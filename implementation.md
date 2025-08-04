@@ -257,6 +257,12 @@ fn build_clean_search_path(shim_dir: &Path, original_path: Option<String>) -> Re
 
     let separator = if cfg!(windows) { ';' } else { ':' };
 
+    // Helper to validate PATH entries
+    fn is_good_dir(p: &str) -> bool {
+        let pb = std::path::Path::new(p);
+        pb.is_absolute() && pb.is_dir()
+    }
+
     // Deduplicate PATH entries for predictable resolution and fewer stats
     let mut seen = std::collections::HashSet::new();
     let paths: Vec<PathBuf> = path_str
@@ -264,6 +270,7 @@ fn build_clean_search_path(shim_dir: &Path, original_path: Option<String>) -> Re
         .filter(|s| !s.is_empty())
         .map(|s| s.trim_end_matches('/'))
         .filter(|p| !Path::new(p).starts_with(shim_dir))
+        .filter(|p| is_good_dir(p))  // Validate paths
         .filter(|p| seen.insert(p.to_string()))
         .map(PathBuf::from)
         .collect();
@@ -421,7 +428,7 @@ fn log_execution(
         "user": env::var("USER").or_else(|_| env::var("USERNAME")).unwrap_or_else(|_| "unknown".to_string()),
         "host": hostname,
         "platform": env::consts::OS,
-        "mode": "shim",
+        "component": "shim",
         "depth": depth,
         "session_id": session_id,
         "resolved_path": resolved_path.display().to_string(),
@@ -439,6 +446,11 @@ fn log_execution(
     // Add signal information if process was terminated by signal
     if let Some(signal) = term_signal {
         log_entry["term_signal"] = json!(signal);
+    }
+
+    // Ensure log directory exists
+    if let Some(dir) = log_path.parent() {
+        std::fs::create_dir_all(dir).ok();
     }
 
     // Serialize to string and write atomically
@@ -466,7 +478,18 @@ fn log_execution(
 
 // Helper function for writing log entries with optional fsync
 fn write_log_entry(log_path: &Path, entry: &serde_json::Value) -> Result<()> {
-    let line = format!("{}\n", entry);
+    // Ensure log directory exists
+    if let Some(dir) = log_path.parent() {
+        std::fs::create_dir_all(dir).ok();
+    }
+    
+    // Ensure single-line JSON by escaping newlines
+    let mut line = entry.to_string();
+    if line.contains('\n') {
+        line = line.replace('\n', "\\n");
+    }
+    line.push('\n');
+    
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
@@ -514,7 +537,8 @@ fn redact_sensitive(arg: &str) -> String {
     const SENSITIVE_FLAGS: &[&str] = &[
         "--token", "--password", "--secret", "-p", "--apikey",
         "--access-key", "--secret-key", "--auth-token",
-        "--bearer-token", "--api-token", "-H", "--header"
+        "--bearer-token", "--api-token", "-H", "--header",
+        "--data-raw", "--data-binary", "--form", "-u", "--user"
     ];
 
     for flag in SENSITIVE_FLAGS {
@@ -575,9 +599,12 @@ fn redact_sensitive_argv(argv: &[std::ffi::OsString]) -> Vec<String> {
         if redacted_arg == "***" && i + 1 < argv.len() {
             let next_arg = argv[i + 1].to_string_lossy();
 
-            // Special handling for header flags - apply header-specific redaction
+            // Special handling for different flag types
             if arg.eq_ignore_ascii_case("-H") || arg.eq_ignore_ascii_case("--header") {
                 result.push(redact_header_value(&next_arg));
+            } else if arg.eq_ignore_ascii_case("-u") || arg.eq_ignore_ascii_case("--user") {
+                // Redact entire user:pass
+                result.push("***".to_string());
             } else {
                 result.push("***".to_string());
             }
@@ -772,9 +799,16 @@ fn strip_shim_dir_from_path(path: &str, shim_dir: &str) -> String {
     let separator = if cfg!(windows) { ';' } else { ':' };
     let shim_dir_normalized = shim_dir.trim_end_matches('/');
 
+    // Helper to validate PATH entries
+    fn is_good_dir(p: &str) -> bool {
+        let pb = std::path::Path::new(p);
+        pb.is_absolute() && pb.is_dir()
+    }
+
     path.split(separator)
         .filter(|s| !s.is_empty())
         .filter(|p| p.trim_end_matches('/') != shim_dir_normalized)
+        .filter(|p| is_good_dir(p))  // Validate paths
         .collect::<Vec<_>>()
         .join(&separator.to_string())
 }
@@ -796,6 +830,775 @@ fn dedupe_path(path: &str) -> String {
     deduped.join(&separator.to_string())
 }
 ```
+
+## Phase 3: Custom Shell Implementation (Enhanced Multi-Mode Design)
+
+### Overview
+
+Phase 3 creates a custom Rust shell that can operate in multiple modes, making it suitable for both interactive use and CI/CD automation. The shell acts as a wrapper that can be "dropped on top" of any existing shell or process while maintaining comprehensive tracing.
+
+### Shell Modes
+
+```rust
+#[derive(Debug, Clone)]
+pub enum ShellMode {
+    Interactive,          // Full REPL with PTY (default)
+    Wrap(String),        // Single command execution (-c "cmd")
+    Script(PathBuf),     // Script file execution (-f script.sh)
+    Pipe,                // Read commands from stdin
+}
+```
+
+### Usage Patterns
+
+```bash
+# Interactive REPL (default)
+substrate
+
+# CI/CD wrap mode
+substrate -c "npm test && npm build"
+
+# Script execution
+substrate -f deploy.sh
+
+# Pipe mode
+echo "git status" | substrate
+
+# CI-specific mode with non-interactive defaults
+substrate --ci -c "make test"
+```
+
+### Architecture
+
+```
+┌─────────────────────┐
+│     substrate       │ ← Multiple entry points
+│  (CLI Interface)    │
+└──────────┬──────────┘
+           │
+      ┌────▼────┐
+      │  Mode   │
+      │ Router  │ ← Determines execution strategy
+      └────┬────┘
+           │
+    ┌──────┴──────┬──────────┬─────────┐
+    │             │          │         │
+┌───▼────┐  ┌────▼───┐  ┌───▼───┐  ┌─▼──┐
+│  REPL  │  │  Wrap  │  │Script │  │Pipe│
+│  +PTY  │  │  Mode  │  │ Mode  │  │Mode│
+└───┬────┘  └────┬───┘  └───┬───┘  └─┬──┘
+    │            │           │        │
+    └────────────┴───────────┴────────┘
+                 │
+         ┌───────▼────────┐
+         │ Command Router │ ← Built-ins vs External
+         └───────┬────────┘
+                 │
+    ┌────────────┴────────────┐
+    │                         │
+┌───▼────┐            ┌───────▼────────┐
+│Built-in│            │External Command│
+│Handler │            │   Executor     │
+└───┬────┘            └───────┬────────┘
+    │                         │
+    │                    ┌────▼────┐
+    │                    │   PTY   │
+    │                    │ Manager │
+    │                    └────┬────┘
+    │                         │
+    └─────────┬───────────────┘
+              │
+        ┌─────▼──────┐
+        │ Trace Log  │
+        │  (JSONL)   │
+        └────────────┘
+```
+
+### Shell Library (`crates/shell/src/lib.rs`)
+
+```rust
+use anyhow::{Context, Result};
+use chrono::Utc;
+use serde_json::json;
+use std::collections::HashMap;
+use std::env;
+use std::fs::{File, OpenOptions};
+use std::io::{self, BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
+use std::process::{Command, ExitStatus, Stdio};
+use uuid::Uuid;
+
+#[derive(Debug, Clone)]
+pub enum ShellMode {
+    Interactive,          // Full REPL with PTY (default)
+    Wrap(String),        // Single command execution (-c "cmd")
+    Script(PathBuf),     // Script file execution (-f script.sh)
+    Pipe,                // Read commands from stdin
+}
+
+pub struct ShellConfig {
+    pub mode: ShellMode,
+    pub session_id: String,
+    pub trace_log_file: PathBuf,
+    pub original_path: String,
+    pub shim_dir: PathBuf,
+    pub ci_mode: bool,
+    pub env_vars: HashMap<String, String>,
+}
+
+impl ShellConfig {
+    pub fn from_args() -> Result<Self> {
+        let args: Vec<String> = env::args().collect();
+        let session_id = env::var("SHIM_SESSION_ID")
+            .unwrap_or_else(|_| Uuid::now_v7().to_string());
+
+        let home = env::var("HOME")
+            .context("HOME not set")?;
+
+        let trace_log_file = env::var("TRACE_LOG_FILE")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(&home).join(".trace_shell.jsonl"));
+
+        let original_path = env::var("ORIGINAL_PATH")
+            .or_else(|_| env::var("PATH"))
+            .context("No PATH found")?;
+
+        let shim_dir = PathBuf::from(&home).join(".cmdshim_rust");
+
+        // Parse command line arguments
+        let mut mode = ShellMode::Interactive;
+        let mut ci_mode = false;
+        let mut i = 1;
+
+        while i < args.len() {
+            match args[i].as_str() {
+                "-c" | "--command" => {
+                    if i + 1 < args.len() {
+                        mode = ShellMode::Wrap(args[i + 1].clone());
+                        i += 1;
+                    }
+                }
+                "-f" | "--file" => {
+                    if i + 1 < args.len() {
+                        mode = ShellMode::Script(PathBuf::from(&args[i + 1]));
+                        i += 1;
+                    }
+                }
+                "--ci" => {
+                    ci_mode = true;
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+
+        // Check if stdin is piped
+        if !atty::is(atty::Stream::Stdin) && matches!(mode, ShellMode::Interactive) {
+            mode = ShellMode::Pipe;
+        }
+
+        Ok(ShellConfig {
+            mode,
+            session_id,
+            trace_log_file,
+            original_path,
+            shim_dir,
+            ci_mode,
+            env_vars: HashMap::new(),
+        })
+    }
+}
+
+pub fn run_shell() -> Result<i32> {
+    let config = ShellConfig::from_args()?;
+
+    // Set up environment for child processes
+    env::set_var("SHIM_SESSION_ID", &config.session_id);
+    env::set_var("ORIGINAL_PATH", &config.original_path);
+    env::set_var("TRACE_LOG_FILE", &config.trace_log_file);
+
+    // Ensure shim directory is in PATH with deduplication
+    let path_with_shims = format!("{}:{}",
+        config.shim_dir.display(),
+        config.original_path
+    );
+    env::set_var("PATH", dedupe_path(&path_with_shims));
+
+    match &config.mode {
+        ShellMode::Interactive => run_interactive_shell(&config),
+        ShellMode::Wrap(cmd) => run_wrap_mode(&config, cmd),
+        ShellMode::Script(path) => run_script_mode(&config, path),
+        ShellMode::Pipe => run_pipe_mode(&config),
+    }
+}
+
+fn dedupe_path(path: &str) -> String {
+    let separator = if cfg!(windows) { ';' } else { ':' };
+    let mut seen = std::collections::HashSet::new();
+    let mut deduped = Vec::new();
+
+    for component in path.split(separator) {
+        if !component.is_empty() {
+            let canonical = component.trim_end_matches('/');
+            if seen.insert(canonical.to_string()) {
+                deduped.push(component);
+            }
+        }
+    }
+
+    deduped.join(&separator.to_string())
+}
+
+fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
+    use rustyline::DefaultEditor;
+
+    println!("Substrate v{}", env!("CARGO_PKG_VERSION"));
+    println!("Session ID: {}", config.session_id);
+    println!("Logging to: {}", config.trace_log_file.display());
+
+    let mut rl = DefaultEditor::new()?;
+    let prompt = if config.ci_mode { "> " } else { "substrate> " };
+
+    loop {
+        match rl.readline(prompt) {
+            Ok(line) => {
+                if line.trim().is_empty() {
+                    continue;
+                }
+
+                rl.add_history_entry(&line)?;
+
+                // Check for exit commands
+                if matches!(line.trim(), "exit" | "quit") {
+                    break;
+                }
+
+                // Execute command
+                let cmd_id = Uuid::now_v7().to_string();
+                match execute_command(config, &line, &cmd_id) {
+                    Ok(status) => {
+                        if !status.success() {
+                            eprintln!("Command failed with status: {}",
+                                status.code().unwrap_or(-1));
+                        }
+                    }
+                    Err(e) => eprintln!("Error: {}", e),
+                }
+            }
+            Err(rustyline::error::ReadlineError::Interrupted) => {
+                println!("^C");
+                continue;
+            }
+            Err(rustyline::error::ReadlineError::Eof) => {
+                println!("^D");
+                break;
+            }
+            Err(err) => {
+                eprintln!("Error: {:?}", err);
+                break;
+            }
+        }
+    }
+
+    Ok(0)
+}
+
+fn run_wrap_mode(config: &ShellConfig, command: &str) -> Result<i32> {
+    let cmd_id = Uuid::now_v7().to_string();
+    let status = execute_command(config, command, &cmd_id)?;
+    Ok(status.code().unwrap_or(1))
+}
+
+fn run_script_mode(config: &ShellConfig, script_path: &Path) -> Result<i32> {
+    let file = File::open(script_path)
+        .with_context(|| format!("Failed to open script: {}", script_path.display()))?;
+
+    let reader = BufReader::new(file);
+    let mut last_status = 0;
+
+    for (line_num, line) in reader.lines().enumerate() {
+        let line = line?;
+
+        // Skip empty lines and comments
+        if line.trim().is_empty() || line.trim().starts_with('#') {
+            continue;
+        }
+
+        let cmd_id = Uuid::now_v7().to_string();
+        match execute_command(config, &line, &cmd_id) {
+            Ok(status) => {
+                last_status = status.code().unwrap_or(1);
+                if !status.success() && config.ci_mode {
+                    eprintln!("Script failed at line {}: {}", line_num + 1, line);
+                    return Ok(last_status);
+                }
+            }
+            Err(e) => {
+                eprintln!("Error at line {}: {}", line_num + 1, e);
+                return Ok(1);
+            }
+        }
+    }
+
+    Ok(last_status)
+}
+
+fn run_pipe_mode(config: &ShellConfig) -> Result<i32> {
+    let stdin = io::stdin();
+    let mut last_status = 0;
+
+    for line in stdin.lock().lines() {
+        let line = line?;
+
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        let cmd_id = Uuid::now_v7().to_string();
+        match execute_command(config, &line, &cmd_id) {
+            Ok(status) => {
+                last_status = status.code().unwrap_or(1);
+            }
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                return Ok(1);
+            }
+        }
+    }
+
+    Ok(last_status)
+}
+
+fn execute_command(config: &ShellConfig, command: &str, cmd_id: &str) -> Result<ExitStatus> {
+    let trimmed = command.trim();
+
+    // Log command start
+    log_command_event(config, "command_start", trimmed, cmd_id, None)?;
+    let start_time = std::time::Instant::now();
+
+    // Check for built-in commands
+    let status = if let Some(status) = handle_builtin(config, trimmed)? {
+        status
+    } else {
+        // Execute external command through shell
+        execute_external(config, trimmed)?
+    };
+
+    // Log command completion
+    let duration = start_time.elapsed();
+    log_command_event(config, "command_complete", trimmed, cmd_id,
+        Some(json!({
+            "exit_code": status.code().unwrap_or(-1),
+            "duration_ms": duration.as_millis()
+        })))?;
+
+    Ok(status)
+}
+
+fn handle_builtin(config: &ShellConfig, command: &str) -> Result<Option<ExitStatus>> {
+    let parts: Vec<&str> = command.split_whitespace().collect();
+    if parts.is_empty() {
+        return Ok(None);
+    }
+
+    match parts[0] {
+        "cd" => {
+            let path = parts.get(1).unwrap_or(&"~");
+            let expanded = shellexpand::tilde(path);
+            env::set_current_dir(expanded.as_ref())?;
+            Ok(Some(std::process::Command::new("true").status()?))
+        }
+        "pwd" => {
+            println!("{}", env::current_dir()?.display());
+            Ok(Some(std::process::Command::new("true").status()?))
+        }
+        "unset" => {
+            for k in &parts[1..] {
+                env::remove_var(k);
+            }
+            Ok(Some(std::process::Command::new("true").status()?))
+        }
+        "export" => {
+            let mut handled_all = true;
+            for part in &parts[1..] {
+                if let Some((k, v)) = part.split_once('=') {
+                    env::set_var(k, v);
+                } else {
+                    handled_all = false;
+                }
+            }
+            if handled_all {
+                Ok(Some(std::process::Command::new("true").status()?))
+            } else {
+                // Defer complex cases to the external shell
+                execute_external(config, command).map(Some)
+            }
+        }
+        _ => Ok(None),
+    }
+}
+
+fn execute_external(config: &ShellConfig, command: &str) -> Result<ExitStatus> {
+    let shell = env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
+
+    let mut cmd = Command::new(&shell);
+
+    // Add strict shell flags in CI mode (must come before -c)
+    if config.ci_mode && shell.ends_with("bash") {
+        cmd.arg("-o").arg("errexit")
+           .arg("-o").arg("pipefail")
+           .arg("-o").arg("nounset");
+    }
+    
+    cmd.arg("-c").arg(command);
+
+    // Propagate environment
+    cmd.env("SHIM_SESSION_ID", &config.session_id);
+    cmd.env("TRACE_LOG_FILE", &config.trace_log_file);
+
+    // Handle I/O based on mode - always inherit stdin for better compatibility
+    cmd.stdin(Stdio::inherit());
+    cmd.stdout(Stdio::inherit());
+    cmd.stderr(Stdio::inherit());
+
+    cmd.status()
+        .with_context(|| format!("Failed to execute: {}", command))
+}
+
+fn first_command_path(cmd: &str) -> Option<String> {
+    // Skip resolution unless SHIM_LOG_OPTS=resolve is set (performance optimization)
+    if env::var("SHIM_LOG_OPTS").as_deref() != Ok("resolve") {
+        return None;
+    }
+    
+    let first = cmd.split_whitespace().next()?;
+    let p = std::path::Path::new(first);
+    if p.is_absolute() {
+        return Some(first.to_string());
+    }
+    // Best effort PATH lookup
+    which::which(first).ok().map(|pb| pb.display().to_string())
+}
+
+fn log_command_event(
+    config: &ShellConfig,
+    event_type: &str,
+    command: &str,
+    cmd_id: &str,
+    extra: Option<serde_json::Value>
+) -> Result<()> {
+    let mut log_entry = json!({
+        "ts": Utc::now().to_rfc3339(),
+        "event_type": event_type,
+        "session_id": config.session_id,
+        "cmd_id": cmd_id,
+        "command": command,
+        "component": "shell",
+        "mode": match &config.mode {
+            ShellMode::Interactive => "interactive",
+            ShellMode::Wrap(_) => "wrap",
+            ShellMode::Script(_) => "script",
+            ShellMode::Pipe => "pipe",
+        },
+        "cwd": env::current_dir()?.display().to_string(),
+        "host": gethostname::gethostname().to_string_lossy().to_string(),
+        "isatty_stdin": atty::is(atty::Stream::Stdin),
+        "isatty_stdout": atty::is(atty::Stream::Stdout),
+        "isatty_stderr": atty::is(atty::Stream::Stderr),
+    });
+
+    // Add resolved_path for command_start events
+    if event_type == "command_start" {
+        if let Some(resolved) = first_command_path(command) {
+            log_entry["resolved_path"] = json!(resolved);
+        }
+    }
+
+    // Add build version if available
+    if let Ok(build) = env::var("SHIM_BUILD") {
+        log_entry["build"] = json!(build);
+    }
+
+    // Add ppid on Unix
+    #[cfg(unix)]
+    {
+        log_entry["ppid"] = json!(nix::unistd::getppid().as_raw());
+    }
+
+    // Merge extra data
+    if let Some(extra_data) = extra {
+        if let Some(obj) = log_entry.as_object_mut() {
+            if let Some(extra_obj) = extra_data.as_object() {
+                for (k, v) in extra_obj {
+                    obj.insert(k.clone(), v.clone());
+                }
+            }
+        }
+    }
+
+    // Ensure log directory exists
+    if let Some(dir) = config.trace_log_file.parent() {
+        std::fs::create_dir_all(dir).ok();
+    }
+
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&config.trace_log_file)?;
+
+    // Set permissions on first creation
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&config.trace_log_file,
+            std::fs::Permissions::from_mode(0o600));
+    }
+
+    // Ensure single-line JSON by escaping newlines
+    let mut line = log_entry.to_string();
+    if line.contains('\n') {
+        line = line.replace('\n', "\\n");
+    }
+    writeln!(file, "{}", line)?;
+
+    // Optional fsync for durability
+    if env::var("SHIM_FSYNC").as_deref() == Ok("1") {
+        file.flush().ok();
+        let _ = file.sync_all();
+    }
+
+    Ok(())
+}
+```
+
+### Shell Binary (`crates/shell/src/main.rs`)
+
+```rust
+use anyhow::Result;
+use substrate_shell::run_shell;
+
+fn main() -> Result<()> {
+    let exit_code = run_shell()?;
+    std::process::exit(exit_code);
+}
+```
+
+### PTY Manager (`crates/shell/src/pty.rs`)
+
+```rust
+// Note: Currently unused. Future-proofed for interactive PTY mode.
+// Enable with cargo feature flag: #[cfg(feature = "pty")]
+#[cfg(unix)]
+pub mod pty {
+    use anyhow::{Context, Result};
+    use nix::pty::{openpty, OpenptyResult};
+    use nix::unistd::{close, dup2, execvp, fork, ForkResult};
+    use std::ffi::CString;
+    use std::os::unix::io::RawFd;
+
+    pub struct PtySession {
+        pub master: RawFd,
+        pub child_pid: nix::unistd::Pid,
+    }
+
+    pub fn spawn_pty_shell(shell: &str) -> Result<PtySession> {
+        let OpenptyResult { master, slave } = openpty(None, None)?;
+
+        match unsafe { fork() }? {
+            ForkResult::Parent { child } => {
+                close(slave)?;
+                Ok(PtySession {
+                    master,
+                    child_pid: child,
+                })
+            }
+            ForkResult::Child => {
+                // Child process: set up PTY and exec shell
+                close(master)?;
+
+                // Make slave the controlling terminal
+                dup2(slave, 0)?; // stdin
+                dup2(slave, 1)?; // stdout
+                dup2(slave, 2)?; // stderr
+                close(slave)?;
+
+                // Execute shell
+                let shell_cstr = CString::new(shell)?;
+                let args = vec![shell_cstr.clone()];
+                execvp(&shell_cstr, &args)?;
+
+                unreachable!("execvp should not return");
+            }
+        }
+    }
+}
+```
+
+### Shell Cargo.toml (`crates/shell/Cargo.toml`)
+
+```toml
+[package]
+name = "substrate-shell"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.74"
+
+[[bin]]
+name = "substrate"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.10", features = ["v7"] }
+atty = "0.2"
+rustyline = "14.0"
+shellexpand = "3.1"
+gethostname = "0.4"
+which = "6"
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.29", features = ["pty", "process"] }
+```
+
+### CI/CD Integration Examples
+
+```yaml
+# GitHub Actions
+steps:
+  - name: Run tests with substrate tracing
+    env:
+      ORIGINAL_PATH: ${{ env.PATH }}
+      TRACE_LOG_FILE: .substrate/trace.jsonl
+    run: |
+      substrate --ci -c "npm test"
+
+# GitLab CI
+test:
+  script:
+    - substrate --ci -f ./scripts/test.sh
+
+# Docker - Option A
+ENTRYPOINT ["substrate"]
+CMD ["-c", "npm start"]
+
+# Docker - Option B
+ENTRYPOINT ["substrate", "-c", "npm start"]
+
+# Shebang usage
+#!/usr/bin/env substrate
+echo "This script runs under substrate tracing"
+```
+
+### Built-in Command Hooks for Existing Shells
+
+For capturing built-ins in non-substrate shells, inject via BASH_ENV:
+
+```bash
+# ~/.substrate_preexec (injected by BASH_ENV)
+__substrate_preexec() {
+    [[ -z "$TRACE_LOG_FILE" ]] && return 0
+    # Skip if in a subshell started by our own logger or if command is just a prompt render
+    [[ "$BASH_COMMAND" == __substrate_preexec* ]] && return 0
+    [[ -n "$COMP_LINE" ]] && return 0  # skip during completion
+    printf '{"ts":"%s","event_type":"builtin_command","command":%q,"session_id":%q}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" \
+        "$BASH_COMMAND" \
+        "${SHIM_SESSION_ID:-unknown}" >> "$TRACE_LOG_FILE"
+}
+trap '__substrate_preexec' DEBUG
+```
+
+### Handling Absolute Path Bypasses
+
+While shims can't intercept `/usr/bin/git`, the substrate shell can:
+
+1. **Wrap mode**: All commands go through our shell
+2. **BASH_ENV hooks**: Capture via DEBUG trap
+3. **Future enhancement**: LD_PRELOAD or ptrace-based interception (Phase 4)
+
+### Phase 3 Testing
+
+```bash
+# Test wrap mode
+substrate -c 'echo test' # Should output "test" and log
+
+# Test script mode
+echo -e '#!/bin/bash\nls\npwd' > test.sh
+substrate -f test.sh
+
+# Test pipe mode
+echo "date" | substrate
+
+# Test CI mode
+substrate --ci -c 'false' # Should exit with code 1
+
+# Test absolute paths are logged
+substrate -c '/usr/bin/echo traced'
+tail -1 ~/.trace_shell.jsonl | jq .
+
+# Test built-in logging
+substrate -c 'cd /tmp && pwd'
+tail -2 ~/.trace_shell.jsonl | jq .event_type
+
+# Verify log schema alignment with shim
+substrate -c 'git status'
+tail -1 ~/.trace_shell.jsonl | jq '{cmd_id, session_id, resolved_path, ppid, isatty_stdin}'
+
+# Test bash flags order in CI mode
+substrate --ci -c 'set -o | grep -E "errexit|pipefail|nounset"'
+
+# Test resolved_path on absolute commands
+substrate -c '/bin/echo hi'
+tail -1 ~/.trace_shell.jsonl | jq -r '.resolved_path' | grep '^/bin/echo'
+
+# Test export with spaces (should delegate to external shell)
+substrate -c 'export FOO="a b" && echo $FOO'
+```
+
+### Additional Production Tests
+
+```bash
+# Test log directory creation
+export TRACE_LOG_FILE="/tmp/new_dir/substrate_$(date +%s).jsonl"
+substrate -c 'echo test'
+[ -f "$TRACE_LOG_FILE" ] && echo "✅ Log dir created" || echo "❌ Failed"
+
+# Test mode redaction (should not leak command)
+substrate -c 'echo secret password'
+tail -1 "$TRACE_LOG_FILE" | jq -r '.mode' | grep -q "wrap" && echo "✅ Mode redacted"
+
+# Test PATH hardening (relative paths filtered)
+export ORIGINAL_PATH="./relative:/usr/bin:/non/existent:/bin"
+substrate -c 'echo $PATH' | grep -v "./relative" && echo "✅ Relative paths filtered"
+
+# Test user:pass redaction
+substrate -c 'curl -u alice:secret https://example.com'
+tail -1 "$TRACE_LOG_FILE" | jq -r '.argv[]' | grep -q "secret" && echo "❌ Secret leaked" || echo "✅ Redacted"
+
+# Test newline handling in logs
+substrate -c 'echo -e "line1\nline2"'
+tail -1 "$TRACE_LOG_FILE" | grep -q '\\n' && echo "✅ Newlines escaped"
+
+# Test lazy path resolution
+SHIM_LOG_OPTS=resolve substrate -c 'git status'
+tail -1 "$TRACE_LOG_FILE" | jq -r '.resolved_path' | grep -q '^/' && echo "✅ Path resolved"
+```
+
+### Platform Notes
+
+**Unix/Linux**: Full support for all features including PTY mode (future)
+**macOS**: Full support with bash 3.2+ compatibility  
+**Windows**: Phase 3 is Unix-only. Windows support deferred to Phase 4 with ConPTY
+
+### Future Enhancements
+
+- Use `clap` for robust CLI parsing when more flags are added
+- Enable PTY mode for full terminal emulation in interactive mode
+- Add `--no-exit-on-error` flag for CI pipelines that want to continue on failure
+- Support PowerShell as an alternative shell on Windows
+- Extract shared utilities (dedupe_path, log schema) to `substrate-common` crate to avoid duplication
 
 ## Testing Strategy
 
@@ -1030,6 +1833,32 @@ mod tests {
         assert_eq!(paths[0], PathBuf::from("/usr/bin"));
         assert_eq!(paths[1], PathBuf::from("/bin"));
         assert_eq!(paths[2], PathBuf::from("/usr/local/bin"));
+    }
+
+    #[test]
+    fn test_log_dir_creation() {
+        // Test that log directory is created automatically
+        let temp = TempDir::new().unwrap();
+        let log_dir = temp.path().join("subdir").join("logs");
+        let log_file = log_dir.join("test.jsonl");
+        
+        // Directory should not exist yet
+        assert!(!log_dir.exists());
+        
+        // Create a minimal log entry
+        let entry = json!({
+            "ts": "2024-01-01T00:00:00Z",
+            "command": "test",
+            "exit_code": 0
+        });
+        
+        // This should create the directory
+        let result = write_log_entry(&log_file, &entry);
+        assert!(result.is_ok(), "Failed to write log: {:?}", result);
+        
+        // Directory and file should now exist
+        assert!(log_dir.exists(), "Log directory was not created");
+        assert!(log_file.exists(), "Log file was not created");
     }
 
     #[test]
@@ -1680,3 +2509,146 @@ tail -1 /tmp/trace.jsonl | jq -r '.shim_fingerprint' | grep -E '^sha256:[0-9a-f]
 SHIM_FSYNC=1 TRACE_LOG_FILE=/tmp/fsync.jsonl echo "fsync test"
 stat /tmp/fsync.jsonl # Should show recent modification time
 ```
+
+## Phase 4: Future Enhancements (Backlog)
+
+### Overview
+
+Phase 4 addresses advanced features that require more complex implementation or platform-specific considerations. These can be implemented incrementally without breaking existing functionality.
+
+### 4.1 Policy and Permission System
+
+**Broker Layer**: Mediates all command execution with policy enforcement
+
+```rust
+pub struct Broker {
+    policies: HashMap<String, Policy>,
+    default_policy: Policy,
+}
+
+pub struct Policy {
+    allowed_commands: Vec<String>,
+    denied_commands: Vec<String>,
+    allowed_paths: Vec<PathBuf>,
+    allowed_network: Vec<NetworkRule>,
+    require_approval: bool,
+}
+
+// Example usage
+broker.execute(
+    Command::new("curl").arg("https://api.example.com"),
+    &current_policy
+)?;
+```
+
+**Grant System**: Runtime permission management
+
+```bash
+# Grant network access for current session
+substrate grant net:api.stripe.com:443 --session
+
+# Grant filesystem access permanently
+substrate grant fs.write:/tmp --always
+
+# Interactive approval
+substrate grant --interactive
+```
+
+### 4.2 World-based Isolation
+
+**World**: Enforcement container for process isolation
+
+```rust
+pub struct World {
+    id: String,
+    filesystem_rules: Vec<FsRule>,
+    network_rules: Vec<NetRule>,
+    resource_limits: ResourceLimits,
+    processes: Vec<Pid>,
+}
+
+impl World {
+    pub fn spawn(&self, cmd: Command) -> Result<Child> {
+        // Apply seccomp filters
+        // Set up network namespace
+        // Apply filesystem restrictions
+        // Execute with limits
+    }
+}
+```
+
+### 4.3 Enhanced Security Features
+
+1. **LD_PRELOAD Interception**: Catch all exec calls, including absolute paths
+2. **ptrace-based Monitoring**: System call level tracing
+3. **Seccomp Filters**: Restrict system calls per profile
+4. **Network Namespaces**: Isolate network access
+
+### 4.4 Windows Support
+
+1. **ConPTY Integration**: Modern pseudo-console API
+2. **Job Objects**: Process group management
+3. **Windows Firewall API**: Network access control
+4. **WSL2 Bridge**: Unified experience across platforms
+
+### 4.5 Advanced Telemetry
+
+1. **Span-based Tracing**: Parent/child relationships
+2. **Resource Usage**: CPU, memory, I/O per command
+3. **Network Activity**: Bytes sent/received, endpoints
+4. **File System Changes**: Modified files per command
+
+```json
+{
+  "span_id": "spn_123",
+  "parent_span": "spn_122",
+  "command": "npm install",
+  "resource_usage": {
+    "cpu_time_ms": 1234,
+    "peak_memory_mb": 256,
+    "disk_read_bytes": 1048576,
+    "disk_write_bytes": 2097152
+  },
+  "network_activity": {
+    "connections": [
+      {
+        "endpoint": "registry.npmjs.org:443",
+        "bytes_sent": 1024,
+        "bytes_received": 1048576
+      }
+    ]
+  },
+  "fs_changes": {
+    "created": ["node_modules/"],
+    "modified": ["package-lock.json"]
+  }
+}
+```
+
+### 4.6 Enterprise Features
+
+1. **Centralized Logging**: Ship logs to SIEM systems
+2. **Policy Distribution**: Central policy server
+3. **Compliance Reporting**: Audit trail generation
+4. **Multi-user Support**: Per-user policies and isolation
+
+### Phase 4 Implementation Priority
+
+1. **High Priority**:
+
+   - Basic broker/policy system
+   - LD_PRELOAD for absolute path interception
+   - Span-based tracing
+
+2. **Medium Priority**:
+
+   - Windows ConPTY support
+   - Resource usage tracking
+   - Network activity monitoring
+
+3. **Low Priority**:
+   - Full world-based isolation
+   - Enterprise features
+   - Advanced telemetry
+
+These features can be added incrementally as the need arises, building on the solid foundation established in Phases 1-3.

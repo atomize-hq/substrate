@@ -5,6 +5,7 @@
 
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::env;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -62,6 +63,7 @@ pub fn log_execution(
         "pid": pid,
         "hostname": hostname,
         "platform": get_platform_info(),
+        "component": "shim",
         "depth": ctx.depth,
         "session_id": ctx.session_id,
         "resolved_path": resolved_path.display().to_string(),
@@ -69,6 +71,7 @@ pub fn log_execution(
         "isatty_stdout": atty::is(atty::Stream::Stdout),
         "isatty_stderr": atty::is(atty::Stream::Stderr),
         "shim_fingerprint": get_shim_fingerprint(),
+        "user": env::var("USER").or_else(|_| env::var("USERNAME")).unwrap_or_else(|_| "unknown".to_string()),
     });
 
     // Add build version if available
@@ -91,7 +94,18 @@ pub fn log_execution(
 
 /// Helper function for writing log entries with optional fsync
 pub fn write_log_entry(log_path: &Path, entry: &Value) -> Result<()> {
-    let line = format!("{}\n", entry);
+    // Ensure log directory exists
+    if let Some(dir) = log_path.parent() {
+        std::fs::create_dir_all(dir).ok();
+    }
+    
+    // Ensure single-line JSON by escaping newlines
+    let mut line = entry.to_string();
+    if line.contains('\n') {
+        line = line.replace('\n', "\\n");
+    }
+    line.push('\n');
+    
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
@@ -229,7 +243,7 @@ fn redact_header_value(header_value: &str) -> String {
     // Redact common Bearer token patterns
     let lower_value = header_value.to_ascii_lowercase();
     if lower_value.contains("authorization:") && lower_value.contains("bearer ") {
-        return "Authorization: Bearer ***".to_string();
+        return "Authorization: ***".to_string();
     }
 
     // Redact other token patterns in headers
@@ -252,13 +266,12 @@ pub fn format_timestamp(timestamp: SystemTime) -> String {
 
 /// Get platform information
 fn get_platform_info() -> String {
-    format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
+    std::env::consts::OS.to_string()
 }
 
 /// Get shim binary fingerprint for integrity verification  
 pub fn get_shim_fingerprint() -> String {
     use once_cell::sync::Lazy;
-    use sha2::{Digest, Sha256};
 
     static SHIM_FINGERPRINT: Lazy<String> = Lazy::new(|| {
         env::current_exe()

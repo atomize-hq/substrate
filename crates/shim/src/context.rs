@@ -103,6 +103,12 @@ fn build_clean_search_path(
 
     let separator = if cfg!(windows) { ';' } else { ':' };
 
+    // Helper to validate PATH entries
+    fn is_good_dir(p: &str) -> bool {
+        let pb = std::path::Path::new(p);
+        pb.is_absolute() && pb.is_dir()
+    }
+
     // Deduplicate PATH entries for predictable resolution
     let mut seen = std::collections::HashSet::new();
     let paths: Vec<PathBuf> = path_str
@@ -110,6 +116,7 @@ fn build_clean_search_path(
         .filter(|s| !s.is_empty())
         .map(|s| s.trim_end_matches('/'))
         .filter(|p| !Path::new(p).starts_with(shim_dir))
+        .filter(|p| is_good_dir(p))  // Validate paths
         .filter(|p| seen.insert(p.to_string()))
         .map(PathBuf::from)
         .collect();

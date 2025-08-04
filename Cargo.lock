@@ -943,7 +943,7 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
 name = "substrate-shim"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -959,6 +959,15 @@ dependencies = [
  "tempfile",
  "uuid",
  "which",
+]
+
+[[package]]
+name = "substrate-supervisor"
+version = "0.1.1"
+dependencies = [
+ "anyhow",
+ "serde_json",
+ "uuid",
 ]
 
 [[package]]
