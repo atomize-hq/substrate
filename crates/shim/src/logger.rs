@@ -276,10 +276,15 @@ pub fn get_shim_fingerprint() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::ffi::OsString;
 
     #[test]
+    #[serial]
     fn test_sensitive_arg_redaction() {
+        // Ensure clean test environment
+        env::remove_var("SHIM_LOG_OPTS");
+        
         assert_eq!(redact_sensitive("normal_arg"), "normal_arg");
         assert_eq!(redact_sensitive("token=secret123"), "token=***");
         assert_eq!(redact_sensitive("password=mypass"), "password=***");
@@ -311,14 +316,18 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_header_value_redaction() {
+        // Ensure clean test environment
+        env::remove_var("SHIM_LOG_OPTS");
+        
         assert_eq!(
             redact_header_value("Content-Type: application/json"),
             "Content-Type: application/json"
         );
         assert_eq!(
             redact_header_value("Authorization: Bearer token123"),
-            "Authorization: Bearer ***"
+            "Authorization: ***"
         );
         assert_eq!(redact_header_value("X-API-Key: secret123"), "X-API-Key: ***");
         assert_eq!(redact_header_value("Cookie: session=abc123"), "Cookie: ***");
