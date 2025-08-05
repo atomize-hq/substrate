@@ -1,8 +1,10 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/common",
     "crates/shim",
     "crates/supervisor",
+    "crates/shell",
 ]
 
 [workspace.dependencies]
