@@ -13,7 +13,7 @@ use std::time::{Instant, SystemTime};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
-use crate::context::ShimContext;
+use crate::context::{build_clean_search_path, ShimContext, ORIGINAL_PATH_VAR, SHIM_DEPTH_VAR};
 use crate::logger::{log_execution, write_log_entry};
 use crate::resolver::resolve_real_binary;
 
@@ -26,9 +26,10 @@ pub fn run_shim() -> Result<i32> {
 
     let ctx = ShimContext::from_current_exe()?;
 
-    // Skip if already shimmed to avoid recursion
+    // If SHIM_ACTIVE is set, this is a nested shim call (e.g., npm -> node)
+    // Bypass shim logic and execute the real binary directly
     if ctx.should_skip_shimming() {
-        return Err(anyhow!("Recursion detected - SHIM_ACTIVE already set"));
+        return execute_real_binary_bypass(&ctx);
     }
 
     // Set up environment for execution
@@ -160,6 +161,97 @@ fn handle_bypass_mode() -> Result<i32> {
     }
 
     Ok(status.code().unwrap_or(1))
+}
+
+/// Execute real binary when in bypass mode (nested shim call)
+fn execute_real_binary_bypass(ctx: &ShimContext) -> Result<i32> {
+    // Get clean PATH without shim directory
+    let original_path = env::var(ORIGINAL_PATH_VAR)
+        .or_else(|_| env::var("PATH"))
+        .unwrap_or_default();
+    
+    // Build clean search paths
+    let search_paths = build_clean_search_path(&ctx.shim_dir, Some(original_path))?;
+    
+    // Resolve the real binary
+    let real_binary = resolve_real_binary(&ctx.command_name, &search_paths)
+        .ok_or_else(|| anyhow!("Command '{}' not found in bypass mode", ctx.command_name))?;
+    
+    // Get command arguments
+    let args: Vec<_> = env::args_os().skip(1).collect();
+    
+    // Increment depth for observability (but keep SHIM_ACTIVE set)
+    let depth = env::var(SHIM_DEPTH_VAR)
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(0);
+    env::set_var(SHIM_DEPTH_VAR, (depth + 1).to_string());
+    
+    // Log the bypass execution for observability
+    let start_time = Instant::now();
+    let timestamp = SystemTime::now();
+    
+    // Execute the real command
+    let mut cmd = Command::new(&real_binary);
+    
+    #[cfg(unix)]
+    cmd.arg0(&ctx.command_name); // Preserve argv[0] semantics
+    
+    let status = cmd
+        .args(&args)
+        .status()
+        .with_context(|| format!("Failed to execute {} in bypass mode", real_binary.display()))?;
+    
+    // Log the bypass execution
+    let exit_code = status.code().unwrap_or(1);
+    if let Some(log_path) = &ctx.log_file {
+        // Log with a bypass marker in the entry
+        let mut log_entry = serde_json::json!({
+            "ts": crate::logger::format_timestamp(timestamp),
+            "command": ctx.command_name,
+            "argv": std::iter::once(ctx.command_name.clone())
+                .chain(args.iter().map(|s| s.to_string_lossy().to_string()))
+                .collect::<Vec<_>>(),
+            "resolved_path": real_binary.display().to_string(),
+            "exit_code": exit_code,
+            "duration_ms": start_time.elapsed().as_millis(),
+            "component": "shim",
+            "depth": depth + 1,
+            "session_id": ctx.session_id,
+            "bypass": true,  // Mark this as a bypass execution
+            "cwd": env::current_dir().unwrap_or_else(|_| PathBuf::from("/unknown")).to_string_lossy(),
+            "pid": std::process::id(),
+            "hostname": gethostname::gethostname().to_string_lossy().to_string(),
+            "platform": if cfg!(target_os = "macos") { "macos" } else if cfg!(target_os = "linux") { "linux" } else { "other" },
+            "shim_fingerprint": crate::logger::get_shim_fingerprint(),
+            "user": env::var("USER").unwrap_or_else(|_| "unknown".to_string()),
+        });
+        
+        // Add TTY information
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::AsRawFd;
+            log_entry["isatty_stdin"] = serde_json::json!(nix::unistd::isatty(std::io::stdin().as_raw_fd()).unwrap_or(false));
+            log_entry["isatty_stdout"] = serde_json::json!(nix::unistd::isatty(std::io::stdout().as_raw_fd()).unwrap_or(false));
+            log_entry["isatty_stderr"] = serde_json::json!(nix::unistd::isatty(std::io::stderr().as_raw_fd()).unwrap_or(false));
+            
+            // Add parent process ID
+            log_entry["ppid"] = serde_json::json!(nix::unistd::getppid().as_raw());
+        }
+        
+        let _ = write_log_entry(log_path, &log_entry);
+    }
+    
+    // Unix signal exit status parity
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(signal) = status.signal() {
+            return Ok(128 + signal);
+        }
+    }
+    
+    Ok(exit_code)
 }
 
 /// Execute command with preserved argv[0] semantics

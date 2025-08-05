@@ -84,16 +84,26 @@ impl ShimContext {
         env::var("SHIM_BYPASS").as_deref() == Ok("1")
     }
 
-    /// Set up environment for command execution
+    /// Set up environment for command execution (idempotent)
     pub fn setup_execution_env(&self) {
         env::set_var(SHIM_SESSION_VAR, &self.session_id);
-        env::set_var(SHIM_DEPTH_VAR, (self.depth + 1).to_string());
-        env::set_var(SHIM_ACTIVE_VAR, "1");
+        
+        // Only set SHIM_ACTIVE if not already set (idempotent)
+        if env::var(SHIM_ACTIVE_VAR).is_err() {
+            env::set_var(SHIM_ACTIVE_VAR, "1");
+        }
+        
+        // Always increment depth for observability
+        let current_depth = env::var(SHIM_DEPTH_VAR)
+            .ok()
+            .and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(0);
+        env::set_var(SHIM_DEPTH_VAR, (current_depth + 1).to_string());
     }
 }
 
 /// Build clean search path excluding shim directory
-fn build_clean_search_path(
+pub fn build_clean_search_path(
     shim_dir: &Path,
     original_path: Option<String>,
 ) -> Result<Vec<PathBuf>> {

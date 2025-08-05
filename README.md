@@ -2,7 +2,7 @@
 
 [![Rust](https://img.shields.io/badge/rust-1.74%2B-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-passing-green.svg)](#testing)
+[![Build](https://img.shields.io/badge/build-passing-green.svg)](#testing)
 
 > **Production-ready command execution tracing system with custom shell, binary shimming, and comprehensive observability for debugging command chains and AI-assisted development workflows.**
 
@@ -18,7 +18,7 @@ Substrate is a complete command tracing ecosystem that provides transparent comm
 - **Advanced Security**: Comprehensive credential redaction including headers and tokens
 - **High Performance**: <5ms shim overhead with intelligent caching
 - **Binary Integrity**: SHA-256 fingerprinting for forensics and compliance
-- **Cross-Platform**: Full Unix/macOS support, Windows prepared
+- **Cross-Platform**: Unix/macOS support, Windows prepared
 - **Emergency Bypass**: `SHIM_BYPASS=1` escape hatch for troubleshooting
 - **PTY Support**: Full terminal emulation for interactive sessions (Unix)
 - **CI/CD Ready**: Strict mode, error handling, and automation features
@@ -379,6 +379,8 @@ RUST_LOG=debug git status
 
 ## Development
 
+For detailed architectural information and development guidelines, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ### Building from Source
 
 ```bash
@@ -416,7 +418,7 @@ substrate/
 │   │   ├── Cargo.toml
 │   │   ├── src/
 │   │   └── tests/
-│   └── supervisor/           # Process supervision (future)
+│   └── supervisor/           # Process supervision (partially implemented)
 ├── scripts/                  # Deployment and management scripts
 ├── docs/                     # Additional documentation
 └── target/                   # Build artifacts
@@ -435,7 +437,7 @@ This implementation follows Rust best practices:
 ## Compatibility
 
 - **Rust MSRV**: 1.74+ (enforced via rust-version)
-- **Platforms**: macOS, Linux (full support), Windows (prepared)
+- **Platforms**: macOS, Linux, Windows (prepared)
 - **Shells**: bash, zsh, sh, fish, PowerShell, cmd.exe
 - **Commands**: Any executable (git, npm, python, docker, kubectl, etc.)
 - **Terminal**: PTY support for Unix, ConPTY prepared for Windows
@@ -457,7 +459,7 @@ This implementation follows Rust best practices:
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
 
 ## Support
 

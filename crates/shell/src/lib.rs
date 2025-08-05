@@ -174,6 +174,10 @@ pub fn run_shell() -> Result<i32> {
     env::set_var("SHIM_SESSION_ID", &config.session_id);
     env::set_var("ORIGINAL_PATH", &config.original_path);
     env::set_var("TRACE_LOG_FILE", &config.trace_log_file);
+    
+    // Clear SHIM_ACTIVE to allow shims to work properly
+    // The substrate shell itself should not be considered "active" shimming
+    env::remove_var("SHIM_ACTIVE");
 
     // Ensure shim directory is in PATH with deduplication (use OS-specific separator)
     let sep = if cfg!(windows) { ';' } else { ':' };
@@ -405,6 +409,7 @@ fn run_script_mode(config: &ShellConfig, script_path: &Path) -> Result<i32> {
     // Propagate environment
     cmd.env("SHIM_SESSION_ID", &config.session_id)
        .env("TRACE_LOG_FILE", &config.trace_log_file)
+       .env_remove("SHIM_ACTIVE")  // Clear to allow shims to work
        .stdin(Stdio::inherit())
        .stdout(Stdio::inherit())
        .stderr(Stdio::inherit());
@@ -785,6 +790,8 @@ fn execute_external(
     // Propagate environment
     cmd.env("SHIM_SESSION_ID", &config.session_id);
     cmd.env("TRACE_LOG_FILE", &config.trace_log_file);
+    cmd.env_remove("SHIM_ACTIVE");  // Clear to allow shims to work
+    // Keep PATH as-is with shims - the env_remove("SHIM_ACTIVE") should be sufficient
     
     // Set BASH_ENV for builtin command tracking when using bash
     if is_bash {
