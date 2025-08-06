@@ -37,11 +37,19 @@ substrate-common (base utilities)
 - **Cache strategy**: LRU cache for binary resolution, keyed by command + search paths (not CWD)
 - **Depth tracking**: Uses `SHIM_DEPTH` environment variable to track nested execution levels
 - **Session correlation**: UUIDv7-based session IDs for command chain tracking
+- **Bypass mode**: Nested shims (SHIM_ACTIVE set) bypass to real binary to prevent recursion
+- **Call stack tracking**: Maintains SHIM_CALL_STACK (max 8 items, deduped) for debugging
+- **Parent correlation**: Links to shell cmd_id via SHIM_PARENT_CMD_ID
 
 **Critical Code Paths**:
 ```rust
 main() 
   → detect_context()          // Environment setup
+  → should_skip_shimming()    // Check SHIM_ACTIVE for bypass
+    ↓ (if set)
+  → execute_real_binary_bypass() // Direct execution, bypass logging
+    ↓ (if not set)
+  → setup_execution_env()     // Set SHIM_ACTIVE, CALLER, CALL_STACK
   → resolve_real_binary()     // Path resolution with caching
   → log_command_start()       // Pre-execution logging
   → execute_command()         // Fork/exec with signal forwarding
@@ -154,7 +162,7 @@ Interactive mode installs handlers for:
 
 ### Path Resolution Security
 
-1. **ORIGINAL_PATH validation**: Must not contain shim directory
+1. **SHIM_ORIGINAL_PATH validation**: Must not contain shim directory
 2. **Binary fingerprinting**: SHA-256 hash of resolved binary
 3. **Permission checks**: Executable bit verification
 
@@ -167,6 +175,21 @@ Interactive mode installs handlers for:
 ### Emergency Bypass
 
 `SHIM_BYPASS=1` environment variable skips all shimming logic for recovery scenarios.
+
+### Environment Variables
+
+All shim-related environment variables use the `SHIM_` prefix for consistency:
+
+- `SHIM_ACTIVE`: Signals nested shim call (triggers bypass mode)
+- `SHIM_DEPTH`: Tracks nesting depth (0-based)
+- `SHIM_SESSION_ID`: UUIDv7 for command chain correlation
+- `SHIM_ORIGINAL_PATH`: Clean PATH without shim directory
+- `SHIM_TRACE_LOG`: Path to JSONL trace log
+- `SHIM_CALLER`: First shim in the call chain
+- `SHIM_CALL_STACK`: Comma-separated chain (capped at 8, deduped)
+- `SHIM_PARENT_CMD_ID`: Links to substrate shell cmd_id
+- `SHIM_BYPASS`: Emergency bypass mode (1 = skip all tracing)
+- `SHIM_CACHE_BUST`: Force cache invalidation
 
 ## Development Guidelines
 

@@ -20,13 +20,13 @@ const BASH_PREEXEC_SCRIPT: &str = r#"# Substrate PTY command logging
 [[ $- == *i* ]] && [[ -f ~/.bashrc ]] && source ~/.bashrc
 
 __substrate_preexec() {
-    [[ -z "$TRACE_LOG_FILE" ]] && return 0
+    [[ -z "$SHIM_TRACE_LOG" ]] && return 0
     [[ "$BASH_COMMAND" == __substrate_preexec* ]] && return 0
     [[ -n "$COMP_LINE" ]] && return 0
     printf '{"ts":"%s","event_type":"builtin_command","command":%q,"session_id":%q,"component":"shell","pty":true}\n' \
         "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" \
         "$BASH_COMMAND" \
-        "${SHIM_SESSION_ID:-unknown}" >> "$TRACE_LOG_FILE" 2>/dev/null || true
+        "${SHIM_SESSION_ID:-unknown}" >> "$SHIM_TRACE_LOG" 2>/dev/null || true
 }
 trap '__substrate_preexec' DEBUG
 "#;
@@ -113,11 +113,11 @@ impl ShellConfig {
             .or_else(|_| env::var("USERPROFILE"))  // Windows support
             .context("HOME/USERPROFILE not set")?;
 
-        let trace_log_file = env::var("TRACE_LOG_FILE")
+        let trace_log_file = env::var("SHIM_TRACE_LOG")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from(&home).join(".trace_shell.jsonl"));
 
-        let original_path = env::var("ORIGINAL_PATH")
+        let original_path = env::var("SHIM_ORIGINAL_PATH")
             .or_else(|_| env::var("PATH"))
             .context("No PATH found")?;
 
@@ -172,8 +172,8 @@ pub fn run_shell() -> Result<i32> {
 
     // Set up environment for child processes
     env::set_var("SHIM_SESSION_ID", &config.session_id);
-    env::set_var("ORIGINAL_PATH", &config.original_path);
-    env::set_var("TRACE_LOG_FILE", &config.trace_log_file);
+    env::set_var("SHIM_ORIGINAL_PATH", &config.original_path);
+    env::set_var("SHIM_TRACE_LOG", &config.trace_log_file);
     
     // Clear SHIM_ACTIVE to allow shims to work properly
     // The substrate shell itself should not be considered "active" shimming
@@ -408,7 +408,7 @@ fn run_script_mode(config: &ShellConfig, script_path: &Path) -> Result<i32> {
 
     // Propagate environment
     cmd.env("SHIM_SESSION_ID", &config.session_id)
-       .env("TRACE_LOG_FILE", &config.trace_log_file)
+       .env("SHIM_TRACE_LOG", &config.trace_log_file)
        .env_remove("SHIM_ACTIVE")  // Clear to allow shims to work
        .stdin(Stdio::inherit())
        .stdout(Stdio::inherit())
@@ -631,11 +631,11 @@ fn execute_command(
         if let Some(status) = handle_builtin(config, trimmed, cmd_id)? {
             status
         } else {
-            execute_external(config, trimmed, running_child_pid)?
+            execute_external(config, trimmed, running_child_pid, cmd_id)?
         }
     } else {
         // Execute external command through shell for complex commands
-        execute_external(config, trimmed, running_child_pid)?
+        execute_external(config, trimmed, running_child_pid, cmd_id)?
     };
 
     // Log command completion with redacted command
@@ -740,6 +740,7 @@ fn execute_external(
     config: &ShellConfig,
     command: &str,
     running_child_pid: Arc<AtomicI32>,
+    cmd_id: &str,
 ) -> Result<ExitStatus> {
     let shell = &config.shell_path;
 
@@ -789,8 +790,11 @@ fn execute_external(
 
     // Propagate environment
     cmd.env("SHIM_SESSION_ID", &config.session_id);
-    cmd.env("TRACE_LOG_FILE", &config.trace_log_file);
+    cmd.env("SHIM_TRACE_LOG", &config.trace_log_file);
+    cmd.env("SHIM_PARENT_CMD_ID", cmd_id);  // Pass cmd_id for shim correlation
     cmd.env_remove("SHIM_ACTIVE");  // Clear to allow shims to work
+    cmd.env_remove("SHIM_CALLER");  // Clear caller chain for fresh command
+    cmd.env_remove("SHIM_CALL_STACK");  // Clear call stack for fresh command
     // Keep PATH as-is with shims - the env_remove("SHIM_ACTIVE") should be sufficient
     
     // Set BASH_ENV for builtin command tracking when using bash

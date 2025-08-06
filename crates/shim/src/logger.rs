@@ -67,6 +67,9 @@ pub fn log_execution(
         "depth": ctx.depth,
         "session_id": ctx.session_id,
         "resolved_path": resolved_path.display().to_string(),
+        "caller": env::var("SHIM_CALLER").ok(),
+        "call_stack": env::var("SHIM_CALL_STACK").ok(),
+        "parent_cmd_id": env::var("SHIM_PARENT_CMD_ID").ok(),
         "isatty_stdin": atty::is(atty::Stream::Stdin),
         "isatty_stdout": atty::is(atty::Stream::Stdout),
         "isatty_stderr": atty::is(atty::Stream::Stderr),
@@ -133,7 +136,7 @@ pub fn write_log_entry(log_path: &Path, entry: &Value) -> Result<()> {
 }
 
 /// Redact sensitive command-line arguments
-fn redact_sensitive_argv(argv: &[std::ffi::OsString]) -> Vec<String> {
+pub fn redact_sensitive_argv(argv: &[std::ffi::OsString]) -> Vec<String> {
     let mut result = Vec::new();
     let mut i = 0;
 

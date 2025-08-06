@@ -67,9 +67,9 @@ substrate --pty
 ./scripts/stage_shims.sh target/release/shim
 
 # Set up environment
-export ORIGINAL_PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-export PATH="$HOME/.cmdshim_rust:$ORIGINAL_PATH" 
-export TRACE_LOG_FILE="$HOME/.trace_shell.jsonl"
+export SHIM_ORIGINAL_PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+export PATH="$HOME/.cmdshim_rust:$SHIM_ORIGINAL_PATH" 
+export SHIM_TRACE_LOG="$HOME/.trace_shell.jsonl"
 
 # Clear command cache
 hash -r
@@ -79,7 +79,7 @@ hash -r
 
 ```bash
 # Use substrate shell with shims active
-export PATH="$HOME/.cmdshim_rust:$ORIGINAL_PATH"
+export PATH="$HOME/.cmdshim_rust:$SHIM_ORIGINAL_PATH"
 substrate -c "git commit -m 'test' && npm run build"
 
 # All commands are traced through both shell and shims
@@ -168,13 +168,17 @@ All configuration is done through environment variables:
 
 | Variable | Purpose | Default | Example |
 |----------|---------|---------|---------|
-| `ORIGINAL_PATH` | Clean PATH for binary resolution | *none* | `/usr/bin:/bin` |
-| `TRACE_LOG_FILE` | Log output destination | `~/.trace_shell.jsonl` | `/tmp/trace.jsonl` |
+| `SHIM_ORIGINAL_PATH` | Clean PATH for binary resolution | *none* | `/usr/bin:/bin` |
+| `SHIM_TRACE_LOG` | Log output destination | `~/.trace_shell.jsonl` | `/tmp/trace.jsonl` |
 | `SHIM_SESSION_ID` | Session correlation ID | auto-generated | uuid-v7-string |
 | `SHIM_DEPTH` | Nesting level tracking | `0` | `0`, `1`, `2`... |
-| `SHIM_BYPASS` | Emergency bypass mode | *none* | `1` |
+| `SHIM_BYPASS` | Emergency bypass mode (no tracing) | *none* | `1` |
+| `SHIM_CALLER` | First command in chain | *none* | `npm` |
+| `SHIM_CALL_STACK` | Command chain (max 8, deduped) | *none* | `npm,node` |
+| `SHIM_PARENT_CMD_ID` | Links to shell command | *none* | uuid-v7-string |
 | `SHIM_LOG_OPTS` | Logging options | *none* | `raw`, `resolve` |
 | `SHIM_FSYNC` | Force disk sync | *none* | `1` |
+| `SHIM_CACHE_BUST` | Force cache invalidation | *none* | `1` |
 | `TRACE_LOG_MAX_MB` | Log rotation size limit | `50` | `100` |
 | `BASH_ENV` | Bash startup script | *none* | `~/.substrate_bashenv` |
 
@@ -202,6 +206,10 @@ Commands are logged in structured JSONL format:
   "depth": 0,
   "resolved_path": "/opt/homebrew/bin/git",
   "shim_fingerprint": "sha256:abc123def456...",
+  "caller": "npm",
+  "call_stack": "npm,node",
+  "parent_cmd_id": "018d5678-9abc-7def-0123-456789abcdef",
+  "bypass": false,
   "isatty_stdin": true,
   "isatty_stdout": true,
   "isatty_stderr": true,
@@ -260,7 +268,7 @@ Redaction patterns include:
 
 - Log files may contain sensitive information despite redaction efforts
 - Shim binaries should be protected from unauthorized modification
-- The `ORIGINAL_PATH` should not include untrusted directories
+- The `SHIM_ORIGINAL_PATH` should not include untrusted directories
 - Regular integrity verification is recommended for production use
 
 ## Substrate Shell Usage
@@ -371,8 +379,8 @@ RUST_LOG=debug git status
 
 | Problem | Symptom | Solution |
 |---------|---------|----------|
-| Command not found | `bash: git: command not found` | Check `ORIGINAL_PATH` includes system directories |
-| Infinite loops | Commands hang indefinitely | Ensure shim directory not in `ORIGINAL_PATH` |
+| Command not found | `bash: git: command not found` | Check `SHIM_ORIGINAL_PATH` includes system directories |
+| Infinite loops | Commands hang indefinitely | Ensure shim directory not in `SHIM_ORIGINAL_PATH` |
 | Permission denied | Cannot write to log file | Check log file permissions and directory access |
 | Hash conflicts | Wrong binary executed | Run `hash -r` to clear shell command cache |
 | Integration issues | AI assistant can't see commands | Verify `BASH_ENV` and hash pinning setup |

@@ -13,7 +13,7 @@ use std::time::{Instant, SystemTime};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
-use crate::context::{build_clean_search_path, ShimContext, ORIGINAL_PATH_VAR, SHIM_DEPTH_VAR};
+use crate::context::{build_clean_search_path, ShimContext, ORIGINAL_PATH_VAR, SHIM_DEPTH_VAR, SHIM_CALLER_VAR, SHIM_CALL_STACK_VAR, SHIM_PARENT_CMD_VAR};
 use crate::logger::{log_execution, write_log_entry};
 use crate::resolver::resolve_real_binary;
 
@@ -210,7 +210,7 @@ fn execute_real_binary_bypass(ctx: &ShimContext) -> Result<i32> {
             "ts": crate::logger::format_timestamp(timestamp),
             "command": ctx.command_name,
             "argv": std::iter::once(ctx.command_name.clone())
-                .chain(args.iter().map(|s| s.to_string_lossy().to_string()))
+                .chain(crate::logger::redact_sensitive_argv(&args))
                 .collect::<Vec<_>>(),
             "resolved_path": real_binary.display().to_string(),
             "exit_code": exit_code,
@@ -219,6 +219,9 @@ fn execute_real_binary_bypass(ctx: &ShimContext) -> Result<i32> {
             "depth": depth + 1,
             "session_id": ctx.session_id,
             "bypass": true,  // Mark this as a bypass execution
+            "caller": env::var(SHIM_CALLER_VAR).ok(),
+            "call_stack": env::var(SHIM_CALL_STACK_VAR).ok(),
+            "parent_cmd_id": env::var(SHIM_PARENT_CMD_VAR).ok(),
             "cwd": env::current_dir().unwrap_or_else(|_| PathBuf::from("/unknown")).to_string_lossy(),
             "pid": std::process::id(),
             "hostname": gethostname::gethostname().to_string_lossy().to_string(),
