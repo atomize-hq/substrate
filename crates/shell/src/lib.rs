@@ -1631,9 +1631,16 @@ fn log_command_event(
 mod tests {
     use super::*;
     use std::env;
+    use std::sync::Mutex;
+    
+    // Global mutex to ensure tests that modify environment run sequentially
+    static TEST_ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     // Helper to run tests with TEST_MODE set
     fn with_test_mode<F: FnOnce()>(f: F) {
+        // Lock the mutex to ensure exclusive access to environment
+        let _guard = TEST_ENV_MUTEX.lock().unwrap();
+        
         // Save original value if it exists
         let original = env::var("TEST_MODE").ok();
         
@@ -1860,19 +1867,19 @@ mod tests {
     fn test_needs_pty_ssh() {
         with_test_mode(|| {
             // SSH without remote command needs PTY
-            assert!(needs_pty("ssh host"));
+            assert!(needs_pty("ssh host"), "ssh host should need PTY");
             
             // SSH with -t forces PTY
-            assert!(needs_pty("ssh -t host"));
-            assert!(needs_pty("ssh -tt host"));
-            assert!(needs_pty("ssh -t host ls"));
+            assert!(needs_pty("ssh -t host"), "ssh -t host should need PTY");
+            assert!(needs_pty("ssh -tt host"), "ssh -tt host should need PTY");
+            assert!(needs_pty("ssh -t host ls"), "ssh -t host ls should need PTY");
             
             // SSH with -T disables PTY
-            assert!(!needs_pty("ssh -T host"));
-            assert!(!needs_pty("ssh -T host ls"));
+            assert!(!needs_pty("ssh -T host"), "ssh -T host should not need PTY");
+            assert!(!needs_pty("ssh -T host ls"), "ssh -T host ls should not need PTY");
             
             // SSH with remote command doesn't need PTY
-            assert!(!needs_pty("ssh host ls"));
+            assert!(!needs_pty("ssh host ls"), "ssh host ls should not need PTY");
             assert!(!needs_pty("ssh host 'echo hello'"));
             
             // SSH with BatchMode=yes doesn't need PTY
