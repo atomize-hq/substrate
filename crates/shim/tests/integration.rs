@@ -49,13 +49,13 @@ fn test_shim_execution_flow() -> Result<()> {
     // Test execution with session tracking and deterministic environment
     let session_id = uuid::Uuid::now_v7().to_string();
     let log_file = temp.path().join("trace.jsonl");
-    
+
     let output = std::process::Command::new(&shim_binary)
         .args(&["test", "message"])
-        .env("ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
-        .env("TRACE_LOG_FILE", &log_file)
+        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("SHIM_TRACE_LOG", &log_file)
         .env("SHIM_SESSION_ID", &session_id)
-        .env_remove("SHIM_DEPTH")  // Ensure deterministic test environment
+        .env_remove("SHIM_DEPTH") // Ensure deterministic test environment
         .env_remove("SHIM_ACTIVE")
         .output()?;
 
@@ -87,8 +87,12 @@ fn test_claude_code_hash_pinning_scenario() -> Result<()> {
     fs::create_dir_all(&shim_dir)?;
 
     // Create a simple test script using a non-builtin command name to avoid conflicts
-    let test_cmd = bin_dir.join(if cfg!(windows) { "testcmd.cmd" } else { "testcmd" });
-    
+    let test_cmd = bin_dir.join(if cfg!(windows) {
+        "testcmd.cmd"
+    } else {
+        "testcmd"
+    });
+
     #[cfg(unix)]
     {
         fs::write(&test_cmd, "#!/bin/bash\necho \"testcmd: $@\"")?;
@@ -97,7 +101,7 @@ fn test_claude_code_hash_pinning_scenario() -> Result<()> {
         perms.set_mode(0o755);
         fs::set_permissions(&test_cmd, perms)?;
     }
-    
+
     #[cfg(windows)]
     {
         fs::write(&test_cmd, "@echo off\necho testcmd: %*")?;
@@ -106,8 +110,12 @@ fn test_claude_code_hash_pinning_scenario() -> Result<()> {
     // Get the built shim binary using standard Rust testing pattern
     let shim_cmd = Command::cargo_bin("shim")?;
     let shim_binary_path = shim_cmd.get_program();
-    
-    let shim_binary = shim_dir.join(if cfg!(windows) { "testcmd.exe" } else { "testcmd" });
+
+    let shim_binary = shim_dir.join(if cfg!(windows) {
+        "testcmd.exe"
+    } else {
+        "testcmd"
+    });
     fs::copy(shim_binary_path, &shim_binary)?;
 
     #[cfg(unix)]
@@ -120,35 +128,47 @@ fn test_claude_code_hash_pinning_scenario() -> Result<()> {
 
     // Test the exact command sequence that works with Claude Code
     let shimmed_path = format!("{}:{}", shim_dir.display(), bin_dir.display());
-    
+
     // Test 1: Basic PATH resolution - Test that shim is found first
     // We need bash and which, but want our shim to come first
     let full_path = format!("{}:/usr/bin:/bin", shimmed_path);
-    
+
     let output = std::process::Command::new("/bin/bash")
         .args(&["-lc", "/usr/bin/which testcmd; echo found-testcmd"])
         .env("PATH", &full_path)
         .output()?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains(&shim_binary.display().to_string()), "Shim not found first in PATH. Output: {}", stdout);
-    assert!(stdout.contains("found-testcmd"), "Test command failed. Output: {}", stdout);
+    assert!(
+        stdout.contains(&shim_binary.display().to_string()),
+        "Shim not found first in PATH. Output: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("found-testcmd"),
+        "Test command failed. Output: {}",
+        stdout
+    );
 
     // Test 2: Hash pinning - the key discovery from manual testing
     let hash_command = format!(
-        "hash -r; hash -p \"{}\" testcmd; echo pinning-test", 
+        "hash -r; hash -p \"{}\" testcmd; echo pinning-test",
         shim_binary.display()
     );
-    
+
     let output = std::process::Command::new("/bin/bash")
         .args(&["-lc", &hash_command])
         .env("PATH", &full_path)
-        .env("ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
         .output()?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("pinning-test"), "Hash pinning test failed. Output: {}", stdout);
-    
+    assert!(
+        stdout.contains("pinning-test"),
+        "Hash pinning test failed. Output: {}",
+        stdout
+    );
+
     Ok(())
 }
 
@@ -163,7 +183,7 @@ fn test_shim_bypass() -> Result<()> {
 
     // Create a simple test script for bypass testing
     let test_echo = bin_dir.join(if cfg!(windows) { "echo.cmd" } else { "echo" });
-    
+
     #[cfg(unix)]
     {
         fs::write(&test_echo, "#!/bin/bash\necho \"$@\"")?;
@@ -172,7 +192,7 @@ fn test_shim_bypass() -> Result<()> {
         perms.set_mode(0o755);
         fs::set_permissions(&test_echo, perms)?;
     }
-    
+
     #[cfg(windows)]
     {
         fs::write(&test_echo, "@echo off\necho %*")?;
@@ -196,7 +216,7 @@ fn test_shim_bypass() -> Result<()> {
     // Test with SHIM_BYPASS=1 - should execute directly without logging
     let output = std::process::Command::new(&shim_echo)
         .env("SHIM_BYPASS", "1")
-        .env("ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
         .arg("bypass works")
         .output()?;
 
@@ -233,7 +253,7 @@ fn test_session_correlation() -> Result<()> {
     // Get the built shim binary using standard Rust testing pattern
     let shim_cmd = Command::cargo_bin("shim")?;
     let shim_binary_path = shim_cmd.get_program();
-    
+
     let shim_binary = shim_dir.join("test_cmd");
     fs::copy(shim_binary_path, &shim_binary)?;
 
@@ -252,8 +272,8 @@ fn test_session_correlation() -> Result<()> {
     for i in 1..=3 {
         let output = std::process::Command::new(&shim_binary)
             .arg(i.to_string())
-            .env("ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
-            .env("TRACE_LOG_FILE", &log_file)
+            .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+            .env("SHIM_TRACE_LOG", &log_file)
             .env("SHIM_SESSION_ID", &session_id)
             .env("SHIM_DEPTH", (i - 1).to_string()) // Simulate nested execution
             .output()?;
@@ -305,7 +325,7 @@ fn test_credential_redaction() -> Result<()> {
     // Get the built shim binary using standard Rust testing pattern
     let shim_cmd = Command::cargo_bin("shim")?;
     let shim_binary_path = shim_cmd.get_program();
-    
+
     let shim_binary = shim_dir.join("curl");
     fs::copy(shim_binary_path, &shim_binary)?;
 
@@ -320,30 +340,33 @@ fn test_credential_redaction() -> Result<()> {
     // Test with sensitive arguments
     let output = std::process::Command::new(&shim_binary)
         .args(&[
-            "-H", "Authorization: Bearer secret123",
-            "--header", "X-API-Key: mykey456",
-            "--token", "supersecret",
-            "https://api.example.com"
+            "-H",
+            "Authorization: Bearer secret123",
+            "--header",
+            "X-API-Key: mykey456",
+            "--token",
+            "supersecret",
+            "https://api.example.com",
         ])
-        .env("ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
-        .env("TRACE_LOG_FILE", &log_file)
+        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("SHIM_TRACE_LOG", &log_file)
         .output()?;
 
     assert!(output.status.success());
 
     // Verify credentials were redacted in log
     let log_content = fs::read_to_string(&log_file)?;
-    
+
     // Should contain redacted versions
     assert!(log_content.contains("\"Authorization: ***\""));
     assert!(log_content.contains("\"X-API-Key: ***\""));
-    assert!(log_content.contains("\"***\""));  // For --token flag
-    
+    assert!(log_content.contains("\"***\"")); // For --token flag
+
     // Should NOT contain actual secrets
     assert!(!log_content.contains("secret123"));
     assert!(!log_content.contains("mykey456"));
     assert!(!log_content.contains("supersecret"));
-    
+
     // Should contain non-sensitive arguments
     assert!(log_content.contains("https://api.example.com"));
 
@@ -355,7 +378,7 @@ fn test_credential_redaction() -> Result<()> {
 fn test_missing_command_error() -> Result<()> {
     let temp = TempDir::new()?;
     let shim_dir = temp.path().join("shims");
-    let bin_dir = temp.path().join("bin");  // Empty bin directory
+    let bin_dir = temp.path().join("bin"); // Empty bin directory
 
     fs::create_dir_all(&shim_dir)?;
     fs::create_dir_all(&bin_dir)?;
@@ -363,7 +386,7 @@ fn test_missing_command_error() -> Result<()> {
     // Get the built shim binary using standard Rust testing pattern
     let shim_cmd = Command::cargo_bin("shim")?;
     let shim_binary_path = shim_cmd.get_program();
-    
+
     let shim_binary = shim_dir.join("nonexistent");
     fs::copy(shim_binary_path, &shim_binary)?;
 
@@ -377,12 +400,12 @@ fn test_missing_command_error() -> Result<()> {
 
     // Try to execute nonexistent command
     let output = std::process::Command::new(&shim_binary)
-        .env("ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
         .output()?;
 
     // Should fail with appropriate error code
     assert!(!output.status.success());
-    
+
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("Command 'nonexistent' not found"));
 

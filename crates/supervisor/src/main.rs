@@ -4,7 +4,7 @@ use substrate_supervisor::{launch_supervised, SupervisorConfig};
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
-    
+
     if args.len() < 2 {
         eprintln!("Usage: {} <command> [args...]", args[0]);
         eprintln!();
@@ -14,18 +14,18 @@ fn main() -> Result<()> {
         eprintln!("  {} code  # Launch VS Code with tracing", args[0]);
         eprintln!();
         eprintln!("Environment variables:");
-        eprintln!("  TRACE_LOG_FILE - Set log file location (default: no logging)");
+        eprintln!("  SHIM_TRACE_LOG - Set log file location (default: no logging)");
         eprintln!("  SHIM_SESSION_ID - Set session ID (default: auto-generated)");
         return Err(anyhow!("No command specified"));
     }
 
     let target_command = args[1..].iter().map(|s| s.to_string()).collect();
-    
+
     // Create supervisor config
     let mut config = SupervisorConfig::new(target_command)?;
 
     // Check for trace log file in environment
-    if let Ok(log_file) = env::var("TRACE_LOG_FILE") {
+    if let Ok(log_file) = env::var("SHIM_TRACE_LOG") {
         config = config.with_log_file(log_file);
     } else {
         // Default to home directory log file

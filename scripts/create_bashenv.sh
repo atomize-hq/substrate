@@ -17,13 +17,13 @@ if [[ "${SHIM_ACTIVE:-0}" -gt 0 ]]; then
 fi
 
 # Set up paths
-export ORIGINAL_PATH="${ORIGINAL_PATH:-$PATH}"
+export SHIM_ORIGINAL_PATH="${SHIM_ORIGINAL_PATH:-$PATH}"
 
 # Build clean shimmed PATH
 SHIM_DIR="$HOME/.cmdshim_rust"
 if [[ -d "$SHIM_DIR" ]]; then
     # Dedupe PATH components
-    IFS=':' read -r -a parts <<<"$SHIM_DIR:$ORIGINAL_PATH"
+    IFS=':' read -r -a parts <<<"$SHIM_DIR:$SHIM_ORIGINAL_PATH"
     declare -A seen
     deduped=()
     for d in "${parts[@]}"; do

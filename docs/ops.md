@@ -9,21 +9,24 @@ This guide covers operational aspects of the Substrate command tracing system, i
 ### Phase 1: Basic Shim Deployment
 
 1. **Build the shim binary**:
+
    ```bash
    cargo build --release -p substrate-shim
    ```
 
 2. **Stage shims using the deployment script**:
+
    ```bash
    scripts/stage_shims.sh
    ```
 
 3. **Activate shims in your shell**:
+
    ```bash
-   # Create clean ORIGINAL_PATH (strips existing shim directory)
-   ORIGINAL_PATH=$(python3 -c "import os; sd='$HOME/.cmdshim_rust'; print(':'.join(p for p in os.environ.get('PATH','').split(':') if p and p.rstrip('/')!=sd.rstrip('/')))")
-   export ORIGINAL_PATH
-   export PATH="$HOME/.cmdshim_rust:$ORIGINAL_PATH"
+   # Create clean SHIM_ORIGINAL_PATH (strips existing shim directory)
+   SHIM_ORIGINAL_PATH=$(python3 -c "import os; sd='$HOME/.cmdshim_rust'; print(':'.join(p for p in os.environ.get('PATH','').split(':') if p and p.rstrip('/')!=sd.rstrip('/')))")
+   export SHIM_ORIGINAL_PATH
+   export PATH="$HOME/.cmdshim_rust:$SHIM_ORIGINAL_PATH"
    hash -r
    ```
 
@@ -31,13 +34,14 @@ This guide covers operational aspects of the Substrate command tracing system, i
    ```bash
    which -a git  # Should show shim first
    type -a git   # Should show shim first
-   TRACE_LOG_FILE=/tmp/test.jsonl git --version
+   SHIM_TRACE_LOG=/tmp/test.jsonl git --version
    cat /tmp/test.jsonl  # Should contain JSON log entry
    ```
 
 ### Phase 2: Non-Interactive Shell Support
 
 1. **Create BASH_ENV file**:
+
    ```bash
    scripts/create_bashenv.sh
    ```
@@ -71,7 +75,7 @@ jq '.duration_ms' ~/.trace_shell.jsonl | tail -100 > /tmp/warm_cache.txt
 ### Performance Targets
 
 - **Shim overhead**: < 5ms per execution on macOS/Linux
-- **Memory usage**: < 1MB resident per shim process  
+- **Memory usage**: < 1MB resident per shim process
 - **Cache hit rate**: ~40% reduction in stat() calls after warmup
 - **Log file growth**: Bounded by external rotation
 
@@ -95,6 +99,7 @@ Substrate automatically redacts sensitive information:
 - **Flag-value patterns**: `--token secret`, `-p password`, `--apikey value`
 
 To disable redaction for debugging:
+
 ```bash
 export SHIM_LOG_OPTS=raw
 ```
@@ -121,6 +126,7 @@ jq 'select(.term_signal != null) | {command, term_signal, argv}' ~/.trace_shell.
 **Symptoms**: Commands execute without logging, `which` shows system binary
 
 **Diagnosis**:
+
 ```bash
 echo $PATH  # Check if shim directory is first
 which -a git  # Should show shim first
@@ -128,9 +134,10 @@ hash -r  # Clear bash hash table
 ```
 
 **Solution**:
+
 ```bash
 # Reactivate shims
-export PATH="$HOME/.cmdshim_rust:$ORIGINAL_PATH"
+export PATH="$HOME/.cmdshim_rust:$SHIM_ORIGINAL_PATH"
 hash -r
 ```
 
@@ -139,11 +146,13 @@ hash -r
 **Symptoms**: Commands fail with "recursive shim detection" errors
 
 **Diagnosis**:
+
 ```bash
 echo $SHIM_ACTIVE  # Should be unset in normal shells
 ```
 
 **Solution**:
+
 ```bash
 unset SHIM_ACTIVE
 ```
@@ -153,12 +162,14 @@ unset SHIM_ACTIVE
 **Symptoms**: Commands fail to execute
 
 **Diagnosis**:
+
 ```bash
 ls -la ~/.cmdshim_rust/  # Check shim permissions
 file ~/.cmdshim_rust/git  # Verify binary type
 ```
 
 **Solution**:
+
 ```bash
 chmod +x ~/.cmdshim_rust/*
 ```
@@ -168,6 +179,7 @@ chmod +x ~/.cmdshim_rust/*
 **Symptoms**: BASH_ENV errors on macOS
 
 **Diagnosis**:
+
 ```bash
 echo $BASH_VERSION  # Check bash version
 ```
@@ -182,7 +194,7 @@ file ~/.cmdshim_rust/.shimbin
 md5sum ~/.cmdshim_rust/.shimbin ~/.cmdshim_rust/*
 
 # Verify path resolution
-SHIM_CACHE_BUST=1 TRACE_LOG_FILE=/tmp/debug.jsonl git --version
+SHIM_CACHE_BUST=1 SHIM_TRACE_LOG=/tmp/debug.jsonl git --version
 jq '.duration_ms' /tmp/debug.jsonl  # Should be slower without cache
 
 # Test signal handling (Unix)
@@ -226,15 +238,17 @@ export SHIM_CACHE_BUST=1
 ### Updates and Upgrades
 
 1. **Build new shim binary**:
+
    ```bash
    cargo build --release -p substrate-shim
    ```
 
 2. **Update shims atomically**:
+
    ```bash
    # Backup current shims
    cp -r ~/.cmdshim_rust ~/.cmdshim_rust.backup
-   
+
    # Deploy new version
    scripts/stage_shims.sh
    ```
@@ -288,6 +302,7 @@ git status           # Will be logged (uses PATH resolution)
 ### Windows Signal Handling
 
 Signal capture is limited on Windows:
+
 - SIGINT/SIGTERM mapping is basic
 - Some termination methods may not be captured
 
@@ -304,6 +319,7 @@ Shims should not be used with set-uid binaries or privilege elevation scenarios.
 ### Structured Logging
 
 Substrate produces JSONL logs suitable for ingestion by:
+
 - **ELK Stack**: Logstash can parse JSONL directly
 - **Splunk**: Universal Forwarder with JSON parsing
 - **Prometheus**: Custom exporters can parse logs for metrics
@@ -326,15 +342,17 @@ jq 'select(.exit_code != 0) | {ts, command, argv, cwd, exit_code}' ~/.trace_shel
 For issues not covered in this guide:
 
 1. **Enable debug logging**:
+
    ```bash
    export SHIM_LOG_OPTS=raw
-   export TRACE_LOG_FILE=/tmp/substrate_debug.jsonl
+   export SHIM_TRACE_LOG=/tmp/substrate_debug.jsonl
    ```
 
 2. **Collect diagnostic information**:
+
    ```bash
    echo "PATH: $PATH"
-   echo "ORIGINAL_PATH: $ORIGINAL_PATH"
+   echo "SHIM_ORIGINAL_PATH: $SHIM_ORIGINAL_PATH"
    echo "SHIM_ACTIVE: $SHIM_ACTIVE"
    ls -la ~/.cmdshim_rust/
    tail -10 ~/.trace_shell.jsonl
@@ -342,6 +360,6 @@ For issues not covered in this guide:
 
 3. **Test minimal reproduction case**:
    ```bash
-   TRACE_LOG_FILE=/tmp/repro.jsonl git --version
+   SHIM_TRACE_LOG=/tmp/repro.jsonl git --version
    cat /tmp/repro.jsonl
    ```

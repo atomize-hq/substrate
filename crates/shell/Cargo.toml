@@ -24,7 +24,7 @@ ctrlc = "3.4"
 substrate-common = { path = "../common" }
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.29", features = ["process", "signal", "poll", "term"] }
+nix = { version = "0.29", features = ["process", "signal", "poll", "term", "fs"] }
 libc = "0.2"
 
 # Windows dependencies prepared for Phase 4

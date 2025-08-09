@@ -15,6 +15,7 @@ Phase 3 creates a custom Rust shell that can operate in multiple modes, making i
 ### Production Hardening Applied
 
 This implementation includes critical production fixes:
+
 1. **Robust Error Handling**: No silent failures - all errors propagated with context
 2. **Signal Management**: Proper SIGINT handling for interactive mode with child process tracking
 3. **Shell Validation**: Verifies shell binary exists before execution
@@ -265,7 +266,7 @@ pub struct Cli {
     /// Specify shell to use (defaults to $SHELL or /bin/bash)
     #[arg(long = "shell", value_name = "PATH")]
     pub shell: Option<String>,
-    
+
     /// Output version information as JSON
     #[arg(long = "version-json", conflicts_with_all = &["command", "script"])]
     pub version_json: bool,
@@ -294,7 +295,7 @@ pub struct ShellConfig {
 impl ShellConfig {
     pub fn from_args() -> Result<Self> {
         let cli = Cli::parse();
-        
+
         // Handle --version-json flag
         if cli.version_json {
             let version_info = json!({
@@ -311,7 +312,7 @@ impl ShellConfig {
             println!("{}", serde_json::to_string_pretty(&version_info)?);
             std::process::exit(0);
         }
-        
+
         let session_id = env::var("SHIM_SESSION_ID")
             .unwrap_or_else(|_| Uuid::now_v7().to_string());
 
@@ -323,7 +324,7 @@ impl ShellConfig {
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from(&home).join(".trace_shell.jsonl"));
 
-        let original_path = env::var("ORIGINAL_PATH")
+        let original_path = env::var("SHIM_ORIGINAL_PATH")
             .or_else(|_| env::var("PATH"))
             .context("No PATH found")?;
 
@@ -378,8 +379,8 @@ pub fn run_shell() -> Result<i32> {
 
     // Set up environment for child processes
     env::set_var("SHIM_SESSION_ID", &config.session_id);
-    env::set_var("ORIGINAL_PATH", &config.original_path);
-    env::set_var("TRACE_LOG_FILE", &config.trace_log_file);
+    env::set_var("SHIM_ORIGINAL_PATH", &config.original_path);
+    env::set_var("SHIM_TRACE_LOG_FILE", &config.trace_log_file);
 
     // Ensure shim directory is in PATH with deduplication (use OS-specific separator)
     let sep = if cfg!(windows) { ';' } else { ':' };
@@ -407,28 +408,28 @@ pub fn run_shell() -> Result<i32> {
 #[cfg(unix)]
 fn run_interactive_pty(config: &ShellConfig) -> Result<i32> {
     use crate::pty::{spawn_pty_shell, handle_pty_io};
-    
+
     println!("Substrate v{} (PTY mode)", env!("CARGO_PKG_VERSION"));
     println!("Session ID: {}", config.session_id);
     println!("Logging to: {}", config.trace_log_file.display());
     println!("Shell: {}", config.shell_path);
-    
+
     // Log PTY session start
     let session_cmd_id = Uuid::now_v7().to_string();
     log_command_event(config, "pty_session_start", &config.shell_path, &session_cmd_id, None)?;
-    
+
     // Spawn shell in PTY
     let pty_session = spawn_pty_shell(&config.shell_path)?;
-    
+
     // Handle I/O between terminal and PTY
     let result = handle_pty_io(pty_session, config);
-    
+
     // Log PTY session end
     let exit_extra = json!({
         log_schema::EXIT_CODE: if result.is_ok() { 0 } else { 1 }
     });
     log_command_event(config, "pty_session_end", &config.shell_path, &session_cmd_id, Some(exit_extra))?;
-    
+
     result?;
     Ok(0)
 }
@@ -468,7 +469,7 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
         let running_term = running_child_pid.clone();
         use nix::sys::signal::{signal, SigHandler, Signal};
         use std::sync::atomic::AtomicBool;
-        
+
         static TERM_RECEIVED: AtomicBool = AtomicBool::new(false);
         extern "C" fn handle_term(_: i32) {
             TERM_RECEIVED.store(true, Ordering::Relaxed);
@@ -476,7 +477,7 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
         unsafe {
             signal(Signal::SIGTERM, SigHandler::Handler(handle_term))?;
         }
-        
+
         // Spawn a thread to forward SIGTERM to child process group
         std::thread::spawn(move || {
             loop {
@@ -576,12 +577,12 @@ fn run_script_mode(config: &ShellConfig, script_path: &Path) -> Result<i32> {
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    
+
     let is_pwsh = shell_name == "pwsh.exe" || shell_name == "pwsh";
     let is_powershell = shell_name == "powershell.exe" || shell_name == "powershell";
     let is_cmd = shell_name == "cmd.exe" || shell_name == "cmd";
     let is_bash = shell_name == "bash" || shell_name == "bash.exe";
-    
+
     if cfg!(windows) && (is_pwsh || is_powershell) {
         // PowerShell
         if config.ci_mode && !config.no_exit_on_error {
@@ -609,7 +610,7 @@ fn run_script_mode(config: &ShellConfig, script_path: &Path) -> Result<i32> {
        .stdin(Stdio::inherit())
        .stdout(Stdio::inherit())
        .stderr(Stdio::inherit());
-    
+
     // Set BASH_ENV for builtin command tracking when using bash
     if is_bash {
         set_bashenv_trampoline(&mut cmd);
@@ -649,12 +650,12 @@ fn run_script_mode(config: &ShellConfig, script_path: &Path) -> Result<i32> {
         log_schema::EXIT_CODE: status.code().unwrap_or(-1),
         log_schema::DURATION_MS: duration.as_millis()
     });
-    
+
     #[cfg(unix)]
     if let Some(sig) = status.signal() {
         extra["term_signal"] = json!(sig);
     }
-    
+
     log_command_event(config, "command_complete", &script_cmd, &cmd_id, Some(extra))?;
 
     Ok(exit_code(status))
@@ -664,7 +665,7 @@ fn run_pipe_mode(config: &ShellConfig) -> Result<i32> {
     let stdin = io::stdin();
     let reader = stdin.lock();
     let mut last_status = 0;
-    
+
     // No signal handler for pipe mode - inherit from parent
     let no_signal_handler = Arc::new(AtomicI32::new(0));
 
@@ -743,10 +744,10 @@ fn execute_command(
     running_child_pid: Arc<AtomicI32>,
 ) -> Result<ExitStatus> {
     let trimmed = command.trim();
-    
+
     // Compute resolved path from raw command before redaction
     let resolved = first_command_path(trimmed);
-    
+
     // Redact sensitive information before logging (token-aware)
     let redacted_command = if std::env::var("SHIM_LOG_OPTS").as_deref() == Ok("raw") {
         trimmed.to_string()
@@ -755,11 +756,11 @@ fn execute_command(
             .unwrap_or_else(|_| trimmed.split_whitespace().map(|s| s.to_string()).collect());
         let mut out = Vec::new();
         let mut i = 0;
-        
+
         while i < toks.len() {
             let t = &toks[i];
             let lt = t.to_lowercase();
-            
+
             // Handle -u, --user, --password, --token, -p (redact both flag and value)
             if lt == "-u" || lt == "--user" || lt == "--password" || lt == "--token" || lt == "-p" {
                 out.push("***".into());  // redact flag
@@ -771,7 +772,7 @@ fn execute_command(
                 }
                 continue;
             }
-            
+
             // Handle -H/--header specially to preserve header name
             // Note: -H is case-sensitive, --header is case-insensitive
             if t == "-H" || lt == "--header" {
@@ -794,19 +795,19 @@ fn execute_command(
                 }
                 continue;
             }
-            
+
             // Handle inline forms (k=v)
             if t.contains('=') {
                 let (k, _) = t.split_once('=').unwrap();
                 let kl = k.to_lowercase();
-                if kl.contains("token") || kl.contains("password") || kl.contains("secret") 
+                if kl.contains("token") || kl.contains("password") || kl.contains("secret")
                     || kl.contains("apikey") || kl.contains("api_key") {
                     out.push(format!("{}=***", k));
                     i += 1;
                     continue;
                 }
             }
-            
+
             // Default: use base redaction
             out.push(redact_sensitive(t));
             i += 1;
@@ -838,12 +839,12 @@ fn execute_command(
         log_schema::EXIT_CODE: status.code().unwrap_or(-1),
         log_schema::DURATION_MS: duration.as_millis()
     });
-    
+
     #[cfg(unix)]
     if let Some(sig) = status.signal() {
         extra["term_signal"] = json!(sig);
     }
-    
+
     log_command_event(config, "command_complete", &redacted_command, cmd_id, Some(extra))?;
 
     Ok(status)
@@ -919,14 +920,14 @@ fn handle_builtin(config: &ShellConfig, command: &str, parent_cmd_id: &str) -> R
         }
         _ => None,
     };
-    
+
     // Log builtin command if we handled it
     if builtin_result.is_some() {
         let builtin_cmd_id = Uuid::now_v7().to_string();
         let extra = json!({ "parent_cmd_id": parent_cmd_id });
         log_command_event(config, "builtin_command", command, &builtin_cmd_id, Some(extra))?;
     }
-    
+
     Ok(builtin_result)
 }
 
@@ -950,12 +951,12 @@ fn execute_external(
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    
+
     let is_pwsh = shell_name == "pwsh.exe" || shell_name == "pwsh";
     let is_powershell = shell_name == "powershell.exe" || shell_name == "powershell";
     let is_cmd = shell_name == "cmd.exe" || shell_name == "cmd";
     let is_bash = shell_name == "bash" || shell_name == "bash.exe";
-    
+
     if is_pwsh || is_powershell {
         // PowerShell
         if config.ci_mode && !config.no_exit_on_error {
@@ -984,7 +985,7 @@ fn execute_external(
     // Propagate environment
     cmd.env("SHIM_SESSION_ID", &config.session_id);
     cmd.env("TRACE_LOG_FILE", &config.trace_log_file);
-    
+
     // Set BASH_ENV for builtin command tracking when using bash
     if is_bash {
         set_bashenv_trampoline(&mut cmd);
@@ -1031,7 +1032,7 @@ fn first_command_path(cmd: &str) -> Option<String> {
     // Use shell_words for proper tokenization, fall back to whitespace split
     let tokens = shell_words::split(cmd)
         .unwrap_or_else(|_| cmd.split_whitespace().map(|s| s.to_string()).collect());
-    
+
     let first = tokens.first()?;
     let p = std::path::Path::new(first);
     if p.is_absolute() {
@@ -1043,14 +1044,14 @@ fn first_command_path(cmd: &str) -> Option<String> {
 
 fn maybe_rotate_log(path: &Path) -> Result<()> {
     const MAX_BYTES: u64 = 50 * 1024 * 1024; // 50MB default
-    
+
     // Check environment variable for custom limit
     let max_bytes = env::var("TRACE_LOG_MAX_MB")
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
         .map(|mb| mb * 1024 * 1024)
         .unwrap_or(MAX_BYTES);
-    
+
     if let Ok(meta) = std::fs::metadata(path) {
         if meta.len() > max_bytes {
             let bak = path.with_extension("jsonl.1");
@@ -1211,14 +1212,14 @@ pub mod pty {
                     .and_then(|s| s.to_str())
                     .unwrap_or("")
                     .to_ascii_lowercase();
-                
+
                 if shell_name == "bash" || shell_name == "bash.exe" {
                     if let Ok(home) = std::env::var("HOME") {
                         let preexec_path = format!("{}/.substrate_preexec", home);
-                        
+
                         // Create the preexec file
                         let _ = std::fs::write(&preexec_path, crate::BASH_PREEXEC_SCRIPT);
-                        
+
                         // Execute bash with custom rcfile for interactive mode
                         let shell_cstr = CString::new(shell)?;
                         let i_flag = CString::new("-i")?;
@@ -1238,7 +1239,7 @@ pub mod pty {
             }
         }
     }
-    
+
 
     pub fn handle_pty_io(session: PtySession, config: &ShellConfig) -> Result<()> {
         use std::thread;
@@ -1252,7 +1253,7 @@ pub mod pty {
         let stdin_fd = io::stdin().as_raw_fd();
         let stdout_fd = io::stdout().as_raw_fd();
         let original_termios = tcgetattr(stdin_fd)?;
-        
+
         // Set raw mode
         let mut raw_termios = original_termios.clone();
         nix::sys::termios::cfmakeraw(&mut raw_termios);
@@ -1260,7 +1261,7 @@ pub mod pty {
 
         // Restore terminal on exit
         let _guard = TerminalGuard { fd: stdin_fd, termios: original_termios };
-        
+
         // Set up SIGWINCH handler for window resize
         static WINCH_RECEIVED: AtomicBool = AtomicBool::new(false);
         extern "C" fn handle_winch(_: i32) {
@@ -1269,7 +1270,7 @@ pub mod pty {
         unsafe {
             signal(Signal::SIGWINCH, SigHandler::Handler(handle_winch))?;
         }
-        
+
         // Function to update PTY window size
         let update_pty_size = |master_fd: RawFd| -> Result<()> {
             unsafe {
@@ -1280,18 +1281,18 @@ pub mod pty {
             }
             Ok(())
         };
-        
+
         // Set initial window size
         update_pty_size(session.master)?;
 
         // Spawn thread to copy stdin to PTY
         let (tx, rx) = mpsc::channel();
         let master_fd = session.master;
-        
+
         thread::spawn(move || {
             let mut stdin = io::stdin();
             let mut buffer = [0u8; 1024];
-            
+
             loop {
                 match stdin.read(&mut buffer) {
                     Ok(0) => break,
@@ -1315,7 +1316,7 @@ pub mod pty {
             if WINCH_RECEIVED.swap(false, Ordering::Relaxed) {
                 update_pty_size(session.master)?;
             }
-            
+
             // Check for input from stdin thread
             if let Ok(data) = rx.try_recv() {
                 pty_file.write_all(&data)?;
@@ -1416,7 +1417,7 @@ fn main() {
     let version = rustc_version::version()
         .map(|v| v.to_string())
         .unwrap_or_else(|_| "unknown".to_string());
-    
+
     println!("cargo:rustc-env=SHIM_RUSTC_VERSION={}", version);
 }
 ```
@@ -1430,14 +1431,14 @@ steps:
     run: |
       cargo clippy -- -D warnings
       cargo fmt -- --check
-      
+
   - name: Run tests with substrate tracing
     env:
       ORIGINAL_PATH: ${{ env.PATH }}
       TRACE_LOG_FILE: .substrate/trace.jsonl
     run: |
       substrate --ci -c "npm test"
-      
+
   - name: Run with error tolerance
     run: |
       substrate --ci --no-exit-on-error -f ./scripts/integration-tests.sh
@@ -1448,7 +1449,7 @@ test:
     - cargo clippy -- -D warnings
     - cargo fmt -- --check
     - substrate --ci -f ./scripts/test.sh
-    
+
 # PowerShell on Windows
 test-windows:
   script:
@@ -1625,7 +1626,7 @@ use tempfile::TempDir;
 fn test_command_start_finish_json_roundtrip() {
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
-    
+
     Command::cargo_bin("substrate")
         .unwrap()
         .env("TRACE_LOG_FILE", &log_file)
@@ -1633,20 +1634,20 @@ fn test_command_start_finish_json_roundtrip() {
         .arg("echo test")
         .assert()
         .success();
-    
+
     let log_content = fs::read_to_string(&log_file).unwrap();
     let lines: Vec<&str> = log_content.trim().split('\n').collect();
-    
+
     // Should have start and complete events
     assert_eq!(lines.len(), 2);
-    
+
     // Parse and validate JSON structure
     let start_event: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
     assert_eq!(start_event["event_type"], "command_start");
     assert_eq!(start_event["command"], "echo test");
     assert!(start_event["session_id"].is_string());
     assert!(start_event["cmd_id"].is_string());
-    
+
     let complete_event: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
     assert_eq!(complete_event["event_type"], "command_complete");
     assert_eq!(complete_event["exit_code"], 0);
@@ -1658,9 +1659,9 @@ fn test_builtin_cd_side_effects() {
     let temp = TempDir::new().unwrap();
     let target_dir = temp.path().join("test_dir");
     fs::create_dir(&target_dir).unwrap();
-    
+
     let script = format!("cd {}\npwd", target_dir.display());
-    
+
     Command::cargo_bin("substrate")
         .unwrap()
         .arg("-c")
@@ -1674,7 +1675,7 @@ fn test_builtin_cd_side_effects() {
 fn test_ci_flag_strict_mode_ordering() {
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
-    
+
     // Test that undefined variable causes failure in CI mode
     Command::cargo_bin("substrate")
         .unwrap()
@@ -1686,7 +1687,7 @@ fn test_ci_flag_strict_mode_ordering() {
         .arg("echo $UNDEFINED_VAR")
         .assert()
         .failure();
-    
+
     // Test that it succeeds without CI mode
     Command::cargo_bin("substrate")
         .unwrap()
@@ -1703,10 +1704,10 @@ fn test_ci_flag_strict_mode_ordering() {
 fn test_script_mode_single_process() {
     let temp = TempDir::new().unwrap();
     let script_file = temp.path().join("test.sh");
-    
+
     // Test that script state persists (cd, export, etc)
     fs::write(&script_file, "cd /tmp\npwd\nexport FOO=bar\necho $FOO").unwrap();
-    
+
     Command::cargo_bin("substrate")
         .unwrap()
         .arg("-f")
@@ -1721,7 +1722,7 @@ fn test_script_mode_single_process() {
 fn test_redaction_header_values() {
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
-    
+
     // Test -H header value redaction
     Command::cargo_bin("substrate")
         .unwrap()
@@ -1730,7 +1731,7 @@ fn test_redaction_header_values() {
         .arg("curl -H 'Authorization: Bearer secret123' https://api.example.com")
         .assert()
         .success();
-    
+
     let log_content = fs::read_to_string(&log_file).unwrap();
     assert!(!log_content.contains("secret123"));
     assert!(log_content.contains("Authorization: ***"));
@@ -1740,7 +1741,7 @@ fn test_redaction_header_values() {
 fn test_redaction_user_pass() {
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
-    
+
     // Test -u user:pass value redaction
     Command::cargo_bin("substrate")
         .unwrap()
@@ -1749,11 +1750,11 @@ fn test_redaction_user_pass() {
         .arg("curl -u alice:secretpass https://example.com")
         .assert()
         .success();
-    
+
     let log_content = fs::read_to_string(&log_file).unwrap();
     assert!(!log_content.contains("secretpass"));
     assert!(!log_content.contains("alice:secretpass"));
-    
+
     // Verify the command itself is redacted
     let lines: Vec<&str> = log_content.trim().split('\n').collect();
     let start_event: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
@@ -1765,10 +1766,10 @@ fn test_redaction_user_pass() {
 fn test_log_directory_creation() {
     let temp = TempDir::new().unwrap();
     let nested_log = temp.path().join("subdir").join("logs").join("trace.jsonl");
-    
+
     // Directory should not exist yet
     assert!(!nested_log.parent().unwrap().exists());
-    
+
     Command::cargo_bin("substrate")
         .unwrap()
         .env("TRACE_LOG_FILE", &nested_log)
@@ -1776,7 +1777,7 @@ fn test_log_directory_creation() {
         .arg("true")
         .assert()
         .success();
-    
+
     // Log file and directory should now exist
     assert!(nested_log.exists());
     assert!(fs::read_to_string(&nested_log).unwrap().contains("command_start"));
@@ -1786,7 +1787,7 @@ fn test_log_directory_creation() {
 fn test_shell_validation() {
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
-    
+
     // Test with non-existent shell
     Command::cargo_bin("substrate")
         .unwrap()
@@ -1803,7 +1804,7 @@ fn test_shell_validation() {
 fn test_pipe_mode_detection() {
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
-    
+
     Command::cargo_bin("substrate")
         .unwrap()
         .env("TRACE_LOG_FILE", &log_file)
@@ -1811,7 +1812,7 @@ fn test_pipe_mode_detection() {
         .assert()
         .success()
         .stdout(predicate::str::contains("piped"));
-    
+
     let log_content = fs::read_to_string(&log_file).unwrap();
     assert!(log_content.contains("\"mode\":\"pipe\""));
 }
@@ -1825,10 +1826,10 @@ fn test_bash_env_chaining() {
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
     let user_be = temp.path().join("user_be.sh");
-    
+
     // Create a user BASH_ENV file
     fs::write(&user_be, "export FOO=pre\n").unwrap();
-    
+
     Command::cargo_bin("substrate")
         .unwrap()
         .env("TRACE_LOG_FILE", &log_file)
@@ -1840,7 +1841,7 @@ fn test_bash_env_chaining() {
         .assert()
         .success()
         .stdout(predicate::str::contains("pre"));
-    
+
     // Verify builtin_command events are still logged
     let log_content = fs::read_to_string(&log_file).unwrap();
     assert!(log_content.contains("builtin_command"));
@@ -1851,7 +1852,7 @@ fn test_cd_minus_behavior() {
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
     let start_dir = std::env::current_dir().unwrap();
-    
+
     Command::cargo_bin("substrate")
         .unwrap()
         .env("TRACE_LOG_FILE", &log_file)
@@ -1861,7 +1862,7 @@ fn test_cd_minus_behavior() {
         .assert()
         .success()
         .stdout(predicate::str::contains(start_dir.to_string_lossy().to_string()).count(2));
-    
+
     // Verify builtin_command was logged
     let log_content = fs::read_to_string(&log_file).unwrap();
     assert!(log_content.contains("builtin_command"));
@@ -1871,7 +1872,7 @@ fn test_cd_minus_behavior() {
 fn test_raw_mode_no_redaction() {
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
-    
+
     Command::cargo_bin("substrate")
         .unwrap()
         .env("TRACE_LOG_FILE", &log_file)
@@ -1880,7 +1881,7 @@ fn test_raw_mode_no_redaction() {
         .arg("curl -H 'Authorization: Bearer secret123' https://api.example.com")
         .assert()
         .success();
-    
+
     let log_content = fs::read_to_string(&log_file).unwrap();
     // In raw mode, the secret should NOT be redacted
     assert!(log_content.contains("secret123"));
@@ -1891,7 +1892,7 @@ fn test_raw_mode_no_redaction() {
 fn test_export_complex_values_deferred() {
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
-    
+
     // Test that complex export statements are deferred to shell
     Command::cargo_bin("substrate")
         .unwrap()
@@ -1901,7 +1902,7 @@ fn test_export_complex_values_deferred() {
         .assert()
         .success()
         .stdout(predicate::str::contains("bar baz"));
-    
+
     // Complex export should not be handled as builtin
     let log_content = fs::read_to_string(&log_file).unwrap();
     // Should have command_start/complete but no builtin_command
@@ -1913,7 +1914,7 @@ fn test_export_complex_values_deferred() {
 fn test_pty_field_in_logs() {
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
-    
+
     // Non-PTY mode
     Command::cargo_bin("substrate")
         .unwrap()
@@ -1922,10 +1923,10 @@ fn test_pty_field_in_logs() {
         .arg("echo test")
         .assert()
         .success();
-    
+
     let log_content = fs::read_to_string(&log_file).unwrap();
     assert!(log_content.contains("\"pty\":false"));
-    
+
     // Note: Testing pty:true would require Unix-specific PTY setup
 }
 
@@ -1935,7 +1936,7 @@ fn test_process_group_signal_handling() {
     // Note: Full testing would require spawning pipelines and sending signals
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
-    
+
     // Run a pipeline command
     Command::cargo_bin("substrate")
         .unwrap()
@@ -1944,7 +1945,7 @@ fn test_process_group_signal_handling() {
         .arg("sleep 0.1 | cat")
         .assert()
         .success();
-    
+
     // Verify the command completed successfully
     let log_content = fs::read_to_string(&log_file).unwrap();
     assert!(log_content.contains("command_complete"));
@@ -1958,7 +1959,7 @@ fn test_needs_shell_redirections() {
     assert!(substrate_shell::needs_shell("cat file 2>/dev/null"));
     assert!(substrate_shell::needs_shell("cmd 1>&2"));
     assert!(substrate_shell::needs_shell("echo test &>/dev/null"));
-    
+
     // Should not need shell for simple commands
     assert!(!substrate_shell::needs_shell("echo hello world"));
     assert!(!substrate_shell::needs_shell("git status"));
@@ -1969,7 +1970,7 @@ fn test_needs_shell_redirections() {
 fn test_sigterm_exit_code() {
     use std::time::Duration;
     use std::process::Stdio;
-    
+
     // Test that SIGTERM results in exit code 143 (128 + 15)
     let mut child = Command::cargo_bin("substrate")
         .unwrap()
@@ -1979,15 +1980,15 @@ fn test_sigterm_exit_code() {
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
-    
+
     // Give it time to start
     std::thread::sleep(Duration::from_millis(200));
-    
+
     // Send SIGTERM
     use nix::sys::signal::{kill, Signal};
     use nix::unistd::Pid;
     kill(Pid::from_raw(child.id() as i32), Signal::SIGTERM).unwrap();
-    
+
     let status = child.wait().unwrap();
     assert_eq!(status.code(), Some(143)); // 128 + SIGTERM(15)
 }
@@ -1996,11 +1997,11 @@ fn test_sigterm_exit_code() {
 fn test_log_rotation() {
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
-    
+
     // Create a large log file (just over 50MB)
     let large_content = "x".repeat(51 * 1024 * 1024);
     fs::write(&log_file, &large_content).unwrap();
-    
+
     // Set custom rotation size for testing
     Command::cargo_bin("substrate")
         .unwrap()
@@ -2010,12 +2011,12 @@ fn test_log_rotation() {
         .arg("echo test")
         .assert()
         .success();
-    
+
     // Original file should have been rotated
     let rotated = log_file.with_extension("jsonl.1");
     assert!(rotated.exists());
     assert_eq!(fs::read_to_string(&rotated).unwrap().len(), large_content.len());
-    
+
     // New file should contain just the recent command
     let new_content = fs::read_to_string(&log_file).unwrap();
     assert!(new_content.len() < 1000); // Much smaller than original
@@ -2868,6 +2869,7 @@ jq '{command, isatty_stdin, isatty_stdout, exit_code}' ~/.trace_shell.jsonl | \
 ### Log Rotation Behavior
 
 The `TRACE_LOG_MAX_MB` environment variable controls log rotation (default 50MB). Note that rotation is "best-effort":
+
 - New processes will create a fresh log file after rotation
 - Existing processes with open file handles continue writing to the rotated `.jsonl.1` file
 - This prevents data loss but means the rotated file may grow beyond the limit until processes restart
@@ -2882,24 +2884,24 @@ The `TRACE_LOG_MAX_MB` environment variable controls log rotation (default 50MB)
 
 ### Production-Ready Features
 
-- **argv[0] preservation** - Maintains tool compatibility for name-dependent binaries  
-- **Resolved path logging** - Verifiable execution tracking prevents PATH confusion  
-- **Version correlation** - Build tracking enables incident response and rollbacks  
-- **Enhanced context** - Process tree and TTY information for rich debugging  
-- **Session correlation** - Full command chain traceability with UUIDv7 session IDs  
-- **Depth tracking** - Hierarchical execution context for nested commands  
-- **Enhanced security** - Advanced credential redaction for headers and bearer tokens  
-- **Optimized caching** - CWD-independent keys for better hit rates  
-- **PATH deduplication** - Predictable resolution with performance optimization  
-- **Signal logging** - Complete termination context on Unix systems  
-- **Cross-platform** - Windows and Unix support with platform-specific optimizations  
-- **Deterministic testing** - Hermetic test environment prevents CI flakes  
-- **MSRV pinning** - Rust version 1.74+ for reliable builds and contributor experience  
-- **Spawn failure telemetry** - Detailed error reporting for exec failures with ErrorKind  
-- **Exit status parity** - Unix signal compatibility (128 + signal) for shell consistency  
-- **Binary integrity** - SHA-256 fingerprinting for forensics and compliance requirements  
-- **Escape hatch** - SHIM_BYPASS=1 for debugging and sensitive session bypass  
-- **Comprehensive testing** - Unit and integration tests with 95%+ coverage  
+- **argv[0] preservation** - Maintains tool compatibility for name-dependent binaries
+- **Resolved path logging** - Verifiable execution tracking prevents PATH confusion
+- **Version correlation** - Build tracking enables incident response and rollbacks
+- **Enhanced context** - Process tree and TTY information for rich debugging
+- **Session correlation** - Full command chain traceability with UUIDv7 session IDs
+- **Depth tracking** - Hierarchical execution context for nested commands
+- **Enhanced security** - Advanced credential redaction for headers and bearer tokens
+- **Optimized caching** - CWD-independent keys for better hit rates
+- **PATH deduplication** - Predictable resolution with performance optimization
+- **Signal logging** - Complete termination context on Unix systems
+- **Cross-platform** - Windows and Unix support with platform-specific optimizations
+- **Deterministic testing** - Hermetic test environment prevents CI flakes
+- **MSRV pinning** - Rust version 1.74+ for reliable builds and contributor experience
+- **Spawn failure telemetry** - Detailed error reporting for exec failures with ErrorKind
+- **Exit status parity** - Unix signal compatibility (128 + signal) for shell consistency
+- **Binary integrity** - SHA-256 fingerprinting for forensics and compliance requirements
+- **Escape hatch** - SHIM_BYPASS=1 for debugging and sensitive session bypass
+- **Comprehensive testing** - Unit and integration tests with 95%+ coverage
 - **Operations ready** - Monitoring, rollback, and troubleshooting procedures
 
 This implementation follows Rust best practices with proper error handling, comprehensive testing, and production-ready observability optimized for AI agent workflows.

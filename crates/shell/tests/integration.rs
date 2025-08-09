@@ -10,7 +10,7 @@ fn test_command_start_finish_json_roundtrip() {
     
     Command::cargo_bin("substrate")
         .unwrap()
-        .env("TRACE_LOG_FILE", &log_file)
+        .env("SHIM_TRACE_LOG", &log_file)
         .arg("-c")
         .arg("echo test")
         .assert()
@@ -41,7 +41,7 @@ fn test_builtin_cd_side_effects() {
     let target_dir = temp.path().join("test_dir");
     fs::create_dir(&target_dir).unwrap();
     
-    let script = format!("cd {}\npwd", target_dir.display());
+    let script = format!("cd {} && pwd", target_dir.display());
     
     Command::cargo_bin("substrate")
         .unwrap()
@@ -60,7 +60,7 @@ fn test_ci_flag_strict_mode_ordering() {
     // Test that undefined variable causes failure in CI mode
     Command::cargo_bin("substrate")
         .unwrap()
-        .env("TRACE_LOG_FILE", &log_file)
+        .env("SHIM_TRACE_LOG", &log_file)
         .arg("--shell")
         .arg("/bin/bash")
         .arg("--ci")
@@ -72,7 +72,7 @@ fn test_ci_flag_strict_mode_ordering() {
     // Test that it succeeds without CI mode
     Command::cargo_bin("substrate")
         .unwrap()
-        .env("TRACE_LOG_FILE", &log_file)
+        .env("SHIM_TRACE_LOG", &log_file)
         .arg("--shell")
         .arg("/bin/bash")
         .arg("-c")
@@ -104,16 +104,19 @@ fn test_redaction_header_values() {
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
     
-    // Test -H header value redaction
+    // Test that -H header values get redacted in logged commands
+    // Using 'true' command which always exists and succeeds
     Command::cargo_bin("substrate")
         .unwrap()
-        .env("TRACE_LOG_FILE", &log_file)
+        .env("SHIM_TRACE_LOG", &log_file)
         .arg("-c")
-        .arg("echo 'Authorization: Bearer secret123'")
+        .arg("true -H 'Authorization: Bearer secret123'")
         .assert()
         .success();
     
     let log_content = fs::read_to_string(&log_file).unwrap();
+    // The logged command should have the header value redacted
+    assert!(log_content.contains("Authorization: ***"));
     assert!(!log_content.contains("secret123"));
 }
 
@@ -122,16 +125,19 @@ fn test_redaction_user_pass() {
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
     
-    // Test -u user:pass value redaction - simulate with echo since curl might not exist
+    // Test that -u user:pass values get redacted in logged commands
     Command::cargo_bin("substrate")
         .unwrap()
-        .env("TRACE_LOG_FILE", &log_file)
+        .env("SHIM_TRACE_LOG", &log_file)
         .arg("-c")
-        .arg("echo '-u alice:secretpass'")
+        .arg("true -u alice:secretpass")
         .assert()
         .success();
     
     let log_content = fs::read_to_string(&log_file).unwrap();
+    // The -u flag and value should both be redacted as ***
+    assert!(log_content.contains("*** ***"));
+    assert!(!log_content.contains("alice"));
     assert!(!log_content.contains("secretpass"));
 }
 
@@ -145,7 +151,7 @@ fn test_log_directory_creation() {
     
     Command::cargo_bin("substrate")
         .unwrap()
-        .env("TRACE_LOG_FILE", &nested_log)
+        .env("SHIM_TRACE_LOG", &nested_log)
         .arg("-c")
         .arg("true")
         .assert()
@@ -163,7 +169,7 @@ fn test_pipe_mode_detection() {
     
     Command::cargo_bin("substrate")
         .unwrap()
-        .env("TRACE_LOG_FILE", &log_file)
+        .env("SHIM_TRACE_LOG", &log_file)
         .write_stdin("echo piped\n")
         .assert()
         .success()
@@ -188,14 +194,19 @@ fn test_needs_shell_redirections() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn test_sigterm_exit_code() {
     use std::time::Duration;
-    use std::process::Stdio;
+    use std::process::{Command as StdCommand, Stdio};
     
     // Test that SIGTERM results in exit code 143 (128 + 15)
-    let mut child = Command::cargo_bin("substrate")
+    // Note: This test is disabled on macOS due to signal handling differences
+    let substrate_bin = assert_cmd::Command::cargo_bin("substrate")
         .unwrap()
+        .get_program()
+        .to_owned();
+    
+    let mut child = StdCommand::new(substrate_bin)
         .arg("-c")
         .arg("sleep 5")
         .stdout(Stdio::null())
@@ -227,8 +238,8 @@ fn test_log_rotation() {
     // Set custom rotation size for testing
     Command::cargo_bin("substrate")
         .unwrap()
-        .env("TRACE_LOG_FILE", &log_file)
-        .env("TRACE_LOG_MAX_MB", "50")
+        .env("SHIM_TRACE_LOG", &log_file)
+        .env("SHIM_TRACE_LOG_MAX_MB", "50")
         .arg("-c")
         .arg("echo test")
         .assert()
@@ -253,7 +264,7 @@ fn test_cd_minus_behavior() {
     
     Command::cargo_bin("substrate")
         .unwrap()
-        .env("TRACE_LOG_FILE", &log_file)
+        .env("SHIM_TRACE_LOG", &log_file)
         .current_dir(&start_dir)
         .arg("-c")
         .arg("pwd; cd /; cd -; pwd")
@@ -269,7 +280,7 @@ fn test_raw_mode_no_redaction() {
     
     Command::cargo_bin("substrate")
         .unwrap()
-        .env("TRACE_LOG_FILE", &log_file)
+        .env("SHIM_TRACE_LOG", &log_file)
         .env("SHIM_LOG_OPTS", "raw")
         .arg("-c")
         .arg("echo 'Authorization: Bearer secret123'")
@@ -289,7 +300,7 @@ fn test_export_complex_values_deferred() {
     // Test that complex export statements are deferred to shell
     Command::cargo_bin("substrate")
         .unwrap()
-        .env("TRACE_LOG_FILE", &log_file)
+        .env("SHIM_TRACE_LOG", &log_file)
         .arg("-c")
         .arg("export FOO=\"bar baz\" && echo $FOO")
         .assert()
@@ -305,7 +316,7 @@ fn test_pty_field_in_logs() {
     // Non-PTY mode
     Command::cargo_bin("substrate")
         .unwrap()
-        .env("TRACE_LOG_FILE", &log_file)
+        .env("SHIM_TRACE_LOG", &log_file)
         .arg("-c")
         .arg("echo test")
         .assert()
@@ -323,7 +334,7 @@ fn test_process_group_signal_handling() {
     // Run a pipeline command
     Command::cargo_bin("substrate")
         .unwrap()
-        .env("TRACE_LOG_FILE", &log_file)
+        .env("SHIM_TRACE_LOG", &log_file)
         .arg("-c")
         .arg("sleep 0.1 | cat")
         .assert()

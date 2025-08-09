@@ -14,8 +14,7 @@ pub struct SupervisorConfig {
 
 impl SupervisorConfig {
     pub fn new(target_command: Vec<String>) -> Result<Self> {
-        let home = env::var("HOME")
-            .context("HOME environment variable not set")?;
+        let home = env::var("HOME").context("HOME environment variable not set")?;
 
         let shim_dir = PathBuf::from(&home).join(".cmdshim_rust");
 
@@ -39,7 +38,10 @@ impl SupervisorConfig {
     }
 
     pub fn with_log_file<P: Into<PathBuf>>(self, log_file: P) -> Self {
-        self.with_env("TRACE_LOG_FILE".to_string(), log_file.into().display().to_string())
+        self.with_env(
+            "SHIM_TRACE_LOG".to_string(),
+            log_file.into().display().to_string(),
+        )
     }
 }
 
@@ -56,17 +58,14 @@ pub fn launch_supervised(config: SupervisorConfig) -> Result<()> {
     }
 
     // Set up clean environment with session seeding
-    let session_id = env::var("SHIM_SESSION_ID")
-        .unwrap_or_else(|_| uuid::Uuid::now_v7().to_string());
+    let session_id =
+        env::var("SHIM_SESSION_ID").unwrap_or_else(|_| uuid::Uuid::now_v7().to_string());
     cmd.env("SHIM_SESSION_ID", &session_id);
     cmd.env("SHIM_BUILD", env!("CARGO_PKG_VERSION"));
-    cmd.env("ORIGINAL_PATH", &config.original_path);
+    cmd.env("SHIM_ORIGINAL_PATH", &config.original_path);
 
     // Build shimmed PATH with deduplication
-    let shimmed_path = format!("{}:{}",
-        config.shim_dir.display(),
-        config.original_path
-    );
+    let shimmed_path = format!("{}:{}", config.shim_dir.display(), config.original_path);
     cmd.env("PATH", dedupe_path(&shimmed_path));
 
     // Set BASH_ENV for non-interactive shells (Claude Code integration)
@@ -84,14 +83,12 @@ pub fn launch_supervised(config: SupervisorConfig) -> Result<()> {
 
     // Inherit stdio for interactive use
     cmd.stdin(Stdio::inherit())
-       .stdout(Stdio::inherit())
-       .stderr(Stdio::inherit());
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit());
 
-    let mut child = cmd.spawn()
-        .context("Failed to spawn target command")?;
+    let mut child = cmd.spawn().context("Failed to spawn target command")?;
 
-    let status = child.wait()
-        .context("Failed to wait for target command")?;
+    let status = child.wait().context("Failed to wait for target command")?;
 
     if !status.success() {
         std::process::exit(status.code().unwrap_or(1));
@@ -135,7 +132,7 @@ fn strip_shim_dir_from_path(path: &str, shim_dir: &str) -> String {
     path.split(separator)
         .filter(|s| !s.is_empty())
         .filter(|p| p.trim_end_matches('/') != shim_dir_normalized)
-        .filter(|p| is_good_dir(p))  // Validate paths
+        .filter(|p| is_good_dir(p)) // Validate paths
         .collect::<Vec<_>>()
         .join(&separator.to_string())
 }
@@ -157,11 +154,9 @@ fn dedupe_path(path: &str) -> String {
     deduped.join(&separator.to_string())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
 
     #[test]
     fn test_strip_shim_dir() {

@@ -542,6 +542,30 @@ source "{}"
     }
 }
 
+fn needs_direct_terminal(cmd: &str) -> bool {
+    // Commands that need direct terminal control
+    let tokens = shell_words::split(cmd).unwrap_or_else(|_| vec![cmd.to_string()]);
+    if let Some(first) = tokens.first() {
+        let cmd_name = Path::new(first)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or(first)
+            .to_lowercase();
+        
+        // Interactive commands that need full terminal control
+        matches!(cmd_name.as_str(), 
+            "claude" | "vim" | "vi" | "nano" | "emacs" | "less" | "more" |
+            "top" | "htop" | "btop" | "code" | "codex" | "cursor" | 
+            "nvim" | "neovim" | "micro" | "pico" | "joe" | "ed" |
+            "ssh" | "telnet" | "ftp" | "sftp" | "mysql" | "psql" |
+            "python" | "python3" | "ipython" | "node" | "irb" | "pry" |
+            "ghci" | "scala" | "clojure" | "julia" | "R" | "bc" | "dc"
+        )
+    } else {
+        false
+    }
+}
+
 fn execute_command(
     config: &ShellConfig,
     command: &str,
@@ -549,6 +573,12 @@ fn execute_command(
     running_child_pid: Arc<AtomicI32>,
 ) -> Result<ExitStatus> {
     let trimmed = command.trim();
+    
+    // Check if this command needs direct terminal access
+    if needs_direct_terminal(trimmed) {
+        // For interactive commands, spawn directly without shell wrapper
+        return execute_direct(config, trimmed, cmd_id, running_child_pid);
+    }
     
     // Compute resolved path from raw command before redaction
     let resolved = first_command_path(trimmed);

@@ -56,9 +56,9 @@
 //! ### 3. Activate Tracing
 //!
 //! ```bash
-//! export ORIGINAL_PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-//! export PATH="$HOME/.cmdshim_rust:$ORIGINAL_PATH" 
-//! export TRACE_LOG_FILE="$HOME/.trace_shell.jsonl"
+//! export SHIM_ORIGINAL_PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+//! export PATH="$HOME/.cmdshim_rust:$SHIM_ORIGINAL_PATH"
+//! export SHIM_TRACE_LOG="$HOME/.trace_shell.jsonl"
 //! hash -r  # Clear command cache
 //! ```
 //!
@@ -95,7 +95,7 @@
 //!
 //! ```rust,no_run
 //! use substrate_shim::run_shim;
-//! 
+//!
 //! // Direct execution (used by main.rs)
 //! fn main() -> std::process::ExitCode {
 //!     match run_shim() {
@@ -111,8 +111,8 @@
 //!
 //! | Variable | Purpose | Example |
 //! |----------|---------|---------|
-//! | `ORIGINAL_PATH` | Clean PATH for binary resolution | `/usr/bin:/bin` |
-//! | `TRACE_LOG_FILE` | Log output destination | `~/.trace_shell.jsonl` |
+//! | `SHIM_ORIGINAL_PATH` | Clean PATH for binary resolution | `/usr/bin:/bin` |
+//! | `SHIM_TRACE_LOG` | Log output destination | `~/.trace_shell.jsonl` |
 //! | `SHIM_SESSION_ID` | Session correlation ID | `uuid-v7-string` |
 //! | `SHIM_DEPTH` | Nesting level tracking | `0`, `1`, `2`... |
 //! | `SHIM_BYPASS` | Emergency bypass mode | `1` |
@@ -168,8 +168,8 @@
 //!
 //! ### Common Issues
 //!
-//! - **Command not found**: Check `ORIGINAL_PATH` includes system directories
-//! - **Infinite loops**: Ensure shim directory not in `ORIGINAL_PATH`
+//! - **Command not found**: Check `SHIM_ORIGINAL_PATH` includes system directories
+//! - **Infinite loops**: Ensure shim directory not in `SHIM_ORIGINAL_PATH`
 //! - **Permission denied**: Check file permissions on log file and shim binaries
 //! - **Hash conflicts**: Run `hash -r` to clear shell command cache
 //!

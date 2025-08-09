@@ -8,14 +8,14 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 /// Environment variable names used by the shim system
-pub const SHIM_ACTIVE_VAR: &str = "SHIM_ACTIVE";          // Signals nested shim call (bypass mode)
-pub const SHIM_DEPTH_VAR: &str = "SHIM_DEPTH";            // Tracks nesting depth (0-based)
-pub const SHIM_SESSION_VAR: &str = "SHIM_SESSION_ID";     // UUIDv7 for command chain correlation
+pub const SHIM_ACTIVE_VAR: &str = "SHIM_ACTIVE"; // Signals nested shim call (bypass mode)
+pub const SHIM_DEPTH_VAR: &str = "SHIM_DEPTH"; // Tracks nesting depth (0-based)
+pub const SHIM_SESSION_VAR: &str = "SHIM_SESSION_ID"; // UUIDv7 for command chain correlation
 pub const ORIGINAL_PATH_VAR: &str = "SHIM_ORIGINAL_PATH"; // Clean PATH without shim directory
-pub const TRACE_LOG_VAR: &str = "SHIM_TRACE_LOG";         // Path to JSONL trace log
-pub const CACHE_BUST_VAR: &str = "SHIM_CACHE_BUST";       // Forces cache invalidation
-pub const SHIM_CALLER_VAR: &str = "SHIM_CALLER";          // First shim in the call chain
-pub const SHIM_CALL_STACK_VAR: &str = "SHIM_CALL_STACK";  // Comma-separated chain (capped at 8)
+pub const TRACE_LOG_VAR: &str = "SHIM_TRACE_LOG"; // Path to JSONL trace log
+pub const CACHE_BUST_VAR: &str = "SHIM_CACHE_BUST"; // Forces cache invalidation
+pub const SHIM_CALLER_VAR: &str = "SHIM_CALLER"; // First shim in the call chain
+pub const SHIM_CALL_STACK_VAR: &str = "SHIM_CALL_STACK"; // Comma-separated chain (capped at 8)
 pub const SHIM_PARENT_CMD_VAR: &str = "SHIM_PARENT_CMD_ID"; // Links to substrate shell cmd_id
 
 /// Execution context for a shim invocation
@@ -38,8 +38,7 @@ pub struct ShimContext {
 impl ShimContext {
     /// Create context from current executable and environment
     pub fn from_current_exe() -> Result<Self> {
-        let exe = env::current_exe()
-            .context("Failed to get current executable path")?;
+        let exe = env::current_exe().context("Failed to get current executable path")?;
 
         let shim_dir = exe
             .parent()
@@ -64,8 +63,8 @@ impl ShimContext {
             .unwrap_or(0);
 
         // Generate or inherit session ID for command chain correlation
-        let session_id = env::var(SHIM_SESSION_VAR)
-            .unwrap_or_else(|_| uuid::Uuid::now_v7().to_string());
+        let session_id =
+            env::var(SHIM_SESSION_VAR).unwrap_or_else(|_| uuid::Uuid::now_v7().to_string());
 
         Ok(Self {
             command_name,
@@ -93,7 +92,7 @@ impl ShimContext {
     /// Set up environment for command execution (idempotent)
     pub fn setup_execution_env(&self) {
         env::set_var(SHIM_SESSION_VAR, &self.session_id);
-        
+
         // Track the caller chain for debugging
         if env::var(SHIM_CALLER_VAR).is_err() {
             // First shim in the chain
@@ -105,12 +104,12 @@ impl ShimContext {
             let new_stack = build_safe_call_stack(&current_stack, &self.command_name);
             env::set_var(SHIM_CALL_STACK_VAR, new_stack);
         }
-        
+
         // Only set SHIM_ACTIVE if not already set (idempotent)
         if env::var(SHIM_ACTIVE_VAR).is_err() {
             env::set_var(SHIM_ACTIVE_VAR, "1");
         }
-        
+
         // Always increment depth for observability
         let current_depth = env::var(SHIM_DEPTH_VAR)
             .ok()
@@ -123,26 +122,26 @@ impl ShimContext {
 /// Build safe call stack with limits to prevent loops and memory issues
 fn build_safe_call_stack(current: &str, new_cmd: &str) -> String {
     const MAX_STACK_ITEMS: usize = 8;
-    
+
     if current.is_empty() {
         return new_cmd.to_string();
     }
-    
+
     let mut items: Vec<&str> = current.split(',').collect();
-    
+
     // Don't add consecutive duplicates
     if items.last() == Some(&new_cmd) {
         return current.to_string();
     }
-    
+
     items.push(new_cmd);
-    
+
     // Cap at MAX_STACK_ITEMS and add ellipsis if truncated
     if items.len() > MAX_STACK_ITEMS {
         items = items[items.len() - MAX_STACK_ITEMS + 1..].to_vec();
         items.insert(0, "...");
     }
-    
+
     items.join(",")
 }
 
@@ -153,7 +152,7 @@ pub fn build_clean_search_path(
 ) -> Result<Vec<PathBuf>> {
     let path_str = original_path
         .or_else(|| env::var("PATH").ok())
-        .ok_or_else(|| anyhow!("No PATH or ORIGINAL_PATH found"))?;
+        .ok_or_else(|| anyhow!("No PATH or SHIM_ORIGINAL_PATH found"))?;
 
     let separator = if cfg!(windows) { ';' } else { ':' };
 
@@ -170,7 +169,7 @@ pub fn build_clean_search_path(
         .filter(|s| !s.is_empty())
         .map(|s| s.trim_end_matches('/'))
         .filter(|p| !Path::new(p).starts_with(shim_dir))
-        .filter(|p| is_good_dir(p))  // Validate paths
+        .filter(|p| is_good_dir(p)) // Validate paths
         .filter(|p| seen.insert(p.to_string()))
         .map(PathBuf::from)
         .collect();
@@ -224,18 +223,18 @@ mod tests {
         // Test basic append
         assert_eq!(build_safe_call_stack("", "npm"), "npm");
         assert_eq!(build_safe_call_stack("npm", "node"), "npm,node");
-        
+
         // Test consecutive deduplication
         assert_eq!(build_safe_call_stack("npm,node", "node"), "npm,node");
         assert_eq!(build_safe_call_stack("npm", "npm"), "npm");
-        
+
         // Test A→B→A→B pattern (no consecutive dups)
         let stack = build_safe_call_stack("", "A");
         let stack = build_safe_call_stack(&stack, "B");
         let stack = build_safe_call_stack(&stack, "A");
         let stack = build_safe_call_stack(&stack, "B");
         assert_eq!(stack, "A,B,A,B");
-        
+
         // Test capping at 8 items
         let mut stack = String::new();
         for i in 1..=10 {
