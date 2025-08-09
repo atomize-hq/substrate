@@ -2,7 +2,7 @@
 name = "substrate-shell"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.74"
+rust-version = "1.73"  # Required for uuid v7 features
 
 [[bin]]
 name = "substrate"
@@ -22,14 +22,20 @@ gethostname = "0.4"
 which = "6"
 ctrlc = "3.4"
 substrate-common = { path = "../common" }
+# PTY support dependencies
+portable-pty = "0.8"
+signal-hook = "0.3"
+lazy_static = "1.4"
+env_logger = "0.11"
+log = "0.4"
+dirs = "5"
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.29", features = ["process", "signal", "poll", "term", "fs"] }
+nix = { version = "0.29", features = ["process", "signal", "term", "fs"] }
 libc = "0.2"
 
-# Windows dependencies prepared for Phase 4
-# [target.'cfg(windows)'.dependencies]
-# windows = { version = "0.58", features = ["Win32_System_Console", "Win32_Foundation"] }
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = ["Win32_Foundation", "Win32_System_Console"] }
 
 [dev-dependencies]
 assert_cmd = "2.0"

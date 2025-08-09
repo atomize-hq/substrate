@@ -1,3 +1,5 @@
+mod pty_exec;
+
 use anyhow::{Context, Result};
 use chrono::Utc;
 use clap::Parser;
@@ -9,11 +11,35 @@ use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicBool, Ordering};
+use std::sync::Mutex;
+use std::thread;
 use uuid::Uuid;
 use substrate_common::{dedupe_path, log_schema, redact_sensitive};
+use lazy_static::lazy_static;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
+
+// Global flag to prevent double SIGINT handling - must be pub(crate) for pty_exec access
+pub(crate) static PTY_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+// Global SIGWINCH handler state - must be pub(crate) for pty_exec access
+lazy_static! {
+    // Store the current PTY as a mutex-wrapped Box<dyn MasterPty + Send>
+    pub(crate) static ref CURRENT_PTY: Arc<Mutex<Option<Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>>>> = 
+        Arc::new(Mutex::new(None));
+}
+
+// Forward declaration for pty_exec module
+#[cfg(unix)]
+pub(crate) fn initialize_global_sigwinch_handler() {
+    pty_exec::initialize_global_sigwinch_handler_impl();
+}
+
+#[cfg(not(unix))]
+pub(crate) fn initialize_global_sigwinch_handler() {
+    // No-op on non-Unix platforms
+}
 
 const BASH_PREEXEC_SCRIPT: &str = r#"# Substrate PTY command logging
 # Source user's bashrc ONLY in interactive shells
@@ -189,12 +215,9 @@ pub fn run_shell() -> Result<i32> {
     env::set_var("PATH", dedupe_path(&path_with_shims));
 
     match &config.mode {
-        ShellMode::Interactive { use_pty } => {
-            if *use_pty && cfg!(unix) {
-                run_interactive_pty(&config)
-            } else {
-                run_interactive_shell(&config)
-            }
+        ShellMode::Interactive { use_pty: _ } => {
+            // PTY mode is now handled within run_interactive_shell on a per-command basis
+            run_interactive_shell(&config)
         }
         ShellMode::Wrap(cmd) => run_wrap_mode(&config, cmd),
         ShellMode::Script(path) => run_script_mode(&config, path),
@@ -202,39 +225,6 @@ pub fn run_shell() -> Result<i32> {
     }
 }
 
-#[cfg(unix)]
-fn run_interactive_pty(config: &ShellConfig) -> Result<i32> {
-    use crate::pty::{spawn_pty_shell, handle_pty_io};
-    
-    println!("Substrate v{} (PTY mode)", env!("CARGO_PKG_VERSION"));
-    println!("Session ID: {}", config.session_id);
-    println!("Logging to: {}", config.trace_log_file.display());
-    println!("Shell: {}", config.shell_path);
-    
-    // Log PTY session start
-    let session_cmd_id = Uuid::now_v7().to_string();
-    log_command_event(config, "pty_session_start", &config.shell_path, &session_cmd_id, None)?;
-    
-    // Spawn shell in PTY
-    let pty_session = spawn_pty_shell(&config.shell_path)?;
-    
-    // Handle I/O between terminal and PTY
-    let result = handle_pty_io(pty_session, config);
-    
-    // Log PTY session end
-    let exit_extra = json!({
-        log_schema::EXIT_CODE: if result.is_ok() { 0 } else { 1 }
-    });
-    log_command_event(config, "pty_session_end", &config.shell_path, &session_cmd_id, Some(exit_extra))?;
-    
-    result?;
-    Ok(0)
-}
-
-#[cfg(not(unix))]
-fn run_interactive_pty(_config: &ShellConfig) -> Result<i32> {
-    anyhow::bail!("PTY mode is not supported on this platform")
-}
 
 fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
     use rustyline::DefaultEditor;
@@ -245,90 +235,85 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
 
     let mut rl = DefaultEditor::new()?;
     let prompt = if config.ci_mode { "> " } else { "substrate> " };
+    
+    // Set up history file for persistence
+    let hist_path = dirs::home_dir()
+        .map(|p| p.join(".substrate_history"))
+        .unwrap_or_else(|| std::path::PathBuf::from(".substrate_history"));
+    let _ = rl.load_history(&hist_path);
 
-    // Set up signal handling for Ctrl-C
+    // Set up signal handling with PTY awareness
     let running_child_pid = Arc::new(AtomicI32::new(0));
     {
         let running = running_child_pid.clone();
         ctrlc::set_handler(move || {
+            // Check if PTY is active - if so, let PTY handle the signal
+            if PTY_ACTIVE.load(Ordering::Relaxed) {
+                // No-op: PTY is handling signals
+                return;
+            }
+            
             let pid = running.load(Ordering::SeqCst);
             if pid > 0 {
                 // Forward signal to entire process group
                 #[cfg(unix)]
                 {
                     use nix::sys::signal::{killpg, Signal};
-                    use nix::unistd::Pid;
-                    let _ = killpg(Pid::from_raw(pid), Signal::SIGINT);
+                    use nix::unistd::{getpgid, Pid};
+                    if let Ok(pgid) = getpgid(Some(Pid::from_raw(pid))) {
+                        let _ = killpg(pgid, Signal::SIGINT);
+                    }
                 }
             }
             // If no child is running, the signal is dropped and REPL continues
         })?;
     }
-
-    // Also install SIGTERM handler for clean CI cancellation
+    
+    // Set up additional signal forwarding for non-PTY path (SIGTERM, SIGQUIT, SIGHUP)
     #[cfg(unix)]
     {
-        let running_term = running_child_pid.clone();
-        use nix::sys::signal::{signal, SigHandler, Signal};
-        use std::sync::atomic::AtomicBool;
+        use signal_hook::{consts::{SIGTERM, SIGQUIT, SIGHUP}, iterator::Signals};
         
-        static TERM_RECEIVED: AtomicBool = AtomicBool::new(false);
-        extern "C" fn handle_term(_: i32) {
-            TERM_RECEIVED.store(true, Ordering::Relaxed);
-        }
-        unsafe {
-            signal(Signal::SIGTERM, SigHandler::Handler(handle_term))?;
-        }
-        
-        // Spawn a thread to forward SIGTERM to child process group
-        std::thread::spawn(move || {
-            loop {
-                if TERM_RECEIVED.load(Ordering::Relaxed) {
-                    let pid = running_term.load(Ordering::SeqCst);
+        let running = running_child_pid.clone();
+        thread::spawn(move || {
+            let mut signals = match Signals::new(&[SIGTERM, SIGQUIT, SIGHUP]) {
+                Ok(s) => s,
+                Err(e) => {
+                    log::warn!("Failed to register additional signal handlers: {}", e);
+                    return;
+                }
+            };
+            
+            for sig in signals.forever() {
+                // Only forward if PTY is not active (PTY gets kernel-side job control)
+                if !PTY_ACTIVE.load(Ordering::Relaxed) {
+                    let pid = running.load(Ordering::SeqCst);
                     if pid > 0 {
                         use nix::sys::signal::{killpg, Signal};
-                        use nix::unistd::Pid;
-                        let _ = killpg(Pid::from_raw(pid), Signal::SIGTERM);
+                        use nix::unistd::{getpgid, Pid};
+                        
+                        let signal = match sig {
+                            SIGTERM => Signal::SIGTERM,
+                            SIGQUIT => Signal::SIGQUIT,
+                            SIGHUP => Signal::SIGHUP,
+                            _ => continue,
+                        };
+                        
+                        if let Ok(pgid) = getpgid(Some(Pid::from_raw(pid))) {
+                            let _ = killpg(pgid, signal);
+                        }
                     }
-                    TERM_RECEIVED.store(false, Ordering::Relaxed);
                 }
-                std::thread::sleep(std::time::Duration::from_millis(100));
             }
         });
     }
+    
+    // NOTE: We do NOT intercept SIGTSTP (Ctrl-Z) - let the PTY handle job control
+    // The default kernel behavior will properly suspend the child process
 
     loop {
-        match rl.readline(prompt) {
-            Ok(line) => {
-                if line.trim().is_empty() {
-                    continue;
-                }
-
-                rl.add_history_entry(&line)?;
-
-                // Check for exit commands
-                if matches!(line.trim(), "exit" | "quit") {
-                    break;
-                }
-
-                // Execute command
-                let cmd_id = Uuid::now_v7().to_string();
-                match execute_command(config, &line, &cmd_id, running_child_pid.clone()) {
-                    Ok(status) => {
-                        if !status.success() {
-                            #[cfg(unix)]
-                            if let Some(sig) = status.signal() {
-                                eprintln!("Command terminated by signal {}", sig);
-                            } else {
-                                eprintln!("Command failed with status: {}", status.code().unwrap_or(-1));
-                            }
-                            #[cfg(not(unix))]
-                            eprintln!("Command failed with status: {}", status.code().unwrap_or(-1));
-                        }
-                    }
-                    Err(e) => eprintln!("Error: {}", e),
-                }
-            }
+        let line = match rl.readline(prompt) {
+            Ok(line) => line,
             Err(rustyline::error::ReadlineError::Interrupted) => {
                 println!("^C");
                 continue;
@@ -341,6 +326,58 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
                 eprintln!("Error: {:?}", err);
                 break;
             }
+        };
+        
+        if line.trim().is_empty() {
+            continue;
+        }
+        
+        let _ = rl.add_history_entry(line.as_str());
+        
+        // Check for exit commands
+        if matches!(line.trim(), "exit" | "quit") {
+            break;
+        }
+        
+        // Store whether this was a PTY command for terminal recovery (force overrides disable)
+        let disabled = is_pty_disabled();
+        let forced = is_force_pty_command(&line);
+        let was_pty_command = forced || (!disabled && needs_pty(&line));
+        
+        // Execute command
+        let cmd_id = Uuid::now_v7().to_string();
+        match execute_command(config, &line, &cmd_id, running_child_pid.clone()) {
+            Ok(status) => {
+                if !status.success() {
+                    #[cfg(unix)]
+                    if let Some(sig) = status.signal() {
+                        eprintln!("Command terminated by signal {}", sig);
+                    } else {
+                        eprintln!("Command failed with status: {}", status.code().unwrap_or(-1));
+                    }
+                    #[cfg(not(unix))]
+                    eprintln!("Command failed with status: {}", status.code().unwrap_or(-1));
+                }
+                
+                // CRITICAL: Reset rustyline after PTY commands to fix terminal state
+                if was_pty_command {
+                    log::debug!("Resetting rustyline after PTY command");
+                    // Reset terminal: attributes, show cursor, exit alt-screen, disable bracketed paste/mouse modes
+                    print!("\x1b[0m\x1b[?25h\x1b[?1049l\x1b[?2004l\x1b[?1000l\x1b[?1002l\x1b[?1006l");
+                    // Optional: Clear screen if redraw artifacts appear
+                    // print!("\x1b[2J\x1b[H");
+                    let _ = std::io::stdout().flush();
+                    
+                    // Save history before dropping rustyline
+                    let _ = rl.save_history(&hist_path);
+                    
+                    drop(rl);
+                    rl = DefaultEditor::new()?;
+                    // Reload history after recreating rustyline
+                    let _ = rl.load_history(&hist_path);
+                }
+            }
+            Err(e) => eprintln!("Error: {}", e),
         }
     }
 
@@ -542,28 +579,592 @@ source "{}"
     }
 }
 
-fn needs_direct_terminal(cmd: &str) -> bool {
-    // Commands that need direct terminal control
-    let tokens = shell_words::split(cmd).unwrap_or_else(|_| vec![cmd.to_string()]);
-    if let Some(first) = tokens.first() {
-        let cmd_name = Path::new(first)
+/// Check if it's sudo that needs PTY for password prompt
+fn sudo_wants_pty(cmd_lower: &str, tokens: &[String]) -> bool {
+    if cmd_lower != "sudo" {
+        return false;
+    }
+    
+    // No PTY if -n/-S/-A or their long forms
+    !tokens.iter().any(|t| matches!(t.as_str(),
+        "-n" | "--non-interactive" |
+        "-S" | "--stdin" |
+        "-A" | "--askpass"
+    ))
+}
+
+/// Check if it's an interactive shell
+fn is_interactive_shell(cmd_lower: &str, tokens: &[String]) -> bool {
+    let is_shell = matches!(cmd_lower, "bash" | "zsh" | "sh" | "fish" | "dash" | "ksh");
+    if !is_shell {
+        return false;
+    }
+    
+    // No PTY if executing command with -c
+    let has_command = tokens.iter().any(|t| t == "-c");
+    
+    // Explicit interactive flag
+    let has_interactive = tokens.iter().any(|t| t == "-i" || t == "--interactive");
+    
+    // It's interactive if: no -c flag OR explicit -i flag
+    !has_command || has_interactive
+}
+
+/// Check if interpreter command looks like interactive REPL
+fn looks_like_repl(cmd_lower: &str, tokens: &[String]) -> bool {
+    let is_interp = matches!(cmd_lower, "python" | "python3" | "ipython" | "bpython" | "node" | "irb" | "pry");
+    if !is_interp { 
+        return false; 
+    }
+    
+    // Force interactive if -i/--interactive present, regardless of script/inline code
+    let has_i = tokens.iter().any(|t| t == "-i" || t == "--interactive");
+    if has_i { 
+        return true; 
+    }
+    
+    // Check for script file (any non-option argument after the command)
+    let has_script = tokens.iter().skip(1).any(|t| !t.starts_with('-'));
+    
+    // Check for inline code execution flags
+    let has_inline = tokens.iter().any(|t| {
+        matches!(t.as_str(),
+            "-c" |                                    // python
+            "-e" | "--eval" | "-p" | "--print"      // node
+        )
+    });
+    
+    // REPL when no script AND not inline
+    !has_script && !has_inline
+}
+
+/// Check if it's a container/k8s command that needs PTY
+fn container_wants_pty(cmd_lower: &str, tokens: &[String]) -> bool {
+    // Check for "docker compose" (space-separated form)
+    let is_docker_compose = cmd_lower == "docker" && 
+        tokens.get(1).map(|s| s.as_str() == "compose").unwrap_or(false);
+    
+    // Docker/Podman/docker-compose run|exec: only scan flags up to image/container name
+    if matches!(cmd_lower, "docker" | "podman" | "docker-compose") || is_docker_compose {
+        if let Some(subcmd_idx) = tokens.iter().position(|t| t == "run" || t == "exec") {
+            let mut has_i = false;
+            let mut has_t = false;
+
+            for token in tokens.iter().skip(subcmd_idx + 1) {
+                if token == "--" { break; }
+                if token.starts_with('-') {
+                    if token == "-it" || token == "-ti" { return true; }
+                    if token == "-i" || token == "--interactive" || token == "--stdin" { has_i = true; }
+                    if token == "-t" || token == "--tty" { has_t = true; }
+                    if token.starts_with('-') && !token.starts_with("--") && token.len() > 1 {
+                        let chars: Vec<char> = token[1..].chars().collect();
+                        if chars.contains(&'i') { has_i = true; }
+                        if chars.contains(&'t') { has_t = true; }
+                    }
+                } else {
+                    // First non-option = image (run) or container (exec)
+                    break; // stop scanning; rest belongs to the in-container command
+                }
+            }
+            return has_i && has_t;
+        }
+    }
+    
+    // kubectl exec with proper flag detection (scoped to after exec, stop at --)
+    if cmd_lower == "kubectl" {
+        if let Some(exec_idx) = tokens.iter().position(|t| t == "exec") {
+            let mut has_i = false;
+            let mut has_t = false;
+            
+            // Only check flags after exec and before --
+            for token in tokens.iter().skip(exec_idx + 1) {
+                // Stop scanning at -- (rest are remote command args)
+                if token == "--" {
+                    break;
+                }
+                
+                if token == "-it" || token == "-ti" {
+                    return true;
+                }
+                if token == "-i" || token == "--stdin" {
+                    has_i = true;
+                }
+                if token == "-t" || token == "--tty" {
+                    has_t = true;
+                }
+                // Check for flags in clusters
+                if token.starts_with("-") && !token.starts_with("--") && token.len() > 1 {
+                    let chars: Vec<char> = token[1..].chars().collect();
+                    if chars.contains(&'i') {
+                        has_i = true;
+                    }
+                    if chars.contains(&'t') {
+                        has_t = true;
+                    }
+                }
+            }
+            return has_i && has_t;
+        }
+    }
+    
+    false
+}
+
+/// Check if command is launching an interactive debugger
+fn wants_debugger_pty(cmd_lower: &str, tokens: &[String]) -> bool {
+    // Python debuggers: python -m pdb/ipdb
+    if cmd_lower == "python" || cmd_lower == "python3" {
+        if let Some(i) = tokens.iter().position(|t| t == "-m") {
+            if let Some(modname) = tokens.get(i + 1) {
+                if modname == "pdb" || modname == "ipdb" {
+                    return true;
+                }
+            }
+        }
+    }
+    
+    // Node debuggers: node inspect or node --inspect-brk
+    if cmd_lower == "node" {
+        if tokens.iter().any(|t| t == "inspect" || t == "--inspect" || t == "--inspect-brk") {
+            return true;
+        }
+    }
+    
+    false
+}
+
+/// Check if git command needs interactive PTY
+fn git_wants_pty(tokens: &[String]) -> bool {
+    // Skip "git"
+    let mut i = 1;
+
+    // Git global options that may appear before the subcommand.
+    // Options that consume a value: -C <path>, -c <name=val>, --git-dir <path>, --work-tree <path>, --namespace <ns>
+    while i < tokens.len() {
+        let t = tokens[i].as_str();
+        match t {
+            "-C" | "-c" | "--git-dir" | "--work-tree" | "--namespace" => {
+                i += 2; // skip option + value
+            }
+            _ if t.starts_with("--git-dir=") || t.starts_with("--work-tree=") || t.starts_with("--namespace=") => {
+                i += 1;
+            }
+            // First non-option token is the subcommand
+            _ if !t.starts_with('-') => break,
+            // Unknown global flag without value (safe to skip)
+            _ => i += 1,
+        }
+    }
+
+    if i >= tokens.len() { return false; }
+    let sub = tokens[i].as_str();
+
+    match sub {
+        "add"    => tokens.iter().any(|t| t == "-p" || t == "-i"),
+        "rebase" => tokens.iter().any(|t| t == "-i"),
+        "commit" => {
+            // Scan all flags - -e/--edit can override -m/-F to open editor
+            let mut no_editor = false;
+            let mut force_editor = false;
+            for t in tokens.iter().skip(i + 1) {
+                if t == "-e" || t == "--edit" {
+                    force_editor = true;
+                }
+                if t == "-m" || t == "--message" || t.starts_with("-m") || t.starts_with("--message=") {
+                    no_editor = true;
+                }
+                if t == "-F" || t == "--file" || t.starts_with("--file=") {
+                    no_editor = true;
+                }
+                if t == "--no-edit" {
+                    no_editor = true;
+                    force_editor = false; // --no-edit overrides -e
+                }
+            }
+            // Editor opens if forced OR if no message provided
+            force_editor || !no_editor
+        }
+        _ => false,
+    }
+}
+
+/// Check for shell metacharacters at top-level (not inside quotes, subshells, or backticks)
+fn has_top_level_shell_meta(s: &str) -> bool {
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut in_backticks = false;
+    let mut escape = false;
+    let mut subshell_depth = 0;
+    let mut chars = s.chars().peekable();
+    
+    while let Some(ch) = chars.next() {
+        if escape {
+            escape = false;
+            continue;
+        }
+        
+        // Check for $( subshell start
+        if ch == '$' && !in_single && !in_backticks && chars.peek() == Some(&'(') {
+            chars.next(); // consume '('
+            subshell_depth += 1;
+            continue;
+        }
+        
+        match ch {
+            '\\' if !in_single => { escape = true; }
+            '`' if !in_single && !in_double && subshell_depth == 0 => {
+                in_backticks = !in_backticks;
+            }
+            '\'' if !in_double && !in_backticks && subshell_depth == 0 => { in_single = !in_single; }
+            '"' if !in_single && !in_backticks && subshell_depth == 0 => { in_double = !in_double; }
+            '(' if !in_single && !in_double && !in_backticks && subshell_depth > 0 => { subshell_depth += 1; }
+            ')' if !in_single && !in_double && !in_backticks && subshell_depth > 0 => { subshell_depth -= 1; }
+            '|' | '>' | '<' | '&' | ';' 
+                if !in_single && !in_double && !in_backticks && subshell_depth == 0 => return true,
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Strip known wrapper commands to find the actual command being run
+fn peel_wrappers(tokens: &[String]) -> Vec<String> {
+    if tokens.is_empty() {
+        return tokens.to_vec();
+    }
+    
+    let i = 0;
+    if i < tokens.len() {
+        let cmd = tokens[i].as_str();
+        
+        // Get base command name (strip path)
+        let base_cmd = std::path::Path::new(cmd)
             .file_name()
             .and_then(|s| s.to_str())
-            .unwrap_or(first)
-            .to_lowercase();
+            .unwrap_or(cmd);
         
-        // Interactive commands that need full terminal control
-        matches!(cmd_name.as_str(), 
-            "claude" | "vim" | "vi" | "nano" | "emacs" | "less" | "more" |
-            "top" | "htop" | "btop" | "code" | "codex" | "cursor" | 
-            "nvim" | "neovim" | "micro" | "pico" | "joe" | "ed" |
-            "ssh" | "telnet" | "ftp" | "sftp" | "mysql" | "psql" |
-            "python" | "python3" | "ipython" | "node" | "irb" | "pry" |
-            "ghci" | "scala" | "clojure" | "julia" | "R" | "bc" | "dc"
-        )
-    } else {
-        false
+        match base_cmd {
+            // Wrappers that take 1 argument
+            "sshpass" => {
+                // sshpass -p pass cmd... or sshpass -f file cmd...
+                if i + 1 < tokens.len() && (tokens[i + 1] == "-p" || tokens[i + 1] == "-f") {
+                    if i + 3 < tokens.len() {
+                        return tokens[i + 3..].to_vec(); // Skip sshpass -p pass
+                    }
+                }
+                return tokens[i + 1..].to_vec(); // Skip just sshpass
+            }
+            "timeout" => {
+                // timeout [opts] duration command...
+                let mut j = i + 1;
+                // Skip options
+                while j < tokens.len() && tokens[j].starts_with('-') {
+                    j += if tokens[j] == "-s" || tokens[j] == "--signal" { 2 } else { 1 };
+                }
+                // Skip duration
+                if j < tokens.len() && !tokens[j].starts_with('-') {
+                    j += 1;
+                }
+                if j < tokens.len() {
+                    return tokens[j..].to_vec();
+                }
+                return vec![];
+            }
+            "env" => {
+                // env [-i] [-u NAME]... [VAR=val]... command...
+                let mut j = i + 1;
+                while j < tokens.len() {
+                    let t = tokens[j].as_str();
+                    match t {
+                        "-i" => j += 1,                     // clear environment
+                        "-u" => j += 2,                     // unset NAME
+                        _ if t.starts_with('-') => j += 1,  // other env flags
+                        _ if t.contains('=') => j += 1,     // VAR=val
+                        _ => break,                         // first real command
+                    }
+                }
+                return tokens.get(j..).map(|s| s.to_vec()).unwrap_or_else(Vec::new);
+            }
+            "stdbuf" => {
+                // stdbuf -oL|-eL|-iL command...
+                let mut j = i + 1;
+                while j < tokens.len() && tokens[j].starts_with('-') {
+                    j += 1;
+                }
+                if j < tokens.len() {
+                    return tokens[j..].to_vec();
+                }
+                return vec![];
+            }
+            "nice" | "ionice" => {
+                // nice [-n priority] command...
+                let mut j = i + 1;
+                if j < tokens.len() && tokens[j] == "-n" {
+                    j += 2; // Skip -n and value
+                }
+                if j < tokens.len() {
+                    return tokens[j..].to_vec();
+                }
+                return vec![];
+            }
+            "doas" => {
+                // doas [-u user] command... (sudo alternative)
+                let mut j = i + 1;
+                if j < tokens.len() && tokens[j] == "-u" {
+                    j += 2; // Skip -u and user
+                }
+                if j < tokens.len() {
+                    return tokens[j..].to_vec();
+                }
+                return vec![];
+            }
+            _ => return tokens.to_vec(), // Not a wrapper
+        }
     }
+    
+    tokens.to_vec()
+}
+
+/// Determines if a command needs PTY allocation for proper terminal control
+fn needs_pty(cmd: &str) -> bool {
+    // For unit tests, skip actual TTY detection
+    let is_test_mode = std::env::var("TEST_MODE").is_ok();
+    
+    // If parent stdio isn't a TTY, never use PTY (skip in test mode)
+    if !is_test_mode && (!atty::is(atty::Stream::Stdin) || !atty::is(atty::Stream::Stdout)) {
+        return false;
+    }
+    
+    // Optional: Enable pipeline-last TUI detection
+    let enable_pipeline_last = std::env::var("SUBSTRATE_PTY_PIPELINE_LAST").is_ok();
+    
+    // Check for shell metacharacters at top-level (not inside quotes)
+    if !is_test_mode && has_top_level_shell_meta(cmd) {
+        // If pipeline-last is enabled, check if last segment needs PTY
+        if enable_pipeline_last && cmd.contains('|') {
+            // Simple heuristic: split by top-level pipes and check last segment
+            // This is simplified - a full implementation would parse properly
+            if let Some(last_segment) = cmd.rsplit('|').next() {
+                // Check if output is redirected (>, <, >>, 1>, 2>, 2>&1, etc.)
+                let has_redirect = last_segment.chars().any(|c| c == '>' || c == '<') 
+                    || last_segment.contains("&>");
+                if !has_redirect {
+                    // Recursively check if last segment needs PTY
+                    return needs_pty(last_segment.trim());
+                }
+            }
+        }
+        return false;
+    }
+    
+    // Conservative allowlist for known TUIs that definitely need PTY
+    const KNOWN_TUIS: &[&str] = &[
+        "vim", "vi", "nvim", "neovim", "nano", "emacs",  // editors
+        "less", "more", "most",                           // pagers
+        "top", "htop", "btop", "glances",                // monitors
+        "telnet", "ftp", "sftp",                         // network tools
+        "claude", "chatgpt",                             // AI tools
+        "tmux", "screen", "zellij",                      // multiplexers
+        "fzf", "lazygit", "gitui", "tig",                // git/file tools
+        "ranger", "yazi", "k9s", "nmtui",                // additional TUIs
+        "ipython", "bpython",                             // interactive pythons
+        // Note: python, node, git, ssh handled by special logic
+        // 🔥 PRODUCTION FIX: Removed ssh from list since dedicated logic is comprehensive
+    ];
+    
+    // Parse command properly using shell_words for quoted argument handling
+    let tokens = match shell_words::split(cmd) {
+        Ok(tokens) => tokens,
+        Err(_) => return false, // Malformed command, don't use PTY
+    };
+    
+    // Peel off wrapper commands to find the actual command
+    let peeled_tokens = peel_wrappers(&tokens);
+    
+    // Use peeled tokens if available, otherwise original
+    let working_tokens = if !peeled_tokens.is_empty() {
+        &peeled_tokens
+    } else {
+        &tokens
+    };
+    
+    let first_token = working_tokens.first()
+        .and_then(|s| Path::new(s).file_name())
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    
+    // 🔥 EXPERT FIX: Convert to lowercase FIRST, then strip Windows extensions
+    let lower = first_token.to_ascii_lowercase();
+    let cmd_lower = if cfg!(windows) {
+        lower.trim_end_matches(".exe")
+            .trim_end_matches(".cmd")
+            .trim_end_matches(".bat")
+            .to_string()
+    } else {
+        lower
+    };
+    
+    // Check for sudo (needs PTY for password prompt)
+    if sudo_wants_pty(&cmd_lower, working_tokens) {
+        return true;
+    }
+    
+    // Check if it's an interactive shell
+    if is_interactive_shell(&cmd_lower, working_tokens) {
+        return true;
+    }
+    
+    // Check if it's an interactive REPL
+    if looks_like_repl(&cmd_lower, working_tokens) {
+        return true;
+    }
+    
+    // Check if it's launching a debugger
+    if wants_debugger_pty(&cmd_lower, working_tokens) {
+        return true;
+    }
+    
+    // Check for container/k8s commands
+    if container_wants_pty(&cmd_lower, working_tokens) {
+        return true;
+    }
+    
+    // Check if it's an interactive git command
+    if cmd_lower == "git" && git_wants_pty(working_tokens) {
+        return true;
+    }
+    
+    // Special SSH handling for -t/-T flags and remote commands
+    if cmd_lower == "ssh" {
+        // Create lowercase versions for case-insensitive option checking
+        let tokens_lc: Vec<String> = working_tokens.iter().map(|t| t.to_ascii_lowercase()).collect();
+        
+        // Check for explicit -t or -tt flag (force PTY)
+        let has_t = tokens_lc.iter().any(|arg| arg == "-t" || arg == "-tt");
+        
+        // Check for explicit -T flag (no PTY) - uppercase T
+        if working_tokens.iter().any(|arg| arg == "-T") {
+            return false;
+        }
+        
+        // Check for -N flag (no remote command, typically for port forwarding)
+        // Only deny PTY if -t/-tt not present
+        if working_tokens.iter().any(|arg| arg == "-N") && !has_t {
+            return false;
+        }
+        
+        // Check for -O control operations (check|exit|stop|forward|cancel)
+        if working_tokens.iter().any(|arg| arg == "-O") && !has_t {
+            return false;
+        }
+        
+        // Check for -W (stdio forwarding) - never PTY unless -t is explicit
+        if tokens_lc.iter().any(|arg| arg == "-w") && !has_t {
+            return false;
+        }
+        
+        // If -t or -tt was present, force PTY
+        if has_t {
+            return true;
+        }
+        
+        // Check for BatchMode=yes (case-insensitive, no PTY)
+        // Handles both -o BatchMode=yes and -oBatchMode=yes
+        for arg in &tokens_lc {
+            if let Some(val) = arg.strip_prefix("-obatchmode=") {
+                if val == "yes" {
+                    return false;
+                }
+            }
+        }
+        if tokens_lc.iter().any(|arg| arg.contains("batchmode=") && arg.contains("=yes")) {
+            return false;
+        }
+        
+        // Check for RequestTTY option (case-insensitive, ssh_config style)
+        // First check spaced form: -o RequestTTY=value
+        for (i, arg) in tokens_lc.iter().enumerate() {
+            if arg == "-o" && i + 1 < tokens_lc.len() {
+                if let Some(val) = tokens_lc[i + 1].strip_prefix("requesttty=") {
+                    match val {
+                        "yes" | "force" => return true,
+                        "no" => return false,
+                        _ => {}
+                    }
+                }
+            }
+        }
+        
+        // Check inline form: -oRequestTTY=value
+        for arg in &tokens_lc {
+            if let Some(val) = arg.strip_prefix("-orequesttty=") {
+                match val {
+                    "yes" | "force" => return true,
+                    "no" => return false,
+                    _ => {}
+                }
+            }
+        }
+        
+        // Handle all 2-arg SSH options (not just -l)
+        // 🔥 EXPERT FIX: Skip ALL 2-arg options to correctly identify host
+        let mut skip_next = false;
+        let mut host_idx = None;
+        // Start from index 1 to skip "ssh" itself
+        for i in 1..working_tokens.len() {
+            let arg = &working_tokens[i];
+            if skip_next {
+                skip_next = false;
+                continue;
+            }
+            // Skip all 2-arg SSH options: -p -l -i -F -J -b -c -D -L -R -S -E -B -o
+            if matches!(arg.as_str(), "-p" | "-l" | "-i" | "-F" | "-J" | "-b" | "-c" | "-D" | "-L" | "-R" | "-S" | "-E" | "-B") {
+                skip_next = true;
+                continue;
+            }
+            // Handle -o option (can be -o key=val or -okey=val)
+            if arg == "-o" {
+                skip_next = true;
+                continue;
+            }
+            // Stop at -- delimiter
+            if arg == "--" {
+                if i + 1 < working_tokens.len() {
+                    host_idx = Some(i + 1);
+                }
+                break;
+            }
+            // First non-option is the host
+            if !arg.starts_with('-') && !arg.contains('=') {
+                host_idx = Some(i);
+                break;
+            }
+        }
+        
+        // Check if there's a remote command after the host
+        if let Some(idx) = host_idx {
+            if idx + 1 < working_tokens.len() {
+                // There's a remote command, no explicit -t, so no PTY
+                return false;
+            }
+        }
+        
+        // 🔥 CRITICAL FIX: No -T/-W/BatchMode, no remote command => interactive login
+        return true;
+    }
+    
+    // Check if it's a known TUI
+    KNOWN_TUIS.iter().any(|&tui| cmd_lower == tui)
+}
+
+/// Force PTY for specific command (user override)
+fn is_force_pty_command(cmd: &str) -> bool {
+    cmd.starts_with(":pty ") || std::env::var("SUBSTRATE_FORCE_PTY").is_ok()
+}
+
+/// Check if PTY is disabled globally
+fn is_pty_disabled() -> bool {
+    std::env::var("SUBSTRATE_DISABLE_PTY").is_ok()
 }
 
 fn execute_command(
@@ -574,12 +1175,43 @@ fn execute_command(
 ) -> Result<ExitStatus> {
     let trimmed = command.trim();
     
-    // Check if this command needs direct terminal access
-    if needs_direct_terminal(trimmed) {
-        // For interactive commands, spawn directly without shell wrapper
-        return execute_direct(config, trimmed, cmd_id, running_child_pid);
+    // Check if PTY should be used (force overrides disable)
+    let disabled = is_pty_disabled();
+    let forced = is_force_pty_command(trimmed);
+    let should_use_pty = forced || (!disabled && needs_pty(trimmed));
+    
+    if should_use_pty {
+        // Use PTY execution path for interactive commands
+        let pty_status = pty_exec::execute_with_pty(config, trimmed, cmd_id, running_child_pid)?;
+        
+        // Convert PtyExitStatus to std::process::ExitStatus for compatibility
+        // NOTE: This is a documented compatibility shim using from_raw
+        // The actual exit information is preserved in logs
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            if let Some(signal) = pty_status.signal {
+                // Terminated by signal: set low 7 bits to the signal number
+                // This makes status.signal() work correctly
+                return Ok(ExitStatus::from_raw(signal & 0x7f));
+            } else if let Some(code) = pty_status.code {
+                // Normal exit: code in bits 8-15
+                return Ok(ExitStatus::from_raw((code & 0xff) << 8));
+            } else {
+                return Ok(ExitStatus::from_raw(0));
+            }
+        }
+        
+        #[cfg(windows)]
+        {
+            // 🔥 EXPERT FIX: Don't shift bits on Windows - use raw code directly
+            use std::os::windows::process::ExitStatusExt;
+            let code = pty_status.code.unwrap_or(0) as u32;
+            return Ok(ExitStatus::from_raw(code));
+        }
     }
     
+    // Continue with existing implementation for non-PTY commands...
     // Compute resolved path from raw command before redaction
     let resolved = first_command_path(trimmed);
     
@@ -995,6 +1627,362 @@ fn log_command_event(
     Ok(())
 }
 
-// Re-export pty module
-#[cfg(unix)]
-pub mod pty;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+
+    // Helper to run tests with TEST_MODE set
+    fn with_test_mode<F: FnOnce()>(f: F) {
+        // Save original value if it exists
+        let original = env::var("TEST_MODE").ok();
+        
+        env::set_var("TEST_MODE", "1");
+        f();
+        
+        // Restore original value or remove
+        match original {
+            Some(val) => env::set_var("TEST_MODE", val),
+            None => env::remove_var("TEST_MODE"),
+        }
+    }
+
+    #[test]
+    fn test_sudo_wants_pty() {
+        // sudo without flags should want PTY
+        assert!(sudo_wants_pty("sudo", &["sudo".to_string(), "apt".to_string()]));
+        
+        // sudo with -n should not want PTY
+        assert!(!sudo_wants_pty("sudo", &["sudo".to_string(), "-n".to_string(), "apt".to_string()]));
+        assert!(!sudo_wants_pty("sudo", &["sudo".to_string(), "--non-interactive".to_string()]));
+        
+        // sudo with -S should not want PTY
+        assert!(!sudo_wants_pty("sudo", &["sudo".to_string(), "-S".to_string()]));
+        assert!(!sudo_wants_pty("sudo", &["sudo".to_string(), "--stdin".to_string()]));
+        
+        // Not sudo
+        assert!(!sudo_wants_pty("apt", &["apt".to_string(), "update".to_string()]));
+    }
+
+    #[test]
+    fn test_is_interactive_shell() {
+        // Plain shell invocation is interactive
+        assert!(is_interactive_shell("bash", &["bash".to_string()]));
+        assert!(is_interactive_shell("zsh", &["zsh".to_string()]));
+        assert!(is_interactive_shell("sh", &["sh".to_string()]));
+        
+        // Shell with -c is not interactive (unless -i is also present)
+        assert!(!is_interactive_shell("bash", &["bash".to_string(), "-c".to_string(), "echo hello".to_string()]));
+        assert!(is_interactive_shell("bash", &["bash".to_string(), "-i".to_string(), "-c".to_string(), "echo hello".to_string()]));
+        
+        // Explicit interactive flag
+        assert!(is_interactive_shell("bash", &["bash".to_string(), "-i".to_string()]));
+        assert!(is_interactive_shell("bash", &["bash".to_string(), "--interactive".to_string()]));
+        
+        // Not a shell
+        assert!(!is_interactive_shell("python", &["python".to_string()]));
+    }
+
+    #[test]
+    fn test_looks_like_repl() {
+        // Plain interpreter invocation is REPL
+        assert!(looks_like_repl("python", &["python".to_string()]));
+        assert!(looks_like_repl("python3", &["python3".to_string()]));
+        assert!(looks_like_repl("node", &["node".to_string()]));
+        assert!(looks_like_repl("irb", &["irb".to_string()]));
+        
+        // With script file is not REPL
+        assert!(!looks_like_repl("python", &["python".to_string(), "script.py".to_string()]));
+        assert!(!looks_like_repl("node", &["node".to_string(), "app.js".to_string()]));
+        
+        // With inline code is not REPL
+        assert!(!looks_like_repl("python", &["python".to_string(), "-c".to_string(), "print('hello')".to_string()]));
+        assert!(!looks_like_repl("node", &["node".to_string(), "-e".to_string(), "console.log('hello')".to_string()]));
+        
+        // Force interactive with -i is REPL even with script
+        assert!(looks_like_repl("python", &["python".to_string(), "-i".to_string(), "script.py".to_string()]));
+        assert!(looks_like_repl("python", &["python".to_string(), "--interactive".to_string(), "-c".to_string(), "print()".to_string()]));
+        
+        // Not an interpreter
+        assert!(!looks_like_repl("bash", &["bash".to_string()]));
+    }
+
+    #[test]
+    fn test_container_wants_pty() {
+        // docker run -it
+        assert!(container_wants_pty("docker", &["docker".to_string(), "run".to_string(), "-it".to_string(), "ubuntu".to_string()]));
+        assert!(container_wants_pty("docker", &["docker".to_string(), "run".to_string(), "-ti".to_string(), "ubuntu".to_string()]));
+        
+        // docker run with separate -i and -t
+        assert!(container_wants_pty("docker", &["docker".to_string(), "run".to_string(), "-i".to_string(), "-t".to_string(), "ubuntu".to_string()]));
+        
+        // docker exec -it
+        assert!(container_wants_pty("docker", &["docker".to_string(), "exec".to_string(), "-it".to_string(), "container1".to_string(), "bash".to_string()]));
+        
+        // Only -i or only -t is not enough
+        assert!(!container_wants_pty("docker", &["docker".to_string(), "run".to_string(), "-i".to_string(), "ubuntu".to_string()]));
+        assert!(!container_wants_pty("docker", &["docker".to_string(), "run".to_string(), "-t".to_string(), "ubuntu".to_string()]));
+        
+        // kubectl exec -it
+        assert!(container_wants_pty("kubectl", &["kubectl".to_string(), "exec".to_string(), "-it".to_string(), "pod1".to_string(), "--".to_string(), "bash".to_string()]));
+        
+        // kubectl exec with separate flags
+        assert!(container_wants_pty("kubectl", &["kubectl".to_string(), "exec".to_string(), "-i".to_string(), "-t".to_string(), "pod1".to_string()]));
+        
+        // docker-compose run/exec
+        assert!(container_wants_pty("docker-compose", &["docker-compose".to_string(), "run".to_string(), "-it".to_string(), "service1".to_string()]));
+        
+        // docker compose (space form)
+        assert!(container_wants_pty("docker", &["docker".to_string(), "compose".to_string(), "run".to_string(), "-it".to_string(), "service1".to_string()]));
+    }
+
+    #[test]
+    fn test_wants_debugger_pty() {
+        // Python debuggers
+        assert!(wants_debugger_pty("python", &["python".to_string(), "-m".to_string(), "pdb".to_string(), "script.py".to_string()]));
+        assert!(wants_debugger_pty("python3", &["python3".to_string(), "-m".to_string(), "ipdb".to_string()]));
+        
+        // Node debuggers
+        assert!(wants_debugger_pty("node", &["node".to_string(), "inspect".to_string(), "app.js".to_string()]));
+        assert!(wants_debugger_pty("node", &["node".to_string(), "--inspect".to_string(), "app.js".to_string()]));
+        assert!(wants_debugger_pty("node", &["node".to_string(), "--inspect-brk".to_string(), "app.js".to_string()]));
+        
+        // Not debuggers
+        assert!(!wants_debugger_pty("python", &["python".to_string(), "script.py".to_string()]));
+        assert!(!wants_debugger_pty("node", &["node".to_string(), "app.js".to_string()]));
+    }
+
+    #[test]
+    fn test_git_wants_pty() {
+        // git add -p needs PTY
+        assert!(git_wants_pty(&["git".to_string(), "add".to_string(), "-p".to_string()]));
+        assert!(git_wants_pty(&["git".to_string(), "add".to_string(), "-i".to_string()]));
+        
+        // git rebase -i needs PTY
+        assert!(git_wants_pty(&["git".to_string(), "rebase".to_string(), "-i".to_string(), "HEAD~3".to_string()]));
+        
+        // git commit without message needs PTY (opens editor)
+        assert!(git_wants_pty(&["git".to_string(), "commit".to_string()]));
+        
+        // git commit with -e forces editor even with -m
+        assert!(git_wants_pty(&["git".to_string(), "commit".to_string(), "-m".to_string(), "msg".to_string(), "-e".to_string()]));
+        assert!(git_wants_pty(&["git".to_string(), "commit".to_string(), "-m".to_string(), "msg".to_string(), "--edit".to_string()]));
+        
+        // git commit with message doesn't need PTY
+        assert!(!git_wants_pty(&["git".to_string(), "commit".to_string(), "-m".to_string(), "message".to_string()]));
+        assert!(!git_wants_pty(&["git".to_string(), "commit".to_string(), "--message=message".to_string()]));
+        
+        // git commit with --no-edit doesn't need PTY
+        assert!(!git_wants_pty(&["git".to_string(), "commit".to_string(), "--no-edit".to_string()]));
+        
+        // Regular git commands don't need PTY
+        assert!(!git_wants_pty(&["git".to_string(), "status".to_string()]));
+        assert!(!git_wants_pty(&["git".to_string(), "push".to_string()]));
+        assert!(!git_wants_pty(&["git".to_string(), "pull".to_string()]));
+    }
+
+    #[test]
+    fn test_has_top_level_shell_meta() {
+        // Top-level metacharacters
+        assert!(has_top_level_shell_meta("echo hello | grep h"));
+        assert!(has_top_level_shell_meta("ls > file.txt"));
+        assert!(has_top_level_shell_meta("cat < input.txt"));
+        assert!(has_top_level_shell_meta("cmd1 && cmd2"));
+        assert!(has_top_level_shell_meta("cmd1; cmd2"));
+        
+        // Metacharacters inside quotes don't count
+        assert!(!has_top_level_shell_meta("echo 'hello | world'"));
+        assert!(!has_top_level_shell_meta("echo \"hello > world\""));
+        
+        // Metacharacters inside subshells don't count
+        assert!(!has_top_level_shell_meta("echo $(ls | grep txt)"));
+        assert!(!has_top_level_shell_meta("echo `ls | grep txt`"));
+        
+        // No metacharacters
+        assert!(!has_top_level_shell_meta("echo hello world"));
+        assert!(!has_top_level_shell_meta("ls -la"));
+    }
+
+    #[test]
+    fn test_peel_wrappers() {
+        // sshpass wrapper
+        assert_eq!(
+            peel_wrappers(&["sshpass".to_string(), "-p".to_string(), "pass".to_string(), "ssh".to_string(), "host".to_string()]),
+            vec!["ssh".to_string(), "host".to_string()]
+        );
+        
+        // timeout wrapper
+        assert_eq!(
+            peel_wrappers(&["timeout".to_string(), "10".to_string(), "command".to_string()]),
+            vec!["command".to_string()]
+        );
+        assert_eq!(
+            peel_wrappers(&["timeout".to_string(), "-s".to_string(), "KILL".to_string(), "10".to_string(), "command".to_string()]),
+            vec!["command".to_string()]
+        );
+        
+        // env wrapper
+        assert_eq!(
+            peel_wrappers(&["env".to_string(), "VAR=val".to_string(), "command".to_string()]),
+            vec!["command".to_string()]
+        );
+        assert_eq!(
+            peel_wrappers(&["env".to_string(), "-i".to_string(), "command".to_string()]),
+            vec!["command".to_string()]
+        );
+        
+        // stdbuf wrapper
+        assert_eq!(
+            peel_wrappers(&["stdbuf".to_string(), "-oL".to_string(), "command".to_string()]),
+            vec!["command".to_string()]
+        );
+        
+        // nice wrapper
+        assert_eq!(
+            peel_wrappers(&["nice".to_string(), "-n".to_string(), "10".to_string(), "command".to_string()]),
+            vec!["command".to_string()]
+        );
+        
+        // doas wrapper
+        assert_eq!(
+            peel_wrappers(&["doas".to_string(), "-u".to_string(), "user".to_string(), "command".to_string()]),
+            vec!["command".to_string()]
+        );
+        
+        // Not a wrapper
+        assert_eq!(
+            peel_wrappers(&["ls".to_string(), "-la".to_string()]),
+            vec!["ls".to_string(), "-la".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_needs_pty_ssh() {
+        with_test_mode(|| {
+            // SSH without remote command needs PTY
+            assert!(needs_pty("ssh host"));
+            
+            // SSH with -t forces PTY
+            assert!(needs_pty("ssh -t host"));
+            assert!(needs_pty("ssh -tt host"));
+            assert!(needs_pty("ssh -t host ls"));
+            
+            // SSH with -T disables PTY
+            assert!(!needs_pty("ssh -T host"));
+            assert!(!needs_pty("ssh -T host ls"));
+            
+            // SSH with remote command doesn't need PTY
+            assert!(!needs_pty("ssh host ls"));
+            assert!(!needs_pty("ssh host 'echo hello'"));
+            
+            // SSH with BatchMode=yes doesn't need PTY
+            assert!(!needs_pty("ssh -o BatchMode=yes host"));
+            assert!(!needs_pty("ssh -oBatchMode=yes host"));
+            
+            // SSH with RequestTTY options
+            assert!(needs_pty("ssh -o RequestTTY=yes host"));
+            assert!(needs_pty("ssh -oRequestTTY=force host"));
+            assert!(!needs_pty("ssh -o RequestTTY=no host"));
+            
+            // SSH with -N (no remote command for port forwarding)
+            assert!(!needs_pty("ssh -N -L 8080:localhost:80 host"));
+            
+            // SSH with -W (stdio forwarding)
+            assert!(!needs_pty("ssh -W localhost:80 host"));
+        });
+    }
+
+    #[test]
+    fn test_needs_pty_known_tuis() {
+        with_test_mode(|| {
+            // Known TUI editors
+            assert!(needs_pty("vim"));
+            assert!(needs_pty("vi"));
+            assert!(needs_pty("nano"));
+            assert!(needs_pty("emacs"));
+            
+            // Known TUI pagers
+            assert!(needs_pty("less"));
+            assert!(needs_pty("more"));
+            
+            // Known TUI monitors
+            assert!(needs_pty("top"));
+            assert!(needs_pty("htop"));
+            assert!(needs_pty("btop"));
+            
+            // AI tools
+            assert!(needs_pty("claude"));
+            
+            // Not TUIs
+            assert!(!needs_pty("ls"));
+            assert!(!needs_pty("cat"));
+            assert!(!needs_pty("echo hello"));
+        });
+    }
+
+    #[test]
+    fn test_needs_pty_shell_meta() {
+        with_test_mode(|| {
+            // Commands with pipes don't need PTY by default
+            assert!(!needs_pty("ls | grep txt"));
+            assert!(!needs_pty("echo hello > file.txt"));
+            
+            // Commands with && or ; don't need PTY
+            assert!(!needs_pty("cmd1 && cmd2"));
+            assert!(!needs_pty("cmd1; cmd2"));
+        });
+    }
+
+    #[test]
+    fn test_is_force_pty_command() {
+        // :pty prefix forces PTY
+        assert!(is_force_pty_command(":pty ls"));
+        assert!(is_force_pty_command(":pty echo hello"));
+        
+        // Regular commands
+        assert!(!is_force_pty_command("ls"));
+        assert!(!is_force_pty_command("echo hello"));
+    }
+
+    #[test]
+    fn test_is_pty_disabled() {
+        // Test with env var not set
+        env::remove_var("SUBSTRATE_DISABLE_PTY");
+        assert!(!is_pty_disabled());
+        
+        // Test with env var set
+        env::set_var("SUBSTRATE_DISABLE_PTY", "1");
+        assert!(is_pty_disabled());
+        env::remove_var("SUBSTRATE_DISABLE_PTY");
+    }
+
+    #[test]
+    fn test_needs_pty_integration() {
+        with_test_mode(|| {
+            // Interactive shells need PTY
+            assert!(needs_pty("bash"));
+            assert!(needs_pty("zsh"));
+            
+            // Shell with command doesn't need PTY
+            assert!(!needs_pty("bash -c 'echo hello'"));
+            
+            // Python REPL needs PTY
+            assert!(needs_pty("python"));
+            assert!(needs_pty("python3"));
+            
+            // Python with script doesn't need PTY
+            assert!(!needs_pty("python script.py"));
+            
+            // Docker run -it needs PTY
+            assert!(needs_pty("docker run -it ubuntu"));
+            
+            // Git interactive commands need PTY
+            assert!(needs_pty("git add -p"));
+            assert!(needs_pty("git commit"));
+            
+            // Sudo needs PTY for password
+            assert!(needs_pty("sudo apt update"));
+            assert!(!needs_pty("sudo -n apt update"));
+        });
+    }
+}

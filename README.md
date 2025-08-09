@@ -181,6 +181,139 @@ All configuration is done through environment variables:
 | `SHIM_CACHE_BUST` | Force cache invalidation | *none* | `1` |
 | `TRACE_LOG_MAX_MB` | Log rotation size limit | `50` | `100` |
 | `BASH_ENV` | Bash startup script | *none* | `~/.substrate_bashenv` |
+| `SUBSTRATE_FORCE_PTY` | Force PTY for all commands | *none* | `1` |
+| `SUBSTRATE_DISABLE_PTY` | Disable PTY globally | *none* | `1` |
+| `SUBSTRATE_PTY_DEBUG` | Enable PTY debug logging | *none* | `1` |
+| `SUBSTRATE_PTY_PIPELINE_LAST` | PTY for last pipeline segment | *none* | `1` |
+| `TEST_MODE` | Skip TTY checks in tests | *none* | `1` |
+
+## PTY Support
+
+Substrate includes comprehensive pseudo-terminal (PTY) support for running interactive commands and TUI applications with proper terminal emulation.
+
+### Automatic PTY Detection
+
+Substrate automatically uses PTY for commands that need terminal control:
+
+**Interactive shells:**
+- `bash`, `zsh`, `sh`, `fish` (without `-c` flag)
+- `bash -i` (forced interactive mode)
+
+**TUI applications:**
+- Editors: `vim`, `vi`, `nvim`, `nano`, `emacs`
+- Pagers: `less`, `more`, `most`
+- System monitors: `top`, `htop`, `btop`, `glances`
+- AI tools: `claude`, `chatgpt`
+- Multiplexers: `tmux`, `screen`, `zellij`
+- File managers: `ranger`, `yazi`
+- Other TUIs: `fzf`, `lazygit`, `gitui`, `tig`, `k9s`, `nmtui`
+
+**Interactive REPLs:**
+- `python`, `python3`, `ipython`, `bpython` (without script)
+- `node` (without script)
+- `irb`, `pry` (Ruby)
+- Force interactive: `python -i script.py`
+
+**Container commands:**
+- `docker run -it ubuntu`
+- `docker exec -it container bash`
+- `docker-compose run -it service`
+- `kubectl exec -it pod -- bash`
+- `podman run -it image`
+
+**SSH sessions:**
+- `ssh host` (interactive login)
+- `ssh -t host` (force PTY)
+- `ssh -t host command` (PTY for remote command)
+- No PTY: `ssh host command`, `ssh -T host`, `ssh -N host`
+
+**Git interactive commands:**
+- `git add -p` or `git add -i` (interactive staging)
+- `git rebase -i` (interactive rebase)
+- `git commit` (opens editor)
+- `git commit -e -m "msg"` (force editor)
+- No PTY: `git commit -m "message"`
+
+**Debuggers:**
+- `python -m pdb script.py`
+- `python3 -m ipdb`
+- `node inspect app.js`
+- `node --inspect-brk`
+
+**Sudo:**
+- `sudo command` (needs PTY for password)
+- No PTY: `sudo -n command` (non-interactive)
+
+### Manual PTY Control
+
+You can manually control PTY usage:
+
+```bash
+# Force PTY for any command
+substrate -c ":pty ls -la"
+
+# Force PTY globally
+export SUBSTRATE_FORCE_PTY=1
+substrate -c "ls -la"  # Will use PTY
+
+# Disable PTY globally
+export SUBSTRATE_DISABLE_PTY=1
+substrate -c "vim"  # Will NOT use PTY (may cause issues)
+```
+
+### PTY Features
+
+When PTY is active:
+- Full terminal emulation with proper control sequences
+- Arrow keys, function keys, and special keys work correctly
+- Terminal resizing (SIGWINCH) is handled automatically
+- Colors and formatting are preserved
+- Interactive password prompts work
+- TUI applications render correctly
+
+### PTY Logging
+
+PTY sessions are logged with additional metadata:
+
+```json
+{
+  "event_type": "command_start",
+  "command": "vim file.txt",
+  "pty": true,
+  "pty_rows": 24,
+  "pty_cols": 80
+}
+```
+
+### Debugging PTY Issues
+
+Enable debug logging to troubleshoot PTY behavior:
+
+```bash
+export SUBSTRATE_PTY_DEBUG=1
+substrate -c "vim"
+# Debug output shows PTY allocation and resize events
+```
+
+### Platform Support
+
+- **Unix/Linux/macOS**: Full PTY support using Unix pseudo-terminals
+- **Windows**: ConPTY support (requires Windows 10 1809+)
+
+### Advanced: Pipeline PTY Detection
+
+By default, commands with shell metacharacters (pipes, redirects) don't use PTY:
+
+```bash
+substrate -c "ls | less"  # No PTY (pipe detected)
+```
+
+Enable last-segment PTY detection for pipelines:
+
+```bash
+export SUBSTRATE_PTY_PIPELINE_LAST=1
+substrate -c "ls | less"  # PTY for 'less' only
+```
 
 ## Log Format
 
