@@ -363,21 +363,22 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
                     eprintln!("Command failed with status: {}", status.code().unwrap_or(-1));
                 }
                 
-                // CRITICAL: Reset rustyline after PTY commands to fix terminal state
+                // Reset terminal after PTY commands to restore shell state
                 if was_pty_command {
-                    log::debug!("Resetting rustyline after PTY command");
-                    // Reset terminal: attributes, show cursor, disable bracketed paste/mouse modes
-                    // NOTE: Removed \x1b[?1049l (exit alt-screen) as it was causing cursor position issues
-                    // Add \r\n to ensure we're on a new line and \x1b[K to clear current line
-                    print!("\r\n\x1b[K\x1b[0m\x1b[?25h\x1b[?2004l\x1b[?1000l\x1b[?1002l\x1b[?1006l");
+                    log::debug!("Resetting terminal after PTY command");
+                    
+                    // Wait a bit for TUI to finish cleanup
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    
+                    // Clear any residual terminal state but don't interfere with positioning
+                    // Don't use escape sequences that might conflict with TUI cleanup
+                    print!("\r\n");
                     let _ = std::io::stdout().flush();
                     
-                    // Save history before dropping rustyline
+                    // Save and restore history around rustyline reset
                     let _ = rl.save_history(&hist_path);
-                    
                     drop(rl);
                     rl = DefaultEditor::new()?;
-                    // Reload history after recreating rustyline
                     let _ = rl.load_history(&hist_path);
                 }
             }

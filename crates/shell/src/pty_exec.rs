@@ -106,11 +106,15 @@ pub fn execute_with_pty(
     // Ensure flag is cleared on exit (RAII guard for panic safety)
     let _pty_guard = PtyActiveGuard;
     
-    // Save and prepare terminal for PTY
-    let _terminal_guard = TerminalGuard::new()?;
+    // Create minimal terminal guard - ONLY for stdin raw mode
+    // This allows proper input forwarding without display interference
+    let _terminal_guard = MinimalTerminalGuard::new()?;
     
     // Get current terminal size
     let pty_size = get_terminal_size()?;
+    
+    // Log the detected terminal size (debug only)
+    log::info!("PTY: Detected terminal size: {}x{} (rows x cols)", pty_size.rows, pty_size.cols);
     
     // Create PTY system
     let pty_system = native_pty_system();
@@ -290,7 +294,26 @@ fn get_terminal_size() -> Result<PtySize> {
         use libc::{ioctl, winsize, TIOCGWINSZ};
         use std::mem;
         
-        // Try stdin, stdout, stderr in order (handles redirects)
+        // CRITICAL: Try /dev/tty first - this always refers to the controlling terminal
+        // This ensures we get the real size even when stdin/stdout are redirected
+        if let Ok(tty) = std::fs::File::open("/dev/tty") {
+            use std::os::unix::io::AsRawFd;
+            let fd = tty.as_raw_fd();
+            unsafe {
+                let mut size: winsize = mem::zeroed();
+                if ioctl(fd, TIOCGWINSZ, &mut size) == 0 
+                    && size.ws_row > 0 && size.ws_col > 0 {
+                    return Ok(PtySize {
+                        rows: size.ws_row,
+                        cols: size.ws_col,
+                        pixel_width: size.ws_xpixel,
+                        pixel_height: size.ws_ypixel,
+                    });
+                }
+            }
+        }
+        
+        // Fallback: Try stdin, stdout, stderr in order (handles redirects)
         for fd in [libc::STDIN_FILENO, libc::STDOUT_FILENO, libc::STDERR_FILENO] {
             unsafe {
                 let mut size: winsize = mem::zeroed();
@@ -307,15 +330,15 @@ fn get_terminal_size() -> Result<PtySize> {
         }
     }
     
-    // Fallback to environment or defaults
+    // Fallback to environment or MODERN defaults (not 1970s terminals!)
     let rows = std::env::var("LINES")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(24);
+        .unwrap_or(50);  // Modern default: 50 rows
     let cols = std::env::var("COLUMNS")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(80);
+        .unwrap_or(120); // Modern default: 120 columns
     
     Ok(PtySize {
         rows,
@@ -350,7 +373,7 @@ pub(crate) fn initialize_windows_input_forwarder() {
     INIT.call_once(|| {
         thread::spawn(|| {
             let mut stdin = io::stdin();
-            let mut buffer = vec![0u8; 4096];
+            let mut buffer = vec![0u8; 2048]; // Reduced to 2KB for better responsiveness
             
             loop {
                 // Wait until a PTY is active
@@ -428,8 +451,8 @@ fn handle_pty_io(
         let cmd_id_stdin = cmd_id.to_string();
         stdin_join = Some(thread::spawn(move || {
             let mut stdin = io::stdin();
-            // Increased buffer size for better performance with complex TUIs
-            let mut buffer = vec![0u8; 32768];
+            // Use smaller buffer to prevent blocking on partial reads
+            let mut buffer = vec![0u8; 2048]; // Reduced to 2KB for better responsiveness
             
             while !done_writer.load(Ordering::Relaxed) {
                 match stdin.read(&mut buffer) {
@@ -485,21 +508,34 @@ fn handle_pty_io(
     let cmd_id_output = cmd_id.to_string();
     let output_thread = thread::spawn(move || {
         let mut stdout = io::stdout();
-        // Increased buffer size for better performance with complex TUIs
-        let mut buffer = vec![0u8; 32768];
+        // Use smaller buffer to prevent blocking on partial reads
+        let mut buffer = vec![0u8; 4096];
         
         while !done_reader.load(Ordering::Relaxed) {
             match reader.read(&mut buffer) {
                 Ok(0) => break, // EOF - child process exited
                 Ok(n) => {
-                    if let Err(e) = stdout.write_all(&buffer[..n]) {
-                        log::warn!("[{}] Failed to write to stdout: {}", cmd_id_output, e);
-                        break;
+                    // Handle partial writes properly to prevent blocking
+                    let mut written = 0;
+                    while written < n {
+                        match stdout.write(&buffer[written..n]) {
+                            Ok(0) => break, // Can't write anymore
+                            Ok(bytes) => {
+                                written += bytes;
+                            }
+                            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                            Err(e) => {
+                                log::warn!("[{}] Failed to write to stdout: {}", cmd_id_output, e);
+                                break;
+                            }
+                        }
                     }
+                    // Flush after processing the buffer
                     if let Err(e) = stdout.flush() {
                         log::warn!("[{}] Failed to flush stdout: {}", cmd_id_output, e);
                     }
                 }
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
                 Err(e) => {
                     log::error!("[{}] Failed to read from PTY: {}", cmd_id_output, e);
                     break;
@@ -513,6 +549,10 @@ fn handle_pty_io(
     
     // Signal threads to stop
     done.store(true, Ordering::Relaxed);
+    
+    // CRITICAL: Drain any remaining output before sending reset sequences
+    // This prevents race condition with TUI cleanup sequences
+    thread::sleep(std::time::Duration::from_millis(50)); // Give TUI time to send cleanup
     
     // Wait for output thread (it will exit when PTY closes)
     let _ = output_thread.join();
@@ -574,76 +614,40 @@ fn verify_process_group(_pid: Option<u32>) {
     // No-op on non-Unix platforms
 }
 
-struct TerminalGuard {
+// Minimal terminal guard - ONLY sets stdin to raw mode for input forwarding
+// Does NOT touch stdout to avoid display corruption
+struct MinimalTerminalGuard {
     #[cfg(unix)]
     saved_termios: Option<nix::sys::termios::Termios>,
-    #[cfg(unix)]
-    saved_stdin_flags: Option<i32>,
     #[cfg(windows)]
     saved_stdin_mode: Option<u32>,
-    #[cfg(windows)]
-    saved_stdout_mode: Option<u32>,
 }
 
-impl TerminalGuard {
+impl MinimalTerminalGuard {
     fn new() -> Result<Self> {
         #[cfg(unix)]
         {
-            use nix::sys::termios::{tcgetattr, tcsetattr, SetArg};
+            use nix::sys::termios::{tcgetattr, tcsetattr, SetArg, cfmakeraw};
             use std::os::unix::io::{AsRawFd, BorrowedFd};
             
             let raw_fd = io::stdin().as_raw_fd();
             let fd = unsafe { BorrowedFd::borrow_raw(raw_fd) };
             let saved_termios = tcgetattr(fd).ok();
             
-            // Save original file flags for restoration
-            let saved_stdin_flags = unsafe {
-                let flags = libc::fcntl(raw_fd, libc::F_GETFL);
-                if flags != -1 { 
-                    Some(flags) 
-                } else {
-                    if std::env::var("SUBSTRATE_PTY_DEBUG").is_ok() {
-                        log::debug!("Failed to get stdin flags with fcntl(F_GETFL): {}", io::Error::last_os_error());
-                    }
-                    None 
-                }
-            };
-            
-            // Set minimal terminal changes for PTY operation
-            // Instead of full raw mode, just disable echo and canonical mode
-            // This allows TUI apps to manage their own terminal settings
+            // Set raw mode on stdin ONLY for proper input forwarding
             if let Some(ref orig) = saved_termios {
-                let mut new_termios = orig.clone();
+                let mut raw = orig.clone();
+                cfmakeraw(&mut raw);
                 
-                // Disable echo and canonical mode (line buffering)
-                // But keep other terminal processing intact
-                use nix::sys::termios::{LocalFlags, InputFlags};
-                new_termios.local_flags.remove(LocalFlags::ECHO | LocalFlags::ICANON);
-                
-                // Keep signal processing (ISIG) so Ctrl-C/Ctrl-Z work normally
-                // This is different from cfmakeraw which disables everything
-                
-                // Set VMIN=1, VTIME=1 for responsive input with timeout
-                // This allows reads to return with partial data
-                new_termios.control_chars[nix::sys::termios::SpecialCharacterIndices::VMIN as usize] = 1;
-                new_termios.control_chars[nix::sys::termios::SpecialCharacterIndices::VTIME as usize] = 1; // 0.1s timeout
+                // Ensure immediate input without buffering
+                raw.control_chars[nix::sys::termios::SpecialCharacterIndices::VMIN as usize] = 1;
+                raw.control_chars[nix::sys::termios::SpecialCharacterIndices::VTIME as usize] = 0;
                 
                 let fd = unsafe { BorrowedFd::borrow_raw(raw_fd) };
-                let _ = tcsetattr(fd, SetArg::TCSANOW, &new_termios);
-                
-                // Set O_NONBLOCK on stdin to prevent blocking even in canonical mode
-                // This ensures the stdin thread can be joined cleanly
-                if let Some(flags) = saved_stdin_flags {
-                    unsafe {
-                        let result = libc::fcntl(raw_fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-                        if result == -1 && std::env::var("SUBSTRATE_PTY_DEBUG").is_ok() {
-                            log::debug!("Failed to set O_NONBLOCK with fcntl(F_SETFL): {}", io::Error::last_os_error());
-                        }
-                    }
-                }
+                let _ = tcsetattr(fd, SetArg::TCSANOW, &raw);
             }
             
-            Ok(Self { saved_termios, saved_stdin_flags })
+            Ok(Self { saved_termios })
         }
         
         #[cfg(windows)]
@@ -652,10 +656,9 @@ impl TerminalGuard {
             use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
             
             let mut saved_stdin_mode = None;
-            let mut saved_stdout_mode = None;
             
             unsafe {
-                // Save and modify stdin console mode
+                // Save and modify stdin console mode ONLY
                 let h_stdin = GetStdHandle(STD_INPUT_HANDLE);
                 if h_stdin != INVALID_HANDLE_VALUE {
                     let mut mode = 0;
@@ -669,25 +672,9 @@ impl TerminalGuard {
                         SetConsoleMode(h_stdin, new_mode);
                     }
                 }
-                
-                // Save and modify stdout console mode
-                let h_stdout = GetStdHandle(STD_OUTPUT_HANDLE);
-                if h_stdout != INVALID_HANDLE_VALUE {
-                    let mut mode = 0;
-                    if GetConsoleMode(h_stdout, &mut mode) != 0 {
-                        saved_stdout_mode = Some(mode);
-                        
-                        // Add: ENABLE_VIRTUAL_TERMINAL_PROCESSING for VT sequences
-                        let new_mode = mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-                        SetConsoleMode(h_stdout, new_mode);
-                    }
-                }
             }
             
-            Ok(Self {
-                saved_stdin_mode,
-                saved_stdout_mode,
-            })
+            Ok(Self { saved_stdin_mode })
         }
         
         #[cfg(not(any(unix, windows)))]
@@ -695,25 +682,17 @@ impl TerminalGuard {
     }
 }
 
-impl Drop for TerminalGuard {
+impl Drop for MinimalTerminalGuard {
     fn drop(&mut self) {
         #[cfg(unix)]
         {
+            use nix::sys::termios::{tcsetattr, SetArg};
             use std::os::unix::io::{AsRawFd, BorrowedFd};
-            let raw_fd = io::stdin().as_raw_fd();
             
-            // Restore original termios settings (exits raw mode)
             if let Some(ref termios) = self.saved_termios {
-                use nix::sys::termios::{tcsetattr, SetArg};
+                let raw_fd = io::stdin().as_raw_fd();
                 let fd = unsafe { BorrowedFd::borrow_raw(raw_fd) };
                 let _ = tcsetattr(fd, SetArg::TCSANOW, termios);
-            }
-            
-            // Restore original file flags (removes O_NONBLOCK)
-            if let Some(flags) = self.saved_stdin_flags {
-                unsafe {
-                    let _ = libc::fcntl(raw_fd, libc::F_SETFL, flags);
-                }
             }
         }
         
@@ -723,19 +702,10 @@ impl Drop for TerminalGuard {
             use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
             
             unsafe {
-                // Restore original stdin console mode
                 if let Some(mode) = self.saved_stdin_mode {
                     let h_stdin = GetStdHandle(STD_INPUT_HANDLE);
                     if h_stdin != INVALID_HANDLE_VALUE {
                         SetConsoleMode(h_stdin, mode);
-                    }
-                }
-                
-                // Restore original stdout console mode
-                if let Some(mode) = self.saved_stdout_mode {
-                    let h_stdout = GetStdHandle(STD_OUTPUT_HANDLE);
-                    if h_stdout != INVALID_HANDLE_VALUE {
-                        SetConsoleMode(h_stdout, mode);
                     }
                 }
             }
