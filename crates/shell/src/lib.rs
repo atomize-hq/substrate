@@ -26,6 +26,10 @@ pub(crate) static PTY_ACTIVE: AtomicBool = AtomicBool::new(false);
 // Global SIGWINCH handler state - must be pub(crate) for pty_exec access
 lazy_static! {
     // Store the current PTY as a mutex-wrapped Box<dyn MasterPty + Send>
+    // Note: Using nested Mutex to satisfy Sync requirement for global static, since
+    // portable_pty::MasterPty is not Sync. The outer mutex protects Option swapping,
+    // the inner mutex protects the MasterPty itself. This could be simplified if
+    // portable_pty adds Sync to MasterPty trait in the future.
     pub(crate) static ref CURRENT_PTY: Arc<Mutex<Option<Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>>>> = 
         Arc::new(Mutex::new(None));
 }
@@ -362,10 +366,10 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
                 // CRITICAL: Reset rustyline after PTY commands to fix terminal state
                 if was_pty_command {
                     log::debug!("Resetting rustyline after PTY command");
-                    // Reset terminal: attributes, show cursor, exit alt-screen, disable bracketed paste/mouse modes
-                    print!("\x1b[0m\x1b[?25h\x1b[?1049l\x1b[?2004l\x1b[?1000l\x1b[?1002l\x1b[?1006l");
-                    // Optional: Clear screen if redraw artifacts appear
-                    // print!("\x1b[2J\x1b[H");
+                    // Reset terminal: attributes, show cursor, disable bracketed paste/mouse modes
+                    // NOTE: Removed \x1b[?1049l (exit alt-screen) as it was causing cursor position issues
+                    // Add \r\n to ensure we're on a new line and \x1b[K to clear current line
+                    print!("\r\n\x1b[K\x1b[0m\x1b[?25h\x1b[?2004l\x1b[?1000l\x1b[?1002l\x1b[?1006l");
                     let _ = std::io::stdout().flush();
                     
                     // Save history before dropping rustyline
@@ -666,6 +670,7 @@ fn container_wants_pty(cmd_lower: &str, tokens: &[String]) -> bool {
                     break; // stop scanning; rest belongs to the in-container command
                 }
             }
+            // Need both -i and -t for interactive container session
             return has_i && has_t;
         }
     }
@@ -703,6 +708,7 @@ fn container_wants_pty(cmd_lower: &str, tokens: &[String]) -> bool {
                     }
                 }
             }
+            // kubectl: need both -i and -t for interactive exec
             return has_i && has_t;
         }
     }
@@ -939,7 +945,7 @@ fn needs_pty(cmd: &str) -> bool {
     let enable_pipeline_last = std::env::var("SUBSTRATE_PTY_PIPELINE_LAST").is_ok();
     
     // Check for shell metacharacters at top-level (not inside quotes)
-    if !is_test_mode && has_top_level_shell_meta(cmd) {
+    if has_top_level_shell_meta(cmd) {
         // If pipeline-last is enabled, check if last segment needs PTY
         if enable_pipeline_last && cmd.contains('|') {
             // Simple heuristic: split by top-level pipes and check last segment
@@ -1069,7 +1075,7 @@ fn needs_pty(cmd: &str) -> bool {
         }
         
         // Check for BatchMode=yes (case-insensitive, no PTY)
-        // Handles both -o BatchMode=yes and -oBatchMode=yes
+        // First check inline form: -oBatchMode=yes
         for arg in &tokens_lc {
             if let Some(val) = arg.strip_prefix("-obatchmode=") {
                 if val == "yes" {
@@ -1077,16 +1083,36 @@ fn needs_pty(cmd: &str) -> bool {
                 }
             }
         }
-        if tokens_lc.iter().any(|arg| arg.contains("batchmode=") && arg.contains("=yes")) {
-            return false;
+        // Check spaced form: -o BatchMode=yes or -o BatchMode = yes
+        for (i, arg) in tokens_lc.iter().enumerate() {
+            if arg == "-o" && i + 1 < tokens_lc.len() {
+                // Handle: -o BatchMode=yes
+                if tokens_lc[i + 1] == "batchmode=yes" {
+                    return false;
+                }
+                // Handle: -o BatchMode = yes (with spaces)
+                if tokens_lc[i + 1] == "batchmode" && i + 3 < tokens_lc.len() && 
+                   tokens_lc[i + 2] == "=" && tokens_lc[i + 3] == "yes" {
+                    return false;
+                }
+            }
         }
         
         // Check for RequestTTY option (case-insensitive, ssh_config style)
-        // First check spaced form: -o RequestTTY=value
+        // First check spaced form: -o RequestTTY=value or -o RequestTTY = value
         for (i, arg) in tokens_lc.iter().enumerate() {
             if arg == "-o" && i + 1 < tokens_lc.len() {
+                // Handle: -o RequestTTY=value
                 if let Some(val) = tokens_lc[i + 1].strip_prefix("requesttty=") {
                     match val {
+                        "yes" | "force" => return true,
+                        "no" => return false,
+                        _ => {}
+                    }
+                }
+                // Handle: -o RequestTTY = value (with spaces)
+                if tokens_lc[i + 1] == "requesttty" && i + 3 < tokens_lc.len() && tokens_lc[i + 2] == "=" {
+                    match tokens_lc[i + 3].as_str() {
                         "yes" | "force" => return true,
                         "no" => return false,
                         _ => {}
@@ -1942,13 +1968,28 @@ mod tests {
 
     #[test]
     fn test_is_force_pty_command() {
+        // Save and remove SUBSTRATE_FORCE_PTY if it exists
+        let old_force = std::env::var("SUBSTRATE_FORCE_PTY").ok();
+        std::env::remove_var("SUBSTRATE_FORCE_PTY");
+        
         // :pty prefix forces PTY
         assert!(is_force_pty_command(":pty ls"));
         assert!(is_force_pty_command(":pty echo hello"));
         
-        // Regular commands
+        // Regular commands without SUBSTRATE_FORCE_PTY
         assert!(!is_force_pty_command("ls"));
         assert!(!is_force_pty_command("echo hello"));
+        
+        // Test with SUBSTRATE_FORCE_PTY set
+        std::env::set_var("SUBSTRATE_FORCE_PTY", "1");
+        assert!(is_force_pty_command("ls"));
+        assert!(is_force_pty_command("echo hello"));
+        
+        // Restore original state
+        match old_force {
+            Some(val) => std::env::set_var("SUBSTRATE_FORCE_PTY", val),
+            None => std::env::remove_var("SUBSTRATE_FORCE_PTY"),
+        }
     }
 
     #[test]
@@ -1961,6 +2002,45 @@ mod tests {
         env::set_var("SUBSTRATE_DISABLE_PTY", "1");
         assert!(is_pty_disabled());
         env::remove_var("SUBSTRATE_DISABLE_PTY");
+    }
+    
+    #[test]
+    #[cfg(unix)]
+    fn test_stdin_nonblock_roundtrip() {
+        // Test that O_NONBLOCK can be set and restored correctly
+        // This verifies the save/restore behavior that TerminalGuard relies on
+        use std::os::unix::io::AsRawFd;
+        use std::io;
+        
+        unsafe {
+            let fd = io::stdin().as_raw_fd();
+            
+            // Get current flags
+            let flags_before = libc::fcntl(fd, libc::F_GETFL);
+            assert!(flags_before != -1, "Failed to get stdin flags");
+            
+            // Mimic TerminalGuard behavior: set O_NONBLOCK
+            let result = libc::fcntl(fd, libc::F_SETFL, flags_before | libc::O_NONBLOCK);
+            assert!(result != -1, "Failed to set O_NONBLOCK");
+            
+            // Verify O_NONBLOCK is set
+            let flags_after = libc::fcntl(fd, libc::F_GETFL);
+            assert!(flags_after != -1, "Failed to get flags after setting O_NONBLOCK");
+            assert!(flags_after & libc::O_NONBLOCK != 0, "O_NONBLOCK should be set");
+            
+            // Restore original flags
+            let result = libc::fcntl(fd, libc::F_SETFL, flags_before);
+            assert!(result != -1, "Failed to restore original flags");
+            
+            // Verify restoration
+            let flags_restored = libc::fcntl(fd, libc::F_GETFL);
+            assert!(flags_restored != -1, "Failed to get restored flags");
+            assert_eq!(
+                flags_restored & libc::O_NONBLOCK, 
+                flags_before & libc::O_NONBLOCK,
+                "O_NONBLOCK state should be restored to original"
+            );
+        }
     }
 
     #[test]
@@ -1990,6 +2070,412 @@ mod tests {
             // Sudo needs PTY for password
             assert!(needs_pty("sudo apt update"));
             assert!(!needs_pty("sudo -n apt update"));
+        });
+    }
+
+    #[test]
+    fn test_needs_pty_ssh_variations() {
+        with_test_mode(|| {
+        
+        // SSH with -T flag should not get PTY
+        assert!(!needs_pty("ssh -T host 'cmd'"));
+        
+        // SSH with -t flag should get PTY
+        assert!(needs_pty("ssh -t host"));
+        assert!(needs_pty("ssh -tt host"));
+        
+        // SSH with remote command (no -t) should not get PTY
+        assert!(!needs_pty("ssh host ls"));
+        assert!(!needs_pty("ssh host 'echo hello'"));
+        
+        // SSH with -l user form
+        assert!(needs_pty("ssh -l user host"));
+        assert!(!needs_pty("ssh -l user host ls"));
+        
+        // SSH with -- delimiter
+        assert!(needs_pty("ssh -o SomeOption -- host"));
+        assert!(!needs_pty("ssh -o SomeOption -- host ls"));
+        
+        // SSH with BatchMode should not get PTY
+        assert!(!needs_pty("ssh -o BatchMode=yes host"));
+        
+        // SSH with RequestTTY option
+        assert!(needs_pty("ssh -o RequestTTY=yes host"));
+        assert!(needs_pty("ssh -o RequestTTY=force host"));
+        assert!(!needs_pty("ssh -o RequestTTY=no host"));
+        
+        // SSH RequestTTY=auto behavior
+        assert!(needs_pty("ssh -o RequestTTY=auto host"));        // interactive login
+        assert!(!needs_pty("ssh -o RequestTTY=auto host id"));    // remote cmd, no -t
+        
+        // Test case-insensitive options
+        assert!(needs_pty("ssh -o RequestTTY=YES host"));
+        assert!(needs_pty("ssh -o RequestTTY=Force host"));
+        assert!(!needs_pty("ssh -o RequestTTY=NO host"));
+        assert!(!needs_pty("ssh -o BatchMode=YES host"));
+        
+        // Test inline -o format
+        assert!(needs_pty("ssh -oRequestTTY=yes host"));
+        assert!(needs_pty("ssh -oRequestTTY=force host"));
+        assert!(!needs_pty("ssh -oRequestTTY=no host"));
+        assert!(!needs_pty("ssh -oBatchMode=yes host"));
+        
+        // Test case-insensitive inline options
+        assert!(needs_pty("ssh -oRequestTTY=Yes host"));
+        assert!(!needs_pty("ssh -oRequestTTY=No host"));
+        assert!(!needs_pty("ssh -oBatchMode=YES host"));
+        
+        // SSH with -W should not get PTY unless -t is explicit
+        assert!(!needs_pty("ssh -W host:port jumphost"));
+        assert!(needs_pty("ssh -t -W host:port jumphost"));
+        
+        // SSH with 2-arg options that could confuse host detection
+        assert!(needs_pty("ssh -p 2222 host"));
+        assert!(needs_pty("ssh -o StrictHostKeyChecking=no host"));
+        assert!(!needs_pty("ssh -p 2222 host echo ok"));
+        assert!(needs_pty("ssh -J jumphost host"));
+        assert!(!needs_pty("ssh -J jumphost host 'id'"));
+        
+        // Plain SSH interactive login
+        assert!(needs_pty("ssh host"));
+        assert!(needs_pty("ssh -l user host"));
+        assert!(needs_pty("ssh user@host"));
+        
+        // SSH -N flag (no remote command, typically for port forwarding)
+        assert!(!needs_pty("ssh -N host"));
+        assert!(!needs_pty("ssh -N -L 8080:localhost:80 host"));
+        assert!(needs_pty("ssh -t -N host"));  // -t forces PTY
+        
+        // SSH -O control operations
+        assert!(!needs_pty("ssh -O check host"));
+        assert!(!needs_pty("ssh -O exit host"));
+        assert!(!needs_pty("ssh -O stop host"));
+        assert!(needs_pty("ssh -t -O check host"));  // -t forces PTY
+        });
+    }
+    
+    #[test]
+    fn test_needs_pty_quoted_args() {
+        with_test_mode(|| {
+        
+        // Quoted filename with spaces
+        assert!(needs_pty("vim 'a b.txt'"));
+        assert!(needs_pty("vim \"file with spaces.txt\""));
+        
+        // Complex quoted arguments
+        assert!(needs_pty("vim 'file (1).txt'"));
+        });
+    }
+    
+    #[test]
+    fn test_needs_pty_pipes_redirects() {
+        with_test_mode(|| {
+        
+        // Pipes should prevent PTY
+        assert!(!needs_pty("ls | less"));
+        assert!(!needs_pty("vim file.txt | grep pattern"));
+        
+        // Redirects should prevent PTY
+        assert!(!needs_pty("vim > output.txt"));
+        assert!(!needs_pty("less < input.txt"));
+        
+        // Background jobs should prevent PTY
+        assert!(!needs_pty("vim &"));
+        
+        // Command sequences should prevent PTY
+        assert!(!needs_pty("vim; ls"));
+        });
+    }
+    
+    #[test]
+    fn test_repl_heuristic() {
+        with_test_mode(|| {
+        
+        // Interactive REPL (no args) should get PTY
+        assert!(needs_pty("python"));
+        assert!(needs_pty("python3"));
+        assert!(needs_pty("node"));
+        
+        // Script execution should NOT get PTY
+        assert!(!needs_pty("python script.py"));
+        assert!(!needs_pty("python3 /path/to/script.py"));
+        assert!(!needs_pty("node app.js"));
+        
+        // Inline code should NOT get PTY
+        assert!(!needs_pty("python -c 'print(1)'"));
+        assert!(!needs_pty("node -e 'console.log(1)'"));
+        assert!(!needs_pty("node -p '1+1'"));
+        assert!(!needs_pty("node --print '1+1'"));
+        assert!(!needs_pty("node --eval 'console.log(1)'"));
+        
+        // Explicit interactive flag should get PTY even with script
+        assert!(needs_pty("python -i script.py"));
+        assert!(needs_pty("python -i -c 'print(1)'"));
+        });
+    }
+    
+    #[test]
+    fn test_debugger_pty() {
+        with_test_mode(|| {
+        
+        // Debuggers should get PTY
+        assert!(needs_pty("python -m pdb script.py"));
+        assert!(needs_pty("python3 -m ipdb script.py"));
+        assert!(needs_pty("node inspect app.js"));
+        assert!(needs_pty("node --inspect-brk app.js"));
+        assert!(needs_pty("node --inspect script.js"));
+        });
+    }
+    
+    #[test]
+    fn test_windows_exe_handling() {
+        with_test_mode(|| {
+        
+        // Windows-style paths with .exe should work
+        if cfg!(windows) {
+            assert!(needs_pty(r#"C:\Python\python.exe"#));
+            assert!(needs_pty(r#"C:\Program Files\Git\usr\bin\ssh.exe"#));
+            assert!(needs_pty(r#"vim.exe file.txt"#));
+        }
+        });
+    }
+    
+    #[test]
+    fn test_container_k8s_pty() {
+        with_test_mode(|| {
+        
+        // Docker/Podman commands with -it should get PTY
+        assert!(needs_pty("docker run -it ubuntu bash"));
+        assert!(needs_pty("docker exec -it container bash"));
+        assert!(needs_pty("podman run -it alpine sh"));
+        assert!(!needs_pty("docker run ubuntu echo hello"));
+        
+        // Only -t without -i should NOT get PTY (not fully interactive)
+        assert!(!needs_pty("podman run -t alpine sh"));
+        assert!(!needs_pty("docker run -t ubuntu bash"));
+        
+        // kubectl exec with -it should get PTY
+        assert!(needs_pty("kubectl exec -it pod -- sh"));
+        assert!(needs_pty("kubectl exec --stdin --tty pod -- bash"));
+        assert!(!needs_pty("kubectl exec pod -- ls"));
+        assert!(!needs_pty("kubectl exec --tty pod -- bash"));  // Only -t, not -i
+        
+        // Container false positives and split flags
+        assert!(!needs_pty("docker run --timeout=5s ubuntu echo hi"));
+        assert!(needs_pty("docker exec -ti c bash"));
+        assert!(needs_pty("kubectl exec --stdin --tty pod -- sh"));
+        assert!(needs_pty("docker exec -i -t c bash"));
+        assert!(needs_pty("docker exec -t -i c bash"));
+        
+        // Docker/Podman should NOT detect flags in the in-container command
+        assert!(!needs_pty("docker run ubuntu bash -lc \"echo -t\""));
+        assert!(!needs_pty("docker exec c sh -c 'echo -it'"));
+        
+        // Docker -- separator sanity test
+        assert!(needs_pty("docker run -it -- ubuntu bash"));
+        
+        // docker-compose support (both forms)
+        assert!(needs_pty("docker-compose exec -it web sh"));
+        assert!(needs_pty("docker compose exec -it web sh"));
+        assert!(needs_pty("docker compose run --rm -it web sh"));
+        assert!(!needs_pty("docker compose exec web ls"));
+        });
+    }
+    
+    #[test]
+    fn test_sudo_pty() {
+        with_test_mode(|| {
+        
+        // sudo should get PTY for password prompt
+        assert!(needs_pty("sudo ls"));
+        assert!(needs_pty("sudo apt update"));
+        
+        // sudo with -n or -S should NOT get PTY
+        assert!(!needs_pty("sudo -n ls"));
+        assert!(!needs_pty("sudo --non-interactive command"));
+        assert!(!needs_pty("sudo -S ls"));
+        
+        // sudo -S (stdin password)
+        assert!(!needs_pty("sudo -S true"));
+        
+        // sudo with -A (askpass) doesn't get PTY
+        assert!(!needs_pty("sudo -A true"));
+        assert!(!needs_pty("sudo --askpass true"));
+        });
+    }
+    
+    #[test]
+    fn test_interactive_shells() {
+        with_test_mode(|| {
+        
+        // Interactive shells should get PTY
+        assert!(needs_pty("bash"));
+        assert!(needs_pty("zsh"));
+        assert!(needs_pty("sh"));
+        assert!(needs_pty("fish"));
+        assert!(needs_pty("bash -i"));
+        assert!(needs_pty("zsh --interactive"));
+        
+        // Shells with -c should NOT get PTY (unless -i is also present)
+        assert!(!needs_pty("bash -c 'echo ok'"));
+        assert!(!needs_pty("sh -c 'ls'"));
+        assert!(needs_pty("bash -i -c 'echo ok'"));  // -i overrides
+        
+        // bash --interactive
+        assert!(needs_pty("bash --interactive"));
+        });
+    }
+    
+    #[test]
+    fn test_git_selective_pty() {
+        with_test_mode(|| {
+        
+        // Interactive git commands should get PTY
+        assert!(needs_pty("git add -p"));
+        assert!(needs_pty("git add -i"));
+        assert!(needs_pty("git rebase -i"));
+        assert!(needs_pty("git commit"));  // No -m, will open editor
+        
+        // Non-interactive git commands should NOT get PTY
+        assert!(!needs_pty("git status"));
+        assert!(!needs_pty("git log"));
+        assert!(!needs_pty("git diff"));
+        assert!(!needs_pty("git commit -m 'message'"));
+        assert!(!needs_pty("git add file.txt"));
+        assert!(!needs_pty("git push"));
+        
+        // git commit with --no-edit and -F should not get PTY
+        assert!(!needs_pty("git commit --no-edit"));
+        assert!(!needs_pty("git commit -F msg.txt"));
+        assert!(!needs_pty("git commit --file=msg.txt"));
+        
+        // git with global options before subcommand
+        assert!(needs_pty("git -c core.editor=vim commit"));
+        assert!(needs_pty("git -C repo commit"));
+        assert!(!needs_pty("git --git-dir=.git --work-tree=. commit -m 'msg'"));
+        });
+    }
+    
+    #[test]
+    fn test_wrapper_commands() {
+        with_test_mode(|| {
+        
+        // sshpass wrapper
+        assert!(needs_pty("sshpass -p x ssh host"));
+        assert!(!needs_pty("sshpass -p x ssh host ls"));
+        
+        // env wrapper with -i and -u flags
+        assert!(needs_pty("env -i vim file"));
+        assert!(needs_pty("env -u PATH bash"));
+        assert!(needs_pty("env FOO=1 -i bash"));
+        assert!(needs_pty("env FOO=1 ssh -t host"));
+        assert!(needs_pty("env FOO=1 BAR=2 vim file.txt"));
+        
+        // timeout wrapper
+        assert!(needs_pty("timeout 10s ssh host"));
+        assert!(!needs_pty("timeout 10s ssh host ls"));
+        
+        // stdbuf wrapper
+        assert!(needs_pty("stdbuf -oL less README.md"));
+        assert!(needs_pty("stdbuf -oL vim file.txt"));
+        
+        // nice/ionice wrappers
+        assert!(needs_pty("nice -n 10 vim file.txt"));
+        assert!(needs_pty("ionice -n 5 less README.md"));
+        
+        // doas wrapper (sudo alternative)
+        assert!(needs_pty("doas vim /etc/hosts"));
+        assert!(needs_pty("doas -u user ssh host"));
+        });
+    }
+    
+    #[test]
+    fn test_pipeline_last_tui() {
+        with_test_mode(|| {
+            // This test requires SUBSTRATE_PTY_PIPELINE_LAST to be set
+            let old_pipeline = std::env::var("SUBSTRATE_PTY_PIPELINE_LAST").ok();
+            std::env::set_var("SUBSTRATE_PTY_PIPELINE_LAST", "1");
+        
+        // Pipeline with TUI at the end should get PTY
+        assert!(needs_pty("ls | less"));
+        assert!(needs_pty("git ls-files | fzf"));
+        
+        // Pipeline with redirect should NOT get PTY
+        assert!(!needs_pty("ls | less > out.txt"));
+        assert!(!needs_pty("git diff | head > changes.txt"));
+        assert!(!needs_pty("ls | less 2>err.log"));
+        assert!(!needs_pty("cmd | less < input.txt"));
+        assert!(!needs_pty("ls | less >> append.txt"));
+        assert!(!needs_pty("ls | less 2>&1"));
+            
+            // Restore SUBSTRATE_PTY_PIPELINE_LAST
+            match old_pipeline {
+                Some(val) => std::env::set_var("SUBSTRATE_PTY_PIPELINE_LAST", val),
+                None => std::env::remove_var("SUBSTRATE_PTY_PIPELINE_LAST"),
+            }
+        });
+    }
+    
+    #[test]
+    fn test_ssh_spacing_edge_cases() {
+        with_test_mode(|| {
+        
+        // SSH with spaces around = in options (OpenSSH accepts this)
+        assert!(needs_pty("ssh -o RequestTTY = yes host"));
+        assert!(needs_pty("ssh -o RequestTTY = force host"));
+        assert!(!needs_pty("ssh -o RequestTTY = no host"));
+        assert!(!needs_pty("ssh -o BatchMode = yes host"));
+        
+        // -E and -B options with 2 args
+        assert!(needs_pty("ssh -E logfile.txt host"));
+        assert!(needs_pty("ssh -B 192.168.1.1 host"));
+        assert!(!needs_pty("ssh -E log.txt host ls"));
+        });
+    }
+    
+    #[test]
+    fn test_force_vs_disable_precedence() {
+        // Test that force overrides disable at the execute_command level
+        let old_disable = std::env::var("SUBSTRATE_DISABLE_PTY").ok();
+        let old_force = std::env::var("SUBSTRATE_FORCE_PTY").ok();
+        
+        // Test with both set - force should override
+        std::env::set_var("SUBSTRATE_DISABLE_PTY", "1");
+        std::env::set_var("SUBSTRATE_FORCE_PTY", "1");
+        
+        // is_force_pty_command should return true when SUBSTRATE_FORCE_PTY is set
+        assert!(is_force_pty_command("echo hello"));
+        assert!(is_force_pty_command("ls -l"));
+        
+        // :pty prefix should also force
+        assert!(is_force_pty_command(":pty echo hello"));
+            
+        
+        // is_pty_disabled should still return true
+        assert!(is_pty_disabled());
+        
+        // Restore environment variables
+        match old_disable {
+            Some(val) => std::env::set_var("SUBSTRATE_DISABLE_PTY", val),
+            None => std::env::remove_var("SUBSTRATE_DISABLE_PTY"),
+        }
+        match old_force {
+            Some(val) => std::env::set_var("SUBSTRATE_FORCE_PTY", val),
+            None => std::env::remove_var("SUBSTRATE_FORCE_PTY"),
+        }
+    }
+    
+    #[test]
+    fn test_git_commit_edit_flag() {
+        with_test_mode(|| {
+        
+        // git commit -e can override -m to open editor
+        assert!(needs_pty("git commit -m 'msg' -e"));
+        assert!(needs_pty("git commit -m 'msg' --edit"));
+        
+        // --no-edit overrides -e
+        assert!(!needs_pty("git commit -e --no-edit"));
+        assert!(!needs_pty("git commit --edit --no-edit"));
         });
     }
 }

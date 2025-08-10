@@ -182,10 +182,17 @@ All configuration is done through environment variables:
 | `TRACE_LOG_MAX_MB` | Log rotation size limit | `50` | `100` |
 | `BASH_ENV` | Bash startup script | *none* | `~/.substrate_bashenv` |
 | `SUBSTRATE_FORCE_PTY` | Force PTY for all commands | *none* | `1` |
-| `SUBSTRATE_DISABLE_PTY` | Disable PTY globally | *none* | `1` |
+| `SUBSTRATE_DISABLE_PTY` | Disable PTY globally (escape hatch) | *none* | `1` |
 | `SUBSTRATE_PTY_DEBUG` | Enable PTY debug logging | *none* | `1` |
 | `SUBSTRATE_PTY_PIPELINE_LAST` | PTY for last pipeline segment | *none* | `1` |
 | `TEST_MODE` | Skip TTY checks in tests | *none* | `1` |
+
+### PTY Environment Variables (Escape Hatches)
+
+- **`SUBSTRATE_DISABLE_PTY=1`**: Globally disable PTY support. Use this escape hatch if PTY is causing issues with specific workflows.
+- **`SUBSTRATE_FORCE_PTY=1`**: Force PTY for all commands, even those that normally wouldn't use it.
+- **`SUBSTRATE_PTY_DEBUG=1`**: Enable debug logging for PTY operations (resize events, thread lifecycle).
+- **`:pty` prefix**: Force PTY for a single command: `substrate -c ":pty echo hello"`
 
 ## PTY Support
 
@@ -266,10 +273,14 @@ substrate -c "vim"  # Will NOT use PTY (may cause issues)
 When PTY is active:
 - Full terminal emulation with proper control sequences
 - Arrow keys, function keys, and special keys work correctly
-- Terminal resizing (SIGWINCH) is handled automatically
+- Terminal resizing (SIGWINCH) is handled automatically (Unix only)
 - Colors and formatting are preserved
 - Interactive password prompts work
 - TUI applications render correctly
+
+**Platform Notes:**
+- **Unix/Linux/macOS**: Full support including live terminal resizing via SIGWINCH
+- **Windows**: ConPTY support (requires Windows 10 1809+). Terminal size is set at spawn time only; live resize events are not yet supported
 
 ### PTY Logging
 

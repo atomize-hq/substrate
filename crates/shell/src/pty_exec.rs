@@ -152,10 +152,12 @@ pub fn execute_with_pty(
     cmd.env_remove("SHIM_CALLER");
     cmd.env_remove("SHIM_CALL_STACK");
     
-    // Set TERM if not already set
-    if std::env::var("TERM").is_err() {
-        cmd.env("TERM", "xterm-256color");
-    }
+    // Preserve existing TERM or set a default
+    // Many TUIs like claude need the correct TERM to function properly
+    match std::env::var("TERM") {
+        Ok(term) => cmd.env("TERM", term),
+        Err(_) => cmd.env("TERM", "xterm-256color"),
+    };
     
     // Set COLUMNS/LINES for TUIs that read them (only if valid)
     if pty_size.cols > 0 && pty_size.rows > 0 {
@@ -426,7 +428,8 @@ fn handle_pty_io(
         let cmd_id_stdin = cmd_id.to_string();
         stdin_join = Some(thread::spawn(move || {
             let mut stdin = io::stdin();
-            let mut buffer = vec![0u8; 4096];
+            // Increased buffer size for better performance with complex TUIs
+            let mut buffer = vec![0u8; 32768];
             
             while !done_writer.load(Ordering::Relaxed) {
                 match stdin.read(&mut buffer) {
@@ -482,7 +485,8 @@ fn handle_pty_io(
     let cmd_id_output = cmd_id.to_string();
     let output_thread = thread::spawn(move || {
         let mut stdout = io::stdout();
-        let mut buffer = vec![0u8; 4096];
+        // Increased buffer size for better performance with complex TUIs
+        let mut buffer = vec![0u8; 32768];
         
         while !done_reader.load(Ordering::Relaxed) {
             match reader.read(&mut buffer) {
@@ -573,6 +577,8 @@ fn verify_process_group(_pid: Option<u32>) {
 struct TerminalGuard {
     #[cfg(unix)]
     saved_termios: Option<nix::sys::termios::Termios>,
+    #[cfg(unix)]
+    saved_stdin_flags: Option<i32>,
     #[cfg(windows)]
     saved_stdin_mode: Option<u32>,
     #[cfg(windows)]
@@ -583,30 +589,61 @@ impl TerminalGuard {
     fn new() -> Result<Self> {
         #[cfg(unix)]
         {
-            use nix::sys::termios::{tcgetattr, tcsetattr, SetArg, cfmakeraw};
+            use nix::sys::termios::{tcgetattr, tcsetattr, SetArg};
             use std::os::unix::io::{AsRawFd, BorrowedFd};
             
             let raw_fd = io::stdin().as_raw_fd();
             let fd = unsafe { BorrowedFd::borrow_raw(raw_fd) };
             let saved_termios = tcgetattr(fd).ok();
             
-            // Set raw mode for proper PTY operation
-            // This ensures ^C/^Z arrive as bytes, no local echo, no line buffering
+            // Save original file flags for restoration
+            let saved_stdin_flags = unsafe {
+                let flags = libc::fcntl(raw_fd, libc::F_GETFL);
+                if flags != -1 { 
+                    Some(flags) 
+                } else {
+                    if std::env::var("SUBSTRATE_PTY_DEBUG").is_ok() {
+                        log::debug!("Failed to get stdin flags with fcntl(F_GETFL): {}", io::Error::last_os_error());
+                    }
+                    None 
+                }
+            };
+            
+            // Set minimal terminal changes for PTY operation
+            // Instead of full raw mode, just disable echo and canonical mode
+            // This allows TUI apps to manage their own terminal settings
             if let Some(ref orig) = saved_termios {
-                let mut raw = orig.clone();
-                cfmakeraw(&mut raw);
+                let mut new_termios = orig.clone();
                 
-                // 🔥 CRITICAL FIX: Set VMIN=0, VTIME=1 to prevent stdin thread deadlock
-                // This makes read() return every 100ms even if no bytes arrived,
-                // allowing the stdin thread to check the done flag and exit cleanly
-                raw.control_chars[nix::sys::termios::SpecialCharacterIndices::VMIN as usize] = 0;
-                raw.control_chars[nix::sys::termios::SpecialCharacterIndices::VTIME as usize] = 1; // 0.1s timeout
+                // Disable echo and canonical mode (line buffering)
+                // But keep other terminal processing intact
+                use nix::sys::termios::{LocalFlags, InputFlags};
+                new_termios.local_flags.remove(LocalFlags::ECHO | LocalFlags::ICANON);
+                
+                // Keep signal processing (ISIG) so Ctrl-C/Ctrl-Z work normally
+                // This is different from cfmakeraw which disables everything
+                
+                // Set VMIN=1, VTIME=1 for responsive input with timeout
+                // This allows reads to return with partial data
+                new_termios.control_chars[nix::sys::termios::SpecialCharacterIndices::VMIN as usize] = 1;
+                new_termios.control_chars[nix::sys::termios::SpecialCharacterIndices::VTIME as usize] = 1; // 0.1s timeout
                 
                 let fd = unsafe { BorrowedFd::borrow_raw(raw_fd) };
-                let _ = tcsetattr(fd, SetArg::TCSANOW, &raw);
+                let _ = tcsetattr(fd, SetArg::TCSANOW, &new_termios);
+                
+                // Set O_NONBLOCK on stdin to prevent blocking even in canonical mode
+                // This ensures the stdin thread can be joined cleanly
+                if let Some(flags) = saved_stdin_flags {
+                    unsafe {
+                        let result = libc::fcntl(raw_fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+                        if result == -1 && std::env::var("SUBSTRATE_PTY_DEBUG").is_ok() {
+                            log::debug!("Failed to set O_NONBLOCK with fcntl(F_SETFL): {}", io::Error::last_os_error());
+                        }
+                    }
+                }
             }
             
-            Ok(Self { saved_termios })
+            Ok(Self { saved_termios, saved_stdin_flags })
         }
         
         #[cfg(windows)]
@@ -662,13 +699,21 @@ impl Drop for TerminalGuard {
     fn drop(&mut self) {
         #[cfg(unix)]
         {
+            use std::os::unix::io::{AsRawFd, BorrowedFd};
+            let raw_fd = io::stdin().as_raw_fd();
+            
             // Restore original termios settings (exits raw mode)
             if let Some(ref termios) = self.saved_termios {
                 use nix::sys::termios::{tcsetattr, SetArg};
-                use std::os::unix::io::{AsRawFd, BorrowedFd};
-                let raw_fd = io::stdin().as_raw_fd();
                 let fd = unsafe { BorrowedFd::borrow_raw(raw_fd) };
                 let _ = tcsetattr(fd, SetArg::TCSANOW, termios);
+            }
+            
+            // Restore original file flags (removes O_NONBLOCK)
+            if let Some(flags) = self.saved_stdin_flags {
+                unsafe {
+                    let _ = libc::fcntl(raw_fd, libc::F_SETFL, flags);
+                }
             }
         }
         
