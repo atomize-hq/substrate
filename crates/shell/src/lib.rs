@@ -368,18 +368,15 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
                     log::debug!("Resetting terminal after PTY command");
                     
                     // Wait a bit for TUI to finish cleanup
-                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    std::thread::sleep(std::time::Duration::from_millis(50));
                     
-                    // Clear any residual terminal state but don't interfere with positioning
-                    // Don't use escape sequences that might conflict with TUI cleanup
-                    print!("\r\n");
+                    // Print newline and a hint about the limitation
+                    println!("\n(Press Enter for prompt)");
                     let _ = std::io::stdout().flush();
                     
-                    // Save and restore history around rustyline reset
-                    let _ = rl.save_history(&hist_path);
-                    drop(rl);
-                    rl = DefaultEditor::new()?;
-                    let _ = rl.load_history(&hist_path);
+                    // This is a known limitation of rustyline's synchronous readline()
+                    // It cannot be interrupted to show the prompt without user input
+                    // Future fix: switch to rustyline-async or linefeed library
                 }
             }
             Err(e) => eprintln!("Error: {}", e),
