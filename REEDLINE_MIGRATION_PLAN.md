@@ -97,7 +97,7 @@ AI agent integration deferred until broker, graph, and session crates are built.
 # Add reedline and related dependencies:
 reedline = { version = "0.36", features = ["external_printer"] }
 nu-ansi-term = "0.50"  # For colored prompts
-crossterm = "0.28"      # Terminal control (reedline dependency)
+# Optional explicit pin: crossterm = "0.28"  # Reedline already pulls this; keep only if you need a newer patch
 
 # Optional: For async features (AgentOutputManager)
 tokio = { version = "1", features = ["rt", "sync"], optional = true }
@@ -146,7 +146,8 @@ use nu_ansi_term::{Color, Style};
 use std::borrow::Cow;
 
 // Add static flag for PTY repaint signaling at line 25 (confirmed: PTY_ACTIVE is at line 24)
-static NEEDS_REPAINT: AtomicBool = AtomicBool::new(false);
+// Needs to be visible to the pty_exec module that lives in the same crate.
+pub(crate) static NEEDS_REPAINT: AtomicBool = AtomicBool::new(false);
 
 fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
     println!("Substrate v{}", env!("CARGO_PKG_VERSION"));
@@ -322,23 +323,11 @@ impl Prompt for SubstratePrompt {
     }
 }
 
-// Signal handling integration for PTY awareness
-impl SubstratePrompt {
-    fn handle_signal(&self, signal: Signal) -> bool {
-        use std::sync::atomic::Ordering;
-        
-        match signal {
-            Signal::CtrlC if PTY_ACTIVE.load(Ordering::Relaxed) => {
-                // Let PTY handle the signal
-                false
-            }
-            _ => {
-                // Let Reedline handle the signal
-                true
-            }
-        }
-    }
-}
+// --- Optional signal helper (not part of the Prompt trait) -----------------
+// Reedline exposes Ctrl-C as `Signal::CtrlC` from `read_line()`; therefore the
+// REPL loop can make the PTY-aware decision inline instead of extending the
+// Prompt.  If you prefer the helper, convert it to a free function and call it
+// from the match arm handling `Signal::CtrlC`.
 
 // NEW: Completer implementation (command completion is a new feature, not a port)
 // Note: No existing CommandCompleter in the rustyline implementation to migrate
@@ -421,7 +410,9 @@ fn is_executable(metadata: &std::fs::Metadata) -> bool {
 
 #[cfg(not(unix))]
 fn is_executable(_metadata: &std::fs::Metadata) -> bool {
-    true // On Windows, check file extension instead
+    // TODO: On Windows honour PATHEXT (.exe, .bat, .cmd, etc.). For now assume
+    // the file is executable and let the completer filter duplicates.
+    true
 }
 
 fn extract_word_at_pos(line: &str, pos: usize) -> &str {
@@ -440,8 +431,12 @@ fn extract_word_at_pos(line: &str, pos: usize) -> &str {
 **Strategy**: Use the NEEDS_REPAINT AtomicBool flag defined in lib.rs
 
 ```rust
-// In crates/shell/src/pty_exec.rs, add import at top:
-use crate::NEEDS_REPAINT;
+// In crates/shell/src/pty_exec.rs, extend the existing `use crate::` line:
+// BEFORE:
+//     use crate::{ShellConfig, log_command_event, CURRENT_PTY, PTY_ACTIVE};
+// AFTER:
+//     use crate::{ShellConfig, log_command_event, CURRENT_PTY, PTY_ACTIVE, NEEDS_REPAINT};
+// Also bring `std::sync::atomic::Ordering` into scope just below the other std imports.
 use std::sync::atomic::Ordering;
 
 // At line 592, just before Ok(PtyExitStatus::from_portable_pty(portable_status)):
@@ -531,6 +526,9 @@ The following existing functions and infrastructure from Phase 3.5 must be prese
 - [ ] execute_command() function (line 1194) - Keep unchanged
 - [ ] PTY detection functions (lines 933-1192) - Keep unchanged from Phase 3.5
 - [ ] Test suite (lines 1891-2438) - Update tests for Reedline-specific behavior
+  * The old expectation that the prompt string is printed only after the user
+    presses Enter is gone; the new atomic flag yields an immediate repaint.
+  * Update any `expect_prompt()` helpers or golden outputs accordingly.
 
 ## Deferred Phase 4 Features
 
