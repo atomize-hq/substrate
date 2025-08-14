@@ -431,12 +431,15 @@ fn handle_pty_io(
 ) -> Result<PtyExitStatus> {
     let done = Arc::new(AtomicBool::new(false));
     
-    // Get writer for stdin->pty (briefly lock to take writer)
-    let mut writer = {
+    // Get writer for stdin->pty (wrap in Arc<Mutex<Option>> so we can drop it from main thread)
+    let writer = {
         let master = pty_master.lock().unwrap();
-        master.take_writer()
-            .context("Failed to create PTY writer")?
+        Arc::new(Mutex::new(Some(master.take_writer()
+            .context("Failed to create PTY writer")?)))
     };
+    
+    // Clone for the stdin thread
+    let writer_for_thread = Arc::clone(&writer);
     
     // 🔥 CRITICAL FIX: Declare stdin_thread handle outside platform blocks
     // 🔥 MUST-FIX: Initialize to None to avoid uninitialized variable on non-Unix
@@ -446,37 +449,77 @@ fn handle_pty_io(
     #[cfg(unix)]
     {
         // Unix: Spawn thread to copy stdin to PTY (will be joined after child exits)
-        // With VMIN=0/VTIME=1, reads timeout every 100ms so thread can check done flag
+        // CRITICAL FIX: Use non-blocking I/O to prevent stealing input after PTY exit
         let done_writer = Arc::clone(&done);
         let cmd_id_stdin = cmd_id.to_string();
         stdin_join = Some(thread::spawn(move || {
             let mut stdin = io::stdin();
-            // Use smaller buffer to prevent blocking on partial reads
-            let mut buffer = vec![0u8; 2048]; // Reduced to 2KB for better responsiveness
+            let mut buffer = vec![0u8; 4096];
             
             while !done_writer.load(Ordering::Relaxed) {
-                match stdin.read(&mut buffer) {
+                // Check if writer is still valid BEFORE reading stdin
+                let mut writer_guard = match writer_for_thread.try_lock() {
+                    Ok(guard) => guard,
+                    Err(_) => break, // Writer was dropped or is locked, exit thread
+                };
+                
+                // If writer is None, exit immediately
+                if writer_guard.is_none() {
+                    break;
+                }
+                
+                // Drop the guard before blocking read to avoid holding lock
+                drop(writer_guard);
+                
+                // Set up a select/poll with timeout to avoid blocking forever
+                use std::os::unix::io::{AsRawFd, AsFd};
+                use nix::sys::select::{select, FdSet};
+                use nix::sys::time::TimeVal;
+                
+                let stdin_fd = stdin.as_raw_fd();
+                let stdin_borrowed = stdin.as_fd();
+                let mut read_fds = FdSet::new();
+                read_fds.insert(stdin_borrowed);
+                
+                // Wait up to 100ms for input
+                let mut timeout = TimeVal::new(0, 100_000); // 100ms = 100,000 microseconds
+                let result = select(stdin_fd + 1, Some(&mut read_fds), None, None, Some(&mut timeout));
+                
+                match result {
                     Ok(0) => {
-                        // Could be timeout (VTIME) or actual EOF
-                        // Continue looping to check done flag
-                        thread::sleep(std::time::Duration::from_millis(10));
+                        // Timeout - check done flag and continue
+                        continue;
                     }
-                    Ok(n) => {
-                        if let Err(e) = writer.write_all(&buffer[..n]) {
-                            log::warn!("[{}] Failed to write to PTY: {}", cmd_id_stdin, e);
+                    Ok(_) if read_fds.contains(stdin_borrowed) => {
+                        // Data available, try to read
+                        match stdin.read(&mut buffer) {
+                            Ok(0) => break, // EOF
+                            Ok(n) => {
+                                // Re-acquire writer guard to write
+                                if let Ok(mut writer_guard) = writer_for_thread.try_lock() {
+                                    if let Some(ref mut writer) = *writer_guard {
+                                        if let Err(e) = writer.write_all(&buffer[..n]) {
+                                            if !done_writer.load(Ordering::Relaxed) {
+                                                log::warn!("[{}] Failed to write to PTY: {}", cmd_id_stdin, e);
+                                            }
+                                            break;
+                                        }
+                                        let _ = writer.flush();
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log::warn!("[{}] Failed to read from stdin: {}", cmd_id_stdin, e);
+                                break;
+                            }
+                        }
+                    }
+                    Ok(_) => continue, // Spurious wakeup
+                    Err(e) => {
+                        if e != nix::errno::Errno::EINTR {
+                            log::warn!("[{}] select() failed: {}", cmd_id_stdin, e);
                             break;
                         }
-                        if let Err(e) = writer.flush() {
-                            log::warn!("[{}] Failed to flush PTY writer: {}", cmd_id_stdin, e);
-                        }
-                    }
-                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                        // Timeout from VTIME, check done flag
-                        thread::sleep(std::time::Duration::from_millis(10));
-                    }
-                    Err(e) => {
-                        log::warn!("[{}] Failed to read from stdin: {}", cmd_id_stdin, e);
-                        break;
                     }
                 }
             }
@@ -489,7 +532,15 @@ fn handle_pty_io(
         
         // Windows: Use global input forwarder to avoid thread leak
         // Set the current PTY writer and wake the forwarder thread
-        *CURRENT_PTY_WRITER.lock().unwrap() = Some(Box::new(writer));
+        // Clone the writer for Windows (can't move it since Unix also uses it)
+        if let Ok(guard) = writer.lock() {
+            if let Some(ref w) = *guard {
+                // Clone the writer for Windows
+                if let Ok(cloned) = w.try_clone_writer() {
+                    *CURRENT_PTY_WRITER.lock().unwrap() = Some(Box::new(cloned));
+                }
+            }
+        }
         
         // Wake the forwarder thread
         let (lock, cvar) = &**WIN_PTY_INPUT_GATE;
@@ -547,8 +598,18 @@ fn handle_pty_io(
     // Wait for child to exit (blocking wait, not polling - more efficient)
     let portable_status = child.wait()?;
     
-    // Signal threads to stop
+    // Signal threads to stop FIRST
     done.store(true, Ordering::Relaxed);
+    
+    // CRITICAL FIX: Drop the writer to stop stdin thread from trying to write
+    #[cfg(unix)]
+    {
+        // Take the writer out of the Arc<Mutex> and drop it
+        // This causes the stdin thread to fail on its next write attempt
+        if let Ok(mut guard) = writer.lock() {
+            *guard = None; // Drop the writer
+        }
+    }
     
     // CRITICAL: Drain any remaining output before sending reset sequences
     // This prevents race condition with TUI cleanup sequences
@@ -560,7 +621,7 @@ fn handle_pty_io(
     // Platform-specific cleanup
     #[cfg(unix)]
     if let Some(handle) = stdin_join {
-        // Unix: Join stdin thread (with O_NONBLOCK it won't hang)
+        // Unix: Join stdin thread (it should exit quickly now that writer is dropped)
         let _ = handle.join();
     }
     
@@ -588,6 +649,12 @@ fn handle_pty_io(
             }
         }
     }
+    
+    // Note: We've tried various approaches to make the prompt appear immediately:
+    // - TIOCSTI injection of newline/Ctrl+L - doesn't solve the blocking issue
+    // - Terminal state restoration - helps but prompt still doesn't appear
+    // - The core issue is that Reedline's read_line() blocks waiting for input
+    //   and we're not using the ExecuteHostCommand event system
     
     Ok(PtyExitStatus::from_portable_pty(portable_status))
 }

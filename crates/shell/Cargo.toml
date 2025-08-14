@@ -15,7 +15,9 @@ serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.10", features = ["v7"] }
 atty = "0.2"
-rustyline = "14.0"
+# rustyline = "14.0"  # Replaced with reedline
+reedline = { version = "0.41", features = ["external_printer", "substrate_api", "substrate_host_hook"] }
+nu-ansi-term = "0.50"
 shellexpand = "3.1"
 shell-words = "1.1"
 gethostname = "0.4"
@@ -31,7 +33,7 @@ log = "0.4"
 dirs = "5"
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.29", features = ["process", "signal", "term", "fs"] }
+nix = { version = "0.29", features = ["process", "signal", "term", "fs", "time", "poll"] }
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]

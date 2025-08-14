@@ -1,4 +1,5 @@
 mod pty_exec;
+mod host_decider;
 
 use anyhow::{Context, Result};
 use chrono::Utc;
@@ -17,11 +18,23 @@ use std::thread;
 use uuid::Uuid;
 use substrate_common::{dedupe_path, log_schema, redact_sensitive};
 use lazy_static::lazy_static;
+
+// Reedline imports
+use reedline::{
+    default_emacs_keybindings, ExampleHighlighter,
+    DefaultValidator, Emacs, ExternalPrinter, FileBackedHistory,
+    KeyCode, KeyModifiers, Reedline, ReedlineEvent, ReedlineMenu, Signal,
+    ColumnarMenu, Prompt, PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus,
+    Completer, Suggestion, Span, MenuBuilder,
+};
+// use nu_ansi_term::{Color, Style}; // Unused for now
+use std::borrow::Cow;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 
 // Global flag to prevent double SIGINT handling - must be pub(crate) for pty_exec access
 pub(crate) static PTY_ACTIVE: AtomicBool = AtomicBool::new(false);
+
 
 // Global SIGWINCH handler state - must be pub(crate) for pty_exec access
 lazy_static! {
@@ -231,158 +244,174 @@ pub fn run_shell() -> Result<i32> {
 
 
 fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
-    use rustyline::DefaultEditor;
-
     println!("Substrate v{}", env!("CARGO_PKG_VERSION"));
     println!("Session ID: {}", config.session_id);
     println!("Logging to: {}", config.trace_log_file.display());
-
-    let mut rl = DefaultEditor::new()?;
-    let prompt = if config.ci_mode { "> " } else { "substrate> " };
     
-    // Set up history file for persistence
+    // Set up history file with proper initialization
     let hist_path = dirs::home_dir()
         .map(|p| p.join(".substrate_history"))
-        .unwrap_or_else(|| std::path::PathBuf::from(".substrate_history"));
-    let _ = rl.load_history(&hist_path);
-
-    // Set up signal handling with PTY awareness
-    let running_child_pid = Arc::new(AtomicI32::new(0));
-    {
-        let running = running_child_pid.clone();
-        ctrlc::set_handler(move || {
-            // Check if PTY is active - if so, let PTY handle the signal
-            if PTY_ACTIVE.load(Ordering::Relaxed) {
-                // No-op: PTY is handling signals
-                return;
-            }
-            
-            let pid = running.load(Ordering::SeqCst);
-            if pid > 0 {
-                // Forward signal to entire process group
-                #[cfg(unix)]
-                {
-                    use nix::sys::signal::{killpg, Signal};
-                    use nix::unistd::{getpgid, Pid};
-                    if let Ok(pgid) = getpgid(Some(Pid::from_raw(pid))) {
-                        let _ = killpg(pgid, Signal::SIGINT);
-                    }
-                }
-            }
-            // If no child is running, the signal is dropped and REPL continues
-        })?;
+        .unwrap_or_else(|| PathBuf::from(".substrate_history"));
+    
+    // Ensure history file exists and is accessible
+    if !hist_path.exists() {
+        std::fs::File::create(&hist_path)?;
     }
     
-    // Set up additional signal forwarding for non-PTY path (SIGTERM, SIGQUIT, SIGHUP)
-    #[cfg(unix)]
-    {
-        use signal_hook::{consts::{SIGTERM, SIGQUIT, SIGHUP}, iterator::Signals};
+    let history = Box::new(
+        FileBackedHistory::with_file(100_000, hist_path.clone())
+            .expect("Error configuring history file"),
+    );
+
+    // Create custom prompt
+    let prompt = SubstratePrompt::new(config.ci_mode);
+
+    // Set up ExternalPrinter for concurrent output
+    let external_printer = ExternalPrinter::new(1000); // 1000 line buffer
+
+    // Configure keybindings
+    let mut keybindings = default_emacs_keybindings();
+    keybindings.add_binding(
+        KeyModifiers::NONE,
+        KeyCode::Tab,
+        ReedlineEvent::Menu("completion_menu".to_string()),
+    );
+    keybindings.add_binding(
+        KeyModifiers::CONTROL,
+        KeyCode::Char('l'),
+        ReedlineEvent::ClearScreen,
+    );
+
+    // Create completer
+    let completer = Box::new(SubstrateCompleter::new(&config));
+
+    // Create the line editor
+    let edit_mode = Box::new(Emacs::new(keybindings));
+    
+    // Create a simple transient prompt for after command execution
+    let transient_prompt = SubstratePrompt::new(config.ci_mode);
+    
+    let mut line_editor = Reedline::create()
+        .with_history(history)
+        .with_edit_mode(edit_mode)
+        .with_completer(completer)
+        .with_highlighter(Box::new(ExampleHighlighter::default()))
+        .with_validator(Box::new(DefaultValidator))
+        .with_external_printer(external_printer)
+        .with_transient_prompt(Box::new(transient_prompt))
+        .with_menu(ReedlineMenu::EngineCompleter(Box::new(
+            ColumnarMenu::default().with_name("completion_menu")
+        )));
+    
+    // Set up the host command decider for PTY commands
+    line_editor.set_host_decider(host_decider::SubstrateHostDecider::new());
+
+    // Signal handling setup
+    let running_child_pid = Arc::new(AtomicI32::new(0));
+    setup_signal_handlers(running_child_pid.clone())?;
+
+    // Main REPL loop
+    loop {
+        let sig = line_editor.read_line(&prompt);
         
-        let running = running_child_pid.clone();
-        thread::spawn(move || {
-            let mut signals = match Signals::new(&[SIGTERM, SIGQUIT, SIGHUP]) {
-                Ok(s) => s,
-                Err(e) => {
-                    log::warn!("Failed to register additional signal handlers: {}", e);
-                    return;
-                }
-            };
-            
-            for sig in signals.forever() {
-                // Only forward if PTY is not active (PTY gets kernel-side job control)
-                if !PTY_ACTIVE.load(Ordering::Relaxed) {
-                    let pid = running.load(Ordering::SeqCst);
-                    if pid > 0 {
-                        use nix::sys::signal::{killpg, Signal};
-                        use nix::unistd::{getpgid, Pid};
-                        
-                        let signal = match sig {
-                            SIGTERM => Signal::SIGTERM,
-                            SIGQUIT => Signal::SIGQUIT,
-                            SIGHUP => Signal::SIGHUP,
-                            _ => continue,
-                        };
-                        
-                        if let Ok(pgid) = getpgid(Some(Pid::from_raw(pid))) {
-                            let _ = killpg(pgid, signal);
+        match sig {
+            Ok(Signal::ExecuteHostCommand(line)) => {
+                log::debug!("ExecuteHostCommand signal received for: {}", line);
+                
+                // Print newline to ensure TUI starts on a fresh line
+                println!();
+                
+                // Reedline has already marked itself as suspended
+                // Run the command via PTY with full tracing
+                let cmd_id = Uuid::now_v7().to_string();
+                match execute_command(config, &line, &cmd_id, running_child_pid.clone()) {
+                    Ok(status) => {
+                        if !status.success() {
+                            #[cfg(unix)]
+                            if let Some(sig) = status.signal() {
+                                eprintln!("Command terminated by signal {}", sig);
+                            } else {
+                                eprintln!("Command failed with status: {}", status.code().unwrap_or(-1));
+                            }
+                            #[cfg(not(unix))]
+                            eprintln!("Command failed with status: {}", status.code().unwrap_or(-1));
                         }
                     }
+                    Err(e) => eprintln!("Error: {}", e),
                 }
-            }
-        });
-    }
-    
-    // NOTE: We do NOT intercept SIGTSTP (Ctrl-Z) - let the PTY handle job control
-    // The default kernel behavior will properly suspend the child process
-
-    loop {
-        let line = match rl.readline(prompt) {
-            Ok(line) => line,
-            Err(rustyline::error::ReadlineError::Interrupted) => {
-                println!("^C");
+                
+                // After PTY command, try to force terminal to refresh display
+                #[cfg(unix)]
+                {
+                    use nix::sys::termios::{tcgetattr, tcsetattr, SetArg};
+                    use std::os::unix::io::{AsRawFd, BorrowedFd};
+                    
+                    // Get current terminal attributes
+                    let raw_fd = io::stdout().as_raw_fd();
+                    let fd = unsafe { BorrowedFd::borrow_raw(raw_fd) };
+                    if let Ok(termios) = tcgetattr(fd) {
+                        // Set them again to force terminal driver to refresh
+                        let _ = tcsetattr(fd, SetArg::TCSANOW, &termios);
+                    }
+                    
+                    // Send terminal control sequences to ensure visibility
+                    print!("\x1b[?25h"); // Show cursor
+                    print!("\x1b[0m");   // Reset attributes
+                    let _ = io::stdout().flush();
+                }
+                
+                // Now when we loop back to read_line(), Reedline will see it's resuming
+                // from suspended state and will repaint immediately
                 continue;
             }
-            Err(rustyline::error::ReadlineError::Eof) => {
+            Ok(Signal::Success(line)) => {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                
+                // Check for exit commands
+                if matches!(line.trim(), "exit" | "quit") {
+                    break;
+                }
+                
+                // Execute normal command (non-PTY)
+                let cmd_id = Uuid::now_v7().to_string();
+                match execute_command(config, &line, &cmd_id, running_child_pid.clone()) {
+                    Ok(status) => {
+                        if !status.success() {
+                            #[cfg(unix)]
+                            if let Some(sig) = status.signal() {
+                                eprintln!("Command terminated by signal {}", sig);
+                            } else {
+                                eprintln!("Command failed with status: {}", status.code().unwrap_or(-1));
+                            }
+                            #[cfg(not(unix))]
+                            eprintln!("Command failed with status: {}", status.code().unwrap_or(-1));
+                        }
+                    }
+                    Err(e) => eprintln!("Error: {}", e),
+                }
+            }
+            Ok(Signal::CtrlC) => {
+                println!("^C");
+                // Reedline handles this better than rustyline
+            }
+            Ok(Signal::CtrlD) => {
                 println!("^D");
                 break;
             }
-            Err(err) => {
-                eprintln!("Error: {:?}", err);
+            Err(e) => {
+                eprintln!("Error: {:?}", e);
                 break;
             }
-        };
-        
-        if line.trim().is_empty() {
-            continue;
-        }
-        
-        let _ = rl.add_history_entry(line.as_str());
-        
-        // Check for exit commands
-        if matches!(line.trim(), "exit" | "quit") {
-            break;
-        }
-        
-        // Store whether this was a PTY command for terminal recovery (force overrides disable)
-        let disabled = is_pty_disabled();
-        let forced = is_force_pty_command(&line);
-        let was_pty_command = forced || (!disabled && needs_pty(&line));
-        
-        // Execute command
-        let cmd_id = Uuid::now_v7().to_string();
-        match execute_command(config, &line, &cmd_id, running_child_pid.clone()) {
-            Ok(status) => {
-                if !status.success() {
-                    #[cfg(unix)]
-                    if let Some(sig) = status.signal() {
-                        eprintln!("Command terminated by signal {}", sig);
-                    } else {
-                        eprintln!("Command failed with status: {}", status.code().unwrap_or(-1));
-                    }
-                    #[cfg(not(unix))]
-                    eprintln!("Command failed with status: {}", status.code().unwrap_or(-1));
-                }
-                
-                // Reset terminal after PTY commands to restore shell state
-                if was_pty_command {
-                    log::debug!("Resetting terminal after PTY command");
-                    
-                    // Wait a bit for TUI to finish cleanup
-                    std::thread::sleep(std::time::Duration::from_millis(50));
-                    
-                    // Print newline and a hint about the limitation
-                    println!("\n(Press Enter for prompt)");
-                    let _ = std::io::stdout().flush();
-                    
-                    // This is a known limitation of rustyline's synchronous readline()
-                    // It cannot be interrupted to show the prompt without user input
-                    // Future fix: switch to rustyline-async or linefeed library
-                }
-            }
-            Err(e) => eprintln!("Error: {}", e),
         }
     }
-
+    
+    // Save history before exit
+    if let Err(e) = line_editor.sync_history() {
+        log::warn!("Failed to save history: {}", e);
+    }
+    
     Ok(0)
 }
 
@@ -1649,6 +1678,198 @@ fn log_command_event(
     }
 
     Ok(())
+}
+
+// Helper function to setup signal handlers
+fn setup_signal_handlers(running_child_pid: Arc<AtomicI32>) -> Result<()> {
+    // Set up Ctrl-C handler with PTY awareness
+    {
+        let running = running_child_pid.clone();
+        ctrlc::set_handler(move || {
+            // Check if PTY is active - if so, let PTY handle the signal
+            if PTY_ACTIVE.load(Ordering::Relaxed) {
+                // No-op: PTY is handling signals
+                return;
+            }
+            
+            let pid = running.load(Ordering::SeqCst);
+            if pid > 0 {
+                // Forward signal to entire process group
+                #[cfg(unix)]
+                {
+                    use nix::sys::signal::{killpg, Signal};
+                    use nix::unistd::{getpgid, Pid};
+                    if let Ok(pgid) = getpgid(Some(Pid::from_raw(pid))) {
+                        let _ = killpg(pgid, Signal::SIGINT);
+                    }
+                }
+            }
+            // If no child is running, the signal is dropped and REPL continues
+        })?;
+    }
+    
+    // Set up additional signal forwarding for non-PTY path (SIGTERM, SIGQUIT, SIGHUP)
+    #[cfg(unix)]
+    {
+        use signal_hook::{consts::{SIGTERM, SIGQUIT, SIGHUP}, iterator::Signals};
+        
+        let running = running_child_pid.clone();
+        thread::spawn(move || {
+            let mut signals = match Signals::new(&[SIGTERM, SIGQUIT, SIGHUP]) {
+                Ok(s) => s,
+                Err(e) => {
+                    log::warn!("Failed to register additional signal handlers: {}", e);
+                    return;
+                }
+            };
+            
+            for sig in signals.forever() {
+                // Only forward if PTY is not active (PTY gets kernel-side job control)
+                if !PTY_ACTIVE.load(Ordering::Relaxed) {
+                    let pid = running.load(Ordering::SeqCst);
+                    if pid > 0 {
+                        use nix::sys::signal::{killpg, Signal};
+                        use nix::unistd::{getpgid, Pid};
+                        
+                        let signal = match sig {
+                            SIGTERM => Signal::SIGTERM,
+                            SIGQUIT => Signal::SIGQUIT,
+                            SIGHUP => Signal::SIGHUP,
+                            _ => continue,
+                        };
+                        
+                        if let Ok(pgid) = getpgid(Some(Pid::from_raw(pid))) {
+                            let _ = killpg(pgid, signal);
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    Ok(())
+}
+
+// Custom prompt implementation with signal handling
+struct SubstratePrompt {
+    ci_mode: bool,
+}
+
+impl SubstratePrompt {
+    fn new(ci_mode: bool) -> Self {
+        Self { ci_mode }
+    }
+}
+
+impl Prompt for SubstratePrompt {
+    fn render_prompt_left(&self) -> Cow<str> {
+        if self.ci_mode {
+            Cow::Borrowed("> ")
+        } else {
+            Cow::Borrowed("substrate> ")
+        }
+    }
+
+    fn render_prompt_right(&self) -> Cow<str> {
+        Cow::Borrowed("")
+    }
+
+    fn render_prompt_indicator(&self, _edit_mode: PromptEditMode) -> Cow<str> {
+        Cow::Borrowed("")
+    }
+
+    fn render_prompt_multiline_indicator(&self) -> Cow<str> {
+        Cow::Borrowed("::: ")
+    }
+
+    fn render_prompt_history_search_indicator(
+        &self,
+        history_search: PromptHistorySearch,
+    ) -> Cow<str> {
+        match history_search.status {
+            PromptHistorySearchStatus::Passing => Cow::Borrowed("(history search) "),
+            PromptHistorySearchStatus::Failing => Cow::Borrowed("(failing search) "),
+        }
+    }
+}
+
+// NEW: Completer implementation (command completion is a new feature, not a port)
+struct SubstrateCompleter {
+    commands: Vec<String>,
+}
+
+impl SubstrateCompleter {
+    fn new(config: &ShellConfig) -> Self {
+        // Use PATH from config.original_path
+        let commands = collect_commands_from_path(&config.original_path);
+        Self { 
+            commands,
+        }
+    }
+}
+
+impl Completer for SubstrateCompleter {
+    fn complete(&mut self, line: &str, pos: usize) -> Vec<Suggestion> {
+        // Extract the word being completed
+        let word = extract_word_at_pos(line, pos);
+        
+        // Filter commands that start with the current word
+        // Limit to first 100 suggestions for performance
+        self.commands
+            .iter()
+            .filter(|cmd| cmd.starts_with(word))
+            .take(100)
+            .map(|cmd| Suggestion {
+                value: cmd.clone(),
+                description: None,
+                extra: None,
+                span: Span::new(pos - word.len(), pos),
+                append_whitespace: true,
+                style: None,
+            })
+            .collect()
+    }
+}
+
+// Helper functions for completion
+fn collect_commands_from_path(path: &str) -> Vec<String> {
+    let mut commands = Vec::new();
+    for dir in path.split(':') {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                if let Ok(metadata) = entry.metadata() {
+                    if metadata.is_file() && is_executable(&metadata) {
+                        if let Some(name) = entry.file_name().to_str() {
+                            commands.push(name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    commands.sort();
+    commands.dedup();
+    commands
+}
+
+#[cfg(unix)]
+fn is_executable(metadata: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    metadata.permissions().mode() & 0o111 != 0
+}
+
+#[cfg(not(unix))]
+fn is_executable(_metadata: &std::fs::Metadata) -> bool {
+    // On Windows, check file extensions (simplified for now)
+    true
+}
+
+fn extract_word_at_pos(line: &str, pos: usize) -> &str {
+    let start = line[..pos]
+        .rfind(|c: char| c.is_whitespace())
+        .map(|i| i + 1)
+        .unwrap_or(0);
+    &line[start..pos]
 }
 
 #[cfg(test)]
