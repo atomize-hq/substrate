@@ -101,14 +101,14 @@ pub fn write_log_entry(log_path: &Path, entry: &Value) -> Result<()> {
     if let Some(dir) = log_path.parent() {
         std::fs::create_dir_all(dir).ok();
     }
-    
+
     // Ensure single-line JSON by escaping newlines
     let mut line = entry.to_string();
     if line.contains('\n') {
         line = line.replace('\n', "\\n");
     }
     line.push('\n');
-    
+
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
@@ -250,7 +250,9 @@ fn redact_header_value(header_value: &str) -> String {
     }
 
     // Redact other token patterns in headers
-    if lower_value.contains("token") || lower_value.contains("key") || lower_value.contains("secret")
+    if lower_value.contains("token")
+        || lower_value.contains("key")
+        || lower_value.contains("secret")
     {
         // Simple heuristic: if it looks like a credential header, redact the value part
         if let Some((key, _)) = header_value.split_once(':') {
@@ -300,7 +302,7 @@ mod tests {
     fn test_sensitive_arg_redaction() {
         // Ensure clean test environment
         env::remove_var("SHIM_LOG_OPTS");
-        
+
         assert_eq!(redact_sensitive("normal_arg"), "normal_arg");
         assert_eq!(redact_sensitive("token=secret123"), "token=***");
         assert_eq!(redact_sensitive("password=mypass"), "password=***");
@@ -325,10 +327,7 @@ mod tests {
         ];
 
         let redacted = redact_sensitive_argv(&args);
-        assert_eq!(
-            redacted,
-            vec!["***", "***", "--url", "https://example.com"]
-        );
+        assert_eq!(redacted, vec!["***", "***", "--url", "https://example.com"]);
     }
 
     #[test]
@@ -336,7 +335,7 @@ mod tests {
     fn test_header_value_redaction() {
         // Ensure clean test environment
         env::remove_var("SHIM_LOG_OPTS");
-        
+
         assert_eq!(
             redact_header_value("Content-Type: application/json"),
             "Content-Type: application/json"
@@ -345,7 +344,10 @@ mod tests {
             redact_header_value("Authorization: Bearer token123"),
             "Authorization: ***"
         );
-        assert_eq!(redact_header_value("X-API-Key: secret123"), "X-API-Key: ***");
+        assert_eq!(
+            redact_header_value("X-API-Key: secret123"),
+            "X-API-Key: ***"
+        );
         assert_eq!(redact_header_value("Cookie: session=abc123"), "Cookie: ***");
 
         // Test with SHIM_LOG_OPTS=raw

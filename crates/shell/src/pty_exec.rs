@@ -1,19 +1,19 @@
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
-use std::io::{self, Read, Write};
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-use std::thread;
 use serde_json::json;
+use std::io::{self, Read, Write};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread;
 
-use crate::{ShellConfig, log_command_event, CURRENT_PTY, PTY_ACTIVE};
+use crate::{log_command_event, ShellConfig, CURRENT_PTY, PTY_ACTIVE};
 
 #[cfg(unix)]
 pub(crate) fn initialize_global_sigwinch_handler_impl() {
     use signal_hook::{consts::SIGWINCH, iterator::Signals};
-    
+
     static INIT: std::sync::Once = std::sync::Once::new();
-    
+
     INIT.call_once(|| {
         thread::spawn(|| {
             let mut signals = match Signals::new(&[SIGWINCH]) {
@@ -23,7 +23,7 @@ pub(crate) fn initialize_global_sigwinch_handler_impl() {
                     return;
                 }
             };
-            
+
             for _ in signals.forever() {
                 // Resize current PTY if one is active
                 // NOTE: signal_hook runs this in a normal thread, not a signal handler
@@ -33,11 +33,11 @@ pub(crate) fn initialize_global_sigwinch_handler_impl() {
                         if let Ok(size) = get_terminal_size() {
                             // ioctl + resize called from handler thread
                             let _ = pty.lock().unwrap().resize(size);
-                            
+
                             // Debug logging if requested (safe in normal thread)
                             if std::env::var("SUBSTRATE_PTY_DEBUG").is_ok() {
                                 log::debug!("SIGWINCH: Resized PTY to {}x{}", size.cols, size.rows);
-                                // 🔥 PRODUCTION: Would emit terminal_resize telemetry here but 
+                                // 🔥 PRODUCTION: Would emit terminal_resize telemetry here but
                                 // cannot access ShellConfig from SIGWINCH thread
                             }
                         }
@@ -75,7 +75,7 @@ impl PtyExitStatus {
                 }
             }
         }
-        
+
         #[cfg(not(unix))]
         {
             PtyExitStatus {
@@ -84,20 +84,20 @@ impl PtyExitStatus {
             }
         }
     }
-    
+
     pub fn success(&self) -> bool {
         self.code == Some(0)
     }
-    
+
     pub fn code(&self) -> Option<i32> {
         self.code
     }
-    
+
     #[cfg(unix)]
     pub fn signal(&self) -> Option<i32> {
         self.signal
     }
-    
+
     #[cfg(not(unix))]
     pub fn signal(&self) -> Option<i32> {
         None
@@ -114,106 +114,121 @@ pub fn execute_with_pty(
     // Initialize global handlers once
     #[cfg(unix)]
     crate::initialize_global_sigwinch_handler();
-    
+
     #[cfg(windows)]
     initialize_windows_input_forwarder();
-    
+
     // Set PTY active flag to prevent double SIGINT handling
     PTY_ACTIVE.store(true, Ordering::SeqCst);
-    
+
     // Ensure flag is cleared on exit (RAII guard for panic safety)
     let _pty_guard = PtyActiveGuard;
-    
+
     // Create minimal terminal guard - ONLY for stdin raw mode
     // This allows proper input forwarding without display interference
     let _terminal_guard = MinimalTerminalGuard::new()?;
-    
+
     // Get current terminal size
     let pty_size = get_terminal_size()?;
-    
+
     // Log the detected terminal size (debug only)
-    log::info!("PTY: Detected terminal size: {}x{} (rows x cols)", pty_size.rows, pty_size.cols);
-    
+    log::info!(
+        "PTY: Detected terminal size: {}x{} (rows x cols)",
+        pty_size.rows,
+        pty_size.cols
+    );
+
     // Create PTY system
     let pty_system = native_pty_system();
-    
+
     // Create a new PTY pair with graceful error on older Windows
-    let pair = pty_system
-        .openpty(pty_size)
-        .map_err(|e| {
-            #[cfg(windows)]
-            {
-                // ConPTY requires Windows 10 1809+
-                anyhow::anyhow!("PTY creation failed. ConPTY requires Windows 10 version 1809 or later. Error: {}", e)
-            }
-            #[cfg(not(windows))]
-            {
-                anyhow::anyhow!("Failed to create PTY: {}", e)
-            }
-        })?;
-    
+    let pair = pty_system.openpty(pty_size).map_err(|e| {
+        #[cfg(windows)]
+        {
+            // ConPTY requires Windows 10 1809+
+            anyhow::anyhow!(
+                "PTY creation failed. ConPTY requires Windows 10 version 1809 or later. Error: {}",
+                e
+            )
+        }
+        #[cfg(not(windows))]
+        {
+            anyhow::anyhow!("Failed to create PTY: {}", e)
+        }
+    })?;
+
     // Prepare command - handle :pty prefix if present
     let actual_command = if command.starts_with(":pty ") {
         &command[5..]
     } else {
         command
     };
-    
+
     let mut cmd = CommandBuilder::new(&config.shell_path);
     cmd.arg("-c");
     cmd.arg(actual_command);
     cmd.cwd(std::env::current_dir()?);
-    
+
     // CRITICAL: Preserve tracing environment variables needed for logging
     cmd.env("SHIM_SESSION_ID", &config.session_id);
     cmd.env("SHIM_TRACE_LOG", &config.trace_log_file);
     cmd.env("SHIM_PARENT_CMD_ID", cmd_id);
-    
+
     // Clear SHIM_ACTIVE/CALLER/CALL_STACK to allow shims to work inside PTY
     cmd.env_remove("SHIM_ACTIVE");
     cmd.env_remove("SHIM_CALLER");
     cmd.env_remove("SHIM_CALL_STACK");
-    
+
     // Preserve existing TERM or set a default
     // Many TUIs like claude need the correct TERM to function properly
     match std::env::var("TERM") {
         Ok(term) => cmd.env("TERM", term),
         Err(_) => cmd.env("TERM", "xterm-256color"),
     };
-    
+
     // Set COLUMNS/LINES for TUIs that read them (only if valid)
     if pty_size.cols > 0 && pty_size.rows > 0 {
         cmd.env("COLUMNS", pty_size.cols.to_string());
         cmd.env("LINES", pty_size.rows.to_string());
     }
-    
+
     // Log command start with pty flag and initial size
-    let start_extra = json!({ 
+    let start_extra = json!({
         "pty": true,
         "pty_rows": pty_size.rows,
         "pty_cols": pty_size.cols
     });
-    
+
     // Add debug logging if requested
     if std::env::var("SUBSTRATE_PTY_DEBUG").is_ok() {
-        log::debug!("[{}] PTY allocated: {}x{}", cmd_id, pty_size.cols, pty_size.rows);
+        log::debug!(
+            "[{}] PTY allocated: {}x{}",
+            cmd_id,
+            pty_size.cols,
+            pty_size.rows
+        );
     }
-    
-    log_command_event(config, "command_start", actual_command, cmd_id, 
-        Some(start_extra))?;
+
+    log_command_event(
+        config,
+        "command_start",
+        actual_command,
+        cmd_id,
+        Some(start_extra),
+    )?;
     let start_time = std::time::Instant::now();
-    
+
     // Spawn the child process
     let mut child = pair
         .slave
         .spawn_command(cmd)
         .context(format!("Failed to spawn PTY command: {}", actual_command))?;
-    
+
     // Store child PID for signal handling
     if let Some(pid) = child.process_id() {
         running_child_pid.store(pid as i32, Ordering::SeqCst);
     }
-    
+
     // Verify process group setup (Unix only, debug mode)
     #[cfg(unix)]
     if std::env::var("SUBSTRATE_PTY_DEBUG").is_ok() {
@@ -221,38 +236,44 @@ pub fn execute_with_pty(
             verify_process_group(Some(pid));
         }
     }
-    
+
     // Set up PTY master for resize handling
     // Wrap the Box in Arc<Mutex> for thread safety
     let pty_master = Arc::new(Mutex::new(pair.master));
-    
+
     // Register this PTY for SIGWINCH handling with RAII guard
     let _current_pty_guard = CurrentPtyGuard::register(Arc::clone(&pty_master));
-    
+
     // Handle I/O between terminal and PTY
     let exit_status = handle_pty_io(pty_master, &mut child, cmd_id)?;
-    
+
     // PTY automatically unregistered by CurrentPtyGuard drop
-    
+
     // Clear the running PID BEFORE logging completion
     running_child_pid.store(0, Ordering::SeqCst);
-    
+
     // Log command completion with pty flag
     let duration = start_time.elapsed();
     let mut extra = json!({
         "duration_ms": duration.as_millis(),
         "pty": true
     });
-    
+
     if let Some(code) = exit_status.code {
         extra["exit_code"] = json!(code);
     }
     if let Some(signal) = exit_status.signal {
         extra["term_signal"] = json!(signal);
     }
-    
-    log_command_event(config, "command_complete", actual_command, cmd_id, Some(extra))?;
-    
+
+    log_command_event(
+        config,
+        "command_complete",
+        actual_command,
+        cmd_id,
+        Some(extra),
+    )?;
+
     Ok(exit_status)
 }
 
@@ -287,14 +308,21 @@ fn windows_console_size() -> Option<PtySize> {
     use windows_sys::Win32::System::Console::*;
     unsafe {
         let h = GetStdHandle(STD_OUTPUT_HANDLE);
-        if h == INVALID_HANDLE_VALUE { return None; }
+        if h == INVALID_HANDLE_VALUE {
+            return None;
+        }
         let mut info = std::mem::MaybeUninit::<CONSOLE_SCREEN_BUFFER_INFO>::uninit();
         if GetConsoleScreenBufferInfo(h, info.as_mut_ptr()) != 0 {
             let info = info.assume_init();
             let cols = (info.srWindow.Right - info.srWindow.Left + 1) as u16;
             let rows = (info.srWindow.Bottom - info.srWindow.Top + 1) as u16;
             if rows > 0 && cols > 0 {
-                return Some(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 });
+                return Some(PtySize {
+                    rows,
+                    cols,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                });
             }
         }
         None
@@ -306,12 +334,12 @@ fn get_terminal_size() -> Result<PtySize> {
     if let Some(sz) = windows_console_size() {
         return Ok(sz);
     }
-    
+
     #[cfg(unix)]
     {
         use libc::{ioctl, winsize, TIOCGWINSZ};
         use std::mem;
-        
+
         // CRITICAL: Try /dev/tty first - this always refers to the controlling terminal
         // This ensures we get the real size even when stdin/stdout are redirected
         if let Ok(tty) = std::fs::File::open("/dev/tty") {
@@ -319,8 +347,7 @@ fn get_terminal_size() -> Result<PtySize> {
             let fd = tty.as_raw_fd();
             unsafe {
                 let mut size: winsize = mem::zeroed();
-                if ioctl(fd, TIOCGWINSZ, &mut size) == 0 
-                    && size.ws_row > 0 && size.ws_col > 0 {
+                if ioctl(fd, TIOCGWINSZ, &mut size) == 0 && size.ws_row > 0 && size.ws_col > 0 {
                     return Ok(PtySize {
                         rows: size.ws_row,
                         cols: size.ws_col,
@@ -330,13 +357,12 @@ fn get_terminal_size() -> Result<PtySize> {
                 }
             }
         }
-        
+
         // Fallback: Try stdin, stdout, stderr in order (handles redirects)
         for fd in [libc::STDIN_FILENO, libc::STDOUT_FILENO, libc::STDERR_FILENO] {
             unsafe {
                 let mut size: winsize = mem::zeroed();
-                if ioctl(fd, TIOCGWINSZ, &mut size) == 0 
-                    && size.ws_row > 0 && size.ws_col > 0 {
+                if ioctl(fd, TIOCGWINSZ, &mut size) == 0 && size.ws_row > 0 && size.ws_col > 0 {
                     return Ok(PtySize {
                         rows: size.ws_row,
                         cols: size.ws_col,
@@ -347,17 +373,17 @@ fn get_terminal_size() -> Result<PtySize> {
             }
         }
     }
-    
+
     // Fallback to environment or MODERN defaults (not 1970s terminals!)
     let rows = std::env::var("LINES")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(50);  // Modern default: 50 rows
+        .unwrap_or(50); // Modern default: 50 rows
     let cols = std::env::var("COLUMNS")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(120); // Modern default: 120 columns
-    
+
     Ok(PtySize {
         rows,
         cols,
@@ -375,11 +401,11 @@ use std::sync::{Condvar, Mutex};
 
 #[cfg(windows)]
 lazy_static! {
-    static ref CURRENT_PTY_WRITER: Arc<Mutex<Option<Box<dyn Write + Send>>>> = 
+    static ref CURRENT_PTY_WRITER: Arc<Mutex<Option<Box<dyn Write + Send>>>> =
         Arc::new(Mutex::new(None));
     // Condvar to wake/sleep the forwarder thread
     // 🔥 MUST-FIX: Renamed from PTY_ACTIVE to avoid collision with crate::PTY_ACTIVE
-    static ref WIN_PTY_INPUT_GATE: Arc<(Mutex<bool>, Condvar)> = 
+    static ref WIN_PTY_INPUT_GATE: Arc<(Mutex<bool>, Condvar)> =
         Arc::new((Mutex::new(false), Condvar::new()));
 }
 
@@ -387,12 +413,12 @@ lazy_static! {
 pub(crate) fn initialize_windows_input_forwarder() {
     use std::sync::Once;
     static INIT: Once = Once::new();
-    
+
     INIT.call_once(|| {
         thread::spawn(|| {
             let mut stdin = io::stdin();
             let mut buffer = vec![0u8; 2048]; // Reduced to 2KB for better responsiveness
-            
+
             loop {
                 // Wait until a PTY is active
                 {
@@ -403,7 +429,7 @@ pub(crate) fn initialize_windows_input_forwarder() {
                         active = cvar.wait(active).unwrap();
                     }
                 }
-                
+
                 // Now we know PTY is active, safe to read stdin
                 match stdin.read(&mut buffer) {
                     Ok(0) => {
@@ -435,7 +461,7 @@ pub(crate) fn initialize_windows_input_forwarder() {
                 }
             }
         });
-        
+
         if std::env::var("SUBSTRATE_PTY_DEBUG").is_ok() {
             log::debug!("Windows global input forwarder initialized (with Condvar gating)");
         }
@@ -448,21 +474,24 @@ fn handle_pty_io(
     cmd_id: &str,
 ) -> Result<PtyExitStatus> {
     let done = Arc::new(AtomicBool::new(false));
-    
+
     // Get writer for stdin->pty (wrap in Arc<Mutex<Option>> so we can drop it from main thread)
     let writer = {
         let master = pty_master.lock().unwrap();
-        Arc::new(Mutex::new(Some(master.take_writer()
-            .context("Failed to create PTY writer")?)))
+        Arc::new(Mutex::new(Some(
+            master
+                .take_writer()
+                .context("Failed to create PTY writer")?,
+        )))
     };
-    
+
     // Clone for the stdin thread
     let writer_for_thread = Arc::clone(&writer);
-    
+
     // 🔥 CRITICAL FIX: Declare stdin_thread handle outside platform blocks
     // 🔥 MUST-FIX: Initialize to None to avoid uninitialized variable on non-Unix
     let stdin_join: Option<thread::JoinHandle<()>>;
-    
+
     // Platform-specific stdin handling
     #[cfg(unix)]
     {
@@ -473,36 +502,42 @@ fn handle_pty_io(
         stdin_join = Some(thread::spawn(move || {
             let mut stdin = io::stdin();
             let mut buffer = vec![0u8; 4096];
-            
+
             while !done_writer.load(Ordering::Relaxed) {
                 // Check if writer is still valid BEFORE reading stdin
                 let writer_guard = match writer_for_thread.try_lock() {
                     Ok(guard) => guard,
                     Err(_) => break, // Writer was dropped or is locked, exit thread
                 };
-                
+
                 // If writer is None, exit immediately
                 if writer_guard.is_none() {
                     break;
                 }
-                
+
                 // Drop the guard before blocking read to avoid holding lock
                 drop(writer_guard);
-                
+
                 // Set up a select/poll with timeout to avoid blocking forever
-                use std::os::unix::io::{AsRawFd, AsFd};
                 use nix::sys::select::{select, FdSet};
                 use nix::sys::time::TimeVal;
-                
+                use std::os::unix::io::{AsFd, AsRawFd};
+
                 let stdin_fd = stdin.as_raw_fd();
                 let stdin_borrowed = stdin.as_fd();
                 let mut read_fds = FdSet::new();
                 read_fds.insert(stdin_borrowed);
-                
+
                 // Wait up to 100ms for input
                 let mut timeout = TimeVal::new(0, 100_000); // 100ms = 100,000 microseconds
-                let result = select(stdin_fd + 1, Some(&mut read_fds), None, None, Some(&mut timeout));
-                
+                let result = select(
+                    stdin_fd + 1,
+                    Some(&mut read_fds),
+                    None,
+                    None,
+                    Some(&mut timeout),
+                );
+
                 match result {
                     Ok(0) => {
                         // Timeout - check done flag and continue
@@ -518,7 +553,11 @@ fn handle_pty_io(
                                     if let Some(ref mut writer) = *writer_guard {
                                         if let Err(e) = writer.write_all(&buffer[..n]) {
                                             if !done_writer.load(Ordering::Relaxed) {
-                                                log::warn!("[{}] Failed to write to PTY: {}", cmd_id_stdin, e);
+                                                log::warn!(
+                                                    "[{}] Failed to write to PTY: {}",
+                                                    cmd_id_stdin,
+                                                    e
+                                                );
                                             }
                                             break;
                                         }
@@ -543,11 +582,11 @@ fn handle_pty_io(
             }
         }));
     }
-    
+
     #[cfg(windows)]
     {
         stdin_join = None; // Windows doesn't use per-command threads
-        
+
         // Windows: Use global input forwarder to avoid thread leak
         // Set the current PTY writer and wake the forwarder thread
         // Clone the writer for Windows (can't move it since Unix also uses it)
@@ -559,27 +598,28 @@ fn handle_pty_io(
                 }
             }
         }
-        
+
         // Wake the forwarder thread
         let (lock, cvar) = &**WIN_PTY_INPUT_GATE;
         *lock.lock().unwrap() = true;
         cvar.notify_all();
     }
-    
+
     // Spawn thread to copy PTY output to stdout (using blocking I/O)
     let mut reader = {
         let master = pty_master.lock().unwrap();
-        master.try_clone_reader()
+        master
+            .try_clone_reader()
             .context("Failed to create PTY reader")?
     };
-    
+
     let done_reader = Arc::clone(&done);
     let cmd_id_output = cmd_id.to_string();
     let output_thread = thread::spawn(move || {
         let mut stdout = io::stdout();
         // Use smaller buffer to prevent blocking on partial reads
         let mut buffer = vec![0u8; 4096];
-        
+
         while !done_reader.load(Ordering::Relaxed) {
             match reader.read(&mut buffer) {
                 Ok(0) => break, // EOF - child process exited
@@ -612,13 +652,13 @@ fn handle_pty_io(
             }
         }
     });
-    
+
     // Wait for child to exit (blocking wait, not polling - more efficient)
     let portable_status = child.wait()?;
-    
+
     // Signal threads to stop FIRST
     done.store(true, Ordering::Relaxed);
-    
+
     // CRITICAL FIX: Drop the writer to stop stdin thread from trying to write
     #[cfg(unix)]
     {
@@ -628,36 +668,36 @@ fn handle_pty_io(
             *guard = None; // Drop the writer
         }
     }
-    
+
     // CRITICAL: Drain any remaining output before sending reset sequences
     // This prevents race condition with TUI cleanup sequences
     thread::sleep(std::time::Duration::from_millis(50)); // Give TUI time to send cleanup
-    
+
     // Wait for output thread (it will exit when PTY closes)
     let _ = output_thread.join();
-    
+
     // Platform-specific cleanup
     #[cfg(unix)]
     if let Some(handle) = stdin_join {
         // Unix: Join stdin thread (it should exit quickly now that writer is dropped)
         let _ = handle.join();
     }
-    
+
     #[cfg(windows)]
     {
         // Windows: Clear the current PTY writer and put forwarder to sleep
         *CURRENT_PTY_WRITER.lock().unwrap() = None;
-        
+
         // Put the forwarder thread back to sleep
         let (lock, _cvar) = &**WIN_PTY_INPUT_GATE;
         *lock.lock().unwrap() = false;
-        
+
         // Flush any straggler input to prevent swallowed keystrokes
         // This prevents the next keystroke from waking the read() and getting discarded
         // Only flush if there's actually pending input to avoid nuking legitimate keystrokes
         unsafe {
-            use windows_sys::Win32::System::Console::*;
             use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+            use windows_sys::Win32::System::Console::*;
             let h = GetStdHandle(STD_INPUT_HANDLE);
             if h != INVALID_HANDLE_VALUE {
                 let mut n: u32 = 0;
@@ -667,13 +707,13 @@ fn handle_pty_io(
             }
         }
     }
-    
+
     // Note: We've tried various approaches to make the prompt appear immediately:
     // - TIOCSTI injection of newline/Ctrl+L - doesn't solve the blocking issue
     // - Terminal state restoration - helps but prompt still doesn't appear
     // - The core issue is that Reedline's read_line() blocks waiting for input
     //   and we're not using the ExecuteHostCommand event system
-    
+
     Ok(PtyExitStatus::from_portable_pty(portable_status))
 }
 
@@ -712,36 +752,36 @@ impl MinimalTerminalGuard {
     fn new() -> Result<Self> {
         #[cfg(unix)]
         {
-            use nix::sys::termios::{tcgetattr, tcsetattr, SetArg, cfmakeraw};
+            use nix::sys::termios::{cfmakeraw, tcgetattr, tcsetattr, SetArg};
             use std::os::unix::io::{AsRawFd, BorrowedFd};
-            
+
             let raw_fd = io::stdin().as_raw_fd();
             let fd = unsafe { BorrowedFd::borrow_raw(raw_fd) };
             let saved_termios = tcgetattr(fd).ok();
-            
+
             // Set raw mode on stdin ONLY for proper input forwarding
             if let Some(ref orig) = saved_termios {
                 let mut raw = orig.clone();
                 cfmakeraw(&mut raw);
-                
+
                 // Ensure immediate input without buffering
                 raw.control_chars[nix::sys::termios::SpecialCharacterIndices::VMIN as usize] = 1;
                 raw.control_chars[nix::sys::termios::SpecialCharacterIndices::VTIME as usize] = 0;
-                
+
                 let fd = unsafe { BorrowedFd::borrow_raw(raw_fd) };
                 let _ = tcsetattr(fd, SetArg::TCSANOW, &raw);
             }
-            
+
             Ok(Self { saved_termios })
         }
-        
+
         #[cfg(windows)]
         {
-            use windows_sys::Win32::System::Console::*;
             use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
-            
+            use windows_sys::Win32::System::Console::*;
+
             let mut saved_stdin_mode = None;
-            
+
             unsafe {
                 // Save and modify stdin console mode ONLY
                 let h_stdin = GetStdHandle(STD_INPUT_HANDLE);
@@ -749,19 +789,20 @@ impl MinimalTerminalGuard {
                     let mut mode = 0;
                     if GetConsoleMode(h_stdin, &mut mode) != 0 {
                         saved_stdin_mode = Some(mode);
-                        
+
                         // Clear: ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT
                         // Set: ENABLE_VIRTUAL_TERMINAL_INPUT
-                        let new_mode = (mode & !(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT))
+                        let new_mode = (mode
+                            & !(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT))
                             | ENABLE_VIRTUAL_TERMINAL_INPUT;
                         SetConsoleMode(h_stdin, new_mode);
                     }
                 }
             }
-            
+
             Ok(Self { saved_stdin_mode })
         }
-        
+
         #[cfg(not(any(unix, windows)))]
         Ok(Self {})
     }
@@ -773,19 +814,19 @@ impl Drop for MinimalTerminalGuard {
         {
             use nix::sys::termios::{tcsetattr, SetArg};
             use std::os::unix::io::{AsRawFd, BorrowedFd};
-            
+
             if let Some(ref termios) = self.saved_termios {
                 let raw_fd = io::stdin().as_raw_fd();
                 let fd = unsafe { BorrowedFd::borrow_raw(raw_fd) };
                 let _ = tcsetattr(fd, SetArg::TCSANOW, termios);
             }
         }
-        
+
         #[cfg(windows)]
         {
-            use windows_sys::Win32::System::Console::*;
             use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
-            
+            use windows_sys::Win32::System::Console::*;
+
             unsafe {
                 if let Some(mode) = self.saved_stdin_mode {
                     let h_stdin = GetStdHandle(STD_INPUT_HANDLE);

@@ -64,8 +64,8 @@ fn resolve_binary_uncached(command: &str, search_paths: &[PathBuf]) -> Option<Pa
         // On Windows, try with common executable extensions
         #[cfg(windows)]
         {
-            let extensions = env::var("PATHEXT")
-                .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
+            let extensions =
+                env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
 
             for ext in extensions.split(';') {
                 if !ext.is_empty() {
@@ -101,7 +101,9 @@ fn is_executable(path: &Path) -> bool {
 
     #[cfg(windows)]
     {
-        std::fs::metadata(path).map(|m| m.is_file()).unwrap_or(false)
+        std::fs::metadata(path)
+            .map(|m| m.is_file())
+            .unwrap_or(false)
     }
 }
 
@@ -146,16 +148,10 @@ mod tests {
 
     #[test]
     fn test_cache_key_normalization() {
-        let paths = vec![
-            PathBuf::from("/usr/bin/"),
-            PathBuf::from("/bin"),
-        ];
+        let paths = vec![PathBuf::from("/usr/bin/"), PathBuf::from("/bin")];
 
         let key1 = build_cache_key("git", &paths);
-        let normalized_paths = vec![
-            PathBuf::from("/usr/bin"),
-            PathBuf::from("/bin"),
-        ];
+        let normalized_paths = vec![PathBuf::from("/usr/bin"), PathBuf::from("/bin")];
         let key2 = build_cache_key("git", &normalized_paths);
 
         // Keys should be the same due to normalization
