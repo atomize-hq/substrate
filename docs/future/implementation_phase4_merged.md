@@ -4,6 +4,10 @@
 
 Phase 4 adds security enforcement, AI agent integration, and graph-based intelligence to substrate WITHOUT rewriting existing functionality. Everything is additive and can be enabled via environment variables. **Now with cross-platform support via world backend abstraction.**
 
+## Important: Concurrent Output Design Change
+
+**Note**: The original ExternalPrinter approach for concurrent agent output has been removed due to CPU usage issues (2.4% idle CPU from polling). Phase 4 will implement an async REPL using tokio for efficient concurrent I/O. See `docs/PHASE_4_CONCURRENT_OUTPUT_DESIGN.md` for details.
+
 ## World Backend Abstraction (Cross-Platform Foundation)
 
 ```rust

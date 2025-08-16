@@ -16,7 +16,7 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.10", features = ["v7"] }
 atty = "0.2"
 # rustyline = "14.0"  # Replaced with reedline
-reedline = { version = "0.41", features = ["external_printer"] }
+reedline = { version = "0.41", features = [] }
 nu-ansi-term = "0.50"
 shellexpand = "3.1"
 shell-words = "1.1"

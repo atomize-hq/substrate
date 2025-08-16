@@ -22,7 +22,7 @@ use uuid::Uuid;
 // Reedline imports
 use reedline::{
     default_emacs_keybindings, ColumnarMenu, Completer, DefaultValidator, Emacs,
-    ExampleHighlighter, ExternalPrinter, FileBackedHistory, KeyCode, KeyModifiers, MenuBuilder,
+    ExampleHighlighter, FileBackedHistory, KeyCode, KeyModifiers, MenuBuilder,
     Prompt, PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus, Reedline,
     ReedlineEvent, ReedlineMenu, Signal, Span, Suggestion,
 };
@@ -273,9 +273,6 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
     // Create custom prompt
     let prompt = SubstratePrompt::new(config.ci_mode);
 
-    // Set up ExternalPrinter for concurrent output
-    let external_printer = ExternalPrinter::new(1000); // 1000 line buffer
-
     // Configure keybindings
     let mut keybindings = default_emacs_keybindings();
     keybindings.add_binding(
@@ -304,7 +301,6 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
         .with_completer(completer)
         .with_highlighter(Box::new(ExampleHighlighter::default()))
         .with_validator(Box::new(DefaultValidator))
-        .with_external_printer(external_printer)
         .with_transient_prompt(Box::new(transient_prompt))
         .with_menu(ReedlineMenu::EngineCompleter(Box::new(
             ColumnarMenu::default().with_name("completion_menu"),
