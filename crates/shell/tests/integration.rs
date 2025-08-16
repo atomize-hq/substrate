@@ -182,15 +182,15 @@ fn test_pipe_mode_detection() {
 #[test]
 fn test_needs_shell_redirections() {
     // Test that needs_shell() correctly identifies shell redirections
-    assert!(substrate_shell::needs_shell("echo hi 2>&1"));
-    assert!(substrate_shell::needs_shell("echo hi 1>/dev/null"));
-    assert!(substrate_shell::needs_shell("cat file 2>/dev/null"));
-    assert!(substrate_shell::needs_shell("cmd 1>&2"));
-    assert!(substrate_shell::needs_shell("echo test &>/dev/null"));
+    assert!(substrate::needs_shell("echo hi 2>&1"));
+    assert!(substrate::needs_shell("echo hi 1>/dev/null"));
+    assert!(substrate::needs_shell("cat file 2>/dev/null"));
+    assert!(substrate::needs_shell("cmd 1>&2"));
+    assert!(substrate::needs_shell("echo test &>/dev/null"));
     
     // Should not need shell for simple commands
-    assert!(!substrate_shell::needs_shell("echo hello world"));
-    assert!(!substrate_shell::needs_shell("git status"));
+    assert!(!substrate::needs_shell("echo hello world"));
+    assert!(!substrate::needs_shell("git status"));
 }
 
 #[test]

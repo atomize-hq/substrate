@@ -1566,14 +1566,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "substrate-common"
-version = "0.1.0"
-dependencies = [
- "tempfile",
-]
-
-[[package]]
-name = "substrate-shell"
+name = "substrate"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -1603,6 +1596,13 @@ dependencies = [
  "uuid",
  "which",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "substrate-common"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
 ]
 
 [[package]]

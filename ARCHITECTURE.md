@@ -22,7 +22,7 @@ User Command → Shell Resolution → PATH Lookup → Shim Intercept → Logging
 substrate-common (base utilities)
     ↑
     ├── substrate-shim (command interception)
-    ├── substrate-shell (custom shell)
+    ├── substrate (custom shell)
     └── substrate-supervisor (process management)
 ```
 
@@ -339,7 +339,7 @@ substrate-shim/
 ├── exec.rs           # Process execution
 └── redact.rs         # Credential redaction
 
-substrate-shell/
+substrate/
 ├── main.rs           # Entry point
 ├── lib.rs            # Shell modes, command routing
 ├── pty.rs            # PTY management (Unix)

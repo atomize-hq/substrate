@@ -477,7 +477,7 @@ cargo test -- --nocapture
 # Run specific test suites
 cargo test --lib                    # Unit tests
 cargo test --test integration       # Integration tests
-cargo test -p substrate-shell       # Shell-specific tests
+cargo test -p substrate       # Shell-specific tests
 cargo test -p substrate-shim        # Shim-specific tests
 ```
 

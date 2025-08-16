@@ -84,6 +84,24 @@ impl PtyExitStatus {
             }
         }
     }
+    
+    pub fn success(&self) -> bool {
+        self.code == Some(0)
+    }
+    
+    pub fn code(&self) -> Option<i32> {
+        self.code
+    }
+    
+    #[cfg(unix)]
+    pub fn signal(&self) -> Option<i32> {
+        self.signal
+    }
+    
+    #[cfg(not(unix))]
+    pub fn signal(&self) -> Option<i32> {
+        None
+    }
 }
 
 /// Execute a command with full PTY support
@@ -458,7 +476,7 @@ fn handle_pty_io(
             
             while !done_writer.load(Ordering::Relaxed) {
                 // Check if writer is still valid BEFORE reading stdin
-                let mut writer_guard = match writer_for_thread.try_lock() {
+                let writer_guard = match writer_for_thread.try_lock() {
                     Ok(guard) => guard,
                     Err(_) => break, // Writer was dropped or is locked, exit thread
                 };

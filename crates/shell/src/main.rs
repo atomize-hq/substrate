@@ -1,5 +1,5 @@
 use anyhow::Result;
-use substrate_shell::run_shell;
+use substrate::run_shell;
 
 fn main() -> Result<()> {
     // Initialize logger early for debugging (non-fatal to avoid panics)

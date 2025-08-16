@@ -1,5 +1,5 @@
 mod pty_exec;
-mod host_decider;
+use pty_exec::execute_with_pty;
 
 use anyhow::{Context, Result};
 use chrono::Utc;
@@ -304,7 +304,6 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
         )));
     
     // Set up the host command decider for PTY commands
-    line_editor.set_host_decider(host_decider::SubstrateHostDecider::new());
 
     // Signal handling setup
     let running_child_pid = Arc::new(AtomicI32::new(0));
@@ -315,55 +314,6 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
         let sig = line_editor.read_line(&prompt);
         
         match sig {
-            Ok(Signal::ExecuteHostCommand(line)) => {
-                log::debug!("ExecuteHostCommand signal received for: {}", line);
-                
-                // Print newline to ensure TUI starts on a fresh line
-                println!();
-                
-                // Reedline has already marked itself as suspended
-                // Run the command via PTY with full tracing
-                let cmd_id = Uuid::now_v7().to_string();
-                match execute_command(config, &line, &cmd_id, running_child_pid.clone()) {
-                    Ok(status) => {
-                        if !status.success() {
-                            #[cfg(unix)]
-                            if let Some(sig) = status.signal() {
-                                eprintln!("Command terminated by signal {}", sig);
-                            } else {
-                                eprintln!("Command failed with status: {}", status.code().unwrap_or(-1));
-                            }
-                            #[cfg(not(unix))]
-                            eprintln!("Command failed with status: {}", status.code().unwrap_or(-1));
-                        }
-                    }
-                    Err(e) => eprintln!("Error: {}", e),
-                }
-                
-                // After PTY command, try to force terminal to refresh display
-                #[cfg(unix)]
-                {
-                    use nix::sys::termios::{tcgetattr, tcsetattr, SetArg};
-                    use std::os::unix::io::{AsRawFd, BorrowedFd};
-                    
-                    // Get current terminal attributes
-                    let raw_fd = io::stdout().as_raw_fd();
-                    let fd = unsafe { BorrowedFd::borrow_raw(raw_fd) };
-                    if let Ok(termios) = tcgetattr(fd) {
-                        // Set them again to force terminal driver to refresh
-                        let _ = tcsetattr(fd, SetArg::TCSANOW, &termios);
-                    }
-                    
-                    // Send terminal control sequences to ensure visibility
-                    print!("\x1b[?25h"); // Show cursor
-                    print!("\x1b[0m");   // Reset attributes
-                    let _ = io::stdout().flush();
-                }
-                
-                // Now when we loop back to read_line(), Reedline will see it's resuming
-                // from suspended state and will repaint immediately
-                continue;
-            }
             Ok(Signal::Success(line)) => {
                 if line.trim().is_empty() {
                     continue;
@@ -374,22 +324,49 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
                     break;
                 }
                 
-                // Execute normal command (non-PTY)
+                // Determine if this needs PTY
+                let disabled = is_pty_disabled();
+                let forced = is_force_pty_command(&line);
+                let needs_pty_exec = forced || (!disabled && needs_pty(&line));
+                
                 let cmd_id = Uuid::now_v7().to_string();
-                match execute_command(config, &line, &cmd_id, running_child_pid.clone()) {
-                    Ok(status) => {
-                        if !status.success() {
-                            #[cfg(unix)]
-                            if let Some(sig) = status.signal() {
-                                eprintln!("Command terminated by signal {}", sig);
-                            } else {
+                
+                // Key change: Use suspend guard for PTY commands
+                if needs_pty_exec {
+                    // Suspend Reedline while PTY command runs
+                    let _guard = line_editor.suspend_guard();
+                    match execute_with_pty(config, &line, &cmd_id, running_child_pid.clone()) {
+                        Ok(status) => {
+                            if !status.success() {
+                                #[cfg(unix)]
+                                if let Some(sig) = status.signal() {
+                                    eprintln!("Command terminated by signal {}", sig);
+                                } else {
+                                    eprintln!("Command failed with status: {}", status.code().unwrap_or(-1));
+                                }
+                                #[cfg(not(unix))]
                                 eprintln!("Command failed with status: {}", status.code().unwrap_or(-1));
                             }
-                            #[cfg(not(unix))]
-                            eprintln!("Command failed with status: {}", status.code().unwrap_or(-1));
                         }
+                        Err(e) => eprintln!("Error: {}", e),
                     }
-                    Err(e) => eprintln!("Error: {}", e),
+                    // Guard automatically drops and resumes here
+                } else {
+                    match execute_command(config, &line, &cmd_id, running_child_pid.clone()) {
+                        Ok(status) => {
+                            if !status.success() {
+                                #[cfg(unix)]
+                                if let Some(sig) = status.signal() {
+                                    eprintln!("Command terminated by signal {}", sig);
+                                } else {
+                                    eprintln!("Command failed with status: {}", status.code().unwrap_or(-1));
+                                }
+                                #[cfg(not(unix))]
+                                eprintln!("Command failed with status: {}", status.code().unwrap_or(-1));
+                            }
+                        }
+                        Err(e) => eprintln!("Error: {}", e),
+                    }
                 }
             }
             Ok(Signal::CtrlC) => {
@@ -996,11 +973,12 @@ fn needs_pty(cmd: &str) -> bool {
         "less", "more", "most",                           // pagers
         "top", "htop", "btop", "glances",                // monitors
         "telnet", "ftp", "sftp",                         // network tools
-        "claude", "chatgpt",                             // AI tools
+        "claude", "codex", "gemini", "atomize",          // AI tools
         "tmux", "screen", "zellij",                      // multiplexers
         "fzf", "lazygit", "gitui", "tig",                // git/file tools
         "ranger", "yazi", "k9s", "nmtui",                // additional TUIs
         "ipython", "bpython",                             // interactive pythons
+        "sqlite3", "psql", "mysql",                      // database CLIs
         // Note: python, node, git, ssh handled by special logic
         // 🔥 PRODUCTION FIX: Removed ssh from list since dedicated logic is comprehensive
     ];
