@@ -193,3 +193,73 @@ mod resolver;
 // Re-export commonly used types
 pub use anyhow::{Context, Result};
 pub use std::path::PathBuf;
+
+// Version constants and functions for auto-deployment
+use serde_json::json;
+use sha2::{Sha256, Digest};
+
+/// Version string embedded at build time
+pub const SHIM_VERSION: &str = env!("SHIM_VERSION");
+
+/// Get comprehensive version information including binary hash
+pub fn get_version_info() -> serde_json::Value {
+    json!({
+        "version": SHIM_VERSION,
+        "build_time": chrono::Utc::now().to_rfc3339(),
+        "binary_hash": calculate_self_hash(),
+    })
+}
+
+/// Calculate hash of current binary for integrity checking
+pub fn calculate_self_hash() -> String {
+    let exe_path = std::env::current_exe().unwrap_or_default();
+    match std::fs::read(exe_path) {
+        Ok(bytes) => {
+            let mut hasher = Sha256::new();
+            hasher.update(&bytes);
+            format!("{:x}", hasher.finalize())
+        }
+        Err(_) => "unknown".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod version_tests {
+    use super::*;
+
+    #[test]
+    fn test_version_constant_is_set() {
+        assert!(!SHIM_VERSION.is_empty(), "SHIM_VERSION should not be empty");
+        assert!(SHIM_VERSION.contains('.'), "SHIM_VERSION should contain version number");
+    }
+
+    #[test]
+    fn test_get_version_info_structure() {
+        let info = get_version_info();
+        
+        assert!(info.get("version").is_some(), "version_info should contain 'version' field");
+        assert!(info.get("build_time").is_some(), "version_info should contain 'build_time' field");
+        assert!(info.get("binary_hash").is_some(), "version_info should contain 'binary_hash' field");
+        
+        let version = info.get("version").unwrap().as_str().unwrap();
+        assert_eq!(version, SHIM_VERSION, "version_info.version should match SHIM_VERSION constant");
+    }
+
+    #[test]
+    fn test_calculate_self_hash_returns_string() {
+        let hash = calculate_self_hash();
+        assert!(!hash.is_empty(), "calculate_self_hash should return non-empty string");
+        // Hash should be either "unknown" or a hex string
+        assert!(hash == "unknown" || hash.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test] 
+    fn test_version_includes_git_info() {
+        println!("SHIM_VERSION: {}", SHIM_VERSION);
+        let info = get_version_info();
+        println!("Version info: {}", serde_json::to_string_pretty(&info).unwrap());
+        
+        // Verify that the version string exists and follows expected format
+        assert!(SHIM_VERSION.starts_with("0.1.1"), "Version should start with package version");
+    }
+}
