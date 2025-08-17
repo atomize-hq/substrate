@@ -8,3 +8,4 @@ test_script.sh
 test_pty.sh
 debug.log
 crates/shell/test.py
+docs/project_management

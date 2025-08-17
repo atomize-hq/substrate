@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Substrate is a command tracing ecosystem written in Rust that provides transparent command interception, a custom shell with multiple execution modes, and structured logging for full visibility into command execution patterns. It consists of two main binaries:
 - `substrate`: Custom shell with interactive REPL, wrap mode, script execution, and pipe processing
-- `shim`: Binary shimming tool for command interception
+- `substrate-shim`: Binary shimming tool for command interception
 
 ## Development Commands
 
@@ -19,8 +19,8 @@ cargo build
 cargo build --release
 
 # Build artifacts are located in:
-# - target/debug/substrate & target/debug/shim (dev)
-# - target/release/substrate & target/release/shim (release)
+# - target/debug/substrate & target/debug/substrate-shim (dev)
+# - target/release/substrate & target/release/substrate-shim (release)
 ```
 
 ### Testing
@@ -83,7 +83,7 @@ The project uses a Cargo workspace with four main crates:
    - Session and command ID generation using UUIDv7
    - Structured JSONL logging with automatic rotation
 
-3. **`crates/shim/`**: Binary shimming implementation (`shim` binary)
+3. **`crates/shim/`**: Binary shimming implementation (`substrate-shim` binary)
    - `src/lib.rs`: Core shimming logic
    - Path resolution with intelligent caching
    - Session correlation and depth tracking

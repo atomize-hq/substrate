@@ -1556,6 +1556,7 @@ dependencies = [
  "reedline",
  "rustc_version",
  "serde_json",
+ "sha2",
  "shell-words",
  "shellexpand",
  "signal-hook",

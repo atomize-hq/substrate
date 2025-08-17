@@ -31,7 +31,7 @@ fn test_shim_execution_flow() -> Result<()> {
     }
 
     // Get the built shim binary using standard Rust testing pattern
-    let shim_cmd = Command::cargo_bin("shim")?;
+    let shim_cmd = Command::cargo_bin("substrate-shim")?;
     let shim_binary_path = shim_cmd.get_program();
 
     // Copy shim binary to test location
@@ -108,7 +108,7 @@ fn test_claude_code_hash_pinning_scenario() -> Result<()> {
     }
 
     // Get the built shim binary using standard Rust testing pattern
-    let shim_cmd = Command::cargo_bin("shim")?;
+    let shim_cmd = Command::cargo_bin("substrate-shim")?;
     let shim_binary_path = shim_cmd.get_program();
 
     let shim_binary = shim_dir.join(if cfg!(windows) {
@@ -199,7 +199,7 @@ fn test_shim_bypass() -> Result<()> {
     }
 
     // Get the built shim binary using standard Rust testing pattern
-    let shim_cmd = Command::cargo_bin("shim")?;
+    let shim_cmd = Command::cargo_bin("substrate-shim")?;
     let shim_binary_path = shim_cmd.get_program();
 
     let shim_echo = shim_dir.join(if cfg!(windows) { "echo.exe" } else { "echo" });
@@ -251,7 +251,7 @@ fn test_session_correlation() -> Result<()> {
     }
 
     // Get the built shim binary using standard Rust testing pattern
-    let shim_cmd = Command::cargo_bin("shim")?;
+    let shim_cmd = Command::cargo_bin("substrate-shim")?;
     let shim_binary_path = shim_cmd.get_program();
 
     let shim_binary = shim_dir.join("test_cmd");
@@ -323,7 +323,7 @@ fn test_credential_redaction() -> Result<()> {
     }
 
     // Get the built shim binary using standard Rust testing pattern
-    let shim_cmd = Command::cargo_bin("shim")?;
+    let shim_cmd = Command::cargo_bin("substrate-shim")?;
     let shim_binary_path = shim_cmd.get_program();
 
     let shim_binary = shim_dir.join("curl");
@@ -384,7 +384,7 @@ fn test_missing_command_error() -> Result<()> {
     fs::create_dir_all(&bin_dir)?;
 
     // Get the built shim binary using standard Rust testing pattern
-    let shim_cmd = Command::cargo_bin("shim")?;
+    let shim_cmd = Command::cargo_bin("substrate-shim")?;
     let shim_binary_path = shim_cmd.get_program();
 
     let shim_binary = shim_dir.join("nonexistent");

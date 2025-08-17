@@ -7,11 +7,12 @@ authors = ["Substrate Team"]
 description = "Command execution shim for tracing and observability"
 license = "MIT"
 repository = "https://github.com/your-org/substrate"
+readme = "../../README.md"
 keywords = ["tracing", "observability", "command", "shim"]
 categories = ["command-line-utilities", "development-tools::debugging"]
 
 [[bin]]
-name = "shim"
+name = "substrate-shim"
 path = "src/main.rs"
 
 [[bench]]
