@@ -117,6 +117,15 @@ Critical for operation:
 - `SHIM_SESSION_ID`: Session correlation ID (auto-generated if not set)
 - `SHIM_BYPASS`: Emergency bypass mode (set to `1` to disable tracing)
 
+For debugging and development:
+- `SHIM_LOG_OPTS`: Logging options (`raw`, `resolve`, or `raw,resolve`)
+  - `raw`: Disables credential redaction (security sensitive)
+  - `resolve`: Includes binary resolution paths in logs
+- `SHIM_CACHE_BUST`: Set to `1` to force cache invalidation for testing
+- `SHIM_FSYNC`: Set to `1` to force filesystem sync for maximum log durability
+- `RUST_LOG`: Standard Rust logging (set to `debug` for detailed output)
+- `SUBSTRATE_PTY_DEBUG`: Set to `1` to enable PTY debugging output
+
 ## Testing Strategy
 
 When modifying the codebase:
@@ -150,3 +159,11 @@ Modify the `should_use_pty()` function in `crates/shell/src/lib.rs` to add detec
 
 ### Debugging Path Resolution
 Set `SHIM_LOG_OPTS=resolve` to log path resolution details, or use `SHIM_CACHE_BUST=1` to force cache invalidation.
+
+### Environment Setup for Comprehensive Debugging
+```bash
+export RUST_LOG=debug
+export SHIM_LOG_OPTS=raw,resolve
+export SUBSTRATE_PTY_DEBUG=1
+export SHIM_CACHE_BUST=1  # Force cache invalidation
+```
