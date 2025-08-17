@@ -58,7 +58,7 @@ fn bench_credential_patterns(c: &mut Criterion) {
     let mut group = c.benchmark_group("credential_redaction");
 
     // Realistic command line arguments
-    let test_cases = vec![
+    let test_cases = [
         // Clean case (no redaction needed)
         vec!["git", "status", "--porcelain", "-b"],
         // Simple token case
@@ -120,7 +120,7 @@ fn bench_json_operations(c: &mut Criterion) {
     let mut group = c.benchmark_group("json_serialization");
 
     // Sample log entries of different sizes
-    let log_entries = vec![
+    let log_entries = [
         // Small entry
         json!({
             "ts": "2024-01-15T10:30:45.123Z",
