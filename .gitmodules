@@ -1,4 +1,4 @@
 [submodule "third_party/reedline"]
 	path = third_party/reedline
-	url = https://github.com/atomize-codes/reedline.git
+	url = https://github.com/atomize-hq/reedline.git
 	branch = minimal-suspend-api
