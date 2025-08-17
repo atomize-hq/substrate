@@ -3,6 +3,12 @@ name = "substrate-common"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.74"
+authors = ["Substrate Team"]
+description = "Shared utilities and logging schema for the Substrate command tracing ecosystem"
+license = "MIT"
+repository = "https://github.com/your-org/substrate"
+keywords = ["tracing", "logging", "utilities"]
+categories = ["development-tools::debugging"]
 
 [dependencies]
 # No runtime dependencies needed

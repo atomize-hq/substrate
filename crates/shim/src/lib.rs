@@ -50,7 +50,7 @@
 //! ### 2. Deploy Shims
 //!
 //! ```bash
-//! ./scripts/stage_shims.sh target/release/shim
+//! ./scripts/stage_shims.sh target/release/substrate-shim
 //! ```
 //!
 //! ### 3. Activate Tracing

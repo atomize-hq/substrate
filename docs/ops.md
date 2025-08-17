@@ -2,101 +2,164 @@
 
 ## Overview
 
-This guide covers operational aspects of the Substrate command tracing system, including deployment, monitoring, troubleshooting, and maintenance procedures.
+This guide covers operational aspects of the Substrate command tracing system based on the current implementation, including deployment, monitoring, troubleshooting, and maintenance procedures.
 
 ## Deployment
 
-### Phase 1: Basic Shim Deployment
+### Prerequisites
 
-1. **Build the shim binary**:
+- Rust 1.74+ installed
+- Git for cloning the repository
+- Appropriate permissions for creating directories in `$HOME`
+
+### Phase 1: Building and Basic Deployment
+
+1. **Build the system**:
 
    ```bash
-   cargo build --release -p substrate-shim
+   # Clone and build all components
+   git clone <repository-url>
+   cd substrate
+   cargo build --release
+   
+   # Built artifacts:
+   # - target/release/substrate-shim        # Command interception shim
+   # - target/release/substrate             # Custom shell
+   # - target/release/substrate-supervisor  # Process supervisor (if built)
    ```
 
-2. **Stage shims using the deployment script**:
+2. **Deploy shims using the staging script**:
 
    ```bash
-   scripts/stage_shims.sh
+   # Deploy shims to ~/.cmdshim_rust/
+   ./scripts/stage_shims.sh
+   
+   # Script automatically uses target/release/substrate-shim if no argument provided
+   # Or specify custom binary:
+   # ./scripts/stage_shims.sh path/to/custom/substrate-shim
    ```
 
-3. **Activate shims in your shell**:
+3. **Set up environment variables**:
 
    ```bash
-   # Create clean SHIM_ORIGINAL_PATH (strips existing shim directory)
-   SHIM_ORIGINAL_PATH=$(python3 -c "import os; sd='$HOME/.cmdshim_rust'; print(':'.join(p for p in os.environ.get('PATH','').split(':') if p and p.rstrip('/')!=sd.rstrip('/')))")
-   export SHIM_ORIGINAL_PATH
+   # Required: Clean PATH without shim directory
+   export SHIM_ORIGINAL_PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+   
+   # Required: Update PATH to include shims first
    export PATH="$HOME/.cmdshim_rust:$SHIM_ORIGINAL_PATH"
+   
+   # Optional: Specify log file (defaults to ~/.trace_shell.jsonl)
+   export SHIM_TRACE_LOG="$HOME/.trace_shell.jsonl"
+   
+   # Clear shell command cache
    hash -r
    ```
 
-4. **Verify deployment**:
+4. **Verify basic deployment**:
    ```bash
-   which -a git  # Should show shim first
-   type -a git   # Should show shim first
-   SHIM_TRACE_LOG=/tmp/test.jsonl git --version
-   cat /tmp/test.jsonl  # Should contain JSON log entry
+   which git    # Should show: ~/.cmdshim_rust/git
+   type git     # Should show shim first
+   git --version  # Should work normally
+   
+   # Check logging
+   tail -1 ~/.trace_shell.jsonl | jq '.'
    ```
 
-### Phase 2: Non-Interactive Shell Support
+### Phase 2: Non-Interactive Shell Support (Claude Code Integration)
 
-1. **Create BASH_ENV file**:
+1. **Create BASH_ENV file for non-interactive shells**:
 
    ```bash
-   scripts/create_bashenv.sh
+   ./scripts/create_bashenv.sh
    ```
 
-2. **Test with non-interactive shells**:
+2. **Set up environment for non-interactive use**:
+
    ```bash
-   BASH_ENV="$HOME/.substrate_bashenv" bash -c 'which git; git --version'
+   export BASH_ENV="$HOME/.substrate_bashenv"
    ```
+
+3. **Test non-interactive shell integration**:
+   ```bash
+   # Test with non-interactive bash
+   bash -c 'which git; git --version'
+   
+   # Verify logging occurred
+   tail -2 ~/.trace_shell.jsonl | jq '.command'
+   ```
+
+### Phase 3: Supervisor Integration
+
+1. **Using the supervisor for managed execution**:
+
+   ```bash
+   # Direct supervisor usage (if supervisor binary built)
+   target/release/substrate-supervisor git status
+   
+   # Or programmatic usage via supervisor API
+   ```
+
+## Current Implementation Status
+
+### Available Components
+
+- **substrate-shim**: ✅ Fully functional command interception
+- **substrate**: ✅ Full shell with PTY support, interactive REPL
+- **substrate-common**: ✅ Shared utilities and logging
+- **substrate-supervisor**: ✅ Process management and environment setup
+
+### Deployment Scripts
+
+- **`scripts/stage_shims.sh`**: ✅ Working shim deployment
+- **`scripts/create_bashenv.sh`**: ✅ Non-interactive shell setup
+- **`scripts/rollback.sh`**: ✅ Emergency rollback functionality
 
 ## Performance Monitoring
 
 ### Key Metrics
 
-Monitor these performance indicators:
+Monitor these performance indicators with current implementation:
 
 ```bash
-# Average shim overhead
-jq '.duration_ms' ~/.trace_shell.jsonl | awk '{sum+=$1; count++} END {print "avg:", sum/count "ms"}'
+# Average shim overhead (requires jq)
+jq '.duration_ms // empty' ~/.trace_shell.jsonl | awk '{sum+=$1; count++} END {if(count>0) print "avg:", sum/count "ms"}'
 
 # 95th percentile latency
-jq -r '.duration_ms' ~/.trace_shell.jsonl | sort -n | awk 'NR==int(NR*0.95)'
+jq -r '.duration_ms // empty' ~/.trace_shell.jsonl | sort -n | awk 'END {print NR*0.95}' | xargs -I {} sed -n '{}p' <(jq -r '.duration_ms // empty' ~/.trace_shell.jsonl | sort -n)
 
 # Command execution frequency
-jq -r '.command' ~/.trace_shell.jsonl | sort | uniq -c | sort -nr | head -10
+jq -r '.command // empty' ~/.trace_shell.jsonl | sort | uniq -c | sort -nr | head -10
 
-# Cache effectiveness (compare early vs late execution times)
-jq '.duration_ms' ~/.trace_shell.jsonl | head -100 > /tmp/cold_cache.txt
-jq '.duration_ms' ~/.trace_shell.jsonl | tail -100 > /tmp/warm_cache.txt
+# Session analysis
+jq -r '.session_id // empty' ~/.trace_shell.jsonl | sort | uniq -c | sort -nr
 ```
 
-### Performance Targets
+### Performance Characteristics
 
-- **Shim overhead**: < 5ms per execution on macOS/Linux
-- **Memory usage**: < 1MB resident per shim process
-- **Cache hit rate**: ~40% reduction in stat() calls after warmup
-- **Log file growth**: Bounded by external rotation
+- **Shim overhead**: Optimized for minimal latency with intelligent caching
+- **Memory usage**: Designed for efficient resource utilization
+- **Binary size**: Compact Rust binaries optimized for performance
+- **Benchmarks**: Run `cargo bench` for detailed performance analysis
+- **Cache effectiveness**: Reduces stat() calls after warmup
 
 ## Security Operations
 
 ### Log File Security
 
-Substrate automatically creates log files with user-only permissions (0o600):
+Substrate automatically creates log files with user-only permissions:
 
 ```bash
 # Verify log file permissions
 ls -la ~/.trace_shell.jsonl
-# Should show: -rw------- (user read/write only)
+# Should show: -rw------- (0o600 - user read/write only)
 ```
 
 ### Credential Redaction
 
-Substrate automatically redacts sensitive information:
+Current redaction implementation automatically handles:
 
 - **Key-value patterns**: `token=secret`, `password=mypass`, `SECRET=value`
-- **Flag-value patterns**: `--token secret`, `-p password`, `--apikey value`
+- **Flag-value patterns**: `--token`, `--password`, `-p`, `-H`, `--header`
 
 To disable redaction for debugging:
 
@@ -111,152 +174,216 @@ export SHIM_LOG_OPTS=raw
 grep -i "token\|password\|secret\|key" ~/.trace_shell.jsonl
 
 # Monitor failed executions
-jq 'select(.exit_code != 0) | {command, exit_code, argv}' ~/.trace_shell.jsonl
+jq 'select(.exit_code != 0 and .exit_code != null) | {ts, command, exit_code, argv}' ~/.trace_shell.jsonl
 
 # Track signal terminations (potential security issues)
-jq 'select(.term_signal != null) | {command, term_signal, argv}' ~/.trace_shell.jsonl
+jq 'select(.term_signal != null) | {ts, command, term_signal, argv}' ~/.trace_shell.jsonl
+
+# Session correlation analysis
+jq 'select(.session_id) | {session_id, command, ts}' ~/.trace_shell.jsonl | head -20
 ```
 
 ## Error Monitoring and Troubleshooting
 
 ### Common Issues
 
-#### 1. Shim Not Found in PATH
+#### 1. Commands Not Being Intercepted
 
 **Symptoms**: Commands execute without logging, `which` shows system binary
 
 **Diagnosis**:
-
 ```bash
 echo $PATH  # Check if shim directory is first
-which -a git  # Should show shim first
-hash -r  # Clear bash hash table
+which -a git  # Should show shim first, then system binary
+echo $SHIM_ORIGINAL_PATH  # Should not contain shim directory
 ```
 
 **Solution**:
-
 ```bash
-# Reactivate shims
+# Ensure proper PATH setup
 export PATH="$HOME/.cmdshim_rust:$SHIM_ORIGINAL_PATH"
-hash -r
+hash -r  # Clear shell command cache
 ```
 
-#### 2. Recursion Detection
+#### 2. Bypass Mode Activated
 
-**Symptoms**: Commands fail with "recursive shim detection" errors
+**Symptoms**: Commands skip tracing, logs show bypass=true
 
 **Diagnosis**:
-
 ```bash
 echo $SHIM_ACTIVE  # Should be unset in normal shells
+echo $SHIM_BYPASS  # Should be unset for normal operation
 ```
 
 **Solution**:
-
 ```bash
 unset SHIM_ACTIVE
+unset SHIM_BYPASS
 ```
 
 #### 3. Permission Denied Errors
 
-**Symptoms**: Commands fail to execute
+**Symptoms**: Shim binaries fail to execute
 
 **Diagnosis**:
-
 ```bash
 ls -la ~/.cmdshim_rust/  # Check shim permissions
-file ~/.cmdshim_rust/git  # Verify binary type
+file ~/.cmdshim_rust/.shimbin  # Verify binary type
 ```
 
 **Solution**:
-
 ```bash
 chmod +x ~/.cmdshim_rust/*
+# Or re-run staging script
+./scripts/stage_shims.sh
 ```
 
-#### 4. macOS Bash Compatibility Issues
+#### 4. PTY-Related Issues
 
-**Symptoms**: BASH_ENV errors on macOS
+**Symptoms**: Interactive commands don't work properly
 
 **Diagnosis**:
-
 ```bash
-echo $BASH_VERSION  # Check bash version
+echo $SUBSTRATE_DISABLE_PTY  # Should be unset for PTY support
+echo $SUBSTRATE_FORCE_PTY    # Check PTY forcing
 ```
 
-**Solution**: The create_bashenv.sh script automatically handles bash 3.2 compatibility.
+**Solution**:
+```bash
+# Enable PTY debug logging
+export SUBSTRATE_PTY_DEBUG=1
+substrate -c "vim test.txt"  # Test with interactive command
+
+# Or disable PTY as escape hatch
+export SUBSTRATE_DISABLE_PTY=1
+```
 
 ### Diagnostic Commands
 
 ```bash
-# Check shim binary integrity
+# Check shim binary integrity and installation
 file ~/.cmdshim_rust/.shimbin
-md5sum ~/.cmdshim_rust/.shimbin ~/.cmdshim_rust/*
+md5sum ~/.cmdshim_rust/.shimbin ~/.cmdshim_rust/git
+ls -la ~/.cmdshim_rust/ | head -10
 
-# Verify path resolution
+# Test path resolution and caching
 SHIM_CACHE_BUST=1 SHIM_TRACE_LOG=/tmp/debug.jsonl git --version
 jq '.duration_ms' /tmp/debug.jsonl  # Should be slower without cache
 
-# Test signal handling (Unix)
-timeout 2s yes > /dev/null  # Should log SIGTERM
-jq 'select(.term_signal != null)' ~/.trace_shell.jsonl | tail -1
+# Verify session correlation
+jq 'select(.session_id) | .session_id' ~/.trace_shell.jsonl | sort | uniq -c
+
+# Test emergency bypass
+SHIM_BYPASS=1 git --version  # Should not create log entries
+```
+
+## Shell Operations
+
+### Using Substrate Shell
+
+```bash
+# Interactive REPL mode
+substrate
+
+# Single command execution
+substrate -c "git status && npm test"
+
+# Script execution with state preservation
+substrate -f script.sh
+
+# CI mode with strict error handling
+substrate --ci -c "make test"
+
+# PTY mode for interactive commands
+substrate -c ":pty vim file.txt"
+```
+
+### PTY Configuration
+
+```bash
+# Force PTY for all commands
+export SUBSTRATE_FORCE_PTY=1
+
+# Disable PTY globally (escape hatch)
+export SUBSTRATE_DISABLE_PTY=1
+
+# Enable PTY debug logging
+export SUBSTRATE_PTY_DEBUG=1
+
+# PTY for last segment in pipelines
+export SUBSTRATE_PTY_PIPELINE_LAST=1
 ```
 
 ## Maintenance Procedures
 
-### Log Rotation
+### Log Management
 
-Implement external log rotation to prevent unbounded growth:
+Current implementation creates logs but doesn't include automatic rotation. Implement external rotation:
 
 ```bash
 # Example logrotate configuration
-cat > /etc/logrotate.d/substrate <<EOF
-/home/*/.trace_shell.jsonl {
+cat > ~/.config/logrotate/substrate <<EOF
+$HOME/.trace_shell.jsonl {
     daily
     rotate 30
     compress
     delaycompress
     missingok
     notifempty
-    create 0600
+    create 0600 $(whoami) $(id -gn)
 }
 EOF
+
+# Manual rotation
+mv ~/.trace_shell.jsonl ~/.trace_shell.jsonl.$(date +%Y%m%d)
+gzip ~/.trace_shell.jsonl.*
 ```
 
 ### Cache Management
 
-The resolution cache is automatically managed, but can be controlled:
+The resolution cache is automatically managed by the shim:
 
 ```bash
-# Disable cache for debugging
+# Force cache invalidation for debugging
 export SHIM_CACHE_BUST=1
 
-# Monitor cache effectiveness
-# (Compare execution times before/after cache warmup)
+# Test cache effectiveness (compare warm vs cold)
+time git --version  # Warm cache
+SHIM_CACHE_BUST=1 time git --version  # Cold cache
 ```
 
 ### Updates and Upgrades
 
-1. **Build new shim binary**:
+```bash
+# 1. Build new binaries
+cargo build --release
 
-   ```bash
-   cargo build --release -p substrate-shim
-   ```
+# 2. Backup current installation
+cp -r ~/.cmdshim_rust ~/.cmdshim_rust.backup.$(date +%Y%m%d)
 
-2. **Update shims atomically**:
+# 3. Deploy new version
+./scripts/stage_shims.sh
 
-   ```bash
-   # Backup current shims
-   cp -r ~/.cmdshim_rust ~/.cmdshim_rust.backup
+# 4. Verify installation
+which git  # Should show shim path
+git --version  # Should work normally
+tail -1 ~/.trace_shell.jsonl | jq '.build'  # Check version
+```
 
-   # Deploy new version
-   scripts/stage_shims.sh
-   ```
+### Reedline Fork Maintenance
 
-3. **Verify update**:
-   ```bash
-   ~/.cmdshim_rust/.shimbin --version 2>/dev/null || echo "Shim binary updated"
-   ```
+The system uses a patched reedline version:
+
+```bash
+# Check reedline integration
+grep -A 3 "\[patch.crates-io\]" Cargo.toml
+
+# Update reedline fork if needed
+cd third_party/reedline
+git pull upstream main  # If upstream updates needed
+cd ../..
+cargo build --release  # Rebuild with updated reedline
+```
 
 ## Emergency Procedures
 
@@ -265,101 +392,144 @@ export SHIM_CACHE_BUST=1
 If shims cause system instability:
 
 ```bash
-# Immediate rollback
-scripts/rollback.sh
+# Use provided rollback script
+./scripts/rollback.sh
 
 # Manual rollback if script fails
 mv ~/.cmdshim_rust ~/.cmdshim_rust.disabled
-export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+export PATH="$SHIM_ORIGINAL_PATH"
 hash -r
 ```
 
-### Disable Immutable Shims
+### Complete Bypass
 
-If shims were made immutable for security:
-
-```bash
-# Remove immutable flags (macOS)
-chflags nouchg ~/.cmdshim_rust/*
-
-# Then proceed with normal rollback
-scripts/rollback.sh
-```
-
-## Known Limitations
-
-### Absolute Path Commands
-
-Commands invoked with absolute paths cannot be intercepted:
+For critical situations:
 
 ```bash
-/usr/bin/git status  # Will NOT be logged
-git status           # Will be logged (uses PATH resolution)
+# Temporary bypass for single command
+SHIM_BYPASS=1 git status
+
+# Global bypass (disables all tracing)
+export SHIM_BYPASS=1
 ```
 
-**Workaround**: Use relative command names when possible.
+### Recovery from Broken Environment
 
-### Windows Signal Handling
+```bash
+# If PATH is completely broken
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
-Signal capture is limited on Windows:
+# If you can't access the rollback script
+rm -rf ~/.cmdshim_rust
+unset SHIM_ORIGINAL_PATH SHIM_TRACE_LOG BASH_ENV
+hash -r
+```
 
-- SIGINT/SIGTERM mapping is basic
-- Some termination methods may not be captured
+## Integration Monitoring
 
-### Large Log Entries
+### Claude Code Integration
 
-Log entries exceeding ~8MB may have interleaved writes, though this is rare in practice.
+```bash
+# Verify BASH_ENV setup
+echo $BASH_ENV
+test -f "$BASH_ENV" && echo "BASH_ENV file exists"
 
-### Set-uid Binaries
+# Test non-interactive execution
+bash -c 'which git; git --version'
 
-Shims should not be used with set-uid binaries or privilege elevation scenarios.
+# Check integration logging
+jq 'select(.component == "shim")' ~/.trace_shell.jsonl | tail -5
+```
+
+### Hash Pinning Verification
+
+```bash
+# Check hash table state
+hash -l | grep -E "(git|npm|node)"
+
+# Verify shim resolution
+type git npm node
+which -a git npm node
+
+# Test hash pinning
+hash -p "$HOME/.cmdshim_rust/git" git
+type git  # Should show pinned path
+```
 
 ## Monitoring Integration
 
-### Structured Logging
+### Structured Logging Analysis
 
-Substrate produces JSONL logs suitable for ingestion by:
-
-- **ELK Stack**: Logstash can parse JSONL directly
-- **Splunk**: Universal Forwarder with JSON parsing
-- **Prometheus**: Custom exporters can parse logs for metrics
-
-### Sample Queries
+Current JSONL format supports various log analysis tools:
 
 ```bash
-# Commands by user (multi-user systems)
-jq -r '.user' ~/.trace_shell.jsonl | sort | uniq -c
+# Event type distribution
+jq -r '.event_type' ~/.trace_shell.jsonl | sort | uniq -c
 
-# Execution patterns by time of day
-jq -r '.ts' ~/.trace_shell.jsonl | cut -dT -f2 | cut -d: -f1 | sort | uniq -c
+# Component breakdown
+jq -r '.component' ~/.trace_shell.jsonl | sort | uniq -c
 
-# Failed commands with context
-jq 'select(.exit_code != 0) | {ts, command, argv, cwd, exit_code}' ~/.trace_shell.jsonl
+# Command frequency analysis
+jq -r '.command' ~/.trace_shell.jsonl | sort | uniq -c | sort -nr | head -20
+
+# Session duration analysis
+jq 'select(.event_type == "command_complete") | .duration_ms' ~/.trace_shell.jsonl | sort -n
+```
+
+### Performance Analysis
+
+```bash
+# Commands by execution time
+jq 'select(.duration_ms != null) | {command, duration_ms}' ~/.trace_shell.jsonl | sort -k2 -nr | head -10
+
+# Cache hit analysis (compare early vs late executions)
+jq '.duration_ms // empty' ~/.trace_shell.jsonl | head -20 > /tmp/early.txt
+jq '.duration_ms // empty' ~/.trace_shell.jsonl | tail -20 > /tmp/late.txt
+echo "Early avg:" $(awk '{sum+=$1} END {print sum/NR}' /tmp/early.txt)
+echo "Late avg:" $(awk '{sum+=$1} END {print sum/NR}' /tmp/late.txt)
 ```
 
 ## Support and Debugging
 
-For issues not covered in this guide:
+### Debug Logging
 
-1. **Enable debug logging**:
+```bash
+# Enable comprehensive debug logging
+export RUST_LOG=debug
+export SHIM_LOG_OPTS=raw,resolve
+export SUBSTRATE_PTY_DEBUG=1
 
-   ```bash
-   export SHIM_LOG_OPTS=raw
-   export SHIM_TRACE_LOG=/tmp/substrate_debug.jsonl
-   ```
+# Test command with full debugging
+substrate -c "git status"
+```
 
-2. **Collect diagnostic information**:
+### Diagnostic Information Collection
 
-   ```bash
-   echo "PATH: $PATH"
-   echo "SHIM_ORIGINAL_PATH: $SHIM_ORIGINAL_PATH"
-   echo "SHIM_ACTIVE: $SHIM_ACTIVE"
-   ls -la ~/.cmdshim_rust/
-   tail -10 ~/.trace_shell.jsonl
-   ```
+```bash
+# System state dump
+echo "=== Environment ==="
+echo "PATH: $PATH"
+echo "SHIM_ORIGINAL_PATH: $SHIM_ORIGINAL_PATH"
+echo "SHIM_TRACE_LOG: $SHIM_TRACE_LOG"
+echo "BASH_ENV: $BASH_ENV"
 
-3. **Test minimal reproduction case**:
-   ```bash
-   SHIM_TRACE_LOG=/tmp/repro.jsonl git --version
-   cat /tmp/repro.jsonl
-   ```
+echo "=== Shim Installation ==="
+ls -la ~/.cmdshim_rust/ | head -10
+file ~/.cmdshim_rust/.shimbin
+
+echo "=== Recent Activity ==="
+tail -5 ~/.trace_shell.jsonl | jq '.'
+
+echo "=== Performance ==="
+jq '.duration_ms // empty' ~/.trace_shell.jsonl | tail -20 | awk '{sum+=$1} END {print "Recent avg:", sum/NR "ms"}'
+```
+
+### Known Limitations
+
+1. **Absolute path bypass**: Commands invoked with absolute paths skip shimming
+2. **Shell builtin limitation**: Built-ins in non-substrate shells aren't captured
+3. **Windows PTY**: Live resize not yet supported on Windows ConPTY
+4. **Log interleaving**: Large entries may interleave in high-concurrency scenarios
+5. **Reedline dependency**: Requires maintained fork for shell functionality
+
+For issues not covered in this guide, collect diagnostic information and refer to the codebase or OLD_OPS.md for planned enhancements.

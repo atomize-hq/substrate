@@ -5,7 +5,7 @@ set -euo pipefail
 # This script deploys the built shim binary to intercept common development commands
 
 SHIM_DIR="$HOME/.cmdshim_rust"
-TARGET_BINARY="${1:-target/release/shim}"
+TARGET_BINARY="${1:-target/release/substrate-shim}"
 
 # Commands to shim - curated list for development safety
 # Based on proven working commands from manual testing
@@ -20,7 +20,7 @@ echo "🚀 Staging substrate shims in $SHIM_DIR"
 # Validate target binary exists
 if [[ ! -f "$TARGET_BINARY" ]]; then
     echo "❌ Error: Target binary not found at $TARGET_BINARY"
-    echo "💡 Build the shim first: cargo build --release --bin shim"
+    echo "💡 Build the shim first: cargo build --release --bin substrate-shim"
     exit 1
 fi
 

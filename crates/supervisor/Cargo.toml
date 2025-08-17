@@ -3,11 +3,16 @@ name = "substrate-supervisor"
 version = "0.1.1"
 edition = "2021"
 rust-version = "1.74"
+authors = ["Atomize"]
 description = "Environment supervisor for substrate command tracing"
 license = "MIT"
+repository = "https://github.com/atomize-codes/substrate"
+readme = "../../README.md"
+keywords = ["supervisor", "process", "environment", "tracing"]
+categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
-name = "supervisor"
+name = "substrate-supervisor"
 path = "src/main.rs"
 
 [dependencies]

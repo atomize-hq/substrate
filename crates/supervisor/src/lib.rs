@@ -100,7 +100,7 @@ pub fn launch_supervised(config: SupervisorConfig) -> Result<()> {
 fn build_default_path(home: &str) -> Result<String> {
     // Start with parent PATH if available, otherwise use common paths
     if let Ok(parent_path) = env::var("PATH") {
-        let shim_dir = format!("{}/.cmdshim_rust", home);
+        let shim_dir = format!("{home}/.cmdshim_rust");
         Ok(strip_shim_dir_from_path(&parent_path, &shim_dir))
     } else {
         // Fallback to common paths for macOS/Linux development environments
