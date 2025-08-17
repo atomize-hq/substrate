@@ -30,7 +30,7 @@ fn main() -> Result<()> {
     } else {
         // Default to home directory log file
         if let Ok(home) = env::var("HOME") {
-            let default_log = format!("{}/.trace_shell.jsonl", home);
+            let default_log = format!("{home}/.trace_shell.jsonl");
             config = config.with_log_file(default_log);
         }
     }
