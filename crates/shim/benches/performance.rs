@@ -22,7 +22,7 @@ fn bench_path_operations(c: &mut Criterion) {
     let mut group = c.benchmark_group("path_operations");
 
     // Test with realistic PATH values
-    let path_cases = vec![
+    let path_cases = [
         "/usr/bin:/bin:/usr/sbin:/sbin",
         "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
         "/home/user/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/bin:/snap/bin",
@@ -167,7 +167,7 @@ fn bench_json_operations(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("serialize", i), entry, |b, entry| {
             b.iter(|| {
                 let json_string = serde_json::to_string(entry).unwrap();
-                let log_line = format!("{}\n", json_string);
+                let log_line = format!("{json_string}\n");
                 criterion::black_box(log_line);
             })
         });
@@ -252,7 +252,7 @@ fn bench_memory_patterns(c: &mut Criterion) {
 
     // Benchmark vector allocations for argv processing
     group.bench_function("argv_vector_creation", |b| {
-        let args = vec!["command", "arg1", "arg2", "arg3", "arg4", "arg5"];
+        let args = ["command", "arg1", "arg2", "arg3", "arg4", "arg5"];
 
         b.iter(|| {
             let os_strings: Vec<OsString> = args.iter().map(|s| OsString::from(*s)).collect();
@@ -268,7 +268,7 @@ fn bench_memory_patterns(c: &mut Criterion) {
 
     // Benchmark string concatenation for PATH building
     group.bench_function("path_string_building", |b| {
-        let components = vec![
+        let components = [
             "/opt/homebrew/bin",
             "/usr/local/bin",
             "/usr/bin",
@@ -294,7 +294,7 @@ fn bench_shim_simulation(c: &mut Criterion) {
     // Simulate the key operations a shim performs
     group.bench_function("complete_cycle", |b| {
         let command = "git";
-        let args = vec!["status", "--porcelain"];
+        let args = ["status", "--porcelain"];
         let cwd = "/Users/developer/project";
         let original_path = "/usr/bin:/bin";
 
@@ -315,7 +315,7 @@ fn bench_shim_simulation(c: &mut Criterion) {
 
             // 3. Serialize to JSON
             let json_string = serde_json::to_string(&log_entry).unwrap();
-            let log_line = format!("{}\n", json_string);
+            let log_line = format!("{json_string}\n");
 
             criterion::black_box((paths, log_line));
         })

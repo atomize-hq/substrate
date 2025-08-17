@@ -16,10 +16,10 @@ pub(crate) fn initialize_global_sigwinch_handler_impl() {
 
     INIT.call_once(|| {
         thread::spawn(|| {
-            let mut signals = match Signals::new(&[SIGWINCH]) {
+            let mut signals = match Signals::new([SIGWINCH]) {
                 Ok(s) => s,
                 Err(e) => {
-                    log::error!("Failed to register SIGWINCH handler: {}", e);
+                    log::error!("Failed to register SIGWINCH handler: {e}");
                     return;
                 }
             };
@@ -158,8 +158,8 @@ pub fn execute_with_pty(
     })?;
 
     // Prepare command - handle :pty prefix if present
-    let actual_command = if command.starts_with(":pty ") {
-        &command[5..]
+    let actual_command = if let Some(stripped) = command.strip_prefix(":pty ") {
+        stripped
     } else {
         command
     };
@@ -222,7 +222,7 @@ pub fn execute_with_pty(
     let mut child = pair
         .slave
         .spawn_command(cmd)
-        .context(format!("Failed to spawn PTY command: {}", actual_command))?;
+        .context(format!("Failed to spawn PTY command: {actual_command}"))?;
 
     // Store child PID for signal handling
     if let Some(pid) = child.process_id() {
@@ -554,9 +554,7 @@ fn handle_pty_io(
                                         if let Err(e) = writer.write_all(&buffer[..n]) {
                                             if !done_writer.load(Ordering::Relaxed) {
                                                 log::warn!(
-                                                    "[{}] Failed to write to PTY: {}",
-                                                    cmd_id_stdin,
-                                                    e
+                                                    "[{cmd_id_stdin}] Failed to write to PTY: {e}"
                                                 );
                                             }
                                             break;
@@ -566,7 +564,7 @@ fn handle_pty_io(
                                 }
                             }
                             Err(e) => {
-                                log::warn!("[{}] Failed to read from stdin: {}", cmd_id_stdin, e);
+                                log::warn!("[{cmd_id_stdin}] Failed to read from stdin: {e}");
                                 break;
                             }
                         }
@@ -574,7 +572,7 @@ fn handle_pty_io(
                     Ok(_) => continue, // Spurious wakeup
                     Err(e) => {
                         if e != nix::errno::Errno::EINTR {
-                            log::warn!("[{}] select() failed: {}", cmd_id_stdin, e);
+                            log::warn!("[{cmd_id_stdin}] select() failed: {e}");
                             break;
                         }
                     }
@@ -634,19 +632,19 @@ fn handle_pty_io(
                             }
                             Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
                             Err(e) => {
-                                log::warn!("[{}] Failed to write to stdout: {}", cmd_id_output, e);
+                                log::warn!("[{cmd_id_output}] Failed to write to stdout: {e}");
                                 break;
                             }
                         }
                     }
                     // Flush after processing the buffer
                     if let Err(e) = stdout.flush() {
-                        log::warn!("[{}] Failed to flush stdout: {}", cmd_id_output, e);
+                        log::warn!("[{cmd_id_output}] Failed to flush stdout: {e}");
                     }
                 }
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
                 Err(e) => {
-                    log::error!("[{}] Failed to read from PTY: {}", cmd_id_output, e);
+                    log::error!("[{cmd_id_output}] Failed to read from PTY: {e}");
                     break;
                 }
             }
@@ -724,11 +722,11 @@ fn verify_process_group(pid: Option<u32>) {
         // This is for debugging/verification only
         use std::process::Command;
         if let Ok(output) = Command::new("ps")
-            .args(&["-o", "pid,pgid,tpgid,stat", "-p", &pid.to_string()])
+            .args(["-o", "pid,pgid,tpgid,stat", "-p", &pid.to_string()])
             .output()
         {
             let output_str = String::from_utf8_lossy(&output.stdout);
-            log::debug!("Process group info for {}: {}", pid, output_str);
+            log::debug!("Process group info for {pid}: {output_str}");
             // We want pid==pgid==tpgid for proper session leader
         }
     }

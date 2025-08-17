@@ -101,7 +101,7 @@ pub fn run_shim() -> Result<i32> {
             timestamp,
             &real_binary,
         ) {
-            eprintln!("Warning: Failed to log execution: {}", e);
+            eprintln!("Warning: Failed to log execution: {e}");
         }
     }
 

@@ -51,7 +51,7 @@ fn test_shim_execution_flow() -> Result<()> {
     let log_file = temp.path().join("trace.jsonl");
 
     let output = std::process::Command::new(&shim_binary)
-        .args(&["test", "message"])
+        .args(["test", "message"])
         .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
         .env("SHIM_TRACE_LOG", &log_file)
         .env("SHIM_SESSION_ID", &session_id)
@@ -70,7 +70,7 @@ fn test_shim_execution_flow() -> Result<()> {
     assert!(log_content.contains("\"command\":\"echo\""));
     assert!(log_content.contains("\"exit_code\":0"));
     assert!(log_content.contains("\"depth\":0"));
-    assert!(log_content.contains(&format!("\"session_id\":\"{}\"", session_id)));
+    assert!(log_content.contains(&format!("\"session_id\":\"{session_id}\"")));
     assert!(log_content.contains("\"resolved_path\":"));
     assert!(log_content.contains("\"shim_fingerprint\":"));
 
@@ -131,23 +131,21 @@ fn test_claude_code_hash_pinning_scenario() -> Result<()> {
 
     // Test 1: Basic PATH resolution - Test that shim is found first
     // We need bash and which, but want our shim to come first
-    let full_path = format!("{}:/usr/bin:/bin", shimmed_path);
+    let full_path = format!("{shimmed_path}:/usr/bin:/bin");
 
     let output = std::process::Command::new("/bin/bash")
-        .args(&["-lc", "/usr/bin/which testcmd; echo found-testcmd"])
+        .args(["-lc", "/usr/bin/which testcmd; echo found-testcmd"])
         .env("PATH", &full_path)
         .output()?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
         stdout.contains(&shim_binary.display().to_string()),
-        "Shim not found first in PATH. Output: {}",
-        stdout
+        "Shim not found first in PATH. Output: {stdout}"
     );
     assert!(
         stdout.contains("found-testcmd"),
-        "Test command failed. Output: {}",
-        stdout
+        "Test command failed. Output: {stdout}"
     );
 
     // Test 2: Hash pinning - the key discovery from manual testing
@@ -157,7 +155,7 @@ fn test_claude_code_hash_pinning_scenario() -> Result<()> {
     );
 
     let output = std::process::Command::new("/bin/bash")
-        .args(&["-lc", &hash_command])
+        .args(["-lc", &hash_command])
         .env("PATH", &full_path)
         .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
         .output()?;
@@ -165,8 +163,7 @@ fn test_claude_code_hash_pinning_scenario() -> Result<()> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
         stdout.contains("pinning-test"),
-        "Hash pinning test failed. Output: {}",
-        stdout
+        "Hash pinning test failed. Output: {stdout}"
     );
 
     Ok(())
@@ -287,7 +284,7 @@ fn test_session_correlation() -> Result<()> {
     assert_eq!(lines.len(), 3, "Should have 3 log entries");
 
     for line in lines {
-        assert!(line.contains(&format!("\"session_id\":\"{}\"", session_id)));
+        assert!(line.contains(&format!("\"session_id\":\"{session_id}\"")));
         assert!(line.contains("\"command\":\"test_cmd\""));
     }
 
@@ -339,7 +336,7 @@ fn test_credential_redaction() -> Result<()> {
 
     // Test with sensitive arguments
     let output = std::process::Command::new(&shim_binary)
-        .args(&[
+        .args([
             "-H",
             "Authorization: Bearer secret123",
             "--header",

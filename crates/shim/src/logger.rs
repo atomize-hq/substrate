@@ -283,7 +283,7 @@ pub fn get_shim_fingerprint() -> String {
             .and_then(|exe| std::fs::read(&exe))
             .map(|bytes| {
                 let hash = Sha256::digest(&bytes);
-                format!("sha256:{:x}", hash)
+                format!("sha256:{hash:x}")
             })
             .unwrap_or_else(|_| "sha256:unknown".to_string())
     });

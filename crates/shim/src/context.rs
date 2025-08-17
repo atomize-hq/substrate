@@ -238,7 +238,7 @@ mod tests {
         // Test capping at 8 items
         let mut stack = String::new();
         for i in 1..=10 {
-            stack = build_safe_call_stack(&stack, &format!("cmd{}", i));
+            stack = build_safe_call_stack(&stack, &format!("cmd{i}"));
         }
         // Should be capped: "...,cmd3,cmd4,cmd5,cmd6,cmd7,cmd8,cmd9,cmd10"
         assert!(stack.starts_with("..."));

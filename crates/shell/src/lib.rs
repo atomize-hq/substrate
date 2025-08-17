@@ -22,9 +22,9 @@ use uuid::Uuid;
 // Reedline imports
 use reedline::{
     default_emacs_keybindings, ColumnarMenu, Completer, DefaultValidator, Emacs,
-    ExampleHighlighter, FileBackedHistory, KeyCode, KeyModifiers, MenuBuilder,
-    Prompt, PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus, Reedline,
-    ReedlineEvent, ReedlineMenu, Signal, Span, Suggestion,
+    ExampleHighlighter, FileBackedHistory, KeyCode, KeyModifiers, MenuBuilder, Prompt,
+    PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus, Reedline, ReedlineEvent,
+    ReedlineMenu, Signal, Span, Suggestion,
 };
 // use nu_ansi_term::{Color, Style}; // Unused for now
 use std::borrow::Cow;
@@ -34,6 +34,9 @@ use std::os::unix::process::ExitStatusExt;
 // Global flag to prevent double SIGINT handling - must be pub(crate) for pty_exec access
 pub(crate) static PTY_ACTIVE: AtomicBool = AtomicBool::new(false);
 
+// Type alias to simplify complex PTY type
+type CurrentPtyType = Arc<Mutex<Option<Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>>>>;
+
 // Global SIGWINCH handler state - must be pub(crate) for pty_exec access
 lazy_static! {
     // Store the current PTY as a mutex-wrapped Box<dyn MasterPty + Send>
@@ -41,8 +44,7 @@ lazy_static! {
     // portable_pty::MasterPty is not Sync. The outer mutex protects Option swapping,
     // the inner mutex protects the MasterPty itself. This could be simplified if
     // portable_pty adds Sync to MasterPty trait in the future.
-    pub(crate) static ref CURRENT_PTY: Arc<Mutex<Option<Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>>>> =
-        Arc::new(Mutex::new(None));
+    pub(crate) static ref CURRENT_PTY: CurrentPtyType = Arc::new(Mutex::new(None));
 }
 
 // Forward declaration for pty_exec module
@@ -287,7 +289,7 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
     );
 
     // Create completer
-    let completer = Box::new(SubstrateCompleter::new(&config));
+    let completer = Box::new(SubstrateCompleter::new(config));
 
     // Create the line editor
     let edit_mode = Box::new(Emacs::new(keybindings));
@@ -343,7 +345,7 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
                             if !status.success() {
                                 #[cfg(unix)]
                                 if let Some(sig) = status.signal() {
-                                    eprintln!("Command terminated by signal {}", sig);
+                                    eprintln!("Command terminated by signal {sig}");
                                 } else {
                                     eprintln!(
                                         "Command failed with status: {}",
@@ -357,7 +359,7 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
                                 );
                             }
                         }
-                        Err(e) => eprintln!("Error: {}", e),
+                        Err(e) => eprintln!("Error: {e}"),
                     }
                     // Guard automatically drops and resumes here
                 } else {
@@ -366,7 +368,7 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
                             if !status.success() {
                                 #[cfg(unix)]
                                 if let Some(sig) = status.signal() {
-                                    eprintln!("Command terminated by signal {}", sig);
+                                    eprintln!("Command terminated by signal {sig}");
                                 } else {
                                     eprintln!(
                                         "Command failed with status: {}",
@@ -380,7 +382,7 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
                                 );
                             }
                         }
-                        Err(e) => eprintln!("Error: {}", e),
+                        Err(e) => eprintln!("Error: {e}"),
                     }
                 }
             }
@@ -393,7 +395,7 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
                 break;
             }
             Err(e) => {
-                eprintln!("Error: {:?}", e);
+                eprintln!("Error: {e:?}");
                 break;
             }
         }
@@ -401,7 +403,7 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
 
     // Save history before exit
     if let Err(e) = line_editor.sync_history() {
-        log::warn!("Failed to save history: {}", e);
+        log::warn!("Failed to save history: {e}");
     }
 
     Ok(0)
@@ -560,12 +562,12 @@ fn run_pipe_mode(config: &ShellConfig) -> Result<i32> {
             Ok(status) => {
                 last_status = exit_code(status);
                 if !status.success() && config.ci_mode && !config.no_exit_on_error {
-                    eprintln!("Command failed: {}", line);
+                    eprintln!("Command failed: {line}");
                     return Ok(last_status);
                 }
             }
             Err(e) => {
-                eprintln!("Error: {}", e);
+                eprintln!("Error: {e}");
                 if !config.no_exit_on_error {
                     return Ok(1);
                 }
@@ -592,13 +594,13 @@ pub fn needs_shell(cmd: &str) -> bool {
 
 fn set_bashenv_trampoline(cmd: &mut Command) {
     if let Ok(home) = std::env::var("HOME") {
-        let preexec_path = format!("{}/.substrate_preexec", home);
+        let preexec_path = format!("{home}/.substrate_preexec");
         // Base trap file we already write:
         let _ = std::fs::write(&preexec_path, BASH_PREEXEC_SCRIPT);
 
         // If user had BASH_ENV, create a trampoline that sources it first.
         if let Ok(user_be) = std::env::var("BASH_ENV") {
-            let tramp = format!("{}/.substrate_bashenv_trampoline", home);
+            let tramp = format!("{home}/.substrate_bashenv_trampoline");
             let content = format!(
                 r#"#!/usr/bin/env bash
 # chain user's BASH_ENV then our trap
@@ -700,7 +702,7 @@ fn container_wants_pty(cmd_lower: &str, tokens: &[String]) -> bool {
                 if token == "--" {
                     break;
                 }
-                if token.starts_with('-') {
+                if let Some(stripped) = token.strip_prefix('-') {
                     if token == "-it" || token == "-ti" {
                         return true;
                     }
@@ -710,8 +712,8 @@ fn container_wants_pty(cmd_lower: &str, tokens: &[String]) -> bool {
                     if token == "-t" || token == "--tty" {
                         has_t = true;
                     }
-                    if token.starts_with('-') && !token.starts_with("--") && token.len() > 1 {
-                        let chars: Vec<char> = token[1..].chars().collect();
+                    if !token.starts_with("--") && !stripped.is_empty() {
+                        let chars: Vec<char> = stripped.chars().collect();
                         if chars.contains(&'i') {
                             has_i = true;
                         }
@@ -784,13 +786,12 @@ fn wants_debugger_pty(cmd_lower: &str, tokens: &[String]) -> bool {
     }
 
     // Node debuggers: node inspect or node --inspect-brk
-    if cmd_lower == "node" {
-        if tokens
+    if cmd_lower == "node"
+        && tokens
             .iter()
             .any(|t| t == "inspect" || t == "--inspect" || t == "--inspect-brk")
-        {
-            return true;
-        }
+    {
+        return true;
     }
 
     false
@@ -932,10 +933,11 @@ fn peel_wrappers(tokens: &[String]) -> Vec<String> {
             // Wrappers that take 1 argument
             "sshpass" => {
                 // sshpass -p pass cmd... or sshpass -f file cmd...
-                if i + 1 < tokens.len() && (tokens[i + 1] == "-p" || tokens[i + 1] == "-f") {
-                    if i + 3 < tokens.len() {
-                        return tokens[i + 3..].to_vec(); // Skip sshpass -p pass
-                    }
+                if i + 1 < tokens.len()
+                    && (tokens[i + 1] == "-p" || tokens[i + 1] == "-f")
+                    && i + 3 < tokens.len()
+                {
+                    return tokens[i + 3..].to_vec(); // Skip sshpass -p pass
                 }
                 return tokens[i + 1..].to_vec(); // Skip just sshpass
             }
@@ -1413,7 +1415,7 @@ fn execute_command(
                     || kl.contains("apikey")
                     || kl.contains("api_key")
                 {
-                    out.push(format!("{}=***", k));
+                    out.push(format!("{k}=***"));
                     i += 1;
                     continue;
                 }
@@ -1498,7 +1500,7 @@ fn handle_builtin(
                 None => "~".to_string(),
                 Some("-") => {
                     if let Ok(oldpwd) = env::var("OLDPWD") {
-                        println!("{}", oldpwd);
+                        println!("{oldpwd}");
                         oldpwd
                     } else {
                         "~".to_string()
@@ -1573,7 +1575,7 @@ fn execute_external(
     let shell = &config.shell_path;
 
     // Verify shell exists
-    if !which::which(shell).is_ok() && !Path::new(shell).exists() {
+    if which::which(shell).is_err() && !Path::new(shell).exists() {
         return Err(anyhow::anyhow!("Shell not found: {}", shell));
     }
 
@@ -1597,7 +1599,7 @@ fn execute_external(
             cmd.arg("-NoProfile")
                 .arg("-NonInteractive")
                 .arg("-Command")
-                .arg(&format!("$ErrorActionPreference='Stop'; {}", command));
+                .arg(format!("$ErrorActionPreference='Stop'; {command}"));
         } else {
             cmd.arg("-NoProfile").arg("-Command").arg(command);
         }
@@ -1652,14 +1654,14 @@ fn execute_external(
     // Spawn and track child PID for signal handling
     let mut child = cmd
         .spawn()
-        .with_context(|| format!("Failed to execute: {}", command))?;
+        .with_context(|| format!("Failed to execute: {command}"))?;
 
     let child_pid = child.id() as i32;
     running_child_pid.store(child_pid, Ordering::SeqCst);
 
     let status = child
         .wait()
-        .with_context(|| format!("Failed to wait for command: {}", command))?;
+        .with_context(|| format!("Failed to wait for command: {command}"))?;
 
     // Clear the running PID
     running_child_pid.store(0, Ordering::SeqCst);
@@ -1785,7 +1787,7 @@ fn log_command_event(
     if line.contains('\n') {
         line = line.replace('\n', "\\n");
     }
-    writeln!(file, "{}", line).with_context(|| {
+    writeln!(file, "{line}").with_context(|| {
         format!(
             "Failed to write log entry to: {}",
             config.trace_log_file.display()
@@ -1839,10 +1841,10 @@ fn setup_signal_handlers(running_child_pid: Arc<AtomicI32>) -> Result<()> {
 
         let running = running_child_pid.clone();
         thread::spawn(move || {
-            let mut signals = match Signals::new(&[SIGTERM, SIGQUIT, SIGHUP]) {
+            let mut signals = match Signals::new([SIGTERM, SIGQUIT, SIGHUP]) {
                 Ok(s) => s,
                 Err(e) => {
-                    log::warn!("Failed to register additional signal handlers: {}", e);
+                    log::warn!("Failed to register additional signal handlers: {e}");
                     return;
                 }
             };

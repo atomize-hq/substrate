@@ -11,7 +11,7 @@ Substrate is becoming the **foundational platform for secure AI-assisted develop
 - **Intelligent Analysis**: Graph-based understanding of command relationships and dependencies
 - **Cross-Platform Security**: Consistent isolation across Linux, macOS, and Windows
 
-## Phase 4: Security & Agent Integration
+## Security & Agent Integration
 
 ### Security Worlds
 
@@ -28,6 +28,7 @@ git commit -m "feat"  # Allowed: matches policy
 ```
 
 **Features**:
+
 - Filesystem isolation with overlayfs
 - Network filtering via nftables/iptables
 - Resource limits via cgroups
@@ -45,6 +46,7 @@ curl --unix-socket ~/.substrate/sock/agent.sock \
 ```
 
 **Capabilities**:
+
 - Per-agent execution budgets
 - Scope-based permission tokens
 - PTY streaming for interactive commands
@@ -91,6 +93,7 @@ substrate replay span_abc123
 ### Linux (Native)
 
 Full isolation using Linux kernel features:
+
 - Namespaces for process/filesystem/network isolation
 - Cgroups v2 for resource limits
 - Seccomp for syscall filtering
@@ -99,6 +102,7 @@ Full isolation using Linux kernel features:
 ### macOS (Lima Integration)
 
 Consistent experience via lightweight Linux VM:
+
 - Lima VM with virtiofs for fast file access
 - All isolation happens inside VM using Linux stack
 - Transparent integration with host development workflow
@@ -106,6 +110,7 @@ Consistent experience via lightweight Linux VM:
 ### Windows (WSL2 Integration)
 
 Future support via WSL2 integration:
+
 - WSL2 distro as isolation backend
 - ConPTY for terminal handling
 - Reuse Linux isolation code inside WSL2
@@ -117,18 +122,21 @@ Future support via WSL2 integration:
 Advanced capabilities planned for later phases:
 
 **Enhanced Security**:
+
 - Advanced seccomp policy tuning for granular syscall filtering
 - Sophisticated domain/SNI-based network egress controls
 - Complex network filtering with deep packet inspection
 - High-isolation microVMs for maximum security scenarios
 
 **AI/ML Integration**:
+
 - Human-readable command training datasets for ML applications
 - Intelligent command suggestion and completion
 - Automated policy generation from usage patterns
 - Predictive resource allocation
 
 **Platform Extensions**:
+
 - Firecracker integration for Linux high-isolation scenarios
 - Advanced Windows integration beyond WSL2
 - Container runtime integration (Docker, Podman)
