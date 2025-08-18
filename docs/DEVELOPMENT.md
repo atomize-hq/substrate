@@ -17,7 +17,6 @@ substrate/
 │   ├── common/               # Shared utilities and log schema
 │   ├── shell/                # Custom shell implementation
 │   ├── shim/                 # Binary shimming implementation
-│   └── supervisor/           # Process supervision
 ├── third_party/reedline/     # Custom Reedline fork
 ├── scripts/                  # Deployment and management scripts
 └── docs/                     # Documentation
@@ -43,7 +42,6 @@ cargo build --release
 # Build individual components
 cargo build --bin substrate
 cargo build --bin substrate-shim
-cargo build --bin substrate-supervisor
 
 # Build with features
 cargo build --release --features production
@@ -111,8 +109,7 @@ cargo doc --no-deps  # Skip dependencies
 substrate-common (base utilities)
     ↑
     ├── substrate-shim (command interception)
-    ├── substrate (custom shell)
-    └── substrate-supervisor (process management)
+    └── substrate (custom shell)
 ```
 
 ### Design Principles
@@ -126,16 +123,19 @@ substrate-common (base utilities)
 ### Module Organization
 
 **substrate-shim**:
+
 - `context.rs`: Environment detection
 - `resolver.rs`: Binary path resolution with caching
 - `logger.rs`: Structured logging
 - `exec.rs`: Process execution
 
 **substrate (shell)**:
+
 - `lib.rs`: Shell modes and built-in commands
 - `pty_exec.rs`: PTY management and terminal emulation
 
 **substrate-common**:
+
 - Shared utilities (path handling, redaction)
 - Cross-component constants and types
 
@@ -254,7 +254,7 @@ time git --version                    # Warm cache
 ```bash
 # Create release binaries
 cargo build --release
-tar -czf substrate-v0.x.x-$(uname -m).tar.gz -C target/release substrate substrate-shim substrate-supervisor
+tar -czf substrate-v0.x.x-$(uname -m).tar.gz -C target/release substrate substrate-shim
 ```
 
 For contributing guidelines, see [CONTRIBUTING.md](../CONTRIBUTING.md).

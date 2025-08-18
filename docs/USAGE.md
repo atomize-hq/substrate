@@ -125,16 +125,6 @@ which git  # Should show shim path
 git --version  # Should work with logging
 ```
 
-## Process Supervision
-
-```bash
-# Direct execution
-substrate-supervisor git status
-
-# With custom environment
-substrate-supervisor npm install
-```
-
 ## Log Analysis
 
 Commands are logged in structured JSONL format:

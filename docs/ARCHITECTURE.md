@@ -22,8 +22,7 @@ User Command → Shell Resolution → PATH Lookup → Shim Intercept → Logging
 substrate-common (base utilities)
     ↑
     ├── substrate-shim (command interception)
-    ├── substrate (custom shell)
-    └── substrate-supervisor (process management)
+    └── substrate (custom shell)
 ```
 
 ## Core Components
@@ -153,34 +152,6 @@ pub mod log_schema {
 }
 ```
 
-### 4. Supervisor (`crates/supervisor/`)
-
-**Purpose**: Process supervision and environment management.
-
-**Package**: `substrate-supervisor`
-
-**Current Status**: Fully implemented with core functionality
-
-**Key Features**:
-- Process lifecycle management via `launch_supervised()`
-- Environment setup and PATH management
-- Session seeding and correlation
-- Clean PATH construction with shim integration
-- BASH_ENV setup for non-interactive shells
-
-**API**:
-```rust
-pub struct SupervisorConfig {
-    pub shim_dir: PathBuf,
-    pub original_path: String,
-    pub bash_env_file: Option<PathBuf>,
-    pub target_command: Vec<String>,
-    pub environment: HashMap<String, String>,
-}
-
-pub fn launch_supervised(config: SupervisorConfig) -> Result<()>
-```
-
 ## Third-Party Dependencies
 
 ### Reedline Fork
@@ -214,7 +185,7 @@ interface LogEntry {
   event_type: string;          // Event classification
   session_id: string;          // UUIDv7 for correlation
   cmd_id?: string;             // Command-specific UUID
-  component: "shim" | "shell" | "supervisor";
+  component: "shim" | "shell";
   // ... additional fields per event type
 }
 ```
@@ -388,7 +359,6 @@ All shim-related environment variables use the `SHIM_` prefix, shell-specific us
 ### Planned Enhancements
 
 The OLD_ARCHITECTURE.md file contains detailed plans for future enhancements including:
-- Enhanced supervisor capabilities
 - Advanced shell features (job control, aliases, completion)
 - Windows full support improvements
 - Observability improvements (metrics export, streaming API)

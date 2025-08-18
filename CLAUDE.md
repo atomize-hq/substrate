@@ -90,9 +90,6 @@ The project uses a Cargo workspace with four main crates:
    - Binary fingerprinting (SHA-256)
    - Comprehensive credential redaction
 
-4. **`crates/supervisor/`**: Process supervision (partially implemented)
-   - Currently contains minimal implementation
-   - Future expansion planned for process management
 
 ### Key Design Patterns
 

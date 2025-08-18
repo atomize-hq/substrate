@@ -114,18 +114,6 @@ Future: Lima VM integration for complete feature parity.
 Current: Basic support via ConPTY.
 Future: WSL2 integration for full feature support.
 
-## Process Supervisor
-
-Optional process management utility:
-
-```bash
-# Direct usage
-target/release/substrate-supervisor git status
-
-# Or install to PATH
-sudo cp target/release/substrate-supervisor /usr/local/bin/
-```
-
 ## Verification
 
 Test your installation:
@@ -139,9 +127,6 @@ substrate> exit
 # Command tracing
 git --version
 tail -1 ~/.trace_shell.jsonl
-
-# Process supervision
-substrate-supervisor echo "Hello, World!"
 ```
 
 ## Troubleshooting
