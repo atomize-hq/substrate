@@ -4,7 +4,7 @@ set -euo pipefail
 # Stage substrate shims for command tracing
 # This script deploys the built shim binary to intercept common development commands
 
-SHIM_DIR="$HOME/.cmdshim_rust"
+SHIM_DIR="$HOME/.substrate/shims"
 TARGET_BINARY="${1:-target/release/substrate-shim}"
 
 # Commands to shim - curated list for development safety

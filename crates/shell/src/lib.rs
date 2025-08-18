@@ -1,5 +1,9 @@
+mod lock;
 mod pty_exec;
+pub mod shim_deploy;  // Made public for integration tests
+
 use pty_exec::execute_with_pty;
+use shim_deploy::{DeploymentStatus, ShimDeployer};
 
 use anyhow::{Context, Result};
 use chrono::Utc;
@@ -173,7 +177,7 @@ impl ShellConfig {
             .or_else(|_| env::var("PATH"))
             .context("No PATH found")?;
 
-        let shim_dir = PathBuf::from(&home).join(".cmdshim_rust");
+        let shim_dir = substrate_common::paths::shims_dir()?;
 
         // Determine shell to use
         let shell_path = if let Some(shell) = cli.shell {
@@ -221,6 +225,25 @@ impl ShellConfig {
 
 pub fn run_shell() -> Result<i32> {
     let config = ShellConfig::from_args()?;
+
+    // Deploy shims if needed (non-blocking, continues on error)
+    let skip_shims = env::var("SUBSTRATE_NO_SHIMS").is_ok();
+    match ShimDeployer::with_skip(skip_shims)?.ensure_deployed() {
+        Ok(DeploymentStatus::Deployed) => {
+            // Shims were deployed, no additional action needed
+        }
+        Ok(DeploymentStatus::Failed(msg)) => {
+            eprintln!("Warning: Shim deployment failed: {msg}");
+            // Continue without shims
+        }
+        Ok(_) => {
+            // Current, Skipped - no action needed
+        }
+        Err(e) => {
+            eprintln!("Warning: Error checking shim deployment: {e}");
+            // Continue without shims
+        }
+    }
 
     // Set up environment for child processes
     env::set_var("SHIM_SESSION_ID", &config.session_id);

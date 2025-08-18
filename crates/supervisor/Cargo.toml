@@ -19,3 +19,4 @@ path = "src/main.rs"
 anyhow = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
+substrate-common = { path = "../common" }

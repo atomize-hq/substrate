@@ -138,7 +138,7 @@ When modifying the codebase:
 ## Deployment Scripts
 
 Located in `scripts/`:
-- `stage_shims.sh`: Creates shimmed binaries in `~/.cmdshim_rust/`
+- `stage_shims.sh`: Creates shimmed binaries in `~/.substrate/shims/`
 - `create_bashenv.sh`: Sets up non-interactive shell environment
 - `rollback.sh`: Emergency rollback to restore original environment
 

@@ -37,7 +37,7 @@ substrate
 
 # 3. Deploy command interception (optional)
 substrate-shim --deploy
-export PATH="$HOME/.cmdshim_rust:$PATH"
+export PATH="$HOME/.substrate/shims:$PATH"
 ```
 
 ### Alternative: Build from Source

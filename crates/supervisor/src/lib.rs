@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::env;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use substrate_common::paths;
 
 pub struct SupervisorConfig {
     pub shim_dir: PathBuf,
@@ -16,7 +17,7 @@ impl SupervisorConfig {
     pub fn new(target_command: Vec<String>) -> Result<Self> {
         let home = env::var("HOME").context("HOME environment variable not set")?;
 
-        let shim_dir = PathBuf::from(&home).join(".cmdshim_rust");
+        let shim_dir = paths::shims_dir()?;
 
         // Build clean original path from current PATH, removing any shim directories
         let original_path = build_default_path(&home)?;
@@ -100,7 +101,7 @@ pub fn launch_supervised(config: SupervisorConfig) -> Result<()> {
 fn build_default_path(home: &str) -> Result<String> {
     // Start with parent PATH if available, otherwise use common paths
     if let Ok(parent_path) = env::var("PATH") {
-        let shim_dir = format!("{home}/.cmdshim_rust");
+        let shim_dir = format!("{home}/.substrate/shims");
         Ok(strip_shim_dir_from_path(&parent_path, &shim_dir))
     } else {
         // Fallback to common paths for macOS/Linux development environments
@@ -160,8 +161,8 @@ mod tests {
 
     #[test]
     fn test_strip_shim_dir() {
-        let path = "/usr/bin:/home/user/.cmdshim_rust:/bin";
-        let shim_dir = "/home/user/.cmdshim_rust";
+        let path = "/usr/bin:/home/user/.substrate/shims:/bin";
+        let shim_dir = "/home/user/.substrate/shims";
         let result = strip_shim_dir_from_path(path, shim_dir);
         assert_eq!(result, "/usr/bin:/bin");
     }
@@ -172,6 +173,6 @@ mod tests {
         assert!(config.is_ok());
         let config = config.unwrap();
         assert_eq!(config.target_command, vec!["echo", "test"]);
-        assert!(config.shim_dir.ends_with(".cmdshim_rust"));
+        assert!(config.shim_dir.ends_with("shims"));
     }
 }

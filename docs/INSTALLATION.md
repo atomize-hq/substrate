@@ -63,14 +63,14 @@ Deploy binary shims for transparent command tracing:
 
 # Configure environment
 export SHIM_ORIGINAL_PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-export PATH="$HOME/.cmdshim_rust:$SHIM_ORIGINAL_PATH"
+export PATH="$HOME/.substrate/shims:$SHIM_ORIGINAL_PATH"
 export SHIM_TRACE_LOG="$HOME/.trace_shell.jsonl"
 
 # Clear command cache
 hash -r
 
 # Verify installation
-which git  # Should show: ~/.cmdshim_rust/git
+which git  # Should show: ~/.substrate/shims/git
 git --version  # Should work normally with logging
 ```
 
@@ -144,7 +144,7 @@ substrate-supervisor echo "Hello, World!"
 - Check `SHIM_ORIGINAL_PATH` excludes shim directory
 
 **Permission errors**:
-- Verify shim binaries are executable: `chmod +x ~/.cmdshim_rust/*`
+- Verify shim binaries are executable: `chmod +x ~/.substrate/shims/*`
 - Check log file permissions and directory access
 
 **Emergency recovery**:
@@ -154,7 +154,7 @@ substrate-supervisor echo "Hello, World!"
 
 # Or manual cleanup
 export PATH="$SHIM_ORIGINAL_PATH"
-rm -rf ~/.cmdshim_rust
+rm -rf ~/.substrate/shims
 ```
 
 For detailed troubleshooting, see [USAGE.md](USAGE.md#troubleshooting).

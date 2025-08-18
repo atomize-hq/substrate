@@ -73,7 +73,7 @@ export SUBSTRATE_PTY_DEBUG=1      # Enable PTY debug logging
 ./scripts/stage_shims.sh
 
 # Configure PATH
-export PATH="$HOME/.cmdshim_rust:$SHIM_ORIGINAL_PATH"
+export PATH="$HOME/.substrate/shims:$SHIM_ORIGINAL_PATH"
 hash -r
 ```
 
@@ -88,8 +88,8 @@ export BASH_ENV="$HOME/.substrate_bashenv"
 
 # 2. Use hash pinning for reliable resolution
 hash -r
-hash -p "$HOME/.cmdshim_rust/git" git
-hash -p "$HOME/.cmdshim_rust/npm" npm
+hash -p "$HOME/.substrate/shims/git" git
+hash -p "$HOME/.substrate/shims/npm" npm
 
 # 3. Verify integration
 which git  # Should show shim path

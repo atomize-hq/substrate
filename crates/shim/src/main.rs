@@ -1,6 +1,6 @@
 //! Substrate command shim - intercepts and logs command execution
 //!
-//! This binary is copied to multiple names in ~/.cmdshim_rust/ to intercept
+//! This binary is copied to multiple names in ~/.substrate/shims/ to intercept
 //! different commands. It resolves the real binary from a clean PATH and
 //! executes it while logging the invocation.
 

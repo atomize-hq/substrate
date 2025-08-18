@@ -31,7 +31,7 @@ This guide covers operational aspects of the Substrate command tracing system ba
 2. **Deploy shims using the staging script**:
 
    ```bash
-   # Deploy shims to ~/.cmdshim_rust/
+   # Deploy shims to ~/.substrate/shims/
    ./scripts/stage_shims.sh
    
    # Script automatically uses target/release/substrate-shim if no argument provided
@@ -46,7 +46,7 @@ This guide covers operational aspects of the Substrate command tracing system ba
    export SHIM_ORIGINAL_PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
    
    # Required: Update PATH to include shims first
-   export PATH="$HOME/.cmdshim_rust:$SHIM_ORIGINAL_PATH"
+   export PATH="$HOME/.substrate/shims:$SHIM_ORIGINAL_PATH"
    
    # Optional: Specify log file (defaults to ~/.trace_shell.jsonl)
    export SHIM_TRACE_LOG="$HOME/.trace_shell.jsonl"
@@ -57,7 +57,7 @@ This guide covers operational aspects of the Substrate command tracing system ba
 
 4. **Verify basic deployment**:
    ```bash
-   which git    # Should show: ~/.cmdshim_rust/git
+   which git    # Should show: ~/.substrate/shims/git
    type git     # Should show shim first
    git --version  # Should work normally
    
@@ -201,7 +201,7 @@ echo $SHIM_ORIGINAL_PATH  # Should not contain shim directory
 **Solution**:
 ```bash
 # Ensure proper PATH setup
-export PATH="$HOME/.cmdshim_rust:$SHIM_ORIGINAL_PATH"
+export PATH="$HOME/.substrate/shims:$SHIM_ORIGINAL_PATH"
 hash -r  # Clear shell command cache
 ```
 
@@ -227,13 +227,13 @@ unset SHIM_BYPASS
 
 **Diagnosis**:
 ```bash
-ls -la ~/.cmdshim_rust/  # Check shim permissions
-file ~/.cmdshim_rust/.shimbin  # Verify binary type
+ls -la ~/.substrate/shims/  # Check shim permissions
+file ~/.substrate/shims/.shimbin  # Verify binary type
 ```
 
 **Solution**:
 ```bash
-chmod +x ~/.cmdshim_rust/*
+chmod +x ~/.substrate/shims/*
 # Or re-run staging script
 ./scripts/stage_shims.sh
 ```
@@ -262,9 +262,9 @@ export SUBSTRATE_DISABLE_PTY=1
 
 ```bash
 # Check shim binary integrity and installation
-file ~/.cmdshim_rust/.shimbin
-md5sum ~/.cmdshim_rust/.shimbin ~/.cmdshim_rust/git
-ls -la ~/.cmdshim_rust/ | head -10
+file ~/.substrate/shims/.shimbin
+md5sum ~/.substrate/shims/.shimbin ~/.substrate/shims/git
+ls -la ~/.substrate/shims/ | head -10
 
 # Test path resolution and caching
 SHIM_CACHE_BUST=1 SHIM_TRACE_LOG=/tmp/debug.jsonl git --version
@@ -359,7 +359,7 @@ SHIM_CACHE_BUST=1 time git --version  # Cold cache
 cargo build --release
 
 # 2. Backup current installation
-cp -r ~/.cmdshim_rust ~/.cmdshim_rust.backup.$(date +%Y%m%d)
+cp -r ~/.substrate/shims ~/.substrate/shims.backup.$(date +%Y%m%d)
 
 # 3. Deploy new version
 ./scripts/stage_shims.sh
@@ -396,7 +396,7 @@ If shims cause system instability:
 ./scripts/rollback.sh
 
 # Manual rollback if script fails
-mv ~/.cmdshim_rust ~/.cmdshim_rust.disabled
+mv ~/.substrate/shims ~/.substrate/shims.disabled
 export PATH="$SHIM_ORIGINAL_PATH"
 hash -r
 ```
@@ -420,7 +420,7 @@ export SHIM_BYPASS=1
 export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 # If you can't access the rollback script
-rm -rf ~/.cmdshim_rust
+rm -rf ~/.substrate/shims
 unset SHIM_ORIGINAL_PATH SHIM_TRACE_LOG BASH_ENV
 hash -r
 ```
@@ -452,7 +452,7 @@ type git npm node
 which -a git npm node
 
 # Test hash pinning
-hash -p "$HOME/.cmdshim_rust/git" git
+hash -p "$HOME/.substrate/shims/git" git
 type git  # Should show pinned path
 ```
 
@@ -514,8 +514,8 @@ echo "SHIM_TRACE_LOG: $SHIM_TRACE_LOG"
 echo "BASH_ENV: $BASH_ENV"
 
 echo "=== Shim Installation ==="
-ls -la ~/.cmdshim_rust/ | head -10
-file ~/.cmdshim_rust/.shimbin
+ls -la ~/.substrate/shims/ | head -10
+file ~/.substrate/shims/.shimbin
 
 echo "=== Recent Activity ==="
 tail -5 ~/.trace_shell.jsonl | jq '.'

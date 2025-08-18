@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Create ~/.substrate_bashenv for non-interactive shell environments
 BASHENV_FILE="$HOME/.substrate_bashenv"
-SHIM_DIR="$HOME/.cmdshim_rust"
+SHIM_DIR="$HOME/.substrate/shims"
 
 echo "Creating $BASHENV_FILE for non-interactive shell support"
 
@@ -20,7 +20,7 @@ fi
 export SHIM_ORIGINAL_PATH="${SHIM_ORIGINAL_PATH:-$PATH}"
 
 # Build clean shimmed PATH
-SHIM_DIR="$HOME/.cmdshim_rust"
+SHIM_DIR="$HOME/.substrate/shims"
 if [[ -d "$SHIM_DIR" ]]; then
     # Dedupe PATH components
     IFS=':' read -r -a parts <<<"$SHIM_DIR:$SHIM_ORIGINAL_PATH"

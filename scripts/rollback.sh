@@ -4,7 +4,7 @@ set -euo pipefail
 # Emergency rollback of substrate shims
 # This script safely removes all shim components and restores original environment
 
-SHIM_DIR="$HOME/.cmdshim_rust"
+SHIM_DIR="$HOME/.substrate/shims"
 BASHENV_FILE="$HOME/.substrate_bashenv"
 BACKUP_SUFFIX=".DISABLED.$(date +%s)"
 
@@ -44,7 +44,7 @@ echo "   - ~/.zprofile"
 echo ""
 echo "2. Remove any lines containing:"
 echo "   - SHIM_ORIGINAL_PATH"
-echo "   - .cmdshim_rust"
+echo "   - .substrate/shims"
 echo "   - .substrate_bashenv"
 echo "   - BASH_ENV"
 echo ""

@@ -171,9 +171,9 @@ substrate --ci --no-exit-on-error -f test-suite.sh
 
 ```bash
 # Hash pinning for reliability
-hash -p "$HOME/.cmdshim_rust/git" git
-hash -p "$HOME/.cmdshim_rust/npm" npm
-hash -p "$HOME/.cmdshim_rust/docker" docker
+hash -p "$HOME/.substrate/shims/git" git
+hash -p "$HOME/.substrate/shims/npm" npm
+hash -p "$HOME/.substrate/shims/docker" docker
 
 # Verify pinning
 type git npm docker
