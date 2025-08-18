@@ -3,7 +3,7 @@ mod tests {
     use serial_test::serial;
     use std::fs;
     use std::path::{Path, PathBuf};
-    use substrate::shim_deploy::{DeploymentStatus, ShimDeployer};
+    use substrate_shell::shim_deploy::{DeploymentStatus, ShimDeployer};
     use tempfile::TempDir;
 
     /// Helper to create a mock substrate-shim binary for testing

@@ -1,3 +1,30 @@
+[package]
+name = "substrate"
+version = "0.1.1"
+edition = "2021"
+rust-version = "1.74"
+authors = ["Atomize"]
+description = "Secure execution layer for AI agent development workflows with comprehensive tracing and isolation"
+license = "MIT"
+repository = "https://github.com/atomize-hq/substrate"
+keywords = ["ai", "agent", "security", "tracing", "shell"]
+categories = ["command-line-utilities", "development-tools"]
+readme = "README.md"
+
+[[bin]]
+name = "substrate"
+path = "src/main.rs"
+
+[[bin]]
+name = "substrate-shim"
+path = "src/shim_main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+env_logger = "0.11"
+substrate-shell = { version = "0.1.1", path = "crates/shell" }
+substrate-shim = { version = "0.1.1", path = "crates/shim" }
+
 [workspace]
 resolver = "2"
 members = [

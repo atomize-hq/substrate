@@ -11,10 +11,6 @@ readme = "../../README.md"
 keywords = ["tracing", "observability", "command", "shim"]
 categories = ["command-line-utilities", "development-tools::debugging"]
 
-[[bin]]
-name = "substrate-shim"
-path = "src/main.rs"
-
 [[bench]]
 name = "performance"
 harness = false

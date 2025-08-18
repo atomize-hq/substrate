@@ -1,5 +1,5 @@
 [package]
-name = "substrate"
+name = "substrate-shell"
 version = "0.1.1"
 edition = "2021"
 rust-version = "1.74"
@@ -10,10 +10,6 @@ repository = "https://github.com/atomize-hq/substrate"
 keywords = ["ai", "agent", "security", "tracing", "shell"]
 categories = ["command-line-utilities", "development-tools"]
 readme = "../../README.md"
-
-[[bin]]
-name = "substrate"
-path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0"
