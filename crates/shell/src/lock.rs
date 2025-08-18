@@ -47,13 +47,13 @@ impl ProcessLock {
                             .as_secs() as i64,
                         version: env!("CARGO_PKG_VERSION").to_string(),
                     };
-                    
+
                     if let Ok(json) = serde_json::to_string(&lock_info) {
                         let _ = file.set_len(0); // Truncate the file
                         let _ = file.write_all(json.as_bytes());
                         let _ = file.sync_all();
                     }
-                    
+
                     return Ok(Self { _file: file });
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {

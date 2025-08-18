@@ -1,6 +1,6 @@
 mod lock;
 mod pty_exec;
-pub mod shim_deploy;  // Made public for integration tests
+pub mod shim_deploy; // Made public for integration tests
 
 use pty_exec::execute_with_pty;
 use shim_deploy::{DeploymentStatus, ShimDeployer};
@@ -223,18 +223,21 @@ impl ShellConfig {
         if cli.shim_status {
             let shims_dir = substrate_common::paths::shims_dir()?;
             let version_file = substrate_common::paths::version_file()?;
-            
+
             if !shims_dir.exists() {
                 println!("Shims: Not deployed");
                 std::process::exit(1);
             }
-            
+
             if let Ok(content) = std::fs::read_to_string(&version_file) {
                 let info: serde_json::Value = serde_json::from_str(&content)?;
                 println!("Shims: Deployed");
-                println!("Version: {}", info.get("version").unwrap_or(&json!("unknown")));
+                println!(
+                    "Version: {}",
+                    info.get("version").unwrap_or(&json!("unknown"))
+                );
                 println!("Location: {shims_dir:?}");
-                
+
                 // Check if update is available
                 let current_version = env!("CARGO_PKG_VERSION");
                 if info.get("version").and_then(|v| v.as_str()) != Some(current_version) {
@@ -242,17 +245,18 @@ impl ShellConfig {
                 } else {
                     println!("Status: Up to date");
                 }
-                
+
                 // Show deployment timestamp if available
                 if let Some(deployed_at) = info.get("deployed_at") {
-                    if let Some(secs) = deployed_at.get("secs_since_epoch").and_then(|s| s.as_i64()) {
+                    if let Some(secs) = deployed_at.get("secs_since_epoch").and_then(|s| s.as_i64())
+                    {
                         use chrono::DateTime;
                         if let Some(datetime) = DateTime::from_timestamp(secs, 0) {
                             println!("Deployed: {}", datetime.format("%Y-%m-%d %H:%M:%S UTC"));
                         }
                     }
                 }
-                
+
                 // Show command count if available
                 if let Some(commands) = info.get("commands").and_then(|c| c.as_array()) {
                     println!("Commands: {} shims", commands.len());

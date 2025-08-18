@@ -237,7 +237,10 @@ mod version_tests {
         );
         // Also verify it starts with a digit (version number)
         assert!(
-            SHIM_VERSION.chars().next().is_some_and(|c| c.is_ascii_digit()),
+            SHIM_VERSION
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_digit()),
             "SHIM_VERSION should start with a version number"
         );
     }

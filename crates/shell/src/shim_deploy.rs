@@ -104,14 +104,14 @@ impl ShimDeployer {
         }
 
         // Read version file
-        let contents = fs::read_to_string(&self.version_file)
-            .context("Failed to read version file")?;
-        let version_info: VersionInfo = serde_json::from_str(&contents)
-            .context("Failed to parse version file")?;
+        let contents =
+            fs::read_to_string(&self.version_file).context("Failed to read version file")?;
+        let version_info: VersionInfo =
+            serde_json::from_str(&contents).context("Failed to parse version file")?;
 
         // Get current shim version from environment
         let current_version = env!("CARGO_PKG_VERSION");
-        
+
         // Check version match
         if !version_info.version.starts_with(current_version) {
             return Ok(true);
@@ -143,14 +143,14 @@ impl ShimDeployer {
         let commands = self.get_commands_to_shim();
         for cmd in &commands {
             let temp_shim = temp_dir.path().join(cmd);
-            
+
             // Create symlink to substrate-shim
             #[cfg(unix)]
             {
                 std::os::unix::fs::symlink(&shim_binary, &temp_shim)
                     .with_context(|| format!("Failed to create symlink for {cmd}"))?;
             }
-            
+
             #[cfg(not(unix))]
             {
                 // On non-Unix, copy the binary
@@ -161,14 +161,12 @@ impl ShimDeployer {
 
         // Ensure parent directory exists
         if let Some(parent) = self.shims_dir.parent() {
-            fs::create_dir_all(parent)
-                .context("Failed to create parent directory for shims")?;
+            fs::create_dir_all(parent).context("Failed to create parent directory for shims")?;
         }
 
         // Remove old shims directory if it exists
         if self.shims_dir.exists() {
-            fs::remove_dir_all(&self.shims_dir)
-                .context("Failed to remove old shims directory")?;
+            fs::remove_dir_all(&self.shims_dir).context("Failed to remove old shims directory")?;
         }
 
         // Atomically move temp directory to final location
@@ -190,25 +188,27 @@ impl ShimDeployer {
 
     fn get_shim_binary_path(&self) -> Result<PathBuf> {
         // First, try to find substrate-shim in the same directory as the current executable
-        let current_exe = std::env::current_exe()
-            .context("Failed to get current executable path")?;
-        let exe_dir = current_exe.parent()
+        let current_exe =
+            std::env::current_exe().context("Failed to get current executable path")?;
+        let exe_dir = current_exe
+            .parent()
             .ok_or_else(|| anyhow::anyhow!("Failed to get executable directory"))?;
-        
+
         let shim_name = if cfg!(windows) {
             "substrate-shim.exe"
         } else {
             "substrate-shim"
         };
-        
+
         let shim_path = exe_dir.join(shim_name);
-        
+
         if shim_path.exists() {
             Ok(shim_path)
         } else {
             // Fall back to searching in PATH
-            Ok(which::which(shim_name)
-                .context("Failed to find substrate-shim binary. Please ensure it's built and in PATH.")?)
+            Ok(which::which(shim_name).context(
+                "Failed to find substrate-shim binary. Please ensure it's built and in PATH.",
+            )?)
         }
     }
 
@@ -221,25 +221,22 @@ impl ShimDeployer {
 
         let json = serde_json::to_string_pretty(&version_info)
             .context("Failed to serialize version info")?;
-        
-        fs::write(&self.version_file, json)
-            .context("Failed to write version file")?;
+
+        fs::write(&self.version_file, json).context("Failed to write version file")?;
 
         Ok(())
     }
 
     fn migrate_old_shims(&self, old_dir: &Path) -> Result<()> {
         println!("Migrating shims from old location...");
-        
+
         // Create parent directory if needed
         if let Some(parent) = self.shims_dir.parent() {
-            fs::create_dir_all(parent)
-                .context("Failed to create parent directory")?;
+            fs::create_dir_all(parent).context("Failed to create parent directory")?;
         }
 
         // Move old directory to new location
-        fs::rename(old_dir, &self.shims_dir)
-            .context("Failed to migrate old shims directory")?;
+        fs::rename(old_dir, &self.shims_dir).context("Failed to migrate old shims directory")?;
 
         println!("Migration complete.");
         Ok(())
@@ -247,11 +244,9 @@ impl ShimDeployer {
 
     fn get_commands_to_shim(&self) -> Vec<String> {
         vec![
-            "git", "npm", "npx", "node", "pnpm", "bun",
-            "python", "python3", "pip", "pip3",
-            "jq", "curl", "wget", "tar", "unzip",
-            "make", "go", "cargo", "deno", 
-            "docker", "kubectl", "rg", "fd", "bat",
+            "git", "npm", "npx", "node", "pnpm", "bun", "python", "python3", "pip", "pip3", "jq",
+            "curl", "wget", "tar", "unzip", "make", "go", "cargo", "deno", "docker", "kubectl",
+            "rg", "fd", "bat",
         ]
         .into_iter()
         .map(String::from)
@@ -267,7 +262,7 @@ mod tests {
     fn test_deployment_status_enum() {
         let status = DeploymentStatus::Current;
         assert_eq!(status, DeploymentStatus::Current);
-        
+
         let status = DeploymentStatus::Failed("test".to_string());
         matches!(status, DeploymentStatus::Failed(_));
     }
@@ -276,7 +271,7 @@ mod tests {
     fn test_get_commands_to_shim() {
         let deployer = ShimDeployer::with_skip(true).unwrap();
         let commands = deployer.get_commands_to_shim();
-        
+
         assert!(commands.contains(&"git".to_string()));
         assert!(commands.contains(&"npm".to_string()));
         assert!(commands.contains(&"python".to_string()));

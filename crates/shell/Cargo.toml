@@ -6,7 +6,7 @@ rust-version = "1.74"
 authors = ["Atomize"]
 description = "Secure execution layer for AI agent development workflows with comprehensive tracing and isolation"
 license = "MIT"
-repository = "https://github.com/atomize-codes/substrate"
+repository = "https://github.com/atomize-hq/substrate"
 keywords = ["ai", "agent", "security", "tracing", "shell"]
 categories = ["command-line-utilities", "development-tools"]
 readme = "../../README.md"
@@ -30,7 +30,7 @@ shell-words = "1.1"
 gethostname = "0.4"
 which = "6"
 ctrlc = "3.4"
-substrate-common = { version = "0.1.0", path = "../common" }
+substrate-common = { version = "0.1.1", path = "../common" }
 # Dependencies for bundled binaries
 sha2 = "0.10"
 # PTY support dependencies
