@@ -60,7 +60,7 @@ impl ShimDeployer {
         let _lock = match ProcessLock::acquire(&self.lock_file, Duration::from_secs(5)) {
             Ok(lock) => lock,
             Err(e) => {
-                eprintln!("Warning: Could not acquire lock for shim deployment: {}", e);
+                eprintln!("Warning: Could not acquire lock for shim deployment: {e}");
                 return Ok(DeploymentStatus::Failed(e.to_string()));
             }
         };
@@ -86,7 +86,7 @@ impl ShimDeployer {
                 Ok(DeploymentStatus::Deployed)
             }
             Err(e) => {
-                eprintln!("Warning: Failed to deploy shims: {}", e);
+                eprintln!("Warning: Failed to deploy shims: {e}");
                 Ok(DeploymentStatus::Failed(e.to_string()))
             }
         }
@@ -148,7 +148,7 @@ impl ShimDeployer {
             #[cfg(unix)]
             {
                 std::os::unix::fs::symlink(&shim_binary, &temp_shim)
-                    .with_context(|| format!("Failed to create symlink for {}", cmd))?;
+                    .with_context(|| format!("Failed to create symlink for {cmd}"))?;
             }
             
             #[cfg(not(unix))]

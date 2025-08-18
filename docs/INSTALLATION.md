@@ -13,15 +13,13 @@ Complete setup guide for Substrate command tracing and AI agent platform.
 ### Option 1: Install from crates.io (Recommended)
 
 ```bash
-# Install main substrate command
+# Install substrate (includes automatic shim deployment)
 cargo install substrate
 
-# Install supporting tools
-cargo install substrate-shim
-cargo install substrate-supervisor
+# That's it! Shims are deployed automatically on first run
+substrate --version
 
 # Verify installation
-substrate --version
 which substrate  # Should show ~/.cargo/bin/substrate
 ```
 
@@ -55,15 +53,23 @@ substrate --version
 
 ### Command Interception (Shimming)
 
-Deploy binary shims for transparent command tracing:
+Substrate automatically deploys command shims on first run. No manual setup required!
 
 ```bash
-# Deploy shims
-./scripts/stage_shims.sh target/release/substrate-shim
+# Automatic deployment happens on first run
+substrate
 
-# Configure environment
-export SHIM_ORIGINAL_PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-export PATH="$HOME/.substrate/shims:$SHIM_ORIGINAL_PATH"
+# Check deployment status
+substrate --shim-status
+
+# Manual management (optional)
+substrate --shim-deploy   # Force redeployment
+substrate --shim-remove   # Remove all shims
+substrate --shim-skip     # Skip deployment for this run
+
+# To use shims for command interception, add to PATH:
+export PATH="$HOME/.substrate/shims:$PATH"
+export SHIM_ORIGINAL_PATH="$PATH"  # Save original PATH
 export SHIM_TRACE_LOG="$HOME/.trace_shell.jsonl"
 
 # Clear command cache
@@ -73,6 +79,10 @@ hash -r
 which git  # Should show: ~/.substrate/shims/git
 git --version  # Should work normally with logging
 ```
+
+**Note**: Shims are deployed as:
+- **Symlinks on Unix/macOS** (efficient, instant updates)
+- **File copies on Windows** (for compatibility)
 
 ### Non-Interactive Shell Support
 
@@ -149,12 +159,16 @@ substrate-supervisor echo "Hello, World!"
 
 **Emergency recovery**:
 ```bash
-# Complete rollback
-./scripts/rollback.sh
+# Remove all shims using CLI
+substrate --shim-remove
 
 # Or manual cleanup
 export PATH="$SHIM_ORIGINAL_PATH"
 rm -rf ~/.substrate/shims
+
+# Disable automatic deployment
+export SUBSTRATE_NO_SHIMS=1
+substrate
 ```
 
 For detailed troubleshooting, see [USAGE.md](USAGE.md#troubleshooting).

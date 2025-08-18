@@ -11,6 +11,7 @@ Environment variables and advanced configuration options for Substrate.
 | `SHIM_SESSION_ID` | Session correlation ID | auto-generated | uuid-v7-string |
 | `SHIM_DEPTH` | Nesting level tracking | `0` | `0`, `1`, `2`... |
 | `SHIM_BYPASS` | Emergency bypass mode | *none* | `1` |
+| `SUBSTRATE_NO_SHIMS` | Disable automatic shim deployment | *none* | `1` |
 
 ## Advanced Shim Variables
 
@@ -30,6 +31,28 @@ Environment variables and advanced configuration options for Substrate.
 | `SUBSTRATE_DISABLE_PTY` | Disable PTY globally | *none* | `1` |
 | `SUBSTRATE_PTY_DEBUG` | Enable PTY debug logging | *none* | `1` |
 | `SUBSTRATE_PTY_PIPELINE_LAST` | PTY for last pipeline segment | *none* | `1` |
+
+## CLI Flags
+
+### Shim Management
+
+| Flag | Purpose | Example |
+|------|---------|---------|
+| `--shim-status` | Show deployment status and version | `substrate --shim-status` |
+| `--shim-deploy` | Force redeployment of shims | `substrate --shim-deploy` |
+| `--shim-remove` | Remove all deployed shims | `substrate --shim-remove` |
+| `--shim-skip` | Skip automatic deployment for this run | `substrate --shim-skip` |
+
+### Other Flags
+
+| Flag | Purpose | Example |
+|------|---------|---------|
+| `-c <command>` | Execute command and exit | `substrate -c "ls -la"` |
+| `-f <script>` | Execute script file | `substrate -f script.sh` |
+| `--ci` | CI mode (no banner, strict errors) | `substrate --ci -c "npm test"` |
+| `--no-exit-on-error` | Continue on error in CI mode | `substrate --ci --no-exit-on-error` |
+| `--pty` | Force PTY for command | `substrate --pty -c "vim"` |
+| `--version-json` | Output version info as JSON | `substrate --version-json` |
 
 ## Integration Variables
 

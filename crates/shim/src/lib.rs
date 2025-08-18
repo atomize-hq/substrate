@@ -229,10 +229,16 @@ mod version_tests {
 
     #[test]
     fn test_version_constant_is_set() {
-        assert!(!SHIM_VERSION.is_empty(), "SHIM_VERSION should not be empty");
+        // SHIM_VERSION is a compile-time constant from env! macro
+        // We just verify its format contains a version number
         assert!(
             SHIM_VERSION.contains('.'),
-            "SHIM_VERSION should contain version number"
+            "SHIM_VERSION should contain version number like '0.1.1'"
+        );
+        // Also verify it starts with a digit (version number)
+        assert!(
+            SHIM_VERSION.chars().next().is_some_and(|c| c.is_ascii_digit()),
+            "SHIM_VERSION should start with a version number"
         );
     }
 
@@ -273,7 +279,7 @@ mod version_tests {
 
     #[test]
     fn test_version_includes_git_info() {
-        println!("SHIM_VERSION: {}", SHIM_VERSION);
+        println!("SHIM_VERSION: {SHIM_VERSION}");
         let info = get_version_info();
         println!(
             "Version info: {}",

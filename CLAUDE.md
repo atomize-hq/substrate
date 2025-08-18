@@ -109,6 +109,17 @@ The project uses a Cargo workspace with four main crates:
 
 5. **Emergency Bypass**: `SHIM_BYPASS=1` environment variable for critical situations
 
+6. **Automatic Shim Deployment**: Shims deploy automatically on first run with version tracking
+
+### Directory Structure
+
+Substrate uses `~/.substrate/` for all its data:
+- `~/.substrate/shims/` - Command interception symlinks/binaries
+- `~/.substrate/.substrate.lock` - Multi-instance lock file  
+- `~/.substrate/shims/.version` - Version tracking with metadata
+- `~/.substrate/logs/` - Future: centralized logging
+- `~/.substrate/cache/` - Future: command cache
+
 ### Important Environment Variables
 
 Critical for operation:
@@ -116,6 +127,7 @@ Critical for operation:
 - `SHIM_TRACE_LOG`: Log output destination (default: `~/.trace_shell.jsonl`)
 - `SHIM_SESSION_ID`: Session correlation ID (auto-generated if not set)
 - `SHIM_BYPASS`: Emergency bypass mode (set to `1` to disable tracing)
+- `SUBSTRATE_NO_SHIMS`: Set to `1` to disable automatic shim deployment
 
 For debugging and development:
 - `SHIM_LOG_OPTS`: Logging options (`raw`, `resolve`, or `raw,resolve`)
@@ -134,6 +146,21 @@ When modifying the codebase:
 3. Shell mode testing covers: interactive, wrap (-c), script (-f), pipe modes
 4. PTY tests validate terminal emulation (Unix only)
 5. Security tests verify credential redaction
+
+## Shim Deployment Implementation
+
+### Automatic Deployment
+- Uses symlinks on Unix for efficiency
+- Falls back to file copies on Windows
+- Version checking via `env!("CARGO_PKG_VERSION")`
+- Atomic deployment using tempfile crate
+- Process locking with 5-second timeout
+
+### CLI Commands
+- `substrate --shim-status`: Check deployment status and version
+- `substrate --shim-deploy`: Force redeployment of shims
+- `substrate --shim-remove`: Remove all deployed shims
+- `substrate --shim-skip`: Skip automatic deployment for this run
 
 ## Deployment Scripts
 

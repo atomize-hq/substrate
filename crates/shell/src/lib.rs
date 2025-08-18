@@ -120,6 +120,22 @@ pub struct Cli {
     /// Output version information as JSON
     #[arg(long = "version-json", conflicts_with_all = &["command", "script"])]
     pub version_json: bool,
+
+    /// Show shim deployment status
+    #[arg(long = "shim-status", conflicts_with_all = &["command", "script", "shim_deploy", "shim_remove"])]
+    pub shim_status: bool,
+
+    /// Skip shim deployment check
+    #[arg(long = "shim-skip")]
+    pub shim_skip: bool,
+
+    /// Force deployment of command shims
+    #[arg(long = "shim-deploy", conflicts_with_all = &["command", "script", "shim_remove", "shim_status"])]
+    pub shim_deploy: bool,
+
+    /// Remove all deployed shims
+    #[arg(long = "shim-remove", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status"])]
+    pub shim_remove: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -139,6 +155,7 @@ pub struct ShellConfig {
     pub shell_path: String,
     pub ci_mode: bool,
     pub no_exit_on_error: bool,
+    pub skip_shims: bool,
     pub env_vars: HashMap<String, String>,
 }
 
@@ -160,6 +177,90 @@ impl ShellConfig {
                 "arch": std::env::consts::ARCH,
             });
             println!("{}", serde_json::to_string_pretty(&version_info)?);
+            std::process::exit(0);
+        }
+
+        // Handle --shim-deploy flag
+        if cli.shim_deploy {
+            let deployer = ShimDeployer::with_skip(false)?;
+            match deployer.ensure_deployed() {
+                Ok(DeploymentStatus::Deployed) => {
+                    println!("✓ Shims deployed successfully");
+                    std::process::exit(0);
+                }
+                Ok(DeploymentStatus::Current) => {
+                    println!("✓ Shims are already up to date");
+                    std::process::exit(0);
+                }
+                Ok(DeploymentStatus::Failed(msg)) => {
+                    eprintln!("✗ Shim deployment failed: {msg}");
+                    std::process::exit(1);
+                }
+                Ok(DeploymentStatus::Skipped) => {
+                    println!("Shim deployment was skipped");
+                    std::process::exit(0);
+                }
+                Err(e) => {
+                    eprintln!("✗ Error deploying shims: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        // Handle --shim-remove flag
+        if cli.shim_remove {
+            let shims_dir = substrate_common::paths::shims_dir()?;
+            if shims_dir.exists() {
+                std::fs::remove_dir_all(&shims_dir)?;
+                println!("✓ Removed shims from {shims_dir:?}");
+            } else {
+                println!("No shims found to remove");
+            }
+            std::process::exit(0);
+        }
+
+        // Handle --shim-status flag
+        if cli.shim_status {
+            let shims_dir = substrate_common::paths::shims_dir()?;
+            let version_file = substrate_common::paths::version_file()?;
+            
+            if !shims_dir.exists() {
+                println!("Shims: Not deployed");
+                std::process::exit(1);
+            }
+            
+            if let Ok(content) = std::fs::read_to_string(&version_file) {
+                let info: serde_json::Value = serde_json::from_str(&content)?;
+                println!("Shims: Deployed");
+                println!("Version: {}", info.get("version").unwrap_or(&json!("unknown")));
+                println!("Location: {shims_dir:?}");
+                
+                // Check if update is available
+                let current_version = env!("CARGO_PKG_VERSION");
+                if info.get("version").and_then(|v| v.as_str()) != Some(current_version) {
+                    println!("Status: Update available (current: {current_version})");
+                } else {
+                    println!("Status: Up to date");
+                }
+                
+                // Show deployment timestamp if available
+                if let Some(deployed_at) = info.get("deployed_at") {
+                    if let Some(secs) = deployed_at.get("secs_since_epoch").and_then(|s| s.as_i64()) {
+                        use chrono::DateTime;
+                        if let Some(datetime) = DateTime::from_timestamp(secs, 0) {
+                            println!("Deployed: {}", datetime.format("%Y-%m-%d %H:%M:%S UTC"));
+                        }
+                    }
+                }
+                
+                // Show command count if available
+                if let Some(commands) = info.get("commands").and_then(|c| c.as_array()) {
+                    println!("Commands: {} shims", commands.len());
+                }
+            } else {
+                println!("Shims: Deployed (version unknown)");
+                println!("Location: {shims_dir:?}");
+            }
             std::process::exit(0);
         }
 
@@ -218,6 +319,7 @@ impl ShellConfig {
             shell_path,
             ci_mode: cli.ci_mode,
             no_exit_on_error: cli.no_exit_on_error,
+            skip_shims: cli.shim_skip,
             env_vars: HashMap::new(),
         })
     }
@@ -227,7 +329,8 @@ pub fn run_shell() -> Result<i32> {
     let config = ShellConfig::from_args()?;
 
     // Deploy shims if needed (non-blocking, continues on error)
-    let skip_shims = env::var("SUBSTRATE_NO_SHIMS").is_ok();
+    // Skip if either the CLI flag is set or the environment variable is set
+    let skip_shims = config.skip_shims || env::var("SUBSTRATE_NO_SHIMS").is_ok();
     match ShimDeployer::with_skip(skip_shims)?.ensure_deployed() {
         Ok(DeploymentStatus::Deployed) => {
             // Shims were deployed, no additional action needed

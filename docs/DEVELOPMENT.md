@@ -64,6 +64,7 @@ cargo test --lib                    # Unit tests
 cargo test --test integration       # Integration tests
 cargo test -p substrate             # Shell-specific tests
 cargo test -p substrate-shim        # Shim-specific tests
+cargo test --test shim_deployment   # Shim deployment tests
 ```
 
 ### Test with Output
@@ -221,6 +222,12 @@ export SUBSTRATE_PTY_DEBUG=1
 ### Common Debug Tasks
 
 ```bash
+# Test shim deployment
+substrate --shim-status              # Check deployment status
+substrate --shim-deploy              # Force redeployment
+substrate --shim-remove              # Clean up shims
+SUBSTRATE_NO_SHIMS=1 substrate      # Skip auto-deployment
+
 # Test shim execution
 SHIM_TRACE_LOG=/tmp/debug.jsonl git --version
 cat /tmp/debug.jsonl
