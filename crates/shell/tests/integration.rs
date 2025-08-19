@@ -3,13 +3,24 @@ use predicates::prelude::*;
 use std::fs;
 use tempfile::TempDir;
 
+/// Helper function to get the substrate binary from workspace root
+fn get_substrate_binary() -> Command {
+    // Try to get workspace dir from environment, fall back to relative path
+    let binary_path = if let Ok(workspace_dir) = std::env::var("CARGO_WORKSPACE_DIR") {
+        format!("{}/target/debug/substrate", workspace_dir)
+    } else {
+        // Fallback: relative path from crates/shell/tests to workspace root
+        "../../target/debug/substrate".to_string()
+    };
+    Command::new(binary_path)
+}
+
 #[test]
 fn test_command_start_finish_json_roundtrip() {
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
 
-    Command::cargo_bin("substrate")
-        .unwrap()
+    get_substrate_binary()
         .env("SHIM_TRACE_LOG", &log_file)
         .arg("-c")
         .arg("echo test")
@@ -43,8 +54,7 @@ fn test_builtin_cd_side_effects() {
 
     let script = format!("cd {} && pwd", target_dir.display());
 
-    Command::cargo_bin("substrate")
-        .unwrap()
+    get_substrate_binary()
         .arg("-c")
         .arg(&script)
         .assert()
@@ -60,8 +70,7 @@ fn test_ci_flag_strict_mode_ordering() {
     let log_file = temp.path().join("trace.jsonl");
 
     // Test that undefined variable causes failure in CI mode
-    Command::cargo_bin("substrate")
-        .unwrap()
+    get_substrate_binary()
         .env("SHIM_TRACE_LOG", &log_file)
         .arg("--shell")
         .arg("/bin/bash")
@@ -72,8 +81,7 @@ fn test_ci_flag_strict_mode_ordering() {
         .failure();
 
     // Test that it succeeds without CI mode
-    Command::cargo_bin("substrate")
-        .unwrap()
+    get_substrate_binary()
         .env("SHIM_TRACE_LOG", &log_file)
         .arg("--shell")
         .arg("/bin/bash")
@@ -91,8 +99,7 @@ fn test_script_mode_single_process() {
     // Test that script state persists (cd, export, etc)
     fs::write(&script_file, "cd /tmp\npwd\nexport FOO=bar\necho $FOO").unwrap();
 
-    Command::cargo_bin("substrate")
-        .unwrap()
+    get_substrate_binary()
         .arg("-f")
         .arg(&script_file)
         .assert()
@@ -108,8 +115,7 @@ fn test_redaction_header_values() {
 
     // Test that -H header values get redacted in logged commands
     // Using 'true' command which always exists and succeeds
-    Command::cargo_bin("substrate")
-        .unwrap()
+    get_substrate_binary()
         .env("SHIM_TRACE_LOG", &log_file)
         .arg("-c")
         .arg("true -H 'Authorization: Bearer secret123'")
@@ -128,8 +134,7 @@ fn test_redaction_user_pass() {
     let log_file = temp.path().join("trace.jsonl");
 
     // Test that -u user:pass values get redacted in logged commands
-    Command::cargo_bin("substrate")
-        .unwrap()
+    get_substrate_binary()
         .env("SHIM_TRACE_LOG", &log_file)
         .arg("-c")
         .arg("true -u alice:secretpass")
@@ -151,8 +156,7 @@ fn test_log_directory_creation() {
     // Directory should not exist yet
     assert!(!nested_log.parent().unwrap().exists());
 
-    Command::cargo_bin("substrate")
-        .unwrap()
+    get_substrate_binary()
         .env("SHIM_TRACE_LOG", &nested_log)
         .arg("-c")
         .arg("true")
@@ -171,8 +175,7 @@ fn test_pipe_mode_detection() {
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
 
-    Command::cargo_bin("substrate")
-        .unwrap()
+    get_substrate_binary()
         .env("SHIM_TRACE_LOG", &log_file)
         .write_stdin("echo piped\n")
         .assert()
@@ -205,10 +208,12 @@ fn test_sigterm_exit_code() {
 
     // Test that SIGTERM results in exit code 143 (128 + 15)
     // Note: This test is disabled on macOS due to signal handling differences
-    let substrate_bin = assert_cmd::Command::cargo_bin("substrate")
-        .unwrap()
-        .get_program()
-        .to_owned();
+    let binary_path = if let Ok(workspace_dir) = std::env::var("CARGO_WORKSPACE_DIR") {
+        format!("{}/target/debug/substrate", workspace_dir)
+    } else {
+        "../../target/debug/substrate".to_string()
+    };
+    let substrate_bin = std::path::PathBuf::from(binary_path);
 
     let mut child = StdCommand::new(substrate_bin)
         .arg("-c")
@@ -240,8 +245,7 @@ fn test_log_rotation() {
     fs::write(&log_file, &large_content).unwrap();
 
     // Set custom rotation size for testing
-    Command::cargo_bin("substrate")
-        .unwrap()
+    get_substrate_binary()
         .env("SHIM_TRACE_LOG", &log_file)
         .env("SHIM_TRACE_LOG_MAX_MB", "50")
         .arg("-c")
@@ -269,8 +273,7 @@ fn test_cd_minus_behavior() {
     let log_file = temp.path().join("trace.jsonl");
     let start_dir = std::env::current_dir().unwrap();
 
-    Command::cargo_bin("substrate")
-        .unwrap()
+    get_substrate_binary()
         .env("SHIM_TRACE_LOG", &log_file)
         .current_dir(&start_dir)
         .arg("-c")
@@ -285,8 +288,7 @@ fn test_raw_mode_no_redaction() {
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
 
-    Command::cargo_bin("substrate")
-        .unwrap()
+    get_substrate_binary()
         .env("SHIM_TRACE_LOG", &log_file)
         .env("SHIM_LOG_OPTS", "raw")
         .arg("-c")
@@ -305,8 +307,7 @@ fn test_export_complex_values_deferred() {
     let log_file = temp.path().join("trace.jsonl");
 
     // Test that complex export statements are deferred to shell
-    Command::cargo_bin("substrate")
-        .unwrap()
+    get_substrate_binary()
         .env("SHIM_TRACE_LOG", &log_file)
         .arg("-c")
         .arg("export FOO=\"bar baz\" && echo $FOO")
@@ -321,8 +322,7 @@ fn test_pty_field_in_logs() {
     let log_file = temp.path().join("trace.jsonl");
 
     // Non-PTY mode
-    Command::cargo_bin("substrate")
-        .unwrap()
+    get_substrate_binary()
         .env("SHIM_TRACE_LOG", &log_file)
         .arg("-c")
         .arg("echo test")
@@ -339,8 +339,7 @@ fn test_process_group_signal_handling() {
     let log_file = temp.path().join("trace.jsonl");
 
     // Run a pipeline command
-    Command::cargo_bin("substrate")
-        .unwrap()
+    get_substrate_binary()
         .env("SHIM_TRACE_LOG", &log_file)
         .arg("-c")
         .arg("sleep 0.1 | cat")
