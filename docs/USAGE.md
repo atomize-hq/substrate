@@ -66,14 +66,43 @@ export SUBSTRATE_PTY_DEBUG=1      # Enable PTY debug logging
 
 ## Command Interception
 
-### Basic Setup
+### Automatic Deployment
+
+Substrate automatically deploys shims on first run:
 
 ```bash
-# Deploy shims
-./scripts/stage_shims.sh
+# First run deploys shims automatically
+substrate
 
+# Check deployment status
+substrate --shim-status
+```
+
+### Manual Shim Management
+
+```bash
+# Force redeployment (useful after updates)
+substrate --shim-deploy
+
+# Remove all shims
+substrate --shim-remove
+
+# Skip automatic deployment for this run
+substrate --shim-skip
+
+# Disable automatic deployment permanently
+export SUBSTRATE_NO_SHIMS=1
+substrate
+```
+
+### PATH Configuration
+
+To use shims for command interception:
+
+```bash
 # Configure PATH
-export PATH="$HOME/.cmdshim_rust:$SHIM_ORIGINAL_PATH"
+export PATH="$HOME/.substrate/shims:$PATH"
+export SHIM_ORIGINAL_PATH="$PATH"
 hash -r
 ```
 
@@ -88,22 +117,12 @@ export BASH_ENV="$HOME/.substrate_bashenv"
 
 # 2. Use hash pinning for reliable resolution
 hash -r
-hash -p "$HOME/.cmdshim_rust/git" git
-hash -p "$HOME/.cmdshim_rust/npm" npm
+hash -p "$HOME/.substrate/shims/git" git
+hash -p "$HOME/.substrate/shims/npm" npm
 
 # 3. Verify integration
 which git  # Should show shim path
 git --version  # Should work with logging
-```
-
-## Process Supervision
-
-```bash
-# Direct execution
-substrate-supervisor git status
-
-# With custom environment
-substrate-supervisor npm install
 ```
 
 ## Log Analysis

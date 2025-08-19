@@ -13,15 +13,13 @@ Complete setup guide for Substrate command tracing and AI agent platform.
 ### Option 1: Install from crates.io (Recommended)
 
 ```bash
-# Install main substrate command
+# Install substrate (includes automatic shim deployment)
 cargo install substrate
 
-# Install supporting tools
-cargo install substrate-shim
-cargo install substrate-supervisor
+# That's it! Shims are deployed automatically on first run
+substrate --version
 
 # Verify installation
-substrate --version
 which substrate  # Should show ~/.cargo/bin/substrate
 ```
 
@@ -55,24 +53,36 @@ substrate --version
 
 ### Command Interception (Shimming)
 
-Deploy binary shims for transparent command tracing:
+Substrate automatically deploys command shims on first run. No manual setup required!
 
 ```bash
-# Deploy shims
-./scripts/stage_shims.sh target/release/substrate-shim
+# Automatic deployment happens on first run
+substrate
 
-# Configure environment
-export SHIM_ORIGINAL_PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-export PATH="$HOME/.cmdshim_rust:$SHIM_ORIGINAL_PATH"
+# Check deployment status
+substrate --shim-status
+
+# Manual management (optional)
+substrate --shim-deploy   # Force redeployment
+substrate --shim-remove   # Remove all shims
+substrate --shim-skip     # Skip deployment for this run
+
+# To use shims for command interception, add to PATH:
+export PATH="$HOME/.substrate/shims:$PATH"
+export SHIM_ORIGINAL_PATH="$PATH"  # Save original PATH
 export SHIM_TRACE_LOG="$HOME/.trace_shell.jsonl"
 
 # Clear command cache
 hash -r
 
 # Verify installation
-which git  # Should show: ~/.cmdshim_rust/git
+which git  # Should show: ~/.substrate/shims/git
 git --version  # Should work normally with logging
 ```
+
+**Note**: Shims are deployed as:
+- **Symlinks on Unix/macOS** (efficient, instant updates)
+- **File copies on Windows** (for compatibility)
 
 ### Non-Interactive Shell Support
 
@@ -104,18 +114,6 @@ Future: Lima VM integration for complete feature parity.
 Current: Basic support via ConPTY.
 Future: WSL2 integration for full feature support.
 
-## Process Supervisor
-
-Optional process management utility:
-
-```bash
-# Direct usage
-target/release/substrate-supervisor git status
-
-# Or install to PATH
-sudo cp target/release/substrate-supervisor /usr/local/bin/
-```
-
 ## Verification
 
 Test your installation:
@@ -129,9 +127,6 @@ substrate> exit
 # Command tracing
 git --version
 tail -1 ~/.trace_shell.jsonl
-
-# Process supervision
-substrate-supervisor echo "Hello, World!"
 ```
 
 ## Troubleshooting
@@ -144,17 +139,21 @@ substrate-supervisor echo "Hello, World!"
 - Check `SHIM_ORIGINAL_PATH` excludes shim directory
 
 **Permission errors**:
-- Verify shim binaries are executable: `chmod +x ~/.cmdshim_rust/*`
+- Verify shim binaries are executable: `chmod +x ~/.substrate/shims/*`
 - Check log file permissions and directory access
 
 **Emergency recovery**:
 ```bash
-# Complete rollback
-./scripts/rollback.sh
+# Remove all shims using CLI
+substrate --shim-remove
 
 # Or manual cleanup
 export PATH="$SHIM_ORIGINAL_PATH"
-rm -rf ~/.cmdshim_rust
+rm -rf ~/.substrate/shims
+
+# Disable automatic deployment
+export SUBSTRATE_NO_SHIMS=1
+substrate
 ```
 
 For detailed troubleshooting, see [USAGE.md](USAGE.md#troubleshooting).

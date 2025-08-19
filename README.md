@@ -35,9 +35,31 @@ cargo install substrate
 # 2. Start the interactive shell
 substrate
 
-# 3. Deploy command interception (optional)
-substrate-shim --deploy
-export PATH="$HOME/.cmdshim_rust:$PATH"
+# That's it! Shims are deployed automatically on first run
+```
+
+### Shim Deployment
+
+Substrate automatically deploys command shims on first run. The shims are:
+- **Symlinks on Unix systems** (efficient, instant updates)
+- **File copies on Windows systems** (for compatibility)
+- **Version-tracked** to avoid unnecessary redeployment
+- **Deployed to** `~/.substrate/shims/`
+
+To manage shims manually:
+```bash
+# Check shim status
+substrate --shim-status
+
+# Force redeployment
+substrate --shim-deploy
+
+# Remove all shims
+substrate --shim-remove
+
+# Skip automatic deployment
+export SUBSTRATE_NO_SHIMS=1
+substrate
 ```
 
 ### Alternative: Build from Source

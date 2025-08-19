@@ -6,14 +6,10 @@ rust-version = "1.74"
 authors = ["Atomize"]
 description = "Command execution shim for tracing and observability"
 license = "MIT"
-repository = "https://github.com/atomize-codes/substrate"
+repository = "https://github.com/atomize-hq/substrate"
 readme = "../../README.md"
 keywords = ["tracing", "observability", "command", "shim"]
 categories = ["command-line-utilities", "development-tools::debugging"]
-
-[[bin]]
-name = "substrate-shim"
-path = "src/main.rs"
 
 [[bench]]
 name = "performance"
@@ -38,3 +34,6 @@ which = "6"
 assert_cmd = "2.0"
 serial_test = "3.0"
 criterion = { version = "0.5", features = ["html_reports"] }
+
+[build-dependencies]
+chrono = "0.4"

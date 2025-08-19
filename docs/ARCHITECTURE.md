@@ -22,8 +22,7 @@ User Command → Shell Resolution → PATH Lookup → Shim Intercept → Logging
 substrate-common (base utilities)
     ↑
     ├── substrate-shim (command interception)
-    ├── substrate (custom shell)
-    └── substrate-supervisor (process management)
+    └── substrate (custom shell)
 ```
 
 ## Core Components
@@ -35,7 +34,11 @@ substrate-common (base utilities)
 **Package**: `substrate-shim` (binary: `substrate-shim`)
 
 **Key Design Decisions**:
-- **Copy-based deployment**: Each command gets its own shim copy (not symlinks) to ensure argv[0] preservation
+- **Automatic deployment**: Shims deploy automatically on first substrate run
+- **Platform-optimized deployment**: 
+  - Unix/macOS: Symlinks to single binary (efficient, instant updates)
+  - Windows: File copies for each command (compatibility)
+- **Version tracking**: Embedded version via `env!("CARGO_PKG_VERSION")` at compile time
 - **Path resolution with caching**: Intelligent caching for binary resolution performance
 - **Depth tracking**: Uses `SHIM_DEPTH` environment variable to track nested execution levels
 - **Session correlation**: UUIDv7-based session IDs for command chain tracking
@@ -90,8 +93,18 @@ pub enum ShellMode {
 substrate/
 ├── main.rs           # Entry point
 ├── lib.rs            # Shell modes, command routing, built-ins
-└── pty_exec.rs       # PTY management and execution
+├── pty_exec.rs       # PTY management and execution
+├── shim_deploy.rs    # Automatic shim deployment system
+└── lock.rs           # Process locking for deployment safety
 ```
+
+**Shim Deployment System**:
+- **Automatic**: Deploys on first run unless `SUBSTRATE_NO_SHIMS=1`
+- **Version-aware**: Tracks version via `.version` file in shims directory
+- **Atomic deployment**: Uses tempfile crate for safe atomic operations
+- **Process locking**: 5-second timeout prevents deployment races
+- **Migration support**: Automatically migrates from old `~/.cmdshim_rust` location
+- **CLI control**: `--shim-status`, `--shim-deploy`, `--shim-remove`, `--shim-skip`
 
 **Built-in Commands**:
 - Handled directly without spawning external processes in `execute_builtin()` function
@@ -139,34 +152,6 @@ pub mod log_schema {
 }
 ```
 
-### 4. Supervisor (`crates/supervisor/`)
-
-**Purpose**: Process supervision and environment management.
-
-**Package**: `substrate-supervisor`
-
-**Current Status**: Fully implemented with core functionality
-
-**Key Features**:
-- Process lifecycle management via `launch_supervised()`
-- Environment setup and PATH management
-- Session seeding and correlation
-- Clean PATH construction with shim integration
-- BASH_ENV setup for non-interactive shells
-
-**API**:
-```rust
-pub struct SupervisorConfig {
-    pub shim_dir: PathBuf,
-    pub original_path: String,
-    pub bash_env_file: Option<PathBuf>,
-    pub target_command: Vec<String>,
-    pub environment: HashMap<String, String>,
-}
-
-pub fn launch_supervised(config: SupervisorConfig) -> Result<()>
-```
-
 ## Third-Party Dependencies
 
 ### Reedline Fork
@@ -200,7 +185,7 @@ interface LogEntry {
   event_type: string;          // Event classification
   session_id: string;          // UUIDv7 for correlation
   cmd_id?: string;             // Command-specific UUID
-  component: "shim" | "shell" | "supervisor";
+  component: "shim" | "shell";
   // ... additional fields per event type
 }
 ```
@@ -374,7 +359,6 @@ All shim-related environment variables use the `SHIM_` prefix, shell-specific us
 ### Planned Enhancements
 
 The OLD_ARCHITECTURE.md file contains detailed plans for future enhancements including:
-- Enhanced supervisor capabilities
 - Advanced shell features (job control, aliases, completion)
 - Windows full support improvements
 - Observability improvements (metrics export, streaming API)

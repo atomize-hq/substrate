@@ -2,6 +2,8 @@
 
 use std::collections::HashSet;
 
+pub mod paths;
+
 /// Deduplicate PATH-like strings while preserving order
 pub fn dedupe_path(path: &str) -> String {
     let separator = if cfg!(windows) { ';' } else { ':' };

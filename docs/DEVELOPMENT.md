@@ -17,7 +17,6 @@ substrate/
 │   ├── common/               # Shared utilities and log schema
 │   ├── shell/                # Custom shell implementation
 │   ├── shim/                 # Binary shimming implementation
-│   └── supervisor/           # Process supervision
 ├── third_party/reedline/     # Custom Reedline fork
 ├── scripts/                  # Deployment and management scripts
 └── docs/                     # Documentation
@@ -43,7 +42,6 @@ cargo build --release
 # Build individual components
 cargo build --bin substrate
 cargo build --bin substrate-shim
-cargo build --bin substrate-supervisor
 
 # Build with features
 cargo build --release --features production
@@ -64,6 +62,7 @@ cargo test --lib                    # Unit tests
 cargo test --test integration       # Integration tests
 cargo test -p substrate             # Shell-specific tests
 cargo test -p substrate-shim        # Shim-specific tests
+cargo test --test shim_deployment   # Shim deployment tests
 ```
 
 ### Test with Output
@@ -110,8 +109,7 @@ cargo doc --no-deps  # Skip dependencies
 substrate-common (base utilities)
     ↑
     ├── substrate-shim (command interception)
-    ├── substrate (custom shell)
-    └── substrate-supervisor (process management)
+    └── substrate (custom shell)
 ```
 
 ### Design Principles
@@ -125,16 +123,19 @@ substrate-common (base utilities)
 ### Module Organization
 
 **substrate-shim**:
+
 - `context.rs`: Environment detection
 - `resolver.rs`: Binary path resolution with caching
 - `logger.rs`: Structured logging
 - `exec.rs`: Process execution
 
 **substrate (shell)**:
+
 - `lib.rs`: Shell modes and built-in commands
 - `pty_exec.rs`: PTY management and terminal emulation
 
 **substrate-common**:
+
 - Shared utilities (path handling, redaction)
 - Cross-component constants and types
 
@@ -221,6 +222,12 @@ export SUBSTRATE_PTY_DEBUG=1
 ### Common Debug Tasks
 
 ```bash
+# Test shim deployment
+substrate --shim-status              # Check deployment status
+substrate --shim-deploy              # Force redeployment
+substrate --shim-remove              # Clean up shims
+SUBSTRATE_NO_SHIMS=1 substrate      # Skip auto-deployment
+
 # Test shim execution
 SHIM_TRACE_LOG=/tmp/debug.jsonl git --version
 cat /tmp/debug.jsonl
@@ -247,7 +254,7 @@ time git --version                    # Warm cache
 ```bash
 # Create release binaries
 cargo build --release
-tar -czf substrate-v0.x.x-$(uname -m).tar.gz -C target/release substrate substrate-shim substrate-supervisor
+tar -czf substrate-v0.x.x-$(uname -m).tar.gz -C target/release substrate substrate-shim
 ```
 
 For contributing guidelines, see [CONTRIBUTING.md](../CONTRIBUTING.md).
