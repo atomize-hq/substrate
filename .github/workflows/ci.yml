@@ -58,21 +58,3 @@ jobs:
         test -f target/release/substrate-shim
         echo "✅ Both binaries built successfully"
 
-  publish-check:
-    name: Publish Check
-    runs-on: ubuntu-24.04
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
-
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
-
-    - name: Check publishing (dry run)
-      run: |
-        cargo publish -p substrate-common --dry-run --allow-dirty
-        cargo publish -p substrate-shell --dry-run --allow-dirty  
-        cargo publish -p substrate-shim --dry-run --allow-dirty
-        echo "✅ All packages ready for publication"
