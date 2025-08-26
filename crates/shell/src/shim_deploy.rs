@@ -246,7 +246,7 @@ impl ShimDeployer {
         vec![
             "git", "npm", "npx", "node", "pnpm", "bun", "python", "python3", "pip", "pip3", "jq",
             "curl", "wget", "tar", "unzip", "make", "go", "cargo", "deno", "docker", "kubectl",
-            "rg", "fd", "bat",
+            "rg", "fd", "bat", "codex",
         ]
         .into_iter()
         .map(String::from)
