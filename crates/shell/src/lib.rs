@@ -542,6 +542,10 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
 fn run_wrap_mode(config: &ShellConfig, command: &str) -> Result<i32> {
     let cmd_id = Uuid::now_v7().to_string();
     let running_child_pid = Arc::new(AtomicI32::new(0));
+
+    // Set up signal handlers for wrap mode to properly handle signals like SIGTERM
+    setup_signal_handlers(running_child_pid.clone())?;
+
     let status = execute_command(config, command, &cmd_id, running_child_pid)?;
     Ok(exit_code(status))
 }
@@ -566,6 +570,9 @@ fn run_script_mode(config: &ShellConfig, script_path: &Path) -> Result<i32> {
     let mut cmd = Command::new(&config.shell_path);
     let cmd_id = Uuid::now_v7().to_string();
     let running_child_pid = Arc::new(AtomicI32::new(0));
+
+    // Set up signal handlers for script mode to properly handle signals like SIGTERM
+    setup_signal_handlers(running_child_pid.clone())?;
 
     // Shell-specific script execution
     let shell_name = Path::new(&config.shell_path)
@@ -612,7 +619,9 @@ fn run_script_mode(config: &ShellConfig, script_path: &Path) -> Result<i32> {
         .stderr(Stdio::inherit());
 
     // Set BASH_ENV for builtin command tracking when using bash
-    if is_bash {
+    // Only in script mode where we need to track script internals
+    // Skip for simple -c commands to avoid duplicate logging
+    if is_bash && matches!(config.mode, ShellMode::Script(_)) {
         set_bashenv_trampoline(&mut cmd);
     }
 
@@ -650,6 +659,7 @@ fn run_script_mode(config: &ShellConfig, script_path: &Path) -> Result<i32> {
 
     // Log script completion
     let duration = start_time.elapsed();
+    #[allow(unused_mut)]
     let mut extra = json!({
         log_schema::EXIT_CODE: status.code().unwrap_or(-1),
         log_schema::DURATION_MS: duration.as_millis()
@@ -1684,10 +1694,43 @@ fn handle_builtin(
     if builtin_result.is_some() {
         let builtin_cmd_id = Uuid::now_v7().to_string();
         let extra = json!({ "parent_cmd_id": parent_cmd_id });
+
+        // Apply redaction to builtin commands
+        let redacted_command = {
+            let tokens = shell_words::split(command).unwrap_or_else(|_| vec![command.to_string()]);
+            let mut out = Vec::new();
+            let mut i = 0;
+
+            while i < tokens.len() {
+                let t = &tokens[i];
+
+                // Check for environment variable exports with sensitive names
+                if tokens.len() > 1 && tokens[0] == "export" && t.contains('=') {
+                    if let Some((k, _)) = t.split_once('=') {
+                        let kl = k.to_lowercase();
+                        if kl.contains("token")
+                            || kl.contains("password")
+                            || kl.contains("secret")
+                            || kl.contains("apikey")
+                            || kl.contains("api_key")
+                        {
+                            out.push(format!("{k}=***"));
+                            i += 1;
+                            continue;
+                        }
+                    }
+                }
+
+                out.push(t.clone());
+                i += 1;
+            }
+            out.join(" ")
+        };
+
         log_command_event(
             config,
             "builtin_command",
-            command,
+            &redacted_command,
             &builtin_cmd_id,
             Some(extra),
         )?;
@@ -1759,7 +1802,9 @@ fn execute_external(
                                        // Keep PATH as-is with shims - the env_remove("SHIM_ACTIVE") should be sufficient
 
     // Set BASH_ENV for builtin command tracking when using bash
-    if is_bash {
+    // Only in script mode where we need to track script internals
+    // Skip for simple -c commands to avoid duplicate logging
+    if is_bash && matches!(config.mode, ShellMode::Script(_)) {
         set_bashenv_trampoline(&mut cmd);
     }
 

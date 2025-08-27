@@ -210,6 +210,7 @@ fn execute_real_binary_bypass(ctx: &ShimContext) -> Result<i32> {
     let exit_code = status.code().unwrap_or(1);
     if let Some(log_path) = &ctx.log_file {
         // Log with a bypass marker in the entry
+        #[allow(unused_mut)]
         let mut log_entry = serde_json::json!({
             "ts": crate::logger::format_timestamp(timestamp),
             "command": ctx.command_name,
@@ -274,7 +275,7 @@ fn execute_real_binary_bypass(ctx: &ShimContext) -> Result<i32> {
 fn execute_command(
     binary: &PathBuf,
     args: &[std::ffi::OsString],
-    command_name: &str,
+    #[allow(unused_variables)] command_name: &str,
 ) -> Result<ExitStatus> {
     let mut cmd = Command::new(binary);
 

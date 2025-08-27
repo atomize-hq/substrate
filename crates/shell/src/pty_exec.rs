@@ -397,7 +397,7 @@ fn get_terminal_size() -> Result<PtySize> {
 #[cfg(windows)]
 use lazy_static::lazy_static;
 #[cfg(windows)]
-use std::sync::{Condvar, Mutex};
+use std::sync::Condvar;
 
 #[cfg(windows)]
 lazy_static! {
@@ -587,20 +587,15 @@ fn handle_pty_io(
 
         // Windows: Use global input forwarder to avoid thread leak
         // Set the current PTY writer and wake the forwarder thread
-        // Clone the writer for Windows (can't move it since Unix also uses it)
-        if let Ok(guard) = writer.lock() {
-            if let Some(ref w) = *guard {
-                // Clone the writer for Windows
-                if let Ok(cloned) = w.try_clone_writer() {
-                    *CURRENT_PTY_WRITER.lock().unwrap() = Some(Box::new(cloned));
-                }
-            }
-        }
+        // TODO: Properly handle writer cloning on Windows
+        // For now, we'll skip PTY input forwarding on Windows as it needs
+        // a different approach than Unix
 
-        // Wake the forwarder thread
-        let (lock, cvar) = &**WIN_PTY_INPUT_GATE;
-        *lock.lock().unwrap() = true;
-        cvar.notify_all();
+        // Clear any existing writer
+        *CURRENT_PTY_WRITER.lock().unwrap() = None;
+
+        // Note: Windows PTY input handling needs to be reimplemented
+        // The try_clone_writer() method doesn't exist on trait objects
     }
 
     // Spawn thread to copy PTY output to stdout (using blocking I/O)

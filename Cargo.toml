@@ -2,7 +2,7 @@
 name = "substrate"
 version = "0.1.1"
 edition = "2021"
-rust-version = "1.74"
+rust-version = "1.89"
 authors = ["Atomize"]
 description = "Secure execution layer for AI agent development workflows with comprehensive tracing and isolation"
 license = "MIT"

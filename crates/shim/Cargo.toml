@@ -2,7 +2,7 @@
 name = "substrate-shim"
 version = "0.1.1"
 edition = "2021"
-rust-version = "1.74"
+rust-version = "1.89"
 authors = ["Atomize"]
 description = "Command execution shim for tracing and observability"
 license = "MIT"
