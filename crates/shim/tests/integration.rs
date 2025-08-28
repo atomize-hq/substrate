@@ -4,9 +4,24 @@
 //! scenarios that were proven to work with Claude Code through manual testing.
 
 use anyhow::Result;
-use assert_cmd::Command;
 use std::fs;
 use tempfile::TempDir;
+
+/// Helper function to get the substrate-shim binary path from workspace root
+fn get_shim_binary_path() -> String {
+    let binary_name = if cfg!(windows) {
+        "substrate-shim.exe"
+    } else {
+        "substrate-shim"
+    };
+
+    if let Ok(workspace_dir) = std::env::var("CARGO_WORKSPACE_DIR") {
+        format!("{}/target/debug/{}", workspace_dir, binary_name)
+    } else {
+        // Fallback: relative path from crates/shim/tests to workspace root
+        format!("../../target/debug/{}", binary_name)
+    }
+}
 
 /// Test the complete shim execution flow with real binary resolution
 #[test]
@@ -30,9 +45,8 @@ fn test_shim_execution_flow() -> Result<()> {
         fs::set_permissions(&test_script, perms)?;
     }
 
-    // Get the built shim binary using standard Rust testing pattern
-    let shim_cmd = Command::cargo_bin("substrate-shim")?;
-    let shim_binary_path = shim_cmd.get_program();
+    // Get the built shim binary from workspace root
+    let shim_binary_path = get_shim_binary_path();
 
     // Copy shim binary to test location
     let shim_binary = shim_dir.join("echo");
@@ -107,9 +121,8 @@ fn test_claude_code_hash_pinning_scenario() -> Result<()> {
         fs::write(&test_cmd, "@echo off\necho testcmd: %*")?;
     }
 
-    // Get the built shim binary using standard Rust testing pattern
-    let shim_cmd = Command::cargo_bin("substrate-shim")?;
-    let shim_binary_path = shim_cmd.get_program();
+    // Get the built shim binary from workspace root
+    let shim_binary_path = get_shim_binary_path();
 
     let shim_binary = shim_dir.join(if cfg!(windows) {
         "testcmd.exe"
@@ -195,9 +208,8 @@ fn test_shim_bypass() -> Result<()> {
         fs::write(&test_echo, "@echo off\necho %*")?;
     }
 
-    // Get the built shim binary using standard Rust testing pattern
-    let shim_cmd = Command::cargo_bin("substrate-shim")?;
-    let shim_binary_path = shim_cmd.get_program();
+    // Get the built shim binary from workspace root
+    let shim_binary_path = get_shim_binary_path();
 
     let shim_echo = shim_dir.join(if cfg!(windows) { "echo.exe" } else { "echo" });
     fs::copy(shim_binary_path, &shim_echo)?;
@@ -247,9 +259,8 @@ fn test_session_correlation() -> Result<()> {
         fs::set_permissions(&test_script, perms)?;
     }
 
-    // Get the built shim binary using standard Rust testing pattern
-    let shim_cmd = Command::cargo_bin("substrate-shim")?;
-    let shim_binary_path = shim_cmd.get_program();
+    // Get the built shim binary from workspace root
+    let shim_binary_path = get_shim_binary_path();
 
     let shim_binary = shim_dir.join("test_cmd");
     fs::copy(shim_binary_path, &shim_binary)?;
@@ -319,9 +330,8 @@ fn test_credential_redaction() -> Result<()> {
         fs::set_permissions(&test_script, perms)?;
     }
 
-    // Get the built shim binary using standard Rust testing pattern
-    let shim_cmd = Command::cargo_bin("substrate-shim")?;
-    let shim_binary_path = shim_cmd.get_program();
+    // Get the built shim binary from workspace root
+    let shim_binary_path = get_shim_binary_path();
 
     let shim_binary = shim_dir.join("curl");
     fs::copy(shim_binary_path, &shim_binary)?;
@@ -380,9 +390,8 @@ fn test_missing_command_error() -> Result<()> {
     fs::create_dir_all(&shim_dir)?;
     fs::create_dir_all(&bin_dir)?;
 
-    // Get the built shim binary using standard Rust testing pattern
-    let shim_cmd = Command::cargo_bin("substrate-shim")?;
-    let shim_binary_path = shim_cmd.get_program();
+    // Get the built shim binary from workspace root
+    let shim_binary_path = get_shim_binary_path();
 
     let shim_binary = shim_dir.join("nonexistent");
     fs::copy(shim_binary_path, &shim_binary)?;

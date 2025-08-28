@@ -1,4 +1,4 @@
-mod lock;
+pub mod lock;
 mod pty_exec;
 pub mod shim_deploy; // Made public for integration tests
 
@@ -719,6 +719,61 @@ fn run_pipe_mode(config: &ShellConfig) -> Result<i32> {
     Ok(last_status)
 }
 
+/// Determines if a command requires shell interpretation.
+///
+/// Returns `true` if the command contains shell metacharacters that require
+/// shell parsing (pipes, redirections, command substitution, etc.).
+///
+/// # Examples
+///
+/// Simple commands don't need shell interpretation:
+/// ```
+/// use substrate_shell::needs_shell;
+///
+/// assert!(!needs_shell("ls"));
+/// assert!(!needs_shell("echo hello"));
+/// assert!(!needs_shell("git status"));
+/// ```
+///
+/// Commands with pipes need shell interpretation:
+/// ```
+/// use substrate_shell::needs_shell;
+///
+/// assert!(needs_shell("ls | grep txt"));
+/// assert!(needs_shell("cat file.txt | head -10"));
+/// ```
+///
+/// Commands with redirections need shell interpretation:
+/// ```
+/// use substrate_shell::needs_shell;
+///
+/// assert!(needs_shell("echo hello > file.txt"));
+/// assert!(needs_shell("cat file.txt 2>/dev/null"));
+/// assert!(needs_shell("command 2>&1"));
+/// ```
+///
+/// Commands with logical operators need shell interpretation:
+/// ```
+/// use substrate_shell::needs_shell;
+///
+/// assert!(needs_shell("make && echo success"));
+/// assert!(needs_shell("test -f file || echo missing"));
+/// ```
+///
+/// Commands with command substitution need shell interpretation:
+/// ```
+/// use substrate_shell::needs_shell;
+///
+/// assert!(needs_shell("echo $(date)"));
+/// assert!(needs_shell("ls `pwd`"));
+/// ```
+///
+/// Malformed commands that can't be parsed are assumed to need shell:
+/// ```
+/// use substrate_shell::needs_shell;
+///
+/// assert!(needs_shell("echo 'unclosed quote"));
+/// ```
 pub fn needs_shell(cmd: &str) -> bool {
     let Ok(tokens) = shell_words::split(cmd) else {
         return true;
@@ -730,6 +785,90 @@ pub fn needs_shell(cmd: &str) -> bool {
         || t.contains(">&")            // 2>&1, 1>&2, etc.
         || t.chars().any(|c| "<>|&".contains(c)) && t.len() > 1 // e.g. 1>/dev/null
     })
+}
+
+#[cfg(test)]
+mod proptest_tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn test_needs_shell_never_panics(input in "\\PC*") {
+            // Any printable character sequence shouldn't cause panic
+            let _ = needs_shell(&input);
+        }
+
+        #[test]
+        fn test_simple_commands_dont_need_shell(
+            cmd in "[a-zA-Z][a-zA-Z0-9_-]*",
+            args in prop::collection::vec("[a-zA-Z0-9_.-]+", 0..5)
+        ) {
+            let command = if args.is_empty() {
+                cmd
+            } else {
+                format!("{} {}", cmd, args.join(" "))
+            };
+
+            // Simple commands with alphanumeric args shouldn't need shell
+            prop_assert!(!needs_shell(&command));
+        }
+
+        #[test]
+        fn test_pipes_always_need_shell(
+            left_cmd in "[a-zA-Z]+",
+            right_cmd in "[a-zA-Z]+"
+        ) {
+            let command = format!("{} | {}", left_cmd, right_cmd);
+            prop_assert!(needs_shell(&command));
+        }
+
+        #[test]
+        fn test_redirections_need_shell(
+            cmd in "[a-zA-Z]+",
+            file in "[a-zA-Z0-9._-]+",
+            redirect in prop::sample::select(vec![">", ">>", "<", "2>", "&>"])
+        ) {
+            let command = format!("{} {} {}", cmd, redirect, file);
+            prop_assert!(needs_shell(&command));
+        }
+
+        #[test]
+        fn test_logical_operators_need_shell(
+            left_cmd in "[a-zA-Z]+",
+            right_cmd in "[a-zA-Z]+",
+            operator in prop::sample::select(vec!["&&", "||", ";"])
+        ) {
+            let command = format!("{} {} {}", left_cmd, operator, right_cmd);
+            prop_assert!(needs_shell(&command));
+        }
+
+        #[test]
+        fn test_command_substitution_needs_shell(
+            outer_cmd in "[a-zA-Z]+",
+            inner_cmd in "[a-zA-Z]+",
+            substitution_type in prop::sample::select(vec!["$({})", "`{}`"])
+        ) {
+            let substitution = substitution_type.replace("{}", &inner_cmd);
+            let command = format!("{} {}", outer_cmd, substitution);
+            prop_assert!(needs_shell(&command));
+        }
+
+        #[test]
+        fn test_background_processes_need_shell(cmd in "[a-zA-Z]+") {
+            let command = format!("{} &", cmd);
+            prop_assert!(needs_shell(&command));
+        }
+
+        #[test]
+        fn test_stderr_redirections_need_shell(
+            cmd in "[a-zA-Z]+",
+            stderr_redirect in prop::sample::select(vec!["2>&1", "1>&2", "2>"])
+        ) {
+            let command = format!("{} {}", cmd, stderr_redirect);
+            prop_assert!(needs_shell(&command));
+        }
+    }
 }
 
 fn set_bashenv_trampoline(cmd: &mut Command) {

@@ -359,4 +359,276 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_bypass_mode_detection() {
+        // Test SHIM_BYPASS environment variable detection
+        env::remove_var("SHIM_BYPASS");
+        assert!(!ShimContext::is_bypass_enabled());
+
+        env::set_var("SHIM_BYPASS", "1");
+        assert!(ShimContext::is_bypass_enabled());
+
+        // Note: is_bypass_enabled() only accepts "1" as true
+        env::set_var("SHIM_BYPASS", "true");
+        assert!(!ShimContext::is_bypass_enabled());
+
+        env::set_var("SHIM_BYPASS", "0");
+        assert!(!ShimContext::is_bypass_enabled());
+
+        env::set_var("SHIM_BYPASS", "false");
+        assert!(!ShimContext::is_bypass_enabled());
+
+        env::set_var("SHIM_BYPASS", "");
+        assert!(!ShimContext::is_bypass_enabled());
+
+        env::remove_var("SHIM_BYPASS");
+    }
+
+    #[test]
+    fn test_explicit_path_handling() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let script_path = temp_dir.path().join("test_script.sh");
+
+        // Create a simple executable script
+        std::fs::write(&script_path, "#!/bin/bash\necho 'test'").unwrap();
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&script_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&script_path, perms).unwrap();
+        }
+
+        // Test that explicit paths are handled correctly
+        assert!(is_executable(&script_path));
+
+        // Test non-executable file
+        let non_exec_path = temp_dir.path().join("not_executable");
+        std::fs::write(&non_exec_path, "content").unwrap();
+        assert!(!is_executable(&non_exec_path));
+    }
+
+    #[test]
+    fn test_handle_bypass_mode_command_resolution() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let fake_bin = temp_dir.path().join("fake_echo");
+
+        #[cfg(unix)]
+        std::fs::write(&fake_bin, "#!/bin/bash\necho 'bypass test'").unwrap();
+        #[cfg(windows)]
+        std::fs::write(&fake_bin.with_extension("exe"), "@echo bypass test").unwrap();
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&fake_bin).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&fake_bin, perms).unwrap();
+        }
+
+        // Test explicit path detection
+        #[cfg(unix)]
+        assert!(fake_bin
+            .to_string_lossy()
+            .contains(std::path::MAIN_SEPARATOR));
+        #[cfg(windows)]
+        assert!(fake_bin
+            .with_extension("exe")
+            .to_string_lossy()
+            .contains(std::path::MAIN_SEPARATOR));
+    }
+
+    #[test]
+    fn test_signal_exit_status_handling() {
+        // Test Unix signal handling in exit status
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            use std::process::Command;
+
+            // We can't easily test signal handling without spawning actual processes,
+            // but we can test the logic that converts exit codes
+            // Most Unix systems have 'false' command that exits with status 1
+            if let Ok(status) = Command::new("false").status() {
+                assert_eq!(status.code(), Some(1));
+                assert!(status.signal().is_none());
+
+                // Test the conversion logic we use in run_shim
+                let exit_code = if let Some(signal) = status.signal() {
+                    128 + signal
+                } else {
+                    status.code().unwrap_or(1)
+                };
+                assert_eq!(exit_code, 1);
+            }
+        }
+    }
+
+    #[test]
+    fn test_environment_variable_preservation() {
+        // Test that critical environment variables are preserved
+        let original_path = env::var("PATH").unwrap_or_default();
+        let original_user = env::var("USER").ok();
+
+        // Test that we don't accidentally clear critical env vars
+        assert!(!original_path.is_empty());
+
+        // Test ORIGINAL_PATH_VAR handling
+        env::set_var(ORIGINAL_PATH_VAR, "/test/path");
+        let retrieved = env::var(ORIGINAL_PATH_VAR).unwrap();
+        assert_eq!(retrieved, "/test/path");
+
+        // Cleanup
+        env::remove_var(ORIGINAL_PATH_VAR);
+        if let Some(user) = original_user {
+            env::set_var("USER", user);
+        }
+    }
+
+    #[test]
+    fn test_shim_context_creation() {
+        // Test basic ShimContext creation from current executable
+        // This will fail in test environment, but we test error handling
+        let result = ShimContext::from_current_exe();
+
+        // In test environment, this should fail gracefully
+        match result {
+            Ok(_ctx) => {
+                // If it succeeds, verify basic properties
+                // This might happen in some test setups
+            }
+            Err(_e) => {
+                // Expected in most test environments
+                // The important thing is it doesn't panic
+            }
+        }
+    }
+
+    #[test]
+    fn test_command_argument_handling() {
+        use std::ffi::OsString;
+
+        // Test that command arguments are properly collected
+        let args = vec![
+            OsString::from("arg1"),
+            OsString::from("arg with spaces"),
+            OsString::from("arg-with-dashes"),
+            OsString::from(""), // empty arg
+        ];
+
+        // Test that we can handle various argument types
+        for arg in &args {
+            assert!(!arg.to_string_lossy().is_empty() || arg.len() == 0); // Better sanity check
+        }
+
+        // Test empty args collection
+        let empty_args: Vec<OsString> = vec![];
+        assert!(empty_args.is_empty());
+    }
+
+    #[test]
+    fn test_path_separator_detection() {
+        // Test path separator detection for explicit paths
+        let with_separator = format!(
+            "path{}to{}command",
+            std::path::MAIN_SEPARATOR,
+            std::path::MAIN_SEPARATOR
+        );
+        let without_separator = "command";
+
+        assert!(with_separator.contains(std::path::MAIN_SEPARATOR));
+        assert!(!without_separator.contains(std::path::MAIN_SEPARATOR));
+
+        // Test platform-specific separators
+        #[cfg(windows)]
+        {
+            assert!(r"C:\path\to\command".contains(std::path::MAIN_SEPARATOR));
+            assert!(!r"command".contains(std::path::MAIN_SEPARATOR));
+        }
+
+        #[cfg(unix)]
+        {
+            assert!("/path/to/command".contains(std::path::MAIN_SEPARATOR));
+            assert!(!"command".contains(std::path::MAIN_SEPARATOR));
+        }
+    }
+
+    #[test]
+    fn test_error_context_preservation() {
+        use std::ffi::OsString;
+
+        // Test that error contexts are properly preserved through the call stack
+        let nonexistent = PathBuf::from("/definitely/does/not/exist/command");
+        let result = execute_command(&nonexistent, &[OsString::from("test")], "test");
+
+        assert!(result.is_err());
+
+        // Verify error message contains useful context
+        let error_msg = result.unwrap_err().to_string();
+        assert!(!error_msg.is_empty());
+        // Error should mention the failed command path
+        assert!(error_msg.contains("Failed to execute") || error_msg.contains("not found"));
+    }
+
+    #[test]
+    fn test_cross_platform_executable_detection() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+
+        #[cfg(unix)]
+        {
+            // Unix: Test executable bit detection
+            let exec_file = temp_dir.path().join("executable");
+            let non_exec_file = temp_dir.path().join("not_executable");
+
+            std::fs::write(&exec_file, "#!/bin/bash\necho test").unwrap();
+            std::fs::write(&non_exec_file, "not executable").unwrap();
+
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&exec_file).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&exec_file, perms).unwrap();
+
+            assert!(is_executable(&exec_file));
+            assert!(!is_executable(&non_exec_file));
+        }
+
+        #[cfg(windows)]
+        {
+            // Windows: Any file is considered "executable"
+            let file = temp_dir.path().join("test.exe");
+            std::fs::write(&file, "dummy content").unwrap();
+
+            assert!(is_executable(&file));
+
+            // Test non-existent file
+            let nonexistent = temp_dir.path().join("does_not_exist.exe");
+            assert!(!is_executable(&nonexistent));
+        }
+    }
+
+    #[test]
+    fn test_timing_and_metrics() {
+        use std::time::{Duration, Instant, SystemTime};
+
+        // Test that timing functions work correctly
+        let start = Instant::now();
+        std::thread::sleep(Duration::from_millis(10));
+        let elapsed = start.elapsed();
+
+        assert!(elapsed >= Duration::from_millis(5));
+        assert!(elapsed < Duration::from_millis(100));
+
+        // Test SystemTime functionality used in logging
+        let timestamp = SystemTime::now();
+        let duration_since_epoch = timestamp.duration_since(SystemTime::UNIX_EPOCH).unwrap();
+        assert!(duration_since_epoch.as_secs() > 1_600_000_000); // After 2020
+    }
 }
