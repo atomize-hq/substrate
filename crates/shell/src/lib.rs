@@ -19,6 +19,7 @@ use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
+#[cfg(unix)]
 use std::thread;
 use substrate_common::{dedupe_path, log_schema, redact_sensitive};
 use uuid::Uuid;
@@ -58,6 +59,7 @@ pub(crate) fn initialize_global_sigwinch_handler() {
 }
 
 #[cfg(not(unix))]
+#[allow(dead_code)]
 pub(crate) fn initialize_global_sigwinch_handler() {
     // No-op on non-Unix platforms
 }
@@ -1733,7 +1735,7 @@ fn execute_command(
 
     // Log command completion with redacted command
     let duration = start_time.elapsed();
-    let mut extra = json!({
+    let extra = json!({
         log_schema::EXIT_CODE: status.code().unwrap_or(-1),
         log_schema::DURATION_MS: duration.as_millis()
     });

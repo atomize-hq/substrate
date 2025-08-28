@@ -37,6 +37,9 @@ cargo test --test integration       # Integration tests
 cargo test -p substrate             # Shell-specific tests
 cargo test -p substrate-shim        # Shim-specific tests
 
+# Run integration tests (requires workspace dir for binary discovery)
+CARGO_WORKSPACE_DIR=$PWD cargo test --test integration
+
 # Run a single test
 cargo test test_name -- --exact
 ```
@@ -71,24 +74,35 @@ cargo doc --no-deps
 The project uses a Cargo workspace with four main crates:
 
 1. **`crates/common/`**: Shared utilities and log schema
-   - Path deduplication utilities
-   - Log schema constants
-   - Credential redaction logic
+   - `src/lib.rs`: Core utilities including path deduplication and credential redaction
+   - `src/paths.rs`: Cross-platform path handling for substrate directories
+   - Log schema constants for consistent structured logging
    - Used by both shell and shim components
 
 2. **`crates/shell/`**: Custom shell implementation (`substrate` binary)
    - `src/lib.rs`: Core shell modes (interactive, wrap, script, pipe)
-   - `src/pty_exec.rs`: PTY terminal emulation for Unix systems
+   - `src/pty_exec.rs`: PTY terminal emulation and signal handling for Unix systems
+   - `src/shim_deploy.rs`: Automatic shim deployment with version tracking
+   - `src/lock.rs`: Process locking for safe multi-instance operations
    - Built-in commands: cd, pwd, export, unset, exit
    - Session and command ID generation using UUIDv7
    - Structured JSONL logging with automatic rotation
+   - Integration with patched Reedline for interactive REPL
 
 3. **`crates/shim/`**: Binary shimming implementation (`substrate-shim` binary)
-   - `src/lib.rs`: Core shimming logic
-   - Path resolution with intelligent caching
+   - `src/lib.rs`: Core shimming logic and main entry point
+   - `src/context.rs`: Environment detection and configuration management
+   - `src/resolver.rs`: Binary path resolution with intelligent caching
+   - `src/logger.rs`: Structured JSONL logging with credential redaction
+   - `src/exec.rs`: Cross-platform command execution with signal handling
    - Session correlation and depth tracking
    - Binary fingerprinting (SHA-256)
    - Comprehensive credential redaction
+
+4. **`src/`**: Thin binary entry points (workspace root)
+   - `main.rs`: Entry point for `substrate` binary - delegates to `substrate_shell::run_shell()`
+   - `shim_main.rs`: Entry point for `substrate-shim` binary - delegates to `substrate_shim::run_shim()`
+   - These create the two main binaries: `target/debug/substrate` and `target/debug/substrate-shim`
 
 
 ### Key Design Patterns
@@ -138,11 +152,17 @@ For debugging and development:
 ## Testing Strategy
 
 When modifying the codebase:
-1. Unit tests are in `src/lib.rs` files as `#[cfg(test)]` modules
-2. Integration tests are in `tests/` directories
-3. Shell mode testing covers: interactive, wrap (-c), script (-f), pipe modes
-4. PTY tests validate terminal emulation (Unix only)
-5. Security tests verify credential redaction
+1. **Unit tests**: Located in `src/lib.rs` files as `#[cfg(test)]` modules
+2. **Integration tests**: Located in `tests/` directories - require `CARGO_WORKSPACE_DIR=$PWD` environment variable for binary discovery
+3. **Shell mode testing**: Covers interactive, wrap (-c), script (-f), pipe modes
+4. **PTY tests**: Validate terminal emulation (Unix only)
+5. **Security tests**: Verify credential redaction patterns
+
+### Integration Test Requirements
+Integration tests need to locate the built binaries (`target/debug/substrate` and `target/debug/substrate-shim`). They use the `CARGO_WORKSPACE_DIR` environment variable to find the workspace root, falling back to relative paths if not set. Always run integration tests with:
+```bash
+CARGO_WORKSPACE_DIR=$PWD cargo test --test integration
+```
 
 ## Shim Deployment Implementation
 
@@ -153,18 +173,20 @@ When modifying the codebase:
 - Atomic deployment using tempfile crate
 - Process locking with 5-second timeout
 
-### CLI Commands
+
+## Deployment and Management
+
+### CLI Commands for Shim Management
 - `substrate --shim-status`: Check deployment status and version
 - `substrate --shim-deploy`: Force redeployment of shims
 - `substrate --shim-remove`: Remove all deployed shims
 - `substrate --shim-skip`: Skip automatic deployment for this run
 
-## Deployment Scripts
-
-Located in `scripts/`:
-- `stage_shims.sh`: Creates shimmed binaries in `~/.substrate/shims/`
-- `create_bashenv.sh`: Sets up non-interactive shell environment
-- `rollback.sh`: Emergency rollback to restore original environment
+### Shell Execution Modes
+- **Interactive mode**: `substrate` - Full REPL with history and completion
+- **Wrap mode**: `substrate -c "command"` - Execute single command with tracing
+- **Script mode**: `substrate -f script.sh` - Execute script file with tracing
+- **Pipe mode**: `echo "command" | substrate` - Process commands from stdin
 
 ## Third-Party Dependencies
 

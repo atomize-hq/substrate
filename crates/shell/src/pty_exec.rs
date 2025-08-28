@@ -99,6 +99,7 @@ impl PtyExitStatus {
     }
 
     #[cfg(not(unix))]
+    #[allow(dead_code)]
     pub fn signal(&self) -> Option<i32> {
         None
     }
@@ -476,6 +477,17 @@ fn handle_pty_io(
     let done = Arc::new(AtomicBool::new(false));
 
     // Get writer for stdin->pty (wrap in Arc<Mutex<Option>> so we can drop it from main thread)
+    #[cfg(unix)]
+    let writer = {
+        let master = pty_master.lock().unwrap();
+        Arc::new(Mutex::new(Some(
+            master
+                .take_writer()
+                .context("Failed to create PTY writer")?,
+        )))
+    };
+
+    #[cfg(not(unix))]
     let writer = {
         let master = pty_master.lock().unwrap();
         Arc::new(Mutex::new(Some(
@@ -486,11 +498,15 @@ fn handle_pty_io(
     };
 
     // Clone for the stdin thread
+    #[cfg(unix)]
     let writer_for_thread = Arc::clone(&writer);
 
     // 🔥 CRITICAL FIX: Declare stdin_thread handle outside platform blocks
     // 🔥 MUST-FIX: Initialize to None to avoid uninitialized variable on non-Unix
-    let stdin_join: Option<thread::JoinHandle<()>>;
+    #[cfg(unix)]
+    let stdin_join: Option<std::thread::JoinHandle<()>>;
+    #[cfg(not(unix))]
+    let _stdin_join: Option<()> = None;
 
     // Platform-specific stdin handling
     #[cfg(unix)]
@@ -583,7 +599,7 @@ fn handle_pty_io(
 
     #[cfg(windows)]
     {
-        stdin_join = None; // Windows doesn't use per-command threads
+        // Windows doesn't use per-command threads
 
         // Windows: Use global input forwarder to avoid thread leak
         // Set the current PTY writer and wake the forwarder thread
@@ -662,6 +678,15 @@ fn handle_pty_io(
         }
     }
 
+    #[cfg(not(unix))]
+    {
+        // Take the writer out of the Arc<Mutex> and drop it
+        // This prevents any potential resource leaks on Windows
+        if let Ok(mut guard) = writer.lock() {
+            *guard = None; // Drop the writer
+        }
+    }
+
     // CRITICAL: Drain any remaining output before sending reset sequences
     // This prevents race condition with TUI cleanup sequences
     thread::sleep(std::time::Duration::from_millis(50)); // Give TUI time to send cleanup
@@ -728,6 +753,7 @@ fn verify_process_group(pid: Option<u32>) {
 }
 
 #[cfg(not(unix))]
+#[allow(dead_code)]
 fn verify_process_group(_pid: Option<u32>) {
     // No-op on non-Unix platforms
 }
