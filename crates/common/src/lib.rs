@@ -60,9 +60,19 @@ mod tests {
 
     #[test]
     fn test_dedupe_path() {
-        let path = "/usr/bin:/bin:/usr/bin:/usr/local/bin:/bin";
-        let result = dedupe_path(path);
-        assert_eq!(result, "/usr/bin:/bin:/usr/local/bin");
+        #[cfg(unix)]
+        {
+            let path = "/usr/bin:/bin:/usr/bin:/usr/local/bin:/bin";
+            let result = dedupe_path(path);
+            assert_eq!(result, "/usr/bin:/bin:/usr/local/bin");
+        }
+
+        #[cfg(windows)]
+        {
+            let path = "C:\\bin;D:\\bin;C:\\bin;C:\\tools;D:\\bin";
+            let result = dedupe_path(path);
+            assert_eq!(result, "C:\\bin;D:\\bin;C:\\tools");
+        }
     }
 
     #[test]

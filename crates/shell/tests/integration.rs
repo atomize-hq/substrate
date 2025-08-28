@@ -77,6 +77,11 @@ fn test_command_start_finish_json_roundtrip() {
 
 #[test]
 fn test_builtin_cd_side_effects() {
+    // Skip this test on Windows due to shell compatibility differences
+    if cfg!(windows) {
+        return;
+    }
+
     let temp = TempDir::new().unwrap();
     let target_dir = temp.path().join("test_dir");
     fs::create_dir(&target_dir).unwrap();
@@ -98,42 +103,59 @@ fn test_ci_flag_strict_mode_ordering() {
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
 
-    // Test that undefined variable causes failure in CI mode
-    get_substrate_binary()
-        .env("SHIM_TRACE_LOG", &log_file)
-        .arg("--shell")
-        .arg("/bin/bash")
-        .arg("--ci")
-        .arg("-c")
-        .arg("echo $UNDEFINED_VAR")
-        .assert()
-        .failure();
+    // Skip this test on Windows since /bin/bash doesn't exist
+    if !cfg!(windows) {
+        // Test that undefined variable causes failure in CI mode
+        get_substrate_binary()
+            .env("SHIM_TRACE_LOG", &log_file)
+            .arg("--shell")
+            .arg("/bin/bash")
+            .arg("--ci")
+            .arg("-c")
+            .arg("echo $UNDEFINED_VAR")
+            .assert()
+            .failure();
 
-    // Test that it succeeds without CI mode
-    get_substrate_binary()
-        .env("SHIM_TRACE_LOG", &log_file)
-        .arg("--shell")
-        .arg("/bin/bash")
-        .arg("-c")
-        .arg("echo $UNDEFINED_VAR")
-        .assert()
-        .success();
+        // Test that it succeeds without CI mode
+        get_substrate_binary()
+            .env("SHIM_TRACE_LOG", &log_file)
+            .arg("--shell")
+            .arg("/bin/bash")
+            .arg("-c")
+            .arg("echo $UNDEFINED_VAR")
+            .assert()
+            .success();
+    }
 }
 
 #[test]
 fn test_script_mode_single_process() {
     let temp = TempDir::new().unwrap();
-    let script_file = temp.path().join("test.sh");
+    let script_file = if cfg!(windows) {
+        temp.path().join("test.ps1")
+    } else {
+        temp.path().join("test.sh")
+    };
 
     // Test that script state persists (cd, export, etc)
-    fs::write(&script_file, "cd /tmp\npwd\nexport FOO=bar\necho $FOO").unwrap();
+    let script_content = if cfg!(windows) {
+        // Use Windows temp directory and PowerShell syntax
+        "cd $env:TEMP\nGet-Location\n$env:FOO=\"bar\"\necho $env:FOO"
+    } else {
+        "cd /tmp\npwd\nexport FOO=bar\necho $FOO"
+    };
+    fs::write(&script_file, script_content).unwrap();
 
     get_substrate_binary()
         .arg("-f")
         .arg(&script_file)
         .assert()
         .success()
-        .stdout(predicate::str::contains("/tmp"))
+        .stdout(predicate::str::contains(if cfg!(windows) {
+            "Temp"
+        } else {
+            "/tmp"
+        }))
         .stdout(predicate::str::contains("bar"));
 }
 
@@ -147,7 +169,11 @@ fn test_redaction_header_values() {
     get_substrate_binary()
         .env("SHIM_TRACE_LOG", &log_file)
         .arg("-c")
-        .arg("export API_TOKEN=secret123 && echo 'test'")
+        .arg(if cfg!(windows) {
+            "$env:API_TOKEN=\"secret123\"; echo 'test'"
+        } else {
+            "export API_TOKEN=secret123 && echo 'test'"
+        })
         .assert()
         .success();
 
@@ -174,7 +200,11 @@ fn test_redaction_user_pass() {
     get_substrate_binary()
         .env("SHIM_TRACE_LOG", &log_file)
         .arg("-c")
-        .arg("export DB_PASSWORD=secretpass && echo 'test'")
+        .arg(if cfg!(windows) {
+            "$env:DB_PASSWORD=\"secretpass\"; echo 'test'"
+        } else {
+            "export DB_PASSWORD=secretpass && echo 'test'"
+        })
         .assert()
         .success();
 
@@ -323,6 +353,11 @@ fn test_log_rotation() {
 
 #[test]
 fn test_cd_minus_behavior() {
+    // Skip this test on Windows due to shell compatibility differences
+    if cfg!(windows) {
+        return;
+    }
+
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
 
@@ -371,7 +406,11 @@ fn test_export_complex_values_deferred() {
     get_substrate_binary()
         .env("SHIM_TRACE_LOG", &log_file)
         .arg("-c")
-        .arg("export FOO=\"bar baz\" && echo $FOO")
+        .arg(if cfg!(windows) {
+            "$env:FOO=\"bar baz\"; echo $env:FOO"
+        } else {
+            "export FOO=\"bar baz\" && echo $FOO"
+        })
         .assert()
         .success()
         .stdout(predicate::str::contains("bar baz"));

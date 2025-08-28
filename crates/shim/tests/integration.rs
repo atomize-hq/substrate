@@ -34,22 +34,31 @@ fn test_shim_execution_flow() -> Result<()> {
     fs::create_dir(&bin_dir)?;
 
     // Create a test script that echoes its arguments
-    let test_script = bin_dir.join("echo");
-    fs::write(&test_script, "#!/bin/bash\necho \"shimmed: $*\"")?;
+    let (_test_script, expected_output) = if cfg!(windows) {
+        let script = bin_dir.join("echo.bat");
+        fs::write(&script, "@echo shimmed: %*")?;
+        (script, "shimmed: test message")
+    } else {
+        let script = bin_dir.join("echo");
+        fs::write(&script, "#!/bin/bash\necho \"shimmed: $*\"")?;
 
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&test_script)?.permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&test_script, perms)?;
-    }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&script)?.permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&script, perms)?;
+        }
+
+        (script, "shimmed: test message")
+    };
 
     // Get the built shim binary from workspace root
     let shim_binary_path = get_shim_binary_path();
 
     // Copy shim binary to test location
-    let shim_binary = shim_dir.join("echo");
+    let shim_binary_name = if cfg!(windows) { "echo.exe" } else { "echo" };
+    let shim_binary = shim_dir.join(shim_binary_name);
     fs::copy(shim_binary_path, &shim_binary)?;
 
     #[cfg(unix)]
@@ -64,9 +73,25 @@ fn test_shim_execution_flow() -> Result<()> {
     let session_id = uuid::Uuid::now_v7().to_string();
     let log_file = temp.path().join("trace.jsonl");
 
+    // On Windows, we need the original command to be found in PATH
+    let original_path = if cfg!(windows) {
+        format!(
+            "{};{}",
+            bin_dir.display(),
+            std::env::var("PATH").unwrap_or_default()
+        )
+    } else {
+        format!(
+            "{}:{}",
+            bin_dir.display(),
+            std::env::var("PATH").unwrap_or_default()
+        )
+    };
+
     let output = std::process::Command::new(&shim_binary)
         .args(["test", "message"])
-        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("SHIM_ORIGINAL_PATH", &original_path)
+        .env("PATH", &original_path)
         .env("SHIM_TRACE_LOG", &log_file)
         .env("SHIM_SESSION_ID", &session_id)
         .env_remove("SHIM_DEPTH") // Ensure deterministic test environment
@@ -76,12 +101,17 @@ fn test_shim_execution_flow() -> Result<()> {
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8_lossy(&output.stdout).trim(),
-        "shimmed: test message"
+        expected_output
     );
 
     // Verify log was written with all expected fields
     let log_content = fs::read_to_string(&log_file)?;
-    assert!(log_content.contains("\"command\":\"echo\""));
+    let expected_command = if cfg!(windows) {
+        "echo.exe" // On Windows, the command is logged with the .exe extension
+    } else {
+        "echo"
+    };
+    assert!(log_content.contains(&format!("\"command\":\"{}\"", expected_command)));
     assert!(log_content.contains("\"exit_code\":0"));
     assert!(log_content.contains("\"depth\":0"));
     assert!(log_content.contains(&format!("\"session_id\":\"{session_id}\"")));

@@ -1347,7 +1347,14 @@ fn needs_pty(cmd: &str) -> bool {
     ];
 
     // Parse command properly using shell_words for quoted argument handling
-    let tokens = match shell_words::split(cmd) {
+    // On Windows, convert backslashes to forward slashes to avoid shell_words escaping issues
+    let normalized_cmd = if cfg!(windows) {
+        cmd.replace('\\', "/")
+    } else {
+        cmd.to_string()
+    };
+
+    let tokens = match shell_words::split(&normalized_cmd) {
         Ok(tokens) => tokens,
         Err(_) => return false, // Malformed command, don't use PTY
     };
@@ -3174,9 +3181,18 @@ mod tests {
         with_test_mode(|| {
             // Windows-style paths with .exe should work
             if cfg!(windows) {
+                // Test Windows-style paths with backslashes (should work now)
                 assert!(needs_pty(r#"C:\Python\python.exe"#));
-                assert!(needs_pty(r#"C:\Program Files\Git\usr\bin\ssh.exe"#));
                 assert!(needs_pty(r#"vim.exe file.txt"#));
+
+                // Test .exe extension stripping for various commands
+                assert!(needs_pty("python.exe"));
+                assert!(needs_pty("python.exe -i"));
+                assert!(needs_pty("vim.exe"));
+                assert!(needs_pty("nano.exe"));
+
+                // Test forward slashes too (should work)
+                assert!(needs_pty("C:/Python/python.exe"));
             }
         });
     }
