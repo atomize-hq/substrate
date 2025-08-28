@@ -1735,6 +1735,12 @@ fn execute_command(
 
     // Log command completion with redacted command
     let duration = start_time.elapsed();
+    #[cfg(unix)]
+    let mut extra = json!({
+        log_schema::EXIT_CODE: status.code().unwrap_or(-1),
+        log_schema::DURATION_MS: duration.as_millis()
+    });
+    #[cfg(not(unix))]
     let extra = json!({
         log_schema::EXIT_CODE: status.code().unwrap_or(-1),
         log_schema::DURATION_MS: duration.as_millis()
