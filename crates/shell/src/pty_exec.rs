@@ -1103,13 +1103,23 @@ mod tests {
     #[test]
     fn test_pty_size_environment_validation() {
         // Test COLUMNS and LINES validation logic
-        let test_cases = vec![
-            (0, 0, false),      // Invalid: zero dimensions
-            (1, 1, true),       // Valid: minimal dimensions
-            (24, 80, true),     // Valid: typical dimensions
-            (50, 120, true),    // Valid: modern defaults
-            (1000, 1000, true), // Valid: large dimensions
-        ];
+        let test_cases = if cfg!(windows) {
+            vec![
+                (0, 0, false),      // Invalid: zero dimensions
+                (10, 10, true),     // Valid: Windows minimum dimensions
+                (24, 80, true),     // Valid: typical dimensions
+                (50, 120, true),    // Valid: modern defaults
+                (1000, 1000, true), // Valid: large dimensions
+            ]
+        } else {
+            vec![
+                (0, 0, false),      // Invalid: zero dimensions
+                (1, 1, true),       // Valid: minimal dimensions on Unix
+                (24, 80, true),     // Valid: typical dimensions
+                (50, 120, true),    // Valid: modern defaults
+                (1000, 1000, true), // Valid: large dimensions
+            ]
+        };
 
         for (rows, cols, should_be_valid) in test_cases {
             let is_valid = rows > 0 && cols > 0;

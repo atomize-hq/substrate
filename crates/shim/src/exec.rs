@@ -304,9 +304,23 @@ fn is_executable(path: &std::path::Path) -> bool {
 
     #[cfg(windows)]
     {
-        std::fs::metadata(path)
-            .map(|m| m.is_file())
-            .unwrap_or(false)
+        if let Ok(metadata) = std::fs::metadata(path) {
+            if !metadata.is_file() {
+                return false;
+            }
+
+            // On Windows, check if file has executable extension
+            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                matches!(
+                    ext.to_ascii_lowercase().as_str(),
+                    "exe" | "bat" | "cmd" | "com" | "ps1"
+                )
+            } else {
+                false
+            }
+        } else {
+            false
+        }
     }
 }
 
@@ -390,10 +404,18 @@ mod tests {
         use tempfile::TempDir;
 
         let temp_dir = TempDir::new().unwrap();
-        let script_path = temp_dir.path().join("test_script.sh");
+
+        // Create platform-appropriate executable file
+        let (script_path, script_content) = if cfg!(windows) {
+            let path = temp_dir.path().join("test_script.bat");
+            (path, "@echo test")
+        } else {
+            let path = temp_dir.path().join("test_script.sh");
+            (path, "#!/bin/bash\necho 'test'")
+        };
 
         // Create a simple executable script
-        std::fs::write(&script_path, "#!/bin/bash\necho 'test'").unwrap();
+        std::fs::write(&script_path, script_content).unwrap();
 
         #[cfg(unix)]
         {

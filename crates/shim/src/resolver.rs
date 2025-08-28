@@ -101,9 +101,23 @@ fn is_executable(path: &Path) -> bool {
 
     #[cfg(windows)]
     {
-        std::fs::metadata(path)
-            .map(|m| m.is_file())
-            .unwrap_or(false)
+        if let Ok(metadata) = std::fs::metadata(path) {
+            if !metadata.is_file() {
+                return false;
+            }
+
+            // On Windows, check if file has executable extension
+            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                matches!(
+                    ext.to_ascii_lowercase().as_str(),
+                    "exe" | "bat" | "cmd" | "com" | "ps1"
+                )
+            } else {
+                false
+            }
+        } else {
+            false
+        }
     }
 }
 
@@ -119,22 +133,41 @@ mod tests {
         let bin_dir = temp.path().join("bin");
         fs::create_dir(&bin_dir).unwrap();
 
-        let test_binary = bin_dir.join("test_cmd");
-        fs::write(&test_binary, "#!/bin/bash\necho test").unwrap();
+        // Create platform-appropriate executable
+        let (test_binary, command_name) = if cfg!(windows) {
+            let binary = bin_dir.join("test_cmd.exe");
+            fs::write(&binary, "echo test").unwrap();
+            (binary, "test_cmd")
+        } else {
+            let binary = bin_dir.join("test_cmd");
+            fs::write(&binary, "#!/bin/bash\necho test").unwrap();
 
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&test_binary).unwrap().permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(&test_binary, perms).unwrap();
-        }
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mut perms = fs::metadata(&binary).unwrap().permissions();
+                perms.set_mode(0o755);
+                fs::set_permissions(&binary, perms).unwrap();
+            }
+
+            (binary, "test_cmd")
+        };
 
         let search_paths = vec![bin_dir];
-        let result = resolve_real_binary("test_cmd", &search_paths);
+        let result = resolve_real_binary(command_name, &search_paths);
 
         assert!(result.is_some());
-        assert_eq!(result.unwrap(), test_binary);
+        let resolved = result.unwrap();
+
+        // On Windows, paths may have different case due to PATHEXT extensions
+        if cfg!(windows) {
+            assert_eq!(
+                resolved.to_string_lossy().to_ascii_lowercase(),
+                test_binary.to_string_lossy().to_ascii_lowercase()
+            );
+        } else {
+            assert_eq!(resolved, test_binary);
+        }
     }
 
     #[test]

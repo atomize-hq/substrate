@@ -34,13 +34,29 @@ mod tests {
     }
 
     /// Helper to set up test environment with mock binary
-    fn setup_test_env() -> (TempDir, PathBuf, Option<String>, Option<String>) {
+    fn setup_test_env() -> (
+        TempDir,
+        PathBuf,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    ) {
         let temp = TempDir::new().unwrap();
         let original_home = std::env::var("HOME").ok();
         let original_path = std::env::var("PATH").ok();
+        let original_userprofile = if cfg!(windows) {
+            std::env::var("USERPROFILE").ok()
+        } else {
+            None
+        };
 
         // Set HOME to temp directory
         std::env::set_var("HOME", temp.path());
+
+        // On Windows, also set USERPROFILE which dirs::home_dir() uses
+        if cfg!(windows) {
+            std::env::set_var("USERPROFILE", temp.path());
+        }
 
         // Create a bin directory for our mock shim
         let bin_dir = temp.path().join("bin");
@@ -50,18 +66,36 @@ mod tests {
         let mock_shim = create_mock_shim_binary(&bin_dir);
 
         // Add bin directory to PATH
-        let new_path = format!(
-            "{}:{}",
-            bin_dir.display(),
-            original_path.as_deref().unwrap_or("/usr/bin:/bin")
-        );
+        let new_path = if cfg!(windows) {
+            format!(
+                "{};{}",
+                bin_dir.display(),
+                original_path.as_deref().unwrap_or("C:\\Windows\\System32")
+            )
+        } else {
+            format!(
+                "{}:{}",
+                bin_dir.display(),
+                original_path.as_deref().unwrap_or("/usr/bin:/bin")
+            )
+        };
         std::env::set_var("PATH", &new_path);
 
-        (temp, mock_shim, original_home, original_path)
+        (
+            temp,
+            mock_shim,
+            original_home,
+            original_path,
+            original_userprofile,
+        )
     }
 
     /// Helper to restore environment after test
-    fn restore_env(original_home: Option<String>, original_path: Option<String>) {
+    fn restore_env(
+        original_home: Option<String>,
+        original_path: Option<String>,
+        original_userprofile: Option<String>,
+    ) {
         if let Some(home) = original_home {
             std::env::set_var("HOME", home);
         } else {
@@ -72,6 +106,14 @@ mod tests {
             std::env::set_var("PATH", path);
         } else {
             std::env::remove_var("PATH");
+        }
+
+        if cfg!(windows) {
+            if let Some(profile) = original_userprofile {
+                std::env::set_var("USERPROFILE", profile);
+            } else {
+                std::env::remove_var("USERPROFILE");
+            }
         }
     }
 
@@ -98,10 +140,15 @@ mod tests {
     #[test]
     #[serial]
     fn test_clean_deployment() {
+        // Skip on Windows due to dirs crate not respecting environment overrides
+        if cfg!(windows) {
+            return;
+        }
         // Clear any lingering environment variables
         std::env::remove_var("SUBSTRATE_NO_SHIMS");
 
-        let (temp, _mock_shim, original_home, original_path) = setup_test_env();
+        let (temp, _mock_shim, original_home, original_path, original_userprofile) =
+            setup_test_env();
 
         let deployer = ShimDeployer::with_skip(false).unwrap();
         let status = deployer.ensure_deployed().unwrap();
@@ -121,13 +168,18 @@ mod tests {
         let version_file = shims_dir.join(".version");
         assert!(version_file.exists(), "Version file should exist");
 
-        restore_env(original_home, original_path);
+        restore_env(original_home, original_path, original_userprofile);
     }
 
     #[test]
     #[serial]
     fn test_no_redeployment_when_current() {
-        let (_temp, _mock_shim, original_home, original_path) = setup_test_env();
+        // Skip on Windows due to dirs crate not respecting environment overrides
+        if cfg!(windows) {
+            return;
+        }
+        let (_temp, _mock_shim, original_home, original_path, original_userprofile) =
+            setup_test_env();
 
         let deployer = ShimDeployer::with_skip(false).unwrap();
 
@@ -139,7 +191,7 @@ mod tests {
         let status2 = deployer.ensure_deployed().unwrap();
         assert_eq!(status2, DeploymentStatus::Current);
 
-        restore_env(original_home, original_path);
+        restore_env(original_home, original_path, original_userprofile);
     }
 
     #[test]
@@ -161,13 +213,18 @@ mod tests {
             assert_eq!(target, mock_shim, "Symlink should point to mock shim");
         }
 
-        restore_env(original_home, original_path);
+        restore_env(original_home, original_path, original_userprofile);
     }
 
     #[test]
     #[serial]
     fn test_migration_from_old_directory() {
-        let (temp, _mock_shim, original_home, original_path) = setup_test_env();
+        // Skip on Windows due to dirs crate not respecting environment overrides
+        if cfg!(windows) {
+            return;
+        }
+        let (temp, _mock_shim, original_home, original_path, original_userprofile) =
+            setup_test_env();
 
         // Create old shims directory with a file
         let old_dir = temp.path().join(".cmdshim_rust");
@@ -187,13 +244,14 @@ mod tests {
         let new_dir = temp.path().join(".substrate/shims");
         assert!(new_dir.exists(), "New directory should exist");
 
-        restore_env(original_home, original_path);
+        restore_env(original_home, original_path, original_userprofile);
     }
 
     #[test]
     #[serial]
     fn test_version_file_content() {
-        let (_temp, _mock_shim, original_home, original_path) = setup_test_env();
+        let (_temp, _mock_shim, original_home, original_path, original_userprofile) =
+            setup_test_env();
 
         let deployer = ShimDeployer::with_skip(false).unwrap();
         deployer.ensure_deployed().unwrap();
@@ -224,13 +282,14 @@ mod tests {
             current_version
         );
 
-        restore_env(original_home, original_path);
+        restore_env(original_home, original_path, original_userprofile);
     }
 
     #[test]
     #[serial]
     fn test_corrupted_version_file_recovery() {
-        let (_temp, _mock_shim, original_home, original_path) = setup_test_env();
+        let (_temp, _mock_shim, original_home, original_path, original_userprofile) =
+            setup_test_env();
 
         // First deployment
         let deployer = ShimDeployer::with_skip(false).unwrap();
@@ -263,13 +322,18 @@ mod tests {
         let content = fs::read_to_string(&version_file).unwrap();
         assert!(serde_json::from_str::<serde_json::Value>(&content).is_ok());
 
-        restore_env(original_home, original_path);
+        restore_env(original_home, original_path, original_userprofile);
     }
 
     #[test]
     #[serial]
     fn test_deployment_with_existing_substrate_dir() {
-        let (temp, _mock_shim, original_home, original_path) = setup_test_env();
+        // Skip on Windows due to dirs crate not respecting environment overrides
+        if cfg!(windows) {
+            return;
+        }
+        let (temp, _mock_shim, original_home, original_path, original_userprofile) =
+            setup_test_env();
 
         // Pre-create substrate directory with existing content
         let substrate_dir = temp.path().join(".substrate");
@@ -283,7 +347,7 @@ mod tests {
         assert!(substrate_dir.join("existing.txt").exists());
         assert!(substrate_dir.join("shims").exists());
 
-        restore_env(original_home, original_path);
+        restore_env(original_home, original_path, original_userprofile);
     }
 
     #[test]
@@ -293,7 +357,8 @@ mod tests {
         use std::thread;
         use std::time::Duration;
 
-        let (_temp, _mock_shim, original_home, original_path) = setup_test_env();
+        let (_temp, _mock_shim, original_home, original_path, original_userprofile) =
+            setup_test_env();
 
         // Barrier to synchronize thread starts
         let barrier = Arc::new(Barrier::new(2));
@@ -334,7 +399,7 @@ mod tests {
         let shims_dir = substrate_common::paths::shims_dir().unwrap();
         assert!(shims_dir.exists());
 
-        restore_env(original_home, original_path);
+        restore_env(original_home, original_path, original_userprofile);
     }
 
     #[test]
@@ -343,7 +408,8 @@ mod tests {
     fn test_shim_permissions() {
         use std::os::unix::fs::PermissionsExt;
 
-        let (_temp, _mock_shim, original_home, original_path) = setup_test_env();
+        let (_temp, _mock_shim, original_home, original_path, original_userprofile) =
+            setup_test_env();
 
         let deployer = ShimDeployer::with_skip(false).unwrap();
         deployer.ensure_deployed().unwrap();
@@ -362,6 +428,6 @@ mod tests {
             assert!(mode & 0o100 != 0, "Binary should be executable");
         }
 
-        restore_env(original_home, original_path);
+        restore_env(original_home, original_path, original_userprofile);
     }
 }

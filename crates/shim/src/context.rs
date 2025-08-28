@@ -193,12 +193,25 @@ mod tests {
         let shim_dir = temp.path().join("shims");
         fs::create_dir(&shim_dir).unwrap();
 
-        let original_path = format!("/usr/bin:{}:/bin", shim_dir.display());
+        let (original_path, expected_paths) = if cfg!(windows) {
+            let path = format!("C:\\Windows\\System32;{};C:\\Windows", shim_dir.display());
+            let expected = vec![
+                PathBuf::from("C:\\Windows\\System32"),
+                PathBuf::from("C:\\Windows"),
+            ];
+            (path, expected)
+        } else {
+            let path = format!("/usr/bin:{}:/bin", shim_dir.display());
+            let expected = vec![PathBuf::from("/usr/bin"), PathBuf::from("/bin")];
+            (path, expected)
+        };
+
         let paths = build_clean_search_path(&shim_dir, Some(original_path)).unwrap();
 
-        assert_eq!(paths.len(), 2);
-        assert_eq!(paths[0], PathBuf::from("/usr/bin"));
-        assert_eq!(paths[1], PathBuf::from("/bin"));
+        assert_eq!(paths.len(), expected_paths.len());
+        for (i, expected) in expected_paths.iter().enumerate() {
+            assert_eq!(paths[i], *expected);
+        }
     }
 
     #[test]
@@ -208,14 +221,31 @@ mod tests {
         fs::create_dir(&shim_dir).unwrap();
 
         // PATH with duplicates
-        let original_path = "/usr/bin:/bin:/usr/bin:/usr/local/bin:/bin".to_string();
+        let (original_path, expected_paths) = if cfg!(windows) {
+            let path = "C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32;C:\\Program Files\\Git\\bin;C:\\Windows".to_string();
+            let expected = vec![
+                PathBuf::from("C:\\Windows\\System32"),
+                PathBuf::from("C:\\Windows"),
+                PathBuf::from("C:\\Program Files\\Git\\bin"),
+            ];
+            (path, expected)
+        } else {
+            let path = "/usr/bin:/bin:/usr/bin:/usr/local/bin:/bin".to_string();
+            let expected = vec![
+                PathBuf::from("/usr/bin"),
+                PathBuf::from("/bin"),
+                PathBuf::from("/usr/local/bin"),
+            ];
+            (path, expected)
+        };
+
         let paths = build_clean_search_path(&shim_dir, Some(original_path)).unwrap();
 
         // Should be deduplicated
-        assert_eq!(paths.len(), 3);
-        assert_eq!(paths[0], PathBuf::from("/usr/bin"));
-        assert_eq!(paths[1], PathBuf::from("/bin"));
-        assert_eq!(paths[2], PathBuf::from("/usr/local/bin"));
+        assert_eq!(paths.len(), expected_paths.len());
+        for (i, expected) in expected_paths.iter().enumerate() {
+            assert_eq!(paths[i], *expected);
+        }
     }
 
     #[test]
