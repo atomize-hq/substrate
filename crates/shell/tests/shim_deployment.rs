@@ -198,7 +198,8 @@ mod tests {
     #[serial]
     #[cfg(unix)]
     fn test_symlink_creation() {
-        let (temp, mock_shim, original_home, original_path) = setup_test_env();
+        let (temp, mock_shim, original_home, original_path, original_userprofile) =
+            setup_test_env();
 
         let deployer = ShimDeployer::with_skip(false).unwrap();
         let _ = deployer.ensure_deployed();
