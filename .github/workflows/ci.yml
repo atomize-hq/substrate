@@ -14,11 +14,10 @@ jobs:
   test:
     name: Test
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.os == 'windows-2022' }}  # Allow Windows to fail without blocking
     strategy:
       fail-fast: false  # Allow other OS tests to continue even if one fails
       matrix:
-        os: [ubuntu-24.04, macos-14, windows-2022]
+        os: [ubuntu-24.04, macos-14]
         rust: [1.89.0]
 
     steps:

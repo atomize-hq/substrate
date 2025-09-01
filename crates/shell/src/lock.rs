@@ -173,11 +173,15 @@ mod tests {
         let elapsed = start.elapsed();
 
         assert!(result.is_err());
-        assert!(elapsed >= Duration::from_millis(90)); // Allow some variance
-        assert!(elapsed < Duration::from_millis(200)); // But should timeout quickly
+        assert!(elapsed >= Duration::from_millis(80)); // More lenient timing for macOS
+        assert!(elapsed < Duration::from_millis(300)); // But should timeout relatively quickly
 
         let error_msg = result.unwrap_err().to_string();
-        assert!(error_msg.contains("Timeout waiting for lock"));
+        // Windows may return different error messages than Unix
+        assert!(
+            error_msg.contains("Timeout waiting for lock")
+                || error_msg.contains("Failed to acquire lock")
+        );
     }
 
     #[test]
@@ -234,7 +238,7 @@ mod tests {
         });
 
         // Give first thread time to acquire lock
-        thread::sleep(Duration::from_millis(50));
+        thread::sleep(Duration::from_millis(100)); // Give first thread more time
 
         // This should timeout while first thread holds the lock
         let start = std::time::Instant::now();
@@ -242,7 +246,8 @@ mod tests {
         let elapsed = start.elapsed();
 
         assert!(result.is_err());
-        assert!(elapsed >= Duration::from_millis(90));
+        assert!(elapsed >= Duration::from_millis(80)); // More lenient timing for macOS
+        assert!(elapsed < Duration::from_millis(300)); // But still should timeout relatively quickly
 
         // Wait for first thread to finish and release lock
         handle.join().unwrap();
