@@ -34,11 +34,14 @@ cargo test -- --nocapture
 # Run specific test suites
 cargo test --lib                    # Unit tests
 cargo test --test integration       # Integration tests
-cargo test -p substrate             # Shell-specific tests
+cargo test -p substrate-shell       # Shell-specific tests
 cargo test -p substrate-shim        # Shim-specific tests
 
 # Run a single test
 cargo test test_name -- --exact
+
+# Run specific module tests (e.g., lock tests)
+cargo test -p substrate-shell --lib lock::
 ```
 
 ### Linting & Formatting
@@ -49,8 +52,8 @@ cargo fmt
 # Check formatting without making changes
 cargo fmt -- --check
 
-# Run clippy linter
-cargo clippy
+# Run clippy linter with warnings as errors
+cargo clippy --workspace -- -D warnings
 
 # Fix clippy warnings automatically
 cargo clippy --fix
@@ -144,6 +147,12 @@ When modifying the codebase:
 4. PTY tests validate terminal emulation (Unix only)
 5. Security tests verify credential redaction
 
+### CI/CD Configuration
+- **Platforms**: Linux (ubuntu-24.04) and macOS (macos-14)
+- **Rust version**: 1.89.0
+- **Windows support**: Deferred (removed from CI pipeline)
+- **Known issues**: Lock tests may be timing-sensitive in CI environments
+
 ## Shim Deployment Implementation
 
 ### Automatic Deployment
@@ -191,3 +200,14 @@ export SHIM_LOG_OPTS=raw,resolve
 export SUBSTRATE_PTY_DEBUG=1
 export SHIM_CACHE_BUST=1  # Force cache invalidation
 ```
+
+## Troubleshooting
+
+### Lock Test Failures
+If lock tests fail with timing assertions, the issue is likely due to slow CI environments. The tests use `std::sync::Barrier` for synchronization and have lenient timing bounds (50-500ms).
+
+### Path Resolution Issues
+If shims aren't resolving correctly:
+1. Check `SHIM_ORIGINAL_PATH` is set correctly
+2. Use `SHIM_LOG_OPTS=resolve` for detailed path resolution logs
+3. Set `SHIM_CACHE_BUST=1` to force cache invalidation
