@@ -22,9 +22,13 @@ pub struct NetworkScope {
 
 /// Network filter manager using nftables.
 pub struct NetFilter {
+    #[allow(dead_code)]
     world_id: String,
+    #[allow(dead_code)]
     table_name: String,
+    #[allow(dead_code)]
     chain_name: String,
+    #[allow(dead_code)]
     allowed_domains: Vec<String>,
     allowed_ips: HashSet<IpAddr>,
     scopes_used: Vec<NetworkScope>,

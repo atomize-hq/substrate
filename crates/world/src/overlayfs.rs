@@ -48,7 +48,7 @@ impl OverlayFs {
     }
 
     /// Mount the overlayfs with the given lower directory.
-    pub fn mount(&mut self, lower_dir: &Path) -> Result<PathBuf> {
+    pub fn mount(&mut self, #[allow(unused_variables)] lower_dir: &Path) -> Result<PathBuf> {
         if self.is_mounted {
             return Ok(self.merged_dir.clone());
         }
@@ -66,14 +66,13 @@ impl OverlayFs {
         {
             self.mount_linux(lower_dir)?;
             self.is_mounted = true;
+            Ok(self.merged_dir.clone())
         }
 
         #[cfg(not(target_os = "linux"))]
         {
             anyhow::bail!("Overlayfs is only supported on Linux");
         }
-
-        Ok(self.merged_dir.clone())
     }
 
     #[cfg(target_os = "linux")]

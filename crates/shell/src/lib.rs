@@ -1602,7 +1602,7 @@ fn execute_command(
     let trimmed = command.trim();
     
     // Start span for command execution
-    let mut policy_decision = None;
+    let policy_decision;
     let span = if std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
         // Policy evaluation (Phase 4)
         let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -1682,6 +1682,7 @@ fn execute_command(
             }
         }
     } else {
+        policy_decision = None;
         None
     };
 

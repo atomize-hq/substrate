@@ -4,7 +4,7 @@
 //! shim execution process, including bypass mode, path resolution, command execution,
 //! and logging.
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use std::env;
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus};
@@ -415,9 +415,9 @@ fn is_executable(path: &std::path::Path) -> bool {
 }
 
 /// Collect filesystem diff and network scopes from world backend
-fn collect_world_telemetry(span_id: &str) -> (Vec<String>, Option<FsDiff>) {
+fn collect_world_telemetry(_span_id: &str) -> (Vec<String>, Option<FsDiff>) {
     // Try to get world handle from environment
-    let world_id = match env::var("SUBSTRATE_WORLD_ID") {
+    let _world_id = match env::var("SUBSTRATE_WORLD_ID") {
         Ok(id) => id,
         Err(_) => {
             // No world ID, return empty telemetry
