@@ -1,0 +1,28 @@
+[package]
+name = "world"
+version = "0.1.1"
+edition = "2021"
+authors = ["Atomize"]
+description = "Linux native world backend with namespaces, cgroups, and network isolation"
+license = "MIT"
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = { workspace = true }
+tokio = { version = "1", features = ["full"] }
+uuid = { workspace = true }
+thiserror = "1"
+walkdir = "2"
+dns-lookup = "2"
+world-api = { path = "../world-api" }
+sha2.workspace = true
+
+# Linux-specific dependencies
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = "0.27"
+prctl = "1"
+libseccomp = "0.3"
+
+[dev-dependencies]
+tempfile = "3"

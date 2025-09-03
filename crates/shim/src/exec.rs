@@ -19,6 +19,8 @@ use crate::context::{
 };
 use crate::logger::{log_execution, write_log_entry};
 use crate::resolver::resolve_real_binary;
+use substrate_broker::{Decision, quick_check};
+use substrate_trace::{create_span_builder, init_trace, PolicyDecision};
 
 /// Main shim execution function
 pub fn run_shim() -> Result<i32> {
@@ -54,6 +56,93 @@ pub fn run_shim() -> Result<i32> {
 
     // Prepare execution context
     let args: Vec<_> = env::args_os().skip(1).collect();
+    let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    
+    // Build command string for logging and spans
+    let command_str = std::iter::once(ctx.command_name.clone())
+        .chain(args.iter().map(|s| s.to_string_lossy().to_string()))
+        .collect::<Vec<_>>()
+        .join(" ");
+    
+    // Policy evaluation (Phase 4) and span creation
+    let mut policy_decision = None;
+    let mut active_span = None;
+    
+    if env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
+        // Initialize trace if needed
+        let _ = init_trace(None);
+        
+        let argv: Vec<String> = std::iter::once(ctx.command_name.clone())
+            .chain(args.iter().map(|s| s.to_string_lossy().to_string()))
+            .collect();
+        
+        match quick_check(&argv, cwd.to_str().unwrap_or(".")) {
+            Ok(Decision::Allow) => {
+                policy_decision = Some(PolicyDecision {
+                    action: "allow".to_string(),
+                    restrictions: None,
+                    reason: None,
+                });
+            },
+            Ok(Decision::AllowWithRestrictions(restrictions)) => {
+                eprintln!("substrate: command requires restrictions: {:?}", restrictions);
+                policy_decision = Some(PolicyDecision {
+                    action: "allow_with_restrictions".to_string(),
+                    restrictions: Some(restrictions.iter().map(|r| format!("{:?}", r)).collect()),
+                    reason: None,
+                });
+            },
+            Ok(Decision::Deny(reason)) => {
+                eprintln!("substrate: command denied by policy: {}", reason);
+                policy_decision = Some(PolicyDecision {
+                    action: "deny".to_string(),
+                    restrictions: None,
+                    reason: Some(reason.clone()),
+                });
+                
+                // Create span for denied command
+                let mut builder = create_span_builder()
+                    .with_command(&command_str)
+                    .with_cwd(cwd.to_str().unwrap_or("."));
+                
+                if let Some(pd) = policy_decision.clone() {
+                    builder = builder.with_policy_decision(pd);
+                }
+                
+                if let Ok(span) = builder.start() {
+                    // Immediately finish with error code
+                    let _ = span.finish(126, vec![], None);
+                }
+                
+                return Ok(126); // Cannot execute
+            },
+            Err(e) => {
+                eprintln!("substrate: policy check failed: {}", e);
+                // Continue in observe mode
+            }
+        }
+        
+        // Create span for allowed command
+        let mut builder = create_span_builder()
+            .with_command(&command_str)
+            .with_cwd(cwd.to_str().unwrap_or("."));
+        
+        if let Some(pd) = policy_decision.clone() {
+            builder = builder.with_policy_decision(pd);
+        }
+        
+        // Set parent span ID in environment for child processes
+        match builder.start() {
+            Ok(span) => {
+                std::env::set_var("SHIM_PARENT_SPAN", span.get_span_id());
+                active_span = Some(span);
+            },
+            Err(e) => {
+                eprintln!("substrate: failed to create span: {}", e);
+            }
+        }
+    }
+    
     let start_time = Instant::now();
     let timestamp = SystemTime::now();
 
@@ -103,6 +192,13 @@ pub fn run_shim() -> Result<i32> {
         ) {
             eprintln!("Warning: Failed to log execution: {e}");
         }
+    }
+
+    // Complete span if we created one
+    if let Some(span) = active_span {
+        let exit_code = status.code().unwrap_or(-1);
+        // TODO: Collect actual scopes and fs_diff from world backend when available
+        let _ = span.finish(exit_code, vec![], None);
     }
 
     // Unix signal exit status parity - return 128 + signal for terminated processes

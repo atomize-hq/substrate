@@ -21,6 +21,8 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
 use substrate_common::{dedupe_path, log_schema, redact_sensitive};
+use substrate_broker::{Decision, evaluate, detect_profile};
+use substrate_trace::{create_span_builder, init_trace, PolicyDecision};
 use uuid::Uuid;
 
 // Reedline imports
@@ -331,6 +333,13 @@ impl ShellConfig {
 
 pub fn run_shell() -> Result<i32> {
     let config = ShellConfig::from_args()?;
+    
+    // Initialize trace if Phase 4 is enabled
+    if env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
+        if let Err(e) = init_trace(None) {
+            eprintln!("substrate: warning: failed to initialize trace: {}", e);
+        }
+    }
 
     // Deploy shims if needed (non-blocking, continues on error)
     // Skip if either the CLI flag is set or the environment variable is set
@@ -1591,6 +1600,90 @@ fn execute_command(
     running_child_pid: Arc<AtomicI32>,
 ) -> Result<ExitStatus> {
     let trimmed = command.trim();
+    
+    // Start span for command execution
+    let mut policy_decision = None;
+    let span = if std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
+        // Policy evaluation (Phase 4)
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        
+        // Detect and load .substrate-profile if present
+        let _ = detect_profile(&cwd);
+        
+        let decision = evaluate(trimmed, cwd.to_str().unwrap_or("."), None);
+        
+        // Convert broker Decision to trace PolicyDecision
+        policy_decision = match &decision {
+            Ok(Decision::Allow) => Some(PolicyDecision {
+                action: "allow".to_string(),
+                reason: None,
+                restrictions: None,
+            }),
+            Ok(Decision::AllowWithRestrictions(restrictions)) => {
+                eprintln!("substrate: command requires restrictions: {:?}", restrictions);
+                // Convert Restriction objects to strings for trace
+                let restriction_strings: Vec<String> = restrictions
+                    .iter()
+                    .map(|r| format!("{:?}:{}", r.type_, r.value))
+                    .collect();
+                Some(PolicyDecision {
+                    action: "allow_with_restrictions".to_string(),
+                    reason: None,
+                    restrictions: Some(restriction_strings),
+                })
+            },
+            Ok(Decision::Deny(reason)) => {
+                eprintln!("substrate: command denied by policy: {}", reason);
+                Some(PolicyDecision {
+                    action: "deny".to_string(),
+                    reason: Some(reason.clone()),
+                    restrictions: None,
+                })
+            },
+            Err(e) => {
+                eprintln!("substrate: policy check failed: {}", e);
+                None
+            }
+        };
+        
+        // Handle denial
+        if let Ok(Decision::Deny(_)) = decision {
+            // Return failure status
+            #[cfg(unix)]
+            {
+                use std::os::unix::process::ExitStatusExt;
+                return Ok(ExitStatus::from_raw(126 << 8)); // Cannot execute
+            }
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::ExitStatusExt;
+                return Ok(ExitStatus::from_raw(126));
+            }
+        }
+        
+        // Create span with policy decision
+        let mut builder = create_span_builder()
+            .with_command(trimmed)
+            .with_cwd(cwd.to_str().unwrap_or("."));
+        
+        if let Some(pd) = policy_decision.clone() {
+            builder = builder.with_policy_decision(pd);
+        }
+        
+        // Set parent span ID in environment for child processes
+        match builder.start() {
+            Ok(span) => {
+                std::env::set_var("SHIM_PARENT_SPAN", span.get_span_id());
+                Some(span)
+            },
+            Err(e) => {
+                eprintln!("substrate: failed to create span: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     // Check if PTY should be used (force overrides disable)
     let disabled = is_pty_disabled();
@@ -1601,6 +1694,13 @@ fn execute_command(
         // Use PTY execution path for interactive commands
         let pty_status = pty_exec::execute_with_pty(config, trimmed, cmd_id, running_child_pid)?;
 
+        // Finish span if we created one (PTY path)
+        if let Some(active_span) = span {
+            let exit_code = pty_status.code.unwrap_or(-1);
+            // TODO: Collect actual scopes and fs_diff from world backend when available
+            let _ = active_span.finish(exit_code, vec![], None);
+        }
+        
         // Convert PtyExitStatus to std::process::ExitStatus for compatibility
         // NOTE: This is a documented compatibility shim using from_raw
         // The actual exit information is preserved in logs
@@ -1750,6 +1850,13 @@ fn execute_command(
         cmd_id,
         Some(extra),
     )?;
+    
+    // Finish span if we created one
+    if let Some(active_span) = span {
+        let exit_code = status.code().unwrap_or(-1);
+        // TODO: Collect actual scopes and fs_diff from world backend
+        let _ = active_span.finish(exit_code, vec![], None);
+    }
 
     Ok(status)
 }

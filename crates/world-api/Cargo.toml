@@ -1,0 +1,16 @@
+[package]
+name = "world-api"
+version = "0.1.1"
+edition = "2021"
+authors = ["Atomize"]
+description = "World backend abstraction for cross-platform execution environments"
+license = "MIT"
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }

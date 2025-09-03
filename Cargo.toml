@@ -31,6 +31,18 @@ members = [
     "crates/common",
     "crates/shim", 
     "crates/shell",
+    # New Phase 4 crates
+    "crates/world-api",
+    "crates/world",
+    "crates/world-mac-lima",
+    "crates/world-agent",
+    # Agent API (shared contract + proxy)
+    "crates/agent-api-types",
+    "crates/agent-api-core",
+    "crates/agent-api-client",
+    "crates/host-proxy",
+    "crates/broker", "crates/trace",
+    # "crates/trace",   # TODO: Implement after broker
 ]
 
 [workspace.dependencies]

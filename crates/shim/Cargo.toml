@@ -24,6 +24,8 @@ once_cell = { workspace = true }
 uuid = { workspace = true }
 atty = { workspace = true }
 sha2 = { workspace = true }
+substrate-broker = { version = "0.1.0", path = "../broker" }
+substrate-trace = { version = "0.1.0", path = "../trace" }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.29", features = ["fs", "process"] }
