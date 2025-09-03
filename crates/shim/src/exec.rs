@@ -21,7 +21,7 @@ use crate::context::{
 use crate::logger::{log_execution, write_log_entry};
 use crate::resolver::resolve_real_binary;
 use substrate_broker::{Decision, quick_check};
-use substrate_trace::{create_span_builder, init_trace, PolicyDecision};
+use substrate_trace::{create_span_builder, init_trace};
 
 /// Main shim execution function
 pub fn run_shim() -> Result<i32> {

@@ -43,6 +43,8 @@ members = [
     "crates/host-proxy",
     "crates/broker", "crates/trace",
     # "crates/trace",   # TODO: Implement after broker
+    "crates/telemetry-lib",
+    "crates/hrm",
 ]
 
 [workspace.dependencies]

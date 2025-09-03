@@ -1,0 +1,25 @@
+[package]
+name = "substrate-telemetry"
+version = "0.1.0"
+edition = "2021"
+authors = ["Substrate Team"]
+
+[lib]
+name = "substrate_telemetry"
+crate-type = ["cdylib"]  # Create a dynamic library for LD_PRELOAD
+
+[dependencies]
+libc = "0.2"
+lazy_static = "1.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.10", features = ["v7", "serde"] }
+substrate-common = { path = "../common" }
+
+[dev-dependencies]
+tempfile = "3.8"
+
+[features]
+default = []
+debug = []  # Enable debug output

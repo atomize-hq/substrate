@@ -4,7 +4,6 @@
 //! using Linux namespaces, cgroups v2, nftables, and other native security features.
 
 use anyhow::{Context, Result};
-use std::path::PathBuf;
 use world_api::{ExecRequest, ExecResult, FsDiff, WorldBackend, WorldHandle, WorldSpec};
 
 pub mod diff;
