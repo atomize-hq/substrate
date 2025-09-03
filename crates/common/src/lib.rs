@@ -2,7 +2,10 @@
 
 use std::collections::HashSet;
 
+pub mod fs_diff;
 pub mod paths;
+
+pub use fs_diff::FsDiff;
 
 /// Deduplicate PATH-like strings while preserving order
 pub fn dedupe_path(path: &str) -> String {

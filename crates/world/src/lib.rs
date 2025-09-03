@@ -10,7 +10,9 @@ use world_api::{ExecRequest, ExecResult, FsDiff, WorldBackend, WorldHandle, Worl
 pub mod diff;
 pub mod dns;
 pub mod isolation;
+pub mod netfilter;
 pub mod network;
+pub mod overlayfs;
 pub mod session;
 
 pub use session::SessionWorld;
@@ -68,8 +70,8 @@ impl WorldBackend for LinuxLocalBackend {
     fn exec(&self, world: &WorldHandle, req: ExecRequest) -> Result<ExecResult> {
         self.check_platform()?;
 
-        let cache = self.session_cache.read().unwrap();
-        let session_world = cache.get(&world.id).context("World not found in cache")?;
+        let mut cache = self.session_cache.write().unwrap();
+        let session_world = cache.get_mut(&world.id).context("World not found in cache")?;
 
         session_world.execute(&req.cmd, &req.cwd, req.env, req.pty)
     }

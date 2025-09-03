@@ -9,6 +9,7 @@ use std::env;
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus};
 use std::time::{Instant, SystemTime};
+use world_api::FsDiff;
 
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
@@ -78,7 +79,7 @@ pub fn run_shim() -> Result<i32> {
         
         match quick_check(&argv, cwd.to_str().unwrap_or(".")) {
             Ok(Decision::Allow) => {
-                policy_decision = Some(PolicyDecision {
+                policy_decision = Some(substrate_trace::PolicyDecision {
                     action: "allow".to_string(),
                     restrictions: None,
                     reason: None,
@@ -86,7 +87,7 @@ pub fn run_shim() -> Result<i32> {
             },
             Ok(Decision::AllowWithRestrictions(restrictions)) => {
                 eprintln!("substrate: command requires restrictions: {:?}", restrictions);
-                policy_decision = Some(PolicyDecision {
+                policy_decision = Some(substrate_trace::PolicyDecision {
                     action: "allow_with_restrictions".to_string(),
                     restrictions: Some(restrictions.iter().map(|r| format!("{:?}", r)).collect()),
                     reason: None,
@@ -94,7 +95,7 @@ pub fn run_shim() -> Result<i32> {
             },
             Ok(Decision::Deny(reason)) => {
                 eprintln!("substrate: command denied by policy: {}", reason);
-                policy_decision = Some(PolicyDecision {
+                policy_decision = Some(substrate_trace::PolicyDecision {
                     action: "deny".to_string(),
                     restrictions: None,
                     reason: Some(reason.clone()),
@@ -197,8 +198,15 @@ pub fn run_shim() -> Result<i32> {
     // Complete span if we created one
     if let Some(span) = active_span {
         let exit_code = status.code().unwrap_or(-1);
-        // TODO: Collect actual scopes and fs_diff from world backend when available
-        let _ = span.finish(exit_code, vec![], None);
+        
+        // Collect scopes and fs_diff from world backend if enabled
+        let (scopes_used, fs_diff) = if std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
+            collect_world_telemetry(span.get_span_id())
+        } else {
+            (vec![], None)
+        };
+        
+        let _ = span.finish(exit_code, scopes_used, fs_diff);
     }
 
     // Unix signal exit status parity - return 128 + signal for terminated processes
@@ -403,6 +411,49 @@ fn is_executable(path: &std::path::Path) -> bool {
         std::fs::metadata(path)
             .map(|m| m.is_file())
             .unwrap_or(false)
+    }
+}
+
+/// Collect filesystem diff and network scopes from world backend
+fn collect_world_telemetry(span_id: &str) -> (Vec<String>, Option<FsDiff>) {
+    // Try to get world handle from environment
+    let world_id = match env::var("SUBSTRATE_WORLD_ID") {
+        Ok(id) => id,
+        Err(_) => {
+            // No world ID, return empty telemetry
+            return (vec![], None);
+        }
+    };
+    
+    // Create world backend and collect telemetry
+    #[cfg(target_os = "linux")]
+    {
+        use world::LinuxLocalBackend;
+        use world_api::WorldBackend;
+        
+        let backend = LinuxLocalBackend::new();
+        let handle = world_api::WorldHandle { id: world_id };
+        
+        // Try to get filesystem diff
+        let fs_diff = match backend.fs_diff(&handle, span_id) {
+            Ok(diff) => Some(diff),
+            Err(e) => {
+                eprintln!("Warning: Failed to collect fs_diff: {}", e);
+                None
+            }
+        };
+        
+        // For now, scopes are tracked in the session world's execute method
+        // and would need to be retrieved from there
+        let scopes_used = vec![];
+        
+        (scopes_used, fs_diff)
+    }
+    
+    #[cfg(not(target_os = "linux"))]
+    {
+        // World backend only available on Linux for now
+        (vec![], None)
     }
 }
 

@@ -95,23 +95,8 @@ pub struct ExecResult {
     pub scopes_used: Vec<String>,
 }
 
-/// Filesystem changes detected after execution.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct FsDiff {
-    /// Files that were written/created.
-    pub writes: Vec<PathBuf>,
-    /// Files that were modified.
-    pub mods: Vec<PathBuf>,
-    /// Files that were deleted.
-    pub deletes: Vec<PathBuf>,
-    /// Whether the diff was truncated due to size limits.
-    #[serde(default)]
-    pub truncated: bool,
-    /// Hash of the directory tree when truncated.
-    pub tree_hash: Option<String>,
-    /// Human-readable summary of changes.
-    pub summary: Option<String>,
-}
+// Re-export FsDiff from substrate_common
+pub use substrate_common::FsDiff;
 
 /// Backend implementations for different platforms.
 pub enum Backend {

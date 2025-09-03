@@ -13,6 +13,7 @@ pub struct SessionWorld {
     pub cgroup_path: PathBuf,
     pub net_namespace: Option<String>,
     pub spec: WorldSpec,
+    pub network_filter: Option<crate::netfilter::NetFilter>,
 }
 
 impl SessionWorld {
@@ -26,13 +27,14 @@ impl SessionWorld {
         }
 
         // Create new session world
-        let world = Self {
+        let mut world = Self {
             id: format!("wld_{}", uuid::Uuid::now_v7()),
             root_dir: PathBuf::from("/tmp/substrate-worlds"),
             project_dir: spec.project_dir.clone(),
             cgroup_path: PathBuf::from("/sys/fs/cgroup/substrate"),
             net_namespace: None,
             spec,
+            network_filter: None,
         };
 
         world.setup()?;
@@ -47,12 +49,17 @@ impl SessionWorld {
     }
 
     /// Set up the world isolation.
-    fn setup(&self) -> Result<()> {
+    fn setup(&mut self) -> Result<()> {
         self.create_directories()?;
 
         #[cfg(target_os = "linux")]
         {
             self.setup_linux_isolation()?;
+            
+            // Set up network filtering if isolation is enabled
+            if self.spec.isolate_network {
+                self.setup_network_filter()?;
+            }
         }
 
         #[cfg(not(target_os = "linux"))]
@@ -60,6 +67,17 @@ impl SessionWorld {
             eprintln!("⚠️  Linux isolation not available on this platform");
         }
 
+        Ok(())
+    }
+    
+    /// Set up network filtering with nftables.
+    fn setup_network_filter(&mut self) -> Result<()> {
+        let filter = crate::netfilter::apply_network_filter(
+            &self.id,
+            self.spec.allowed_domains.clone(),
+        )?;
+        
+        self.network_filter = Some(filter);
         Ok(())
     }
 
@@ -81,37 +99,76 @@ impl SessionWorld {
 
     /// Execute a command in this world.
     pub fn execute(
-        &self,
+        &mut self,
         cmd: &str,
         cwd: &Path,
         env: HashMap<String, String>,
         _pty: bool,
     ) -> Result<ExecResult> {
-        // For now, simple implementation that executes on host
-        // TODO: Implement proper world execution
-
-        let span_id = format!("spn_{}", uuid::Uuid::now_v7());
-
-        let output = std::process::Command::new("sh")
-            .arg("-c")
-            .arg(cmd)
-            .current_dir(cwd)
-            .envs(&env)
-            .output()
-            .context("Failed to execute command")?;
+        let output;
+        let scopes_used;
+        
+        // Check if command should be isolated with overlayfs
+        if self.should_isolate_command(cmd) {
+            // Execute with overlayfs isolation
+            let (exec_output, _diff) = crate::overlayfs::execute_with_overlay(
+                &self.id,
+                cmd,
+                &self.project_dir,
+                cwd,
+                &env,
+            )?;
+            output = exec_output;
+        } else {
+            // Execute directly on host (for now)
+            output = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(cmd)
+                .current_dir(cwd)
+                .envs(&env)
+                .output()
+                .context("Failed to execute command")?;
+        }
+        
+        // Track network scopes if filter is active
+        if let Some(ref mut filter) = self.network_filter {
+            scopes_used = crate::netfilter::monitor_network_scopes(filter)?;
+        } else {
+            scopes_used = vec![];
+        }
 
         Ok(ExecResult {
             exit: output.status.code().unwrap_or(-1),
             stdout: output.stdout,
             stderr: output.stderr,
-            scopes_used: vec![], // TODO: Track actual scopes
+            scopes_used,
         })
     }
 
     /// Compute filesystem diff for a span.
-    pub fn compute_fs_diff(&self, _span_id: &str) -> Result<FsDiff> {
-        // TODO: Implement proper diff computation
-        Ok(FsDiff::default())
+    pub fn compute_fs_diff(&self, span_id: &str) -> Result<FsDiff> {
+        // Create an overlayfs instance for this span
+        let overlay = crate::overlayfs::OverlayFs::new(span_id)?;
+        
+        // Compute the diff from the upper layer
+        overlay.compute_diff()
+    }
+
+    /// Check if a command should be isolated with overlayfs.
+    fn should_isolate_command(&self, cmd: &str) -> bool {
+        // Commands that should run in isolated overlayfs
+        let isolated_patterns = [
+            "pip install",
+            "npm install",
+            "cargo install",
+            "go get",
+            "gem install",
+            "apt install",
+            "yum install",
+            "brew install",
+        ];
+
+        isolated_patterns.iter().any(|pattern| cmd.contains(pattern))
     }
 
     /// Apply policy to this world.

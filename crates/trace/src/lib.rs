@@ -44,12 +44,8 @@ pub struct Span {
     pub policy_decision: Option<PolicyDecision>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FsDiff {
-    pub writes: Vec<String>,
-    pub mods: Vec<String>,
-    pub deletes: Vec<String>,
-}
+// FsDiff is now imported from substrate_common
+pub use substrate_common::FsDiff;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReplayContext {
@@ -576,9 +572,12 @@ mod tests {
     #[test]
     fn test_fs_diff() {
         let diff = FsDiff {
-            writes: vec!["file1.txt".to_string()],
-            mods: vec!["file2.txt".to_string()],
+            writes: vec!["file1.txt".into()],
+            mods: vec!["file2.txt".into()],
             deletes: vec![],
+            truncated: false,
+            tree_hash: None,
+            summary: None,
         };
         
         let json = serde_json::to_string(&diff).unwrap();

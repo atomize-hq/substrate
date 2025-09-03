@@ -2917,6 +2917,8 @@ version = "0.1.1"
 dependencies = [
  "anyhow",
  "dirs 5.0.1",
+ "serde",
+ "serde_json",
  "tempfile",
 ]
 
@@ -2980,6 +2982,8 @@ dependencies = [
  "tempfile",
  "uuid",
  "which 6.0.3",
+ "world",
+ "world-api",
 ]
 
 [[package]]
@@ -2995,6 +2999,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "substrate-common",
  "tempfile",
  "tokio",
  "tracing",
@@ -3990,6 +3995,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "substrate-common",
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
@@ -4032,6 +4038,7 @@ dependencies = [
  "anyhow",
  "serde",
  "serde_json",
+ "substrate-common",
  "tokio",
  "uuid",
 ]
