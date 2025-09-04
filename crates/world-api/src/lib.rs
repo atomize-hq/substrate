@@ -80,6 +80,9 @@ pub struct ExecRequest {
     pub env: HashMap<String, String>,
     /// Whether to use PTY mode.
     pub pty: bool,
+    /// Optional span identifier to correlate fs_diff and telemetry
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub span_id: Option<String>,
 }
 
 /// Result of command execution.
@@ -93,6 +96,9 @@ pub struct ExecResult {
     pub stderr: Vec<u8>,
     /// Scopes that were accessed during execution.
     pub scopes_used: Vec<String>,
+    /// Filesystem diff (when available, e.g., isolated runs)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fs_diff: Option<FsDiff>,
 }
 
 // Re-export FsDiff from substrate_common

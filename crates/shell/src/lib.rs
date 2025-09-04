@@ -979,7 +979,7 @@ fn handle_replay_command(span_id: &str) -> Result<()> {
 /// Collect filesystem diff and network scopes from world backend
 fn collect_world_telemetry(_span_id: &str) -> (Vec<String>, Option<substrate_common::fs_diff::FsDiff>) {
     // Try to get world handle from environment
-    let _world_id = match env::var("SUBSTRATE_WORLD_ID") {
+    let world_id = match env::var("SUBSTRATE_WORLD_ID") {
         Ok(id) => id,
         Err(_) => {
             // No world ID, return empty telemetry
@@ -994,7 +994,7 @@ fn collect_world_telemetry(_span_id: &str) -> (Vec<String>, Option<substrate_com
         use world_api::WorldBackend;
         
         let backend = LinuxLocalBackend::new();
-        let handle = world_api::WorldHandle { id: world_id };
+        let handle = world_api::WorldHandle { id: world_id.clone() };
         
         // Try to get filesystem diff
         let fs_diff = match backend.fs_diff(&handle, _span_id) {

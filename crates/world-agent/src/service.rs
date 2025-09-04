@@ -121,6 +121,7 @@ impl WorldAgentService {
                 .unwrap_or_else(|| std::env::current_dir().unwrap_or_default()),
             env: req.env.unwrap_or_default(),
             pty: req.pty,
+            span_id: None,
         };
 
         // Execute command

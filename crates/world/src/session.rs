@@ -142,6 +142,7 @@ impl SessionWorld {
             stdout: output.stdout,
             stderr: output.stderr,
             scopes_used,
+            fs_diff: None,
         })
     }
 
