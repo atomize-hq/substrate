@@ -14,6 +14,7 @@ pub struct SessionWorld {
     pub net_namespace: Option<String>,
     pub spec: WorldSpec,
     pub network_filter: Option<crate::netfilter::NetFilter>,
+    pub fs_by_span: HashMap<String, FsDiff>,
 }
 
 impl SessionWorld {
@@ -35,6 +36,7 @@ impl SessionWorld {
             net_namespace: None,
             spec,
             network_filter: None,
+            fs_by_span: HashMap::new(),
         };
 
         world.setup()?;
@@ -104,14 +106,16 @@ impl SessionWorld {
         cwd: &Path,
         env: HashMap<String, String>,
         _pty: bool,
+        span_id: Option<String>,
     ) -> Result<ExecResult> {
         let output;
         let scopes_used;
+        let mut diff_opt: Option<FsDiff> = None;
         
         // Check if command should be isolated with overlayfs
         if self.should_isolate_command(cmd) {
             // Execute with overlayfs isolation
-            let (exec_output, _diff) = crate::overlayfs::execute_with_overlay(
+            let (exec_output, diff) = crate::overlayfs::execute_with_overlay(
                 &self.id,
                 cmd,
                 &self.project_dir,
@@ -119,6 +123,10 @@ impl SessionWorld {
                 &env,
             )?;
             output = exec_output;
+            diff_opt = Some(diff.clone());
+            if let Some(id) = span_id.as_ref() {
+                self.fs_by_span.insert(id.clone(), diff);
+            }
         } else {
             // Execute directly on host (for now)
             output = std::process::Command::new("sh")
@@ -142,17 +150,16 @@ impl SessionWorld {
             stdout: output.stdout,
             stderr: output.stderr,
             scopes_used,
-            fs_diff: None,
+            fs_diff: diff_opt,
         })
     }
 
     /// Compute filesystem diff for a span.
     pub fn compute_fs_diff(&self, span_id: &str) -> Result<FsDiff> {
-        // Create an overlayfs instance for this span
-        let overlay = crate::overlayfs::OverlayFs::new(span_id)?;
-        
-        // Compute the diff from the upper layer
-        overlay.compute_diff()
+        if let Some(diff) = self.fs_by_span.get(span_id) {
+            return Ok(diff.clone());
+        }
+        Ok(FsDiff::default())
     }
 
     /// Check if a command should be isolated with overlayfs.

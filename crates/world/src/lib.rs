@@ -72,7 +72,7 @@ impl WorldBackend for LinuxLocalBackend {
         let mut cache = self.session_cache.write().unwrap();
         let session_world = cache.get_mut(&world.id).context("World not found in cache")?;
 
-        session_world.execute(&req.cmd, &req.cwd, req.env, req.pty)
+        session_world.execute(&req.cmd, &req.cwd, req.env, req.pty, req.span_id)
     }
 
     fn fs_diff(&self, world: &WorldHandle, span_id: &str) -> Result<FsDiff> {

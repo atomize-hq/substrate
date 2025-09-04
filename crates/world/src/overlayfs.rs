@@ -21,6 +21,7 @@ pub struct OverlayFs {
     upper_dir: PathBuf,
     work_dir: PathBuf,
     merged_dir: PathBuf,
+    lower_dir: Option<PathBuf>,
     is_mounted: bool,
 }
 
@@ -43,6 +44,7 @@ impl OverlayFs {
             upper_dir,
             work_dir,
             merged_dir,
+            lower_dir: None,
             is_mounted: false,
         })
     }
@@ -64,6 +66,7 @@ impl OverlayFs {
         // Mount overlay filesystem
         #[cfg(target_os = "linux")]
         {
+            self.lower_dir = Some(lower_dir.to_path_buf());
             self.mount_linux(lower_dir)?;
             self.is_mounted = true;
             Ok(self.merged_dir.clone())
@@ -209,11 +212,11 @@ impl OverlayFs {
     }
 
     /// Check if a file is a modification of an existing file.
-    fn is_modification(&self, _rel_path: &Path) -> bool {
-        // In overlayfs, we can check if a file is modified by looking for
-        // certain metadata or by comparing with the lower layer.
-        // For now, we'll consider all files as new writes unless we implement
-        // more sophisticated detection.
+    fn is_modification(&self, rel_path: &Path) -> bool {
+        if let Some(lower) = &self.lower_dir {
+            let candidate = lower.join(rel_path);
+            return candidate.exists();
+        }
         false
     }
 
