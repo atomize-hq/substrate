@@ -27,6 +27,12 @@ impl LinuxIsolation {
     }
 
     fn setup_mount_namespace(&self, root_dir: &Path, project_dir: &Path) -> Result<()> {
+        // Enter a fresh mount namespace first
+        {
+            use nix::sched::{unshare, CloneFlags};
+            unshare(CloneFlags::CLONE_NEWNS).context("Failed to unshare mount namespace")?;
+        }
+
         // CRITICAL: Prevent mount propagation leaks from host
         self.make_mounts_private()?;
         self.setup_bind_mounts(root_dir, project_dir)?;
