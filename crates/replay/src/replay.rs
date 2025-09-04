@@ -37,17 +37,58 @@ pub async fn execute_in_world(
     state: &ExecutionState,
     timeout_secs: u64,
 ) -> Result<ExecutionResult> {
-    // Check if world isolation is available
+    // Use world-api backend on Linux when enabled
     if world_isolation_available() {
-        execute_with_world_isolation(state, timeout_secs).await
-    } else {
-        // PR#12 Phase 1: Direct execution while world backend API stabilizes
-        // This aligns with Phase 4's parallel development strategy
-        tracing::info!(
-            "Replay using direct execution (world integration pending PR#9-10 stabilization)"
-        );
-        execute_direct(state, timeout_secs).await
+        #[cfg(target_os = "linux")]
+        {
+            use world::LinuxLocalBackend;
+            use world_api::{WorldBackend, WorldSpec, ExecRequest};
+
+            let backend = LinuxLocalBackend::new();
+            let spec = WorldSpec {
+                reuse_session: true,
+                isolate_network: true,
+                limits: world_api::ResourceLimits::default(),
+                enable_preload: false,
+                allowed_domains: vec![],
+                project_dir: state.cwd.clone(),
+            };
+            let handle = backend.ensure_session(&spec)?;
+
+            let full_cmd = if state.args.is_empty() {
+                state.command.clone()
+            } else {
+                format!("{} {}", state.command, state.args.join(" "))
+            };
+            let req = ExecRequest {
+                cmd: full_cmd,
+                cwd: state.cwd.clone(),
+                env: state.env.clone(),
+                pty: false,
+                span_id: Some(state.span_id.clone()),
+            };
+
+            let start = std::time::Instant::now();
+            let res = backend.exec(&handle, req)?;
+            let duration_ms = start.elapsed().as_millis() as u64;
+
+            return Ok(ExecutionResult {
+                exit_code: res.exit,
+                stdout: res.stdout,
+                stderr: res.stderr,
+                fs_diff: res.fs_diff,
+                scopes_used: res.scopes_used,
+                duration_ms,
+            });
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            // Fallback to direct on non-Linux
+            return execute_direct(state, timeout_secs).await;
+        }
     }
+    // Fallback direct execution when isolation disabled
+    execute_direct(state, timeout_secs).await
 }
 
 /// Check if world isolation backend is available
@@ -65,68 +106,7 @@ fn world_isolation_available() -> bool {
 }
 
 /// Execute with full world isolation
-async fn execute_with_world_isolation(
-    state: &ExecutionState,
-    _timeout_secs: u64,
-) -> Result<ExecutionResult> {
-    #[cfg(target_os = "linux")]
-    {
-        use world::SessionWorld;
-        use world::isolation::{WorldSpec, ResourceLimits};
-        use std::path::Path;
-        use std::time::Instant;
-        
-        // Build the full command with arguments
-        let full_command = if state.args.is_empty() {
-            state.command.clone()
-        } else {
-            format!("{} {}", state.command, state.args.join(" "))
-        };
-        
-        // Create world spec for replay execution
-        let spec = WorldSpec {
-            id: format!("replay-{}", uuid::Uuid::new_v4()),
-            name: format!("Replay of {}", state.command),
-            fs_isolation: true, // Use overlayfs for filesystem isolation
-            net_isolation: true, // Use network namespace isolation
-            resource_limits: ResourceLimits {
-                memory: Some("512M".to_string()),
-                cpu: Some("1.0".to_string()),
-                processes: Some(100),
-                open_files: Some(1024),
-            },
-            allowed_paths: vec![], // Replay should only access what it needs
-            allowed_domains: vec![], // Network domains from trace would go here
-        };
-        
-        // Start the isolated world session
-        let mut session = SessionWorld::ensure_started(spec)?;
-        
-        // Execute command in the isolated world
-        let cwd = Path::new(&state.cwd);
-        let start = Instant::now();
-        let result = session.execute(&full_command, cwd, state.env.clone(), false)?;
-        let duration_ms = start.elapsed().as_millis() as u64;
-        
-        // Compute filesystem diff
-        let fs_diff = Some(session.compute_fs_diff(&state.span_id)?);
-        
-        // Convert world execution result to our ExecutionResult
-        Ok(ExecutionResult {
-            exit_code: result.exit,
-            stdout: result.stdout,
-            stderr: result.stderr,
-            duration_ms,
-            fs_diff,
-            scopes_used: result.scopes_used,
-        })
-    }
-    
-    #[cfg(not(target_os = "linux"))]
-    {
-        anyhow::bail!("World isolation is only available on Linux - use SUBSTRATE_REPLAY_USE_WORLD=0")
-    }
-}
+// legacy world-specific execution removed in favor of world-api path
 
 /// Execute a command directly (without world isolation)
 pub async fn execute_direct(
