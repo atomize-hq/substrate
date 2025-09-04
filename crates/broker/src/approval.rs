@@ -198,8 +198,12 @@ pub fn request_interactive_approval(
                 .interact()
             {
                 if response {
-                    // TODO: Implement policy file update
-                    println!("{}", "Note: Policy file update not yet implemented".yellow().italic());
+                    // Add the command to the policy's allowed list
+                    if let Err(e) = add_command_to_policy(cmd) {
+                        println!("{}", format!("Warning: Failed to update policy file: {}", e).yellow());
+                    } else {
+                        println!("{}", "✓ Command added to policy file".green());
+                    }
                 }
             }
             
@@ -210,6 +214,84 @@ pub fn request_interactive_approval(
             cache.add(cmd.to_string(), ApprovalStatus::Denied, ApprovalScope::Session);
             println!("{}", "✗ Command denied".red());
             Ok(false)
+        }
+    }
+}
+
+/// Add a command pattern to the policy file's allowed list
+fn add_command_to_policy(cmd: &str) -> anyhow::Result<()> {
+    use std::fs;
+    use std::path::Path;
+    
+    // Look for policy file in standard locations
+    let mut policy_paths = vec![
+        Path::new(".substrate/policy.yaml").to_path_buf(),
+        Path::new(".substrate-policy.yaml").to_path_buf(),
+    ];
+    
+    if let Some(home) = dirs::home_dir() {
+        policy_paths.push(home.join(".substrate/policy.yaml"));
+    }
+    
+    for path in &policy_paths {
+        if path.exists() {
+            // Read existing policy
+            let content = fs::read_to_string(path)?;
+            let mut policy: crate::Policy = serde_yaml::from_str(&content)?;
+            
+            // Add command to allowed list if not already present
+            let cmd_pattern = simplify_command_pattern(cmd);
+            if !policy.cmd_allowed.contains(&cmd_pattern) {
+                policy.cmd_allowed.push(cmd_pattern);
+                
+                // Write updated policy back
+                let updated_content = serde_yaml::to_string(&policy)?;
+                fs::write(path, updated_content)?;
+            }
+            
+            return Ok(());
+        }
+    }
+    
+    // If no existing policy file, create a new one
+    let policy_dir = dirs::home_dir()
+        .ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?
+        .join(".substrate");
+    
+    fs::create_dir_all(&policy_dir)?;
+    let policy_path = policy_dir.join("policy.yaml");
+    
+    let mut policy = crate::Policy::default();
+    policy.cmd_allowed.push(simplify_command_pattern(cmd));
+    
+    let content = serde_yaml::to_string(&policy)?;
+    fs::write(policy_path, content)?;
+    
+    Ok(())
+}
+
+/// Simplify a command to a reusable pattern
+fn simplify_command_pattern(cmd: &str) -> String {
+    // Extract the base command without arguments for common cases
+    let parts: Vec<&str> = cmd.split_whitespace().collect();
+    if parts.is_empty() {
+        return cmd.to_string();
+    }
+    
+    // For common package managers, create specific patterns
+    match parts[0] {
+        "npm" | "yarn" | "pnpm" if parts.len() > 1 => {
+            format!("{} {}*", parts[0], parts[1])
+        }
+        "pip" | "pip3" | "cargo" | "go" if parts.len() > 1 => {
+            format!("{} {}*", parts[0], parts[1])
+        }
+        "git" if parts.len() > 1 => {
+            format!("git {}*", parts[1])
+        }
+        _ => {
+            // For other commands, just use the base command with wildcard
+            format!("{}*", parts[0])
         }
     }
 }

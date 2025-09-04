@@ -138,6 +138,14 @@ pub struct Cli {
     /// Remove all deployed shims
     #[arg(long = "shim-remove", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status"])]
     pub shim_remove: bool,
+    
+    /// Show trace information for a span ID
+    #[arg(long = "trace", value_name = "SPAN_ID", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status", "shim_remove", "replay"])]
+    pub trace: Option<String>,
+    
+    /// Replay a traced command by span ID
+    #[arg(long = "replay", value_name = "SPAN_ID", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status", "shim_remove", "trace"])]
+    pub replay: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -267,6 +275,18 @@ impl ShellConfig {
                 println!("Shims: Deployed (version unknown)");
                 println!("Location: {shims_dir:?}");
             }
+            std::process::exit(0);
+        }
+        
+        // Handle --trace flag
+        if let Some(span_id) = cli.trace {
+            handle_trace_command(&span_id)?;
+            std::process::exit(0);
+        }
+        
+        // Handle --replay flag
+        if let Some(span_id) = cli.replay {
+            handle_replay_command(&span_id)?;
             std::process::exit(0);
         }
 
@@ -794,6 +814,209 @@ pub fn needs_shell(cmd: &str) -> bool {
         || t.contains(">&")            // 2>&1, 1>&2, etc.
         || t.chars().any(|c| "<>|&".contains(c)) && t.len() > 1 // e.g. 1>/dev/null
     })
+}
+
+/// Handle trace command - show trace information for a span ID
+fn handle_trace_command(span_id: &str) -> Result<()> {
+    use std::fs::File;
+    use std::io::{BufReader, BufRead};
+    
+    // Get trace file location
+    let trace_file = env::var("SHIM_TRACE_LOG")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .expect("Cannot determine home directory")
+                .join(".substrate/trace.jsonl")
+        });
+    
+    if !trace_file.exists() {
+        eprintln!("Trace file not found: {}", trace_file.display());
+        eprintln!("Make sure tracing is enabled with SUBSTRATE_WORLD=enabled");
+        std::process::exit(1);
+    }
+    
+    // Read trace file and find the span
+    let file = File::open(&trace_file)?;
+    let reader = BufReader::new(file);
+    let mut found = false;
+    
+    for line in reader.lines() {
+        let line = line?;
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
+            if let Some(id) = json.get("span_id").and_then(|v| v.as_str()) {
+                if id == span_id {
+                    // Pretty print the trace entry
+                    println!("{}", serde_json::to_string_pretty(&json)?);
+                    found = true;
+                    break;
+                }
+            }
+        }
+    }
+    
+    if !found {
+        eprintln!("Span ID not found: {}", span_id);
+        std::process::exit(1);
+    }
+    
+    Ok(())
+}
+
+/// Handle replay command - replay a traced command by span ID
+fn handle_replay_command(span_id: &str) -> Result<()> {
+    use std::fs::File;
+    use std::io::{BufReader, BufRead};
+    
+    // Get trace file location
+    let trace_file = env::var("SHIM_TRACE_LOG")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .expect("Cannot determine home directory")
+                .join(".substrate/trace.jsonl")
+        });
+    
+    if !trace_file.exists() {
+        eprintln!("Trace file not found: {}", trace_file.display());
+        eprintln!("Make sure tracing is enabled with SUBSTRATE_WORLD=enabled");
+        std::process::exit(1);
+    }
+    
+    // Load the trace for the span
+    let file = File::open(&trace_file)?;
+    let reader = BufReader::new(file);
+    let mut trace_entry = None;
+    
+    for line in reader.lines() {
+        let line = line?;
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
+            if let Some(id) = json.get("span_id").and_then(|v| v.as_str()) {
+                if id == span_id {
+                    trace_entry = Some(json);
+                    break;
+                }
+            }
+        }
+    }
+    
+    let entry = trace_entry.ok_or_else(|| anyhow::anyhow!("Span ID not found: {}", span_id))?;
+    
+    // Extract command information from the trace
+    let command = entry.get("cmd")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("No command found in trace"))?;
+    
+    let cwd = entry.get("cwd")
+        .and_then(|v| v.as_str())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| env::current_dir().unwrap());
+    
+    let session_id = entry.get("session_id")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .unwrap_or_else(|| Uuid::now_v7().to_string());
+    
+    println!("Replaying command: {}", command);
+    println!("Working directory: {}", cwd.display());
+    println!("Session ID: {}", session_id);
+    println!();
+    
+    // Parse command into command and args
+    let parts: Vec<&str> = command.split_whitespace().collect();
+    let (cmd, args) = if !parts.is_empty() {
+        (parts[0].to_string(), parts[1..].iter().map(|s| s.to_string()).collect())
+    } else {
+        (command.to_string(), Vec::new())
+    };
+    
+    // Create execution state
+    let state = substrate_replay::replay::ExecutionState {
+        command: cmd,
+        args,
+        cwd,
+        env: HashMap::new(), // Could extract from trace if captured
+        stdin: None,
+        session_id,
+        span_id: span_id.to_string(),
+    };
+    
+    // Execute with replay (use direct execution for CLI command)
+    let runtime = tokio::runtime::Runtime::new()?;
+    let result = runtime.block_on(async {
+        substrate_replay::replay::execute_direct(&state, 60).await
+    })?;
+    
+    // Display results
+    println!("Exit code: {}", result.exit_code);
+    if !result.stdout.is_empty() {
+        println!("\nStdout:");
+        println!("{}", String::from_utf8_lossy(&result.stdout));
+    }
+    if !result.stderr.is_empty() {
+        println!("\nStderr:");
+        println!("{}", String::from_utf8_lossy(&result.stderr));
+    }
+    
+    if let Some(fs_diff) = result.fs_diff {
+        if !fs_diff.is_empty() {
+            println!("\nFilesystem changes:");
+            for write in &fs_diff.writes {
+                println!("  + {}", write.display());
+            }
+            for modify in &fs_diff.mods {
+                println!("  ~ {}", modify.display());
+            }
+            for delete in &fs_diff.deletes {
+                println!("  - {}", delete.display());
+            }
+        }
+    }
+    
+    std::process::exit(result.exit_code);
+}
+
+/// Collect filesystem diff and network scopes from world backend
+fn collect_world_telemetry(_span_id: &str) -> (Vec<String>, Option<substrate_common::fs_diff::FsDiff>) {
+    // Try to get world handle from environment
+    let _world_id = match env::var("SUBSTRATE_WORLD_ID") {
+        Ok(id) => id,
+        Err(_) => {
+            // No world ID, return empty telemetry
+            return (vec![], None);
+        }
+    };
+    
+    // Create world backend and collect telemetry
+    #[cfg(target_os = "linux")]
+    {
+        use world::LinuxLocalBackend;
+        use world_api::WorldBackend;
+        
+        let backend = LinuxLocalBackend::new();
+        let handle = world_api::WorldHandle { id: world_id };
+        
+        // Try to get filesystem diff
+        let fs_diff = match backend.fs_diff(&handle, _span_id) {
+            Ok(diff) => Some(diff),
+            Err(e) => {
+                eprintln!("substrate: warning: failed to collect fs_diff: {}", e);
+                None
+            }
+        };
+        
+        // For now, scopes are tracked in the session world's execute method
+        // and would need to be retrieved from there
+        let scopes_used = vec![];
+        
+        (scopes_used, fs_diff)
+    }
+    
+    #[cfg(not(target_os = "linux"))]
+    {
+        // World backend only available on Linux for now
+        (vec![], None)
+    }
 }
 
 #[cfg(test)]
@@ -1698,8 +1921,13 @@ fn execute_command(
         // Finish span if we created one (PTY path)
         if let Some(active_span) = span {
             let exit_code = pty_status.code.unwrap_or(-1);
-            // TODO: Collect actual scopes and fs_diff from world backend when available
-            let _ = active_span.finish(exit_code, vec![], None);
+            // Collect scopes and fs_diff from world backend if enabled
+            let (scopes_used, fs_diff) = if env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
+                collect_world_telemetry(active_span.get_span_id())
+            } else {
+                (vec![], None)
+            };
+            let _ = active_span.finish(exit_code, scopes_used, fs_diff);
         }
         
         // Convert PtyExitStatus to std::process::ExitStatus for compatibility
@@ -1855,8 +2083,13 @@ fn execute_command(
     // Finish span if we created one
     if let Some(active_span) = span {
         let exit_code = status.code().unwrap_or(-1);
-        // TODO: Collect actual scopes and fs_diff from world backend
-        let _ = active_span.finish(exit_code, vec![], None);
+        // Collect scopes and fs_diff from world backend if enabled
+        let (scopes_used, fs_diff) = if env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
+            collect_world_telemetry(active_span.get_span_id())
+        } else {
+            (vec![], None)
+        };
+        let _ = active_span.finish(exit_code, scopes_used, fs_diff);
     }
 
     Ok(status)

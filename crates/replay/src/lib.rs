@@ -1,4 +1,4 @@
-//! Hot Reload Module (HRM) for deterministic trace replay and regression testing
+//! Replay module for deterministic trace replay and regression testing
 //!
 //! This module provides functionality to replay recorded command sequences from trace.jsonl files,
 //! enabling regression testing and debugging by reproducing exact command execution patterns.

@@ -4,7 +4,7 @@
 //! shim execution process, including bypass mode, path resolution, command execution,
 //! and logging.
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use std::env;
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus};

@@ -10,6 +10,7 @@ use axum::{
 use serde_json::{json, Value};
 
 /// Wrapper type to implement IntoResponse for ApiError
+#[derive(Debug)]
 pub struct ApiErrorResponse(ApiError);
 
 impl From<ApiError> for ApiErrorResponse {

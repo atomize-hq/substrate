@@ -253,7 +253,7 @@ pub fn generate_html_report(report: &RegressionReport) -> String {
         r#"<!DOCTYPE html>
 <html>
 <head>
-    <title>Substrate HRM Regression Report</title>
+    <title>Substrate Replay Regression Report</title>
     <style>
         body {{ font-family: sans-serif; margin: 20px; }}
         h1 {{ color: #333; }}
@@ -269,7 +269,7 @@ pub fn generate_html_report(report: &RegressionReport) -> String {
     </style>
 </head>
 <body>
-    <h1>Substrate HRM Regression Report</h1>
+    <h1>Substrate Replay Regression Report</h1>
     
     <div class="summary">
         <h2>Summary</h2>

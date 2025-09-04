@@ -1,6 +1,6 @@
-# HRM (Hot Reload Module)
+# Substrate Replay Module
 
-The Hot Reload Module provides deterministic trace replay and regression testing capabilities for Substrate. It enables replaying recorded command sequences from trace.jsonl files to verify behavior consistency and detect regressions.
+The Replay module provides deterministic trace replay and regression testing capabilities for Substrate. It enables replaying recorded command sequences from trace.jsonl files to verify behavior consistency and detect regressions.
 
 ## Features
 
@@ -13,7 +13,7 @@ The Hot Reload Module provides deterministic trace replay and regression testing
 
 ## Architecture
 
-The HRM module consists of four main components:
+The Replay module consists of four main components:
 
 ### 1. Trace Reader (`state.rs`)
 - Loads spans from trace.jsonl files
@@ -40,7 +40,7 @@ The HRM module consists of four main components:
 ### Basic Replay
 
 ```rust
-use substrate_hrm::{replay_span, ReplayConfig};
+use substrate_replay::{replay_span, ReplayConfig};
 
 let config = ReplayConfig {
     trace_file: PathBuf::from("~/.substrate/trace.jsonl"),
@@ -60,7 +60,7 @@ if result.matched {
 ### Batch Testing
 
 ```rust
-use substrate_hrm::{find_spans_to_replay, replay_batch, SpanFilter};
+use substrate_replay::{find_spans_to_replay, replay_batch, SpanFilter};
 
 // Find all npm commands
 let filter = SpanFilter {
@@ -115,12 +115,12 @@ The `ReplayConfig` struct provides fine-grained control:
 
 Run unit tests:
 ```bash
-cargo test -p substrate-hrm
+cargo test -p substrate-replay
 ```
 
 Run integration tests:
 ```bash
-cargo test -p substrate-hrm --test integration
+cargo test -p substrate-replay --test integration
 ```
 
 ## Performance
@@ -132,7 +132,7 @@ cargo test -p substrate-hrm --test integration
 
 ## Design Decisions
 
-1. **Phased Integration**: HRM can operate without world backends, using direct execution as a fallback. This allows immediate functionality while world APIs stabilize.
+1. **Phased Integration**: The replay module can operate without world backends, using direct execution as a fallback. This allows immediate functionality while world APIs stabilize.
 
 2. **Non-Deterministic Handling**: The comparison engine intelligently handles timestamps, PIDs, and other non-deterministic elements to reduce false positives.
 

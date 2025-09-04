@@ -44,7 +44,7 @@ pub async fn execute_in_world(
         // PR#12 Phase 1: Direct execution while world backend API stabilizes
         // This aligns with Phase 4's parallel development strategy
         tracing::info!(
-            "HRM replay using direct execution (world integration pending PR#9-10 stabilization)"
+            "Replay using direct execution (world integration pending PR#9-10 stabilization)"
         );
         execute_direct(state, timeout_secs).await
     }
@@ -52,25 +52,80 @@ pub async fn execute_in_world(
 
 /// Check if world isolation backend is available
 fn world_isolation_available() -> bool {
-    // TODO: Implement actual check once world backend API is stable
-    // For now, return false to use direct execution
-    std::env::var("SUBSTRATE_HRM_USE_WORLD").unwrap_or_default() == "1"
+    // Check if world isolation is enabled and we're on Linux
+    #[cfg(target_os = "linux")]
+    {
+        std::env::var("SUBSTRATE_REPLAY_USE_WORLD").unwrap_or_default() == "1"
+    }
+    
+    #[cfg(not(target_os = "linux"))]
+    {
+        false // World backend only available on Linux
+    }
 }
 
-/// Execute with full world isolation (future implementation)
+/// Execute with full world isolation
 async fn execute_with_world_isolation(
-    _state: &ExecutionState,
+    state: &ExecutionState,
     _timeout_secs: u64,
 ) -> Result<ExecutionResult> {
-    // TODO: Implement once world backend API stabilizes
-    // This will use SessionWorld::ensure_started() and related methods
-    // Structure matches planning doc's expectation:
-    // - Create WorldSpec with replay-specific settings
-    // - Execute in isolated world
-    // - Collect telemetry (fs_diff, network scopes)
-    // - Clean up world
+    #[cfg(target_os = "linux")]
+    {
+        use world::SessionWorld;
+        use world::isolation::{WorldSpec, ResourceLimits};
+        use std::path::Path;
+        use std::time::Instant;
+        
+        // Build the full command with arguments
+        let full_command = if state.args.is_empty() {
+            state.command.clone()
+        } else {
+            format!("{} {}", state.command, state.args.join(" "))
+        };
+        
+        // Create world spec for replay execution
+        let spec = WorldSpec {
+            id: format!("replay-{}", uuid::Uuid::new_v4()),
+            name: format!("Replay of {}", state.command),
+            fs_isolation: true, // Use overlayfs for filesystem isolation
+            net_isolation: true, // Use network namespace isolation
+            resource_limits: ResourceLimits {
+                memory: Some("512M".to_string()),
+                cpu: Some("1.0".to_string()),
+                processes: Some(100),
+                open_files: Some(1024),
+            },
+            allowed_paths: vec![], // Replay should only access what it needs
+            allowed_domains: vec![], // Network domains from trace would go here
+        };
+        
+        // Start the isolated world session
+        let mut session = SessionWorld::ensure_started(spec)?;
+        
+        // Execute command in the isolated world
+        let cwd = Path::new(&state.cwd);
+        let start = Instant::now();
+        let result = session.execute(&full_command, cwd, state.env.clone(), false)?;
+        let duration_ms = start.elapsed().as_millis() as u64;
+        
+        // Compute filesystem diff
+        let fs_diff = Some(session.compute_fs_diff(&state.span_id)?);
+        
+        // Convert world execution result to our ExecutionResult
+        Ok(ExecutionResult {
+            exit_code: result.exit,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            duration_ms,
+            fs_diff,
+            scopes_used: result.scopes_used,
+        })
+    }
     
-    anyhow::bail!("World isolation not yet implemented - use SUBSTRATE_HRM_USE_WORLD=0")
+    #[cfg(not(target_os = "linux"))]
+    {
+        anyhow::bail!("World isolation is only available on Linux - use SUBSTRATE_REPLAY_USE_WORLD=0")
+    }
 }
 
 /// Execute a command directly (without world isolation)

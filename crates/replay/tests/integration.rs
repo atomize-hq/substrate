@@ -1,6 +1,6 @@
-//! Integration tests for HRM module
+//! Integration tests for Replay module
 
-use substrate_hrm::{replay_span, ReplayConfig, SpanFilter, find_spans_to_replay, replay_batch};
+use substrate_replay::{replay_span, ReplayConfig, SpanFilter, find_spans_to_replay, replay_batch};
 use tempfile::NamedTempFile;
 use tokio::io::AsyncWriteExt;
 use std::path::PathBuf;
@@ -135,7 +135,7 @@ async fn test_batch_replay() {
 /// Test environment reconstruction
 #[tokio::test]
 async fn test_env_reconstruction() {
-    use substrate_hrm::state::{TraceSpan, ReplayContext, reconstruct_state};
+    use substrate_replay::state::{TraceSpan, ReplayContext, reconstruct_state};
     use chrono::Utc;
     use std::collections::HashMap;
     

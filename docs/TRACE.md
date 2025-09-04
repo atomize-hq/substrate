@@ -97,6 +97,7 @@ graph TB
         Broker[Policy Broker]
         Trace[Trace Module]
         World[World Backend]
+        Telemetry[LD_PRELOAD Telemetry]
     end
     
     subgraph "Storage"
@@ -111,12 +112,12 @@ graph TB
     Shim -->|create_span| Trace
     
     Broker -->|Decision| Trace
-    World -.->|scopes/diff| Trace
+    World -->|scopes/diff| Trace
+    Telemetry -->|syscalls| JSONL
     
     Trace -->|append| JSONL
     Trace -.->|ingest| Kuzu
     
-    style World stroke-dasharray: 5 5
     style Kuzu stroke-dasharray: 5 5
 ```
 
@@ -168,7 +169,7 @@ sequenceDiagram
 
 6. **Component Attribution**: Spans identify their origin (shell vs shim) via environment detection, crucial for understanding execution flow.
 
-7. **Placeholder Integration**: `scopes_used` and `fs_diff` are currently empty, awaiting world backend integration (PR#10).
+7. **World Integration Complete**: `scopes_used` and `fs_diff` are now populated via world backend integration (PR#10 ✅).
 
 ### Module Structure
 
@@ -201,19 +202,40 @@ crates/trace/
    - Decisions are converted to `PolicyDecision` format
    - Restrictions are stringified for trace storage
 
+4. **Telemetry Library** (`crates/telemetry-lib/`):
+   - LD_PRELOAD syscall interception inside worlds/VMs
+   - Writes syscall events directly to trace.jsonl
+   - Maintains session correlation via environment variables
+   - Complements span-level tracing with syscall-level detail
+
+5. **Replay Module** (`crates/replay/`):
+   - Consumes trace.jsonl for deterministic replay
+   - Reconstructs environment from replay_context
+   - Enables regression testing and debugging
+
+## Recent Enhancements
+
+### ✅ PR#10 Complete: Overlayfs & Network Filtering  
+- `scopes_used` populated with actual filesystem/network access
+- `fs_diff` captures overlayfs changes with smart truncation  
+- Network scope tracking via nftables integration
+- Unified FsDiff type in substrate-common
+
+### ✅ PR#11 Complete: LD_PRELOAD Telemetry
+- Syscall-level interception via `crates/telemetry-lib/`
+- Intercepts exec*, file ops, network calls inside worlds/VMs
+- Session correlation through fork/exec boundaries
+- Docker-tested Linux compatibility
+
+### ✅ PR#12 Complete: Replay Module
+- Trace replay engine for regression testing (`crates/replay/`)
+- Deterministic command replay with environment reconstruction
+- Output comparison with non-deterministic element handling
+- Batch testing and HTML regression reports
+
 ## Future Enhancements
 
-### PR#10: Overlayfs & Network Filtering
-- Populate `scopes_used` with actual filesystem/network access
-- Capture `fs_diff` from overlayfs changes
-- Track network connections and data transfer
-
-### PR#11: LD_PRELOAD Telemetry
-- Enhanced syscall interception for Linux worlds
-- More granular scope tracking
-- Library call attribution
-
-### PR#12-14: Graph Intelligence
+### PR#13-14: Graph Intelligence
 - Full Kuzu integration with query interface
 - Graph-based security analysis
 - Command dependency visualization

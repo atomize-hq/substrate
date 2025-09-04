@@ -1,9 +1,9 @@
 [package]
-name = "substrate-hrm"
+name = "substrate-replay"
 version = "0.1.0"
 edition = "2021"
 authors = ["Atomize HQ"]
-description = "Hot Reload Module for deterministic trace replay and regression testing"
+description = "Trace replay engine for deterministic command replay and regression testing"
 
 [dependencies]
 anyhow = "1.0"
@@ -24,6 +24,7 @@ substrate-common = { path = "../common" }
 substrate-trace = { path = "../trace" }
 substrate-broker = { path = "../broker" }
 world = { path = "../world" }
+world-api = { path = "../world-api" }
 
 [dev-dependencies]
 tempdir = "0.3"

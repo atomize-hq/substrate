@@ -1,0 +1,35 @@
+[package]
+name = "substrate-graph"
+version = "0.1.0"
+edition = "2021"
+description = "Graph database integration for Substrate command tracing"
+license = "MIT"
+
+[dependencies]
+substrate-common = { path = "../common" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+anyhow = "1.0"
+tracing = "0.1"
+tokio = { version = "1.0", features = ["rt", "fs"] }
+dirs = "6.0"
+
+# Kuzu backend - multiple build options
+kuzu = { version = "0.11", optional = true }
+
+[features]
+default = []
+
+# Static build from source (requires cmake, 5-10min build)
+kuzu-static = ["kuzu"]
+
+# Dynamic link to system library (fast build, requires system kuzu)
+kuzu-dylib = ["kuzu"]
+
+# Mock backend for testing (no external dependencies)
+mock = []
+
+[dev-dependencies]
+tempfile = "3.8"
+tokio-test = "0.4"
