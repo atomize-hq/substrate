@@ -231,3 +231,21 @@ substrate -f scripts/deploy.sh
 ```
 
 For more advanced usage patterns and future capabilities, see [VISION.md](VISION.md).
+
+## Graph CLI (mock backend)
+
+Substrate includes a simple graph CLI backed by an in-memory mock service to preview graph features:
+
+```
+# Show status
+substrate graph status
+
+# Ingest your trace file
+substrate graph ingest ~/.substrate/trace.jsonl
+
+# List files changed for a span
+substrate graph what-changed <SPAN_ID> --limit 100
+```
+
+Notes
+- The mock backend does not persist across runs. A Kuzu backend is planned for Phase 4.5.

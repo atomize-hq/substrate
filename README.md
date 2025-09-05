@@ -114,6 +114,9 @@ Additional capabilities planned for later phases:
 - **[Development](docs/DEVELOPMENT.md)** - Building, testing, and architecture
 - **[Contributing](CONTRIBUTING.md)** - How to contribute to the project
 - **[Security](SECURITY.md)** - Security model and vulnerability reporting
+ - **[Replay](docs/REPLAY.md)** - Replaying traced commands (with Linux isolation option)
+ - **[Graph](docs/GRAPH.md)** - Graph architecture and CLI (mock backend)
+ - **[Privileged Tests](docs/HOWTO_PRIVILEGED_TESTS.md)** - Running isolation/netfilter tests on Linux
 
 ## Getting Help
 

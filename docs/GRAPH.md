@@ -1,6 +1,6 @@
 # Substrate Graph Database Integration
 
-**Status**: Scaffolded (Phase 4 completion required)
+**Status**: Mock backend + CLI scaffold available; Kuzu backend planned
 
 This document describes the graph database integration for Substrate command tracing, enabling relationship analysis and security intelligence.
 
@@ -20,31 +20,34 @@ This document describes the graph database integration for Substrate command tra
 
 ## Current Implementation
 
-### Basic Scaffold (Phase 4)
+### Facade (current)
+`substrate-graph` exposes a simple facade trait `GraphService` and a `MockGraphService` implementation to unblock CLI development:
+
 ```rust
-pub trait GraphDB: Send + Sync {
-    fn init(&mut self, db_path: &Path) -> Result<()>;
-    fn query(&self, query: &str) -> Result<Vec<Value>>;
-    fn is_initialized(&self) -> bool;
+pub trait GraphService {
+  fn ensure_schema(&mut self) -> Result<(), GraphError>;
+  fn ingest_span(&mut self, span: &substrate_trace::Span) -> Result<(), GraphError>;
+  fn what_changed(&self, span_id: &str, limit: usize) -> Result<Vec<FileChange>, GraphError>;
+  fn status(&self) -> Result<String, GraphError>;
 }
 ```
 
-### Feature Flags
+### Feature Flags (planned)
 - `kuzu-static`: Build Kuzu from source (requires cmake, slow build)
 - `kuzu-dylib`: Link to system Kuzu library (fast build, requires system install)
-- `mock`: Testing backend with no external dependencies
+- `mock`: Testing backend with no external dependencies (used by default during 4.5)
 
 ### Default Storage
 - Database location: `~/.substrate/graph/`
 - Privacy-aware: Configurable ignore patterns for sensitive paths
 
-## Post-Phase 4 Implementation Plan
+## Implementation Plan (Phase 4.5)
 
 ### Core Components
 1. **GraphClient**: Main interface with backend abstraction
 2. **KuzuBackend**: Kuzu database implementation
 3. **MockBackend**: Testing implementation
-4. **Ingestion Pipeline**: JSONL → Graph conversion
+4. **Ingestion Pipeline**: JSONL → Graph conversion (mock implemented via CLI ingest)
 5. **Privacy Controls**: Selective indexing, hash-only mode
 6. **Query Interface**: High-level typed queries
 
@@ -88,14 +91,24 @@ CREATE REL TABLE PARENT_OF(FROM Span TO Span);
 ## Build Instructions
 
 ```bash
-# Default (no backend, compiles fast)
+# Default (mock facade)
 cargo build -p substrate-graph
 
-# With mock backend (testing)
-cargo build -p substrate-graph --features mock
+# With Kuzu (planned): requires cmake, slow build
+# cargo build -p substrate-graph --features kuzu-static
 
-# With Kuzu (requires cmake, slow build)
-cargo build -p substrate-graph --features kuzu-static
+## CLI Usage (mock backend)
+
+```bash
+# Status
+substrate graph status
+
+# Ingest existing trace JSONL
+substrate graph ingest ~/.substrate/trace.jsonl
+
+# Show changes for a span
+substrate graph what-changed <SPAN_ID> --limit 100
+```
 ```
 
 ## Expert Recommendations Applied
