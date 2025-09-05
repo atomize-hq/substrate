@@ -231,6 +231,16 @@ fn log_violation(cmd: &str, reason: &str) {
     // In future, this could write to audit log or send telemetry
 }
 
+/// Get the current list of allowed domains for network egress from the active policy.
+pub fn allowed_domains() -> Vec<String> {
+    if let Ok(broker) = GLOBAL_BROKER.read() {
+        if let Ok(policy) = broker.policy.read() {
+            return policy.net_allowed.clone();
+        }
+    }
+    Vec::new()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

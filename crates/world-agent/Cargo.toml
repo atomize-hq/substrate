@@ -32,6 +32,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 agent-api-core = { path = "../agent-api-core" }
 agent-api-types = { path = "../agent-api-types" }
 world-api = { path = "../world-api" }
+substrate-broker = { path = "../broker" }
 
 # Platform-specific world backends
 [target.'cfg(target_os = "linux")'.dependencies]

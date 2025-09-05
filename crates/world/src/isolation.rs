@@ -169,13 +169,37 @@ impl LinuxIsolation {
     }
 
     fn setup_cgroups(&self, cgroup_path: &Path) -> Result<()> {
-        // Gracefully degrade if cgroups v2 not available
+        // Ensure cgroup v2 is mounted; attempt mount if missing
+        let controllers = Path::new("/sys/fs/cgroup/cgroup.controllers");
+        if !controllers.exists() {
+            // try to mount cgroup2
+            #[cfg(target_os = "linux")]
+            {
+                use nix::mount::{mount, MsFlags};
+                let _ = std::fs::create_dir_all("/sys/fs/cgroup");
+                if let Err(e) = mount(
+                    Some("cgroup2"),
+                    "/sys/fs/cgroup",
+                    Some("cgroup2"),
+                    MsFlags::empty(),
+                    None::<&str>,
+                ) {
+                    eprintln!("⚠️  Failed to mount cgroup v2: {}", e);
+                }
+            }
+        }
+        // If still unavailable, degrade gracefully
         if !Path::new("/sys/fs/cgroup/cgroup.controllers").exists() {
             eprintln!("⚠️  cgroups v2 not available, skipping resource limits");
             return Ok(());
         }
 
         std::fs::create_dir_all(cgroup_path)?;
+
+        // Attach current process to the cgroup
+        let pid = std::process::id();
+        let procs = cgroup_path.join("cgroup.procs");
+        let _ = std::fs::write(&procs, pid.to_string());
 
         // Apply resource limits
         if let Some(ref memory) = self.spec.limits.memory {

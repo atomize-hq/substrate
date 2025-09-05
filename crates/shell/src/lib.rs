@@ -146,6 +146,22 @@ pub struct Cli {
     /// Replay a traced command by span ID
     #[arg(long = "replay", value_name = "SPAN_ID", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status", "shim_remove", "trace"])]
     pub replay: Option<String>,
+
+    /// Graph commands (ingest/status/what-changed)
+    #[command(subcommand)]
+    pub sub: Option<SubCommands>,
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum SubCommands {
+    Graph(GraphCmd),
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum GraphCmd {
+    Ingest { file: std::path::PathBuf },
+    Status,
+    WhatChanged { span_id: String, #[arg(long, default_value_t = 100)] limit: usize },
 }
 
 #[derive(Debug, Clone)]
@@ -290,6 +306,12 @@ impl ShellConfig {
             std::process::exit(0);
         }
 
+        // Handle subcommands
+        if let Some(SubCommands::Graph(graph_cmd)) = &cli.sub {
+            handle_graph_command(graph_cmd)?;
+            std::process::exit(0);
+        }
+
         let session_id = env::var("SHIM_SESSION_ID").unwrap_or_else(|_| Uuid::now_v7().to_string());
 
         let home = env::var("HOME")
@@ -349,6 +371,43 @@ impl ShellConfig {
             env_vars: HashMap::new(),
         })
     }
+}
+
+fn handle_graph_command(cmd: &GraphCmd) -> Result<()> {
+    use substrate_graph::{connect_mock, GraphConfig, GraphService};
+    let cfg = GraphConfig { backend: "mock".into(), db_path: substrate_graph::default_graph_path()? };
+    let mut svc = connect_mock(cfg).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    svc.ensure_schema().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    match cmd {
+        GraphCmd::Status => {
+            let s = svc.status().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            println!("graph status: {}", s);
+        }
+        GraphCmd::Ingest { file } => {
+            use std::io::{BufRead, BufReader};
+            let f = std::fs::File::open(file)?;
+            let reader = BufReader::new(f);
+            let mut n = 0usize;
+            for line in reader.lines() {
+                let line = line?;
+                if line.trim().is_empty() { continue; }
+                if let Ok(span) = serde_json::from_str::<substrate_trace::Span>(&line) {
+                    svc.ingest_span(&span).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+                    n += 1;
+                }
+            }
+            println!("ingested {} spans (mock)", n);
+        }
+        GraphCmd::WhatChanged { span_id, limit } => {
+            let items = svc.what_changed(span_id, *limit).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            if items.is_empty() {
+                println!("no changes recorded for span {}", span_id);
+            } else {
+                for fc in items { println!("{}\t{}", fc.change, fc.path); }
+            }
+        }
+    }
+    Ok(())
 }
 
 pub fn run_shell() -> Result<i32> {

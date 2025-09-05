@@ -44,6 +44,7 @@ tempfile = "3.8"   # For atomic deployment
 serde = { version = "1.0", features = ["derive"] }
 substrate-trace = { version = "0.1.0", path = "../trace" }
 substrate-replay = { version = "0.1.0", path = "../replay" }
+substrate-graph = { version = "0.1.0", path = "../substrate-graph" }
 tokio = { version = "1.32", features = ["rt"] }
 
 [target.'cfg(unix)'.dependencies]

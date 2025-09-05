@@ -99,6 +99,18 @@ impl NetFilter {
         );
         self.run_nft(&["add", &create_chain])?;
 
+        // Create IPv4/IPv6 sets for allowed destinations (idempotent add)
+        let set_v4 = format!(
+            "set inet {} allowed4 {{ type ipv4_addr; flags interval; }}",
+            self.table_name
+        );
+        let _ = self.run_nft(&["add", &set_v4]);
+        let set_v6 = format!(
+            "set inet {} allowed6 {{ type ipv6_addr; flags interval; }}",
+            self.table_name
+        );
+        let _ = self.run_nft(&["add", &set_v6]);
+
         // Allow loopback traffic
         let allow_loopback = format!(
             "rule inet {} {} oif lo accept",
@@ -120,21 +132,41 @@ impl NetFilter {
         );
         self.run_nft(&["add", &allow_dns])?;
 
-        // Add rules for allowed IPs
+        // Populate sets with allowed IPs
         for ip in &self.allowed_ips {
-            let allow_ip = format!(
-                "rule inet {} {} ip daddr {} accept",
-                self.table_name, self.chain_name, ip
-            );
-            self.run_nft(&["add", &allow_ip])?;
+            match ip {
+                IpAddr::V4(v4) => {
+                    let add_elem = format!(
+                        "add element inet {} allowed4 {{ {} }}",
+                        self.table_name, v4
+                    );
+                    let _ = self.run_nft(&["add", &add_elem]);
+                }
+                IpAddr::V6(v6) => {
+                    let add_elem = format!(
+                        "add element inet {} allowed6 {{ {} }}",
+                        self.table_name, v6
+                    );
+                    let _ = self.run_nft(&["add", &add_elem]);
+                }
+            }
         }
 
+        // Allow traffic to addresses in sets
+        let allow_v4 = format!("rule inet {} {} ip daddr @allowed4 accept", self.table_name, self.chain_name);
+        let allow_v6 = format!("rule inet {} {} ip6 daddr @allowed6 accept", self.table_name, self.chain_name);
+        self.run_nft(&["add", &allow_v4])?;
+        self.run_nft(&["add", &allow_v6])?;
+
         // Log dropped packets for tracking
+        // Rate-limited LOG + drop for everything else
         let log_dropped = format!(
-            "rule inet {} {} log prefix \"substrate-dropped-{}:\" drop",
+            "rule inet {} {} limit rate 10/second log prefix \"substrate-dropped-{}:\"",
             self.table_name, self.chain_name, self.world_id
         );
+        let drop_rule = format!("rule inet {} {} counter drop", self.table_name, self.chain_name);
         self.run_nft(&["add", &log_dropped])?;
+        self.run_nft(&["add", &drop_rule])?;
 
         Ok(())
     }

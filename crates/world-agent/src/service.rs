@@ -98,7 +98,7 @@ impl WorldAgentService {
             isolate_network: true,
             limits: world_api::ResourceLimits::default(),
             enable_preload: false,
-            allowed_domains: vec![], // TODO: Get from policy
+            allowed_domains: substrate_broker::allowed_domains(),
             project_dir: req
                 .cwd
                 .clone()
