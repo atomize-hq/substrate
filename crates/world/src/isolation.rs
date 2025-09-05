@@ -19,10 +19,14 @@ impl LinuxIsolation {
     }
 
     pub fn apply(&self, root_dir: &Path, project_dir: &Path, cgroup_path: &Path) -> Result<()> {
+        // Ensure user namespace first so subsequent namespace ops have privileges
+        self.setup_user_namespace()?;
+
         self.setup_mount_namespace(root_dir, project_dir)?;
         self.setup_cgroups(cgroup_path)?;
         self.setup_network_namespace()?;
-        self.setup_security()?;
+        // User namespace already set; now drop caps, set NNP, apply seccomp
+        self.setup_security_without_userns()?;
         Ok(())
     }
 
@@ -219,14 +223,23 @@ impl LinuxIsolation {
 
     fn setup_network_namespace(&self) -> Result<()> {
         if self.spec.isolate_network {
-            // TODO: Implement network namespace with nftables
-            eprintln!("⚠️  Network isolation not yet implemented");
+            #[cfg(target_os = "linux")]
+            {
+                use nix::sched::{unshare, CloneFlags};
+                if let Err(e) = unshare(CloneFlags::CLONE_NEWNET) {
+                    eprintln!("⚠️  Failed to unshare network namespace (continuing without netns): {}", e);
+                }
+            }
         }
         Ok(())
     }
 
     fn setup_security(&self) -> Result<()> {
-        self.setup_user_namespace()?;
+        // Backward-compatible wrapper
+        self.setup_security_without_userns()
+    }
+
+    fn setup_security_without_userns(&self) -> Result<()> {
         self.drop_capabilities()?;
         self.set_no_new_privs()?;
         self.apply_seccomp_baseline()?;

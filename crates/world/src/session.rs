@@ -28,11 +28,12 @@ impl SessionWorld {
         }
 
         // Create new session world
+        let world_id = format!("wld_{}", uuid::Uuid::now_v7());
         let mut world = Self {
-            id: format!("wld_{}", uuid::Uuid::now_v7()),
+            id: world_id.clone(),
             root_dir: PathBuf::from("/tmp/substrate-worlds"),
             project_dir: spec.project_dir.clone(),
-            cgroup_path: PathBuf::from("/sys/fs/cgroup/substrate"),
+            cgroup_path: PathBuf::from("/sys/fs/cgroup/substrate").join(&world_id),
             net_namespace: None,
             spec,
             network_filter: None,
@@ -199,6 +200,7 @@ mod tests {
             Ok(world) => {
                 assert!(world.id.starts_with("wld_"));
                 assert_eq!(world.root_dir, PathBuf::from("/tmp/substrate-worlds"));
+                assert!(world.cgroup_path.ends_with(&world.id));
             }
             Err(e) => {
                 // On non-Linux platforms, setup may fail, which is expected
