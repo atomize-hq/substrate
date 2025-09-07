@@ -80,7 +80,11 @@ impl DnsResolver {
              nft add set inet substrate allowed_ips {{ type ipv4_addr; flags interval; }} 2>/dev/null || true\n\
              nft flush set inet substrate allowed_ips\n\
              nft add element inet substrate allowed_ips {{ {} }}",
-            all_ips.iter().map(|ip| ip.to_string()).collect::<Vec<_>>().join(", ")
+            all_ips
+                .iter()
+                .map(|ip: &IpAddr| ip.to_string())
+                .collect::<Vec<String>>()
+                .join(", ")
         );
 
         Command::new("sh").arg("-c").arg(&cmds).output()?;

@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 #[cfg(target_os = "linux")]
 use std::path::Path;
 #[cfg(target_os = "linux")]
-use world_api::{ResourceLimits, WorldSpec};
+use world_api::WorldSpec;
 
 #[cfg(target_os = "linux")]
 pub struct LinuxIsolation {
@@ -90,7 +90,7 @@ impl LinuxIsolation {
                     &target,
                     None::<&str>,
                     MsFlags::MS_BIND | MsFlags::MS_REC,
-                    None::<&str>,
+                    None::<&[u8]>,
                 )
                 .context(format!("Failed to bind mount {}", dir))?;
 
@@ -100,7 +100,7 @@ impl LinuxIsolation {
                     &target,
                     None::<&str>,
                     MsFlags::MS_REMOUNT | MsFlags::MS_BIND | MsFlags::MS_RDONLY,
-                    None::<&str>,
+                    None::<&[u8]>,
                 )
                 .context(format!("Failed to remount {} as read-only", dir))?;
             }
@@ -122,17 +122,16 @@ impl LinuxIsolation {
 
     fn setup_minimal_filesystem(&self) -> Result<()> {
         use nix::mount::MntFlags;
-        use nix::mount::{mount, MsFlags};
-        use nix::unistd::umount2;
+        use nix::mount::{mount, MsFlags, umount2};
 
         // Mount clean /proc
         std::fs::create_dir_all("/proc")?;
         mount(
-            "proc",
+            Some("proc"),
             "/proc",
             Some("proc"),
             MsFlags::empty(),
-            None::<&str>,
+            None::<&[u8]>,
         )
         .context("Failed to mount /proc")?;
 
@@ -276,8 +275,11 @@ impl LinuxIsolation {
     }
 
     fn set_no_new_privs(&self) -> Result<()> {
-        prctl::set_no_new_privs().context("Failed to set no_new_privs")?;
-        Ok(())
+        // prctl crate names this function `set_no_new_privileges(bool)`
+        match prctl::set_no_new_privileges(true) {
+            Ok(()) => Ok(()),
+            Err(code) => Err(anyhow::anyhow!("Failed to set no_new_privileges: {}", code)),
+        }
     }
 
     fn apply_seccomp_baseline(&self) -> Result<()> {

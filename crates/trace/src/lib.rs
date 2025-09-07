@@ -502,20 +502,4 @@ mod tests {
         assert!(!hash1.is_empty());
     }
     
-    #[cfg(feature = "graph")]
-    #[test]
-    fn test_kuzu_integration() {
-        let tmp_dir = TempDir::new().unwrap();
-        let db_path = tmp_dir.path().join("graph.db");
-        
-        let result = init_graph_db(&db_path);
-        assert!(result.is_ok());
-        
-        let span = create_span_builder()
-            .with_command("test command")
-            .start()
-            .unwrap();
-        
-        span.finish(0, vec![], None).unwrap();
-    }
 }

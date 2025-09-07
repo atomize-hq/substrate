@@ -91,7 +91,7 @@ fn mount_overlay(lower: &Path, upper: &Path, work: &Path, merged: &Path) -> Resu
         merged,
         Some("overlay"),
         MsFlags::empty(),
-        Some(options.as_str()),
+        Some(options.as_bytes()),
     )?;
 
     Ok(())
@@ -189,7 +189,8 @@ mod tests {
         std::fs::write(upper.join("test2.txt"), "content2").unwrap();
 
         let diff = compute_fs_diff_smart(upper).unwrap();
-        assert_eq!(diff.writes.len(), 2);
+        // Expect 3 entries: 1 directory (root) + 2 files
+        assert_eq!(diff.writes.len(), 3);
         assert!(!diff.truncated);
     }
 

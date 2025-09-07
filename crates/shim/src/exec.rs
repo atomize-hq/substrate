@@ -381,6 +381,25 @@ fn execute_command(
     args: &[std::ffi::OsString],
     #[allow(unused_variables)] command_name: &str,
 ) -> Result<ExitStatus> {
+    // Proactive guard: ensure the binary exists and is executable on Unix.
+    // This makes failure behavior consistent across environments (some distros may
+    // return different errors when spawning invalid paths).
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        match std::fs::metadata(binary) {
+            Ok(meta) => {
+                let mode = meta.permissions().mode();
+                if !meta.is_file() || (mode & 0o111) == 0 {
+                    anyhow::bail!("Failed to execute {}: not an executable file", binary.display());
+                }
+            }
+            Err(_) => {
+                anyhow::bail!("Failed to execute {}: not found", binary.display());
+            }
+        }
+    }
+
     let mut cmd = Command::new(binary);
 
     #[cfg(unix)]
@@ -415,9 +434,9 @@ fn is_executable(path: &std::path::Path) -> bool {
 }
 
 /// Collect filesystem diff and network scopes from world backend
-fn collect_world_telemetry(_span_id: &str) -> (Vec<String>, Option<FsDiff>) {
+fn collect_world_telemetry(span_id: &str) -> (Vec<String>, Option<FsDiff>) {
     // Try to get world handle from environment
-    let _world_id = match env::var("SUBSTRATE_WORLD_ID") {
+    let world_id = match env::var("SUBSTRATE_WORLD_ID") {
         Ok(id) => id,
         Err(_) => {
             // No world ID, return empty telemetry
@@ -432,7 +451,7 @@ fn collect_world_telemetry(_span_id: &str) -> (Vec<String>, Option<FsDiff>) {
         use world_api::WorldBackend;
         
         let backend = LinuxLocalBackend::new();
-        let handle = world_api::WorldHandle { id: world_id };
+        let handle = world_api::WorldHandle { id: world_id.clone() };
         
         // Try to get filesystem diff
         let fs_diff = match backend.fs_diff(&handle, span_id) {

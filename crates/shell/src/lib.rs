@@ -157,8 +157,14 @@ pub enum SubCommands {
     Graph(GraphCmd),
 }
 
+#[derive(clap::Args, Debug)]
+pub struct GraphCmd {
+    #[command(subcommand)]
+    pub action: GraphAction,
+}
+
 #[derive(clap::Subcommand, Debug)]
-pub enum GraphCmd {
+pub enum GraphAction {
     Ingest { file: std::path::PathBuf },
     Status,
     WhatChanged { span_id: String, #[arg(long, default_value_t = 100)] limit: usize },
@@ -378,12 +384,12 @@ fn handle_graph_command(cmd: &GraphCmd) -> Result<()> {
     let cfg = GraphConfig { backend: "mock".into(), db_path: substrate_graph::default_graph_path()? };
     let mut svc = connect_mock(cfg).map_err(|e| anyhow::anyhow!(e.to_string()))?;
     svc.ensure_schema().map_err(|e| anyhow::anyhow!(e.to_string()))?;
-    match cmd {
-        GraphCmd::Status => {
+    match &cmd.action {
+        GraphAction::Status => {
             let s = svc.status().map_err(|e| anyhow::anyhow!(e.to_string()))?;
             println!("graph status: {}", s);
         }
-        GraphCmd::Ingest { file } => {
+        GraphAction::Ingest { file } => {
             use std::io::{BufRead, BufReader};
             let f = std::fs::File::open(file)?;
             let reader = BufReader::new(f);
@@ -398,7 +404,7 @@ fn handle_graph_command(cmd: &GraphCmd) -> Result<()> {
             }
             println!("ingested {} spans (mock)", n);
         }
-        GraphCmd::WhatChanged { span_id, limit } => {
+        GraphAction::WhatChanged { span_id, limit } => {
             let items = svc.what_changed(span_id, *limit).map_err(|e| anyhow::anyhow!(e.to_string()))?;
             if items.is_empty() {
                 println!("no changes recorded for span {}", span_id);
@@ -1964,7 +1970,6 @@ fn execute_command(
             }
         }
     } else {
-        policy_decision = None;
         None
     };
 

@@ -3,6 +3,8 @@
 //! This module provides network isolation and tracking capabilities using
 //! Linux nftables for policy enforcement and scope monitoring.
 
+use anyhow::Context;
+use std::process::Command;
 use anyhow::Result;
 use std::collections::HashSet;
 use std::net::IpAddr;

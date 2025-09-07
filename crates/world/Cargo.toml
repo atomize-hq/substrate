@@ -21,7 +21,7 @@ sha2.workspace = true
 
 # Linux-specific dependencies
 [target.'cfg(target_os = "linux")'.dependencies]
-nix = "0.27"
+nix = { version = "0.27", features = ["mount", "sched", "fs", "user"] }
 prctl = "1"
 libseccomp = "0.3"
 
