@@ -21,7 +21,8 @@ How to Test on Manjaro (Arch family) – Step‑by‑Step
 1) Install base tooling (run as root or with sudo):
    - pacman -Syu --needed base-devel git curl jq ripgrep
    - pacman -S --needed nftables conntrack-tools iproute2 iptables iputils
-   - pacman -S --needed libseccomp fuse-overlayfs
+   - pacman -S --needed libseccomp
+   - Optional: fuse-overlayfs (only if you want to test the user-space fallback; not required for native host kernel overlay)
    - Optional niceties: fd bat zsh less unzip
 
 2) Install Rust toolchain (user scope):

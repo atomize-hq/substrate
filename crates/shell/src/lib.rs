@@ -1015,11 +1015,12 @@ fn handle_replay_command(span_id: &str) -> Result<()> {
         span_id: span_id.to_string(),
     };
     
-    // Execute with replay (use direct execution for CLI command)
+    // Execute with replay (choose world isolation when requested)
     let runtime = tokio::runtime::Runtime::new()?;
+    let use_world = env::var("SUBSTRATE_REPLAY_USE_WORLD").unwrap_or_default() == "1";
     // Best-effort capability warnings when world isolation requested but not available
     if cfg!(target_os = "linux") {
-        if env::var("SUBSTRATE_REPLAY_USE_WORLD").unwrap_or_default() == "1" {
+        if use_world {
             // cgroup v2
             if !PathBuf::from("/sys/fs/cgroup/cgroup.controllers").exists() {
                 eprintln!("[replay] warn: cgroup v2 not mounted; world cgroups will not activate");
@@ -1040,7 +1041,11 @@ fn handle_replay_command(span_id: &str) -> Result<()> {
         }
     }
 
-    let result = runtime.block_on(async { substrate_replay::replay::execute_direct(&state, 60).await })?;
+    let result = if use_world {
+        runtime.block_on(async { substrate_replay::replay::execute_in_world(&state, 60).await })?
+    } else {
+        runtime.block_on(async { substrate_replay::replay::execute_direct(&state, 60).await })?
+    };
     
     // Display results
     println!("Exit code: {}", result.exit_code);
