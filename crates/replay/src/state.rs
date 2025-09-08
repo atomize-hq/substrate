@@ -132,6 +132,7 @@ pub fn reconstruct_state(
     env.insert("SHIM_PARENT_SPAN".to_string(), span.span_id.clone());
     
     Ok(ExecutionState {
+        raw_cmd: span.cmd.clone(),
         command,
         args,
         cwd,

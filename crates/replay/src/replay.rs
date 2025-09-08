@@ -12,6 +12,8 @@ use tokio::time::{timeout, Duration};
 /// State required to execute a command
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionState {
+    /// The original raw command string as captured in the span
+    pub raw_cmd: String,
     pub command: String,
     pub args: Vec<String>,
     pub cwd: PathBuf,
@@ -41,45 +43,37 @@ pub async fn execute_in_world(
     if world_isolation_available() {
         #[cfg(target_os = "linux")]
         {
-            use world::LinuxLocalBackend;
-            use world_api::{WorldBackend, WorldSpec, ExecRequest};
-
-            let backend = LinuxLocalBackend::new();
-            let spec = WorldSpec {
-                reuse_session: true,
-                isolate_network: true,
-                limits: world_api::ResourceLimits::default(),
-                enable_preload: false,
-                allowed_domains: vec![],
-                project_dir: state.cwd.clone(),
-            };
-            let handle = backend.ensure_session(&spec)?;
-
-            let full_cmd = if state.args.is_empty() {
-                state.command.clone()
-            } else {
-                format!("{} {}", state.command, state.args.join(" "))
-            };
-            let req = ExecRequest {
-                cmd: full_cmd,
-                cwd: state.cwd.clone(),
-                env: state.env.clone(),
-                pty: false,
-                span_id: Some(state.span_id.clone()),
-            };
-
+            // Use overlayfs-backed execution to compute fs_diff during replay.
+            // Degrade to direct execution if overlay is not available.
+            let world_id = &state.span_id;
+            let bash_cmd = format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''"));
             let start = std::time::Instant::now();
-            let res = backend.exec(&handle, req)?;
-            let duration_ms = start.elapsed().as_millis() as u64;
-
-            return Ok(ExecutionResult {
-                exit_code: res.exit,
-                stdout: res.stdout,
-                stderr: res.stderr,
-                fs_diff: res.fs_diff,
-                scopes_used: res.scopes_used,
-                duration_ms,
-            });
+            match world::overlayfs::execute_with_overlay(
+                world_id,
+                &bash_cmd,
+                &state.cwd,
+                &state.cwd,
+                &state.env,
+            ) {
+                Ok((output, fs_diff)) => {
+                    let duration_ms = start.elapsed().as_millis() as u64;
+                    return Ok(ExecutionResult {
+                        exit_code: output.status.code().unwrap_or(-1),
+                        stdout: output.stdout,
+                        stderr: output.stderr,
+                        fs_diff: Some(fs_diff),
+                        scopes_used: Vec::new(),
+                        duration_ms,
+                    });
+                }
+                Err(e) => {
+                    if std::env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1" {
+                        eprintln!("[replay] warn: overlay execution unavailable: {}\n[replay] falling back to direct execution (no fs_diff)", e);
+                    }
+                    // Fall back to direct execution
+                    return execute_direct(state, timeout_secs).await;
+                }
+            }
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -113,11 +107,16 @@ pub async fn execute_direct(
     state: &ExecutionState,
     timeout_secs: u64,
 ) -> Result<ExecutionResult> {
-    // Set up command
-    let mut cmd = Command::new(&state.command);
-    cmd.args(&state.args);
+    // Prefer running via a shell to preserve quoting, pipes, redirects, etc.
+    let mut cmd = Command::new("/bin/bash");
+    cmd.arg("-lc").arg(&state.raw_cmd);
     cmd.current_dir(&state.cwd);
+    // Minimal environment reinjection
     cmd.envs(&state.env);
+    // Ensure a reasonable default shell environment
+    if std::env::var("SHELL").is_err() { cmd.env("SHELL", "/bin/bash"); }
+    if std::env::var("LANG").is_err() { cmd.env("LANG", "C.UTF-8"); }
+    if std::env::var("LC_ALL").is_err() { cmd.env("LC_ALL", "C.UTF-8"); }
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
     
@@ -211,6 +210,7 @@ pub async fn replay_sequence(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
     
     #[test]
     fn test_parse_command() {
@@ -226,6 +226,7 @@ mod tests {
     #[tokio::test]
     async fn test_execute_direct_simple() {
         let state = ExecutionState {
+            raw_cmd: "echo test".to_string(),
             command: "echo".to_string(),
             args: vec!["test".to_string()],
             cwd: std::env::current_dir().unwrap(),
@@ -238,5 +239,25 @@ mod tests {
         let result = execute_direct(&state, 10).await.unwrap();
         assert_eq!(result.exit_code, 0);
         assert_eq!(String::from_utf8_lossy(&result.stdout).trim(), "test");
+    }
+
+    #[tokio::test]
+    async fn test_execute_direct_with_redirection() {
+        let dir = tempdir().unwrap();
+        let cwd = dir.path().to_path_buf();
+        let state = ExecutionState {
+            raw_cmd: "echo hello > out.txt".to_string(),
+            command: "echo".to_string(),
+            args: vec!["hello".to_string(), ">".to_string(), "out.txt".to_string()],
+            cwd: cwd.clone(),
+            env: HashMap::new(),
+            stdin: None,
+            session_id: "s".to_string(),
+            span_id: "sp".to_string(),
+        };
+        let res = execute_direct(&state, 10).await.unwrap();
+        assert_eq!(res.exit_code, 0);
+        let content = std::fs::read_to_string(cwd.join("out.txt")).unwrap();
+        assert_eq!(content.trim(), "hello");
     }
 }

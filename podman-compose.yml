@@ -1,0 +1,25 @@
+services:
+  substrate-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args: {}
+    image: substrate-dev:latest
+    privileged: true
+    security_opt:
+      - seccomp=unconfined
+      - label=disable
+    cap_add:
+      - ALL
+    devices:
+      - "/dev/fuse:/dev/fuse"
+    working_dir: /src
+    volumes:
+      - .:/src
+      - ${HOME}/.codex:/root/.codex
+    environment:
+      - HOME=/root
+      - RUST_LOG=info
+      - CODEX_UNSAFE_ALLOW_NO_SANDBOX=1
+    entrypoint: ["/usr/local/bin/dev-entrypoint.sh"]
+    command: ["bash"]

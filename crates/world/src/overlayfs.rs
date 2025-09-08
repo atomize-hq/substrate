@@ -80,11 +80,31 @@ impl OverlayFs {
 
     #[cfg(target_os = "linux")]
     fn mount_linux(&self, lower_dir: &Path) -> Result<()> {
-        use nix::mount::{mount, MsFlags};
+        use nix::mount::{mount, umount2, MntFlags, MsFlags};
+        use std::path::Path;
+
+        // Ensure overlay roots exist
+        std::fs::create_dir_all(&self.upper_dir)?;
+        std::fs::create_dir_all(&self.work_dir)?;
+        std::fs::create_dir_all(&self.merged_dir)?;
+
+        // Bind-mount the requested lower_dir into a stable path under the overlay root
+        let bind_lower = self.overlay_dir.join("lower");
+        std::fs::create_dir_all(&bind_lower)?;
+        // Best-effort unmount if already mounted
+        let _ = umount2(&bind_lower, MntFlags::MNT_DETACH);
+        mount(
+            Some(lower_dir),
+            &bind_lower,
+            None::<&str>,
+            MsFlags::MS_BIND,
+            None::<&str>,
+        )
+        .with_context(|| format!("Failed to bind-mount lower {} -> {}", lower_dir.display(), bind_lower.display()))?;
 
         let options = format!(
             "lowerdir={},upperdir={},workdir={}",
-            lower_dir.display(),
+            bind_lower.display(),
             self.upper_dir.display(),
             self.work_dir.display()
         );
@@ -292,25 +312,24 @@ pub fn execute_with_overlay(
     cwd: &Path,
     env: &std::collections::HashMap<String, String>,
 ) -> Result<(std::process::Output, FsDiff)> {
-    
+    // no chroot: rely on cd into target path under merged
+
     let mut overlay = OverlayFs::new(world_id)?;
     
     // Mount overlay with project directory as lower layer
     let merged_dir = overlay.mount(project_dir)?;
-    
-    // Calculate the working directory within the merged filesystem
-    let exec_cwd = if cwd.starts_with(project_dir) {
-        let rel_path = cwd.strip_prefix(project_dir)?;
-        merged_dir.join(rel_path)
-    } else {
-        merged_dir.clone()
-    };
 
-    // Execute command in the merged directory
+    // Execute command in merged by cd into the equivalent path under merged
+    let rel = if cwd.starts_with(project_dir) {
+        cwd.strip_prefix(project_dir).unwrap_or_else(|_| Path::new(".")).to_path_buf()
+    } else {
+        PathBuf::from(".")
+    };
+    let cmd_cd = format!("cd '{}' && {}", rel.display(), cmd);
     let output = std::process::Command::new("sh")
-        .arg("-c")
-        .arg(cmd)
-        .current_dir(&exec_cwd)
+        .arg("-lc")
+        .arg(&cmd_cd)
+        .current_dir(&merged_dir)
         .envs(env)
         .output()
         .context("Failed to execute command in overlay")?;

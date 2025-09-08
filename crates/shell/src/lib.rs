@@ -147,6 +147,10 @@ pub struct Cli {
     #[arg(long = "replay", value_name = "SPAN_ID", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status", "shim_remove", "trace"])]
     pub replay: Option<String>,
 
+    /// Verbose output during replay (prints command, cwd, mode, and capability warnings)
+    #[arg(long = "replay-verbose", requires = "replay")]
+    pub replay_verbose: bool,
+
     /// Graph commands (ingest/status/what-changed)
     #[command(subcommand)]
     pub sub: Option<SubCommands>,
@@ -308,6 +312,7 @@ impl ShellConfig {
         
         // Handle --replay flag
         if let Some(span_id) = cli.replay {
+            if cli.replay_verbose { env::set_var("SUBSTRATE_REPLAY_VERBOSE", "1"); }
             handle_replay_command(&span_id)?;
             std::process::exit(0);
         }
@@ -982,10 +987,13 @@ fn handle_replay_command(span_id: &str) -> Result<()> {
         .map(String::from)
         .unwrap_or_else(|| Uuid::now_v7().to_string());
     
-    println!("Replaying command: {}", command);
-    println!("Working directory: {}", cwd.display());
-    println!("Session ID: {}", session_id);
-    println!();
+    // Verbose header
+    if env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1" || env::args().any(|a| a == "--replay-verbose") {
+        eprintln!("[replay] span_id: {}", span_id);
+        eprintln!("[replay] command: {}", command);
+        eprintln!("[replay] cwd: {}", cwd.display());
+        eprintln!("[replay] mode: bash -lc");
+    }
     
     // Parse command into command and args
     let parts: Vec<&str> = command.split_whitespace().collect();
@@ -997,6 +1005,7 @@ fn handle_replay_command(span_id: &str) -> Result<()> {
     
     // Create execution state
     let state = substrate_replay::replay::ExecutionState {
+        raw_cmd: command.to_string(),
         command: cmd,
         args,
         cwd,
@@ -1008,9 +1017,30 @@ fn handle_replay_command(span_id: &str) -> Result<()> {
     
     // Execute with replay (use direct execution for CLI command)
     let runtime = tokio::runtime::Runtime::new()?;
-    let result = runtime.block_on(async {
-        substrate_replay::replay::execute_direct(&state, 60).await
-    })?;
+    // Best-effort capability warnings when world isolation requested but not available
+    if cfg!(target_os = "linux") {
+        if env::var("SUBSTRATE_REPLAY_USE_WORLD").unwrap_or_default() == "1" {
+            // cgroup v2
+            if !PathBuf::from("/sys/fs/cgroup/cgroup.controllers").exists() {
+                eprintln!("[replay] warn: cgroup v2 not mounted; world cgroups will not activate");
+            }
+            // overlayfs
+            let overlay_ok = std::fs::read_to_string("/proc/filesystems")
+                .ok()
+                .map(|s| s.contains("overlay"))
+                .unwrap_or(false);
+            if !overlay_ok { eprintln!("[replay] warn: overlayfs not present; fs_diff will be unavailable"); }
+            // nftables
+            let nft_ok = std::process::Command::new("nft").arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status().ok().map(|s| s.success()).unwrap_or(false);
+            if !nft_ok { eprintln!("[replay] warn: nft not available; netfilter scoping/logging disabled"); }
+            // dmesg restrict
+            if let Ok(out) = std::process::Command::new("sh").arg("-lc").arg("sysctl -n kernel.dmesg_restrict 2>/dev/null || echo n/a").output() {
+                if let Ok(s) = String::from_utf8(out.stdout) { if s.trim() == "1" { eprintln!("[replay] warn: kernel.dmesg_restrict=1; LOG lines may not be visible"); } }
+            }
+        }
+    }
+
+    let result = runtime.block_on(async { substrate_replay::replay::execute_direct(&state, 60).await })?;
     
     // Display results
     println!("Exit code: {}", result.exit_code);
