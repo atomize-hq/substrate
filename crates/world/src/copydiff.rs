@@ -9,7 +9,7 @@
 use anyhow::{Context, Result};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::io::{Read};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use substrate_common::FsDiff;
@@ -167,9 +167,18 @@ fn compute_diff(base: &Path, work: &Path) -> Result<FsDiff> {
         let b = base_map.get(rel).unwrap();
         let w = work_map.get(rel).unwrap();
         match (&b.kind[..], &w.kind[..]) {
-            ("d", "d") => { /* unchanged or content in subpaths handled elsewhere */ }
+            ("d", "d") => { /* ignore dir metadata for now to reduce noise */ }
             ("f", "f") => {
-                if files_differ(&b.path, &w.path) {
+                let content_changed = files_differ(&b.path, &w.path);
+                let meta_changed = meta_differs(b, w);
+                if content_changed || meta_changed {
+                    diff.mods.push(rel.clone());
+                }
+            }
+            ("l", "l") => {
+                let target_changed = b.symlink_target != w.symlink_target;
+                let meta_changed = meta_differs(b, w);
+                if target_changed || meta_changed {
                     diff.mods.push(rel.clone());
                 }
             }
@@ -196,18 +205,56 @@ fn compute_diff(base: &Path, work: &Path) -> Result<FsDiff> {
     Ok(diff)
 }
 
-struct Meta { path: PathBuf, kind: String }
+struct Meta {
+    path: PathBuf,
+    kind: String, // f|d|l|?
+    size: u64,
+    mode: u32,
+    uid: u32,
+    gid: u32,
+    mtime_sec: i64,
+    mtime_nsec: i64,
+    symlink_target: Option<PathBuf>,
+}
 
 fn meta_of(path: &Path) -> Meta {
     let md = fs::symlink_metadata(path).ok();
-    let kind = md
-        .as_ref()
-        .map(|m| {
-            if m.file_type().is_dir() { "d" } else if m.file_type().is_file() { "f" } else if m.file_type().is_symlink() { "l" } else { "?" }
-        })
-        .unwrap_or("?")
-        .to_string();
-    Meta { path: path.to_path_buf(), kind }
+    let mut kind = "?".to_string();
+    let mut size = 0u64;
+    let mut mode = 0u32;
+    let mut uid = 0u32;
+    let mut gid = 0u32;
+    let mut mtime_sec = 0i64;
+    let mut mtime_nsec = 0i64;
+    let mut symlink_target: Option<PathBuf> = None;
+
+    if let Some(m) = md.as_ref() {
+        let ft = m.file_type();
+        if ft.is_dir() { kind = "d".into(); }
+        else if ft.is_file() { kind = "f".into(); }
+        else if ft.is_symlink() { kind = "l".into(); }
+        size = m.len();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            mode = m.mode();
+            uid = m.uid();
+            gid = m.gid();
+            mtime_sec = m.mtime();
+            mtime_nsec = m.mtime_nsec();
+        }
+        if ft.is_symlink() {
+            symlink_target = fs::read_link(path).ok();
+        }
+    }
+
+    Meta { path: path.to_path_buf(), kind, size, mode, uid, gid, mtime_sec, mtime_nsec, symlink_target }
+}
+
+fn meta_differs(a: &Meta, b: &Meta) -> bool {
+    if a.mode != b.mode || a.uid != b.uid || a.gid != b.gid { return true; }
+    if a.mtime_sec != b.mtime_sec || a.mtime_nsec != b.mtime_nsec { return true; }
+    false
 }
 
 fn files_differ(a: &Path, b: &Path) -> bool {
