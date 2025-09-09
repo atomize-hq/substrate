@@ -66,11 +66,12 @@ pub fn execute_with_copydiff(
     copy_tree(project_dir, &work)?;
 
     // Execute under work at the mapped cwd
-    let rel = if cwd.starts_with(project_dir) {
+    let mut rel = if cwd.starts_with(project_dir) {
         cwd.strip_prefix(project_dir).unwrap_or_else(|_| Path::new(".")).to_path_buf()
     } else {
         PathBuf::from(".")
     };
+    if rel.as_os_str().is_empty() { rel = PathBuf::from("."); }
     let cmd_cd = format!("cd '{}' && {}", rel.display(), cmd);
     let output = Command::new("sh")
         .arg("-lc")
@@ -96,7 +97,7 @@ fn copy_tree(from: &Path, to: &Path) -> Result<()> {
     let status = Command::new("cp")
         .arg("-a")
         .arg("--reflink=auto")
-        .arg(from)
+        .arg(format!("{}/.", from.display()))
         .arg(to)
         .status();
     match status {
@@ -225,4 +226,3 @@ fn files_differ(a: &Path, b: &Path) -> bool {
     if ra != rb { return true; }
     ba[..ra] != bb[..rb]
 }
-

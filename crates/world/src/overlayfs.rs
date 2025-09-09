@@ -23,6 +23,7 @@ pub struct OverlayFs {
     work_dir: PathBuf,
     merged_dir: PathBuf,
     lower_dir: Option<PathBuf>,
+    bind_lower_dir: Option<PathBuf>,
     is_mounted: bool,
     using_fuse: bool,
     fuse_child: Option<Child>,
@@ -48,6 +49,7 @@ impl OverlayFs {
             work_dir,
             merged_dir,
             lower_dir: None,
+            bind_lower_dir: None,
             is_mounted: false,
             using_fuse: false,
             fuse_child: None,
@@ -107,6 +109,7 @@ impl OverlayFs {
             None::<&str>,
         )
         .with_context(|| format!("Failed to bind-mount lower {} -> {}", lower_dir.display(), bind_lower.display()))?;
+        self.bind_lower_dir = Some(bind_lower.clone());
 
         let options = format!(
             "lowerdir={},upperdir={},workdir={}",
@@ -194,6 +197,10 @@ impl OverlayFs {
             } else {
                 umount2(&self.merged_dir, MntFlags::MNT_DETACH)
                     .context("Failed to unmount overlayfs")?;
+            }
+            // Best-effort unmount of bind-lower mountpoint
+            if let Some(ref bind_lower) = self.bind_lower_dir {
+                let _ = umount2(bind_lower, MntFlags::MNT_DETACH);
             }
         }
 
@@ -352,8 +359,15 @@ impl OverlayFs {
 
         // Remove overlay directories
         if self.overlay_dir.exists() {
-            std::fs::remove_dir_all(&self.overlay_dir)
-                .context("Failed to remove overlay directory")?;
+            if let Err(e) = std::fs::remove_dir_all(&self.overlay_dir) {
+                // Best-effort: if busy, leave for GC but do not fail replay
+                if std::env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1" {
+                    eprintln!(
+                        "[replay] warn: overlay cleanup left in place ({}): {}",
+                        self.overlay_dir.display(), e
+                    );
+                }
+            }
         }
 
         Ok(())
@@ -488,11 +502,12 @@ pub fn execute_with_overlay(
     let merged_dir = overlay.mount(project_dir)?;
 
     // Execute command in merged by cd into the equivalent path under merged
-    let rel = if cwd.starts_with(project_dir) {
+    let mut rel = if cwd.starts_with(project_dir) {
         cwd.strip_prefix(project_dir).unwrap_or_else(|_| Path::new(".")).to_path_buf()
     } else {
         PathBuf::from(".")
     };
+    if rel.as_os_str().is_empty() { rel = PathBuf::from("."); }
     let cmd_cd = format!("cd '{}' && {}", rel.display(), cmd);
     let output = std::process::Command::new("sh")
         .arg("-lc")

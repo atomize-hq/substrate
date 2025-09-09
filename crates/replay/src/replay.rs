@@ -62,11 +62,12 @@ pub async fn execute_in_world(
             ) -> Result<(std::process::Output, FsDiff, bool, usize)> {
                 let merged_dir = ovl.merged_dir_path().to_path_buf();
                 // Execute command in merged by cd into the equivalent path under merged
-                let rel = if cwd.starts_with(project_dir) {
+                let mut rel = if cwd.starts_with(project_dir) {
                     cwd.strip_prefix(project_dir).unwrap_or_else(|_| std::path::Path::new(".")).to_path_buf()
                 } else {
                     std::path::PathBuf::from(".")
                 };
+                if rel.as_os_str().is_empty() { rel = std::path::PathBuf::from("."); }
                 let cmd_cd = format!("cd '{}' && {}", rel.display(), cmd);
                 let output = std::process::Command::new("sh")
                     .arg("-lc")
