@@ -13,6 +13,7 @@ pub mod netfilter;
 pub mod network;
 pub mod overlayfs;
 pub mod session;
+pub mod copydiff;
 
 pub use session::SessionWorld;
 

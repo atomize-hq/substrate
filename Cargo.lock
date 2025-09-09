@@ -4203,6 +4203,7 @@ dependencies = [
  "tokio",
  "uuid",
  "walkdir",
+ "which 6.0.3",
  "world-api",
 ]
 

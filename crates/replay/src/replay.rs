@@ -43,19 +43,136 @@ pub async fn execute_in_world(
     if world_isolation_available() {
         #[cfg(target_os = "linux")]
         {
-            // Use overlayfs-backed execution to compute fs_diff during replay.
-            // Degrade to direct execution if overlay is not available.
+            let verbose = std::env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1";
             let world_id = &state.span_id;
             let bash_cmd = format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''"));
             let start = std::time::Instant::now();
-            match world::overlayfs::execute_with_overlay(
-                world_id,
-                &bash_cmd,
-                &state.cwd,
-                &state.cwd,
-                &state.env,
-            ) {
-                Ok((output, fs_diff)) => {
+
+            // Strategy probe and selection
+            // 1) Try kernel overlay: mount + tiny write probe
+            let mut chosen_strategy = String::new();
+
+            // Helper to run inside overlay (kernel or fuse decided by how we mounted)
+            fn run_in_overlay(
+                mut ovl: world::overlayfs::OverlayFs,
+                cmd: &str,
+                project_dir: &std::path::Path,
+                cwd: &std::path::Path,
+                env: &std::collections::HashMap<String, String>,
+            ) -> Result<(std::process::Output, FsDiff, bool, usize)> {
+                let merged_dir = ovl.merged_dir_path().to_path_buf();
+                // Execute command in merged by cd into the equivalent path under merged
+                let rel = if cwd.starts_with(project_dir) {
+                    cwd.strip_prefix(project_dir).unwrap_or_else(|_| std::path::Path::new(".")).to_path_buf()
+                } else {
+                    std::path::PathBuf::from(".")
+                };
+                let cmd_cd = format!("cd '{}' && {}", rel.display(), cmd);
+                let output = std::process::Command::new("sh")
+                    .arg("-lc")
+                    .arg(&cmd_cd)
+                    .current_dir(&merged_dir)
+                    .envs(env)
+                    .output()
+                    .context("Failed to execute command in overlay")?;
+
+                // Count upper entries for diagnostics before cleaning
+                let upper = ovl.upper_dir_path().to_path_buf();
+                fn count_entries(p: &std::path::Path) -> usize {
+                    let mut cnt = 0usize;
+                    if let Ok(rd) = std::fs::read_dir(p) {
+                        for ent in rd.flatten() {
+                            cnt += 1;
+                            let path = ent.path();
+                            if path.is_dir() {
+                                cnt += count_entries(&path);
+                            }
+                        }
+                    }
+                    cnt
+                }
+                let upper_entries = count_entries(&upper);
+
+                // Compute diff before cleanup
+                let diff = ovl.compute_diff()?;
+                ovl.cleanup()?;
+                Ok((output, diff, ovl.is_using_fuse(), upper_entries))
+            }
+
+            // Probe kernel overlay
+            let mut tried_overlay_kernel = false;
+            let mut overlay_kernel_ok = false;
+            if std::fs::read_to_string("/proc/filesystems").map(|s| s.contains("overlay")).unwrap_or(false) {
+                tried_overlay_kernel = true;
+                let mut probe = world::overlayfs::OverlayFs::new(&format!("{}-probe", world_id))?;
+                if let Ok(_m) = probe.mount(&state.cwd) {
+                    if !probe.is_using_fuse() {
+                        // tiny write probe
+                        let merged = probe.merged_dir_path().to_path_buf();
+                        let _ = std::fs::create_dir_all(merged.join(".substrate-probe"));
+                        let _ = std::fs::write(merged.join(".substrate-probe/probe.txt"), b"x");
+                        let diff = probe.compute_diff().unwrap_or_default();
+                        overlay_kernel_ok = !diff.is_empty();
+                    }
+                    let _ = probe.cleanup();
+                }
+            }
+
+            if overlay_kernel_ok {
+                // Use kernel overlay
+                let mut ovl = world::overlayfs::OverlayFs::new(world_id)?;
+                ovl.mount(&state.cwd)?;
+                let (output, fs_diff, using_fuse, upper_entries) = run_in_overlay(
+                    ovl,
+                    &bash_cmd,
+                    &state.cwd,
+                    &state.cwd,
+                    &state.env,
+                )?;
+                chosen_strategy = if using_fuse { "fuse" } else { "overlay" }.to_string();
+                if verbose {
+                    eprintln!("[replay] world strategy: {}", chosen_strategy);
+                    if fs_diff.is_empty() {
+                        eprintln!("[replay] upper entries: {}", upper_entries);
+                    }
+                }
+                let duration_ms = start.elapsed().as_millis() as u64;
+                return Ok(ExecutionResult {
+                    exit_code: output.status.code().unwrap_or(-1),
+                    stdout: output.stdout,
+                    stderr: output.stderr,
+                    fs_diff: Some(fs_diff),
+                    scopes_used: Vec::new(),
+                    duration_ms,
+                });
+            }
+
+            // 2) Try fuse-overlayfs when /dev/fuse exists and binary is present
+            let fuse_dev = std::path::Path::new("/dev/fuse").exists();
+            let fuse_bin_ok = std::process::Command::new("sh")
+                .arg("-lc")
+                .arg("command -v fuse-overlayfs >/dev/null 2>&1")
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if fuse_dev && fuse_bin_ok {
+                let mut ovl = world::overlayfs::OverlayFs::new(world_id)?;
+                if let Ok(_m) = ovl.mount_fuse_only(&state.cwd) {
+                    // quick readiness probe via /proc/self/mounts already done in mount_fuse_only
+                    let (output, fs_diff, using_fuse, upper_entries) = run_in_overlay(
+                        ovl,
+                        &bash_cmd,
+                        &state.cwd,
+                        &state.cwd,
+                        &state.env,
+                    )?;
+                    chosen_strategy = if using_fuse { "fuse" } else { "overlay" }.to_string();
+                    if verbose {
+                        eprintln!("[replay] world strategy: {}", chosen_strategy);
+                        if fs_diff.is_empty() {
+                            eprintln!("[replay] upper entries: {}", upper_entries);
+                        }
+                    }
                     let duration_ms = start.elapsed().as_millis() as u64;
                     return Ok(ExecutionResult {
                         exit_code: output.status.code().unwrap_or(-1),
@@ -66,14 +183,28 @@ pub async fn execute_in_world(
                         duration_ms,
                     });
                 }
-                Err(e) => {
-                    if std::env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1" {
-                        eprintln!("[replay] warn: overlay execution unavailable: {}\n[replay] falling back to direct execution (no fs_diff)", e);
-                    }
-                    // Fall back to direct execution
-                    return execute_direct(state, timeout_secs).await;
-                }
             }
+
+            // 3) Userspace copy-diff fallback (no privileges)
+            if verbose {
+                eprintln!("[replay] world strategy: copy-diff");
+            }
+            let (output, fs_diff) = world::copydiff::execute_with_copydiff(
+                world_id,
+                &bash_cmd,
+                &state.cwd,
+                &state.cwd,
+                &state.env,
+            )?;
+            let duration_ms = start.elapsed().as_millis() as u64;
+            return Ok(ExecutionResult {
+                exit_code: output.status.code().unwrap_or(-1),
+                stdout: output.stdout,
+                stderr: output.stderr,
+                fs_diff: Some(fs_diff),
+                scopes_used: Vec::new(),
+                duration_ms,
+            });
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -82,6 +213,9 @@ pub async fn execute_in_world(
         }
     }
     // Fallback direct execution when isolation disabled
+    if std::env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1" {
+        eprintln!("[replay] world strategy: direct");
+    }
     execute_direct(state, timeout_secs).await
 }
 

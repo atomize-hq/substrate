@@ -12,7 +12,7 @@ Notes / Current State (live)
 - Next adjustments (targeted):
   - Add a tiny capability probe in replay to detect whether kernel overlay captures upper changes; if not, automatically fall back to fuse-overlayfs (present in our image) before degrading further.
   - Optionally add chroot/pivot_root mode (CAP_SYS_CHROOT) when appropriate; continue to cd into merged as a safe default.
-  - Emit “[replay] world strategy: overlay|fuse|chroot|direct” when --replay-verbose is on, plus a one‑line upper summary when fs_diff is empty.
+  - Emit “[replay] world strategy: overlay|fuse|copy-diff|direct” when --replay-verbose is on, plus a one‑line upper summary when fs_diff is empty.
 - Rationale to test on native Linux (your Manjaro host):
   - Confirms whether the empty fs_diff is a container‑specific quirk or a general issue.
   - Provides a clean baseline for Phase B before we add the fuse-overlayfs fallback and extended strategy selection.
@@ -80,6 +80,42 @@ What happens next (after Manjaro test)
   - We’ll add the capability probe to pick overlay vs fuse-overlayfs automatically in containers, and proceed with cgroups (Phase C) and nftables (Phase D).
 - If fs_diff is still empty on Manjaro:
   - I’ll add the fuse-overlayfs fallback and re‑test. If both overlay and fuse fail to capture upper writes, we’ll switch to a pivot_root/chroot execution path and verify; worst case, we’ll flag degraded_components and proceed with cgroups/netfilter coverage while we debug the mount specifics.
+
+Phase B – Part 2: Capability Probe + FUSE + Copy‑Diff Fallback
+Goal
+- Make fs_diff reliable across all Linux environments (native hosts and containers) while preserving performance where possible.
+
+Strategy selection at runtime (in replay when SUBSTRATE_REPLAY_USE_WORLD=1)
+- overlay (kernel): preferred, fastest. If mount fails or upper shows no changes, fall back.
+- fuse-overlayfs (userspace): good coverage in containers (requires /dev/fuse, fuse-overlayfs binary). If unavailable or fails, fall back.
+- copy-diff fallback (userspace, no privileges): always works; slower. If even this fails, run direct with explicit degradation.
+
+Probe details
+- overlay probe:
+  - Attempt to mount overlay with bind-mounted lower -> merged. If mount syscall fails (EINVAL/EPERM) or later upper is empty for a known‑write test, mark overlay unavailable.
+- fuse-overlayfs probe:
+  - Check for /dev/fuse and fuse-overlayfs in PATH. Attempt mounting merged with “fuse-overlayfs -o lowerdir=…,upperdir=…,workdir=… merged”. If process spawns but mountpoint not active within a short timeout, mark unavailable.
+- copy-diff fallback (no probe needed):
+  - Pre-snapshot: copy base (cp -a or rsync; prefer cp --reflink=auto when supported). Execute in “work/” copy. Compute create/modify/delete by comparing base vs work. Emit FsDiff with truncation markers as needed. Cleanup.
+
+Verbose instrumentation
+- Print one line at start: “[replay] world strategy: overlay|fuse|copy-diff|direct”.
+- When a strategy fails, print explicit reason and next fallback selected.
+- When fs_diff ends up empty, print a short diagnostic: e.g., “upper entries: N” for overlay/fuse, or “copy-diff compared M→N entries” for copy-diff.
+
+Paths and permissions
+- Non-root: per-user runtime root under $XDG_RUNTIME_DIR/substrate/overlay or /run/user/$UID/substrate/overlay; fallback to /tmp/substrate-$UID/overlay.
+- Root: keep /var/lib/substrate/overlay.
+- Always best-effort cleanup; tolerate ENOENT on unmount/remove; provide world gc tool later (Phase C/E) to garbage collect leftovers.
+
+Manjaro/Ubuntu notes
+- On native hosts without CAP_SYS_ADMIN, overlay may fail; fuse-overlayfs may still work with /dev/fuse. If neither is available, copy-diff will emit fs_diff without special privileges.
+- Avoid mixing sudo and non-sudo within the same test directory to prevent permission drift; if mixed, clean with sudo rm -rf and start over.
+
+Validation plan (container + native)
+- Container: run write span; replay with world; expect strategy=fuse or copy-diff and non-empty “Filesystem changes:” lines.
+- Native host: run write span; replay with world; expect strategy=overlay (root) or copy-diff (non-root) and non-empty fs_diff.
+
 
 Objective
 - Bring substrate to 100% compliance with Implementation Phase 4 and PRE_PHASE_4_5 hardening on Linux, validated inside the Podman rootful VM/container.

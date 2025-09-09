@@ -6,6 +6,7 @@
 use anyhow::{Context, Result};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
 use substrate_common::FsDiff;
 use walkdir::WalkDir;
 
@@ -23,12 +24,14 @@ pub struct OverlayFs {
     merged_dir: PathBuf,
     lower_dir: Option<PathBuf>,
     is_mounted: bool,
+    using_fuse: bool,
+    fuse_child: Option<Child>,
 }
 
 impl OverlayFs {
     /// Create a new overlayfs instance for the given world.
     pub fn new(world_id: &str) -> Result<Self> {
-        let base_dir = PathBuf::from("/var/lib/substrate/overlay");
+        let base_dir = choose_base_dir()?;
         std::fs::create_dir_all(&base_dir)
             .context("Failed to create overlay base directory")?;
 
@@ -46,6 +49,8 @@ impl OverlayFs {
             merged_dir,
             lower_dir: None,
             is_mounted: false,
+            using_fuse: false,
+            fuse_child: None,
         })
     }
 
@@ -79,9 +84,10 @@ impl OverlayFs {
     }
 
     #[cfg(target_os = "linux")]
-    fn mount_linux(&self, lower_dir: &Path) -> Result<()> {
+    fn mount_linux(&mut self, lower_dir: &Path) -> Result<()> {
         use nix::mount::{mount, umount2, MntFlags, MsFlags};
-        use std::path::Path;
+        use std::thread::sleep;
+        use std::time::Duration;
 
         // Ensure overlay roots exist
         std::fs::create_dir_all(&self.upper_dir)?;
@@ -109,16 +115,59 @@ impl OverlayFs {
             self.work_dir.display()
         );
 
-        mount(
+        match mount(
             Some("overlay"),
             &self.merged_dir,
             Some("overlay"),
             MsFlags::empty(),
             Some(options.as_bytes()),
-        )
-        .context("Failed to mount overlayfs")?;
-
-        Ok(())
+        ) {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                // Try FUSE fallback
+                let fuse = which::which("fuse-overlayfs").ok();
+                if fuse.is_none() {
+                    return Err(anyhow::anyhow!("Failed to mount overlayfs: {}", e));
+                }
+                let fuse_bin = fuse.unwrap();
+                let fuse_opts = format!(
+                    "lowerdir={},upperdir={},workdir={}",
+                    bind_lower.display(),
+                    self.upper_dir.display(),
+                    self.work_dir.display()
+                );
+                let mut child = Command::new(&fuse_bin)
+                    .arg("-o").arg(&fuse_opts)
+                    .arg(&self.merged_dir)
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .context("Failed to spawn fuse-overlayfs")?;
+                // Wait up to ~1s for mount readiness by parsing /proc/self/mounts
+                let mut ready = false;
+                for _ in 0..30 {
+                    if let Ok(Some(fs_type)) = is_path_mounted(&self.merged_dir) {
+                        if fs_type.contains("fuse") || fs_type.contains("fuse-overlayfs") {
+                            ready = true;
+                            break;
+                        }
+                    }
+                    sleep(Duration::from_millis(33));
+                }
+                if !ready {
+                    // Kill child and return error so caller can fallback further
+                    let _ = child.kill();
+                    return Err(anyhow::anyhow!(
+                        "fuse-overlayfs did not mount {} within timeout",
+                        self.merged_dir.display()
+                    ));
+                }
+                self.using_fuse = true;
+                self.fuse_child = Some(child);
+                return Ok(());
+            }
+        }
     }
 
     /// Unmount the overlayfs.
@@ -130,8 +179,22 @@ impl OverlayFs {
         #[cfg(target_os = "linux")]
         {
             use nix::mount::{umount2, MntFlags};
-            umount2(&self.merged_dir, MntFlags::MNT_DETACH)
-                .context("Failed to unmount overlayfs")?;
+            if self.using_fuse {
+                // Try fusermount3 first
+                let status = Command::new("fusermount3")
+                    .arg("-u")
+                    .arg(&self.merged_dir)
+                    .status();
+                // Fallback to lazy umount
+                let _ = umount2(&self.merged_dir, MntFlags::MNT_DETACH);
+                // Terminate fuse child if still running
+                if let Some(mut ch) = self.fuse_child.take() {
+                    let _ = ch.kill();
+                }
+            } else {
+                umount2(&self.merged_dir, MntFlags::MNT_DETACH)
+                    .context("Failed to unmount overlayfs")?;
+            }
         }
 
         self.is_mounted = false;
@@ -295,6 +358,111 @@ impl OverlayFs {
 
         Ok(())
     }
+
+    /// Return true if the current mount is using fuse-overlayfs.
+    pub fn is_using_fuse(&self) -> bool {
+        self.using_fuse
+    }
+
+    /// Get merged directory path.
+    pub fn merged_dir_path(&self) -> &Path {
+        &self.merged_dir
+    }
+
+    /// Get upper directory path.
+    pub fn upper_dir_path(&self) -> &Path {
+        &self.upper_dir
+    }
+
+    /// Mount only via fuse-overlayfs (no kernel overlay attempt).
+    #[cfg(target_os = "linux")]
+    pub fn mount_fuse_only(&mut self, lower_dir: &Path) -> Result<PathBuf> {
+        use nix::mount::{mount, umount2, MntFlags, MsFlags};
+        use std::thread::sleep;
+        use std::time::Duration;
+
+        // Prepare dirs
+        std::fs::create_dir_all(&self.upper_dir)?;
+        std::fs::create_dir_all(&self.work_dir)?;
+        std::fs::create_dir_all(&self.merged_dir)?;
+
+        // Bind-mount lower into a stable path
+        let bind_lower = self.overlay_dir.join("lower");
+        std::fs::create_dir_all(&bind_lower)?;
+        let _ = umount2(&bind_lower, MntFlags::MNT_DETACH);
+        mount(
+            Some(lower_dir),
+            &bind_lower,
+            None::<&str>,
+            MsFlags::MS_BIND,
+            None::<&str>,
+        )
+        .with_context(|| format!("Failed to bind-mount lower {} -> {}", lower_dir.display(), bind_lower.display()))?;
+
+        let fuse_bin = which::which("fuse-overlayfs")
+            .context("fuse-overlayfs binary not found in PATH")?;
+        let fuse_opts = format!(
+            "lowerdir={},upperdir={},workdir={}",
+            bind_lower.display(),
+            self.upper_dir.display(),
+            self.work_dir.display()
+        );
+        let mut child = Command::new(&fuse_bin)
+            .arg("-o").arg(&fuse_opts)
+            .arg(&self.merged_dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .context("Failed to spawn fuse-overlayfs")?;
+
+        // Wait up to ~1s for mount
+        let mut ready = false;
+        for _ in 0..30 {
+            if let Ok(Some(fs_type)) = is_path_mounted(&self.merged_dir) {
+                if fs_type.contains("fuse") || fs_type.contains("fuse-overlayfs") {
+                    ready = true;
+                    break;
+                }
+            }
+            sleep(Duration::from_millis(33));
+        }
+        if !ready {
+            let _ = child.kill();
+            anyhow::bail!(
+                "fuse-overlayfs did not mount {} within timeout",
+                self.merged_dir.display()
+            );
+        }
+
+        self.lower_dir = Some(lower_dir.to_path_buf());
+        self.is_mounted = true;
+        self.using_fuse = true;
+        self.fuse_child = Some(child);
+        Ok(self.merged_dir.clone())
+    }
+}
+
+fn choose_base_dir() -> Result<PathBuf> {
+    #[cfg(target_os = "linux")]
+    {
+        let uid = nix::unistd::Uid::current();
+        if uid.is_root() {
+            return Ok(PathBuf::from("/var/lib/substrate/overlay"));
+        }
+        if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
+            if !xdg.is_empty() { return Ok(PathBuf::from(xdg).join("substrate/overlay")); }
+        }
+        let run_user = PathBuf::from(format!("/run/user/{}/substrate/overlay", uid.as_raw()));
+        if run_user.parent().unwrap_or(Path::new("/run")).exists() {
+            return Ok(run_user);
+        }
+        Ok(PathBuf::from(format!("/tmp/substrate-{}-overlay", uid.as_raw())))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        Ok(PathBuf::from("/tmp/substrate-overlay"))
+    }
 }
 
 impl Drop for OverlayFs {
@@ -341,6 +509,28 @@ pub fn execute_with_overlay(
     overlay.cleanup()?;
 
     Ok((output, diff))
+}
+
+/// Helper to check if a path is currently a mountpoint by inspecting /proc/self/mounts.
+#[cfg(target_os = "linux")]
+fn is_path_mounted(path: &Path) -> Result<Option<String>> {
+    let mounts = std::fs::read_to_string("/proc/self/mounts")
+        .context("failed reading /proc/self/mounts")?;
+    let target = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    for line in mounts.lines() {
+        // Format: src mountpoint fstype options ...
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() >= 3 {
+            let mp = parts[1];
+            let fstype = parts[2];
+            if let Ok(mp_real) = std::fs::canonicalize(mp) {
+                if mp_real == target {
+                    return Ok(Some(fstype.to_string()));
+                }
+            }
+        }
+    }
+    Ok(None)
 }
 
 #[cfg(test)]
