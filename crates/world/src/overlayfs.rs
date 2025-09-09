@@ -508,11 +508,11 @@ pub fn execute_with_overlay(
         PathBuf::from(".")
     };
     if rel.as_os_str().is_empty() { rel = PathBuf::from("."); }
-    let cmd_cd = format!("cd '{}' && {}", rel.display(), cmd);
+    let target_dir = merged_dir.join(&rel);
     let output = std::process::Command::new("sh")
         .arg("-lc")
-        .arg(&cmd_cd)
-        .current_dir(&merged_dir)
+        .arg(cmd)
+        .current_dir(&target_dir)
         .envs(env)
         .output()
         .context("Failed to execute command in overlay")?;

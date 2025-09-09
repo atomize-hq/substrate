@@ -68,11 +68,11 @@ pub async fn execute_in_world(
                     std::path::PathBuf::from(".")
                 };
                 if rel.as_os_str().is_empty() { rel = std::path::PathBuf::from("."); }
-                let cmd_cd = format!("cd '{}' && {}", rel.display(), cmd);
+                let target_dir = merged_dir.join(&rel);
                 let output = std::process::Command::new("sh")
                     .arg("-lc")
-                    .arg(&cmd_cd)
-                    .current_dir(&merged_dir)
+                    .arg(cmd)
+                    .current_dir(&target_dir)
                     .envs(env)
                     .output()
                     .context("Failed to execute command in overlay")?;

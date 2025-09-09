@@ -72,11 +72,11 @@ pub fn execute_with_copydiff(
         PathBuf::from(".")
     };
     if rel.as_os_str().is_empty() { rel = PathBuf::from("."); }
-    let cmd_cd = format!("cd '{}' && {}", rel.display(), cmd);
+    let target_dir = work.join(&rel);
     let output = Command::new("sh")
         .arg("-lc")
-        .arg(&cmd_cd)
-        .current_dir(&work)
+        .arg(cmd)
+        .current_dir(&target_dir)
         .envs(env)
         .output()
         .context("failed executing command under copydiff work dir")?;
