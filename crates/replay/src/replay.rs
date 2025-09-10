@@ -8,6 +8,8 @@ use std::process::Stdio;
 use substrate_common::FsDiff;
 use tokio::process::Command;
 use tokio::time::{timeout, Duration};
+#[cfg(target_os = "linux")]
+use std::process as stdprocess;
 
 /// State required to execute a command
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,6 +50,79 @@ pub async fn execute_in_world(
             let bash_cmd = format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''"));
             let start = std::time::Instant::now();
 
+            // Best-effort per-world cgroup + netns + nftables setup
+            let mut cgroup_mgr = world::cgroups::CgroupManager::new(world_id);
+            let mut cgroup_active = false;
+            match cgroup_mgr.setup() {
+                Ok(true) => {
+                    // Attach current process immediately; child attach attempted later when possible
+                    let _ = cgroup_mgr.attach_current();
+                    cgroup_active = true;
+                }
+                Ok(false) | Err(_) => {
+                    if verbose {
+                        eprintln!("[replay] warn: cgroup v2 unavailable or insufficient privileges; skipping cgroup attach");
+                    }
+                }
+            }
+
+            // Best-effort network namespace
+            let mut netns_name: Option<String> = None;
+            let mut netns_handle: Option<world::netns::NetNs> = None; // ensure drop after netfilter
+            if world::netns::NetNs::ip_available() {
+                let ns = format!("substrate-{}", world_id);
+                let mut netns = world::netns::NetNs::new(&ns);
+                match netns.add() {
+                    Ok(true) => {
+                        if let Err(_e) = netns.lo_up() {
+                            if verbose { eprintln!("[replay] warn: netns unavailable or insufficient privileges; applying host-wide rules or skipping network scoping"); }
+                        } else {
+                            // Ensure netns lives until after netfilter drop; declared before netfilter
+                            netns_name = Some(ns);
+                            netns_handle = Some(netns);
+                        }
+                    }
+                    _ => {
+                        if verbose {
+                            eprintln!("[replay] warn: netns unavailable or insufficient privileges; applying host-wide rules or skipping network scoping");
+                        }
+                    }
+                }
+            } else if verbose {
+                eprintln!("[replay] warn: netns unavailable or insufficient privileges; applying host-wide rules or skipping network scoping");
+            }
+
+            // Best-effort nftables setup with conservative LOG+drop default (within netns when available)
+            let mut netfilter_opt: Option<world::netfilter::NetFilter> = None;
+            let nft_ok = stdprocess::Command::new("nft").arg("--version").status().map(|s| s.success()).unwrap_or(false);
+            if nft_ok {
+                match world::netfilter::NetFilter::new(world_id, Vec::new()) {
+                    Ok(mut nf) => {
+                        if let Some(ref ns) = netns_name { nf.set_namespace(Some(ns.clone())); }
+                        if let Err(e) = nf.install_rules() {
+                            if verbose {
+                                eprintln!("[replay] warn: nft setup failed; netfilter scoping/logging disabled: {}", e);
+                            }
+                        } else {
+                            // Warn when LOG visibility may be restricted
+                            if let Ok(val) = std::fs::read_to_string("/proc/sys/kernel/dmesg_restrict") {
+                                if val.trim() == "1" && verbose {
+                                    eprintln!("[replay] warn: kernel.dmesg_restrict=1; LOG lines may not be visible");
+                                }
+                            }
+                            netfilter_opt = Some(nf);
+                        }
+                    }
+                    Err(e) => {
+                        if verbose {
+                            eprintln!("[replay] warn: nft initialization failed; netfilter scoping/logging disabled: {}", e);
+                        }
+                    }
+                }
+            } else if verbose {
+                eprintln!("[replay] warn: nft not available; netfilter scoping/logging disabled");
+            }
+
             // Strategy probe and selection
             // 1) Try kernel overlay: mount + tiny write probe
             let mut chosen_strategy = String::new();
@@ -59,6 +134,8 @@ pub async fn execute_in_world(
                 project_dir: &std::path::Path,
                 cwd: &std::path::Path,
                 env: &std::collections::HashMap<String, String>,
+                cgroup_mgr: Option<&world::cgroups::CgroupManager>,
+                netns_name: Option<&str>,
             ) -> Result<(std::process::Output, FsDiff, bool, usize)> {
                 let merged_dir = ovl.merged_dir_path().to_path_buf();
                 // Execute command in merged by cd into the equivalent path under merged
@@ -69,13 +146,24 @@ pub async fn execute_in_world(
                 };
                 if rel.as_os_str().is_empty() { rel = std::path::PathBuf::from("."); }
                 let target_dir = merged_dir.join(&rel);
-                let output = std::process::Command::new("sh")
-                    .arg("-lc")
-                    .arg(cmd)
+                let mut command = std::process::Command::new(if netns_name.is_some() { "ip" } else { "sh" });
+                if let Some(ns) = netns_name {
+                    command.args(["netns","exec", ns, "sh", "-lc", cmd]);
+                } else {
+                    command.args(["-lc", cmd]);
+                }
+                let mut child = command
                     .current_dir(&target_dir)
                     .envs(env)
-                    .output()
-                    .context("Failed to execute command in overlay")?;
+                    .spawn()
+                    .context("Failed to spawn command in overlay")?;
+
+                // Best-effort attach child PID to cgroup when available
+                if let Some(mgr) = cgroup_mgr { let _ = mgr.attach_pid(child.id()); }
+
+                let output = child
+                    .wait_with_output()
+                    .context("Failed to wait for command in overlay")?;
 
                 // Count upper entries for diagnostics before cleaning
                 let upper = ovl.upper_dir_path().to_path_buf();
@@ -129,6 +217,8 @@ pub async fn execute_in_world(
                     &state.cwd,
                     &state.cwd,
                     &state.env,
+                    if cgroup_active { Some(&cgroup_mgr) } else { None },
+                    netns_name.as_deref(),
                 )?;
                 chosen_strategy = if using_fuse { "fuse" } else { "overlay" }.to_string();
                 if verbose {
@@ -138,6 +228,8 @@ pub async fn execute_in_world(
                     }
                 }
                 let duration_ms = start.elapsed().as_millis() as u64;
+                // netfilter rules teardown via Drop at end of scope
+                // cgroup teardown best-effort via Drop
                 return Ok(ExecutionResult {
                     exit_code: output.status.code().unwrap_or(-1),
                     stdout: output.stdout,
@@ -166,6 +258,8 @@ pub async fn execute_in_world(
                         &state.cwd,
                         &state.cwd,
                         &state.env,
+                        if cgroup_active { Some(&cgroup_mgr) } else { None },
+                        netns_name.as_deref(),
                     )?;
                     chosen_strategy = if using_fuse { "fuse" } else { "overlay" }.to_string();
                     if verbose {
@@ -191,13 +285,19 @@ pub async fn execute_in_world(
                 eprintln!("[replay] warn: overlay and fuse-overlayfs unavailable; using copy-diff (userspace snapshot)");
                 eprintln!("[replay] world strategy: copy-diff");
             }
-            let (output, fs_diff) = world::copydiff::execute_with_copydiff(
+            let (output, fs_diff, child_pid_opt) = world::copydiff::execute_with_copydiff(
                 world_id,
                 &bash_cmd,
                 &state.cwd,
                 &state.cwd,
                 &state.env,
+                netns_name.as_deref(),
             )?;
+            if cgroup_active {
+                if let Some(pid) = child_pid_opt { let _ = cgroup_mgr.attach_pid(pid); }
+            }
+            // Note: cannot directly attach child PID here because copydiff currently uses output().
+            // Ensure the cgroup remains non-empty via current PID attachment performed earlier.
             let duration_ms = start.elapsed().as_millis() as u64;
             return Ok(ExecutionResult {
                 exit_code: output.status.code().unwrap_or(-1),

@@ -50,7 +50,27 @@ Validate features (inside container)
   - span_id=$(tail -n 50 /root/.substrate/trace.jsonl | jq -r 'select(.event_type=="command_complete") | .span_id' | tail -n1)
   - export SUBSTRATE_REPLAY_USE_WORLD=1
   - target/debug/substrate --replay "$span_id"
-  - Expect fs_diff to include demo/ and demo/file.txt if overlayfs-in-userns is active
+- Expect fs_diff to include demo/ and demo/file.txt if overlayfs-in-userns is active
+
+Per-world cgroups and nftables (Phase B additions)
+- cgroups attach (privileged): during replay, a per-world cgroup appears at `/sys/fs/cgroup/substrate/<span_id>`.
+  - Quick check in a second shell while replay is running:
+    - `grep -H . /sys/fs/cgroup/substrate/*/cgroup.procs || true`
+    - Expect the world’s cgroup `cgroup.procs` to contain at least one PID while the command runs.
+- nftables LOG: a per-world inet table is installed with a default LOG+drop policy for egress (loopback and established traffic allowed).
+  - Installed inside a per-replay network namespace when available (`ip netns add substrate-<span>`), so host rules remain untouched.
+  - Ensure `kernel.dmesg_restrict=0` to see LOG lines: `sysctl -w kernel.dmesg_restrict=0` (already configured by setup script).
+  - Run a replayed curl to an external host to generate a LOG:
+    - `target/debug/substrate -c "bash -lc 'curl -m2 http://example.com || true'"`
+    - Capture its span id and replay with `SUBSTRATE_REPLAY_USE_WORLD=1`.
+    - Check: `dmesg -T | grep substrate-dropped- | tail -n 5` and expect entries with the per-world prefix.
+  - On constrained kernels or missing nft, replay prints: `[replay] warn: nft not available; netfilter scoping/logging disabled` and continues.
+  - On missing netns privileges, replay prints: `[replay] warn: netns unavailable or insufficient privileges; applying host-wide rules or skipping network scoping`.
+
+Expected warnings (non-root/limited hosts)
+- `[replay] warn: cgroup v2 unavailable or insufficient privileges; skipping cgroup attach`
+- `[replay] warn: nft not available; netfilter scoping/logging disabled`
+- `[replay] warn: kernel.dmesg_restrict=1; LOG lines may not be visible`
 
 Netfilter sanity (inside container)
 - nft list tables || true
@@ -64,4 +84,3 @@ Common issues
 - Cannot find -lseccomp during build: fixed by installing libseccomp-dev in the image (Dockerfile updated).
 - Overlayfs/userns failures on macOS Docker Desktop: move to Podman rootful VM (this doc) or a Linux host/VM.
 - Compose using Docker: our scripts avoid docker-compose on macOS to prevent auth/socket issues; use podman build/run.
-

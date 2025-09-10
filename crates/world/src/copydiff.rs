@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use substrate_common::FsDiff;
 use walkdir::WalkDir;
 
@@ -49,7 +49,8 @@ pub fn execute_with_copydiff(
     project_dir: &Path,
     cwd: &Path,
     env: &std::collections::HashMap<String, String>,
-) -> Result<(std::process::Output, FsDiff)> {
+    netns: Option<&str>,
+) -> Result<(std::process::Output, FsDiff, Option<u32>)> {
     let root = choose_base_dir();
     fs::create_dir_all(&root).context("failed to create copydiff base dir")?;
     let base = root.join(format!("{}-base", world_id));
@@ -73,13 +74,24 @@ pub fn execute_with_copydiff(
     };
     if rel.as_os_str().is_empty() { rel = PathBuf::from("."); }
     let target_dir = work.join(&rel);
-    let output = Command::new("sh")
-        .arg("-lc")
-        .arg(cmd)
+    let mut command = if netns.is_some() { Command::new("ip") } else { Command::new("sh") };
+    if let Some(ns) = netns {
+        command.args(["netns","exec", ns, "sh", "-lc", cmd]);
+    } else {
+        command.args(["-lc", cmd]);
+    }
+    let mut child = command
         .current_dir(&target_dir)
         .envs(env)
-        .output()
-        .context("failed executing command under copydiff work dir")?;
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context("failed spawning command under copydiff work dir")?;
+    let child_pid = Some(child.id());
+    let output = child
+        .wait_with_output()
+        .context("failed waiting for command under copydiff work dir")?;
 
     // Compute diff base vs work
     let diff = compute_diff(&base, &work)?;
@@ -88,7 +100,7 @@ pub fn execute_with_copydiff(
     let _ = fs::remove_dir_all(&base);
     let _ = fs::remove_dir_all(&work);
 
-    Ok((output, diff))
+    Ok((output, diff, child_pid))
 }
 
 fn copy_tree(from: &Path, to: &Path) -> Result<()> {
@@ -286,12 +298,13 @@ mod tests {
         std::fs::write(project.join("file.txt"), b"data").unwrap();
 
         let env = std::collections::HashMap::new();
-        let (_out, diff) = execute_with_copydiff(
+        let (_out, diff, _pid) = execute_with_copydiff(
             "test-md",
             "sh -lc 'echo data > file.txt'",
             project,
             project,
             &env,
+            None,
         )
         .unwrap();
 
@@ -305,12 +318,13 @@ mod tests {
         std::fs::write(project.join("old.txt"), b"old").unwrap();
 
         let env = std::collections::HashMap::new();
-        let (_out, diff) = execute_with_copydiff(
+        let (_out, diff, _pid) = execute_with_copydiff(
             "test-wd",
             "sh -lc 'rm -f old.txt && mkdir -p demo && echo data > demo/file.txt'",
             project,
             project,
             &env,
+            None,
         )
         .unwrap();
 

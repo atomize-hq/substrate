@@ -14,6 +14,8 @@ pub mod network;
 pub mod overlayfs;
 pub mod session;
 pub mod copydiff;
+pub mod cgroups;
+pub mod netns;
 
 pub use session::SessionWorld;
 

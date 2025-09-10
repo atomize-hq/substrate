@@ -70,6 +70,22 @@ How to Test on Manjaro (Arch family) – Step‑by‑Step
      - lsmod | grep overlay || true
      - ls -l /var/lib/substrate/overlay | tail -n 10
 
+6b) Validate Phase B (second half): per-world cgroups + nftables during replay (privileged container)
+   - With a fresh write span (as above), replay again with `SUBSTRATE_REPLAY_USE_WORLD=1`.
+   - In a second shell while replay runs, confirm cgroup attach:
+     - `grep -H . /sys/fs/cgroup/substrate/*/cgroup.procs || true`
+     - Expect the span’s world directory to contain at least one PID while the command is running.
+   - Netns scoping: when privileged, nft rules are installed inside a named netns `substrate-<span>`; host `nft list ruleset` should not show these rules.
+   - Trigger a LOG by attempting egress (ensure `kernel.dmesg_restrict=0`):
+     - `target/debug/substrate -c "bash -lc 'curl -m2 http://example.com || true'"`
+     - Capture the span id and replay with world isolation,
+       then check: `dmesg -T | grep substrate-dropped- | tail -n 5` for per-world LOG lines.
+   - Expected graceful degradations when constrained (printed during replay with `--replay-verbose`):
+     - `[replay] warn: cgroup v2 unavailable or insufficient privileges; skipping cgroup attach`
+     - `[replay] warn: nft not available; netfilter scoping/logging disabled`
+     - `[replay] warn: netns unavailable or insufficient privileges; applying host-wide rules or skipping network scoping`
+     - `[replay] warn: kernel.dmesg_restrict=1; LOG lines may not be visible`
+
 7) Optional quick nftables sanity (Phase D preview):
    - nft --version
    - sudo RUST_LOG=info cargo test -p world -- --nocapture test_nftables_rules

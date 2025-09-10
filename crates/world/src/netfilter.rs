@@ -35,6 +35,8 @@ pub struct NetFilter {
     allowed_ips: HashSet<IpAddr>,
     scopes_used: Vec<NetworkScope>,
     is_active: bool,
+    /// Optional network namespace name to scope nft commands
+    ns_name: Option<String>,
 }
 
 impl NetFilter {
@@ -51,7 +53,13 @@ impl NetFilter {
             allowed_ips: HashSet::new(),
             scopes_used: Vec::new(),
             is_active: false,
+            ns_name: None,
         })
+    }
+
+    /// Scope nft calls to the given named netns.
+    pub fn set_namespace(&mut self, ns: Option<String>) {
+        self.ns_name = ns;
     }
 
     /// Resolve allowed domains to IP addresses.
@@ -175,10 +183,18 @@ impl NetFilter {
 
     #[cfg(target_os = "linux")]
     fn run_nft(&self, args: &[&str]) -> Result<()> {
-        let output = Command::new("nft")
-            .args(args)
-            .output()
-            .context("Failed to run nft command")?;
+        let output = if let Some(ref ns) = self.ns_name {
+            Command::new("ip")
+                .args(["netns", "exec", ns, "nft"])
+                .args(args)
+                .output()
+                .context("Failed to run ip netns exec nft command")?
+        } else {
+            Command::new("nft")
+                .args(args)
+                .output()
+                .context("Failed to run nft command")?
+        };
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);

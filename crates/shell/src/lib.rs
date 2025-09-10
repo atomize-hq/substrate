@@ -126,6 +126,10 @@ pub struct Cli {
     #[arg(long = "shim-status", conflicts_with_all = &["command", "script", "shim_deploy", "shim_remove"])]
     pub shim_status: bool,
 
+    /// Show shim deployment status as JSON (CI-friendly)
+    #[arg(long = "shim-status-json", conflicts_with_all = &["command", "script", "shim_deploy", "shim_remove"])]
+    pub shim_status_json: bool,
+
     /// Skip shim deployment check
     #[arg(long = "shim-skip")]
     pub shim_skip: bool,
@@ -268,6 +272,120 @@ impl ShellConfig {
                 println!("No shims found to remove");
             }
             std::process::exit(0);
+        }
+
+        // Handle --shim-status-json flag (CI)
+        if cli.shim_status_json {
+            if env::var("SUBSTRATE_NO_SHIMS").is_ok() {
+                let out = json!({
+                    "status": "disabled",
+                    "deployed": false,
+                    "version": serde_json::Value::Null,
+                    "location": substrate_common::paths::shims_dir().ok(),
+                    "commands_total": serde_json::Value::Null,
+                    "commands_present": serde_json::Value::Null,
+                    "missing": [],
+                    "path_ok": serde_json::Value::Null,
+                    "path_first": serde_json::Value::Null,
+                    "exit": 0
+                });
+                println!("{}", serde_json::to_string_pretty(&out)?);
+                std::process::exit(0);
+            }
+
+            let shims_dir = substrate_common::paths::shims_dir()?;
+            let version_file = substrate_common::paths::version_file()?;
+
+            if !shims_dir.exists() {
+                let out = json!({
+                    "status": "not_deployed",
+                    "deployed": false,
+                    "version": serde_json::Value::Null,
+                    "location": shims_dir,
+                    "commands_total": 0,
+                    "commands_present": 0,
+                    "missing": [],
+                    "path_ok": serde_json::Value::Null,
+                    "path_first": env::var("PATH").ok().and_then(|p| p.split(if cfg!(windows){';'} else {':'}).next().map(|s| s.to_string())),
+                    "exit": 1
+                });
+                println!("{}", serde_json::to_string_pretty(&out)?);
+                std::process::exit(1);
+            }
+
+            // PATH check
+            let path_str = env::var("PATH").unwrap_or_default();
+            let sep = if cfg!(windows) { ';' } else { ':' };
+            let first_path = path_str.split(sep).next().unwrap_or("").to_string();
+            let shims_dir_str = shims_dir.display().to_string();
+            let path_ok = first_path == shims_dir_str;
+
+            if let Ok(content) = std::fs::read_to_string(&version_file) {
+                let info: serde_json::Value = serde_json::from_str(&content)?;
+                let current_version = env!("CARGO_PKG_VERSION");
+                let file_version = info.get("version").and_then(|v| v.as_str()).unwrap_or("unknown");
+
+                let mut total_cmds: usize = 0;
+                let mut present_cmds: usize = 0;
+                let mut missing_list: Vec<String> = Vec::new();
+                let mut missing_any = false;
+                if let Some(commands) = info.get("commands").and_then(|c| c.as_array()) {
+                    let expected: Vec<String> = commands.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect();
+                    total_cmds = expected.len();
+                    for cmd in &expected {
+                        let path = shims_dir.join(cmd);
+                        if path.exists() {
+                            present_cmds += 1;
+                        } else {
+                            missing_list.push(cmd.clone());
+                        }
+                    }
+                    if !missing_list.is_empty() { missing_any = true; }
+                }
+
+                let mut exit_code = 0;
+                let status_str = if missing_any {
+                    exit_code = 1;
+                    "needs_redeploy"
+                } else if file_version != current_version {
+                    exit_code = 1;
+                    "update_available"
+                } else {
+                    "up_to_date"
+                };
+
+                let out = json!({
+                    "status": status_str,
+                    "deployed": true,
+                    "version": file_version,
+                    "deployed_at": info.get("deployed_at").cloned().unwrap_or(serde_json::Value::Null),
+                    "location": shims_dir,
+                    "commands_total": total_cmds,
+                    "commands_present": present_cmds,
+                    "missing": missing_list,
+                    "path_ok": path_ok,
+                    "path_first": first_path,
+                    "exit": exit_code
+                });
+                println!("{}", serde_json::to_string_pretty(&out)?);
+                std::process::exit(exit_code);
+            } else {
+                let out = json!({
+                    "status": "needs_redeploy",
+                    "deployed": true,
+                    "version": serde_json::Value::Null,
+                    "deployed_at": serde_json::Value::Null,
+                    "location": shims_dir,
+                    "commands_total": serde_json::Value::Null,
+                    "commands_present": serde_json::Value::Null,
+                    "missing": [],
+                    "path_ok": path_ok,
+                    "path_first": first_path,
+                    "exit": 1
+                });
+                println!("{}", serde_json::to_string_pretty(&out)?);
+                std::process::exit(1);
+            }
         }
 
         // Handle --shim-status flag
