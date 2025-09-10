@@ -3034,42 +3034,7 @@ fn log_command_event(
         }
     }
 
-    // Route all event writes through unified trace
-    // Back-compat: propagate SHIM_TRACE_LOG_MAX_MB -> TRACE_LOG_MAX_MB for trace rotation
-    if env::var("TRACE_LOG_MAX_MB").is_err() {
-        if let Ok(v) = env::var("SHIM_TRACE_LOG_MAX_MB") {
-            env::set_var("TRACE_LOG_MAX_MB", v);
-        }
-    }
-    // Pre-rotate if the specified SHIM_TRACE_LOG already exceeds the limit
-    if let Ok(path) = env::var("SHIM_TRACE_LOG") {
-        let p = PathBuf::from(path);
-        if let Ok(meta) = std::fs::metadata(&p) {
-            let mb = env::var("TRACE_LOG_MAX_MB")
-                .ok()
-                .and_then(|v| v.parse::<u64>().ok())
-                .unwrap_or(100);
-            let max_bytes = mb * 1024 * 1024;
-            if meta.len() >= max_bytes {
-                // Respect retention based on TRACE_LOG_KEEP (default 3)
-                let keep = env::var("TRACE_LOG_KEEP")
-                    .ok()
-                    .and_then(|v| v.parse::<usize>().ok())
-                    .unwrap_or(3);
-                if keep > 0 {
-                    let oldest = p.with_extension(format!("jsonl.{}", keep));
-                    let _ = std::fs::remove_file(&oldest);
-                    for i in (2..=keep).rev() {
-                        let from = p.with_extension(format!("jsonl.{}", i - 1));
-                        let to = p.with_extension(format!("jsonl.{}", i));
-                        let _ = std::fs::rename(&from, &to);
-                    }
-                }
-                let bak = p.with_extension("jsonl.1");
-                let _ = std::fs::rename(&p, &bak);
-            }
-        }
-    }
+    // Route all event writes through unified trace; writer handles rotation
     // Ensure trace is initialized first when world is enabled
     let _ = init_trace(None);
     append_to_trace(&log_entry)?;

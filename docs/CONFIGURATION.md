@@ -100,7 +100,10 @@ export SHIM_LOG_OPTS=resolve
 - **Location**: `~/.substrate/trace.jsonl`
 - **Format**: JSONL (one JSON object per line)
 - **Permissions**: 0600 (user-only access)
-- **Rotation**: External (via logrotate or similar)
+- **Rotation**: Built-in size-based rotation handled by the unified writer in `substrate-trace` (no shell-side rotation). Defaults:
+  - `TRACE_LOG_MAX_MB=100` (rotate at ~100MB)
+  - `TRACE_LOG_KEEP=3` (keep last 3 rotated files: `.1..=.<KEEP>`)
+  - You can override these via environment variables. Use external tools only for archival/backup.
 
 ### Custom Log Destination
 

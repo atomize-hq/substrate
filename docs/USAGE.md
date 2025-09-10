@@ -199,9 +199,10 @@ substrate -c "git status"
 # Check log file permissions
 ls -la ~/.substrate/trace.jsonl
 
-# Manual log rotation
-mv ~/.substrate/trace.jsonl ~/.substrate/trace.jsonl.$(date +%Y%m%d)
-gzip ~/.substrate/trace.jsonl.*
+# Rotation is built-in and controlled via env:
+#   TRACE_LOG_MAX_MB (default 100), TRACE_LOG_KEEP (default 3)
+# Use external tools only for archival/compression if needed.
+gzip ~/.substrate/trace.jsonl.*  # Optional archival step
 ```
 
 ## Integration Examples
