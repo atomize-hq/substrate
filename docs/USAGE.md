@@ -10,7 +10,7 @@ Daily usage patterns and integration examples for Substrate.
 substrate
 # Substrate Shell v0.1.0
 # Session ID: 018d1234-5678-7abc-def0-123456789abc
-# Logging to: ~/.trace_shell.jsonl
+# Logging to: ~/.substrate/trace.jsonl
 substrate> git status
 substrate> npm test
 substrate> exit
@@ -131,16 +131,16 @@ Commands are logged in structured JSONL format:
 
 ```bash
 # View recent commands
-tail -5 ~/.trace_shell.jsonl | jq '.command'
+tail -5 ~/.substrate/trace.jsonl | jq '.command'
 
 # Analyze session activity
-jq 'select(.session_id == "your-session-id")' ~/.trace_shell.jsonl
+jq 'select(.session_id == "your-session-id")' ~/.substrate/trace.jsonl
 
 # Command frequency analysis
-jq -r '.command' ~/.trace_shell.jsonl | sort | uniq -c | sort -nr
+jq -r '.command' ~/.substrate/trace.jsonl | sort | uniq -c | sort -nr
 
 # Performance analysis
-jq '.duration_ms // empty' ~/.trace_shell.jsonl | awk '{sum+=$1} END {print "avg:", sum/NR "ms"}'
+jq '.duration_ms // empty' ~/.substrate/trace.jsonl | awk '{sum+=$1} END {print "avg:", sum/NR "ms"}'
 ```
 
 ## Security Features
@@ -197,11 +197,11 @@ substrate -c "git status"
 
 ```bash
 # Check log file permissions
-ls -la ~/.trace_shell.jsonl
+ls -la ~/.substrate/trace.jsonl
 
 # Manual log rotation
-mv ~/.trace_shell.jsonl ~/.trace_shell.jsonl.$(date +%Y%m%d)
-gzip ~/.trace_shell.jsonl.*
+mv ~/.substrate/trace.jsonl ~/.substrate/trace.jsonl.$(date +%Y%m%d)
+gzip ~/.substrate/trace.jsonl.*
 ```
 
 ## Integration Examples

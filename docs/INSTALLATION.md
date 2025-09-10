@@ -70,7 +70,7 @@ substrate --shim-skip     # Skip deployment for this run
 # To use shims for command interception, add to PATH:
 export PATH="$HOME/.substrate/shims:$PATH"
 export SHIM_ORIGINAL_PATH="$PATH"  # Save original PATH
-export SHIM_TRACE_LOG="$HOME/.trace_shell.jsonl"
+export SHIM_TRACE_LOG="$HOME/.substrate/trace.jsonl"
 
 # Clear command cache
 hash -r
@@ -95,7 +95,7 @@ export BASH_ENV="$HOME/.substrate_bashenv"
 
 # Test integration
 bash -c 'which git; git --version'
-tail -1 ~/.trace_shell.jsonl | jq '.'
+tail -1 ~/.substrate/trace.jsonl | jq '.'
 ```
 
 ## Platform-Specific Setup
@@ -126,7 +126,7 @@ substrate> exit
 
 # Command tracing
 git --version
-tail -1 ~/.trace_shell.jsonl
+tail -1 ~/.substrate/trace.jsonl
 ```
 
 ## Troubleshooting

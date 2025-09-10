@@ -117,6 +117,69 @@ Validation plan (container + native)
 - Native host: run write span; replay with world; expect strategy=overlay (root) or copy-diff (non-root) and non-empty fs_diff.
 
 
+Phase B – Part 3: Doctor + Packaging + Copy‑Diff Tests
+Goal
+- Make world capability checks explicit and actionable; ensure Linux installs have robust defaults (fuse-overlayfs) and that the copy-diff fallback reliably reports modifications (including metadata‑only rewrites).
+
+Deliverables
+- A `substrate world doctor` subcommand (or `substrate --doctor`) that inspects the host and prints clear capability status and guidance.
+- Linux packaging guidance (and preflight) to require `fuse-overlayfs` (and `/dev/fuse`) so most users land on the fuse path when kernel overlay isn’t usable.
+- Copy‑diff unit tests that validate modification detection even when bytes are unchanged.
+- Documentation updates clarifying strategy semantics and expected outputs in overlay/fuse vs copy‑diff.
+
+Doctor Command (design)
+- CLI: `substrate world doctor` (preferred; alternative: `substrate --doctor`).
+- Checks (print PASS/WARN/FAIL and a one‑line fix hint):
+  - Kernel: `uname -r`, distro information when available.
+  - Overlayfs: grep overlay in `/proc/filesystems`; if missing and running as root, attempt `modprobe overlay` (best‑effort) and re‑check; print whether overlay is usable and constraints (upper/work same fs).
+  - FUSE: check `/dev/fuse` exists and is character device; check `fuse-overlayfs` in `PATH`; print version (`fuse-overlayfs -V` if supported).
+  - Cgroups v2: `/sys/fs/cgroup/cgroup.controllers` exists.
+  - nftables: `nft --version` present; warn if missing.
+  - dmesg_restrict: `sysctl -n kernel.dmesg_restrict`; warn if 1.
+  - Runtime roots: print chosen per‑user overlay/copy‑diff roots based on `$XDG_RUNTIME_DIR` or `/run/user/$UID` and fallbacks to `/tmp/substrate-UID-*`.
+- Output: supports `--json` for CI and a human‑readable table by default.
+- Exit codes: 0 if at least one of overlay or fuse available; non‑zero if neither overlay nor fuse available and `SUBSTRATE_REPLAY_USE_WORLD=1` is intended.
+
+Packaging and Preflight (Linux)
+- Installer/packaging should ensure `fuse-overlayfs` is present (and `fuse3`/`/dev/fuse` available):
+  - Debian/Ubuntu: `apt-get install -y fuse-overlayfs fuse3`
+  - Fedora/RHEL/CentOS: `dnf install -y fuse-overlayfs`
+  - Arch/Manjaro: `pacman -S --needed fuse-overlayfs`
+- Do not attempt to “install” kernel overlayfs (it’s a kernel module), but doctor may try `modprobe overlay` when privileged.
+- Runtime preflight (on `--replay-verbose` or doctor): if `SUBSTRATE_REPLAY_USE_WORLD=1` and neither overlay nor fuse are available, print an explicit degradation warning that copy‑diff will be used; suggest installing `fuse-overlayfs` and enabling `/dev/fuse`.
+
+Copy‑Diff Semantics and Tests
+- Semantics: copy‑diff takes a pre‑run snapshot of the working directory and a post‑run snapshot, then computes create/modify/delete/type_change.
+  - Writes: paths present in post but not in pre.
+  - Deletes: paths present in pre but not in post.
+  - Modifications: content changed OR metadata changed (mode/uid/gid/mtime and symlink targets).
+  - Note: Idempotent rewrites that leave bytes identical will still be marked as “~ path” due to metadata changes; this differs from overlay/fuse which typically show “+ path” on new writes captured in upper.
+- Add tests (world crate):
+  - `test_copydiff_detects_metadata_mod`: create file in base snapshot; perform a command that overwrites the same bytes (e.g., `sh -lc 'echo data > file.txt'` twice); assert diff contains `~ file.txt`.
+  - `test_copydiff_detects_write_and_delete`: create a new file and delete another; assert `+` and `-` entries present.
+  - Keep limits sane; assert `summary` set when truncated.
+
+Docs and UX Updates
+- Clarify strategy order and expectations:
+  - overlay (kernel) → fuse-overlayfs → copy‑diff → direct
+  - overlay/fuse expected outputs often include “+ dir” and “+ file” for new writes.
+  - copy‑diff may show “~ file” for metadata‑only rewrites; this is correct for a snapshot‑diff fallback.
+- Add “Troubleshooting” notes:
+  - Container environments often prefer fuse-overlayfs; overlay kernel mounts may be restricted; best‑effort cleanup may warn about EBUSY but replay succeeds.
+  - On native non‑root hosts, copy‑diff may be chosen; use doctor to see why and how to enable fuse.
+
+Acceptance Criteria (Part 3)
+- `substrate world doctor` runs on the Podman container and on a native Linux host, printing overlay/fuse availability and guidance without crashing.
+- Linux packaging README includes commands to install `fuse-overlayfs` per distro and explains `/dev/fuse` requirement.
+- Copy‑diff tests pass locally; Manjaro run of the simple write span shows “~ file.txt” with strategy=copy‑diff and exit=0; Podman run shows strategy=fuse with “+ demo” and “+ demo/file.txt”.
+
+Podman Validation (quick)
+- Build container binary, then run:
+  - `podman exec -it substrate-dev-ctl bash -lc 'export HOME=/root && /src/target/debug/substrate world doctor'`
+  - Expect overlay present or restricted; fuse-overlayfs present; `/dev/fuse` present; clear status lines.
+- Re‑run the Phase B test to confirm no regressions:
+  - write span → capture SPAN → replay with `--replay-verbose` → expect `strategy=fuse` and non‑empty fs_diff.
+
 Objective
 - Bring substrate to 100% compliance with Implementation Phase 4 and PRE_PHASE_4_5 hardening on Linux, validated inside the Podman rootful VM/container.
 - Address current gaps: replay parsing/quoting, overlayfs fs_diff, per‑world cgroups, per‑world nftables with LOG, trace consolidation, diagnostics, and reliable shim deployment/usage.

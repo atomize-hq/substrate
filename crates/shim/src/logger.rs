@@ -3,17 +3,16 @@
 //! This module handles all logging functionality including structured JSONL output,
 //! credential redaction, and session correlation for command chains.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::env;
-use std::fs::OpenOptions;
-use std::io::Write;
 use std::path::Path;
 use std::process::ExitStatus;
 use std::time::{Duration, SystemTime};
 
 use crate::context::ShimContext;
+use substrate_trace::{append_to_trace, init_trace};
 
 /// Log a command execution with full context
 pub fn log_execution(
@@ -96,43 +95,11 @@ pub fn log_execution(
 }
 
 /// Helper function for writing log entries with optional fsync
-pub fn write_log_entry(log_path: &Path, entry: &Value) -> Result<()> {
-    // Ensure log directory exists
-    if let Some(dir) = log_path.parent() {
-        std::fs::create_dir_all(dir).ok();
-    }
-
-    // Ensure single-line JSON by escaping newlines
-    let mut line = entry.to_string();
-    if line.contains('\n') {
-        line = line.replace('\n', "\\n");
-    }
-    line.push('\n');
-
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(log_path)
-        .with_context(|| format!("Failed to open log file: {}", log_path.display()))?;
-
-    // Set user-only permissions on Unix
-    #[cfg(unix)]
-    {
-        use std::fs::Permissions;
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(log_path, Permissions::from_mode(0o600));
-    }
-
-    file.write_all(line.as_bytes())
-        .context("Failed to write log entry")?;
-
-    // Optional fsync for maximum durability
-    if env::var("SHIM_FSYNC").as_deref() == Ok("1") {
-        file.flush().ok();
-        let _ = file.sync_all();
-    }
-
-    Ok(())
+pub fn write_log_entry(_log_path: &Path, entry: &Value) -> Result<()> {
+    // Initialize trace if not already set up (no-op if already initialized)
+    let _ = init_trace(None);
+    // Ensure single-line JSON (append_to_trace expects a single Value and handles flushing/rotation)
+    append_to_trace(entry)
 }
 
 /// Redact sensitive command-line arguments

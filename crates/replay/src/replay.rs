@@ -188,6 +188,7 @@ pub async fn execute_in_world(
 
             // 3) Userspace copy-diff fallback (no privileges)
             if verbose {
+                eprintln!("[replay] warn: overlay and fuse-overlayfs unavailable; using copy-diff (userspace snapshot)");
                 eprintln!("[replay] world strategy: copy-diff");
             }
             let (output, fs_diff) = world::copydiff::execute_with_copydiff(

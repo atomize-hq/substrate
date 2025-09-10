@@ -118,6 +118,30 @@ Additional capabilities planned for later phases:
  - **[Graph](docs/GRAPH.md)** - Graph architecture and CLI (mock backend)
  - **[Privileged Tests](docs/HOWTO_PRIVILEGED_TESTS.md)** - Running isolation/netfilter tests on Linux
 
+### World Doctor (Linux)
+
+Use the built-in doctor to check host capabilities and recommended dependencies for replay isolation:
+
+```bash
+# Human-readable report
+substrate world doctor
+
+# JSON for CI
+substrate world doctor --json | jq .
+```
+
+What it checks:
+- overlayfs kernel support (and best-effort modprobe overlay when privileged)
+- FUSE availability: `/dev/fuse` and `fuse-overlayfs` in PATH
+- cgroup v2 presence, nft availability, and `kernel.dmesg_restrict`
+- Per-user runtime roots for overlay and copy-diff
+
+Linux packaging note: we recommend installing `fuse-overlayfs` so Substrate can fall back to user-space overlay where kernel overlay mounts are unavailable. For example:
+- Debian/Ubuntu: `apt-get install -y fuse-overlayfs fuse3`
+- Fedora/RHEL/CentOS: `dnf install -y fuse-overlayfs`
+- Arch/Manjaro: `pacman -S --needed fuse-overlayfs`
+
+
 ## Getting Help
 
 - **Issues**: Report bugs via [GitHub Issues](https://github.com/your-org/substrate/issues)

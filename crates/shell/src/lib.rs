@@ -12,8 +12,7 @@ use lazy_static::lazy_static;
 use serde_json::json;
 use std::collections::HashMap;
 use std::env;
-use std::fs::OpenOptions;
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
@@ -22,7 +21,7 @@ use std::sync::Mutex;
 use std::thread;
 use substrate_common::{dedupe_path, log_schema, redact_sensitive};
 use substrate_broker::{Decision, evaluate, detect_profile};
-use substrate_trace::{create_span_builder, init_trace, PolicyDecision};
+use substrate_trace::{append_to_trace, create_span_builder, init_trace, PolicyDecision};
 use uuid::Uuid;
 
 // Reedline imports
@@ -159,6 +158,7 @@ pub struct Cli {
 #[derive(clap::Subcommand, Debug)]
 pub enum SubCommands {
     Graph(GraphCmd),
+    World(WorldCmd),
 }
 
 #[derive(clap::Args, Debug)]
@@ -172,6 +172,21 @@ pub enum GraphAction {
     Ingest { file: std::path::PathBuf },
     Status,
     WhatChanged { span_id: String, #[arg(long, default_value_t = 100)] limit: usize },
+}
+
+#[derive(clap::Args, Debug)]
+pub struct WorldCmd {
+    #[command(subcommand)]
+    pub action: WorldAction,
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum WorldAction {
+    Doctor {
+        /// Output machine-readable JSON for CI
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -318,9 +333,17 @@ impl ShellConfig {
         }
 
         // Handle subcommands
-        if let Some(SubCommands::Graph(graph_cmd)) = &cli.sub {
-            handle_graph_command(graph_cmd)?;
-            std::process::exit(0);
+        if let Some(sub) = &cli.sub {
+            match sub {
+                SubCommands::Graph(graph_cmd) => {
+                    handle_graph_command(graph_cmd)?;
+                    std::process::exit(0);
+                }
+                SubCommands::World(world_cmd) => {
+                    handle_world_command(world_cmd)?;
+                    std::process::exit(0);
+                }
+            }
         }
 
         let session_id = env::var("SHIM_SESSION_ID").unwrap_or_else(|_| Uuid::now_v7().to_string());
@@ -331,7 +354,7 @@ impl ShellConfig {
 
         let trace_log_file = env::var("SHIM_TRACE_LOG")
             .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from(&home).join(".trace_shell.jsonl"));
+            .unwrap_or_else(|_| PathBuf::from(&home).join(".substrate/trace.jsonl"));
 
         let original_path = env::var("SHIM_ORIGINAL_PATH")
             .or_else(|_| env::var("PATH"))
@@ -419,6 +442,156 @@ fn handle_graph_command(cmd: &GraphCmd) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn handle_world_command(cmd: &WorldCmd) -> Result<()> {
+    match &cmd.action {
+        WorldAction::Doctor { json } => {
+            let code = world_doctor_main(*json);
+            std::process::exit(code);
+        }
+    }
+}
+
+fn world_doctor_main(json_mode: bool) -> i32 {
+    #[cfg(not(target_os = "linux"))]
+    {
+        if json_mode {
+            let out = json!({
+                "platform": std::env::consts::OS,
+                "overlay_present": serde_json::Value::Null,
+                "fuse": {"dev": serde_json::Value::Null, "bin": serde_json::Value::Null},
+                "cgroup_v2": serde_json::Value::Null,
+                "nft_present": serde_json::Value::Null,
+                "dmesg_restrict": serde_json::Value::Null,
+                "overlay_root": serde_json::Value::Null,
+                "copydiff_root": serde_json::Value::Null,
+                "ok": true
+            });
+            println!("{}", serde_json::to_string_pretty(&out).unwrap());
+        } else {
+            eprintln!("substrate world doctor is focused on Linux environments");
+            println!("overlay: N/A");
+            println!("fuse-overlayfs: N/A");
+            println!("cgroup v2: N/A");
+            println!("nft: N/A");
+            println!("dmesg_restrict: N/A");
+        }
+        return 0;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        use std::path::Path;
+        use std::path::PathBuf;
+
+        // Helpers
+        fn pass(msg: &str) { println!("PASS  | {}", msg); }
+        fn warn(msg: &str) { println!("WARN  | {}", msg); }
+        fn fail(msg: &str) { println!("FAIL  | {}", msg); }
+
+        fn overlay_present() -> bool {
+            std::fs::read_to_string("/proc/filesystems")
+                .ok()
+                .map(|s| s.contains("overlay"))
+                .unwrap_or(false)
+        }
+
+        fn try_modprobe_overlay_if_root() {
+            let is_root = unsafe { libc::geteuid() } == 0;
+            if !is_root { return; }
+            let _ = Command::new("modprobe").arg("overlay").status();
+        }
+
+        fn fuse_dev_present() -> bool { Path::new("/dev/fuse").exists() }
+        fn fuse_bin_present() -> bool { which::which("fuse-overlayfs").is_ok() }
+        fn cgroup_v2_present() -> bool { Path::new("/sys/fs/cgroup/cgroup.controllers").exists() }
+        fn nft_present() -> bool {
+            Command::new("nft").arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status().ok().map(|s| s.success()).unwrap_or(false)
+        }
+        fn dmesg_restrict() -> Option<String> {
+            Command::new("sh").arg("-lc").arg("sysctl -n kernel.dmesg_restrict 2>/dev/null || echo n/a")
+                .output().ok().and_then(|o| String::from_utf8(o.stdout).ok()).map(|s| s.trim().to_string())
+        }
+        fn overlay_root() -> PathBuf {
+            let uid = unsafe { libc::geteuid() } as u32;
+            if uid == 0 { return PathBuf::from("/var/lib/substrate/overlay"); }
+            if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") { if !xdg.is_empty() { return PathBuf::from(xdg).join("substrate/overlay"); } }
+            let run = PathBuf::from(format!("/run/user/{}/substrate/overlay", uid));
+            if run.parent().unwrap_or(Path::new("/run")).exists() { return run; }
+            PathBuf::from(format!("/tmp/substrate-{}-overlay", uid))
+        }
+        fn copydiff_root() -> PathBuf {
+            let uid = unsafe { libc::geteuid() } as u32;
+            if uid == 0 { return PathBuf::from("/var/lib/substrate/copydiff"); }
+            if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") { if !xdg.is_empty() { return PathBuf::from(xdg).join("substrate/copydiff"); } }
+            let run = PathBuf::from(format!("/run/user/{}/substrate/copydiff", uid));
+            if run.parent().unwrap_or(Path::new("/run")).exists() { return run; }
+            PathBuf::from(format!("/tmp/substrate-{}-copydiff", uid))
+        }
+
+        // overlay
+        let mut overlay_ok = overlay_present();
+        if !json_mode {
+            println!("== substrate world doctor ==");
+            if overlay_ok { pass("overlayfs: present"); }
+            else {
+                warn("overlayfs: not present; attempting modprobe overlay (root only)");
+                try_modprobe_overlay_if_root();
+                overlay_ok = overlay_present();
+                if overlay_ok { pass("overlayfs: present after modprobe"); } else { warn("overlayfs: unavailable"); }
+            }
+        } else {
+            // still try modprobe if root to improve signal
+            if !overlay_ok { try_modprobe_overlay_if_root(); overlay_ok = overlay_present(); }
+        }
+
+        // fuse
+        let fuse_dev = fuse_dev_present();
+        let fuse_bin = fuse_bin_present();
+        if !json_mode {
+            if fuse_dev && fuse_bin {
+                pass("fuse-overlayfs: /dev/fuse present and binary found");
+            } else if fuse_dev || fuse_bin {
+                warn(&format!("fuse-overlayfs: partial ({}, {})",
+                    if fuse_dev {"/dev/fuse"} else {"missing /dev/fuse"},
+                    if fuse_bin {"binary found"} else {"missing binary"}));
+            } else {
+                warn("fuse-overlayfs: not available");
+            }
+        }
+
+        let cgv2 = cgroup_v2_present();
+        let nft = nft_present();
+        let dmsg = dmesg_restrict().unwrap_or_else(|| "n/a".to_string());
+        let o_root = overlay_root();
+        let c_root = copydiff_root();
+
+        if !json_mode {
+            if cgv2 { pass("cgroup v2: present"); } else { warn("cgroup v2: missing"); }
+            if nft { pass("nft: present"); } else { warn("nft: missing"); }
+            println!("INFO  | dmesg_restrict={}", dmsg);
+            println!("INFO  | overlay_root: {}", o_root.display());
+            println!("INFO  | copydiff_root: {}", c_root.display());
+        } else {
+            let ok = overlay_ok || (fuse_dev && fuse_bin);
+            let out = json!({
+                "platform": std::env::consts::OS,
+                "overlay_present": overlay_ok,
+                "fuse": {"dev": fuse_dev, "bin": fuse_bin},
+                "cgroup_v2": cgv2,
+                "nft_present": nft,
+                "dmesg_restrict": dmsg,
+                "overlay_root": o_root,
+                "copydiff_root": c_root,
+                "ok": ok,
+            });
+            println!("{}", serde_json::to_string_pretty(&out).unwrap());
+        }
+
+        // Exit code policy
+        if overlay_ok || (fuse_dev && fuse_bin) { 0 } else { 2 }
+    }
 }
 
 pub fn run_shell() -> Result<i32> {
@@ -909,26 +1082,31 @@ fn handle_trace_command(span_id: &str) -> Result<()> {
     // Read trace file and find the span
     let file = File::open(&trace_file)?;
     let reader = BufReader::new(file);
-    let mut found = false;
+    let mut found: Option<serde_json::Value> = None;
     
     for line in reader.lines() {
         let line = line?;
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
             if let Some(id) = json.get("span_id").and_then(|v| v.as_str()) {
                 if id == span_id {
-                    // Pretty print the trace entry
-                    println!("{}", serde_json::to_string_pretty(&json)?);
-                    found = true;
-                    break;
+                    // Prefer command_complete if multiple entries exist
+                    let is_complete = json.get("event_type").and_then(|v| v.as_str()) == Some("command_complete");
+                    match &found {
+                        None => found = Some(json),
+                        Some(current) => {
+                            let current_is_complete = current.get("event_type").and_then(|v| v.as_str()) == Some("command_complete");
+                            if is_complete && !current_is_complete {
+                                found = Some(json);
+                            }
+                        }
+                    }
                 }
             }
         }
     }
     
-    if !found {
-        eprintln!("Span ID not found: {}", span_id);
-        std::process::exit(1);
-    }
+    if let Some(json) = found { println!("{}", serde_json::to_string_pretty(&json)?); }
+    else { eprintln!("Span ID not found: {}", span_id); std::process::exit(1); }
     
     Ok(())
 }
@@ -2512,47 +2690,10 @@ fn log_command_event(
         }
     }
 
-    // Ensure log directory exists - CRITICAL: Don't swallow errors
-    if let Some(dir) = config.trace_log_file.parent() {
-        std::fs::create_dir_all(dir)
-            .with_context(|| format!("Failed to create log directory: {}", dir.display()))?;
-    }
-
-    // Rotate log if it's too large
-    maybe_rotate_log(&config.trace_log_file)?;
-
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&config.trace_log_file)?;
-
-    // Set permissions on first creation
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(
-            &config.trace_log_file,
-            std::fs::Permissions::from_mode(0o600),
-        );
-    }
-
-    // Ensure single-line JSON by escaping newlines
-    let mut line = log_entry.to_string();
-    if line.contains('\n') {
-        line = line.replace('\n', "\\n");
-    }
-    writeln!(file, "{line}").with_context(|| {
-        format!(
-            "Failed to write log entry to: {}",
-            config.trace_log_file.display()
-        )
-    })?;
-
-    // Optional fsync for durability
-    if env::var("SHIM_FSYNC").as_deref() == Ok("1") {
-        file.flush()?;
-        file.sync_all()?;
-    }
+    // Route all event writes through unified trace
+    // Ensure trace is initialized first when world is enabled
+    let _ = init_trace(None);
+    append_to_trace(&log_entry)?;
 
     Ok(())
 }

@@ -124,7 +124,7 @@ Substrate uses `~/.substrate/` for all its data:
 
 Critical for operation:
 - `SHIM_ORIGINAL_PATH`: Clean PATH for binary resolution (required for shim)
-- `SHIM_TRACE_LOG`: Log output destination (default: `~/.trace_shell.jsonl`)
+- `SHIM_TRACE_LOG`: Log output destination (default: `~/.substrate/trace.jsonl`)
 - `SHIM_SESSION_ID`: Session correlation ID (auto-generated if not set)
 - `SHIM_BYPASS`: Emergency bypass mode (set to `1` to disable tracing)
 - `SUBSTRATE_NO_SHIMS`: Set to `1` to disable automatic shim deployment

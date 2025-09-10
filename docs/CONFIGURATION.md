@@ -7,7 +7,7 @@ Environment variables and advanced configuration options for Substrate.
 | Variable | Purpose | Default | Example |
 |----------|---------|---------|---------|
 | `SHIM_ORIGINAL_PATH` | Clean PATH for binary resolution | *none* | `/usr/bin:/bin` |
-| `SHIM_TRACE_LOG` | Log output destination | `~/.trace_shell.jsonl` | `/tmp/trace.jsonl` |
+| `SHIM_TRACE_LOG` | Log output destination | `~/.substrate/trace.jsonl` | `/tmp/trace.jsonl` |
 | `SHIM_SESSION_ID` | Session correlation ID | auto-generated | uuid-v7-string |
 | `SHIM_DEPTH` | Nesting level tracking | `0` | `0`, `1`, `2`... |
 | `SHIM_BYPASS` | Emergency bypass mode | *none* | `1` |
@@ -59,7 +59,7 @@ Environment variables and advanced configuration options for Substrate.
 | Variable | Purpose | Default | Example |
 |----------|---------|---------|---------|
 | `BASH_ENV` | Bash startup script | *none* | `~/.substrate_bashenv` |
-| `TRACE_LOG_MAX_MB` | Log rotation size limit | `50` | `100` |
+| `TRACE_LOG_MAX_MB` | Log rotation size limit | `100` | `200` |
 | `TEST_MODE` | Skip TTY checks in tests | *none* | `1` |
 
 ## Debug Configuration
@@ -97,7 +97,7 @@ export SHIM_LOG_OPTS=resolve
 
 ### Default Behavior
 
-- **Location**: `~/.trace_shell.jsonl`
+- **Location**: `~/.substrate/trace.jsonl`
 - **Format**: JSONL (one JSON object per line)
 - **Permissions**: 0600 (user-only access)
 - **Rotation**: External (via logrotate or similar)
@@ -144,7 +144,7 @@ export SHIM_LOG_OPTS=raw
 
 Log files automatically created with restricted permissions:
 ```bash
-ls -la ~/.trace_shell.jsonl
+ls -la ~/.substrate/trace.jsonl
 # -rw------- (user-only access)
 ```
 
@@ -157,8 +157,8 @@ ls -la ~/.trace_shell.jsonl
 export SHIM_CACHE_BUST=1
 
 # Monitor cache effectiveness
-jq '.duration_ms' ~/.trace_shell.jsonl | head -20  # Cold cache
-jq '.duration_ms' ~/.trace_shell.jsonl | tail -20  # Warm cache
+jq '.duration_ms' ~/.substrate/trace.jsonl | head -20  # Cold cache
+jq '.duration_ms' ~/.substrate/trace.jsonl | tail -20  # Warm cache
 ```
 
 ### Resource Limits

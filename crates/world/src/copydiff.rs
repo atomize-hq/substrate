@@ -273,3 +273,49 @@ fn files_differ(a: &Path, b: &Path) -> bool {
     if ra != rb { return true; }
     ba[..ra] != bb[..rb]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_copydiff_detects_metadata_mod() {
+        let tmp = TempDir::new().unwrap();
+        let project = tmp.path();
+        std::fs::write(project.join("file.txt"), b"data").unwrap();
+
+        let env = std::collections::HashMap::new();
+        let (_out, diff) = execute_with_copydiff(
+            "test-md",
+            "sh -lc 'echo data > file.txt'",
+            project,
+            project,
+            &env,
+        )
+        .unwrap();
+
+        assert!(diff.mods.iter().any(|p| p.to_string_lossy() == "file.txt"));
+    }
+
+    #[test]
+    fn test_copydiff_detects_write_and_delete() {
+        let tmp = TempDir::new().unwrap();
+        let project = tmp.path();
+        std::fs::write(project.join("old.txt"), b"old").unwrap();
+
+        let env = std::collections::HashMap::new();
+        let (_out, diff) = execute_with_copydiff(
+            "test-wd",
+            "sh -lc 'rm -f old.txt && mkdir -p demo && echo data > demo/file.txt'",
+            project,
+            project,
+            &env,
+        )
+        .unwrap();
+
+        assert!(diff.writes.iter().any(|p| p.to_string_lossy() == "demo"));
+        assert!(diff.writes.iter().any(|p| p.to_string_lossy() == "demo/file.txt"));
+        assert!(diff.deletes.iter().any(|p| p.to_string_lossy() == "old.txt"));
+    }
+}

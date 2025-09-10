@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::env;
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use tracing::{debug, trace, warn};
@@ -102,7 +102,64 @@ impl TraceOutput {
         })
     }
     
+    fn max_bytes() -> u64 {
+        const DEFAULT_MB: u64 = 100; // ~100MB
+        env::var("TRACE_LOG_MAX_MB")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(DEFAULT_MB)
+            * 1024 * 1024
+    }
+    
+    fn keep_files() -> usize {
+        // Keep last N rotated files
+        env::var("TRACE_LOG_KEEP")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(3)
+    }
+
+    fn rotate_if_needed(&mut self) -> Result<()> {
+        // Flush current writer to ensure size is accurate
+        self.writer.flush()?;
+        let path = self.path.clone();
+
+        if let Ok(meta) = fs::metadata(&path) {
+            if meta.len() >= Self::max_bytes() {
+                // Drop current file handle before renaming
+                // Replace writer with a sink, then drop explicitly
+                let writer = std::mem::replace(&mut self.writer, BufWriter::new(
+                    OpenOptions::new().create(true).append(true).open(&path)?
+                ));
+                drop(writer);
+
+                // Shift older rotations: .(keep-1) -> .keep
+                let keep = Self::keep_files();
+                if keep > 0 {
+                    for i in (1..=keep).rev() {
+                        let from = path.with_extension(format!("jsonl.{}", i));
+                        let to = path.with_extension(format!("jsonl.{}", i + 1));
+                        let _ = fs::rename(&from, &to);
+                    }
+                    // Move current to .1
+                    let bak = path.with_extension("jsonl.1");
+                    let _ = fs::rename(&path, &bak);
+                } else {
+                    // No retention, just truncate by renaming away
+                    let bak = path.with_extension("jsonl.1");
+                    let _ = fs::rename(&path, &bak);
+                }
+
+                // Recreate fresh file and writer
+                let file = OpenOptions::new().create(true).append(true).open(&path)?;
+                self.writer = BufWriter::new(file);
+            }
+        }
+        Ok(())
+    }
+    
     fn write_span(&mut self, span: &Span) -> Result<()> {
+        self.rotate_if_needed()?;
         let json = serde_json::to_string(span)?;
         writeln!(self.writer, "{}", json)?;
         
@@ -383,8 +440,14 @@ pub fn budget_exceeded(agent_id: &str, budget_type: &str) -> Result<()> {
 
 pub fn append_to_trace(entry: &serde_json::Value) -> Result<()> {
     if let Some(ref mut output) = *TRACE_OUTPUT.write() {
+        output.rotate_if_needed()?;
         writeln!(output.writer, "{}", entry)?;
-        output.writer.flush()?;
+        if env::var("SHIM_FSYNC").unwrap_or_default() == "1" {
+            output.writer.flush()?;
+            output.writer.get_ref().sync_all()?;
+        } else {
+            output.writer.flush()?;
+        }
     }
     Ok(())
 }
