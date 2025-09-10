@@ -1,9 +1,9 @@
 //! Integration tests for Replay module
 
-use substrate_replay::{replay_span, ReplayConfig, SpanFilter, find_spans_to_replay, replay_batch};
+use std::path::PathBuf;
+use substrate_replay::{find_spans_to_replay, replay_batch, replay_span, ReplayConfig, SpanFilter};
 use tempfile::NamedTempFile;
 use tokio::io::AsyncWriteExt;
-use std::path::PathBuf;
 
 /// Test creating and replaying a simple trace
 #[tokio::test]
@@ -15,12 +15,12 @@ async fn test_basic_replay_flow() {
 {"ts":"2024-01-01T00:00:01Z","event_type":"command_complete","span_id":"test-span-1","session_id":"session-1","component":"shell","cmd":"echo hello","cwd":"/tmp","exit_code":0,"stdout":"hello\n","replay_context":{"path":"/usr/bin:/bin","env_hash":"abc123","hostname":"test-host","user":"testuser","shell":"/bin/bash","term":"xterm-256color","world_image":null}}
 {"ts":"2024-01-01T00:00:02Z","event_type":"command_complete","span_id":"test-span-2","session_id":"session-1","component":"shell","cmd":"false","exit_code":1}
 "#;
-    
+
     let mut file = tokio::fs::File::create(temp_file.path()).await.unwrap();
     file.write_all(trace_content.as_bytes()).await.unwrap();
     file.flush().await.unwrap();
     drop(file);
-    
+
     // Test replay configuration
     let config = ReplayConfig {
         trace_file: temp_file.path().to_path_buf(),
@@ -31,13 +31,13 @@ async fn test_basic_replay_flow() {
         ignore_timing: true,
         max_output_compare: 1024,
     };
-    
+
     // Test replaying a successful command
     let result = replay_span("test-span-1", &config).await.unwrap();
     assert_eq!(result.exit_code, 0);
     assert!(result.matched);
     assert_eq!(String::from_utf8_lossy(&result.stdout).trim(), "hello");
-    
+
     // Test replaying a failed command
     let result = replay_span("test-span-2", &config).await.unwrap();
     assert_eq!(result.exit_code, 1);
@@ -53,40 +53,46 @@ async fn test_span_filtering() {
 {"ts":"2024-01-01T00:00:02Z","event_type":"command_complete","span_id":"echo-2","session_id":"s1","component":"shim","cmd":"echo another","exit_code":0}
 {"ts":"2024-01-01T00:00:03Z","event_type":"command_complete","span_id":"cat-1","session_id":"s1","component":"shell","cmd":"cat file.txt","exit_code":1}
 "#;
-    
+
     let mut file = tokio::fs::File::create(temp_file.path()).await.unwrap();
     file.write_all(trace_content.as_bytes()).await.unwrap();
     file.flush().await.unwrap();
     drop(file);
-    
+
     // Filter by command pattern
     let filter = SpanFilter {
         command_patterns: vec!["echo".to_string()],
         ..Default::default()
     };
-    
-    let spans = find_spans_to_replay(temp_file.path(), filter).await.unwrap();
+
+    let spans = find_spans_to_replay(temp_file.path(), filter)
+        .await
+        .unwrap();
     assert_eq!(spans.len(), 2);
     assert!(spans.contains(&"echo-1".to_string()));
     assert!(spans.contains(&"echo-2".to_string()));
-    
+
     // Filter by component
     let filter = SpanFilter {
         component: Some("shim".to_string()),
         ..Default::default()
     };
-    
-    let spans = find_spans_to_replay(temp_file.path(), filter).await.unwrap();
+
+    let spans = find_spans_to_replay(temp_file.path(), filter)
+        .await
+        .unwrap();
     assert_eq!(spans.len(), 1);
     assert_eq!(spans[0], "echo-2");
-    
+
     // Filter by exit code
     let filter = SpanFilter {
         exit_codes: Some(vec![1]),
         ..Default::default()
     };
-    
-    let spans = find_spans_to_replay(temp_file.path(), filter).await.unwrap();
+
+    let spans = find_spans_to_replay(temp_file.path(), filter)
+        .await
+        .unwrap();
     assert_eq!(spans.len(), 1);
     assert_eq!(spans[0], "cat-1");
 }
@@ -100,12 +106,12 @@ async fn test_batch_replay() {
 {"ts":"2024-01-01T00:00:01Z","event_type":"command_complete","span_id":"cmd-2","session_id":"s1","component":"shell","cmd":"echo test2","exit_code":0,"stdout":"test2\n"}
 {"ts":"2024-01-01T00:00:02Z","event_type":"command_complete","span_id":"cmd-3","session_id":"s1","component":"shell","cmd":"true","exit_code":0}
 "#;
-    
+
     let mut file = tokio::fs::File::create(temp_file.path()).await.unwrap();
     file.write_all(trace_content.as_bytes()).await.unwrap();
     file.flush().await.unwrap();
     drop(file);
-    
+
     let config = ReplayConfig {
         trace_file: temp_file.path().to_path_buf(),
         strict: false,
@@ -115,30 +121,33 @@ async fn test_batch_replay() {
         ignore_timing: true,
         max_output_compare: 1024,
     };
-    
+
     let span_ids = vec![
         "cmd-1".to_string(),
         "cmd-2".to_string(),
         "cmd-3".to_string(),
     ];
-    
+
     let report = replay_batch(&span_ids, &config).await.unwrap();
-    
+
     // All commands should match
     assert_eq!(report.total_spans, 3);
     assert_eq!(report.matched, 3);
     assert_eq!(report.diverged, 0);
     assert_eq!(report.pass_rate, 100.0);
-    assert!(report.recommendations.iter().any(|r| r.contains("successfully")));
+    assert!(report
+        .recommendations
+        .iter()
+        .any(|r| r.contains("successfully")));
 }
 
 /// Test environment reconstruction
 #[tokio::test]
 async fn test_env_reconstruction() {
-    use substrate_replay::state::{TraceSpan, ReplayContext, reconstruct_state};
     use chrono::Utc;
     use std::collections::HashMap;
-    
+    use substrate_replay::state::{reconstruct_state, ReplayContext, TraceSpan};
+
     let span = TraceSpan {
         ts: Utc::now(),
         event_type: "command_complete".to_string(),
@@ -165,16 +174,25 @@ async fn test_env_reconstruction() {
         stderr: None,
         env_hash: None,
     };
-    
+
     let mut overrides = HashMap::new();
     overrides.insert("TEST_VAR".to_string(), "test_value".to_string());
-    
+
     let exec_state = reconstruct_state(&span, &overrides).unwrap();
-    
+
     assert_eq!(exec_state.command, "env");
     assert_eq!(exec_state.cwd, PathBuf::from("/workspace"));
-    assert_eq!(exec_state.env.get("PATH"), Some(&"/custom/bin:/usr/bin".to_string()));
+    assert_eq!(
+        exec_state.env.get("PATH"),
+        Some(&"/custom/bin:/usr/bin".to_string())
+    );
     assert_eq!(exec_state.env.get("USER"), Some(&"developer".to_string()));
-    assert_eq!(exec_state.env.get("TEST_VAR"), Some(&"test_value".to_string()));
-    assert_eq!(exec_state.env.get("SUBSTRATE_REPLAY"), Some(&"1".to_string()));
+    assert_eq!(
+        exec_state.env.get("TEST_VAR"),
+        Some(&"test_value".to_string())
+    );
+    assert_eq!(
+        exec_state.env.get("SUBSTRATE_REPLAY"),
+        Some(&"1".to_string())
+    );
 }

@@ -1,14 +1,14 @@
 #![allow(non_camel_case_types)]
 
+use chrono::Utc;
+use lazy_static::lazy_static;
+use serde::Serialize;
 use std::ffi::CStr;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::os::raw::c_char;
 use std::sync::Mutex;
 use std::time::Instant;
-use chrono::Utc;
-use lazy_static::lazy_static;
-use serde::Serialize;
 // TraceEvent will be imported when needed
 
 mod correlation;
@@ -18,6 +18,7 @@ mod network;
 
 pub use correlation::*;
 pub use exec::*;
+#[allow(unused_imports)]
 pub use file::*;
 pub use network::*;
 
@@ -48,10 +49,10 @@ fn init_telemetry() {
     if *initialized {
         return;
     }
-    
+
     let session = get_session_info();
     let trace_path = session.trace_log.clone();
-    
+
     // Open trace file for appending
     if let Ok(file) = OpenOptions::new()
         .create(true)
@@ -60,12 +61,14 @@ fn init_telemetry() {
     {
         *TRACE_FILE.lock().unwrap() = Some(file);
     }
-    
+
     *initialized = true;
-    
+
     #[cfg(feature = "debug")]
-    eprintln!("[telemetry] Initialized - session: {}, trace: {}", 
-             session.session_id, trace_path);
+    eprintln!(
+        "[telemetry] Initialized - session: {}, trace: {}",
+        session.session_id, trace_path
+    );
 }
 
 pub fn log_syscall(
@@ -76,7 +79,7 @@ pub fn log_syscall(
     elapsed_us: u64,
 ) {
     init_telemetry();
-    
+
     let session = get_session_info();
     let event = TelemetryEvent {
         ts: Utc::now().to_rfc3339(),
@@ -91,7 +94,7 @@ pub fn log_syscall(
         elapsed_us,
         error,
     };
-    
+
     if let Ok(json) = serde_json::to_string(&event) {
         if let Ok(mut file) = TRACE_FILE.lock() {
             if let Some(ref mut f) = *file {
@@ -103,17 +106,23 @@ pub fn log_syscall(
 }
 
 // Helper to convert C strings
+/// Convert a C string pointer to a Rust `String`.
+///
+/// # Safety
+/// - `ptr` must be either null or a valid, null-terminated C string pointer.
 pub unsafe fn c_str_to_string(ptr: *const c_char) -> String {
     if ptr.is_null() {
         String::new()
     } else {
-        CStr::from_ptr(ptr)
-            .to_string_lossy()
-            .into_owned()
+        CStr::from_ptr(ptr).to_string_lossy().into_owned()
     }
 }
 
 // Helper to convert C string arrays (like argv)
+/// Convert a null-terminated array of C string pointers to a `Vec<String>`.
+///
+/// # Safety
+/// - `ptr` must be either null or a valid, null-terminated array of C string pointers.
 pub unsafe fn c_str_array_to_vec(ptr: *const *const c_char) -> Vec<String> {
     let mut vec = Vec::new();
     if !ptr.is_null() {

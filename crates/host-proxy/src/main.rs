@@ -6,8 +6,8 @@ use std::sync::Arc;
 use agent_api_core::build_router;
 use anyhow::{Context, Result};
 use host_proxy::{cleanup_socket, ensure_socket_dir, HostProxyService, ProxyConfig};
-use tower::ServiceExt;
 use tower::ServiceBuilder;
+use tower::ServiceExt;
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::info;
 use tracing_subscriber::prelude::*;
@@ -34,9 +34,8 @@ async fn main() -> Result<()> {
     cleanup_socket(&config.host_socket).await?;
 
     // Create the proxy service
-    let service = Arc::new(
-        HostProxyService::new(config.clone()).context("Failed to create proxy service")?,
-    );
+    let service =
+        Arc::new(HostProxyService::new(config.clone()).context("Failed to create proxy service")?);
 
     // Build the router with agent API routes
     let api_router = build_router(service);
@@ -60,8 +59,8 @@ async fn main() -> Result<()> {
     let socket_path = config.host_socket.clone();
     info!("Binding to Unix socket: {:?}", socket_path);
 
-    let listener = tokio::net::UnixListener::bind(&socket_path)
-        .context("Failed to bind to Unix socket")?;
+    let listener =
+        tokio::net::UnixListener::bind(&socket_path).context("Failed to bind to Unix socket")?;
 
     // Set socket permissions to be accessible
     #[cfg(unix)]
@@ -85,15 +84,13 @@ async fn main() -> Result<()> {
 
         tokio::spawn(async move {
             let io = hyper_util::rt::TokioIo::new(stream);
-            let hyper_service = hyper::service::service_fn(move |request| {
-                app.clone().oneshot(request)
-            });
+            let hyper_service =
+                hyper::service::service_fn(move |request| app.clone().oneshot(request));
 
-            if let Err(err) = hyper_util::server::conn::auto::Builder::new(
-                hyper_util::rt::TokioExecutor::new(),
-            )
-            .serve_connection_with_upgrades(io, hyper_service)
-            .await
+            if let Err(err) =
+                hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new())
+                    .serve_connection_with_upgrades(io, hyper_service)
+                    .await
             {
                 tracing::error!("Failed to serve connection: {}", err);
             }

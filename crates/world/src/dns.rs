@@ -42,6 +42,9 @@ impl DnsResolver {
 
     fn refresh_all(&self) -> Result<()> {
         let mut cache = self.resolved_ips.write().unwrap();
+        // Prune expired entries based on TTL
+        let now = Instant::now();
+        cache.retain(|_, v| v.expires_at > now);
 
         for domain in &self.allowed_domains {
             match dns_lookup::lookup_host(domain) {
@@ -50,7 +53,7 @@ impl DnsResolver {
                         domain.clone(),
                         CachedResolution {
                             ips,
-                            expires_at: Instant::now() + Duration::from_secs(300), // 5 min TTL
+                            expires_at: Instant::now() + Duration::from_secs(300),
                         },
                     );
                 }
@@ -92,8 +95,9 @@ impl DnsResolver {
     }
 
     #[cfg(not(target_os = "linux"))]
-    fn update_nftables_set(&self, _cache: &HashMap<String, CachedResolution>) -> Result<()> {
-        // Stub for non-Linux platforms
+    fn update_nftables_set(&self, cache: &HashMap<String, CachedResolution>) -> Result<()> {
+        // Stub for non-Linux platforms; touch fields to avoid dead_code warnings
+        let _ = cache.values().next().map(|c| c.ips.len());
         Ok(())
     }
 

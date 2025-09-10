@@ -4,12 +4,12 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+#[cfg(target_os = "linux")]
+use std::process as stdprocess;
 use std::process::Stdio;
 use substrate_common::FsDiff;
 use tokio::process::Command;
 use tokio::time::{timeout, Duration};
-#[cfg(target_os = "linux")]
-use std::process as stdprocess;
 
 /// State required to execute a command
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,18 +68,20 @@ pub async fn execute_in_world(
 
             // Best-effort network namespace
             let mut netns_name: Option<String> = None;
-            let mut netns_handle: Option<world::netns::NetNs> = None; // ensure drop after netfilter
+            let mut _netns_handle: Option<world::netns::NetNs> = None; // ensure drop after netfilter
             if world::netns::NetNs::ip_available() {
                 let ns = format!("substrate-{}", world_id);
                 let mut netns = world::netns::NetNs::new(&ns);
                 match netns.add() {
                     Ok(true) => {
                         if let Err(_e) = netns.lo_up() {
-                            if verbose { eprintln!("[replay] warn: netns unavailable or insufficient privileges; applying host-wide rules or skipping network scoping"); }
+                            if verbose {
+                                eprintln!("[replay] warn: netns unavailable or insufficient privileges; applying host-wide rules or skipping network scoping");
+                            }
                         } else {
                             // Ensure netns lives until after netfilter drop; declared before netfilter
                             netns_name = Some(ns);
-                            netns_handle = Some(netns);
+                            _netns_handle = Some(netns);
                         }
                     }
                     _ => {
@@ -93,24 +95,32 @@ pub async fn execute_in_world(
             }
 
             // Best-effort nftables setup with conservative LOG+drop default (within netns when available)
-            let mut netfilter_opt: Option<world::netfilter::NetFilter> = None;
-            let nft_ok = stdprocess::Command::new("nft").arg("--version").status().map(|s| s.success()).unwrap_or(false);
+            let mut _netfilter_opt: Option<world::netfilter::NetFilter> = None;
+            let nft_ok = stdprocess::Command::new("nft")
+                .arg("--version")
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
             if nft_ok {
                 match world::netfilter::NetFilter::new(world_id, Vec::new()) {
                     Ok(mut nf) => {
-                        if let Some(ref ns) = netns_name { nf.set_namespace(Some(ns.clone())); }
+                        if let Some(ref ns) = netns_name {
+                            nf.set_namespace(Some(ns.clone()));
+                        }
                         if let Err(e) = nf.install_rules() {
                             if verbose {
                                 eprintln!("[replay] warn: nft setup failed; netfilter scoping/logging disabled: {}", e);
                             }
                         } else {
                             // Warn when LOG visibility may be restricted
-                            if let Ok(val) = std::fs::read_to_string("/proc/sys/kernel/dmesg_restrict") {
+                            if let Ok(val) =
+                                std::fs::read_to_string("/proc/sys/kernel/dmesg_restrict")
+                            {
                                 if val.trim() == "1" && verbose {
                                     eprintln!("[replay] warn: kernel.dmesg_restrict=1; LOG lines may not be visible");
                                 }
                             }
-                            netfilter_opt = Some(nf);
+                            _netfilter_opt = Some(nf);
                         }
                     }
                     Err(e) => {
@@ -125,7 +135,7 @@ pub async fn execute_in_world(
 
             // Strategy probe and selection
             // 1) Try kernel overlay: mount + tiny write probe
-            let mut chosen_strategy = String::new();
+            // chosen_strategy printed inline in each branch
 
             // Helper to run inside overlay (kernel or fuse decided by how we mounted)
             fn run_in_overlay(
@@ -140,26 +150,33 @@ pub async fn execute_in_world(
                 let merged_dir = ovl.merged_dir_path().to_path_buf();
                 // Execute command in merged by cd into the equivalent path under merged
                 let mut rel = if cwd.starts_with(project_dir) {
-                    cwd.strip_prefix(project_dir).unwrap_or_else(|_| std::path::Path::new(".")).to_path_buf()
+                    cwd.strip_prefix(project_dir)
+                        .unwrap_or_else(|_| std::path::Path::new("."))
+                        .to_path_buf()
                 } else {
                     std::path::PathBuf::from(".")
                 };
-                if rel.as_os_str().is_empty() { rel = std::path::PathBuf::from("."); }
+                if rel.as_os_str().is_empty() {
+                    rel = std::path::PathBuf::from(".");
+                }
                 let target_dir = merged_dir.join(&rel);
-                let mut command = std::process::Command::new(if netns_name.is_some() { "ip" } else { "sh" });
+                let mut command =
+                    std::process::Command::new(if netns_name.is_some() { "ip" } else { "sh" });
                 if let Some(ns) = netns_name {
-                    command.args(["netns","exec", ns, "sh", "-lc", cmd]);
+                    command.args(["netns", "exec", ns, "sh", "-lc", cmd]);
                 } else {
                     command.args(["-lc", cmd]);
                 }
-                let mut child = command
+                let child = command
                     .current_dir(&target_dir)
                     .envs(env)
                     .spawn()
                     .context("Failed to spawn command in overlay")?;
 
                 // Best-effort attach child PID to cgroup when available
-                if let Some(mgr) = cgroup_mgr { let _ = mgr.attach_pid(child.id()); }
+                if let Some(mgr) = cgroup_mgr {
+                    let _ = mgr.attach_pid(child.id());
+                }
 
                 let output = child
                     .wait_with_output()
@@ -189,10 +206,13 @@ pub async fn execute_in_world(
             }
 
             // Probe kernel overlay
-            let mut tried_overlay_kernel = false;
+            let _tried_overlay_kernel;
             let mut overlay_kernel_ok = false;
-            if std::fs::read_to_string("/proc/filesystems").map(|s| s.contains("overlay")).unwrap_or(false) {
-                tried_overlay_kernel = true;
+            if std::fs::read_to_string("/proc/filesystems")
+                .map(|s| s.contains("overlay"))
+                .unwrap_or(false)
+            {
+                _tried_overlay_kernel = true;
                 let mut probe = world::overlayfs::OverlayFs::new(&format!("{}-probe", world_id))?;
                 if let Ok(_m) = probe.mount(&state.cwd) {
                     if !probe.is_using_fuse() {
@@ -217,12 +237,18 @@ pub async fn execute_in_world(
                     &state.cwd,
                     &state.cwd,
                     &state.env,
-                    if cgroup_active { Some(&cgroup_mgr) } else { None },
+                    if cgroup_active {
+                        Some(&cgroup_mgr)
+                    } else {
+                        None
+                    },
                     netns_name.as_deref(),
                 )?;
-                chosen_strategy = if using_fuse { "fuse" } else { "overlay" }.to_string();
                 if verbose {
-                    eprintln!("[replay] world strategy: {}", chosen_strategy);
+                    eprintln!(
+                        "[replay] world strategy: {}",
+                        if using_fuse { "fuse" } else { "overlay" }
+                    );
                     if fs_diff.is_empty() {
                         eprintln!("[replay] upper entries: {}", upper_entries);
                     }
@@ -258,12 +284,18 @@ pub async fn execute_in_world(
                         &state.cwd,
                         &state.cwd,
                         &state.env,
-                        if cgroup_active { Some(&cgroup_mgr) } else { None },
+                        if cgroup_active {
+                            Some(&cgroup_mgr)
+                        } else {
+                            None
+                        },
                         netns_name.as_deref(),
                     )?;
-                    chosen_strategy = if using_fuse { "fuse" } else { "overlay" }.to_string();
                     if verbose {
-                        eprintln!("[replay] world strategy: {}", chosen_strategy);
+                        eprintln!(
+                            "[replay] world strategy: {}",
+                            if using_fuse { "fuse" } else { "overlay" }
+                        );
                         if fs_diff.is_empty() {
                             eprintln!("[replay] upper entries: {}", upper_entries);
                         }
@@ -294,7 +326,9 @@ pub async fn execute_in_world(
                 netns_name.as_deref(),
             )?;
             if cgroup_active {
-                if let Some(pid) = child_pid_opt { let _ = cgroup_mgr.attach_pid(pid); }
+                if let Some(pid) = child_pid_opt {
+                    let _ = cgroup_mgr.attach_pid(pid);
+                }
             }
             // Note: cannot directly attach child PID here because copydiff currently uses output().
             // Ensure the cgroup remains non-empty via current PID attachment performed earlier.
@@ -328,21 +362,18 @@ fn world_isolation_available() -> bool {
     {
         std::env::var("SUBSTRATE_REPLAY_USE_WORLD").unwrap_or_default() == "1"
     }
-    
+
     #[cfg(not(target_os = "linux"))]
     {
         false // World backend only available on Linux
     }
 }
 
-/// Execute with full world isolation
+// Execute with full world isolation
 // legacy world-specific execution removed in favor of world-api path
 
 /// Execute a command directly (without world isolation)
-pub async fn execute_direct(
-    state: &ExecutionState,
-    timeout_secs: u64,
-) -> Result<ExecutionResult> {
+pub async fn execute_direct(state: &ExecutionState, timeout_secs: u64) -> Result<ExecutionResult> {
     // Prefer running via a shell to preserve quoting, pipes, redirects, etc.
     let mut cmd = Command::new("/bin/bash");
     cmd.arg("-lc").arg(&state.raw_cmd);
@@ -350,45 +381,54 @@ pub async fn execute_direct(
     // Minimal environment reinjection
     cmd.envs(&state.env);
     // Ensure a reasonable default shell environment
-    if std::env::var("SHELL").is_err() { cmd.env("SHELL", "/bin/bash"); }
-    if std::env::var("LANG").is_err() { cmd.env("LANG", "C.UTF-8"); }
-    if std::env::var("LC_ALL").is_err() { cmd.env("LC_ALL", "C.UTF-8"); }
+    if std::env::var("SHELL").is_err() {
+        cmd.env("SHELL", "/bin/bash");
+    }
+    if std::env::var("LANG").is_err() {
+        cmd.env("LANG", "C.UTF-8");
+    }
+    if std::env::var("LC_ALL").is_err() {
+        cmd.env("LC_ALL", "C.UTF-8");
+    }
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
-    
+
     // Add substrate environment variables for correlation
     cmd.env("SHIM_SESSION_ID", &state.session_id);
     cmd.env("SHIM_PARENT_SPAN", &state.span_id);
     cmd.env("SUBSTRATE_REPLAY", "1");
-    
+
     if state.stdin.is_some() {
         cmd.stdin(Stdio::piped());
     }
-    
+
     // Execute with timeout
     let start = std::time::Instant::now();
     let result = match timeout(Duration::from_secs(timeout_secs), async {
         let mut child = cmd.spawn().context("Failed to spawn command")?;
-        
+
         // Provide stdin if needed
         if let Some(stdin_data) = &state.stdin {
             if let Some(mut stdin) = child.stdin.take() {
                 use tokio::io::AsyncWriteExt;
-                stdin.write_all(stdin_data).await
+                stdin
+                    .write_all(stdin_data)
+                    .await
                     .context("Failed to write stdin")?;
             }
         }
-        
+
         Ok::<_, anyhow::Error>(child.wait_with_output().await?)
     })
-    .await {
+    .await
+    {
         Ok(Ok(output)) => output,
         Ok(Err(e)) => return Err(e),
         Err(_) => anyhow::bail!("Command execution timed out"),
     };
-    
+
     let duration_ms = start.elapsed().as_millis() as u64;
-    
+
     Ok(ExecutionResult {
         exit_code: result.status.code().unwrap_or(-1),
         stdout: result.stdout,
@@ -403,14 +443,14 @@ pub async fn execute_direct(
 pub fn parse_command(cmd_str: &str) -> (String, Vec<String>) {
     // Simple parsing - in production would use shell_words or similar
     let parts: Vec<String> = cmd_str.split_whitespace().map(String::from).collect();
-    
+
     if parts.is_empty() {
         return (String::new(), Vec::new());
     }
-    
+
     let command = parts[0].clone();
     let args = parts[1..].to_vec();
-    
+
     (command, args)
 }
 
@@ -421,25 +461,26 @@ pub async fn replay_sequence(
     use_world: bool,
 ) -> Result<Vec<ExecutionResult>> {
     let mut results = Vec::new();
-    
+
     for state in states {
         let result = if use_world {
             execute_in_world(&state, timeout_secs).await?
         } else {
             execute_direct(&state, timeout_secs).await?
         };
-        
+
         // Check if we should continue after failure
         if result.exit_code != 0 {
             tracing::warn!(
                 "Command failed with exit code {}: {}",
-                result.exit_code, state.command
+                result.exit_code,
+                state.command
             );
         }
-        
+
         results.push(result);
     }
-    
+
     Ok(results)
 }
 
@@ -447,18 +488,18 @@ pub async fn replay_sequence(
 mod tests {
     use super::*;
     use tempfile::tempdir;
-    
+
     #[test]
     fn test_parse_command() {
         let (cmd, args) = parse_command("echo hello world");
         assert_eq!(cmd, "echo");
         assert_eq!(args, vec!["hello", "world"]);
-        
+
         let (cmd, args) = parse_command("ls");
         assert_eq!(cmd, "ls");
         assert!(args.is_empty());
     }
-    
+
     #[tokio::test]
     async fn test_execute_direct_simple() {
         let state = ExecutionState {
@@ -471,7 +512,7 @@ mod tests {
             session_id: "test-session".to_string(),
             span_id: "test-span".to_string(),
         };
-        
+
         let result = execute_direct(&state, 10).await.unwrap();
         assert_eq!(result.exit_code, 0);
         assert_eq!(String::from_utf8_lossy(&result.stdout).trim(), "test");

@@ -290,14 +290,14 @@ fn test_log_rotation() {
     let temp = TempDir::new().unwrap();
     let log_file = temp.path().join("trace.jsonl");
 
-    // Create a large log file (just over 50MB)
-    let large_content = "x".repeat(51 * 1024 * 1024);
+    // Create a large log file (just over 1MB) to keep the test fast
+    let large_content = "x".repeat(2 * 1024 * 1024);
     fs::write(&log_file, &large_content).unwrap();
 
     // Set custom rotation size for testing
     get_substrate_binary()
         .env("SHIM_TRACE_LOG", &log_file)
-        .env("SHIM_TRACE_LOG_MAX_MB", "50")
+        .env("TRACE_LOG_MAX_MB", "1")
         .arg("-c")
         .arg("echo test")
         .assert()
@@ -314,10 +314,10 @@ fn test_log_rotation() {
     // New file should contain just the recent command
     let new_content = fs::read_to_string(&log_file).unwrap();
     assert!(
-        new_content.len() < 10000,
+        new_content.len() < 8192,
         "New log file should be much smaller than original. Size: {}",
         new_content.len()
-    ); // Much smaller than original (increased limit for CI environment)
+    ); // Much smaller than original
     assert!(new_content.contains("echo test"));
 }
 

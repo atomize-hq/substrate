@@ -200,8 +200,8 @@ impl MacLimaBackend {
 
     fn call_agent<T: Serialize, R: for<'de> Deserialize<'de>>(
         &self,
-        method: &str,
-        params: &T,
+        _method: &str,
+        _params: &T,
     ) -> Result<R> {
         // TODO: Implement actual agent communication
         // For now, return a placeholder error

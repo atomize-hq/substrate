@@ -27,11 +27,11 @@ impl IntoResponse for ApiErrorResponse {
             ApiError::RateLimited(_) => StatusCode::TOO_MANY_REQUESTS,
             ApiError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
-        
+
         let body = json!({
             "error": self.0.to_string(),
         });
-        
+
         (status, ResponseJson(body)).into_response()
     }
 }
@@ -65,9 +65,7 @@ pub async fn execute(
 }
 
 /// Handle WebSocket upgrade for PTY streaming.
-pub async fn stream(
-    ws: axum::extract::ws::WebSocketUpgrade,
-) -> axum::response::Response {
+pub async fn stream(ws: axum::extract::ws::WebSocketUpgrade) -> axum::response::Response {
     // TODO: Implement WebSocket PTY streaming
     ws.on_upgrade(|_socket| async {
         // PTY streaming logic will go here

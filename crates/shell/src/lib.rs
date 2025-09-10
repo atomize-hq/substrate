@@ -19,8 +19,8 @@ use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
+use substrate_broker::{detect_profile, evaluate, Decision};
 use substrate_common::{dedupe_path, log_schema, redact_sensitive};
-use substrate_broker::{Decision, evaluate, detect_profile};
 use substrate_trace::{append_to_trace, create_span_builder, init_trace, PolicyDecision};
 use uuid::Uuid;
 
@@ -141,11 +141,11 @@ pub struct Cli {
     /// Remove all deployed shims
     #[arg(long = "shim-remove", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status"])]
     pub shim_remove: bool,
-    
+
     /// Show trace information for a span ID
     #[arg(long = "trace", value_name = "SPAN_ID", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status", "shim_remove", "replay"])]
     pub trace: Option<String>,
-    
+
     /// Replay a traced command by span ID
     #[arg(long = "replay", value_name = "SPAN_ID", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status", "shim_remove", "trace"])]
     pub replay: Option<String>,
@@ -173,9 +173,15 @@ pub struct GraphCmd {
 
 #[derive(clap::Subcommand, Debug)]
 pub enum GraphAction {
-    Ingest { file: std::path::PathBuf },
+    Ingest {
+        file: std::path::PathBuf,
+    },
     Status,
-    WhatChanged { span_id: String, #[arg(long, default_value_t = 100)] limit: usize },
+    WhatChanged {
+        span_id: String,
+        #[arg(long, default_value_t = 100)]
+        limit: usize,
+    },
 }
 
 #[derive(clap::Args, Debug)]
@@ -323,14 +329,20 @@ impl ShellConfig {
             if let Ok(content) = std::fs::read_to_string(&version_file) {
                 let info: serde_json::Value = serde_json::from_str(&content)?;
                 let current_version = env!("CARGO_PKG_VERSION");
-                let file_version = info.get("version").and_then(|v| v.as_str()).unwrap_or("unknown");
+                let file_version = info
+                    .get("version")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
 
                 let mut total_cmds: usize = 0;
                 let mut present_cmds: usize = 0;
                 let mut missing_list: Vec<String> = Vec::new();
                 let mut missing_any = false;
                 if let Some(commands) = info.get("commands").and_then(|c| c.as_array()) {
-                    let expected: Vec<String> = commands.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect();
+                    let expected: Vec<String> = commands
+                        .iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect();
                     total_cmds = expected.len();
                     for cmd in &expected {
                         let path = shims_dir.join(cmd);
@@ -340,7 +352,9 @@ impl ShellConfig {
                             missing_list.push(cmd.clone());
                         }
                     }
-                    if !missing_list.is_empty() { missing_any = true; }
+                    if !missing_list.is_empty() {
+                        missing_any = true;
+                    }
                 }
 
                 let mut exit_code = 0;
@@ -414,21 +428,24 @@ impl ShellConfig {
             let path_ok = first_path == shims_dir_str;
 
             let mut exit_code = 0i32;
-            let mut printed_header = false;
+            let printed_header = false;
 
             if let Ok(content) = std::fs::read_to_string(&version_file) {
                 let info: serde_json::Value = serde_json::from_str(&content)?;
                 println!("Shims: Deployed");
-                printed_header = true;
 
                 // Version
                 let current_version = env!("CARGO_PKG_VERSION");
-                let file_version = info.get("version").and_then(|v| v.as_str()).unwrap_or("unknown");
+                let file_version = info
+                    .get("version")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
                 println!("Version: {}", file_version);
 
                 // Deployed at
                 if let Some(deployed_at) = info.get("deployed_at") {
-                    if let Some(secs) = deployed_at.get("secs_since_epoch").and_then(|s| s.as_i64()) {
+                    if let Some(secs) = deployed_at.get("secs_since_epoch").and_then(|s| s.as_i64())
+                    {
                         use chrono::DateTime;
                         if let Some(datetime) = DateTime::from_timestamp(secs, 0) {
                             println!("Deployed: {}", datetime.format("%Y-%m-%d %H:%M:%S UTC"));
@@ -485,10 +502,7 @@ impl ShellConfig {
                             .unwrap_or_else(|| PathBuf::from("/tmp"));
                         let marker = runtime_dir.join(format!("substrate_path_hint_shown_{}", uid));
                         if !marker.exists() {
-                            println!(
-                                "Suggestion: export PATH=\"{}:$PATH\"",
-                                shims_dir.display()
-                            );
+                            println!("Suggestion: export PATH=\"{}:$PATH\"", shims_dir.display());
                             let _ = std::fs::write(&marker, b"1");
                         }
                     }
@@ -507,7 +521,9 @@ impl ShellConfig {
                 std::process::exit(exit_code);
             } else {
                 // Version file missing -> treat as needs redeploy
-                if !printed_header { println!("Shims: Deployed (version unknown)"); }
+                if !printed_header {
+                    println!("Shims: Deployed (version unknown)");
+                }
                 println!("Location: {}", shims_dir.display());
                 if path_ok {
                     println!("PATH: OK ({} is first)", shims_dir.display());
@@ -527,10 +543,7 @@ impl ShellConfig {
                             .unwrap_or_else(|| PathBuf::from("/tmp"));
                         let marker = runtime_dir.join(format!("substrate_path_hint_shown_{}", uid));
                         if !marker.exists() {
-                            println!(
-                                "Suggestion: export PATH=\"{}:$PATH\"",
-                                shims_dir.display()
-                            );
+                            println!("Suggestion: export PATH=\"{}:$PATH\"", shims_dir.display());
                             let _ = std::fs::write(&marker, b"1");
                         }
                     }
@@ -539,16 +552,18 @@ impl ShellConfig {
                 std::process::exit(1);
             }
         }
-        
+
         // Handle --trace flag
         if let Some(span_id) = cli.trace {
             handle_trace_command(&span_id)?;
             std::process::exit(0);
         }
-        
+
         // Handle --replay flag
         if let Some(span_id) = cli.replay {
-            if cli.replay_verbose { env::set_var("SUBSTRATE_REPLAY_VERBOSE", "1"); }
+            if cli.replay_verbose {
+                env::set_var("SUBSTRATE_REPLAY_VERBOSE", "1");
+            }
             handle_replay_command(&span_id)?;
             std::process::exit(0);
         }
@@ -630,9 +645,13 @@ impl ShellConfig {
 
 fn handle_graph_command(cmd: &GraphCmd) -> Result<()> {
     use substrate_graph::{connect_mock, GraphConfig, GraphService};
-    let cfg = GraphConfig { backend: "mock".into(), db_path: substrate_graph::default_graph_path()? };
+    let cfg = GraphConfig {
+        backend: "mock".into(),
+        db_path: substrate_graph::default_graph_path()?,
+    };
     let mut svc = connect_mock(cfg).map_err(|e| anyhow::anyhow!(e.to_string()))?;
-    svc.ensure_schema().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    svc.ensure_schema()
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     match &cmd.action {
         GraphAction::Status => {
             let s = svc.status().map_err(|e| anyhow::anyhow!(e.to_string()))?;
@@ -645,20 +664,27 @@ fn handle_graph_command(cmd: &GraphCmd) -> Result<()> {
             let mut n = 0usize;
             for line in reader.lines() {
                 let line = line?;
-                if line.trim().is_empty() { continue; }
+                if line.trim().is_empty() {
+                    continue;
+                }
                 if let Ok(span) = serde_json::from_str::<substrate_trace::Span>(&line) {
-                    svc.ingest_span(&span).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+                    svc.ingest_span(&span)
+                        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
                     n += 1;
                 }
             }
             println!("ingested {} spans (mock)", n);
         }
         GraphAction::WhatChanged { span_id, limit } => {
-            let items = svc.what_changed(span_id, *limit).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            let items = svc
+                .what_changed(span_id, *limit)
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
             if items.is_empty() {
                 println!("no changes recorded for span {}", span_id);
             } else {
-                for fc in items { println!("{}\t{}", fc.change, fc.path); }
+                for fc in items {
+                    println!("{}\t{}", fc.change, fc.path);
+                }
             }
         }
     }
@@ -698,7 +724,7 @@ fn world_doctor_main(json_mode: bool) -> i32 {
             println!("nft: N/A");
             println!("dmesg_restrict: N/A");
         }
-        return 0;
+        0
     }
 
     #[cfg(target_os = "linux")]
@@ -707,9 +733,13 @@ fn world_doctor_main(json_mode: bool) -> i32 {
         use std::path::PathBuf;
 
         // Helpers
-        fn pass(msg: &str) { println!("PASS  | {}", msg); }
-        fn warn(msg: &str) { println!("WARN  | {}", msg); }
-        fn fail(msg: &str) { println!("FAIL  | {}", msg); }
+        fn pass(msg: &str) {
+            println!("PASS  | {}", msg);
+        }
+        fn warn(msg: &str) {
+            println!("WARN  | {}", msg);
+        }
+        // fn fail(msg: &str) { println!("FAIL  | {}", msg); }
 
         fn overlay_present() -> bool {
             std::fs::read_to_string("/proc/filesystems")
@@ -720,34 +750,70 @@ fn world_doctor_main(json_mode: bool) -> i32 {
 
         fn try_modprobe_overlay_if_root() {
             let is_root = unsafe { libc::geteuid() } == 0;
-            if !is_root { return; }
+            if !is_root {
+                return;
+            }
             let _ = Command::new("modprobe").arg("overlay").status();
         }
 
-        fn fuse_dev_present() -> bool { Path::new("/dev/fuse").exists() }
-        fn fuse_bin_present() -> bool { which::which("fuse-overlayfs").is_ok() }
-        fn cgroup_v2_present() -> bool { Path::new("/sys/fs/cgroup/cgroup.controllers").exists() }
+        fn fuse_dev_present() -> bool {
+            Path::new("/dev/fuse").exists()
+        }
+        fn fuse_bin_present() -> bool {
+            which::which("fuse-overlayfs").is_ok()
+        }
+        fn cgroup_v2_present() -> bool {
+            Path::new("/sys/fs/cgroup/cgroup.controllers").exists()
+        }
         fn nft_present() -> bool {
-            Command::new("nft").arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status().ok().map(|s| s.success()).unwrap_or(false)
+            Command::new("nft")
+                .arg("--version")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .ok()
+                .map(|s| s.success())
+                .unwrap_or(false)
         }
         fn dmesg_restrict() -> Option<String> {
-            Command::new("sh").arg("-lc").arg("sysctl -n kernel.dmesg_restrict 2>/dev/null || echo n/a")
-                .output().ok().and_then(|o| String::from_utf8(o.stdout).ok()).map(|s| s.trim().to_string())
+            Command::new("sh")
+                .arg("-lc")
+                .arg("sysctl -n kernel.dmesg_restrict 2>/dev/null || echo n/a")
+                .output()
+                .ok()
+                .and_then(|o| String::from_utf8(o.stdout).ok())
+                .map(|s| s.trim().to_string())
         }
         fn overlay_root() -> PathBuf {
             let uid = unsafe { libc::geteuid() } as u32;
-            if uid == 0 { return PathBuf::from("/var/lib/substrate/overlay"); }
-            if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") { if !xdg.is_empty() { return PathBuf::from(xdg).join("substrate/overlay"); } }
+            if uid == 0 {
+                return PathBuf::from("/var/lib/substrate/overlay");
+            }
+            if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
+                if !xdg.is_empty() {
+                    return PathBuf::from(xdg).join("substrate/overlay");
+                }
+            }
             let run = PathBuf::from(format!("/run/user/{}/substrate/overlay", uid));
-            if run.parent().unwrap_or(Path::new("/run")).exists() { return run; }
+            if run.parent().unwrap_or(Path::new("/run")).exists() {
+                return run;
+            }
             PathBuf::from(format!("/tmp/substrate-{}-overlay", uid))
         }
         fn copydiff_root() -> PathBuf {
             let uid = unsafe { libc::geteuid() } as u32;
-            if uid == 0 { return PathBuf::from("/var/lib/substrate/copydiff"); }
-            if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") { if !xdg.is_empty() { return PathBuf::from(xdg).join("substrate/copydiff"); } }
+            if uid == 0 {
+                return PathBuf::from("/var/lib/substrate/copydiff");
+            }
+            if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
+                if !xdg.is_empty() {
+                    return PathBuf::from(xdg).join("substrate/copydiff");
+                }
+            }
             let run = PathBuf::from(format!("/run/user/{}/substrate/copydiff", uid));
-            if run.parent().unwrap_or(Path::new("/run")).exists() { return run; }
+            if run.parent().unwrap_or(Path::new("/run")).exists() {
+                return run;
+            }
             PathBuf::from(format!("/tmp/substrate-{}-copydiff", uid))
         }
 
@@ -755,16 +821,24 @@ fn world_doctor_main(json_mode: bool) -> i32 {
         let mut overlay_ok = overlay_present();
         if !json_mode {
             println!("== substrate world doctor ==");
-            if overlay_ok { pass("overlayfs: present"); }
-            else {
+            if overlay_ok {
+                pass("overlayfs: present");
+            } else {
                 warn("overlayfs: not present; attempting modprobe overlay (root only)");
                 try_modprobe_overlay_if_root();
                 overlay_ok = overlay_present();
-                if overlay_ok { pass("overlayfs: present after modprobe"); } else { warn("overlayfs: unavailable"); }
+                if overlay_ok {
+                    pass("overlayfs: present after modprobe");
+                } else {
+                    warn("overlayfs: unavailable");
+                }
             }
         } else {
             // still try modprobe if root to improve signal
-            if !overlay_ok { try_modprobe_overlay_if_root(); overlay_ok = overlay_present(); }
+            if !overlay_ok {
+                try_modprobe_overlay_if_root();
+                overlay_ok = overlay_present();
+            }
         }
 
         // fuse
@@ -774,9 +848,19 @@ fn world_doctor_main(json_mode: bool) -> i32 {
             if fuse_dev && fuse_bin {
                 pass("fuse-overlayfs: /dev/fuse present and binary found");
             } else if fuse_dev || fuse_bin {
-                warn(&format!("fuse-overlayfs: partial ({}, {})",
-                    if fuse_dev {"/dev/fuse"} else {"missing /dev/fuse"},
-                    if fuse_bin {"binary found"} else {"missing binary"}));
+                warn(&format!(
+                    "fuse-overlayfs: partial ({}, {})",
+                    if fuse_dev {
+                        "/dev/fuse"
+                    } else {
+                        "missing /dev/fuse"
+                    },
+                    if fuse_bin {
+                        "binary found"
+                    } else {
+                        "missing binary"
+                    }
+                ));
             } else {
                 warn("fuse-overlayfs: not available");
             }
@@ -789,8 +873,16 @@ fn world_doctor_main(json_mode: bool) -> i32 {
         let c_root = copydiff_root();
 
         if !json_mode {
-            if cgv2 { pass("cgroup v2: present"); } else { warn("cgroup v2: missing"); }
-            if nft { pass("nft: present"); } else { warn("nft: missing"); }
+            if cgv2 {
+                pass("cgroup v2: present");
+            } else {
+                warn("cgroup v2: missing");
+            }
+            if nft {
+                pass("nft: present");
+            } else {
+                warn("nft: missing");
+            }
             println!("INFO  | dmesg_restrict={}", dmsg);
             println!("INFO  | overlay_root: {}", o_root.display());
             println!("INFO  | copydiff_root: {}", c_root.display());
@@ -811,13 +903,17 @@ fn world_doctor_main(json_mode: bool) -> i32 {
         }
 
         // Exit code policy
-        if overlay_ok || (fuse_dev && fuse_bin) { 0 } else { 2 }
+        if overlay_ok || (fuse_dev && fuse_bin) {
+            0
+        } else {
+            2
+        }
     }
 }
 
 pub fn run_shell() -> Result<i32> {
     let config = ShellConfig::from_args()?;
-    
+
     // Initialize trace if Phase 4 is enabled
     if env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
         if let Err(e) = init_trace(None) {
@@ -1283,8 +1379,8 @@ pub fn needs_shell(cmd: &str) -> bool {
 /// Handle trace command - show trace information for a span ID
 fn handle_trace_command(span_id: &str) -> Result<()> {
     use std::fs::File;
-    use std::io::{BufReader, BufRead};
-    
+    use std::io::{BufRead, BufReader};
+
     // Get trace file location
     let trace_file = env::var("SHIM_TRACE_LOG")
         .map(PathBuf::from)
@@ -1293,29 +1389,32 @@ fn handle_trace_command(span_id: &str) -> Result<()> {
                 .expect("Cannot determine home directory")
                 .join(".substrate/trace.jsonl")
         });
-    
+
     if !trace_file.exists() {
         eprintln!("Trace file not found: {}", trace_file.display());
         eprintln!("Make sure tracing is enabled with SUBSTRATE_WORLD=enabled");
         std::process::exit(1);
     }
-    
+
     // Read trace file and find the span
     let file = File::open(&trace_file)?;
     let reader = BufReader::new(file);
     let mut found: Option<serde_json::Value> = None;
-    
+
     for line in reader.lines() {
         let line = line?;
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
             if let Some(id) = json.get("span_id").and_then(|v| v.as_str()) {
                 if id == span_id {
                     // Prefer command_complete if multiple entries exist
-                    let is_complete = json.get("event_type").and_then(|v| v.as_str()) == Some("command_complete");
+                    let is_complete =
+                        json.get("event_type").and_then(|v| v.as_str()) == Some("command_complete");
                     match &found {
                         None => found = Some(json),
                         Some(current) => {
-                            let current_is_complete = current.get("event_type").and_then(|v| v.as_str()) == Some("command_complete");
+                            let current_is_complete =
+                                current.get("event_type").and_then(|v| v.as_str())
+                                    == Some("command_complete");
                             if is_complete && !current_is_complete {
                                 found = Some(json);
                             }
@@ -1325,18 +1424,22 @@ fn handle_trace_command(span_id: &str) -> Result<()> {
             }
         }
     }
-    
-    if let Some(json) = found { println!("{}", serde_json::to_string_pretty(&json)?); }
-    else { eprintln!("Span ID not found: {}", span_id); std::process::exit(1); }
-    
+
+    if let Some(json) = found {
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        eprintln!("Span ID not found: {}", span_id);
+        std::process::exit(1);
+    }
+
     Ok(())
 }
 
 /// Handle replay command - replay a traced command by span ID
 fn handle_replay_command(span_id: &str) -> Result<()> {
     use std::fs::File;
-    use std::io::{BufReader, BufRead};
-    
+    use std::io::{BufRead, BufReader};
+
     // Get trace file location
     let trace_file = env::var("SHIM_TRACE_LOG")
         .map(PathBuf::from)
@@ -1345,18 +1448,18 @@ fn handle_replay_command(span_id: &str) -> Result<()> {
                 .expect("Cannot determine home directory")
                 .join(".substrate/trace.jsonl")
         });
-    
+
     if !trace_file.exists() {
         eprintln!("Trace file not found: {}", trace_file.display());
         eprintln!("Make sure tracing is enabled with SUBSTRATE_WORLD=enabled");
         std::process::exit(1);
     }
-    
+
     // Load the trace for the span
     let file = File::open(&trace_file)?;
     let reader = BufReader::new(file);
     let mut trace_entry = None;
-    
+
     for line in reader.lines() {
         let line = line?;
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
@@ -1368,40 +1471,48 @@ fn handle_replay_command(span_id: &str) -> Result<()> {
             }
         }
     }
-    
+
     let entry = trace_entry.ok_or_else(|| anyhow::anyhow!("Span ID not found: {}", span_id))?;
-    
+
     // Extract command information from the trace
-    let command = entry.get("cmd")
+    let command = entry
+        .get("cmd")
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("No command found in trace"))?;
-    
-    let cwd = entry.get("cwd")
+
+    let cwd = entry
+        .get("cwd")
         .and_then(|v| v.as_str())
         .map(PathBuf::from)
         .unwrap_or_else(|| env::current_dir().unwrap());
-    
-    let session_id = entry.get("session_id")
+
+    let session_id = entry
+        .get("session_id")
         .and_then(|v| v.as_str())
         .map(String::from)
         .unwrap_or_else(|| Uuid::now_v7().to_string());
-    
+
     // Verbose header
-    if env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1" || env::args().any(|a| a == "--replay-verbose") {
+    if env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1"
+        || env::args().any(|a| a == "--replay-verbose")
+    {
         eprintln!("[replay] span_id: {}", span_id);
         eprintln!("[replay] command: {}", command);
         eprintln!("[replay] cwd: {}", cwd.display());
         eprintln!("[replay] mode: bash -lc");
     }
-    
+
     // Parse command into command and args
     let parts: Vec<&str> = command.split_whitespace().collect();
     let (cmd, args) = if !parts.is_empty() {
-        (parts[0].to_string(), parts[1..].iter().map(|s| s.to_string()).collect())
+        (
+            parts[0].to_string(),
+            parts[1..].iter().map(|s| s.to_string()).collect(),
+        )
     } else {
         (command.to_string(), Vec::new())
     };
-    
+
     // Create execution state
     let state = substrate_replay::replay::ExecutionState {
         raw_cmd: command.to_string(),
@@ -1413,29 +1524,48 @@ fn handle_replay_command(span_id: &str) -> Result<()> {
         session_id,
         span_id: span_id.to_string(),
     };
-    
+
     // Execute with replay (choose world isolation when requested)
     let runtime = tokio::runtime::Runtime::new()?;
     let use_world = env::var("SUBSTRATE_REPLAY_USE_WORLD").unwrap_or_default() == "1";
     // Best-effort capability warnings when world isolation requested but not available
-    if cfg!(target_os = "linux") {
-        if use_world {
-            // cgroup v2
-            if !PathBuf::from("/sys/fs/cgroup/cgroup.controllers").exists() {
-                eprintln!("[replay] warn: cgroup v2 not mounted; world cgroups will not activate");
-            }
-            // overlayfs
-            let overlay_ok = std::fs::read_to_string("/proc/filesystems")
-                .ok()
-                .map(|s| s.contains("overlay"))
-                .unwrap_or(false);
-            if !overlay_ok { eprintln!("[replay] warn: overlayfs not present; fs_diff will be unavailable"); }
-            // nftables
-            let nft_ok = std::process::Command::new("nft").arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status().ok().map(|s| s.success()).unwrap_or(false);
-            if !nft_ok { eprintln!("[replay] warn: nft not available; netfilter scoping/logging disabled"); }
-            // dmesg restrict
-            if let Ok(out) = std::process::Command::new("sh").arg("-lc").arg("sysctl -n kernel.dmesg_restrict 2>/dev/null || echo n/a").output() {
-                if let Ok(s) = String::from_utf8(out.stdout) { if s.trim() == "1" { eprintln!("[replay] warn: kernel.dmesg_restrict=1; LOG lines may not be visible"); } }
+    if cfg!(target_os = "linux") && use_world {
+        // cgroup v2
+        if !PathBuf::from("/sys/fs/cgroup/cgroup.controllers").exists() {
+            eprintln!("[replay] warn: cgroup v2 not mounted; world cgroups will not activate");
+        }
+        // overlayfs
+        let overlay_ok = std::fs::read_to_string("/proc/filesystems")
+            .ok()
+            .map(|s| s.contains("overlay"))
+            .unwrap_or(false);
+        if !overlay_ok {
+            eprintln!("[replay] warn: overlayfs not present; fs_diff will be unavailable");
+        }
+        // nftables
+        let nft_ok = std::process::Command::new("nft")
+            .arg("--version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .ok()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !nft_ok {
+            eprintln!("[replay] warn: nft not available; netfilter scoping/logging disabled");
+        }
+        // dmesg restrict
+        if let Ok(out) = std::process::Command::new("sh")
+            .arg("-lc")
+            .arg("sysctl -n kernel.dmesg_restrict 2>/dev/null || echo n/a")
+            .output()
+        {
+            if let Ok(s) = String::from_utf8(out.stdout) {
+                if s.trim() == "1" {
+                    eprintln!(
+                        "[replay] warn: kernel.dmesg_restrict=1; LOG lines may not be visible"
+                    );
+                }
             }
         }
     }
@@ -1445,7 +1575,7 @@ fn handle_replay_command(span_id: &str) -> Result<()> {
     } else {
         runtime.block_on(async { substrate_replay::replay::execute_direct(&state, 60).await })?
     };
-    
+
     // Display results
     println!("Exit code: {}", result.exit_code);
     if !result.stdout.is_empty() {
@@ -1456,7 +1586,7 @@ fn handle_replay_command(span_id: &str) -> Result<()> {
         println!("\nStderr:");
         println!("{}", String::from_utf8_lossy(&result.stderr));
     }
-    
+
     if let Some(fs_diff) = result.fs_diff {
         if !fs_diff.is_empty() {
             println!("\nFilesystem changes:");
@@ -1471,12 +1601,15 @@ fn handle_replay_command(span_id: &str) -> Result<()> {
             }
         }
     }
-    
+
     std::process::exit(result.exit_code);
 }
 
 /// Collect filesystem diff and network scopes from world backend
-fn collect_world_telemetry(_span_id: &str) -> (Vec<String>, Option<substrate_common::fs_diff::FsDiff>) {
+#[allow(unused_variables)]
+fn collect_world_telemetry(
+    _span_id: &str,
+) -> (Vec<String>, Option<substrate_common::fs_diff::FsDiff>) {
     // Try to get world handle from environment
     let world_id = match env::var("SUBSTRATE_WORLD_ID") {
         Ok(id) => id,
@@ -1485,16 +1618,18 @@ fn collect_world_telemetry(_span_id: &str) -> (Vec<String>, Option<substrate_com
             return (vec![], None);
         }
     };
-    
+
     // Create world backend and collect telemetry
     #[cfg(target_os = "linux")]
     {
         use world::LinuxLocalBackend;
         use world_api::WorldBackend;
-        
+
         let backend = LinuxLocalBackend::new();
-        let handle = world_api::WorldHandle { id: world_id.clone() };
-        
+        let handle = world_api::WorldHandle {
+            id: world_id.clone(),
+        };
+
         // Try to get filesystem diff
         let fs_diff = match backend.fs_diff(&handle, _span_id) {
             Ok(diff) => Some(diff),
@@ -1503,14 +1638,14 @@ fn collect_world_telemetry(_span_id: &str) -> (Vec<String>, Option<substrate_com
                 None
             }
         };
-        
+
         // For now, scopes are tracked in the session world's execute method
         // and would need to be retrieved from there
         let scopes_used = vec![];
-        
+
         (scopes_used, fs_diff)
     }
-    
+
     #[cfg(not(target_os = "linux"))]
     {
         // World backend only available on Linux for now
@@ -2322,18 +2457,18 @@ fn execute_command(
     running_child_pid: Arc<AtomicI32>,
 ) -> Result<ExitStatus> {
     let trimmed = command.trim();
-    
+
     // Start span for command execution
     let policy_decision;
     let span = if std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
         // Policy evaluation (Phase 4)
         let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        
+
         // Detect and load .substrate-profile if present
         let _ = detect_profile(&cwd);
-        
+
         let decision = evaluate(trimmed, cwd.to_str().unwrap_or("."), None);
-        
+
         // Convert broker Decision to trace PolicyDecision
         policy_decision = match &decision {
             Ok(Decision::Allow) => Some(PolicyDecision {
@@ -2342,7 +2477,10 @@ fn execute_command(
                 restrictions: None,
             }),
             Ok(Decision::AllowWithRestrictions(restrictions)) => {
-                eprintln!("substrate: command requires restrictions: {:?}", restrictions);
+                eprintln!(
+                    "substrate: command requires restrictions: {:?}",
+                    restrictions
+                );
                 // Convert Restriction objects to strings for trace
                 let restriction_strings: Vec<String> = restrictions
                     .iter()
@@ -2353,7 +2491,7 @@ fn execute_command(
                     reason: None,
                     restrictions: Some(restriction_strings),
                 })
-            },
+            }
             Ok(Decision::Deny(reason)) => {
                 eprintln!("substrate: command denied by policy: {}", reason);
                 Some(PolicyDecision {
@@ -2361,13 +2499,13 @@ fn execute_command(
                     reason: Some(reason.clone()),
                     restrictions: None,
                 })
-            },
+            }
             Err(e) => {
                 eprintln!("substrate: policy check failed: {}", e);
                 None
             }
         };
-        
+
         // Handle denial
         if let Ok(Decision::Deny(_)) = decision {
             // Return failure status
@@ -2382,22 +2520,22 @@ fn execute_command(
                 return Ok(ExitStatus::from_raw(126));
             }
         }
-        
+
         // Create span with policy decision
         let mut builder = create_span_builder()
             .with_command(trimmed)
             .with_cwd(cwd.to_str().unwrap_or("."));
-        
+
         if let Some(pd) = policy_decision.clone() {
             builder = builder.with_policy_decision(pd);
         }
-        
+
         // Set parent span ID in environment for child processes
         match builder.start() {
             Ok(span) => {
                 std::env::set_var("SHIM_PARENT_SPAN", span.get_span_id());
                 Some(span)
-            },
+            }
             Err(e) => {
                 eprintln!("substrate: failed to create span: {}", e);
                 None
@@ -2420,14 +2558,15 @@ fn execute_command(
         if let Some(active_span) = span {
             let exit_code = pty_status.code.unwrap_or(-1);
             // Collect scopes and fs_diff from world backend if enabled
-            let (scopes_used, fs_diff) = if env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
-                collect_world_telemetry(active_span.get_span_id())
-            } else {
-                (vec![], None)
-            };
+            let (scopes_used, fs_diff) =
+                if env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
+                    collect_world_telemetry(active_span.get_span_id())
+                } else {
+                    (vec![], None)
+                };
             let _ = active_span.finish(exit_code, scopes_used, fs_diff);
         }
-        
+
         // Convert PtyExitStatus to std::process::ExitStatus for compatibility
         // NOTE: This is a documented compatibility shim using from_raw
         // The actual exit information is preserved in logs
@@ -2577,12 +2716,13 @@ fn execute_command(
         cmd_id,
         Some(extra),
     )?;
-    
+
     // Finish span if we created one
     if let Some(active_span) = span {
         let exit_code = status.code().unwrap_or(-1);
         // Collect scopes and fs_diff from world backend if enabled
-        let (scopes_used, fs_diff) = if env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
+        let (scopes_used, fs_diff) = if env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled"
+        {
             collect_world_telemetry(active_span.get_span_id())
         } else {
             (vec![], None)
@@ -2841,24 +2981,7 @@ fn first_command_path(cmd: &str) -> Option<String> {
     which::which(first).ok().map(|pb| pb.display().to_string())
 }
 
-fn maybe_rotate_log(path: &Path) -> Result<()> {
-    const MAX_BYTES: u64 = 50 * 1024 * 1024; // 50MB default
-
-    // Check environment variable for custom limit
-    let max_bytes = env::var("TRACE_LOG_MAX_MB")
-        .ok()
-        .and_then(|v| v.parse::<u64>().ok())
-        .map(|mb| mb * 1024 * 1024)
-        .unwrap_or(MAX_BYTES);
-
-    if let Ok(meta) = std::fs::metadata(path) {
-        if meta.len() > max_bytes {
-            let bak = path.with_extension("jsonl.1");
-            let _ = std::fs::rename(path, bak);
-        }
-    }
-    Ok(())
-}
+// Note: removed unused maybe_rotate_log helper to avoid dead_code warnings.
 
 fn log_command_event(
     config: &ShellConfig,
@@ -2912,6 +3035,41 @@ fn log_command_event(
     }
 
     // Route all event writes through unified trace
+    // Back-compat: propagate SHIM_TRACE_LOG_MAX_MB -> TRACE_LOG_MAX_MB for trace rotation
+    if env::var("TRACE_LOG_MAX_MB").is_err() {
+        if let Ok(v) = env::var("SHIM_TRACE_LOG_MAX_MB") {
+            env::set_var("TRACE_LOG_MAX_MB", v);
+        }
+    }
+    // Pre-rotate if the specified SHIM_TRACE_LOG already exceeds the limit
+    if let Ok(path) = env::var("SHIM_TRACE_LOG") {
+        let p = PathBuf::from(path);
+        if let Ok(meta) = std::fs::metadata(&p) {
+            let mb = env::var("TRACE_LOG_MAX_MB")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(100);
+            let max_bytes = mb * 1024 * 1024;
+            if meta.len() >= max_bytes {
+                // Respect retention based on TRACE_LOG_KEEP (default 3)
+                let keep = env::var("TRACE_LOG_KEEP")
+                    .ok()
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .unwrap_or(3);
+                if keep > 0 {
+                    let oldest = p.with_extension(format!("jsonl.{}", keep));
+                    let _ = std::fs::remove_file(&oldest);
+                    for i in (2..=keep).rev() {
+                        let from = p.with_extension(format!("jsonl.{}", i - 1));
+                        let to = p.with_extension(format!("jsonl.{}", i));
+                        let _ = std::fs::rename(&from, &to);
+                    }
+                }
+                let bak = p.with_extension("jsonl.1");
+                let _ = std::fs::rename(&p, &bak);
+            }
+        }
+    }
     // Ensure trace is initialized first when world is enabled
     let _ = init_trace(None);
     append_to_trace(&log_entry)?;

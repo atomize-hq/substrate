@@ -107,20 +107,20 @@ impl Default for ReplayConfig {
 pub async fn replay_span(span_id: &str, config: &ReplayConfig) -> Result<ReplayResult> {
     // Load the original span from trace
     let original_span = state::load_span_from_trace(&config.trace_file, span_id).await?;
-    
+
     // Reconstruct the execution state
     let exec_state = state::reconstruct_state(&original_span, &config.env_overrides)?;
-    
+
     // Execute in a fresh world if configured
     let execution_result = if config.fresh_world {
         replay::execute_in_world(&exec_state, config.timeout).await?
     } else {
         replay::execute_direct(&exec_state, config.timeout).await?
     };
-    
+
     // Compare results with original
     let comparison = compare::compare_execution(&original_span, &execution_result, config)?;
-    
+
     // Build final result
     Ok(ReplayResult {
         span_id: span_id.to_string(),
@@ -141,7 +141,7 @@ pub async fn replay_batch(
     config: &ReplayConfig,
 ) -> Result<regression::RegressionReport> {
     let mut results = Vec::new();
-    
+
     for span_id in span_ids {
         match replay_span(span_id, config).await {
             Ok(result) => results.push(result),
@@ -151,7 +151,7 @@ pub async fn replay_batch(
             }
         }
     }
-    
+
     regression::analyze_results(results)
 }
 

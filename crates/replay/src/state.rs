@@ -56,25 +56,25 @@ pub async fn load_span_from_trace(trace_file: &Path, span_id: &str) -> Result<Tr
     let file = tokio::fs::File::open(trace_file)
         .await
         .context("Failed to open trace file")?;
-    
+
     let reader = BufReader::new(file);
     let mut lines = reader.lines();
-    
+
     while let Some(line) = lines.next_line().await? {
         if line.is_empty() {
             continue;
         }
-        
-        let value: Value = serde_json::from_str(&line)
-            .context("Failed to parse trace line as JSON")?;
-        
+
+        let value: Value =
+            serde_json::from_str(&line).context("Failed to parse trace line as JSON")?;
+
         // Check if this is the span we're looking for
         if let Some(sid) = value.get("span_id").and_then(|v| v.as_str()) {
             if sid == span_id {
                 // Parse into our TraceSpan structure
-                let span: TraceSpan = serde_json::from_value(value)
-                    .context("Failed to deserialize trace span")?;
-                
+                let span: TraceSpan =
+                    serde_json::from_value(value).context("Failed to deserialize trace span")?;
+
                 // Only return completed spans
                 if span.event_type == "command_complete" {
                     return Ok(span);
@@ -82,7 +82,7 @@ pub async fn load_span_from_trace(trace_file: &Path, span_id: &str) -> Result<Tr
             }
         }
     }
-    
+
     anyhow::bail!("Span {} not found in trace file", span_id)
 }
 
@@ -93,15 +93,16 @@ pub fn reconstruct_state(
 ) -> Result<ExecutionState> {
     // Parse command into binary and args
     let (command, args) = crate::replay::parse_command(&span.cmd);
-    
+
     // Reconstruct working directory
-    let cwd = span.cwd.clone().unwrap_or_else(|| {
-        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/tmp"))
-    });
-    
+    let cwd = span
+        .cwd
+        .clone()
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/tmp")));
+
     // Reconstruct environment
     let mut env = HashMap::new();
-    
+
     // Start with replay context environment if available
     if let Some(ctx) = &span.replay_context {
         if let Some(path) = &ctx.path {
@@ -120,17 +121,17 @@ pub fn reconstruct_state(
             env.insert("HOSTNAME".to_string(), hostname.clone());
         }
     }
-    
+
     // Apply any overrides
     for (key, value) in env_overrides {
         env.insert(key.clone(), value.clone());
     }
-    
+
     // Add substrate-specific environment
     env.insert("SUBSTRATE_REPLAY".to_string(), "1".to_string());
     env.insert("SHIM_SESSION_ID".to_string(), span.session_id.clone());
     env.insert("SHIM_PARENT_SPAN".to_string(), span.span_id.clone());
-    
+
     Ok(ExecutionState {
         raw_cmd: span.cmd.clone(),
         command,
@@ -144,54 +145,52 @@ pub fn reconstruct_state(
 }
 
 /// Filter spans from trace file based on criteria
-pub async fn filter_spans_from_trace(
-    trace_file: &Path,
-    filter: SpanFilter,
-) -> Result<Vec<String>> {
+pub async fn filter_spans_from_trace(trace_file: &Path, filter: SpanFilter) -> Result<Vec<String>> {
     let file = tokio::fs::File::open(trace_file)
         .await
         .context("Failed to open trace file")?;
-    
+
     let reader = BufReader::new(file);
     let mut lines = reader.lines();
     let mut matching_spans = Vec::new();
-    
+
     while let Some(line) = lines.next_line().await? {
         if line.is_empty() {
             continue;
         }
-        
+
         let value: Value = match serde_json::from_str(&line) {
             Ok(v) => v,
             Err(_) => continue, // Skip malformed lines
         };
-        
+
         // Only process completed spans
         if value.get("event_type").and_then(|v| v.as_str()) != Some("command_complete") {
             continue;
         }
-        
+
         let span: TraceSpan = match serde_json::from_value(value) {
             Ok(s) => s,
             Err(_) => continue,
         };
-        
+
         // Apply filters
         if !filter.command_patterns.is_empty() {
-            let matches = filter.command_patterns.iter().any(|pattern| {
-                span.cmd.contains(pattern)
-            });
+            let matches = filter
+                .command_patterns
+                .iter()
+                .any(|pattern| span.cmd.contains(pattern));
             if !matches {
                 continue;
             }
         }
-        
+
         if let Some((start, end)) = &filter.time_range {
             if span.ts < *start || span.ts > *end {
                 continue;
             }
         }
-        
+
         if let Some(exit_codes) = &filter.exit_codes {
             if let Some(exit) = span.exit_code {
                 if !exit_codes.contains(&exit) {
@@ -199,23 +198,23 @@ pub async fn filter_spans_from_trace(
                 }
             }
         }
-        
+
         if let Some(component) = &filter.component {
             if span.component != *component {
                 continue;
             }
         }
-        
+
         matching_spans.push(span.span_id);
     }
-    
+
     Ok(matching_spans)
 }
 
 /// Check for environment drift between original and current context
 pub fn detect_context_drift(original: &ReplayContext) -> Vec<String> {
     let mut warnings = Vec::new();
-    
+
     // Check if PATH has changed significantly
     if let Some(orig_path) = &original.path {
         if let Ok(current_path) = std::env::var("PATH") {
@@ -223,7 +222,7 @@ pub fn detect_context_drift(original: &ReplayContext) -> Vec<String> {
                 // Simple check - could be more sophisticated
                 let orig_count = orig_path.split(':').count();
                 let curr_count = current_path.split(':').count();
-                
+
                 if (orig_count as i32 - curr_count as i32).abs() > 5 {
                     warnings.push(format!(
                         "PATH has changed significantly ({} vs {} entries)",
@@ -233,7 +232,7 @@ pub fn detect_context_drift(original: &ReplayContext) -> Vec<String> {
             }
         }
     }
-    
+
     // Check hostname
     if let Some(orig_hostname) = &original.hostname {
         if let Ok(current_hostname) = hostname::get() {
@@ -246,43 +245,41 @@ pub fn detect_context_drift(original: &ReplayContext) -> Vec<String> {
             }
         }
     }
-    
+
     // Check user
     if let Some(orig_user) = &original.user {
         if let Ok(current_user) = std::env::var("USER") {
             if orig_user != &current_user {
-                warnings.push(format!(
-                    "User changed: {} -> {}",
-                    orig_user, current_user
-                ));
+                warnings.push(format!("User changed: {} -> {}", orig_user, current_user));
             }
         }
     }
-    
+
     warnings
 }
 
 /// Calculate a hash of environment variables for comparison
 pub fn hash_env_vars() -> String {
-    use sha2::{Sha256, Digest};
-    
+    use sha2::{Digest, Sha256};
+
     let mut hasher = Sha256::new();
     let mut env_pairs: Vec<(String, String)> = std::env::vars().collect();
     env_pairs.sort_by(|a, b| a.0.cmp(&b.0));
-    
+
     for (key, value) in env_pairs {
         // Skip volatile environment variables
-        if key.starts_with("SHIM_") || 
-           key.starts_with("SUBSTRATE_") ||
-           key == "PWD" || 
-           key == "OLDPWD" ||
-           key == "SHLVL" {
+        if key.starts_with("SHIM_")
+            || key.starts_with("SUBSTRATE_")
+            || key == "PWD"
+            || key == "OLDPWD"
+            || key == "SHLVL"
+        {
             continue;
         }
-        
+
         hasher.update(format!("{}={}", key, value).as_bytes());
     }
-    
+
     format!("{:x}", hasher.finalize())
 }
 
@@ -291,7 +288,7 @@ mod tests {
     use super::*;
     use tempfile::NamedTempFile;
     use tokio::io::AsyncWriteExt;
-    
+
     #[tokio::test]
     async fn test_load_span_from_trace() {
         let temp_file = NamedTempFile::new().unwrap();
@@ -300,18 +297,20 @@ mod tests {
 {"ts":"2024-01-01T00:00:01Z","event_type":"command_complete","span_id":"test-span-1","session_id":"session-1","component":"shell","cmd":"echo test","exit_code":0}
 {"ts":"2024-01-01T00:00:02Z","event_type":"command_complete","span_id":"test-span-2","session_id":"session-1","component":"shell","cmd":"ls","exit_code":0}
 "#;
-        
+
         let mut file = tokio::fs::File::create(temp_file.path()).await.unwrap();
         file.write_all(trace_content.as_bytes()).await.unwrap();
         file.flush().await.unwrap();
         drop(file);
-        
-        let span = load_span_from_trace(temp_file.path(), "test-span-1").await.unwrap();
+
+        let span = load_span_from_trace(temp_file.path(), "test-span-1")
+            .await
+            .unwrap();
         assert_eq!(span.span_id, "test-span-1");
         assert_eq!(span.cmd, "echo test");
         assert_eq!(span.exit_code, Some(0));
     }
-    
+
     #[test]
     fn test_reconstruct_state() {
         let span = TraceSpan {
@@ -340,7 +339,7 @@ mod tests {
             stderr: None,
             env_hash: None,
         };
-        
+
         let state = reconstruct_state(&span, &HashMap::new()).unwrap();
         assert_eq!(state.command, "echo");
         assert_eq!(state.args, vec!["hello", "world"]);

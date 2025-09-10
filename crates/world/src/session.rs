@@ -58,7 +58,7 @@ impl SessionWorld {
         #[cfg(target_os = "linux")]
         {
             self.setup_linux_isolation()?;
-            
+
             // Set up network filtering if isolation is enabled
             if self.spec.isolate_network {
                 self.setup_network_filter()?;
@@ -72,14 +72,13 @@ impl SessionWorld {
 
         Ok(())
     }
-    
+
     /// Set up network filtering with nftables.
+    #[allow(dead_code)]
     fn setup_network_filter(&mut self) -> Result<()> {
-        let filter = crate::netfilter::apply_network_filter(
-            &self.id,
-            self.spec.allowed_domains.clone(),
-        )?;
-        
+        let filter =
+            crate::netfilter::apply_network_filter(&self.id, self.spec.allowed_domains.clone())?;
+
         self.network_filter = Some(filter);
         Ok(())
     }
@@ -112,7 +111,7 @@ impl SessionWorld {
         let output;
         let scopes_used;
         let mut diff_opt: Option<FsDiff> = None;
-        
+
         // Check if command should be isolated with overlayfs
         if self.should_isolate_command(cmd) {
             // Execute with overlayfs isolation
@@ -138,7 +137,7 @@ impl SessionWorld {
                 .output()
                 .context("Failed to execute command")?;
         }
-        
+
         // Track network scopes if filter is active
         if let Some(ref mut filter) = self.network_filter {
             scopes_used = crate::netfilter::monitor_network_scopes(filter)?;
@@ -177,7 +176,9 @@ impl SessionWorld {
             "brew install",
         ];
 
-        isolated_patterns.iter().any(|pattern| cmd.contains(pattern))
+        isolated_patterns
+            .iter()
+            .any(|pattern| cmd.contains(pattern))
     }
 
     /// Apply policy to this world.

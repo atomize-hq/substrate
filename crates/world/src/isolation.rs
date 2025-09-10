@@ -122,7 +122,7 @@ impl LinuxIsolation {
 
     fn setup_minimal_filesystem(&self) -> Result<()> {
         use nix::mount::MntFlags;
-        use nix::mount::{mount, MsFlags, umount2};
+        use nix::mount::{mount, umount2, MsFlags};
 
         // Mount clean /proc
         std::fs::create_dir_all("/proc")?;
@@ -226,16 +226,14 @@ impl LinuxIsolation {
             {
                 use nix::sched::{unshare, CloneFlags};
                 if let Err(e) = unshare(CloneFlags::CLONE_NEWNET) {
-                    eprintln!("⚠️  Failed to unshare network namespace (continuing without netns): {}", e);
+                    eprintln!(
+                        "⚠️  Failed to unshare network namespace (continuing without netns): {}",
+                        e
+                    );
                 }
             }
         }
         Ok(())
-    }
-
-    fn setup_security(&self) -> Result<()> {
-        // Backward-compatible wrapper
-        self.setup_security_without_userns()
     }
 
     fn setup_security_without_userns(&self) -> Result<()> {

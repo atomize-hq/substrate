@@ -36,12 +36,16 @@ pub struct MockGraphService {
 
 impl MockGraphService {
     pub fn connect(_cfg: GraphConfig) -> Result<Self, GraphError> {
-        Ok(Self { spans: HashMap::new() })
+        Ok(Self {
+            spans: HashMap::new(),
+        })
     }
 }
 
 impl GraphService for MockGraphService {
-    fn ensure_schema(&mut self) -> Result<(), GraphError> { Ok(()) }
+    fn ensure_schema(&mut self) -> Result<(), GraphError> {
+        Ok(())
+    }
 
     fn ingest_span(&mut self, span: &substrate_trace::Span) -> Result<(), GraphError> {
         self.spans.insert(span.span_id.clone(), span.clone());
@@ -52,9 +56,33 @@ impl GraphService for MockGraphService {
         let mut out = Vec::new();
         if let Some(span) = self.spans.get(span_id) {
             if let Some(diff) = &span.fs_diff {
-                for p in &diff.writes { if out.len() >= limit { break; } out.push(FileChange { path: p.to_string_lossy().into_owned(), change: "write".into() }); }
-                for p in &diff.mods { if out.len() >= limit { break; } out.push(FileChange { path: p.to_string_lossy().into_owned(), change: "modify".into() }); }
-                for p in &diff.deletes { if out.len() >= limit { break; } out.push(FileChange { path: p.to_string_lossy().into_owned(), change: "delete".into() }); }
+                for p in &diff.writes {
+                    if out.len() >= limit {
+                        break;
+                    }
+                    out.push(FileChange {
+                        path: p.to_string_lossy().into_owned(),
+                        change: "write".into(),
+                    });
+                }
+                for p in &diff.mods {
+                    if out.len() >= limit {
+                        break;
+                    }
+                    out.push(FileChange {
+                        path: p.to_string_lossy().into_owned(),
+                        change: "modify".into(),
+                    });
+                }
+                for p in &diff.deletes {
+                    if out.len() >= limit {
+                        break;
+                    }
+                    out.push(FileChange {
+                        path: p.to_string_lossy().into_owned(),
+                        change: "delete".into(),
+                    });
+                }
             }
         }
         Ok(out)
@@ -70,7 +98,8 @@ pub fn connect_mock(cfg: GraphConfig) -> Result<MockGraphService, GraphError> {
 }
 
 pub fn default_graph_path() -> Result<std::path::PathBuf> {
-    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?;
+    let home =
+        dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?;
     Ok(home.join(".substrate").join("graph"))
 }
 

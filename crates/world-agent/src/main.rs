@@ -17,9 +17,7 @@ use service::WorldAgentService;
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize tracing
-    fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
+    fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     info!("Starting Substrate World Agent");
 

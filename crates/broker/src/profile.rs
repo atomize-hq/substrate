@@ -1,6 +1,8 @@
-use anyhow::{Result, Context};
-use std::path::{Path, PathBuf};
+#[cfg(any(test, feature = "policy-watcher"))]
+use anyhow::Context;
+use anyhow::Result;
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use tracing::{debug, info};
 
 const PROFILE_FILENAME: &str = ".substrate-profile";
@@ -17,30 +19,32 @@ impl ProfileDetector {
             cache: HashMap::new(),
         }
     }
-    
+
     pub fn find_profile(&mut self, start_dir: &Path) -> Result<Option<PathBuf>> {
-        let canonical_start = start_dir.canonicalize()
+        let canonical_start = start_dir
+            .canonicalize()
             .unwrap_or_else(|_| start_dir.to_path_buf());
-        
+
         // Check cache first
         if let Some(cached) = self.cache.get(&canonical_start) {
             debug!("Using cached profile result for {:?}", canonical_start);
             return Ok(cached.clone());
         }
-        
+
         // Search up the directory tree
         let mut current = canonical_start.clone();
         let mut depth = 0;
-        
+
         loop {
             // Check for .substrate-profile file
             let profile_file = current.join(PROFILE_FILENAME);
             if profile_file.exists() && profile_file.is_file() {
                 info!("Found profile at {:?}", profile_file);
-                self.cache.insert(canonical_start.clone(), Some(profile_file.clone()));
+                self.cache
+                    .insert(canonical_start.clone(), Some(profile_file.clone()));
                 return Ok(Some(profile_file));
             }
-            
+
             // Check for .substrate-profile.d directory
             let profile_dir = current.join(PROFILE_DIR_FILENAME);
             if profile_dir.exists() && profile_dir.is_dir() {
@@ -49,25 +53,27 @@ impl ProfileDetector {
                     let policy_file = profile_dir.join(entry);
                     if policy_file.exists() && policy_file.is_file() {
                         info!("Found profile at {:?}", policy_file);
-                        self.cache.insert(canonical_start.clone(), Some(policy_file.clone()));
+                        self.cache
+                            .insert(canonical_start.clone(), Some(policy_file.clone()));
                         return Ok(Some(policy_file));
                     }
                 }
             }
-            
+
             // Move up one directory
             if let Some(parent) = current.parent() {
                 current = parent.to_path_buf();
                 depth += 1;
-                
+
                 if depth > MAX_SEARCH_DEPTH {
                     debug!("Reached max search depth, no profile found");
                     break;
                 }
-                
+
                 // Stop at home directory or root
-                if current == dirs::home_dir().unwrap_or_else(|| PathBuf::from("/")) ||
-                   current == Path::new("/") {
+                if current == dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"))
+                    || current == Path::new("/")
+                {
                     debug!("Reached home or root directory, no profile found");
                     break;
                 }
@@ -75,51 +81,60 @@ impl ProfileDetector {
                 break;
             }
         }
-        
+
         // Cache the negative result
         self.cache.insert(canonical_start, None);
         Ok(None)
     }
-    
+
     pub fn clear_cache(&mut self) {
         self.cache.clear();
     }
 }
 
+impl Default for ProfileDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Load all profiles from a directory and merge them
+#[cfg(any(test, feature = "policy-watcher"))]
+#[allow(dead_code)]
 pub fn load_profile_directory(dir: &Path) -> Result<Vec<crate::Policy>> {
     let mut policies = Vec::new();
-    
+
     if !dir.exists() || !dir.is_dir() {
         return Ok(policies);
     }
-    
+
     // Read all .yaml and .yml files in the directory
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
-        
-        if path.extension().and_then(|s| s.to_str()) == Some("yaml") ||
-           path.extension().and_then(|s| s.to_str()) == Some("yml") {
-            
+
+        if path.extension().and_then(|s| s.to_str()) == Some("yaml")
+            || path.extension().and_then(|s| s.to_str()) == Some("yml")
+        {
             debug!("Loading profile from {:?}", path);
             let content = std::fs::read_to_string(&path)
                 .with_context(|| format!("Failed to read profile from {:?}", path))?;
-            
+
             let policy: crate::Policy = serde_yaml::from_str(&content)
                 .with_context(|| format!("Failed to parse profile from {:?}", path))?;
-            
+
             policies.push(policy);
         }
     }
-    
+
     // Sort by filename for consistent ordering
     policies.sort_by_key(|p| p.id.clone());
-    
+
     Ok(policies)
 }
 
 /// Create a sample profile file
+#[cfg(any(test, feature = "policy-watcher"))]
 pub fn create_sample_profile(path: &Path) -> Result<()> {
     let sample = r#"# Substrate Security Profile
 # Place this file in your project root as .substrate-profile
@@ -183,7 +198,7 @@ metadata:
 
     std::fs::write(path, sample)
         .with_context(|| format!("Failed to write sample profile to {:?}", path))?;
-    
+
     info!("Created sample profile at {:?}", path);
     Ok(())
 }
@@ -199,13 +214,13 @@ mod tests {
         let project_dir = temp.path().join("project");
         let sub_dir = project_dir.join("src").join("lib");
         std::fs::create_dir_all(&sub_dir).unwrap();
-        
+
         // Create a profile file in project root
         let profile_path = project_dir.join(PROFILE_FILENAME);
         std::fs::write(&profile_path, "test").unwrap();
-        
+
         let mut detector = ProfileDetector::new();
-        
+
         // Should find profile from subdirectory
         let result = detector.find_profile(&sub_dir).unwrap();
         assert!(result.is_some());
@@ -213,7 +228,7 @@ mod tests {
         let found = result.unwrap().canonicalize().unwrap();
         let expected = profile_path.canonicalize().unwrap();
         assert_eq!(found, expected);
-        
+
         // Should use cache on second call
         let result2 = detector.find_profile(&sub_dir).unwrap();
         assert!(result2.is_some());
@@ -223,7 +238,7 @@ mod tests {
     fn test_no_profile() {
         let temp = tempdir().unwrap();
         let mut detector = ProfileDetector::new();
-        
+
         let result = detector.find_profile(temp.path()).unwrap();
         assert_eq!(result, None);
     }
@@ -233,10 +248,10 @@ mod tests {
         let temp = tempdir().unwrap();
         let profile_dir = temp.path().join(PROFILE_DIR_FILENAME);
         std::fs::create_dir(&profile_dir).unwrap();
-        
+
         let policy_file = profile_dir.join("default.yaml");
         std::fs::write(&policy_file, "id: test\nname: Test").unwrap();
-        
+
         let mut detector = ProfileDetector::new();
         let result = detector.find_profile(temp.path()).unwrap();
         assert!(result.is_some());
@@ -250,10 +265,10 @@ mod tests {
     fn test_sample_profile_creation() {
         let temp = tempdir().unwrap();
         let profile_path = temp.path().join(".substrate-profile");
-        
+
         create_sample_profile(&profile_path).unwrap();
         assert!(profile_path.exists());
-        
+
         // Verify it can be parsed
         let content = std::fs::read_to_string(&profile_path).unwrap();
         let policy: crate::Policy = serde_yaml::from_str(&content).unwrap();

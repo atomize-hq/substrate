@@ -33,7 +33,7 @@ unsafe fn sockaddr_to_string(addr: *const libc::sockaddr, len: libc::socklen_t) 
     if addr.is_null() || len == 0 {
         return "null".to_string();
     }
-    
+
     match (*addr).sa_family as i32 {
         libc::AF_INET if len >= mem::size_of::<libc::sockaddr_in>() as u32 => {
             let addr_in = addr as *const libc::sockaddr_in;
@@ -47,16 +47,18 @@ unsafe fn sockaddr_to_string(addr: *const libc::sockaddr, len: libc::socklen_t) 
             let port = u16::from_be((*addr_in6).sin6_port);
             format!("[{}]:{}", ip, port)
         }
-        libc::AF_UNIX => {
-            "unix_socket".to_string()
-        }
+        libc::AF_UNIX => "unix_socket".to_string(),
         family => {
             format!("family_{}", family)
         }
     }
 }
 
-// Intercept connect()
+/// Intercept libc `connect` to log outbound connections.
+///
+/// # Safety
+/// - `addr` must be a valid pointer to a `sockaddr` of length `addrlen`.
+/// - This function forwards to the original libc implementation and thus inherits its safety requirements.
 #[no_mangle]
 pub unsafe extern "C" fn connect(
     sockfd: c_int,
@@ -65,15 +67,18 @@ pub unsafe extern "C" fn connect(
 ) -> c_int {
     let start = Instant::now();
     let addr_str = sockaddr_to_string(addr, addrlen);
-    
+
     // Skip logging for local/unix sockets to reduce noise
-    if addr_str == "unix_socket" || addr_str.starts_with("127.0.0.1:") || addr_str.starts_with("[::1]:") {
+    if addr_str == "unix_socket"
+        || addr_str.starts_with("127.0.0.1:")
+        || addr_str.starts_with("[::1]:")
+    {
         if let Some(original_fn) = get_original::<ConnectFn>("connect") {
             return original_fn(sockfd, addr, addrlen);
         }
         return -1;
     }
-    
+
     // Log the attempt
     log_syscall(
         "connect",
@@ -82,14 +87,14 @@ pub unsafe extern "C" fn connect(
         None,
         start.elapsed().as_micros() as u64,
     );
-    
+
     // Call original connect
     let result = if let Some(original_fn) = get_original::<ConnectFn>("connect") {
         original_fn(sockfd, addr, addrlen)
     } else {
         -1
     };
-    
+
     let elapsed = start.elapsed().as_micros() as u64;
     if result == 0 {
         log_syscall(
@@ -109,11 +114,15 @@ pub unsafe extern "C" fn connect(
             elapsed,
         );
     }
-    
+
     result
 }
 
-// Intercept bind()
+/// Intercept libc `bind` to log socket bindings.
+///
+/// # Safety
+/// - `addr` must be a valid pointer to a `sockaddr` of length `addrlen`.
+/// - This function forwards to the original libc implementation and thus inherits its safety requirements.
 #[no_mangle]
 pub unsafe extern "C" fn bind(
     sockfd: c_int,
@@ -122,7 +131,7 @@ pub unsafe extern "C" fn bind(
 ) -> c_int {
     let start = Instant::now();
     let addr_str = sockaddr_to_string(addr, addrlen);
-    
+
     // Skip logging for unix sockets
     if addr_str == "unix_socket" {
         if let Some(original_fn) = get_original::<BindFn>("bind") {
@@ -130,7 +139,7 @@ pub unsafe extern "C" fn bind(
         }
         return -1;
     }
-    
+
     // Log the attempt
     log_syscall(
         "bind",
@@ -139,14 +148,14 @@ pub unsafe extern "C" fn bind(
         None,
         start.elapsed().as_micros() as u64,
     );
-    
+
     // Call original bind
     let result = if let Some(original_fn) = get_original::<BindFn>("bind") {
         original_fn(sockfd, addr, addrlen)
     } else {
         -1
     };
-    
+
     let elapsed = start.elapsed().as_micros() as u64;
     if result == 0 {
         log_syscall(
@@ -166,11 +175,15 @@ pub unsafe extern "C" fn bind(
             elapsed,
         );
     }
-    
+
     result
 }
 
-// Intercept accept()
+/// Intercept libc `accept` to log inbound connections.
+///
+/// # Safety
+/// - `addr` and `addrlen` must be valid pointers if non-null.
+/// - This function forwards to the original libc implementation and thus inherits its safety requirements.
 #[no_mangle]
 pub unsafe extern "C" fn accept(
     sockfd: c_int,
@@ -178,25 +191,28 @@ pub unsafe extern "C" fn accept(
     addrlen: *mut libc::socklen_t,
 ) -> c_int {
     let start = Instant::now();
-    
+
     // Call original accept
     let result = if let Some(original_fn) = get_original::<AcceptFn>("accept") {
         original_fn(sockfd, addr, addrlen)
     } else {
         -1
     };
-    
+
     let elapsed = start.elapsed().as_micros() as u64;
-    
+
     if result >= 0 {
         let client_addr = if !addr.is_null() && !addrlen.is_null() {
             sockaddr_to_string(addr, *addrlen)
         } else {
             "unknown".to_string()
         };
-        
+
         // Skip logging for unix sockets and localhost
-        if client_addr != "unix_socket" && !client_addr.starts_with("127.0.0.1:") && !client_addr.starts_with("[::1]:") {
+        if client_addr != "unix_socket"
+            && !client_addr.starts_with("127.0.0.1:")
+            && !client_addr.starts_with("[::1]:")
+        {
             log_syscall(
                 "accept",
                 vec![format!("fd:{}", sockfd), client_addr],
@@ -215,11 +231,15 @@ pub unsafe extern "C" fn accept(
             elapsed,
         );
     }
-    
+
     result
 }
 
-// Intercept getaddrinfo() for DNS resolution tracking
+/// Intercept libc `getaddrinfo` for DNS resolution tracking.
+///
+/// # Safety
+/// - `node`, `service`, `hints`, and `res` must be valid according to libc contract.
+/// - This function forwards to the original libc implementation and thus inherits its safety requirements.
 #[no_mangle]
 pub unsafe extern "C" fn getaddrinfo(
     node: *const libc::c_char,
@@ -228,19 +248,23 @@ pub unsafe extern "C" fn getaddrinfo(
     res: *mut *mut libc::addrinfo,
 ) -> c_int {
     let start = Instant::now();
-    
+
     let node_str = if !node.is_null() {
-        std::ffi::CStr::from_ptr(node).to_string_lossy().into_owned()
+        std::ffi::CStr::from_ptr(node)
+            .to_string_lossy()
+            .into_owned()
     } else {
         "null".to_string()
     };
-    
+
     let service_str = if !service.is_null() {
-        std::ffi::CStr::from_ptr(service).to_string_lossy().into_owned()
+        std::ffi::CStr::from_ptr(service)
+            .to_string_lossy()
+            .into_owned()
     } else {
         "null".to_string()
     };
-    
+
     // Skip common local lookups
     if node_str == "localhost" || node_str == "127.0.0.1" || node_str == "::1" {
         if let Some(original_fn) = get_original::<GetaddrInfoFn>("getaddrinfo") {
@@ -248,7 +272,7 @@ pub unsafe extern "C" fn getaddrinfo(
         }
         return -1;
     }
-    
+
     // Log the DNS lookup
     log_syscall(
         "getaddrinfo",
@@ -257,16 +281,16 @@ pub unsafe extern "C" fn getaddrinfo(
         None,
         start.elapsed().as_micros() as u64,
     );
-    
+
     // Call original getaddrinfo
     let result = if let Some(original_fn) = get_original::<GetaddrInfoFn>("getaddrinfo") {
         original_fn(node, service, hints, res)
     } else {
         libc::EAI_SYSTEM
     };
-    
+
     let elapsed = start.elapsed().as_micros() as u64;
-    
+
     if result == 0 {
         // Extract resolved addresses
         let mut addresses = Vec::new();
@@ -280,7 +304,7 @@ pub unsafe extern "C" fn getaddrinfo(
                 current = (*current).ai_next;
             }
         }
-        
+
         log_syscall(
             "getaddrinfo",
             vec![node_str, service_str],
@@ -297,6 +321,6 @@ pub unsafe extern "C" fn getaddrinfo(
             elapsed,
         );
     }
-    
+
     result
 }

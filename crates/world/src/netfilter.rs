@@ -3,11 +3,13 @@
 //! This module provides network isolation and tracking capabilities using
 //! Linux nftables for policy enforcement and scope monitoring.
 
+#[cfg(target_os = "linux")]
 use anyhow::Context;
-use std::process::Command;
 use anyhow::Result;
 use std::collections::HashSet;
 use std::net::IpAddr;
+#[cfg(target_os = "linux")]
+use std::process::Command;
 
 /// Network scope tracking for command execution.
 #[derive(Debug, Clone)]
@@ -30,7 +32,6 @@ pub struct NetFilter {
     table_name: String,
     #[allow(dead_code)]
     chain_name: String,
-    #[allow(dead_code)]
     allowed_domains: Vec<String>,
     allowed_ips: HashSet<IpAddr>,
     scopes_used: Vec<NetworkScope>,
@@ -146,25 +147,27 @@ impl NetFilter {
         for ip in &self.allowed_ips {
             match ip {
                 IpAddr::V4(v4) => {
-                    let add_elem = format!(
-                        "add element inet {} allowed4 {{ {} }}",
-                        self.table_name, v4
-                    );
+                    let add_elem =
+                        format!("add element inet {} allowed4 {{ {} }}", self.table_name, v4);
                     let _ = self.run_nft(&["add", &add_elem]);
                 }
                 IpAddr::V6(v6) => {
-                    let add_elem = format!(
-                        "add element inet {} allowed6 {{ {} }}",
-                        self.table_name, v6
-                    );
+                    let add_elem =
+                        format!("add element inet {} allowed6 {{ {} }}", self.table_name, v6);
                     let _ = self.run_nft(&["add", &add_elem]);
                 }
             }
         }
 
         // Allow traffic to addresses in sets
-        let allow_v4 = format!("rule inet {} {} ip daddr @allowed4 accept", self.table_name, self.chain_name);
-        let allow_v6 = format!("rule inet {} {} ip6 daddr @allowed6 accept", self.table_name, self.chain_name);
+        let allow_v4 = format!(
+            "rule inet {} {} ip daddr @allowed4 accept",
+            self.table_name, self.chain_name
+        );
+        let allow_v6 = format!(
+            "rule inet {} {} ip6 daddr @allowed6 accept",
+            self.table_name, self.chain_name
+        );
         self.run_nft(&["add", &allow_v4])?;
         self.run_nft(&["add", &allow_v6])?;
 
@@ -174,7 +177,10 @@ impl NetFilter {
             "rule inet {} {} limit rate 10/second log prefix \"substrate-dropped-{}:\"",
             self.table_name, self.chain_name, self.world_id
         );
-        let drop_rule = format!("rule inet {} {} counter drop", self.table_name, self.chain_name);
+        let drop_rule = format!(
+            "rule inet {} {} counter drop",
+            self.table_name, self.chain_name
+        );
         self.run_nft(&["add", &log_dropped])?;
         self.run_nft(&["add", &drop_rule])?;
 
@@ -222,7 +228,13 @@ impl NetFilter {
     }
 
     /// Track a network scope usage.
-    pub fn track_scope(&mut self, target: String, port: Option<u16>, protocol: String, bytes: usize) {
+    pub fn track_scope(
+        &mut self,
+        target: String,
+        port: Option<u16>,
+        protocol: String,
+        bytes: usize,
+    ) {
         self.scopes_used.push(NetworkScope {
             target,
             port,
@@ -251,7 +263,7 @@ impl NetFilter {
         {
             // Parse kernel log for dropped packets
             self.parse_dropped_packets()?;
-            
+
             // Parse connection tracking for allowed connections
             self.parse_conntrack()?;
         }
@@ -278,14 +290,9 @@ impl NetFilter {
                     let dst_part = &line[dst_start + 4..];
                     if let Some(space_pos) = dst_part.find(' ') {
                         let dst_ip = &dst_part[..space_pos];
-                        
+
                         // Track this as a blocked scope
-                        self.track_scope(
-                            format!("blocked:{}", dst_ip),
-                            None,
-                            "tcp".to_string(),
-                            0,
-                        );
+                        self.track_scope(format!("blocked:{}", dst_ip), None, "tcp".to_string(), 0);
                     }
                 }
             }
@@ -297,23 +304,21 @@ impl NetFilter {
     #[cfg(target_os = "linux")]
     fn parse_conntrack(&mut self) -> Result<()> {
         // Parse connection tracking table for active connections
-        let output = Command::new("conntrack")
-            .args(&["-L", "-n"])
-            .output();
+        let output = Command::new("conntrack").args(&["-L", "-n"]).output();
 
         if let Ok(output) = output {
             let conntrack = String::from_utf8_lossy(&output.stdout);
-            
+
             for line in conntrack.lines() {
                 // Parse conntrack entries
                 // Format: tcp      6 431999 ESTABLISHED src=... dst=<ip> sport=... dport=<port> ...
                 if line.contains("ESTABLISHED") {
                     let parts: Vec<&str> = line.split_whitespace().collect();
-                    
+
                     let mut protocol = "tcp";
                     let mut dst_ip = None;
                     let mut dst_port = None;
-                    
+
                     for (i, part) in parts.iter().enumerate() {
                         if i == 0 {
                             protocol = part;
@@ -323,7 +328,7 @@ impl NetFilter {
                             dst_port = part[6..].parse().ok();
                         }
                     }
-                    
+
                     if let Some(ip) = dst_ip {
                         // Check if this IP is in our allowed list
                         if let Ok(addr) = ip.parse::<IpAddr>() {
@@ -341,6 +346,7 @@ impl NetFilter {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn reverse_lookup(&self, ip: &str) -> Option<String> {
         // Try to find the domain that resolved to this IP
         for domain in &self.allowed_domains {
@@ -362,18 +368,15 @@ impl Drop for NetFilter {
 }
 
 /// Apply network filtering for a world.
-pub fn apply_network_filter(
-    world_id: &str,
-    allowed_domains: Vec<String>,
-) -> Result<NetFilter> {
+pub fn apply_network_filter(world_id: &str, allowed_domains: Vec<String>) -> Result<NetFilter> {
     let mut filter = NetFilter::new(world_id, allowed_domains)?;
-    
+
     // Resolve domains to IPs
     filter.resolve_domains()?;
-    
+
     // Install filtering rules
     filter.install_rules()?;
-    
+
     Ok(filter)
 }
 
@@ -381,7 +384,7 @@ pub fn apply_network_filter(
 pub fn monitor_network_scopes(filter: &mut NetFilter) -> Result<Vec<String>> {
     // Parse network activity from various sources
     filter.parse_network_activity()?;
-    
+
     // Return the formatted scope list
     Ok(filter.get_scopes_used())
 }
@@ -392,11 +395,8 @@ mod tests {
 
     #[test]
     fn test_netfilter_creation() {
-        let filter = NetFilter::new(
-            "test_world",
-            vec!["github.com".to_string()],
-        ).unwrap();
-        
+        let filter = NetFilter::new("test_world", vec!["github.com".to_string()]).unwrap();
+
         assert_eq!(filter.world_id, "test_world");
         assert_eq!(filter.table_name, "substrate_test_world");
         assert!(!filter.is_active);
@@ -404,27 +404,21 @@ mod tests {
 
     #[test]
     fn test_domain_resolution() {
-        let mut filter = NetFilter::new(
-            "test_world",
-            vec!["localhost".to_string()],
-        ).unwrap();
-        
+        let mut filter = NetFilter::new("test_world", vec!["localhost".to_string()]).unwrap();
+
         filter.resolve_domains().unwrap();
-        
+
         // localhost should resolve to at least one IP
         assert!(!filter.allowed_ips.is_empty());
     }
 
     #[test]
     fn test_scope_tracking() {
-        let mut filter = NetFilter::new(
-            "test_world",
-            vec![],
-        ).unwrap();
-        
+        let mut filter = NetFilter::new("test_world", vec![]).unwrap();
+
         filter.track_scope("github.com".to_string(), Some(443), "tcp".to_string(), 1024);
         filter.track_scope("npmjs.org".to_string(), Some(443), "tcp".to_string(), 2048);
-        
+
         let scopes = filter.get_scopes_used();
         assert_eq!(scopes.len(), 2);
         assert!(scopes.contains(&"tcp:github.com:443".to_string()));
@@ -440,16 +434,13 @@ mod tests {
             return;
         }
 
-        let mut filter = NetFilter::new(
-            "test_nft",
-            vec!["github.com".to_string()],
-        ).unwrap();
-        
+        let mut filter = NetFilter::new("test_nft", vec!["github.com".to_string()]).unwrap();
+
         // Resolve and install rules
         filter.resolve_domains().unwrap();
         filter.install_rules().unwrap();
         assert!(filter.is_active);
-        
+
         // Cleanup
         filter.remove_rules().unwrap();
         assert!(!filter.is_active);

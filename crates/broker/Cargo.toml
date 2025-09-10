@@ -30,3 +30,4 @@ tokio = { version = "1.38", features = ["rt", "macros", "test-util"] }
 [features]
 default = []
 hot-reload = ["inotify"]
+policy-watcher = []

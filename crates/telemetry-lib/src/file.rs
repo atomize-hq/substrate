@@ -2,7 +2,7 @@ use std::ffi::CString;
 use std::os::raw::{c_char, c_int};
 use std::time::Instant;
 
-use crate::{log_syscall, c_str_to_string};
+use crate::{c_str_to_string, log_syscall};
 
 // Type definitions for original functions
 type OpenFn = unsafe extern "C" fn(*const c_char, c_int, libc::mode_t) -> c_int;
@@ -27,7 +27,7 @@ unsafe fn get_original<T>(name: &str) -> Option<T> {
 // Helper to convert flags to readable string
 fn flags_to_string(flags: c_int) -> String {
     let mut parts = Vec::new();
-    
+
     // Check access mode (O_RDONLY = 0, O_WRONLY = 1, O_RDWR = 2)
     let access_mode = flags & libc::O_ACCMODE;
     match access_mode {
@@ -45,7 +45,7 @@ fn flags_to_string(flags: c_int) -> String {
     if flags & libc::O_APPEND == libc::O_APPEND {
         parts.push("O_APPEND");
     }
-    
+
     if parts.is_empty() {
         format!("0x{:x}", flags)
     } else {
@@ -53,19 +53,24 @@ fn flags_to_string(flags: c_int) -> String {
     }
 }
 
-// Intercept open()
+/// Intercept libc `open` to log filesystem access and skip tracing our own files.
+///
+/// # Safety
+/// - `path` must be a valid, non-null C string pointer.
+/// - This function forwards to the original libc implementation and thus inherits its safety requirements.
 #[no_mangle]
 pub unsafe extern "C" fn open(path: *const c_char, flags: c_int, mode: c_int) -> c_int {
     let start = Instant::now();
     let path_str = c_str_to_string(path);
     let flags_str = flags_to_string(flags);
-    
+
     // Check if we should skip logging for certain paths
     // Skip our own trace file and system files
-    if path_str.contains(".substrate/trace.jsonl") || 
-       path_str.starts_with("/proc/") ||
-       path_str.starts_with("/sys/") ||
-       path_str.starts_with("/dev/") {
+    if path_str.contains(".substrate/trace.jsonl")
+        || path_str.starts_with("/proc/")
+        || path_str.starts_with("/sys/")
+        || path_str.starts_with("/dev/")
+    {
         // Call original without logging
         let ptr = unsafe {
             let c_name = CString::new("open").unwrap();
@@ -82,7 +87,7 @@ pub unsafe extern "C" fn open(path: *const c_char, flags: c_int, mode: c_int) ->
         }
         return -1;
     }
-    
+
     // Log the attempt
     log_syscall(
         "open",
@@ -91,7 +96,7 @@ pub unsafe extern "C" fn open(path: *const c_char, flags: c_int, mode: c_int) ->
         None,
         start.elapsed().as_micros() as u64,
     );
-    
+
     // Call original open
     let ptr = unsafe {
         let c_name = CString::new("open").unwrap();
@@ -108,7 +113,7 @@ pub unsafe extern "C" fn open(path: *const c_char, flags: c_int, mode: c_int) ->
     } else {
         -1
     };
-    
+
     let elapsed = start.elapsed().as_micros() as u64;
     if result >= 0 {
         log_syscall(
@@ -128,13 +133,22 @@ pub unsafe extern "C" fn open(path: *const c_char, flags: c_int, mode: c_int) ->
             elapsed,
         );
     }
-    
+
     result
 }
 
-// Intercept openat()
+/// Intercept libc `openat` to log filesystem access and skip tracing our own files.
+///
+/// # Safety
+/// - `path` must be a valid, non-null C string pointer.
+/// - This function forwards to the original libc implementation and thus inherits its safety requirements.
 #[no_mangle]
-pub unsafe extern "C" fn openat(dirfd: c_int, path: *const c_char, flags: c_int, mode: c_int) -> c_int {
+pub unsafe extern "C" fn openat(
+    dirfd: c_int,
+    path: *const c_char,
+    flags: c_int,
+    mode: c_int,
+) -> c_int {
     let start = Instant::now();
     let path_str = c_str_to_string(path);
     let flags_str = flags_to_string(flags);
@@ -143,12 +157,13 @@ pub unsafe extern "C" fn openat(dirfd: c_int, path: *const c_char, flags: c_int,
     } else {
         format!("{}", dirfd)
     };
-    
+
     // Skip system paths
-    if path_str.contains(".substrate/trace.jsonl") || 
-       path_str.starts_with("/proc/") ||
-       path_str.starts_with("/sys/") ||
-       path_str.starts_with("/dev/") {
+    if path_str.contains(".substrate/trace.jsonl")
+        || path_str.starts_with("/proc/")
+        || path_str.starts_with("/sys/")
+        || path_str.starts_with("/dev/")
+    {
         let ptr = unsafe {
             let c_name = CString::new("openat").unwrap();
             libc::dlsym(libc::RTLD_NEXT, c_name.as_ptr())
@@ -164,7 +179,7 @@ pub unsafe extern "C" fn openat(dirfd: c_int, path: *const c_char, flags: c_int,
         }
         return -1;
     }
-    
+
     // Log the attempt
     log_syscall(
         "openat",
@@ -173,7 +188,7 @@ pub unsafe extern "C" fn openat(dirfd: c_int, path: *const c_char, flags: c_int,
         None,
         start.elapsed().as_micros() as u64,
     );
-    
+
     // Call original openat
     let ptr = unsafe {
         let c_name = CString::new("openat").unwrap();
@@ -190,7 +205,7 @@ pub unsafe extern "C" fn openat(dirfd: c_int, path: *const c_char, flags: c_int,
     } else {
         -1
     };
-    
+
     let elapsed = start.elapsed().as_micros() as u64;
     if result >= 0 {
         log_syscall(
@@ -210,16 +225,20 @@ pub unsafe extern "C" fn openat(dirfd: c_int, path: *const c_char, flags: c_int,
             elapsed,
         );
     }
-    
+
     result
 }
 
-// Intercept creat()
+/// Intercept libc `creat` to log file creation.
+///
+/// # Safety
+/// - `path` must be a valid, non-null C string pointer.
+/// - This function forwards to the original libc implementation and thus inherits its safety requirements.
 #[no_mangle]
 pub unsafe extern "C" fn creat(path: *const c_char, mode: libc::mode_t) -> c_int {
     let start = Instant::now();
     let path_str = c_str_to_string(path);
-    
+
     // Skip system paths
     if path_str.contains(".substrate/") {
         if let Some(original_fn) = get_original::<CreatFn>("creat") {
@@ -227,7 +246,7 @@ pub unsafe extern "C" fn creat(path: *const c_char, mode: libc::mode_t) -> c_int
         }
         return -1;
     }
-    
+
     // Log the attempt
     log_syscall(
         "creat",
@@ -236,14 +255,14 @@ pub unsafe extern "C" fn creat(path: *const c_char, mode: libc::mode_t) -> c_int
         None,
         start.elapsed().as_micros() as u64,
     );
-    
+
     // Call original creat
     let result = if let Some(original_fn) = get_original::<CreatFn>("creat") {
         original_fn(path, mode)
     } else {
         -1
     };
-    
+
     let elapsed = start.elapsed().as_micros() as u64;
     if result >= 0 {
         log_syscall(
@@ -263,16 +282,20 @@ pub unsafe extern "C" fn creat(path: *const c_char, mode: libc::mode_t) -> c_int
             elapsed,
         );
     }
-    
+
     result
 }
 
-// Intercept unlink()
+/// Intercept libc `unlink` to log file deletions.
+///
+/// # Safety
+/// - `path` must be a valid, non-null C string pointer.
+/// - This function forwards to the original libc implementation and thus inherits its safety requirements.
 #[no_mangle]
 pub unsafe extern "C" fn unlink(path: *const c_char) -> c_int {
     let start = Instant::now();
     let path_str = c_str_to_string(path);
-    
+
     // Log the attempt
     log_syscall(
         "unlink",
@@ -281,14 +304,14 @@ pub unsafe extern "C" fn unlink(path: *const c_char) -> c_int {
         None,
         start.elapsed().as_micros() as u64,
     );
-    
+
     // Call original unlink
     let result = if let Some(original_fn) = get_original::<UnlinkFn>("unlink") {
         original_fn(path)
     } else {
         -1
     };
-    
+
     let elapsed = start.elapsed().as_micros() as u64;
     if result == 0 {
         log_syscall(
@@ -308,17 +331,21 @@ pub unsafe extern "C" fn unlink(path: *const c_char) -> c_int {
             elapsed,
         );
     }
-    
+
     result
 }
 
-// Intercept rename()
+/// Intercept libc `rename` to log file moves/renames.
+///
+/// # Safety
+/// - `oldpath` and `newpath` must be valid, non-null C string pointers.
+/// - This function forwards to the original libc implementation and thus inherits its safety requirements.
 #[no_mangle]
 pub unsafe extern "C" fn rename(oldpath: *const c_char, newpath: *const c_char) -> c_int {
     let start = Instant::now();
     let old_str = c_str_to_string(oldpath);
     let new_str = c_str_to_string(newpath);
-    
+
     // Log the attempt
     log_syscall(
         "rename",
@@ -327,14 +354,14 @@ pub unsafe extern "C" fn rename(oldpath: *const c_char, newpath: *const c_char) 
         None,
         start.elapsed().as_micros() as u64,
     );
-    
+
     // Call original rename
     let result = if let Some(original_fn) = get_original::<RenameFn>("rename") {
         original_fn(oldpath, newpath)
     } else {
         -1
     };
-    
+
     let elapsed = start.elapsed().as_micros() as u64;
     if result == 0 {
         log_syscall(
@@ -354,6 +381,7 @@ pub unsafe extern "C" fn rename(oldpath: *const c_char, newpath: *const c_char) 
             elapsed,
         );
     }
-    
+
     result
 }
+// duplicate openat removed; doc comments are above the original implementation

@@ -73,6 +73,10 @@ async fn handle_get_trace<S: AgentService>(
     State(state): State<AppState<S>>,
     Path(span_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiErrorResponse> {
-    let trace = state.svc.get_trace(span_id).await.map_err(ApiErrorResponse)?;
+    let trace = state
+        .svc
+        .get_trace(span_id)
+        .await
+        .map_err(ApiErrorResponse)?;
     Ok(Json(trace))
 }

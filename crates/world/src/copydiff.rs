@@ -68,19 +68,27 @@ pub fn execute_with_copydiff(
 
     // Execute under work at the mapped cwd
     let mut rel = if cwd.starts_with(project_dir) {
-        cwd.strip_prefix(project_dir).unwrap_or_else(|_| Path::new(".")).to_path_buf()
+        cwd.strip_prefix(project_dir)
+            .unwrap_or_else(|_| Path::new("."))
+            .to_path_buf()
     } else {
         PathBuf::from(".")
     };
-    if rel.as_os_str().is_empty() { rel = PathBuf::from("."); }
+    if rel.as_os_str().is_empty() {
+        rel = PathBuf::from(".");
+    }
     let target_dir = work.join(&rel);
-    let mut command = if netns.is_some() { Command::new("ip") } else { Command::new("sh") };
+    let mut command = if netns.is_some() {
+        Command::new("ip")
+    } else {
+        Command::new("sh")
+    };
     if let Some(ns) = netns {
-        command.args(["netns","exec", ns, "sh", "-lc", cmd]);
+        command.args(["netns", "exec", ns, "sh", "-lc", cmd]);
     } else {
         command.args(["-lc", cmd]);
     }
-    let mut child = command
+    let child = command
         .current_dir(&target_dir)
         .envs(env)
         .stdin(Stdio::null())
@@ -119,19 +127,28 @@ fn copy_tree(from: &Path, to: &Path) -> Result<()> {
             for entry in WalkDir::new(from) {
                 let entry = entry?;
                 let rel = entry.path().strip_prefix(from).unwrap();
-                if rel.as_os_str().is_empty() { continue; }
+                if rel.as_os_str().is_empty() {
+                    continue;
+                }
                 let dest = to.join(rel);
                 if entry.file_type().is_dir() {
                     fs::create_dir_all(&dest)?;
                 } else if entry.file_type().is_file() {
-                    if let Some(parent) = dest.parent() { fs::create_dir_all(parent)?; }
-                    fs::copy(entry.path(), &dest).with_context(|| format!("copy {} -> {}", entry.path().display(), dest.display()))?;
+                    if let Some(parent) = dest.parent() {
+                        fs::create_dir_all(parent)?;
+                    }
+                    fs::copy(entry.path(), &dest).with_context(|| {
+                        format!("copy {} -> {}", entry.path().display(), dest.display())
+                    })?;
                 } else if entry.file_type().is_symlink() {
                     // Preserve symlink
                     if let Ok(target) = fs::read_link(entry.path()) {
-                        if let Some(parent) = dest.parent() { fs::create_dir_all(parent)?; }
+                        if let Some(parent) = dest.parent() {
+                            fs::create_dir_all(parent)?;
+                        }
                         #[cfg(unix)]
-                        std::os::unix::fs::symlink(target, &dest).with_context(|| format!("symlink {}", dest.display()))?;
+                        std::os::unix::fs::symlink(target, &dest)
+                            .with_context(|| format!("symlink {}", dest.display()))?;
                     }
                 }
             }
@@ -148,13 +165,17 @@ fn compute_diff(base: &Path, work: &Path) -> Result<FsDiff> {
     for entry in WalkDir::new(base) {
         let entry = entry?;
         let rel = entry.path().strip_prefix(base).unwrap().to_path_buf();
-        if rel.as_os_str().is_empty() { continue; }
+        if rel.as_os_str().is_empty() {
+            continue;
+        }
         base_map.insert(rel, meta_of(entry.path()));
     }
     for entry in WalkDir::new(work) {
         let entry = entry?;
         let rel = entry.path().strip_prefix(work).unwrap().to_path_buf();
-        if rel.as_os_str().is_empty() { continue; }
+        if rel.as_os_str().is_empty() {
+            continue;
+        }
         work_map.insert(rel, meta_of(entry.path()));
     }
 
@@ -163,19 +184,28 @@ fn compute_diff(base: &Path, work: &Path) -> Result<FsDiff> {
 
     // Writes (only in work)
     for rel in work_keys.difference(&base_keys) {
-        if diff.total_changes() >= MAX_ENTRIES { diff.truncated = true; break; }
+        if diff.total_changes() >= MAX_ENTRIES {
+            diff.truncated = true;
+            break;
+        }
         diff.writes.push(rel.clone());
     }
 
     // Deletes (only in base)
     for rel in base_keys.difference(&work_keys) {
-        if diff.total_changes() >= MAX_ENTRIES { diff.truncated = true; break; }
+        if diff.total_changes() >= MAX_ENTRIES {
+            diff.truncated = true;
+            break;
+        }
         diff.deletes.push(rel.clone());
     }
 
     // Mods or type-changes
     for rel in base_keys.intersection(&work_keys) {
-        if diff.total_changes() >= MAX_ENTRIES { diff.truncated = true; break; }
+        if diff.total_changes() >= MAX_ENTRIES {
+            diff.truncated = true;
+            break;
+        }
         let b = base_map.get(rel).unwrap();
         let w = work_map.get(rel).unwrap();
         match (&b.kind[..], &w.kind[..]) {
@@ -205,12 +235,14 @@ fn compute_diff(base: &Path, work: &Path) -> Result<FsDiff> {
     if diff.truncated {
         diff.summary = Some(format!(
             "copy-diff: compared {}→{} entries (truncated)",
-            base_map.len(), work_map.len()
+            base_map.len(),
+            work_map.len()
         ));
     } else {
         diff.summary = Some(format!(
             "copy-diff: compared {}→{} entries",
-            base_map.len(), work_map.len()
+            base_map.len(),
+            work_map.len()
         ));
     }
 
@@ -220,7 +252,6 @@ fn compute_diff(base: &Path, work: &Path) -> Result<FsDiff> {
 struct Meta {
     path: PathBuf,
     kind: String, // f|d|l|?
-    size: u64,
     mode: u32,
     uid: u32,
     gid: u32,
@@ -232,7 +263,6 @@ struct Meta {
 fn meta_of(path: &Path) -> Meta {
     let md = fs::symlink_metadata(path).ok();
     let mut kind = "?".to_string();
-    let mut size = 0u64;
     let mut mode = 0u32;
     let mut uid = 0u32;
     let mut gid = 0u32;
@@ -242,10 +272,13 @@ fn meta_of(path: &Path) -> Meta {
 
     if let Some(m) = md.as_ref() {
         let ft = m.file_type();
-        if ft.is_dir() { kind = "d".into(); }
-        else if ft.is_file() { kind = "f".into(); }
-        else if ft.is_symlink() { kind = "l".into(); }
-        size = m.len();
+        if ft.is_dir() {
+            kind = "d".into();
+        } else if ft.is_file() {
+            kind = "f".into();
+        } else if ft.is_symlink() {
+            kind = "l".into();
+        }
         #[cfg(unix)]
         {
             use std::os::unix::fs::MetadataExt;
@@ -260,12 +293,25 @@ fn meta_of(path: &Path) -> Meta {
         }
     }
 
-    Meta { path: path.to_path_buf(), kind, size, mode, uid, gid, mtime_sec, mtime_nsec, symlink_target }
+    Meta {
+        path: path.to_path_buf(),
+        kind,
+        mode,
+        uid,
+        gid,
+        mtime_sec,
+        mtime_nsec,
+        symlink_target,
+    }
 }
 
 fn meta_differs(a: &Meta, b: &Meta) -> bool {
-    if a.mode != b.mode || a.uid != b.uid || a.gid != b.gid { return true; }
-    if a.mtime_sec != b.mtime_sec || a.mtime_nsec != b.mtime_nsec { return true; }
+    if a.mode != b.mode || a.uid != b.uid || a.gid != b.gid {
+        return true;
+    }
+    if a.mtime_sec != b.mtime_sec || a.mtime_nsec != b.mtime_nsec {
+        return true;
+    }
     false
 }
 
@@ -273,16 +319,26 @@ fn files_differ(a: &Path, b: &Path) -> bool {
     let ma = fs::metadata(a).ok();
     let mb = fs::metadata(b).ok();
     if let (Some(ma), Some(mb)) = (ma, mb) {
-        if ma.len() != mb.len() { return true; }
+        if ma.len() != mb.len() {
+            return true;
+        }
     }
     // Compare first N bytes
-    let mut fa = match fs::File::open(a) { Ok(f) => f, Err(_) => return true };
-    let mut fb = match fs::File::open(b) { Ok(f) => f, Err(_) => return true };
+    let mut fa = match fs::File::open(a) {
+        Ok(f) => f,
+        Err(_) => return true,
+    };
+    let mut fb = match fs::File::open(b) {
+        Ok(f) => f,
+        Err(_) => return true,
+    };
     let mut ba = vec![0u8; MAX_BYTES_SAMPLE];
     let mut bb = vec![0u8; MAX_BYTES_SAMPLE];
     let ra = fa.read(&mut ba).unwrap_or(0);
     let rb = fb.read(&mut bb).unwrap_or(0);
-    if ra != rb { return true; }
+    if ra != rb {
+        return true;
+    }
     ba[..ra] != bb[..rb]
 }
 
@@ -329,7 +385,13 @@ mod tests {
         .unwrap();
 
         assert!(diff.writes.iter().any(|p| p.to_string_lossy() == "demo"));
-        assert!(diff.writes.iter().any(|p| p.to_string_lossy() == "demo/file.txt"));
-        assert!(diff.deletes.iter().any(|p| p.to_string_lossy() == "old.txt"));
+        assert!(diff
+            .writes
+            .iter()
+            .any(|p| p.to_string_lossy() == "demo/file.txt"));
+        assert!(diff
+            .deletes
+            .iter()
+            .any(|p| p.to_string_lossy() == "old.txt"));
     }
 }

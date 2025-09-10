@@ -1,3 +1,4 @@
+#![cfg(test)]
 //! Network isolation using nftables and network namespaces.
 
 use anyhow::Result;
@@ -42,6 +43,7 @@ impl NetworkIsolation {
     }
 
     #[cfg(target_os = "linux")]
+    #[allow(dead_code)]
     fn setup_nftables(&self, ns_name: &str) -> Result<()> {
         use std::process::Command;
 
@@ -66,6 +68,7 @@ impl NetworkIsolation {
     }
 
     #[cfg(not(target_os = "linux"))]
+    #[allow(dead_code)]
     fn setup_nftables(&self, _ns_name: &str) -> Result<()> {
         Ok(())
     }

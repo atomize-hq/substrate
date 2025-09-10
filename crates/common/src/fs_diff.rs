@@ -11,25 +11,34 @@ use std::path::PathBuf;
 pub struct FsDiff {
     /// Files that were written/created.
     /// Serialized as strings for JSON compatibility.
-    #[serde(serialize_with = "serialize_paths", deserialize_with = "deserialize_paths")]
+    #[serde(
+        serialize_with = "serialize_paths",
+        deserialize_with = "deserialize_paths"
+    )]
     pub writes: Vec<PathBuf>,
-    
+
     /// Files that were modified.
-    #[serde(serialize_with = "serialize_paths", deserialize_with = "deserialize_paths")]
+    #[serde(
+        serialize_with = "serialize_paths",
+        deserialize_with = "deserialize_paths"
+    )]
     pub mods: Vec<PathBuf>,
-    
+
     /// Files that were deleted.
-    #[serde(serialize_with = "serialize_paths", deserialize_with = "deserialize_paths")]
+    #[serde(
+        serialize_with = "serialize_paths",
+        deserialize_with = "deserialize_paths"
+    )]
     pub deletes: Vec<PathBuf>,
-    
+
     /// Whether the diff was truncated due to size limits.
     #[serde(default, skip_serializing_if = "is_false")]
     pub truncated: bool,
-    
+
     /// Hash of the directory tree when truncated.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tree_hash: Option<String>,
-    
+
     /// Human-readable summary of changes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
@@ -40,12 +49,12 @@ impl FsDiff {
     pub fn is_empty(&self) -> bool {
         self.writes.is_empty() && self.mods.is_empty() && self.deletes.is_empty()
     }
-    
+
     /// Get total number of changes.
     pub fn total_changes(&self) -> usize {
         self.writes.len() + self.mods.len() + self.deletes.len()
     }
-    
+
     /// Create a simple diff for testing.
     #[cfg(test)]
     pub fn simple(writes: Vec<&str>, mods: Vec<&str>, deletes: Vec<&str>) -> Self {
@@ -84,14 +93,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_fs_diff_empty() {
         let diff = FsDiff::default();
         assert!(diff.is_empty());
         assert_eq!(diff.total_changes(), 0);
     }
-    
+
     #[test]
     fn test_fs_diff_with_changes() {
         let diff = FsDiff::simple(
@@ -102,7 +111,7 @@ mod tests {
         assert!(!diff.is_empty());
         assert_eq!(diff.total_changes(), 3);
     }
-    
+
     #[test]
     fn test_fs_diff_serialization() {
         let diff = FsDiff {
@@ -113,11 +122,11 @@ mod tests {
             tree_hash: None,
             summary: None,
         };
-        
+
         let json = serde_json::to_string(&diff).unwrap();
         assert!(json.contains("\"/tmp/test.txt\""));
         assert!(!json.contains("truncated")); // Should be skipped when false
-        
+
         let deserialized: FsDiff = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.writes.len(), 1);
         assert_eq!(deserialized.writes[0], PathBuf::from("/tmp/test.txt"));

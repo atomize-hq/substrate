@@ -46,13 +46,17 @@ impl CgroupManager {
         // Create substrate namespace and world cgroup
         if let Err(e) = std::fs::create_dir_all(&self.base_dir) {
             // Surface permission errors so caller can log WARN explicitly
-            if e.kind() == std::io::ErrorKind::PermissionDenied || e.kind() == std::io::ErrorKind::ReadOnlyFilesystem {
+            if e.kind() == std::io::ErrorKind::PermissionDenied
+                || e.kind() == std::io::ErrorKind::ReadOnlyFilesystem
+            {
                 return Err(anyhow::anyhow!("create {}: {}", self.base_dir.display(), e));
             }
             return Err(e).context("failed creating cgroup base dir")?;
         }
         if let Err(e) = std::fs::create_dir_all(&self.path) {
-            if e.kind() == std::io::ErrorKind::PermissionDenied || e.kind() == std::io::ErrorKind::ReadOnlyFilesystem {
+            if e.kind() == std::io::ErrorKind::PermissionDenied
+                || e.kind() == std::io::ErrorKind::ReadOnlyFilesystem
+            {
                 return Err(anyhow::anyhow!("create {}: {}", self.path.display(), e));
             }
             return Err(e).context("failed creating per-world cgroup dir")?;
@@ -65,7 +69,9 @@ impl CgroupManager {
     /// Write a PID to the world cgroup.procs. Returns Ok(true) when attached,
     /// Ok(false) when permission denied or inactive.
     pub fn attach_pid(&self, pid: u32) -> Result<bool> {
-        if !self.active { return Ok(false); }
+        if !self.active {
+            return Ok(false);
+        }
         let procs = self.path.join("cgroup.procs");
         match std::fs::write(&procs, pid.to_string()) {
             Ok(_) => Ok(true),
@@ -85,12 +91,22 @@ impl CgroupManager {
 
     /// Remove the world cgroup directory. Returns Ok(()) on best-effort cleanup.
     pub fn teardown(&mut self) -> Result<()> {
-        if !self.path.exists() { return Ok(()); }
+        if !self.path.exists() {
+            return Ok(());
+        }
         match std::fs::remove_dir(&self.path) {
-            Ok(_) => { self.active = false; Ok(()) }
+            Ok(_) => {
+                self.active = false;
+                Ok(())
+            }
             Err(e) => {
                 // Busy or not empty: leave for GC; also tolerate ENOENT
-                if matches!(e.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::Other) {
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::NotFound
+                        | std::io::ErrorKind::PermissionDenied
+                        | std::io::ErrorKind::Other
+                ) {
                     // On Some systems busy manifests as Other; ignore here.
                     return Ok(());
                 }
@@ -101,9 +117,15 @@ impl CgroupManager {
         }
     }
 
-    pub fn path(&self) -> &Path { &self.path }
-    pub fn is_active(&self) -> bool { self.active }
-    pub fn world_id(&self) -> &str { &self.world_id }
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+    pub fn is_active(&self) -> bool {
+        self.active
+    }
+    pub fn world_id(&self) -> &str {
+        &self.world_id
+    }
 }
 
 impl Drop for CgroupManager {

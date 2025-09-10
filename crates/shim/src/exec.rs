@@ -20,7 +20,7 @@ use crate::context::{
 };
 use crate::logger::{log_execution, write_log_entry};
 use crate::resolver::resolve_real_binary;
-use substrate_broker::{Decision, quick_check};
+use substrate_broker::{quick_check, Decision};
 use substrate_trace::{create_span_builder, init_trace};
 
 /// Main shim execution function
@@ -70,25 +70,25 @@ pub fn run_shim() -> Result<i32> {
     // Prepare execution context
     let args: Vec<_> = env::args_os().skip(1).collect();
     let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    
+
     // Build command string for logging and spans
     let command_str = std::iter::once(ctx.command_name.clone())
         .chain(args.iter().map(|s| s.to_string_lossy().to_string()))
         .collect::<Vec<_>>()
         .join(" ");
-    
+
     // Policy evaluation (Phase 4) and span creation
     let mut policy_decision = None;
     let mut active_span = None;
-    
+
     if env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
         // Initialize trace if needed
         let _ = init_trace(None);
-        
+
         let argv: Vec<String> = std::iter::once(ctx.command_name.clone())
             .chain(args.iter().map(|s| s.to_string_lossy().to_string()))
             .collect();
-        
+
         match quick_check(&argv, cwd.to_str().unwrap_or(".")) {
             Ok(Decision::Allow) => {
                 policy_decision = Some(substrate_trace::PolicyDecision {
@@ -96,15 +96,18 @@ pub fn run_shim() -> Result<i32> {
                     restrictions: None,
                     reason: None,
                 });
-            },
+            }
             Ok(Decision::AllowWithRestrictions(restrictions)) => {
-                eprintln!("substrate: command requires restrictions: {:?}", restrictions);
+                eprintln!(
+                    "substrate: command requires restrictions: {:?}",
+                    restrictions
+                );
                 policy_decision = Some(substrate_trace::PolicyDecision {
                     action: "allow_with_restrictions".to_string(),
                     restrictions: Some(restrictions.iter().map(|r| format!("{:?}", r)).collect()),
                     reason: None,
                 });
-            },
+            }
             Ok(Decision::Deny(reason)) => {
                 eprintln!("substrate: command denied by policy: {}", reason);
                 policy_decision = Some(substrate_trace::PolicyDecision {
@@ -112,50 +115,50 @@ pub fn run_shim() -> Result<i32> {
                     restrictions: None,
                     reason: Some(reason.clone()),
                 });
-                
+
                 // Create span for denied command
                 let mut builder = create_span_builder()
                     .with_command(&command_str)
                     .with_cwd(cwd.to_str().unwrap_or("."));
-                
+
                 if let Some(pd) = policy_decision.clone() {
                     builder = builder.with_policy_decision(pd);
                 }
-                
+
                 if let Ok(span) = builder.start() {
                     // Immediately finish with error code
                     let _ = span.finish(126, vec![], None);
                 }
-                
+
                 return Ok(126); // Cannot execute
-            },
+            }
             Err(e) => {
                 eprintln!("substrate: policy check failed: {}", e);
                 // Continue in observe mode
             }
         }
-        
+
         // Create span for allowed command
         let mut builder = create_span_builder()
             .with_command(&command_str)
             .with_cwd(cwd.to_str().unwrap_or("."));
-        
+
         if let Some(pd) = policy_decision.clone() {
             builder = builder.with_policy_decision(pd);
         }
-        
+
         // Set parent span ID in environment for child processes
         match builder.start() {
             Ok(span) => {
                 std::env::set_var("SHIM_PARENT_SPAN", span.get_span_id());
                 active_span = Some(span);
-            },
+            }
             Err(e) => {
                 eprintln!("substrate: failed to create span: {}", e);
             }
         }
     }
-    
+
     let start_time = Instant::now();
     let timestamp = SystemTime::now();
 
@@ -210,14 +213,15 @@ pub fn run_shim() -> Result<i32> {
     // Complete span if we created one
     if let Some(span) = active_span {
         let exit_code = status.code().unwrap_or(-1);
-        
+
         // Collect scopes and fs_diff from world backend if enabled
-        let (scopes_used, fs_diff) = if std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
-            collect_world_telemetry(span.get_span_id())
-        } else {
-            (vec![], None)
-        };
-        
+        let (scopes_used, fs_diff) =
+            if std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
+                collect_world_telemetry(span.get_span_id())
+            } else {
+                (vec![], None)
+            };
+
         let _ = span.finish(exit_code, scopes_used, fs_diff);
     }
 
@@ -403,7 +407,10 @@ fn execute_command(
             Ok(meta) => {
                 let mode = meta.permissions().mode();
                 if !meta.is_file() || (mode & 0o111) == 0 {
-                    anyhow::bail!("Failed to execute {}: not an executable file", binary.display());
+                    anyhow::bail!(
+                        "Failed to execute {}: not an executable file",
+                        binary.display()
+                    );
                 }
             }
             Err(_) => {
@@ -446,6 +453,7 @@ fn is_executable(path: &std::path::Path) -> bool {
 }
 
 /// Collect filesystem diff and network scopes from world backend
+#[allow(unused_variables)]
 fn collect_world_telemetry(span_id: &str) -> (Vec<String>, Option<FsDiff>) {
     // Try to get world handle from environment
     let world_id = match env::var("SUBSTRATE_WORLD_ID") {
@@ -455,16 +463,18 @@ fn collect_world_telemetry(span_id: &str) -> (Vec<String>, Option<FsDiff>) {
             return (vec![], None);
         }
     };
-    
+
     // Create world backend and collect telemetry
     #[cfg(target_os = "linux")]
     {
         use world::LinuxLocalBackend;
         use world_api::WorldBackend;
-        
+
         let backend = LinuxLocalBackend::new();
-        let handle = world_api::WorldHandle { id: world_id.clone() };
-        
+        let handle = world_api::WorldHandle {
+            id: world_id.clone(),
+        };
+
         // Try to get filesystem diff
         let fs_diff = match backend.fs_diff(&handle, span_id) {
             Ok(diff) => Some(diff),
@@ -473,14 +483,14 @@ fn collect_world_telemetry(span_id: &str) -> (Vec<String>, Option<FsDiff>) {
                 None
             }
         };
-        
+
         // For now, scopes are tracked in the session world's execute method
         // and would need to be retrieved from there
         let scopes_used = vec![];
-        
+
         (scopes_used, fs_diff)
     }
-    
+
     #[cfg(not(target_os = "linux"))]
     {
         // World backend only available on Linux for now
@@ -702,7 +712,7 @@ mod tests {
 
         // Test that we can handle various argument types
         for arg in &args {
-            assert!(!arg.to_string_lossy().is_empty() || arg.len() == 0); // Better sanity check
+            assert!(!arg.to_string_lossy().is_empty() || arg.is_empty()); // Better sanity check
         }
 
         // Test empty args collection

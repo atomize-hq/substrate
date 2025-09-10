@@ -10,14 +10,18 @@ use world_api::{WorldBackend, WorldHandle, WorldSpec};
 #[derive(Clone)]
 pub struct WorldAgentService {
     backend: Arc<dyn WorldBackend>,
+    #[allow(dead_code)]
     worlds: Arc<RwLock<HashMap<String, WorldHandle>>>,
     budgets: Arc<RwLock<HashMap<String, AgentBudgetTracker>>>,
 }
 
 pub struct AgentBudgetTracker {
+    #[allow(dead_code)]
     agent_id: String,
     execs_remaining: std::sync::atomic::AtomicU32,
+    #[allow(dead_code)]
     runtime_remaining_ms: std::sync::atomic::AtomicU64,
+    #[allow(dead_code)]
     egress_remaining: std::sync::atomic::AtomicU64,
 }
 
@@ -102,7 +106,7 @@ impl WorldAgentService {
             project_dir: req
                 .cwd
                 .clone()
-                .map(|p| std::path::PathBuf::from(p))
+                .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| std::env::current_dir().unwrap_or_default()),
         };
 
@@ -117,7 +121,7 @@ impl WorldAgentService {
             cmd: req.cmd,
             cwd: req
                 .cwd
-                .map(|p| std::path::PathBuf::from(p))
+                .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| std::env::current_dir().unwrap_or_default()),
             env: req.env.unwrap_or_default(),
             pty: req.pty,
@@ -136,8 +140,14 @@ impl WorldAgentService {
         Ok(ExecuteResponse {
             exit: result.exit,
             span_id,
-            stdout_b64: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, result.stdout),
-            stderr_b64: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, result.stderr),
+            stdout_b64: base64::Engine::encode(
+                &base64::engine::general_purpose::STANDARD,
+                result.stdout,
+            ),
+            stderr_b64: base64::Engine::encode(
+                &base64::engine::general_purpose::STANDARD,
+                result.stderr,
+            ),
             scopes_used: result.scopes_used,
         })
     }

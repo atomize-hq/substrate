@@ -5,9 +5,8 @@ use similar::{ChangeTag, TextDiff};
 use substrate_common::FsDiff;
 
 use crate::{
-    DivergenceReport, DivergenceSeverity, DivergenceType, ReplayConfig,
-    replay::ExecutionResult,
-    state::TraceSpan,
+    replay::ExecutionResult, state::TraceSpan, DivergenceReport, DivergenceSeverity,
+    DivergenceType, ReplayConfig,
 };
 
 /// Result of comparing original and replayed executions
@@ -30,7 +29,7 @@ pub fn compare_execution(
     config: &ReplayConfig,
 ) -> Result<ComparisonResult> {
     let mut warnings = Vec::new();
-    
+
     // First check exit code - this is critical
     if let Some(orig_exit) = original.exit_code {
         if orig_exit != replay.exit_code {
@@ -49,7 +48,7 @@ pub fn compare_execution(
             });
         }
     }
-    
+
     // Check stdout if captured in original
     if let Some(orig_stdout) = &original.stdout {
         let replay_stdout = String::from_utf8_lossy(&replay.stdout);
@@ -59,7 +58,7 @@ pub fn compare_execution(
             config.max_output_compare,
             DivergenceType::StdoutMismatch,
         );
-        
+
         if let Some(div) = divergence {
             if config.strict || div.severity as u8 >= DivergenceSeverity::High as u8 {
                 return Ok(ComparisonResult {
@@ -71,7 +70,7 @@ pub fn compare_execution(
             }
         }
     }
-    
+
     // Check stderr if captured in original
     if let Some(orig_stderr) = &original.stderr {
         let replay_stderr = String::from_utf8_lossy(&replay.stderr);
@@ -81,7 +80,7 @@ pub fn compare_execution(
             config.max_output_compare,
             DivergenceType::StderrMismatch,
         );
-        
+
         if let Some(div) = divergence {
             if config.strict || div.severity as u8 >= DivergenceSeverity::High as u8 {
                 return Ok(ComparisonResult {
@@ -93,7 +92,7 @@ pub fn compare_execution(
             }
         }
     }
-    
+
     // Check filesystem differences
     if let (Some(orig_diff), Some(replay_diff)) = (&original.fs_diff, &replay.fs_diff) {
         if let Some(div) = compare_fs_diff(orig_diff, replay_diff) {
@@ -107,7 +106,7 @@ pub fn compare_execution(
             }
         }
     }
-    
+
     // Check network scopes
     if let Some(orig_scopes) = &original.scopes_used {
         let div = compare_scopes(orig_scopes, &replay.scopes_used);
@@ -122,13 +121,13 @@ pub fn compare_execution(
             }
         }
     }
-    
+
     // Check timing if not ignored
     if !config.ignore_timing {
         if let Some(orig_duration) = original.duration_ms {
             let timing_diff = (orig_duration as i64 - replay.duration_ms as i64).abs();
             let threshold = orig_duration.max(100) * 2; // 2x threshold or at least 200ms
-            
+
             if timing_diff > threshold as i64 {
                 warnings.push(format!(
                     "Timing difference: {}ms vs {}ms ({}ms delta)",
@@ -137,7 +136,7 @@ pub fn compare_execution(
             }
         }
     }
-    
+
     Ok(ComparisonResult {
         divergence: None,
         warnings,
@@ -157,26 +156,26 @@ fn compare_output(
     } else {
         original
     };
-    
+
     let replay_truncated = if replay.len() > max_bytes {
         &replay[..max_bytes]
     } else {
         replay
     };
-    
+
     if orig_truncated == replay_truncated {
         return None;
     }
-    
+
     // Normalize whitespace and compare again
     let orig_normalized = normalize_whitespace(orig_truncated);
     let replay_normalized = normalize_whitespace(replay_truncated);
-    
+
     if orig_normalized == replay_normalized {
         // Only whitespace differences
         return None;
     }
-    
+
     // Check for timestamp/PID differences (common non-deterministic elements)
     if looks_like_timestamp_difference(&orig_normalized, &replay_normalized) {
         return Some(DivergenceReport {
@@ -187,15 +186,16 @@ fn compare_output(
             severity: DivergenceSeverity::Low,
         });
     }
-    
+
     // Calculate diff to determine severity
     let diff = TextDiff::from_lines(orig_truncated, replay_truncated);
-    let changes: Vec<_> = diff.iter_all_changes()
+    let changes: Vec<_> = diff
+        .iter_all_changes()
         .filter(|c| c.tag() != ChangeTag::Equal)
         .collect();
-    
+
     let change_ratio = changes.len() as f32 / diff.iter_all_changes().count().max(1) as f32;
-    
+
     let severity = if change_ratio > 0.5 {
         DivergenceSeverity::High
     } else if change_ratio > 0.1 {
@@ -203,7 +203,7 @@ fn compare_output(
     } else {
         DivergenceSeverity::Low
     };
-    
+
     Some(DivergenceReport {
         divergence_type,
         description: format!(
@@ -219,24 +219,24 @@ fn compare_output(
 /// Compare filesystem diffs
 fn compare_fs_diff(original: &FsDiff, replay: &FsDiff) -> Option<DivergenceReport> {
     use std::collections::HashSet;
-    
+
     // Extract file paths from both diffs
     let orig_files: HashSet<_> = extract_paths_from_diff(original).into_iter().collect();
     let replay_files: HashSet<_> = extract_paths_from_diff(replay).into_iter().collect();
-    
+
     let missing: Vec<_> = orig_files.difference(&replay_files).cloned().collect();
     let extra: Vec<_> = replay_files.difference(&orig_files).cloned().collect();
-    
+
     if missing.is_empty() && extra.is_empty() {
         return None;
     }
-    
+
     let severity = if missing.len() + extra.len() > 5 {
         DivergenceSeverity::High
     } else {
         DivergenceSeverity::Medium
     };
-    
+
     Some(DivergenceReport {
         divergence_type: DivergenceType::FilesystemDiff,
         description: format!(
@@ -253,17 +253,17 @@ fn compare_fs_diff(original: &FsDiff, replay: &FsDiff) -> Option<DivergenceRepor
 /// Compare network scopes accessed
 fn compare_scopes(original: &[String], replay: &[String]) -> Option<DivergenceReport> {
     use std::collections::HashSet;
-    
+
     let orig_set: HashSet<_> = original.iter().cloned().collect();
     let replay_set: HashSet<_> = replay.iter().cloned().collect();
-    
+
     if orig_set == replay_set {
         return None;
     }
-    
+
     let missing: Vec<_> = orig_set.difference(&replay_set).cloned().collect();
     let extra: Vec<_> = replay_set.difference(&orig_set).cloned().collect();
-    
+
     Some(DivergenceReport {
         divergence_type: DivergenceType::NetworkScope,
         description: format!(
@@ -288,13 +288,13 @@ fn looks_like_timestamp_difference(s1: &str, s2: &str) -> bool {
     if (s1.len() as i32 - s2.len() as i32).abs() > 50 {
         return false;
     }
-    
+
     // Check if both contain timestamp-like patterns
     let timestamp_pattern = regex::Regex::new(r"\d{4}-\d{2}-\d{2}|\d{2}:\d{2}:\d{2}").unwrap();
     let pid_pattern = regex::Regex::new(r"\[\d+\]|\bpid=\d+").unwrap();
-    
-    (timestamp_pattern.is_match(s1) && timestamp_pattern.is_match(s2)) ||
-    (pid_pattern.is_match(s1) && pid_pattern.is_match(s2))
+
+    (timestamp_pattern.is_match(s1) && timestamp_pattern.is_match(s2))
+        || (pid_pattern.is_match(s1) && pid_pattern.is_match(s2))
 }
 
 /// Truncate string for report display
@@ -309,23 +309,23 @@ fn truncate_for_report(s: &str, max_len: usize) -> String {
 /// Extract file paths from filesystem diff
 fn extract_paths_from_diff(diff: &FsDiff) -> Vec<String> {
     let mut paths = Vec::new();
-    
+
     // Add all writes
     paths.extend(diff.writes.iter().map(|p| p.to_string_lossy().to_string()));
-    
+
     // Add all modifications
     paths.extend(diff.mods.iter().map(|p| p.to_string_lossy().to_string()));
-    
+
     // Add all deletes
     paths.extend(diff.deletes.iter().map(|p| p.to_string_lossy().to_string()));
-    
+
     paths
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_normalize_whitespace() {
         assert_eq!(
@@ -333,19 +333,19 @@ mod tests {
             "hello world tab"
         );
     }
-    
+
     #[test]
     fn test_looks_like_timestamp_difference() {
         assert!(looks_like_timestamp_difference(
             "2024-01-01 10:00:00 Starting",
             "2024-01-01 10:00:01 Starting"
         ));
-        
+
         assert!(looks_like_timestamp_difference(
             "Process[1234] ready",
             "Process[5678] ready"
         ));
-        
+
         assert!(!looks_like_timestamp_difference(
             "hello world",
             "goodbye world"

@@ -40,8 +40,10 @@ impl LimaVM {
             name: String,
             status: String,
             #[serde(default)]
+            #[allow(dead_code)]
             dir: String,
             #[serde(default)]
+            #[allow(dead_code)]
             arch: String,
         }
 

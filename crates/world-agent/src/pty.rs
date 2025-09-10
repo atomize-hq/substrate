@@ -14,6 +14,7 @@ use tokio::sync::mpsc;
 use tokio_tungstenite::{tungstenite::Message, WebSocketStream};
 
 /// Async PTY session for Agent API.
+#[allow(dead_code)]
 pub struct AsyncPtySession {
     child: Child,
     tx: mpsc::Sender<Vec<u8>>,
@@ -21,6 +22,7 @@ pub struct AsyncPtySession {
     session_id: String,
 }
 
+#[allow(dead_code)]
 impl AsyncPtySession {
     /// Create a new async PTY session for the given command.
     pub async fn new(
@@ -56,6 +58,7 @@ impl AsyncPtySession {
     }
 
     /// Handle bidirectional streaming over WebSocket.
+    #[allow(dead_code)]
     pub async fn handle_websocket<S>(mut self, ws: WebSocketStream<S>) -> Result<()>
     where
         S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
@@ -166,11 +169,13 @@ impl AsyncPtySession {
     }
 
     /// Get the session ID.
+    #[allow(dead_code)]
     pub fn session_id(&self) -> &str {
         &self.session_id
     }
 
     /// Try to get the exit status if the process has finished.
+    #[allow(dead_code)]
     pub fn try_wait(&mut self) -> Result<Option<std::process::ExitStatus>> {
         match self.child.try_wait() {
             Ok(status) => Ok(status),
@@ -180,12 +185,14 @@ impl AsyncPtySession {
 }
 
 /// Simple PTY session for non-interactive commands.
+#[allow(dead_code)]
 pub struct SimplePtySession {
     cmd: String,
     cwd: std::path::PathBuf,
     env: HashMap<String, String>,
 }
 
+#[allow(dead_code)]
 impl SimplePtySession {
     pub fn new(cmd: String, cwd: std::path::PathBuf, env: HashMap<String, String>) -> Self {
         Self { cmd, cwd, env }

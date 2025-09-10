@@ -6,16 +6,16 @@
 use anyhow::{Context, Result};
 use world_api::{ExecRequest, ExecResult, FsDiff, WorldBackend, WorldHandle, WorldSpec};
 
+pub mod cgroups;
+pub mod copydiff;
 pub mod diff;
 pub mod dns;
 pub mod isolation;
 pub mod netfilter;
+pub mod netns;
 pub mod network;
 pub mod overlayfs;
 pub mod session;
-pub mod copydiff;
-pub mod cgroups;
-pub mod netns;
 
 pub use session::SessionWorld;
 
@@ -73,7 +73,9 @@ impl WorldBackend for LinuxLocalBackend {
         self.check_platform()?;
 
         let mut cache = self.session_cache.write().unwrap();
-        let session_world = cache.get_mut(&world.id).context("World not found in cache")?;
+        let session_world = cache
+            .get_mut(&world.id)
+            .context("World not found in cache")?;
 
         session_world.execute(&req.cmd, &req.cwd, req.env, req.pty, req.span_id)
     }
