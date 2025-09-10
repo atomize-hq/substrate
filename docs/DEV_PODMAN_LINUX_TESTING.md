@@ -73,8 +73,10 @@ Expected warnings (non-root/limited hosts)
 - `[replay] warn: kernel.dmesg_restrict=1; LOG lines may not be visible`
 
 Netfilter sanity (inside container)
-- nft list tables || true
+- nft list tables || true  # host should remain empty for substrate tables
+- For a running replay: `ip netns list | grep substrate-<span>` then `ip netns exec substrate-<span> nft list tables` (should show the per-world table)
 - dmesg -T | grep 'substrate-dropped-' | tail -n 5 || true
+  - Note: In the default netns setup only loopback is up, so egress often fails before hitting the nft output hook. To guarantee LOGs, bring up a veth pair inside the netns and route traffic through it.
 
 Codex “free roam” usage (inside container)
 - codex -C /src --yolo

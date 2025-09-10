@@ -13,6 +13,7 @@ Notes / Current State (live)
   - Add a tiny capability probe in replay to detect whether kernel overlay captures upper changes; if not, automatically fall back to fuse-overlayfs (present in our image) before degrading further.
   - Optionally add chroot/pivot_root mode (CAP_SYS_CHROOT) when appropriate; continue to cd into merged as a safe default.
   - Emit “[replay] world strategy: overlay|fuse|copy-diff|direct” when --replay-verbose is on, plus a one‑line upper summary when fs_diff is empty.
+  - Add best‑effort per‑replay network namespace (netns) with per‑world nft rules applied inside the netns to avoid host‑wide side effects.
 - Rationale to test on native Linux (your Manjaro host):
   - Confirms whether the empty fs_diff is a container‑specific quirk or a general issue.
   - Provides a clean baseline for Phase B before we add the fuse-overlayfs fallback and extended strategy selection.
@@ -70,16 +71,15 @@ How to Test on Manjaro (Arch family) – Step‑by‑Step
      - lsmod | grep overlay || true
      - ls -l /var/lib/substrate/overlay | tail -n 10
 
-6b) Validate Phase B (second half): per-world cgroups + nftables during replay (privileged container)
+6b) Validate Phase B (second half): per-world cgroups + netns‑scoped nftables during replay (privileged container)
    - With a fresh write span (as above), replay again with `SUBSTRATE_REPLAY_USE_WORLD=1`.
-   - In a second shell while replay runs, confirm cgroup attach:
-     - `grep -H . /sys/fs/cgroup/substrate/*/cgroup.procs || true`
-     - Expect the span’s world directory to contain at least one PID while the command is running.
-   - Netns scoping: when privileged, nft rules are installed inside a named netns `substrate-<span>`; host `nft list ruleset` should not show these rules.
-   - Trigger a LOG by attempting egress (ensure `kernel.dmesg_restrict=0`):
-     - `target/debug/substrate -c "bash -lc 'curl -m2 http://example.com || true'"`
-     - Capture the span id and replay with world isolation,
-       then check: `dmesg -T | grep substrate-dropped- | tail -n 5` for per-world LOG lines.
+   - Confirm cgroup attach (in a second shell while replay runs a longer command):
+     - `cat /sys/fs/cgroup/substrate/<SPAN>/cgroup.procs` → expect one or more PIDs while the command runs.
+   - Confirm netns scoping and rules:
+     - `ip netns list | grep substrate-<SPAN>` → netns exists during replay.
+     - `ip netns exec substrate-<SPAN> nft list tables` → shows `table inet substrate_<SPAN>`.
+     - `nft list tables` (host) → should not include `substrate_*` tables.
+   - LOG visibility note: inside a fresh netns only `lo` is up and no default route exists; egress attempts will fail (DNS or connect) and may not reach the nft output hook. To observe LOG lines, you can wire a veth pair and an up interface inside the netns; otherwise absence of LOGs is acceptable when isolation is effective and `dmesg_restrict=0` is set.
    - Expected graceful degradations when constrained (printed during replay with `--replay-verbose`):
      - `[replay] warn: cgroup v2 unavailable or insufficient privileges; skipping cgroup attach`
      - `[replay] warn: nft not available; netfilter scoping/logging disabled`
@@ -174,6 +174,7 @@ Copy‑Diff Semantics and Tests
   - `test_copydiff_detects_metadata_mod`: create file in base snapshot; perform a command that overwrites the same bytes (e.g., `sh -lc 'echo data > file.txt'` twice); assert diff contains `~ file.txt`.
   - `test_copydiff_detects_write_and_delete`: create a new file and delete another; assert `+` and `-` entries present.
   - Keep limits sane; assert `summary` set when truncated.
+  - PID fidelity: copy‑diff execution now uses spawn + wait_with_output to capture the child PID for cgroup attach during replay. Outputs and exit codes are unchanged.
 
 Docs and UX Updates
 - Clarify strategy order and expectations:
@@ -183,6 +184,7 @@ Docs and UX Updates
 - Add “Troubleshooting” notes:
   - Container environments often prefer fuse-overlayfs; overlay kernel mounts may be restricted; best‑effort cleanup may warn about EBUSY but replay succeeds.
   - On native non‑root hosts, copy‑diff may be chosen; use doctor to see why and how to enable fuse.
+  - Netns: rules are installed inside a named netns `substrate-<span>` to avoid host‑wide changes. Without a configured route, egress will fail quickly and LOG lines may not appear; this is acceptable for isolation validation. To view LOGs, bring up a veth interface and route traffic through the nft output chain.
 
 Acceptance Criteria (Part 3)
 - `substrate world doctor` runs on the Podman container and on a native Linux host, printing overlay/fuse availability and guidance without crashing.
@@ -203,7 +205,7 @@ Objective
 Acceptance Criteria (must all pass)
 - Replay faithfully re-executes commands (including shell metacharacters) and emits fs_diff for write spans.
 - Per‑world cgroup v2 subtree exists during replay with non‑empty cgroup.procs.
-- Per‑world nftables tables/chains install; replayed disallowed network attempts are blocked with rate‑limited LOG lines in dmesg.
+- Per‑replay network namespace is used when privileged; per‑world nftables tables/chains install inside that netns; replayed disallowed network attempts are blocked. LOG lines are visible when packets reach the nft output chain and `kernel.dmesg_restrict=0`; absence of LOGs is acceptable when isolation is effective without a route.
 - A single JSONL trace contains spans with fs_diff and scopes_used.
 - “Doctor” or verbose replay prints capability checks and explicit degradation messages when features are unavailable.
 - Shims deploy/remove reliably; shim execution path resolves correctly during substrate -c.
