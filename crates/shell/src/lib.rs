@@ -321,6 +321,7 @@ impl ShellConfig {
                 println!("Location: {}", shims_dir.display());
 
                 // Commands presence check
+                let mut missing_any = false;
                 if let Some(commands) = info.get("commands").and_then(|c| c.as_array()) {
                     let expected: Vec<String> = commands
                         .iter()
@@ -343,6 +344,7 @@ impl ShellConfig {
                             missing.join(", ")
                         );
                         exit_code = 1;
+                        missing_any = true;
                     }
                 }
 
@@ -354,16 +356,30 @@ impl ShellConfig {
                         "PATH: WARN (shims dir is not first; current PATH begins with: {})",
                         first_path
                     );
-                    if !cfg!(windows) {
-                        println!(
-                            "Suggestion: export PATH=\"{}:$PATH\"",
-                            shims_dir.display()
-                        );
+                    #[cfg(unix)]
+                    {
+                        use std::path::PathBuf;
+                        let uid = unsafe { libc::geteuid() };
+                        let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
+                            .ok()
+                            .map(PathBuf::from)
+                            .filter(|p| p.is_dir())
+                            .unwrap_or_else(|| PathBuf::from("/tmp"));
+                        let marker = runtime_dir.join(format!("substrate_path_hint_shown_{}", uid));
+                        if !marker.exists() {
+                            println!(
+                                "Suggestion: export PATH=\"{}:$PATH\"",
+                                shims_dir.display()
+                            );
+                            let _ = std::fs::write(&marker, b"1");
+                        }
                     }
                 }
 
                 // Status line
-                if file_version != current_version {
+                if missing_any {
+                    println!("Status: Needs redeploy");
+                } else if file_version != current_version {
                     println!("Status: Update available (current: {current_version})");
                     exit_code = 1;
                 } else if exit_code == 0 {
@@ -382,11 +398,23 @@ impl ShellConfig {
                         "PATH: WARN (shims dir is not first; current PATH begins with: {})",
                         first_path
                     );
-                    if !cfg!(windows) {
-                        println!(
-                            "Suggestion: export PATH=\"{}:$PATH\"",
-                            shims_dir.display()
-                        );
+                    #[cfg(unix)]
+                    {
+                        use std::path::PathBuf;
+                        let uid = unsafe { libc::geteuid() };
+                        let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
+                            .ok()
+                            .map(PathBuf::from)
+                            .filter(|p| p.is_dir())
+                            .unwrap_or_else(|| PathBuf::from("/tmp"));
+                        let marker = runtime_dir.join(format!("substrate_path_hint_shown_{}", uid));
+                        if !marker.exists() {
+                            println!(
+                                "Suggestion: export PATH=\"{}:$PATH\"",
+                                shims_dir.display()
+                            );
+                            let _ = std::fs::write(&marker, b"1");
+                        }
                     }
                 }
                 println!("Status: Needs redeploy (version file missing)");
