@@ -32,6 +32,18 @@ pub fn run_shim() -> Result<i32> {
 
     let ctx = ShimContext::from_current_exe()?;
 
+    // Ensure SHIM_ORIGINAL_PATH is persisted for nested shims (clean PATH without shim dir)
+    if std::env::var(ORIGINAL_PATH_VAR).is_err() {
+        let sep = if cfg!(windows) { ';' } else { ':' };
+        let clean = ctx
+            .search_paths
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(&sep.to_string());
+        std::env::set_var(ORIGINAL_PATH_VAR, clean);
+    }
+
     // If SHIM_ACTIVE is set, this is a nested shim call (e.g., npm -> node)
     // Bypass shim logic and execute the real binary directly
     if ctx.should_skip_shimming() {

@@ -339,6 +339,79 @@ Tests:
   - During shim invocation, set/propagate `SHIM_ORIGINAL_PATH` and fall back to absolute target path when PATH lookup fails.
 - Ensure build produces `target/<profile>/substrate-shim` and that deploy uses that path for symlink targets.
 
+Enhanced `--shim-status` output (expected)
+
+Examples to standardize human-readable output and exit codes:
+
+- Up to date, PATH OK (exit 0)
+  - Shims: Deployed
+  - Version: 0.1.1
+  - Deployed: 2025-09-10 02:20:33 UTC
+  - Location: /home/user/.substrate/shims
+  - Commands: 25 shims
+  - PATH: OK (/home/user/.substrate/shims is first)
+  - Status: Up to date
+
+- Update available (exit 1)
+  - Shims: Deployed
+  - Version: 0.1.0
+  - Deployed: 2025-09-01 11:12:13 UTC
+  - Location: /home/user/.substrate/shims
+  - Commands: 25 shims
+  - PATH: OK (/home/user/.substrate/shims is first)
+  - Status: Update available (current: 0.1.1)
+
+- Missing shims (exit 1)
+  - Shims: Deployed (incomplete)
+  - Version: 0.1.1
+  - Deployed: 2025-09-10 02:20:33 UTC
+  - Location: /home/user/.substrate/shims
+  - Commands: 23/25 shims (missing: npm, node)
+  - PATH: OK (/home/user/.substrate/shims is first)
+  - Status: Needs redeploy
+
+- PATH misordered (warning only, exit 0)
+  - Shims: Deployed
+  - Version: 0.1.1
+  - Deployed: 2025-09-10 02:20:33 UTC
+  - Location: /home/user/.substrate/shims
+  - Commands: 25 shims
+  - PATH: WARN (shims dir is not first; current PATH begins with: /usr/bin:...)
+  - Status: Up to date
+
+- Not deployed (exit 1)
+  - Shims: Not deployed
+  - Suggestion: run `substrate` once or `substrate --shim-deploy`
+
+- Deployment disabled (exit 0)
+  - Shims: Deployment disabled (SUBSTRATE_NO_SHIMS=1)
+  - Status: Skipped
+
+Exit code policy:
+- 0: Shims current/present (even if PATH warning), or deployment explicitly disabled.
+- 1: Needs action: not deployed, version drift, or missing shims.
+
+Validation snippet (shell):
+```
+set -euo pipefail
+BIN=./target/debug/substrate
+
+# Baseline
+$BIN --shim-status; echo RC=$?
+
+# Simulate drift: remove a shim
+rm -f "$HOME/.substrate/shims/npm" || true
+$BIN --shim-status; echo RC=$?  # expect 1 and "Needs redeploy"
+
+# Fix by forcing redeploy
+$BIN --shim-deploy
+$BIN --shim-status; echo RC=$?  # expect 0
+
+# Simulate PATH misorder
+export PATH="/usr/bin:$PATH"
+$BIN --shim-status; echo RC=$?  # expect PATH: WARN, RC 0
+```
+
 Code touch points
 - crates/shell/src/lib.rs (replay execution + trace writing)
 - crates/world/src/overlayfs.rs (mount, diff)

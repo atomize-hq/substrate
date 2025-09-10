@@ -272,35 +272,45 @@ impl ShellConfig {
 
         // Handle --shim-status flag
         if cli.shim_status {
+            // Respect explicit disable
+            if env::var("SUBSTRATE_NO_SHIMS").is_ok() {
+                println!("Shims: Deployment disabled (SUBSTRATE_NO_SHIMS=1)");
+                println!("Status: Skipped");
+                std::process::exit(0);
+            }
+
             let shims_dir = substrate_common::paths::shims_dir()?;
             let version_file = substrate_common::paths::version_file()?;
 
             if !shims_dir.exists() {
                 println!("Shims: Not deployed");
+                println!("Suggestion: run `substrate` once or `substrate --shim-deploy`");
                 std::process::exit(1);
             }
+
+            // PATH check (warn only)
+            let path_str = env::var("PATH").unwrap_or_default();
+            let sep = if cfg!(windows) { ';' } else { ':' };
+            let first_path = path_str.split(sep).next().unwrap_or("");
+            let shims_dir_str = shims_dir.display().to_string();
+            let path_ok = first_path == shims_dir_str;
+
+            let mut exit_code = 0i32;
+            let mut printed_header = false;
 
             if let Ok(content) = std::fs::read_to_string(&version_file) {
                 let info: serde_json::Value = serde_json::from_str(&content)?;
                 println!("Shims: Deployed");
-                println!(
-                    "Version: {}",
-                    info.get("version").unwrap_or(&json!("unknown"))
-                );
-                println!("Location: {shims_dir:?}");
+                printed_header = true;
 
-                // Check if update is available
+                // Version
                 let current_version = env!("CARGO_PKG_VERSION");
-                if info.get("version").and_then(|v| v.as_str()) != Some(current_version) {
-                    println!("Status: Update available (current: {current_version})");
-                } else {
-                    println!("Status: Up to date");
-                }
+                let file_version = info.get("version").and_then(|v| v.as_str()).unwrap_or("unknown");
+                println!("Version: {}", file_version);
 
-                // Show deployment timestamp if available
+                // Deployed at
                 if let Some(deployed_at) = info.get("deployed_at") {
-                    if let Some(secs) = deployed_at.get("secs_since_epoch").and_then(|s| s.as_i64())
-                    {
+                    if let Some(secs) = deployed_at.get("secs_since_epoch").and_then(|s| s.as_i64()) {
                         use chrono::DateTime;
                         if let Some(datetime) = DateTime::from_timestamp(secs, 0) {
                             println!("Deployed: {}", datetime.format("%Y-%m-%d %H:%M:%S UTC"));
@@ -308,15 +318,80 @@ impl ShellConfig {
                     }
                 }
 
-                // Show command count if available
+                println!("Location: {}", shims_dir.display());
+
+                // Commands presence check
                 if let Some(commands) = info.get("commands").and_then(|c| c.as_array()) {
-                    println!("Commands: {} shims", commands.len());
+                    let expected: Vec<String> = commands
+                        .iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect();
+                    let mut missing = Vec::new();
+                    for cmd in &expected {
+                        let path = shims_dir.join(cmd);
+                        if !path.exists() {
+                            missing.push(cmd.clone());
+                        }
+                    }
+                    if missing.is_empty() {
+                        println!("Commands: {} shims", expected.len());
+                    } else {
+                        println!(
+                            "Commands: {}/{} shims (missing: {})",
+                            expected.len() - missing.len(),
+                            expected.len(),
+                            missing.join(", ")
+                        );
+                        exit_code = 1;
+                    }
                 }
+
+                // PATH line
+                if path_ok {
+                    println!("PATH: OK ({} is first)", shims_dir.display());
+                } else {
+                    println!(
+                        "PATH: WARN (shims dir is not first; current PATH begins with: {})",
+                        first_path
+                    );
+                    if !cfg!(windows) {
+                        println!(
+                            "Suggestion: export PATH=\"{}:$PATH\"",
+                            shims_dir.display()
+                        );
+                    }
+                }
+
+                // Status line
+                if file_version != current_version {
+                    println!("Status: Update available (current: {current_version})");
+                    exit_code = 1;
+                } else if exit_code == 0 {
+                    println!("Status: Up to date");
+                }
+
+                std::process::exit(exit_code);
             } else {
-                println!("Shims: Deployed (version unknown)");
-                println!("Location: {shims_dir:?}");
+                // Version file missing -> treat as needs redeploy
+                if !printed_header { println!("Shims: Deployed (version unknown)"); }
+                println!("Location: {}", shims_dir.display());
+                if path_ok {
+                    println!("PATH: OK ({} is first)", shims_dir.display());
+                } else {
+                    println!(
+                        "PATH: WARN (shims dir is not first; current PATH begins with: {})",
+                        first_path
+                    );
+                    if !cfg!(windows) {
+                        println!(
+                            "Suggestion: export PATH=\"{}:$PATH\"",
+                            shims_dir.display()
+                        );
+                    }
+                }
+                println!("Status: Needs redeploy (version file missing)");
+                std::process::exit(1);
             }
-            std::process::exit(0);
         }
         
         // Handle --trace flag
