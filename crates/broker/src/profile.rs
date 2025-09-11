@@ -135,6 +135,7 @@ pub fn load_profile_directory(dir: &Path) -> Result<Vec<crate::Policy>> {
 
 /// Create a sample profile file
 #[cfg(any(test, feature = "policy-watcher"))]
+#[allow(dead_code)]
 pub fn create_sample_profile(path: &Path) -> Result<()> {
     let sample = r#"# Substrate Security Profile
 # Place this file in your project root as .substrate-profile

@@ -94,6 +94,30 @@ cargo clippy -- -D warnings  # Fail on warnings
 cargo clippy --fix           # Auto-fix issues
 ```
 
+### Feature flags and heavy backends (Kuzu)
+
+- Avoid running `--all-features` at the workspace level. It enables the optional Kuzu graph backend, which triggers a heavy native build (or requires a system lib), and can stall local builds.
+- Recommended workspace commands (no Kuzu):
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo build --workspace
+cargo test --workspace -- --nocapture
+```
+
+- Only enable Kuzu when working on the graph crate:
+
+```bash
+# Dynamically link to a system Kuzu (fast if installed)
+cargo build -p substrate-graph --features kuzu-dylib
+
+# Statically build Kuzu (slow; requires cmake and a long native build)
+cargo build -p substrate-graph --features kuzu-static
+```
+
+Use `cargo tree -p substrate-graph -e features` to inspect which features are active.
+
 ### Documentation
 
 ```bash

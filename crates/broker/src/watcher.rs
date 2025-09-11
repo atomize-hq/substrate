@@ -131,12 +131,14 @@ pub struct MultiPolicyWatcher {
 }
 
 impl MultiPolicyWatcher {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             watchers: Vec::new(),
         }
     }
 
+    #[allow(dead_code)]
     pub fn add_directory(&mut self, dir: &Path) -> Result<()> {
         let mut watcher = PolicyWatcher::new()?;
 

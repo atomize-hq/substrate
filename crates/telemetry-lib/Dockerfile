@@ -15,8 +15,25 @@ WORKDIR /substrate
 # Copy the built telemetry library
 COPY target/release/libsubstrate_telemetry.so /usr/lib/substrate/telemetry.so
 
-# Copy test program
-COPY test_program /substrate/test_program
+# Build a simple test program inside the image
+RUN echo '#include <stdio.h>\n\
+#include <stdlib.h>\n\
+#include <unistd.h>\n\
+#include <fcntl.h>\n\
+int main() {\n\
+    printf("Test program starting\\n");\n\
+    int fd = open("/tmp/test_file.txt", O_CREAT | O_WRONLY | O_TRUNC, 0644);\n\
+    if (fd >= 0) {\n\
+        write(fd, "Hello from test program\\n", 24);\n\
+        close(fd);\n\
+        printf("File created and written\\n");\n\
+    }\n\
+    system("echo \"Nested command via system()\"");\n\
+    printf("Test program complete\\n");\n\
+    return 0;\n\
+}\n' > /tmp/test.c && \
+    gcc -o /substrate/test_program /tmp/test.c && \
+    rm -f /tmp/test.c
 
 # Create test script
 RUN echo '#!/bin/bash\n\
