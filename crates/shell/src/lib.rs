@@ -154,6 +154,10 @@ pub struct Cli {
     #[arg(long = "replay-verbose", requires = "replay")]
     pub replay_verbose: bool,
 
+    /// Disable world isolation (Linux only)
+    #[arg(long = "no-world")]
+    pub no_world: bool,
+
     /// Graph commands (ingest/status/what-changed)
     #[command(subcommand)]
     pub sub: Option<SubCommands>,
@@ -217,6 +221,7 @@ pub struct ShellConfig {
     pub ci_mode: bool,
     pub no_exit_on_error: bool,
     pub skip_shims: bool,
+    pub no_world: bool,
     pub env_vars: HashMap<String, String>,
 }
 
@@ -638,6 +643,7 @@ impl ShellConfig {
             ci_mode: cli.ci_mode,
             no_exit_on_error: cli.no_exit_on_error,
             skip_shims: cli.shim_skip,
+            no_world: cli.no_world,
             env_vars: HashMap::new(),
         })
     }
@@ -914,10 +920,37 @@ fn world_doctor_main(json_mode: bool) -> i32 {
 pub fn run_shell() -> Result<i32> {
     let config = ShellConfig::from_args()?;
 
-    // Initialize trace if Phase 4 is enabled
-    if env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
-        if let Err(e) = init_trace(None) {
-            eprintln!("substrate: warning: failed to initialize trace: {}", e);
+    // Initialize trace
+    if let Err(e) = init_trace(None) {
+        eprintln!("substrate: warning: failed to initialize trace: {}", e);
+    }
+
+    // Default-on world initialization (Linux only)
+    #[cfg(target_os = "linux")]
+    {
+        use world::LinuxLocalBackend;
+        use world_api::{WorldBackend, WorldSpec, ResourceLimits};
+        let world_disabled = env::var("SUBSTRATE_WORLD").map(|v| v == "disabled").unwrap_or(false)
+            || config.no_world;
+        if !world_disabled {
+            let spec = WorldSpec {
+                reuse_session: true,
+                isolate_network: true,
+                limits: ResourceLimits::default(),
+                enable_preload: false,
+                allowed_domains: substrate_broker::allowed_domains(),
+                project_dir: env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+            };
+            let backend = LinuxLocalBackend::new();
+            match backend.ensure_session(&spec) {
+                Ok(handle) => {
+                    env::set_var("SUBSTRATE_WORLD", "enabled");
+                    env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
+                }
+                Err(e) => {
+                    eprintln!("substrate: warn: world isolation unavailable (observe-only): {}", e);
+                }
+            }
         }
     }
 
@@ -2683,6 +2716,55 @@ fn execute_command(
         start_extra,
     )?;
     let start_time = std::time::Instant::now();
+
+    // Route non-PTY commands through world backend if available (Linux only)
+    #[cfg(target_os = "linux")]
+    if env::var("SUBSTRATE_WORLD_ID").is_ok() {
+        use world::LinuxLocalBackend;
+        use world_api::{WorldBackend, ExecRequest};
+        let backend = LinuxLocalBackend::new();
+        let handle = world_api::WorldHandle {
+            id: env::var("SUBSTRATE_WORLD_ID").unwrap(),
+        };
+        let req = ExecRequest {
+            cmd: trimmed.to_string(),
+            cwd: env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+            env: env::vars().collect(),
+            pty: false,
+            span_id: span.as_ref().map(|s| s.get_span_id()),
+        };
+        match backend.exec(&handle, req) {
+            Ok(res) => {
+                use std::io::{self, Write};
+                let _ = io::stdout().write_all(&res.stdout);
+                let _ = io::stderr().write_all(&res.stderr);
+                let exit_code = res.exit;
+                let scopes_used = res.scopes_used;
+                let fs_diff = res.fs_diff;
+                
+                // Finish span with immediate fs_diff from ExecResult
+                if let Some(active_span) = span {
+                    let _ = active_span.finish(exit_code, scopes_used, fs_diff);
+                }
+                
+                // Convert exit code to ExitStatus and return
+                #[cfg(unix)]
+                {
+                    use std::os::unix::process::ExitStatusExt;
+                    return Ok(std::process::ExitStatus::from_raw((exit_code & 0xff) << 8));
+                }
+                #[cfg(windows)]
+                {
+                    use std::os::windows::process::ExitStatusExt;
+                    return Ok(std::process::ExitStatus::from_raw(exit_code as u32));
+                }
+            }
+            Err(e) => {
+                eprintln!("substrate: warn: world exec failed, running direct: {}", e);
+                // Fall through to existing execution path
+            }
+        }
+    }
 
     // Check for built-in commands only in interactive mode or for simple commands
     // Complex commands with shell operators must be handled by the external shell
