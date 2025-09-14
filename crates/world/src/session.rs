@@ -57,9 +57,26 @@ impl SessionWorld {
 
         #[cfg(target_os = "linux")]
         {
+            // Lightweight Linux setup for PTY: avoid unsharing/pivoting the current process.
             self.setup_linux_isolation()?;
 
-            // Set up network filtering if isolation is enabled
+            // Create a named network namespace for this session world (best-effort)
+            let ns_name = format!("substrate-{}", self.id);
+            if crate::netns::NetNs::ip_available() {
+                // Create named netns and bring loopback up. Best-effort; ignore failures.
+                let _ = std::process::Command::new("ip")
+                    .args(["netns", "add", &ns_name])
+                    .status();
+                let _ = std::process::Command::new("ip")
+                    .args(["-n", &ns_name, "link", "set", "lo", "up"])
+                    .status();
+                // Record only if it exists afterwards
+                if std::path::Path::new(&format!("/var/run/netns/{}", ns_name)).exists() {
+                    self.net_namespace = Some(ns_name);
+                }
+            }
+
+            // Set up network filtering if enabled (scoped to netns when available)
             if self.spec.isolate_network {
                 self.setup_network_filter()?;
             }
@@ -76,9 +93,11 @@ impl SessionWorld {
     /// Set up network filtering with nftables.
     #[allow(dead_code)]
     fn setup_network_filter(&mut self) -> Result<()> {
-        let filter =
-            crate::netfilter::apply_network_filter(&self.id, self.spec.allowed_domains.clone())?;
-
+        // Build NetFilter scoped to named netns when available
+        let mut filter = crate::netfilter::NetFilter::new(&self.id, self.spec.allowed_domains.clone())?;
+        filter.set_namespace(self.net_namespace.clone());
+        filter.resolve_domains()?;
+        filter.install_rules()?;
         self.network_filter = Some(filter);
         Ok(())
     }
@@ -91,11 +110,8 @@ impl SessionWorld {
 
     #[cfg(target_os = "linux")]
     fn setup_linux_isolation(&self) -> Result<()> {
-        use crate::isolation::LinuxIsolation;
-
-        let isolation = LinuxIsolation::new(&self.spec);
-        isolation.apply(&self.root_dir, &self.project_dir, &self.cgroup_path)?;
-
+        // Lightweight no-op for PTY phase: avoid unshare/pivot_root in the agent path.
+        // Non-PTY overlayfs isolation remains handled by overlayfs::execute_with_overlay().
         Ok(())
     }
 

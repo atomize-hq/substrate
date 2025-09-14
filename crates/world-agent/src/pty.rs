@@ -1,251 +1,350 @@
-//! Async PTY handling for Agent API WebSocket streaming.
-//!
-//! This implementation is purpose-built for the world-agent's async environment,
-//! handling WebSocket-based PTY streaming for AI agents. It's separate from the
-//! shell's sync PTY implementation due to different architectural requirements.
+//! PTY WebSocket handler for world-agent implementing JSON frame protocol
 
-use anyhow::{Context, Result};
+use axum::extract::ws::{Message, WebSocket};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use futures_util::{SinkExt, StreamExt};
+use portable_pty::*;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::process::Stdio;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
-use tokio::process::{Child, Command};
-use tokio::sync::mpsc;
-use tokio_tungstenite::{tungstenite::Message, WebSocketStream};
+use std::io::{Read, Write};
+use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tracing::info;
+use crate::service::WorldAgentService;
+// no atomic imports needed here
 
-/// Async PTY session for Agent API.
-#[allow(dead_code)]
-pub struct AsyncPtySession {
-    child: Child,
-    tx: mpsc::Sender<Vec<u8>>,
-    rx: mpsc::Receiver<Vec<u8>>,
-    session_id: String,
+fn parse_signal(sig: &str) -> Option<i32> {
+    match sig {
+        "INT" | "SIGINT" => Some(libc::SIGINT),
+        "TERM" | "SIGTERM" => Some(libc::SIGTERM),
+        "QUIT" | "SIGQUIT" => Some(libc::SIGQUIT),
+        "HUP" | "SIGHUP" => Some(libc::SIGHUP),
+        _ => None,
+    }
 }
 
-#[allow(dead_code)]
-impl AsyncPtySession {
-    /// Create a new async PTY session for the given command.
-    pub async fn new(
-        cmd: &str,
-        cwd: &std::path::Path,
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum ClientMessage {
+    #[serde(rename = "start")]
+    Start {
+        cmd: String,
+        cwd: PathBuf,
         env: HashMap<String, String>,
-    ) -> Result<Self> {
-        let session_id = format!("pty_{}", uuid::Uuid::now_v7());
+        span_id: Option<String>,
+        cols: u16,
+        rows: u16,
+    },
+    #[serde(rename = "stdin")]
+    Stdin { data_b64: String },
+    #[serde(rename = "resize")]
+    Resize { cols: u16, rows: u16 },
+    #[serde(rename = "signal")]
+    Signal { sig: String },
+}
 
-        // For now, use regular process with pipes instead of PTY
-        // TODO: Integrate with shared pty-common utilities when available
-        let mut command = Command::new("sh");
-        command
-            .arg("-c")
-            .arg(cmd)
-            .current_dir(cwd)
-            .envs(&env)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true);
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum ServerMessage {
+    #[serde(rename = "stdout")]
+    Stdout { data_b64: String },
+    #[serde(rename = "exit")]
+    Exit { code: i32 },
+    #[serde(rename = "error")]
+    Error { message: String },
+}
 
-        let child = command.spawn().context("Failed to spawn command")?;
+pub async fn handle_ws_pty(service: WorldAgentService, ws: WebSocket) {
+    info!("ws_pty: client connected");
+    let (tx, mut rx) = ws.split();
+    let tx = Arc::new(Mutex::new(tx));
+    
+    // Wait for start message
+    let start_msg = match rx.next().await {
+        Some(Ok(Message::Text(text))) => {
+            match serde_json::from_str::<ClientMessage>(&text) {
+                Ok(ClientMessage::Start { cmd, cwd, env, span_id, cols, rows }) => {
+                    info!(
+                        %cmd,
+                        cwd = %cwd.display(),
+                        span_id = span_id.as_deref().unwrap_or("-"),
+                        cols = cols,
+                        rows = rows,
+                        "ws_pty: start"
+                    );
+                    (cmd, cwd, env, span_id, cols, rows)
+                }
+                Ok(_) => {
+                    let _ = tx.lock().await.send(Message::Text(serde_json::to_string(&ServerMessage::Error {
+                        message: "Expected start message".to_string(),
+                    }).unwrap())).await;
+                    return;
+                }
+                Err(e) => {
+                    let _ = tx.lock().await.send(Message::Text(serde_json::to_string(&ServerMessage::Error {
+                        message: format!("Invalid JSON: {}", e),
+                    }).unwrap())).await;
+                    return;
+                }
+            }
+        }
+        Some(Ok(_)) => {
+            let _ = tx.lock().await.send(Message::Text(serde_json::to_string(&ServerMessage::Error {
+                message: "Expected text message".to_string(),
+            }).unwrap())).await;
+            return;
+        }
+        Some(Err(e)) => {
+            let _ = tx.lock().await.send(Message::Text(serde_json::to_string(&ServerMessage::Error {
+                message: format!("WebSocket error: {}", e),
+            }).unwrap())).await;
+            return;
+        }
+        None => return, // Connection closed
+    };
 
-        let (tx, rx) = mpsc::channel(100);
+    let (cmd, cwd, env, _span_id, cols, rows) = start_msg;
 
-        Ok(Self {
-            child,
-            tx,
-            rx,
-            session_id,
-        })
-    }
-
-    /// Handle bidirectional streaming over WebSocket.
-    #[allow(dead_code)]
-    pub async fn handle_websocket<S>(mut self, ws: WebSocketStream<S>) -> Result<()>
-    where
-        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+    // Prepare in-world session context (best-effort)
+    let mut world_id_for_logs: String = "-".to_string();
+    let mut ns_name_opt: Option<String> = None;
+    let mut cgroup_path_opt: Option<std::path::PathBuf> = None;
+    let mut in_world = false;
+    #[cfg(target_os = "linux")]
     {
-        let (mut ws_sender, mut ws_receiver) = ws.split();
-
-        // Get child's stdin/stdout
-        let mut stdin = self
-            .child
-            .stdin
-            .take()
-            .context("Failed to get child stdin")?;
-        let stdout = self
-            .child
-            .stdout
-            .take()
-            .context("Failed to get child stdout")?;
-        let stderr = self
-            .child
-            .stderr
-            .take()
-            .context("Failed to get child stderr")?;
-
-        // Task 1: Read from child stdout/stderr and send to WebSocket
-        let tx = self.tx.clone();
-        let session_id = self.session_id.clone();
-        let output_task = tokio::spawn(async move {
-            let mut stdout_reader = tokio::io::BufReader::new(stdout).lines();
-            let mut stderr_reader = tokio::io::BufReader::new(stderr).lines();
-
-            loop {
-                tokio::select! {
-                    line = stdout_reader.next_line() => {
-                        match line {
-                            Ok(Some(line)) => {
-                                let data = format!("[OUT] {}\n", line).into_bytes();
-                                if tx.send(data).await.is_err() {
-                                    break;
-                                }
-                            }
-                            Ok(None) => break, // EOF
-                            Err(_) => break,
-                        }
-                    }
-                    line = stderr_reader.next_line() => {
-                        match line {
-                            Ok(Some(line)) => {
-                                let data = format!("[ERR] {}\n", line).into_bytes();
-                                if tx.send(data).await.is_err() {
-                                    break;
-                                }
-                            }
-                            Ok(None) => break, // EOF
-                            Err(_) => break,
-                        }
-                    }
-                }
+        use world_api::{WorldSpec, ResourceLimits};
+        let spec = WorldSpec {
+            reuse_session: true,
+            isolate_network: true,
+            limits: ResourceLimits::default(),
+            enable_preload: false,
+            allowed_domains: substrate_broker::allowed_domains(),
+            project_dir: cwd.clone(),
+        };
+        if let Ok(world) = service.ensure_session_world(&spec) {
+            world_id_for_logs = world.id.clone();
+            let ns_name = format!("substrate-{}", world.id);
+            let ns_path = format!("/var/run/netns/{}", ns_name);
+            if std::path::Path::new(&ns_path).exists() {
+                ns_name_opt = Some(ns_name);
             }
-
-            tracing::debug!("Output task completed for session {}", session_id);
-        });
-
-        // Task 2: Forward output to WebSocket
-        let mut rx = self.rx;
-        let ws_forward_task = tokio::spawn(async move {
-            while let Some(data) = rx.recv().await {
-                if ws_sender.send(Message::Binary(data)).await.is_err() {
-                    break;
-                }
-            }
-        });
-
-        // Task 3: Read from WebSocket and write to child stdin
-        let input_task = tokio::spawn(async move {
-            while let Some(msg) = ws_receiver.next().await {
-                match msg {
-                    Ok(Message::Binary(data)) => {
-                        if stdin.write_all(&data).await.is_err() {
-                            break;
-                        }
-                        if stdin.flush().await.is_err() {
-                            break;
-                        }
-                    }
-                    Ok(Message::Text(text)) => {
-                        if stdin.write_all(text.as_bytes()).await.is_err() {
-                            break;
-                        }
-                        if stdin.flush().await.is_err() {
-                            break;
-                        }
-                    }
-                    Ok(Message::Close(_)) => break,
-                    _ => {} // Ignore other message types
-                }
-            }
-        });
-
-        // Wait for any task to complete (indicating session end)
-        tokio::select! {
-            _ = output_task => {},
-            _ = ws_forward_task => {},
-            _ = input_task => {},
-            _ = self.child.wait() => {},
-        }
-
-        Ok(())
-    }
-
-    /// Get the session ID.
-    #[allow(dead_code)]
-    pub fn session_id(&self) -> &str {
-        &self.session_id
-    }
-
-    /// Try to get the exit status if the process has finished.
-    #[allow(dead_code)]
-    pub fn try_wait(&mut self) -> Result<Option<std::process::ExitStatus>> {
-        match self.child.try_wait() {
-            Ok(status) => Ok(status),
-            Err(e) => Err(anyhow::anyhow!("Failed to check child status: {}", e)),
+            let cg = std::path::PathBuf::from("/sys/fs/cgroup/substrate").join(&world.id);
+            cgroup_path_opt = Some(cg);
+            in_world = true;
         }
     }
-}
+    
+    // Create PTY
+    let pty_system = native_pty_system();
+    let pair = match pty_system.openpty(PtySize {
+        rows,
+        cols,
+        pixel_width: 0,
+        pixel_height: 0,
+    }) {
+        Ok(pair) => pair,
+        Err(e) => {
+            let _ = tx.lock().await.send(Message::Text(serde_json::to_string(&ServerMessage::Error {
+                message: format!("Failed to create PTY: {}", e),
+            }).unwrap())).await;
+            return;
+        }
+    };
 
-/// Simple PTY session for non-interactive commands.
-#[allow(dead_code)]
-pub struct SimplePtySession {
-    cmd: String,
-    cwd: std::path::PathBuf,
-    env: HashMap<String, String>,
-}
-
-#[allow(dead_code)]
-impl SimplePtySession {
-    pub fn new(cmd: String, cwd: std::path::PathBuf, env: HashMap<String, String>) -> Self {
-        Self { cmd, cwd, env }
+    // Spawn command (under netns when available)
+    let mut cmd_builder = CommandBuilder::new("sh");
+    #[cfg(target_os = "linux")]
+    if let Some(ref ns_name) = ns_name_opt {
+        cmd_builder = CommandBuilder::new("ip");
+        cmd_builder.args(["netns", "exec", ns_name, "sh", "-lc", &cmd]);
+    } else {
+        cmd_builder.args(["-lc", &cmd]);
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        cmd_builder.args(["-lc", &cmd]);
+    }
+    cmd_builder.cwd(cwd);
+    for (key, value) in env {
+        cmd_builder.env(key, value);
     }
 
-    /// Execute the command and return the result.
-    pub async fn execute(&self) -> Result<(i32, Vec<u8>, Vec<u8>)> {
-        let output = Command::new("sh")
-            .arg("-c")
-            .arg(&self.cmd)
-            .current_dir(&self.cwd)
-            .envs(&self.env)
-            .output()
-            .await
-            .context("Failed to execute command")?;
+    let mut child = match pair.slave.spawn_command(cmd_builder) {
+        Ok(child) => child,
+        Err(e) => {
+            let _ = tx.lock().await.send(Message::Text(serde_json::to_string(&ServerMessage::Error {
+                message: format!("Failed to spawn command: {}", e),
+            }).unwrap())).await;
+            return;
+        }
+    };
 
-        let exit_code = output.status.code().unwrap_or(-1);
-        Ok((exit_code, output.stdout, output.stderr))
+    // Cache child PID for signal handling
+    let child_pid: Option<i32> = child.process_id().map(|p| p as i32);
+
+    // Attach child to world cgroup (best-effort)
+    #[cfg(target_os = "linux")]
+    if let (Some(pid), Some(ref cg)) = (child.process_id(), cgroup_path_opt.as_ref()) {
+        let _ = std::fs::create_dir_all(cg);
+        let _ = std::fs::write(cg.join("cgroup.procs"), pid.to_string());
     }
+
+    drop(pair.slave);
+
+    // Log start with in-world context
+    info!(
+        world_id = %world_id_for_logs,
+        ns = %ns_name_opt.clone().unwrap_or_else(|| "-".into()),
+        cgroup = %cgroup_path_opt
+            .as_ref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "-".into()),
+        cols = cols,
+        rows = rows,
+        in_world = in_world,
+        "ws_pty: start"
+    );
+
+    // Reader task: forward PTY output to WebSocket
+    let reader = match pair.master.try_clone_reader() {
+        Ok(reader) => reader,
+        Err(e) => {
+            let _ = tx.lock().await.send(Message::Text(serde_json::to_string(&ServerMessage::Error {
+                message: format!("Failed to clone PTY reader: {}", e),
+            }).unwrap())).await;
+            return;
+        }
+    };
+    let tx_clone = tx.clone();
+    let reader_task = tokio::spawn(async move {
+        let mut reader = reader;
+        let mut buf = [0u8; 8192];
+        loop {
+            let read_result = tokio::task::spawn_blocking(move || {
+                let result = reader.read(&mut buf);
+                (reader, buf, result)
+            }).await;
+            
+            match read_result {
+                Ok((r, b, Ok(n))) if n > 0 => {
+                    reader = r;
+                    buf = b;
+                    let data_b64 = BASE64.encode(&buf[..n]);
+                    let msg = ServerMessage::Stdout { data_b64 };
+                    if tx_clone.lock().await.send(Message::Text(serde_json::to_string(&msg).unwrap())).await.is_err() {
+                        break;
+                    }
+                }
+                _ => break,
+            }
+        }
+    });
+
+    // Get writer once using take_writer
+    let writer = match pair.master.take_writer() {
+        Ok(writer) => writer,
+        Err(e) => {
+            let _ = tx.lock().await.send(Message::Text(serde_json::to_string(&ServerMessage::Error {
+                message: format!("Failed to take PTY writer: {}", e),
+            }).unwrap())).await;
+            return;
+        }
+    };
+    
+    // Keep master for resize operations
+    let master = Arc::new(Mutex::new(pair.master));
+    let master_clone = master.clone();
+    
+    // Writer task: handle WebSocket messages
+    let input_task = tokio::spawn(async move {
+        let mut writer = writer;
+        while let Some(msg) = rx.next().await {
+            match msg {
+                Ok(Message::Text(text)) => {
+                    match serde_json::from_str::<ClientMessage>(&text) {
+                        Ok(ClientMessage::Stdin { data_b64 }) => {
+                            match BASE64.decode(&data_b64) {
+                                Ok(data) => {
+                                    let write_result = tokio::task::spawn_blocking(move || {
+                                        let result = writer.write_all(&data);
+                                        (writer, result)
+                                    }).await;
+                                    
+                                    match write_result {
+                                        Ok((w, Ok(_))) => {
+                                            writer = w;
+                                        }
+                                        _ => break,
+                                    }
+                                }
+                                Err(_) => continue, // Ignore invalid base64
+                            }
+                        }
+                        Ok(ClientMessage::Resize { cols, rows }) => {
+                            let size = PtySize { rows, cols, pixel_width: 0, pixel_height: 0 };
+                            let _ = master_clone.lock().await.resize(size);
+                        }
+                        Ok(ClientMessage::Signal { sig }) => {
+                            // Forward signal to child process if available
+                            if let Some(pid) = child_pid {
+                                if let Some(signo) = parse_signal(&sig) {
+                                    // Safety: libc::kill is async-signal-safe; called on background task
+                                    unsafe { libc::kill(pid as libc::pid_t, signo) };
+                                    // best-effort: no response frame, just log on server side
+                                    info!("ws_pty: forwarded signal {} to pid {}", sig, pid);
+                                }
+                            }
+                        }
+                        _ => {} // Ignore other message types
+                    }
+                }
+                Ok(Message::Close(_)) => break,
+                _ => {} // Ignore other message types
+            }
+        }
+    });
+
+    // Wait for child process to exit
+    let status = tokio::task::spawn_blocking(move || child.wait()).await
+        .unwrap_or_else(|_| Ok(portable_pty::ExitStatus::with_exit_code(1)));
+    
+    // Send exit message
+    let exit_code = status.map(|s| s.exit_code() as i32).unwrap_or(1);
+    info!(exit_code, "ws_pty: exit");
+    let exit_msg = ServerMessage::Exit { code: exit_code };
+    let _ = tx.lock().await.send(Message::Text(serde_json::to_string(&exit_msg).unwrap())).await;
+
+    // Clean up tasks
+    reader_task.abort();
+    input_task.abort();
+    info!("ws_pty: session closed");
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
 
-    #[tokio::test]
-    async fn test_simple_pty_session() {
-        let session = SimplePtySession::new(
-            "echo hello".to_string(),
-            std::env::current_dir().unwrap(),
-            HashMap::new(),
-        );
-
-        let (exit_code, stdout, stderr) = session.execute().await.unwrap();
-
-        assert_eq!(exit_code, 0);
-        assert_eq!(String::from_utf8_lossy(&stdout).trim(), "hello");
-        assert!(stderr.is_empty());
+    #[test]
+    fn test_client_message_start_serialization() {
+        let msg = ClientMessage::Start {
+            cmd: "echo hi".into(),
+            cwd: std::env::current_dir().unwrap(),
+            env: HashMap::new(),
+            span_id: Some("spn_test".into()),
+            cols: 80,
+            rows: 24,
+        };
+        let js = serde_json::to_string(&msg).unwrap();
+        assert!(js.contains("\"start\""));
+        assert!(js.contains("echo hi"));
     }
 
-    #[tokio::test]
-    async fn test_async_pty_session_creation() {
-        let cwd = std::env::current_dir().unwrap();
-        let env = HashMap::new();
-
-        match AsyncPtySession::new("echo hello", &cwd, env).await {
-            Ok(session) => {
-                assert!(session.session_id().starts_with("pty_"));
-            }
-            Err(e) => {
-                println!("Failed to create async PTY session: {}", e);
-            }
-        }
+    #[test]
+    fn test_server_message_stdout_serialization() {
+        let msg = ServerMessage::Stdout { data_b64: BASE64.encode(b"hello") };
+        let js = serde_json::to_string(&msg).unwrap();
+        assert!(js.contains("\"stdout\""));
+        assert!(js.contains("aGVsbG8"));
     }
 }

@@ -37,6 +37,7 @@ substrate-broker = { path = "../broker" }
 # Platform-specific world backends
 [target.'cfg(target_os = "linux")'.dependencies]
 world = { path = "../world" }
+libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"

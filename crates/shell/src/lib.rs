@@ -13,6 +13,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::env;
 use std::io::{self, BufRead};
+use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
@@ -31,10 +32,88 @@ use reedline::{
     PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus, Reedline, ReedlineEvent,
     ReedlineMenu, Signal, Span, Suggestion,
 };
+use tokio_tungstenite as tungs;
+#[cfg(unix)]
+use tokio::net::UnixStream;
+#[cfg(target_os = "linux")]
+use tokio::signal::unix::{signal, SignalKind};
+use futures::StreamExt as _; // for next()
+use futures::SinkExt as _;   // for send()
+use base64::engine::general_purpose::STANDARD as B64;
+use base64::Engine as _;
 // use nu_ansi_term::{Color, Style}; // Unused for now
 use std::borrow::Cow;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
+#[cfg(target_os = "linux")]
+use std::os::unix::io::AsRawFd;
+#[cfg(target_os = "linux")]
+use nix::sys::termios::{self, ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices, Termios};
+
+#[cfg(target_os = "linux")]
+fn get_term_size() -> (u16, u16) {
+    // Try to read the current terminal size; fall back to 80x24
+    let fd = std::io::stdout().as_raw_fd();
+    let mut ws: libc::winsize = libc::winsize { ws_row: 0, ws_col: 0, ws_xpixel: 0, ws_ypixel: 0 };
+    unsafe {
+        if libc::ioctl(fd, libc::TIOCGWINSZ, &mut ws) == 0 {
+            let cols = if ws.ws_col == 0 { 80 } else { ws.ws_col };
+            let rows = if ws.ws_row == 0 { 24 } else { ws.ws_row };
+            return (cols, rows);
+        }
+    }
+    (80, 24)
+}
+
+#[cfg(target_os = "linux")]
+struct RawModeGuard {
+    file: std::fs::File,
+    orig: Termios,
+}
+
+#[cfg(target_os = "linux")]
+impl RawModeGuard {
+    fn new_for_tty() -> anyhow::Result<Self> {
+        // Open controlling terminal
+        let file = std::fs::OpenOptions::new().read(true).write(true).open("/dev/tty")?;
+        let mut tio = termios::tcgetattr(&file)
+            .map_err(|e| anyhow::anyhow!("tcgetattr: {}", e))?;
+        let orig = tio.clone();
+        // Configure raw mode (manual equivalent of cfmakeraw)
+        tio.input_flags.remove(
+            InputFlags::BRKINT | InputFlags::ICRNL | InputFlags::INPCK | InputFlags::ISTRIP | InputFlags::IXON,
+        );
+        tio.control_flags.insert(ControlFlags::CS8);
+        tio.local_flags
+            .remove(LocalFlags::ECHO | LocalFlags::ICANON | LocalFlags::IEXTEN | LocalFlags::ISIG);
+        tio.output_flags.remove(OutputFlags::OPOST);
+        // Set read to return as soon as 1 byte is available
+        let vmin = SpecialCharacterIndices::VMIN as usize;
+        let vtime = SpecialCharacterIndices::VTIME as usize;
+        tio.control_chars[vmin] = 1;
+        tio.control_chars[vtime] = 0;
+        termios::tcsetattr(&file, SetArg::TCSANOW, &tio)
+            .map_err(|e| anyhow::anyhow!("tcsetattr: {}", e))?;
+        Ok(Self { file, orig })
+    }
+
+    fn for_stdin_if_tty() -> anyhow::Result<Option<Self>> {
+        if !atty::is(atty::Stream::Stdin) {
+            return Ok(None);
+        }
+        match Self::new_for_tty() {
+            Ok(g) => Ok(Some(g)),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for RawModeGuard {
+    fn drop(&mut self) {
+        let _ = termios::tcsetattr(&self.file, SetArg::TCSANOW, &self.orig);
+    }
+}
 
 // Global flag to prevent double SIGINT handling - must be pub(crate) for pty_exec access
 pub(crate) static PTY_ACTIVE: AtomicBool = AtomicBool::new(false);
@@ -947,8 +1026,8 @@ pub fn run_shell() -> Result<i32> {
                     env::set_var("SUBSTRATE_WORLD", "enabled");
                     env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
                 }
-                Err(e) => {
-                    eprintln!("substrate: warn: world isolation unavailable (observe-only): {}", e);
+                Err(_e) => {
+                    // Degrade silently: world may be unavailable in this environment.
                 }
             }
         }
@@ -1088,11 +1167,11 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
 
                 let cmd_id = Uuid::now_v7().to_string();
 
-                // Key change: Use suspend guard for PTY commands
+                // Use suspend guard for PTY commands and route via execute_command (WS PTY when enabled)
                 if needs_pty_exec {
                     // Suspend Reedline while PTY command runs
                     let _guard = line_editor.suspend_guard();
-                    match execute_with_pty(config, &line, &cmd_id, running_child_pid.clone()) {
+                    match execute_command(config, &line, &cmd_id, running_child_pid.clone()) {
                         Ok(status) => {
                             if !status.success() {
                                 #[cfg(unix)]
@@ -1666,8 +1745,9 @@ fn collect_world_telemetry(
         // Try to get filesystem diff
         let fs_diff = match backend.fs_diff(&handle, _span_id) {
             Ok(diff) => Some(diff),
-            Err(e) => {
-                eprintln!("substrate: warning: failed to collect fs_diff: {}", e);
+            Err(_e) => {
+                // PTY sessions may run in a different process (world-agent), so fs_diff via
+                // the local backend cache can be unavailable. Suppress noisy warnings here.
                 None
             }
         };
@@ -2493,7 +2573,7 @@ fn execute_command(
 
     // Start span for command execution
     let policy_decision;
-    let span = if std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
+    let mut span = if std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
         // Policy evaluation (Phase 4)
         let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
@@ -2584,7 +2664,43 @@ fn execute_command(
     let should_use_pty = forced || (!disabled && needs_pty(trimmed));
 
     if should_use_pty {
-        // Use PTY execution path for interactive commands
+        // Attempt world-agent PTY WS route on Linux when world is enabled or agent socket exists
+        #[cfg(target_os = "linux")]
+        {
+            let world_enabled = std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
+            let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
+            if world_enabled || uds_exists {
+                // Use span id if we have a span, otherwise fall back to cmd_id as a correlation hint
+                let span_id_for_ws = span
+                    .as_ref()
+                    .map(|s| s.get_span_id().to_string())
+                    .unwrap_or_else(|| cmd_id.to_string());
+                match execute_world_pty_over_ws(trimmed, &span_id_for_ws) {
+                    Ok(code) => {
+                        if let Some(active_span) = span.take() {
+                            let (scopes_used, fs_diff) = collect_world_telemetry(active_span.get_span_id());
+                            let _ = active_span.finish(code, scopes_used, fs_diff);
+                        }
+                        #[cfg(unix)]
+                        {
+                            use std::os::unix::process::ExitStatusExt;
+                            return Ok(ExitStatus::from_raw((code & 0xff) << 8));
+                        }
+                        #[cfg(windows)]
+                        {
+                            use std::os::windows::process::ExitStatusExt;
+                            return Ok(ExitStatus::from_raw(code as u32));
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("substrate: warn: world PTY over WS failed, falling back to host PTY: {}", e);
+                        // fall through to host PTY
+                    }
+                }
+            }
+        }
+
+        // Use host PTY execution path as fallback
         let pty_status = pty_exec::execute_with_pty(config, trimmed, cmd_id, running_child_pid)?;
 
         // Finish span if we created one (PTY path)
@@ -2717,37 +2833,19 @@ fn execute_command(
     )?;
     let start_time = std::time::Instant::now();
 
-    // Route non-PTY commands through world backend if available (Linux only)
+    // Route non-PTY commands through world agent (UDS HTTP) when world is enabled (Linux only)
     #[cfg(target_os = "linux")]
-    if env::var("SUBSTRATE_WORLD_ID").is_ok() {
-        use world::LinuxLocalBackend;
-        use world_api::{WorldBackend, ExecRequest};
-        let backend = LinuxLocalBackend::new();
-        let handle = world_api::WorldHandle {
-            id: env::var("SUBSTRATE_WORLD_ID").unwrap(),
-        };
-        let req = ExecRequest {
-            cmd: trimmed.to_string(),
-            cwd: env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
-            env: env::vars().collect(),
-            pty: false,
-            span_id: span.as_ref().map(|s| s.get_span_id()),
-        };
-        match backend.exec(&handle, req) {
-            Ok(res) => {
+    {
+        let world_enabled = env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
+        let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
+        if world_enabled || uds_exists {
+            if let Ok((exit_code, stdout, stderr, scopes_used)) = exec_non_pty_via_agent(trimmed) {
                 use std::io::{self, Write};
-                let _ = io::stdout().write_all(&res.stdout);
-                let _ = io::stderr().write_all(&res.stderr);
-                let exit_code = res.exit;
-                let scopes_used = res.scopes_used;
-                let fs_diff = res.fs_diff;
-                
-                // Finish span with immediate fs_diff from ExecResult
+                let _ = io::stdout().write_all(&stdout);
+                let _ = io::stderr().write_all(&stderr);
                 if let Some(active_span) = span {
-                    let _ = active_span.finish(exit_code, scopes_used, fs_diff);
+                    let _ = active_span.finish(exit_code, scopes_used, None);
                 }
-                
-                // Convert exit code to ExitStatus and return
                 #[cfg(unix)]
                 {
                     use std::os::unix::process::ExitStatusExt;
@@ -2758,10 +2856,8 @@ fn execute_command(
                     use std::os::windows::process::ExitStatusExt;
                     return Ok(std::process::ExitStatus::from_raw(exit_code as u32));
                 }
-            }
-            Err(e) => {
-                eprintln!("substrate: warn: world exec failed, running direct: {}", e);
-                // Fall through to existing execution path
+            } else {
+                eprintln!("substrate: warn: world exec failed, running direct");
             }
         }
     }
@@ -2813,6 +2909,274 @@ fn execute_command(
     }
 
     Ok(status)
+}
+
+#[cfg(target_os = "linux")]
+fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Result<i32> {
+    // Ensure agent is ready
+    ensure_world_agent_ready()?;
+
+    // Connect UDS and do WS handshake
+    let rt = tokio::runtime::Runtime::new()?;
+    let code = rt.block_on(async move {
+        let stream = UnixStream::connect("/run/substrate.sock").await
+            .map_err(|e| anyhow::anyhow!("connect UDS: {}", e))?;
+        let url = url::Url::parse("ws://localhost/v1/stream").unwrap();
+        let (ws, _resp) = tungs::client_async(url, stream).await
+            .map_err(|e| anyhow::anyhow!("ws handshake: {}", e))?;
+        let (sink, mut stream) = ws.split();
+        let sink = std::sync::Arc::new(tokio::sync::Mutex::new(sink));
+
+        if std::env::var("SUBSTRATE_WS_DEBUG").ok().as_deref() == Some("1") {
+            eprintln!("using world-agent PTY WS");
+        }
+
+        // Prepare start frame (strip optional ":pty " prefix used in REPL to force PTY)
+        let cmd_sanitized = if let Some(rest) = cmd.strip_prefix(":pty ") { rest } else { cmd };
+        let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
+        #[cfg(target_os = "linux")]
+        let (cols, rows) = get_term_size();
+        #[cfg(not(target_os = "linux"))]
+        let (cols, rows) = (80u16, 24u16);
+        let start = serde_json::json!({
+            "type": "start",
+            "cmd": cmd_sanitized,
+            "cwd": cwd,
+            "env": env_map,
+            "span_id": span_id,
+            "cols": cols,
+            "rows": rows,
+        });
+        sink
+            .lock()
+            .await
+            .send(tungs::tungstenite::Message::Text(start.to_string()))
+            .await
+            .map_err(|e| anyhow::anyhow!("ws send start: {}", e))?;
+
+        // Enter raw mode on the local terminal and ensure restoration
+        #[cfg(target_os = "linux")]
+        let _raw_guard = RawModeGuard::for_stdin_if_tty()?;
+
+        // Spawn stdin forwarder (raw bytes)
+        let sink_in = sink.clone();
+        let stdin_task = tokio::spawn(async move {
+            use tokio::io::AsyncReadExt;
+            let mut stdin = tokio::io::stdin();
+            let mut buf = [0u8; 8192];
+            loop {
+                match stdin.read(&mut buf).await {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        let b64 = B64.encode(&buf[..n]);
+                        let frame = serde_json::json!({"type":"stdin", "data_b64": b64});
+                        if sink_in
+                            .lock()
+                            .await
+                            .send(tungs::tungstenite::Message::Text(frame.to_string()))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+
+        // Spawn resize watcher (SIGWINCH)
+        #[cfg(target_os = "linux")]
+        let resize_task = {
+            let sink_resize = sink.clone();
+            let mut sig = signal(SignalKind::window_change())
+                .map_err(|e| anyhow::anyhow!("sigwinch subscribe: {}", e))?;
+            tokio::spawn(async move {
+                while sig.recv().await.is_some() {
+                    let (c, r) = get_term_size();
+                    let frame = serde_json::json!({"type":"resize", "cols": c, "rows": r});
+                    if sink_resize
+                        .lock()
+                        .await
+                        .send(tungs::tungstenite::Message::Text(frame.to_string()))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            })
+        };
+
+        // Spawn Unix signal forwarders (INT, TERM, HUP, QUIT) → WS Signal frames
+        #[cfg(target_os = "linux")]
+        let signal_tasks = {
+            let mut tasks = Vec::new();
+
+            // SIGINT
+            if let Ok(mut sig) = signal(SignalKind::interrupt()) {
+                let s = sink.clone();
+                tasks.push(tokio::spawn(async move {
+                    while sig.recv().await.is_some() {
+                        let frame = serde_json::json!({"type":"signal", "sig": "INT"});
+                        if s.lock().await
+                            .send(tungs::tungstenite::Message::Text(frame.to_string()))
+                            .await
+                            .is_err() { break; }
+                    }
+                }));
+            }
+            // SIGTERM
+            if let Ok(mut sig) = signal(SignalKind::terminate()) {
+                let s = sink.clone();
+                tasks.push(tokio::spawn(async move {
+                    while sig.recv().await.is_some() {
+                        let frame = serde_json::json!({"type":"signal", "sig": "TERM"});
+                        if s.lock().await
+                            .send(tungs::tungstenite::Message::Text(frame.to_string()))
+                            .await
+                            .is_err() { break; }
+                    }
+                }));
+            }
+            // SIGHUP
+            if let Ok(mut sig) = signal(SignalKind::hangup()) {
+                let s = sink.clone();
+                tasks.push(tokio::spawn(async move {
+                    while sig.recv().await.is_some() {
+                        let frame = serde_json::json!({"type":"signal", "sig": "HUP"});
+                        if s.lock().await
+                            .send(tungs::tungstenite::Message::Text(frame.to_string()))
+                            .await
+                            .is_err() { break; }
+                    }
+                }));
+            }
+            // SIGQUIT
+            if let Ok(mut sig) = signal(SignalKind::quit()) {
+                let s = sink.clone();
+                tasks.push(tokio::spawn(async move {
+                    while sig.recv().await.is_some() {
+                        let frame = serde_json::json!({"type":"signal", "sig": "QUIT"});
+                        if s.lock().await
+                            .send(tungs::tungstenite::Message::Text(frame.to_string()))
+                            .await
+                            .is_err() { break; }
+                    }
+                }));
+            }
+
+            tasks
+        };
+
+        let mut exit_code: i32 = 0;
+        while let Some(msg) = stream.next().await {
+            let msg = msg.map_err(|e| anyhow::anyhow!("ws recv: {}", e))?;
+            if msg.is_text() {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&msg.to_string()) {
+                    match v.get("type").and_then(|t| t.as_str()) {
+                        Some("stdout") => {
+                            if let Some(b64) = v.get("data_b64").and_then(|x| x.as_str()) {
+                                if let Ok(bytes) = B64.decode(b64) {
+                                    use std::io::Write;
+                                    let _ = std::io::stdout().write_all(&bytes);
+                                    let _ = std::io::stdout().flush();
+                                }
+                            }
+                        }
+                        Some("exit") => {
+                            exit_code = v.get("code").and_then(|c| c.as_i64()).unwrap_or(0) as i32;
+                            break;
+                        }
+                        Some("error") => {
+                            if let Some(msg) = v.get("message").and_then(|m| m.as_str()) {
+                                eprintln!("world-agent error: {}", msg);
+                            }
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+            } else if msg.is_close() {
+                break;
+            }
+        }
+
+        // Cleanup background tasks
+        let _ = stdin_task.abort();
+        #[cfg(target_os = "linux")]
+        {
+            let _ = resize_task.abort();
+            for t in signal_tasks { let _ = t.abort(); }
+        }
+        Ok::<i32, anyhow::Error>(exit_code)
+    })?;
+    Ok(code)
+}
+
+#[cfg(target_os = "linux")]
+fn ensure_world_agent_ready() -> anyhow::Result<()> {
+    use std::path::Path;
+    const SOCK: &str = "/run/substrate.sock";
+
+    // Helper: quick readiness probe via HTTP-over-UDS
+    fn probe_caps() -> bool {
+        match std::os::unix::net::UnixStream::connect(SOCK) {
+            Ok(mut s) => {
+                let _ = s.set_read_timeout(Some(std::time::Duration::from_millis(150)));
+                let _ = s.set_write_timeout(Some(std::time::Duration::from_millis(150)));
+                let req = b"GET /v1/capabilities HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+                if s.write_all(req).is_ok() {
+                    let mut buf = [0u8; 512];
+                    if let Ok(n) = s.read(&mut buf) {
+                        return n > 0 && std::str::from_utf8(&buf[..n]).unwrap_or("").contains(" 200 ");
+                    }
+                }
+                false
+            }
+            Err(_) => false,
+        }
+    }
+
+    // Fast path: already ready
+    if probe_caps() {
+        return Ok(());
+    }
+
+    // Clean up stale socket if present (no responding server)
+    if Path::new(SOCK).exists() {
+        let _ = std::fs::remove_file(SOCK);
+    }
+
+    // Try to spawn agent
+    let candidate_bins = [
+        std::env::var("SUBSTRATE_WORLD_AGENT_BIN").ok(),
+        which::which("substrate-world-agent").ok().map(|p| p.display().to_string()),
+        Some("target/debug/world-agent".to_string()),
+    ];
+    let bin = candidate_bins
+        .into_iter()
+        .flatten()
+        .find(|p| std::path::Path::new(p).exists())
+        .ok_or_else(|| anyhow::anyhow!("world-agent binary not found"))?;
+
+    std::process::Command::new(&bin)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| anyhow::anyhow!("spawn world-agent: {}", e))?;
+
+    // Wait up to ~1s for readiness
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1000);
+    while std::time::Instant::now() < deadline {
+        if probe_caps() {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    anyhow::bail!("world-agent readiness probe failed")
 }
 
 fn ok_status() -> Result<ExitStatus> {
@@ -2937,6 +3301,76 @@ fn handle_builtin(
     }
 
     Ok(builtin_result)
+}
+
+#[cfg(target_os = "linux")]
+fn exec_non_pty_via_agent(cmd: &str) -> anyhow::Result<(i32, Vec<u8>, Vec<u8>, Vec<String>)> {
+    use std::os::unix::net::UnixStream;
+    use std::io::{Read, Write};
+    let sock_path = "/run/substrate.sock";
+    let mut stream = UnixStream::connect(sock_path)
+        .map_err(|e| anyhow::anyhow!("connect UDS: {}", e))?;
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(3)))
+        .ok();
+    stream
+        .set_write_timeout(Some(std::time::Duration::from_secs(3)))
+        .ok();
+
+    let cwd = std::env::current_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        .display()
+        .to_string();
+    let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
+    let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+    let body = serde_json::json!({
+        "profile": null,
+        "cmd": cmd,
+        "cwd": cwd,
+        "env": env_map,
+        "pty": false,
+        "agent_id": agent_id,
+        "budget": null
+    })
+    .to_string();
+    let req = format!(
+        "POST /v1/execute HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{}",
+        body.len(), body
+    );
+    stream
+        .write_all(req.as_bytes())
+        .map_err(|e| anyhow::anyhow!("uds write: {}", e))?;
+
+    let mut resp = Vec::new();
+    stream
+        .read_to_end(&mut resp)
+        .map_err(|e| anyhow::anyhow!("uds read: {}", e))?;
+    let resp_str = String::from_utf8_lossy(&resp);
+    let mut parts = resp_str.splitn(2, "\r\n\r\n");
+    let header = parts.next().unwrap_or("");
+    let body = parts.next().unwrap_or("");
+    // Parse status line
+    let status_line = header.lines().next().unwrap_or("");
+    if !status_line.contains("200") {
+        return Err(anyhow::anyhow!(format!("agent exec failed: {}", status_line)));
+    }
+    let v: serde_json::Value = serde_json::from_str(body)
+        .map_err(|e| anyhow::anyhow!("parse json: {}", e))?;
+    let exit_code = v.get("exit").and_then(|x| x.as_i64()).unwrap_or(1) as i32;
+    let stdout_b64 = v.get("stdout_b64").and_then(|x| x.as_str()).unwrap_or("");
+    let stderr_b64 = v.get("stderr_b64").and_then(|x| x.as_str()).unwrap_or("");
+    let stdout = base64::engine::general_purpose::STANDARD
+        .decode(stdout_b64)
+        .unwrap_or_default();
+    let stderr = base64::engine::general_purpose::STANDARD
+        .decode(stderr_b64)
+        .unwrap_or_default();
+    let scopes_used = v
+        .get("scopes_used")
+        .and_then(|x| x.as_array())
+        .map(|arr| arr.iter().filter_map(|s| s.as_str().map(|s| s.to_string())).collect())
+        .unwrap_or_else(|| Vec::new());
+    Ok((exit_code, stdout, stderr, scopes_used))
 }
 
 fn execute_external(

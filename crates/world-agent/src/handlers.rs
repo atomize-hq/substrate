@@ -65,10 +65,12 @@ pub async fn execute(
 }
 
 /// Handle WebSocket upgrade for PTY streaming.
-pub async fn stream(ws: axum::extract::ws::WebSocketUpgrade) -> axum::response::Response {
-    // TODO: Implement WebSocket PTY streaming
-    ws.on_upgrade(|_socket| async {
-        // PTY streaming logic will go here
+pub async fn stream(
+    State(service): State<WorldAgentService>,
+    ws: axum::extract::ws::WebSocketUpgrade,
+) -> axum::response::Response {
+    ws.on_upgrade(move |socket| async move {
+        crate::pty::handle_ws_pty(service, socket).await;
     })
 }
 

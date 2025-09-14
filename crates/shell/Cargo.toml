@@ -45,7 +45,12 @@ serde = { version = "1.0", features = ["derive"] }
 substrate-trace = { version = "0.1.0", path = "../trace" }
 substrate-replay = { version = "0.1.0", path = "../replay" }
 substrate-graph = { version = "0.1.0", path = "../substrate-graph" }
-tokio = { version = "1.32", features = ["rt"] }
+tokio = { version = "1.32", features = ["rt", "signal"] }
+tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }
+hyperlocal = "0.8"
+futures = "0.3"
+base64 = "0.22"
+url = "2"
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.29", features = ["process", "signal", "term", "fs", "time", "poll"] }

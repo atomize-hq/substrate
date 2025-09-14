@@ -61,6 +61,11 @@ impl WorldAgentService {
         })
     }
 
+    /// Ensure a session world (thin wrapper over backend)
+    pub fn ensure_session_world(&self, spec: &WorldSpec) -> Result<WorldHandle> {
+        self.backend.ensure_session(spec)
+    }
+
     #[cfg(target_os = "linux")]
     fn create_backend() -> Result<Arc<dyn WorldBackend>> {
         use world::LinuxLocalBackend;
