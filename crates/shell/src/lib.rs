@@ -1019,6 +1019,7 @@ pub fn run_shell() -> Result<i32> {
                 enable_preload: false,
                 allowed_domains: substrate_broker::allowed_domains(),
                 project_dir: env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+                always_isolate: false,  // Default: use heuristic-based isolation
             };
             let backend = LinuxLocalBackend::new();
             match backend.ensure_session(&spec) {

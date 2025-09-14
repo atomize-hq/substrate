@@ -14,20 +14,32 @@ substrate --trace <SPAN_ID>
 substrate --replay <SPAN_ID>
 ```
 
-## Linux Isolation (optional)
+## Linux Isolation
 
-On Linux, you can ask replay to use the world backend for isolation and fs-diff collection.
+On Linux, replay uses the world-api backend by default for secure, consistent isolation and fs-diff collection.
 
 ```
-export SUBSTRATE_REPLAY_USE_WORLD=1
+# Replay with default world isolation
+substrate --replay <SPAN_ID>
+
+# Verbose output shows isolation strategy
+substrate --replay-verbose --replay <SPAN_ID>
+
+# Disable world isolation if needed (not recommended)
+export SUBSTRATE_REPLAY_USE_WORLD=disabled
 substrate --replay <SPAN_ID>
 ```
 
-When enabled, replay will:
-- Execute in a session world
-- Return `fs_diff` (writes/mods/deletes) and `scopes_used` if available
+By default on Linux, replay will:
+- Use the world-api backend (LinuxLocalBackend) for secure execution
+- Configure the world with `always_isolate: true`, forcing isolation for ALL commands (even simple ones like `echo` that normally wouldn't be isolated)
+- Return `fs_diff` (writes/mods/deletes) and `scopes_used` from the isolated execution
+- Show isolation strategy in verbose mode (overlay/fuse/copy-diff)
 
-On non-Linux platforms or when isolation is disabled, replay falls back to direct execution without `fs_diff`.
+To disable world isolation (not recommended for security reasons):
+- Set `SUBSTRATE_REPLAY_USE_WORLD=disabled` or `SUBSTRATE_REPLAY_USE_WORLD=0`
+
+On non-Linux platforms, replay falls back to direct execution without isolation or `fs_diff`.
 
 ## Tips
 

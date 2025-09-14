@@ -113,6 +113,7 @@ impl WorldAgentService {
                 .clone()
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| std::env::current_dir().unwrap_or_default()),
+            always_isolate: false,  // Default: use heuristic-based isolation
         };
 
         // Ensure world exists

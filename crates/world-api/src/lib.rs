@@ -24,6 +24,8 @@ pub struct WorldSpec {
     pub allowed_domains: Vec<String>,
     /// Host project directory to mount.
     pub project_dir: PathBuf,
+    /// Whether to force isolation for all commands.
+    pub always_isolate: bool,
 }
 
 impl Default for WorldSpec {
@@ -40,6 +42,7 @@ impl Default for WorldSpec {
                 "crates.io".to_string(),
             ],
             project_dir: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            always_isolate: false,
         }
     }
 }
@@ -163,6 +166,7 @@ mod tests {
         assert!(spec.isolate_network);
         assert!(!spec.enable_preload);
         assert!(spec.allowed_domains.contains(&"github.com".to_string()));
+        assert!(!spec.always_isolate);
     }
 
     #[test]

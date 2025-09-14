@@ -180,6 +180,11 @@ impl SessionWorld {
 
     /// Check if a command should be isolated with overlayfs.
     fn should_isolate_command(&self, cmd: &str) -> bool {
+        // Force isolation if always_isolate is set
+        if self.spec.always_isolate {
+            return true;
+        }
+
         // Commands that should run in isolated overlayfs
         let isolated_patterns = [
             "pip install",

@@ -121,6 +121,7 @@ pub async fn handle_ws_pty(service: WorldAgentService, ws: WebSocket) {
             enable_preload: false,
             allowed_domains: substrate_broker::allowed_domains(),
             project_dir: cwd.clone(),
+            always_isolate: false,  // Default: use heuristic-based isolation
         };
         if let Ok(world) = service.ensure_session_world(&spec) {
             world_id_for_logs = world.id.clone();

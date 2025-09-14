@@ -46,6 +46,66 @@ pub async fn execute_in_world(
         #[cfg(target_os = "linux")]
         {
             let verbose = std::env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1";
+            let start = std::time::Instant::now();
+
+            // Use world-api backend for consistent isolation
+            use world::LinuxLocalBackend;
+            use world_api::{WorldBackend, WorldSpec, ExecRequest, ResourceLimits};
+
+            let spec = WorldSpec {
+                reuse_session: true,
+                isolate_network: true,
+                limits: ResourceLimits::default(),
+                enable_preload: false,
+                allowed_domains: substrate_broker::allowed_domains(),
+                project_dir: state.cwd.clone(),
+                always_isolate: true,  // Force isolation for replay
+            };
+
+            let backend = LinuxLocalBackend::new();
+            match backend.ensure_session(&spec) {
+                Ok(handle) => {
+                    let req = ExecRequest {
+                        cmd: format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''")).to_string(),
+                        cwd: state.cwd.clone(),
+                        env: state.env.clone(),
+                        pty: false,
+                        span_id: Some(state.span_id.clone()),
+                    };
+
+                    match backend.exec(&handle, req) {
+                        Ok(res) => {
+                            if verbose {
+                                eprintln!("[replay] world strategy: overlay");
+                            }
+
+                            let duration_ms = start.elapsed().as_millis() as u64;
+                            return Ok(ExecutionResult {
+                                exit_code: res.exit,
+                                stdout: res.stdout,
+                                stderr: res.stderr,
+                                fs_diff: res.fs_diff,
+                                scopes_used: res.scopes_used,
+                                duration_ms,
+                            });
+                        }
+                        Err(e) => {
+                            if verbose {
+                                eprintln!("[replay] warn: world exec failed: {}", e);
+                            }
+                            // Fall through to legacy implementation or direct execution
+                        }
+                    }
+                }
+                Err(e) => {
+                    if verbose {
+                        eprintln!("[replay] warn: world session creation failed: {}", e);
+                    }
+                    // Fall through to legacy implementation or direct execution
+                }
+            }
+
+            // Legacy fallback implementation (kept for compatibility)
             let world_id = &state.span_id;
             let bash_cmd = format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''"));
             let start = std::time::Instant::now();
@@ -360,7 +420,9 @@ fn world_isolation_available() -> bool {
     // Check if world isolation is enabled and we're on Linux
     #[cfg(target_os = "linux")]
     {
-        std::env::var("SUBSTRATE_REPLAY_USE_WORLD").unwrap_or_default() == "1"
+        // Default to enabled, only disable if explicitly set to "disabled" or "0"
+        let world_var = std::env::var("SUBSTRATE_REPLAY_USE_WORLD").unwrap_or_else(|_| "enabled".to_string());
+        world_var != "disabled" && world_var != "0"
     }
 
     #[cfg(not(target_os = "linux"))]
