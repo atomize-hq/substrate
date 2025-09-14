@@ -129,7 +129,7 @@ Notes
 - PTY/WS
   - `SUBSTRATE_WS_DEBUG=1` (prints “using world-agent PTY WS” on connect)
   - `SUBSTRATE_FORCE_PTY` / `SUBSTRATE_DISABLE_PTY` (developer toggles)
-- Planned GC
+- GC Configuration
   - `SUBSTRATE_NETNS_GC_INTERVAL_SECS` (default 600; 0 disables periodic)
   - `SUBSTRATE_NETNS_GC_TTL_SECS` (default 0 meaning disabled)
 
@@ -175,11 +175,11 @@ Notes
 
 ---
 
-## 10) Netns GC (Planned)
+## 10) Netns GC (Implemented)
 
 Goal: Safely garbage‑collect orphaned `substrate-<WORLD_ID>` netns and best‑effort teardown of related nftables and empty cgroup dirs.
 
-Planned features:
+Implemented features:
 - Triggers
   - Startup sweep (once), periodic sweep (default every 10 minutes; configurable), and `POST /v1/gc` endpoint for on‑demand GC.
 - Conservative delete criteria
@@ -200,9 +200,8 @@ Planned features:
 ## 11) Limitations & Next Steps
 
 - PTY overlay fs_diff is intentionally deferred; non‑PTY continues to provide `fs_diff`.
-- macOS/Windows support is “observe‑only” for worlds.
+- macOS/Windows support is "observe‑only" for worlds.
 - Next steps
-  - Implement netns GC as above
   - Consider PTY overlay or post‑exit diff per span as a follow‑up phase
 
 ---
