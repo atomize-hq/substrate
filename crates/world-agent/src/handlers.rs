@@ -100,6 +100,22 @@ pub async fn request_scopes(
     Ok(ResponseJson(response))
 }
 
+/// Garbage collect orphaned network namespaces.
+pub async fn gc(State(_service): State<WorldAgentService>) -> Result<ResponseJson<Value>, ApiErrorResponse> {
+    // Read TTL from environment
+    let ttl = std::env::var("SUBSTRATE_NETNS_GC_TTL_SECS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .filter(|&ttl| ttl > 0)
+        .map(std::time::Duration::from_secs);
+
+    let report = crate::gc::sweep(ttl)
+        .await
+        .map_err(|e| ApiErrorResponse(ApiError::Internal(e.to_string())))?;
+
+    Ok(ResponseJson(serde_json::to_value(report).unwrap_or_else(|_| json!({}))))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

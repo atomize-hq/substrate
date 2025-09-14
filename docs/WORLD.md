@@ -84,7 +84,7 @@ Socket: `/run/substrate.sock`
     - `{"type":"error","message":"..."}`
 - `GET /v1/trace/:span_id` (placeholder)
 - `POST /v1/request_scopes` (placeholder)
-- Planned: `POST /v1/gc` (netns GC; see §10)
+- `POST /v1/gc` (netns GC; see §10)
 
 Notes
 - Protocol is stable; no TLS by design (UDS only).
