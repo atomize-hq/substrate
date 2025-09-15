@@ -26,6 +26,10 @@ substrate --replay <SPAN_ID>
 substrate --replay-verbose --replay <SPAN_ID>
 
 # Disable world isolation if needed (not recommended)
+# Option 1: CLI flag (applies only to this invocation)
+substrate --no-world --replay <SPAN_ID>
+
+# Option 2: Environment variable
 export SUBSTRATE_REPLAY_USE_WORLD=disabled
 substrate --replay <SPAN_ID>
 ```
@@ -37,6 +41,7 @@ By default on Linux, replay will:
 - Show isolation strategy in verbose mode (overlay/fuse/copy-diff)
 
 To disable world isolation (not recommended for security reasons):
+- Pass `--no-world` on the command line, or
 - Set `SUBSTRATE_REPLAY_USE_WORLD=disabled` or `SUBSTRATE_REPLAY_USE_WORLD=0`
 
 On non-Linux platforms, replay falls back to direct execution without isolation or `fs_diff`.
@@ -45,4 +50,3 @@ On non-Linux platforms, replay falls back to direct execution without isolation 
 
 - If the replayed command modifies files (e.g., `npm install`), run on a disposable project copy or in a clean world.
 - Use `--trace <SPAN_ID>` first to confirm the command and working directory.
-

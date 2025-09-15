@@ -1638,9 +1638,18 @@ fn handle_replay_command(span_id: &str) -> Result<()> {
         span_id: span_id.to_string(),
     };
 
-    // Execute with replay (choose world isolation when requested)
+    // Execute with replay (choose world isolation; default enabled, allow opt-out)
     let runtime = tokio::runtime::Runtime::new()?;
-    let use_world = env::var("SUBSTRATE_REPLAY_USE_WORLD").unwrap_or_default() == "1";
+    // Respect --no-world flag, then environment variable override, else default enabled
+    let no_world_flag = env::args().any(|a| a == "--no-world");
+    let use_world = if no_world_flag {
+        false
+    } else {
+        match env::var("SUBSTRATE_REPLAY_USE_WORLD") {
+            Ok(val) => val != "0" && val != "disabled",
+            Err(_) => true,
+        }
+    };
     // Best-effort capability warnings when world isolation requested but not available
     if cfg!(target_os = "linux") && use_world {
         // cgroup v2

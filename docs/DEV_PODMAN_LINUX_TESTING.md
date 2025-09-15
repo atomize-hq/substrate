@@ -48,8 +48,7 @@ Validate features (inside container)
   - mkdir -p /tmp/pretest && cd /tmp/pretest
   - target/debug/substrate -c "bash -lc 'mkdir demo && echo data > demo/file.txt'"
   - span_id=$(tail -n 50 /root/.substrate/trace.jsonl | jq -r 'select(.event_type=="command_complete") | .span_id' | tail -n1)
-  - export SUBSTRATE_REPLAY_USE_WORLD=1
-  - target/debug/substrate --replay "$span_id"
+  - target/debug/substrate --replay-verbose --replay "$span_id"
 - Expect fs_diff to include demo/ and demo/file.txt if overlayfs-in-userns is active
 
 Per-world cgroups and nftables (Phase B additions)
@@ -62,7 +61,7 @@ Per-world cgroups and nftables (Phase B additions)
   - Ensure `kernel.dmesg_restrict=0` to see LOG lines: `sysctl -w kernel.dmesg_restrict=0` (already configured by setup script).
   - Run a replayed curl to an external host to generate a LOG:
     - `target/debug/substrate -c "bash -lc 'curl -m2 http://example.com || true'"`
-    - Capture its span id and replay with `SUBSTRATE_REPLAY_USE_WORLD=1`.
+    - Capture its span id and replay (world isolation is on by default).
     - Check: `dmesg -T | grep substrate-dropped- | tail -n 5` and expect entries with the per-world prefix.
   - On constrained kernels or missing nft, replay prints: `[replay] warn: nft not available; netfilter scoping/logging disabled` and continues.
   - On missing netns privileges, replay prints: `[replay] warn: netns unavailable or insufficient privileges; applying host-wide rules or skipping network scoping`.
