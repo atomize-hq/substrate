@@ -26,6 +26,13 @@ Status: living document capturing near-term and upcoming work. Keep concise, act
   - On `--replay-verbose`, include a concise “scopes:” line with any collected scopes.
   - Acceptance: visible alongside “world strategy: …”
 
+- Install + Ops: ensure world-agent binary discoverable
+  - Package/install both `substrate` and `substrate-world-agent` into PATH so auto-start works on fresh installs.
+  - Consider systemd socket activation for `/run/substrate.sock` (units: world-agent.socket + world-agent.service).
+  - Improve auto-start search: include `target/release/world-agent` in addition to debug path.
+  - Optional helper: `substrate world install-agent` to copy/link the agent and a `world doctor` hint after install.
+  - Container image: copy agent to `/usr/local/bin/substrate-world-agent` or set `SUBSTRATE_WORLD_AGENT_BIN` in entrypoint.
+
 ## Hardening / Quality
 
 - Differentiate shell vs replay world warnings

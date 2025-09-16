@@ -27,9 +27,8 @@ Socket: `/run/substrate.sock`
 Always‑on by default (unless disabled):
 
 - Non‑PTY commands
-  - Shell POSTs to `world-agent /v1/execute` (UDS HTTP), which ensures a session world and executes the command inside it.
-  - Response returns `exit`, `stdout_b64`, `stderr_b64`, `scopes_used`.
-  - Filesystem diff (fs_diff) is produced for isolated runs on the backend; the shell finishes the span with that data.
+  - Shell POSTs to `world-agent /v1/execute` (UDS HTTP). When `SUBSTRATE_WORLD=enabled`, the shell auto‑starts the agent if needed and waits for readiness; if the socket is already present, it uses it directly.
+  - Response returns `exit`, `stdout_b64`, `stderr_b64`, `scopes_used`, and `fs_diff` (when available). The shell consumes `fs_diff` directly from the agent and attaches it to the span.
 
 - PTY commands (interactive/TUIs)
   - Shell connects a WebSocket to `world-agent /v1/stream` over the UDS.
@@ -41,6 +40,7 @@ Always‑on by default (unless disabled):
 
 - Fallback
   - If the agent/socket is unavailable or WS handshake fails, the shell prints exactly one warning and runs on the host path for that command.
+  - Non‑PTY fallback warning text: `substrate: warn: shell world-agent exec failed, running direct`.
 
 Non‑Linux platforms: shell prints friendly notices and runs direct.
 
@@ -224,4 +224,3 @@ Implemented features:
 - Architecture: `docs/ARCHITECTURE.md`
 - Policy broker: `docs/BROKER.md`
 - Telemetry: `docs/TELEMETRY.md`, `docs/TRACE.md`
-

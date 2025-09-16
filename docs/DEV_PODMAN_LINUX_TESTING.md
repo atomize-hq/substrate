@@ -50,6 +50,11 @@ Validate features (inside container)
   - span_id=$(tail -n 50 /root/.substrate/trace.jsonl | jq -r 'select(.event_type=="command_complete") | .span_id' | tail -n1)
   - target/debug/substrate --replay-verbose --replay "$span_id"
 - Expect fs_diff to include demo/ and demo/file.txt if overlayfs-in-userns is active
+- Quick agent HTTP fs_diff check (UDS):
+  - curl --unix-socket /run/substrate.sock \
+    -H "content-type: application/json" \
+    -d '{"cmd":"bash -lc \"echo ok >> demo/file.txt\"","cwd":"/tmp/pretest","env":{},"pty":false,"agent_id":"human"}' \
+    http://localhost/v1/execute | jq .
 
 Per-world cgroups and nftables (Phase B additions)
 - cgroups attach (privileged): during replay, a per-world cgroup appears at `/sys/fs/cgroup/substrate/<span_id>`.

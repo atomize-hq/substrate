@@ -1860,6 +1860,34 @@ mod proptest_tests {
     }
 }
 
+#[cfg(test)]
+mod fs_diff_parse_tests {
+    #[test]
+    fn test_parse_fs_diff_from_agent_json() {
+        let sample = r#"{
+            "exit":0,
+            "span_id":"spn_x",
+            "stdout_b64":"",
+            "stderr_b64":"",
+            "scopes_used":["tcp:example.com:443"],
+            "fs_diff":{
+                "writes":["/tmp/t/a.txt"],
+                "mods":[],
+                "deletes":[],
+                "truncated":false
+            }
+        }"#;
+        let v: serde_json::Value = serde_json::from_str(sample).unwrap();
+        let fd_val = v.get("fs_diff").cloned().unwrap();
+        let diff: substrate_common::FsDiff = serde_json::from_value(fd_val).unwrap();
+        assert_eq!(diff.writes.len(), 1);
+        assert_eq!(diff.writes[0], std::path::PathBuf::from("/tmp/t/a.txt"));
+        assert!(diff.mods.is_empty());
+        assert!(diff.deletes.is_empty());
+        assert!(!diff.truncated);
+    }
+}
+
 fn set_bashenv_trampoline(cmd: &mut Command) {
     if let Ok(home) = std::env::var("HOME") {
         let preexec_path = format!("{home}/.substrate_preexec");
@@ -2849,12 +2877,15 @@ fn execute_command(
         let world_enabled = env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
         let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
         if world_enabled || uds_exists {
-            if let Ok((exit_code, stdout, stderr, scopes_used)) = exec_non_pty_via_agent(trimmed) {
+            if world_enabled {
+                let _ = ensure_world_agent_ready();
+            }
+            if let Ok((exit_code, stdout, stderr, scopes_used, fs_diff_opt)) = exec_non_pty_via_agent(trimmed) {
                 use std::io::{self, Write};
                 let _ = io::stdout().write_all(&stdout);
                 let _ = io::stderr().write_all(&stderr);
                 if let Some(active_span) = span {
-                    let _ = active_span.finish(exit_code, scopes_used, None);
+                    let _ = active_span.finish(exit_code, scopes_used, fs_diff_opt);
                 }
                 #[cfg(unix)]
                 {
@@ -2867,7 +2898,7 @@ fn execute_command(
                     return Ok(std::process::ExitStatus::from_raw(exit_code as u32));
                 }
             } else {
-                eprintln!("substrate: warn: world exec failed, running direct");
+                eprintln!("substrate: warn: shell world-agent exec failed, running direct");
             }
         }
     }
@@ -3314,7 +3345,9 @@ fn handle_builtin(
 }
 
 #[cfg(target_os = "linux")]
-fn exec_non_pty_via_agent(cmd: &str) -> anyhow::Result<(i32, Vec<u8>, Vec<u8>, Vec<String>)> {
+fn exec_non_pty_via_agent(
+    cmd: &str,
+) -> anyhow::Result<(i32, Vec<u8>, Vec<u8>, Vec<String>, Option<substrate_common::FsDiff>)> {
     use std::os::unix::net::UnixStream;
     use std::io::{Read, Write};
     let sock_path = "/run/substrate.sock";
@@ -3380,7 +3413,18 @@ fn exec_non_pty_via_agent(cmd: &str) -> anyhow::Result<(i32, Vec<u8>, Vec<u8>, V
         .and_then(|x| x.as_array())
         .map(|arr| arr.iter().filter_map(|s| s.as_str().map(|s| s.to_string())).collect())
         .unwrap_or_else(|| Vec::new());
-    Ok((exit_code, stdout, stderr, scopes_used))
+    let fs_diff_opt = if let Some(fd) = v.get("fs_diff") {
+        if fd.is_null() {
+            None
+        } else {
+            let diff: substrate_common::FsDiff = serde_json::from_value(fd.clone())
+                .map_err(|e| anyhow::anyhow!("parse fs_diff: {}", e))?;
+            Some(diff)
+        }
+    } else {
+        None
+    };
+    Ok((exit_code, stdout, stderr, scopes_used, fs_diff_opt))
 }
 
 fn execute_external(

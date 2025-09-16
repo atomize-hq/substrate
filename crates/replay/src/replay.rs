@@ -80,14 +80,18 @@ pub async fn execute_in_world(
                             }
 
                             let duration_ms = start.elapsed().as_millis() as u64;
-                            return Ok(ExecutionResult {
+                            let out = ExecutionResult {
                                 exit_code: res.exit,
                                 stdout: res.stdout,
                                 stderr: res.stderr,
                                 fs_diff: res.fs_diff,
                                 scopes_used: res.scopes_used,
                                 duration_ms,
-                            });
+                            };
+                            if verbose && !out.scopes_used.is_empty() {
+                                eprintln!("[replay] scopes: {}", out.scopes_used.join(","));
+                            }
+                            return Ok(out);
                         }
                         Err(e) => {
                             if verbose {
@@ -316,14 +320,18 @@ pub async fn execute_in_world(
                 let duration_ms = start.elapsed().as_millis() as u64;
                 // netfilter rules teardown via Drop at end of scope
                 // cgroup teardown best-effort via Drop
-                return Ok(ExecutionResult {
+                let out = ExecutionResult {
                     exit_code: output.status.code().unwrap_or(-1),
                     stdout: output.stdout,
                     stderr: output.stderr,
                     fs_diff: Some(fs_diff),
                     scopes_used: Vec::new(),
                     duration_ms,
-                });
+                };
+                if verbose && !out.scopes_used.is_empty() {
+                    eprintln!("[replay] scopes: {}", out.scopes_used.join(","));
+                }
+                return Ok(out);
             }
 
             // 2) Try fuse-overlayfs when /dev/fuse exists and binary is present
@@ -361,14 +369,18 @@ pub async fn execute_in_world(
                         }
                     }
                     let duration_ms = start.elapsed().as_millis() as u64;
-                    return Ok(ExecutionResult {
+                    let out = ExecutionResult {
                         exit_code: output.status.code().unwrap_or(-1),
                         stdout: output.stdout,
                         stderr: output.stderr,
                         fs_diff: Some(fs_diff),
                         scopes_used: Vec::new(),
                         duration_ms,
-                    });
+                    };
+                    if verbose && !out.scopes_used.is_empty() {
+                        eprintln!("[replay] scopes: {}", out.scopes_used.join(","));
+                    }
+                    return Ok(out);
                 }
             }
 
@@ -393,14 +405,18 @@ pub async fn execute_in_world(
             // Note: cannot directly attach child PID here because copydiff currently uses output().
             // Ensure the cgroup remains non-empty via current PID attachment performed earlier.
             let duration_ms = start.elapsed().as_millis() as u64;
-            return Ok(ExecutionResult {
+            let out = ExecutionResult {
                 exit_code: output.status.code().unwrap_or(-1),
                 stdout: output.stdout,
                 stderr: output.stderr,
                 fs_diff: Some(fs_diff),
                 scopes_used: Vec::new(),
                 duration_ms,
-            });
+            };
+            if verbose && !out.scopes_used.is_empty() {
+                eprintln!("[replay] scopes: {}", out.scopes_used.join(","));
+            }
+            return Ok(out);
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -491,14 +507,18 @@ pub async fn execute_direct(state: &ExecutionState, timeout_secs: u64) -> Result
 
     let duration_ms = start.elapsed().as_millis() as u64;
 
-    Ok(ExecutionResult {
+    let out = ExecutionResult {
         exit_code: result.status.code().unwrap_or(-1),
         stdout: result.stdout,
         stderr: result.stderr,
         fs_diff: None, // No isolation means no diff tracking
         scopes_used: Vec::new(),
         duration_ms,
-    })
+    };
+    if std::env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1" && !out.scopes_used.is_empty() {
+        eprintln!("[replay] scopes: {}", out.scopes_used.join(","));
+    }
+    Ok(out)
 }
 
 /// Parse command string into command and args

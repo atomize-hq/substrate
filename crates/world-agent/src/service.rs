@@ -113,7 +113,9 @@ impl WorldAgentService {
                 .clone()
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| std::env::current_dir().unwrap_or_default()),
-            always_isolate: false,  // Default: use heuristic-based isolation
+            // For agent non-PTY path, prefer consistent fs_diff collection
+            // to enable immediate span enrichment in the shell.
+            always_isolate: true,
         };
 
         // Ensure world exists
@@ -155,6 +157,7 @@ impl WorldAgentService {
                 result.stderr,
             ),
             scopes_used: result.scopes_used,
+            fs_diff: result.fs_diff,
         })
     }
 
@@ -198,6 +201,38 @@ mod tests {
         }
 
         assert!(!tracker.can_execute());
+    }
+
+    #[test]
+    fn test_execute_response_serde_fs_diff_roundtrip() {
+        let resp = agent_api_types::ExecuteResponse {
+            exit: 0,
+            span_id: "spn_test".to_string(),
+            stdout_b64: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, b"ok"),
+            stderr_b64: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, b""),
+            scopes_used: vec!["tcp:example.com:443".to_string()],
+            fs_diff: Some(substrate_common::FsDiff {
+                writes: vec![std::path::PathBuf::from("/tmp/a.txt")],
+                mods: vec![],
+                deletes: vec![],
+                truncated: false,
+                tree_hash: None,
+                summary: None,
+            }),
+        };
+
+        let json = serde_json::to_string(&resp).expect("serialize ExecuteResponse");
+        let back: agent_api_types::ExecuteResponse =
+            serde_json::from_str(&json).expect("deserialize ExecuteResponse");
+
+        assert_eq!(back.exit, 0);
+        assert_eq!(back.span_id, "spn_test");
+        assert_eq!(back.scopes_used, vec!["tcp:example.com:443".to_string()]);
+        let fd = back.fs_diff.expect("fs_diff present");
+        assert_eq!(fd.writes.len(), 1);
+        assert_eq!(fd.writes[0], std::path::PathBuf::from("/tmp/a.txt"));
+        assert!(fd.mods.is_empty());
+        assert!(fd.deletes.is_empty());
     }
 
     #[cfg(target_os = "linux")]

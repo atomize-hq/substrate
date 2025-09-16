@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+pub use substrate_common::FsDiff;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Budget {
@@ -28,6 +29,8 @@ pub struct ExecuteResponse {
     pub stdout_b64: String,
     pub stderr_b64: String,
     pub scopes_used: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fs_diff: Option<FsDiff>,
 }
 
 #[derive(Debug, thiserror::Error, Serialize, Deserialize)]

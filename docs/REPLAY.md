@@ -22,8 +22,11 @@ On Linux, replay uses the world-api backend by default for secure, consistent is
 # Replay with default world isolation
 substrate --replay <SPAN_ID>
 
-# Verbose output shows isolation strategy
+# Verbose output shows isolation strategy and scopes used
 substrate --replay-verbose --replay <SPAN_ID>
+# Example lines when verbose:
+# [replay] world strategy: overlay
+# [replay] scopes: tcp:github.com:443,tcp:registry.npmjs.org:443
 
 # Disable world isolation if needed (not recommended)
 # Option 1: CLI flag (applies only to this invocation)
