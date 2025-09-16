@@ -55,7 +55,11 @@ pub enum ServerMessage {
     Error { message: String },
 }
 
-pub async fn handle_ws_pty(service: WorldAgentService, ws: WebSocket) {
+pub async fn handle_ws_pty(
+    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
+    service: WorldAgentService,
+    ws: WebSocket
+) {
     info!("ws_pty: client connected");
     let (tx, mut rx) = ws.split();
     let tx = Arc::new(Mutex::new(tx));
@@ -107,10 +111,10 @@ pub async fn handle_ws_pty(service: WorldAgentService, ws: WebSocket) {
     let (cmd, cwd, env, _span_id, cols, rows) = start_msg;
 
     // Prepare in-world session context (best-effort)
-    let mut world_id_for_logs: String = "-".to_string();
-    let mut ns_name_opt: Option<String> = None;
-    let mut cgroup_path_opt: Option<std::path::PathBuf> = None;
-    let mut in_world = false;
+    let world_id_for_logs: String = "-".to_string();
+    let ns_name_opt: Option<String> = None;
+    let cgroup_path_opt: Option<std::path::PathBuf> = None;
+    let in_world = false;
     #[cfg(target_os = "linux")]
     {
         use world_api::{WorldSpec, ResourceLimits};

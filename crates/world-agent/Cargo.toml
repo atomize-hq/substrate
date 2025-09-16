@@ -29,6 +29,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rand = "0.8"
 once_cell = "1"
+libc = "0.2"
 
 # Local dependencies
 agent-api-core = { path = "../agent-api-core" }
@@ -39,7 +40,6 @@ substrate-broker = { path = "../broker" }
 # Platform-specific world backends
 [target.'cfg(target_os = "linux")'.dependencies]
 world = { path = "../world" }
-libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"
