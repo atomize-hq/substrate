@@ -4327,6 +4327,7 @@ dependencies = [
  "serde",
  "serde_json",
  "substrate-broker",
+ "substrate-common",
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
