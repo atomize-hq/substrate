@@ -129,14 +129,14 @@ impl OverlayFs {
             MsFlags::empty(),
             Some(options.as_bytes()),
         ) {
-            Ok(()) => return Ok(()),
+            Ok(()) => Ok(()),
             Err(e) => {
                 // Try FUSE fallback
-                let fuse = which::which("fuse-overlayfs").ok();
-                if fuse.is_none() {
-                    return Err(anyhow::anyhow!("Failed to mount overlayfs: {}", e));
-                }
-                let fuse_bin = fuse.unwrap();
+                let fuse_bin = which::which("fuse-overlayfs").map_err(|which_err| {
+                    anyhow::anyhow!(
+                        "Failed to mount overlayfs: {e}. Also missing fuse-overlayfs binary: {which_err}"
+                    )
+                })?;
                 let fuse_opts = format!(
                     "lowerdir={},upperdir={},workdir={}",
                     bind_lower.display(),
@@ -166,14 +166,15 @@ impl OverlayFs {
                 if !ready {
                     // Kill child and return error so caller can fallback further
                     let _ = child.kill();
-                    return Err(anyhow::anyhow!(
+                    Err(anyhow::anyhow!(
                         "fuse-overlayfs did not mount {} within timeout",
                         self.merged_dir.display()
-                    ));
+                    ))
+                } else {
+                    self.using_fuse = true;
+                    self.fuse_child = Some(child);
+                    Ok(())
                 }
-                self.using_fuse = true;
-                self.fuse_child = Some(child);
-                return Ok(());
             }
         }
     }

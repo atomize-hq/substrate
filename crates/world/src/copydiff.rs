@@ -34,7 +34,7 @@ fn choose_base_dir() -> PathBuf {
         if run_user.parent().unwrap_or(Path::new("/run")).exists() {
             return run_user;
         }
-        return PathBuf::from(format!("/tmp/substrate-{}-copydiff", uid.as_raw()));
+        PathBuf::from(format!("/tmp/substrate-{}-copydiff", uid.as_raw()))
     }
     #[cfg(not(target_os = "linux"))]
     {

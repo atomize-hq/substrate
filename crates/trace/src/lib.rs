@@ -584,14 +584,20 @@ mod tests {
         let hash2 = hash_env_vars().unwrap();
 
         // The hash should be consistent within the same test run
-        assert_eq!(hash1, hash2, "Hash should be deterministic for the same environment");
+        assert_eq!(
+            hash1, hash2,
+            "Hash should be deterministic for the same environment"
+        );
 
         // The hash should not be empty
         assert!(!hash1.is_empty(), "Hash should not be empty");
 
         // The hash should be a valid hex string of correct length (SHA256 = 64 hex chars)
         assert_eq!(hash1.len(), 64, "SHA256 hash should be 64 hex characters");
-        assert!(hash1.chars().all(|c| c.is_ascii_hexdigit()), "Hash should be valid hex");
+        assert!(
+            hash1.chars().all(|c| c.is_ascii_hexdigit()),
+            "Hash should be valid hex"
+        );
     }
 
     #[test]

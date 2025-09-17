@@ -2,7 +2,6 @@ pub mod lock;
 mod pty_exec;
 pub mod shim_deploy; // Made public for integration tests
 
-use pty_exec::execute_with_pty;
 use shim_deploy::{DeploymentStatus, ShimDeployer};
 
 use anyhow::{Context, Result};
@@ -26,35 +25,43 @@ use substrate_trace::{append_to_trace, create_span_builder, init_trace, PolicyDe
 use uuid::Uuid;
 
 // Reedline imports
+use base64::engine::general_purpose::STANDARD as B64;
+use base64::Engine as _;
+use futures::SinkExt as _; // for send()
+use futures::StreamExt as _; // for next()
 use reedline::{
     default_emacs_keybindings, ColumnarMenu, Completer, DefaultValidator, Emacs,
     ExampleHighlighter, FileBackedHistory, KeyCode, KeyModifiers, MenuBuilder, Prompt,
     PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus, Reedline, ReedlineEvent,
     ReedlineMenu, Signal, Span, Suggestion,
 };
-use tokio_tungstenite as tungs;
 #[cfg(unix)]
 use tokio::net::UnixStream;
 #[cfg(target_os = "linux")]
 use tokio::signal::unix::{signal, SignalKind};
-use futures::StreamExt as _; // for next()
-use futures::SinkExt as _;   // for send()
-use base64::engine::general_purpose::STANDARD as B64;
-use base64::Engine as _;
+use tokio_tungstenite as tungs;
 // use nu_ansi_term::{Color, Style}; // Unused for now
+#[cfg(target_os = "linux")]
+use nix::sys::termios::{
+    self, ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices,
+    Termios,
+};
 use std::borrow::Cow;
-#[cfg(unix)]
-use std::os::unix::process::ExitStatusExt;
 #[cfg(target_os = "linux")]
 use std::os::unix::io::AsRawFd;
-#[cfg(target_os = "linux")]
-use nix::sys::termios::{self, ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices, Termios};
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
 
 #[cfg(target_os = "linux")]
 fn get_term_size() -> (u16, u16) {
     // Try to read the current terminal size; fall back to 80x24
     let fd = std::io::stdout().as_raw_fd();
-    let mut ws: libc::winsize = libc::winsize { ws_row: 0, ws_col: 0, ws_xpixel: 0, ws_ypixel: 0 };
+    let mut ws: libc::winsize = libc::winsize {
+        ws_row: 0,
+        ws_col: 0,
+        ws_xpixel: 0,
+        ws_ypixel: 0,
+    };
     unsafe {
         if libc::ioctl(fd, libc::TIOCGWINSZ, &mut ws) == 0 {
             let cols = if ws.ws_col == 0 { 80 } else { ws.ws_col };
@@ -75,13 +82,19 @@ struct RawModeGuard {
 impl RawModeGuard {
     fn new_for_tty() -> anyhow::Result<Self> {
         // Open controlling terminal
-        let file = std::fs::OpenOptions::new().read(true).write(true).open("/dev/tty")?;
-        let mut tio = termios::tcgetattr(&file)
-            .map_err(|e| anyhow::anyhow!("tcgetattr: {}", e))?;
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/tty")?;
+        let mut tio = termios::tcgetattr(&file).map_err(|e| anyhow::anyhow!("tcgetattr: {}", e))?;
         let orig = tio.clone();
         // Configure raw mode (manual equivalent of cfmakeraw)
         tio.input_flags.remove(
-            InputFlags::BRKINT | InputFlags::ICRNL | InputFlags::INPCK | InputFlags::ISTRIP | InputFlags::IXON,
+            InputFlags::BRKINT
+                | InputFlags::ICRNL
+                | InputFlags::INPCK
+                | InputFlags::ISTRIP
+                | InputFlags::IXON,
         );
         tio.control_flags.insert(ControlFlags::CS8);
         tio.local_flags
@@ -1008,8 +1021,10 @@ pub fn run_shell() -> Result<i32> {
     #[cfg(target_os = "linux")]
     {
         use world::LinuxLocalBackend;
-        use world_api::{WorldBackend, WorldSpec, ResourceLimits};
-        let world_disabled = env::var("SUBSTRATE_WORLD").map(|v| v == "disabled").unwrap_or(false)
+        use world_api::{ResourceLimits, WorldBackend, WorldSpec};
+        let world_disabled = env::var("SUBSTRATE_WORLD")
+            .map(|v| v == "disabled")
+            .unwrap_or(false)
             || config.no_world;
         if !world_disabled {
             let spec = WorldSpec {
@@ -1019,7 +1034,7 @@ pub fn run_shell() -> Result<i32> {
                 enable_preload: false,
                 allowed_domains: substrate_broker::allowed_domains(),
                 project_dir: env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
-                always_isolate: false,  // Default: use heuristic-based isolation
+                always_isolate: false, // Default: use heuristic-based isolation
             };
             let backend = LinuxLocalBackend::new();
             match backend.ensure_session(&spec) {
@@ -1753,14 +1768,7 @@ fn collect_world_telemetry(
         };
 
         // Try to get filesystem diff
-        let fs_diff = match backend.fs_diff(&handle, _span_id) {
-            Ok(diff) => Some(diff),
-            Err(_e) => {
-                // PTY sessions may run in a different process (world-agent), so fs_diff via
-                // the local backend cache can be unavailable. Suppress noisy warnings here.
-                None
-            }
-        };
+        let fs_diff = backend.fs_diff(&handle, _span_id).ok(); // PTY sessions may run in a separate process; missing cache is expected
 
         // For now, scopes are tracked in the session world's execute method
         // and would need to be retrieved from there
@@ -2716,7 +2724,8 @@ fn execute_command(
                 match execute_world_pty_over_ws(trimmed, &span_id_for_ws) {
                     Ok(code) => {
                         if let Some(active_span) = span.take() {
-                            let (scopes_used, fs_diff) = collect_world_telemetry(active_span.get_span_id());
+                            let (scopes_used, fs_diff) =
+                                collect_world_telemetry(active_span.get_span_id());
                             let _ = active_span.finish(code, scopes_used, fs_diff);
                         }
                         #[cfg(unix)]
@@ -2743,7 +2752,10 @@ fn execute_command(
 
         // Finish span if we created one (PTY path)
         if let Some(active_span) = span {
-            let exit_code = pty_status.code.unwrap_or(-1);
+            let exit_code = pty_status
+                .code()
+                .or_else(|| pty_status.success().then_some(0))
+                .unwrap_or(-1);
             // Collect scopes and fs_diff from world backend if enabled
             let (scopes_used, fs_diff) =
                 if env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
@@ -2760,11 +2772,11 @@ fn execute_command(
         #[cfg(unix)]
         {
             use std::os::unix::process::ExitStatusExt;
-            if let Some(signal) = pty_status.signal {
+            if let Some(signal) = pty_status.signal() {
                 // Terminated by signal: set low 7 bits to the signal number
                 // This makes status.signal() work correctly
                 return Ok(ExitStatus::from_raw(signal & 0x7f));
-            } else if let Some(code) = pty_status.code {
+            } else if let Some(code) = pty_status.code() {
                 // Normal exit: code in bits 8-15
                 return Ok(ExitStatus::from_raw((code & 0xff) << 8));
             } else {
@@ -2776,7 +2788,7 @@ fn execute_command(
         {
             // 🔥 EXPERT FIX: Don't shift bits on Windows - use raw code directly
             use std::os::windows::process::ExitStatusExt;
-            let code = pty_status.code.unwrap_or(0) as u32;
+            let code = pty_status.code().unwrap_or(0) as u32;
             return Ok(ExitStatus::from_raw(code));
         }
     }
@@ -2880,7 +2892,9 @@ fn execute_command(
             if world_enabled {
                 let _ = ensure_world_agent_ready();
             }
-            if let Ok((exit_code, stdout, stderr, scopes_used, fs_diff_opt)) = exec_non_pty_via_agent(trimmed) {
+            if let Ok((exit_code, stdout, stderr, scopes_used, fs_diff_opt)) =
+                exec_non_pty_via_agent(trimmed)
+            {
                 use std::io::{self, Write};
                 let _ = io::stdout().write_all(&stdout);
                 let _ = io::stderr().write_all(&stderr);
@@ -2960,10 +2974,12 @@ fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Result<i32> {
     // Connect UDS and do WS handshake
     let rt = tokio::runtime::Runtime::new()?;
     let code = rt.block_on(async move {
-        let stream = UnixStream::connect("/run/substrate.sock").await
+        let stream = UnixStream::connect("/run/substrate.sock")
+            .await
             .map_err(|e| anyhow::anyhow!("connect UDS: {}", e))?;
         let url = url::Url::parse("ws://localhost/v1/stream").unwrap();
-        let (ws, _resp) = tungs::client_async(url, stream).await
+        let (ws, _resp) = tungs::client_async(url, stream)
+            .await
             .map_err(|e| anyhow::anyhow!("ws handshake: {}", e))?;
         let (sink, mut stream) = ws.split();
         let sink = std::sync::Arc::new(tokio::sync::Mutex::new(sink));
@@ -2973,7 +2989,11 @@ fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Result<i32> {
         }
 
         // Prepare start frame (strip optional ":pty " prefix used in REPL to force PTY)
-        let cmd_sanitized = if let Some(rest) = cmd.strip_prefix(":pty ") { rest } else { cmd };
+        let cmd_sanitized = if let Some(rest) = cmd.strip_prefix(":pty ") {
+            rest
+        } else {
+            cmd
+        };
         let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
         #[cfg(target_os = "linux")]
@@ -2989,8 +3009,7 @@ fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Result<i32> {
             "cols": cols,
             "rows": rows,
         });
-        sink
-            .lock()
+        sink.lock()
             .await
             .send(tungs::tungstenite::Message::Text(start.to_string()))
             .await
@@ -3061,10 +3080,14 @@ fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Result<i32> {
                 tasks.push(tokio::spawn(async move {
                     while sig.recv().await.is_some() {
                         let frame = serde_json::json!({"type":"signal", "sig": "INT"});
-                        if s.lock().await
+                        if s.lock()
+                            .await
                             .send(tungs::tungstenite::Message::Text(frame.to_string()))
                             .await
-                            .is_err() { break; }
+                            .is_err()
+                        {
+                            break;
+                        }
                     }
                 }));
             }
@@ -3074,10 +3097,14 @@ fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Result<i32> {
                 tasks.push(tokio::spawn(async move {
                     while sig.recv().await.is_some() {
                         let frame = serde_json::json!({"type":"signal", "sig": "TERM"});
-                        if s.lock().await
+                        if s.lock()
+                            .await
                             .send(tungs::tungstenite::Message::Text(frame.to_string()))
                             .await
-                            .is_err() { break; }
+                            .is_err()
+                        {
+                            break;
+                        }
                     }
                 }));
             }
@@ -3087,10 +3114,14 @@ fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Result<i32> {
                 tasks.push(tokio::spawn(async move {
                     while sig.recv().await.is_some() {
                         let frame = serde_json::json!({"type":"signal", "sig": "HUP"});
-                        if s.lock().await
+                        if s.lock()
+                            .await
                             .send(tungs::tungstenite::Message::Text(frame.to_string()))
                             .await
-                            .is_err() { break; }
+                            .is_err()
+                        {
+                            break;
+                        }
                     }
                 }));
             }
@@ -3100,10 +3131,14 @@ fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Result<i32> {
                 tasks.push(tokio::spawn(async move {
                     while sig.recv().await.is_some() {
                         let frame = serde_json::json!({"type":"signal", "sig": "QUIT"});
-                        if s.lock().await
+                        if s.lock()
+                            .await
                             .send(tungs::tungstenite::Message::Text(frame.to_string()))
                             .await
-                            .is_err() { break; }
+                            .is_err()
+                        {
+                            break;
+                        }
                     }
                 }));
             }
@@ -3145,11 +3180,13 @@ fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Result<i32> {
         }
 
         // Cleanup background tasks
-        let _ = stdin_task.abort();
+        stdin_task.abort();
         #[cfg(target_os = "linux")]
         {
-            let _ = resize_task.abort();
-            for t in signal_tasks { let _ = t.abort(); }
+            resize_task.abort();
+            for t in signal_tasks {
+                t.abort();
+            }
         }
         Ok::<i32, anyhow::Error>(exit_code)
     })?;
@@ -3171,7 +3208,10 @@ fn ensure_world_agent_ready() -> anyhow::Result<()> {
                 if s.write_all(req).is_ok() {
                     let mut buf = [0u8; 512];
                     if let Ok(n) = s.read(&mut buf) {
-                        return n > 0 && std::str::from_utf8(&buf[..n]).unwrap_or("").contains(" 200 ");
+                        return n > 0
+                            && std::str::from_utf8(&buf[..n])
+                                .unwrap_or("")
+                                .contains(" 200 ");
                     }
                 }
                 false
@@ -3193,7 +3233,9 @@ fn ensure_world_agent_ready() -> anyhow::Result<()> {
     // Try to spawn agent
     let candidate_bins = [
         std::env::var("SUBSTRATE_WORLD_AGENT_BIN").ok(),
-        which::which("substrate-world-agent").ok().map(|p| p.display().to_string()),
+        which::which("substrate-world-agent")
+            .ok()
+            .map(|p| p.display().to_string()),
         Some("target/debug/world-agent".to_string()),
     ];
     let bin = candidate_bins
@@ -3345,14 +3387,21 @@ fn handle_builtin(
 }
 
 #[cfg(target_os = "linux")]
-fn exec_non_pty_via_agent(
-    cmd: &str,
-) -> anyhow::Result<(i32, Vec<u8>, Vec<u8>, Vec<String>, Option<substrate_common::FsDiff>)> {
-    use std::os::unix::net::UnixStream;
+type AgentExecResult = (
+    i32,
+    Vec<u8>,
+    Vec<u8>,
+    Vec<String>,
+    Option<substrate_common::FsDiff>,
+);
+
+#[cfg(target_os = "linux")]
+fn exec_non_pty_via_agent(cmd: &str) -> anyhow::Result<AgentExecResult> {
     use std::io::{Read, Write};
+    use std::os::unix::net::UnixStream;
     let sock_path = "/run/substrate.sock";
-    let mut stream = UnixStream::connect(sock_path)
-        .map_err(|e| anyhow::anyhow!("connect UDS: {}", e))?;
+    let mut stream =
+        UnixStream::connect(sock_path).map_err(|e| anyhow::anyhow!("connect UDS: {}", e))?;
     stream
         .set_read_timeout(Some(std::time::Duration::from_secs(3)))
         .ok();
@@ -3395,10 +3444,13 @@ fn exec_non_pty_via_agent(
     // Parse status line
     let status_line = header.lines().next().unwrap_or("");
     if !status_line.contains("200") {
-        return Err(anyhow::anyhow!(format!("agent exec failed: {}", status_line)));
+        return Err(anyhow::anyhow!(format!(
+            "agent exec failed: {}",
+            status_line
+        )));
     }
-    let v: serde_json::Value = serde_json::from_str(body)
-        .map_err(|e| anyhow::anyhow!("parse json: {}", e))?;
+    let v: serde_json::Value =
+        serde_json::from_str(body).map_err(|e| anyhow::anyhow!("parse json: {}", e))?;
     let exit_code = v.get("exit").and_then(|x| x.as_i64()).unwrap_or(1) as i32;
     let stdout_b64 = v.get("stdout_b64").and_then(|x| x.as_str()).unwrap_or("");
     let stderr_b64 = v.get("stderr_b64").and_then(|x| x.as_str()).unwrap_or("");
@@ -3411,8 +3463,12 @@ fn exec_non_pty_via_agent(
     let scopes_used = v
         .get("scopes_used")
         .and_then(|x| x.as_array())
-        .map(|arr| arr.iter().filter_map(|s| s.as_str().map(|s| s.to_string())).collect())
-        .unwrap_or_else(|| Vec::new());
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|s| s.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
     let fs_diff_opt = if let Some(fd) = v.get("fs_diff") {
         if fd.is_null() {
             None

@@ -1,5 +1,6 @@
 //! PTY WebSocket handler for world-agent implementing JSON frame protocol
 
+use crate::service::WorldAgentService;
 use axum::extract::ws::{Message, WebSocket};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use futures_util::{SinkExt, StreamExt};
@@ -11,7 +12,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::info;
-use crate::service::WorldAgentService;
 // no atomic imports needed here
 
 fn parse_signal(sig: &str) -> Option<i32> {
@@ -56,53 +56,85 @@ pub enum ServerMessage {
 }
 
 pub async fn handle_ws_pty(
-    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
-    service: WorldAgentService,
-    ws: WebSocket
+    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))] service: WorldAgentService,
+    ws: WebSocket,
 ) {
     info!("ws_pty: client connected");
     let (tx, mut rx) = ws.split();
     let tx = Arc::new(Mutex::new(tx));
-    
+
     // Wait for start message
     let start_msg = match rx.next().await {
-        Some(Ok(Message::Text(text))) => {
-            match serde_json::from_str::<ClientMessage>(&text) {
-                Ok(ClientMessage::Start { cmd, cwd, env, span_id, cols, rows }) => {
-                    info!(
-                        %cmd,
-                        cwd = %cwd.display(),
-                        span_id = span_id.as_deref().unwrap_or("-"),
-                        cols = cols,
-                        rows = rows,
-                        "ws_pty: start"
-                    );
-                    (cmd, cwd, env, span_id, cols, rows)
-                }
-                Ok(_) => {
-                    let _ = tx.lock().await.send(Message::Text(serde_json::to_string(&ServerMessage::Error {
-                        message: "Expected start message".to_string(),
-                    }).unwrap())).await;
-                    return;
-                }
-                Err(e) => {
-                    let _ = tx.lock().await.send(Message::Text(serde_json::to_string(&ServerMessage::Error {
-                        message: format!("Invalid JSON: {}", e),
-                    }).unwrap())).await;
-                    return;
-                }
+        Some(Ok(Message::Text(text))) => match serde_json::from_str::<ClientMessage>(&text) {
+            Ok(ClientMessage::Start {
+                cmd,
+                cwd,
+                env,
+                span_id,
+                cols,
+                rows,
+            }) => {
+                info!(
+                    %cmd,
+                    cwd = %cwd.display(),
+                    span_id = span_id.as_deref().unwrap_or("-"),
+                    cols = cols,
+                    rows = rows,
+                    "ws_pty: start"
+                );
+                (cmd, cwd, env, span_id, cols, rows)
             }
-        }
+            Ok(_) => {
+                let _ = tx
+                    .lock()
+                    .await
+                    .send(Message::Text(
+                        serde_json::to_string(&ServerMessage::Error {
+                            message: "Expected start message".to_string(),
+                        })
+                        .unwrap(),
+                    ))
+                    .await;
+                return;
+            }
+            Err(e) => {
+                let _ = tx
+                    .lock()
+                    .await
+                    .send(Message::Text(
+                        serde_json::to_string(&ServerMessage::Error {
+                            message: format!("Invalid JSON: {}", e),
+                        })
+                        .unwrap(),
+                    ))
+                    .await;
+                return;
+            }
+        },
         Some(Ok(_)) => {
-            let _ = tx.lock().await.send(Message::Text(serde_json::to_string(&ServerMessage::Error {
-                message: "Expected text message".to_string(),
-            }).unwrap())).await;
+            let _ = tx
+                .lock()
+                .await
+                .send(Message::Text(
+                    serde_json::to_string(&ServerMessage::Error {
+                        message: "Expected text message".to_string(),
+                    })
+                    .unwrap(),
+                ))
+                .await;
             return;
         }
         Some(Err(e)) => {
-            let _ = tx.lock().await.send(Message::Text(serde_json::to_string(&ServerMessage::Error {
-                message: format!("WebSocket error: {}", e),
-            }).unwrap())).await;
+            let _ = tx
+                .lock()
+                .await
+                .send(Message::Text(
+                    serde_json::to_string(&ServerMessage::Error {
+                        message: format!("WebSocket error: {}", e),
+                    })
+                    .unwrap(),
+                ))
+                .await;
             return;
         }
         None => return, // Connection closed
@@ -111,13 +143,13 @@ pub async fn handle_ws_pty(
     let (cmd, cwd, env, _span_id, cols, rows) = start_msg;
 
     // Prepare in-world session context (best-effort)
-    let world_id_for_logs: String = "-".to_string();
-    let ns_name_opt: Option<String> = None;
-    let cgroup_path_opt: Option<std::path::PathBuf> = None;
-    let in_world = false;
+    let mut world_id_for_logs: String = "-".to_string();
+    let mut ns_name_opt: Option<String> = None;
+    let mut cgroup_path_opt: Option<std::path::PathBuf> = None;
+    let mut in_world = false;
     #[cfg(target_os = "linux")]
     {
-        use world_api::{WorldSpec, ResourceLimits};
+        use world_api::{ResourceLimits, WorldSpec};
         let spec = WorldSpec {
             reuse_session: true,
             isolate_network: true,
@@ -125,7 +157,7 @@ pub async fn handle_ws_pty(
             enable_preload: false,
             allowed_domains: substrate_broker::allowed_domains(),
             project_dir: cwd.clone(),
-            always_isolate: false,  // Default: use heuristic-based isolation
+            always_isolate: false, // Default: use heuristic-based isolation
         };
         if let Ok(world) = service.ensure_session_world(&spec) {
             world_id_for_logs = world.id.clone();
@@ -139,7 +171,7 @@ pub async fn handle_ws_pty(
             in_world = true;
         }
     }
-    
+
     // Create PTY
     let pty_system = native_pty_system();
     let pair = match pty_system.openpty(PtySize {
@@ -150,9 +182,16 @@ pub async fn handle_ws_pty(
     }) {
         Ok(pair) => pair,
         Err(e) => {
-            let _ = tx.lock().await.send(Message::Text(serde_json::to_string(&ServerMessage::Error {
-                message: format!("Failed to create PTY: {}", e),
-            }).unwrap())).await;
+            let _ = tx
+                .lock()
+                .await
+                .send(Message::Text(
+                    serde_json::to_string(&ServerMessage::Error {
+                        message: format!("Failed to create PTY: {}", e),
+                    })
+                    .unwrap(),
+                ))
+                .await;
             return;
         }
     };
@@ -178,9 +217,16 @@ pub async fn handle_ws_pty(
     let mut child = match pair.slave.spawn_command(cmd_builder) {
         Ok(child) => child,
         Err(e) => {
-            let _ = tx.lock().await.send(Message::Text(serde_json::to_string(&ServerMessage::Error {
-                message: format!("Failed to spawn command: {}", e),
-            }).unwrap())).await;
+            let _ = tx
+                .lock()
+                .await
+                .send(Message::Text(
+                    serde_json::to_string(&ServerMessage::Error {
+                        message: format!("Failed to spawn command: {}", e),
+                    })
+                    .unwrap(),
+                ))
+                .await;
             return;
         }
     };
@@ -215,9 +261,16 @@ pub async fn handle_ws_pty(
     let reader = match pair.master.try_clone_reader() {
         Ok(reader) => reader,
         Err(e) => {
-            let _ = tx.lock().await.send(Message::Text(serde_json::to_string(&ServerMessage::Error {
-                message: format!("Failed to clone PTY reader: {}", e),
-            }).unwrap())).await;
+            let _ = tx
+                .lock()
+                .await
+                .send(Message::Text(
+                    serde_json::to_string(&ServerMessage::Error {
+                        message: format!("Failed to clone PTY reader: {}", e),
+                    })
+                    .unwrap(),
+                ))
+                .await;
             return;
         }
     };
@@ -229,15 +282,22 @@ pub async fn handle_ws_pty(
             let read_result = tokio::task::spawn_blocking(move || {
                 let result = reader.read(&mut buf);
                 (reader, buf, result)
-            }).await;
-            
+            })
+            .await;
+
             match read_result {
                 Ok((r, b, Ok(n))) if n > 0 => {
                     reader = r;
                     buf = b;
                     let data_b64 = BASE64.encode(&buf[..n]);
                     let msg = ServerMessage::Stdout { data_b64 };
-                    if tx_clone.lock().await.send(Message::Text(serde_json::to_string(&msg).unwrap())).await.is_err() {
+                    if tx_clone
+                        .lock()
+                        .await
+                        .send(Message::Text(serde_json::to_string(&msg).unwrap()))
+                        .await
+                        .is_err()
+                    {
                         break;
                     }
                 }
@@ -250,17 +310,24 @@ pub async fn handle_ws_pty(
     let writer = match pair.master.take_writer() {
         Ok(writer) => writer,
         Err(e) => {
-            let _ = tx.lock().await.send(Message::Text(serde_json::to_string(&ServerMessage::Error {
-                message: format!("Failed to take PTY writer: {}", e),
-            }).unwrap())).await;
+            let _ = tx
+                .lock()
+                .await
+                .send(Message::Text(
+                    serde_json::to_string(&ServerMessage::Error {
+                        message: format!("Failed to take PTY writer: {}", e),
+                    })
+                    .unwrap(),
+                ))
+                .await;
             return;
         }
     };
-    
+
     // Keep master for resize operations
     let master = Arc::new(Mutex::new(pair.master));
     let master_clone = master.clone();
-    
+
     // Writer task: handle WebSocket messages
     let input_task = tokio::spawn(async move {
         let mut writer = writer;
@@ -274,8 +341,9 @@ pub async fn handle_ws_pty(
                                     let write_result = tokio::task::spawn_blocking(move || {
                                         let result = writer.write_all(&data);
                                         (writer, result)
-                                    }).await;
-                                    
+                                    })
+                                    .await;
+
                                     match write_result {
                                         Ok((w, Ok(_))) => {
                                             writer = w;
@@ -287,7 +355,12 @@ pub async fn handle_ws_pty(
                             }
                         }
                         Ok(ClientMessage::Resize { cols, rows }) => {
-                            let size = PtySize { rows, cols, pixel_width: 0, pixel_height: 0 };
+                            let size = PtySize {
+                                rows,
+                                cols,
+                                pixel_width: 0,
+                                pixel_height: 0,
+                            };
                             let _ = master_clone.lock().await.resize(size);
                         }
                         Ok(ClientMessage::Signal { sig }) => {
@@ -311,14 +384,19 @@ pub async fn handle_ws_pty(
     });
 
     // Wait for child process to exit
-    let status = tokio::task::spawn_blocking(move || child.wait()).await
+    let status = tokio::task::spawn_blocking(move || child.wait())
+        .await
         .unwrap_or_else(|_| Ok(portable_pty::ExitStatus::with_exit_code(1)));
-    
+
     // Send exit message
     let exit_code = status.map(|s| s.exit_code() as i32).unwrap_or(1);
     info!(exit_code, "ws_pty: exit");
     let exit_msg = ServerMessage::Exit { code: exit_code };
-    let _ = tx.lock().await.send(Message::Text(serde_json::to_string(&exit_msg).unwrap())).await;
+    let _ = tx
+        .lock()
+        .await
+        .send(Message::Text(serde_json::to_string(&exit_msg).unwrap()))
+        .await;
 
     // Clean up tasks
     reader_task.abort();
@@ -347,7 +425,9 @@ mod tests {
 
     #[test]
     fn test_server_message_stdout_serialization() {
-        let msg = ServerMessage::Stdout { data_b64: BASE64.encode(b"hello") };
+        let msg = ServerMessage::Stdout {
+            data_b64: BASE64.encode(b"hello"),
+        };
         let js = serde_json::to_string(&msg).unwrap();
         assert!(js.contains("\"stdout\""));
         assert!(js.contains("aGVsbG8"));

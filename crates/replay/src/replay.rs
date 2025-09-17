@@ -50,7 +50,7 @@ pub async fn execute_in_world(
 
             // Use world-api backend for consistent isolation
             use world::LinuxLocalBackend;
-            use world_api::{WorldBackend, WorldSpec, ExecRequest, ResourceLimits};
+            use world_api::{ExecRequest, ResourceLimits, WorldBackend, WorldSpec};
 
             let spec = WorldSpec {
                 reuse_session: true,
@@ -59,14 +59,15 @@ pub async fn execute_in_world(
                 enable_preload: false,
                 allowed_domains: substrate_broker::allowed_domains(),
                 project_dir: state.cwd.clone(),
-                always_isolate: true,  // Force isolation for replay
+                always_isolate: true, // Force isolation for replay
             };
 
             let backend = LinuxLocalBackend::new();
             match backend.ensure_session(&spec) {
                 Ok(handle) => {
                     let req = ExecRequest {
-                        cmd: format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''")).to_string(),
+                        cmd: format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''"))
+                            .to_string(),
                         cwd: state.cwd.clone(),
                         env: state.env.clone(),
                         pty: false,
@@ -437,7 +438,8 @@ fn world_isolation_available() -> bool {
     #[cfg(target_os = "linux")]
     {
         // Default to enabled, only disable if explicitly set to "disabled" or "0"
-        let world_var = std::env::var("SUBSTRATE_REPLAY_USE_WORLD").unwrap_or_else(|_| "enabled".to_string());
+        let world_var =
+            std::env::var("SUBSTRATE_REPLAY_USE_WORLD").unwrap_or_else(|_| "enabled".to_string());
         world_var != "disabled" && world_var != "0"
     }
 
@@ -515,7 +517,9 @@ pub async fn execute_direct(state: &ExecutionState, timeout_secs: u64) -> Result
         scopes_used: Vec::new(),
         duration_ms,
     };
-    if std::env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1" && !out.scopes_used.is_empty() {
+    if std::env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1"
+        && !out.scopes_used.is_empty()
+    {
         eprintln!("[replay] scopes: {}", out.scopes_used.join(","));
     }
     Ok(out)

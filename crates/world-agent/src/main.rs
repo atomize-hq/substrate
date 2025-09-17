@@ -72,7 +72,10 @@ async fn main() -> Result<()> {
     // Start periodic GC if enabled
     let gc_interval_secs = get_env_u64("SUBSTRATE_NETNS_GC_INTERVAL_SECS", 600).unwrap_or(600);
     if gc_interval_secs > 0 {
-        info!("Starting periodic GC sweep every {} seconds", gc_interval_secs);
+        info!(
+            "Starting periodic GC sweep every {} seconds",
+            gc_interval_secs
+        );
         spawn_periodic_gc(gc_interval_secs);
     } else {
         info!("Periodic GC sweep disabled");

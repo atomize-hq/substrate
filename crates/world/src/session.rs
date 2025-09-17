@@ -94,7 +94,8 @@ impl SessionWorld {
     #[allow(dead_code)]
     fn setup_network_filter(&mut self) -> Result<()> {
         // Build NetFilter scoped to named netns when available
-        let mut filter = crate::netfilter::NetFilter::new(&self.id, self.spec.allowed_domains.clone())?;
+        let mut filter =
+            crate::netfilter::NetFilter::new(&self.id, self.spec.allowed_domains.clone())?;
         filter.set_namespace(self.net_namespace.clone());
         filter.resolve_domains()?;
         filter.install_rules()?;

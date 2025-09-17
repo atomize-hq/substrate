@@ -275,7 +275,7 @@ impl NetFilter {
     fn parse_dropped_packets(&mut self) -> Result<()> {
         // Read kernel log for dropped packets with our prefix
         let output = Command::new("dmesg")
-            .args(&["-t"])
+            .args(["-t"])
             .output()
             .context("Failed to read kernel log")?;
 
@@ -304,7 +304,7 @@ impl NetFilter {
     #[cfg(target_os = "linux")]
     fn parse_conntrack(&mut self) -> Result<()> {
         // Parse connection tracking table for active connections
-        let output = Command::new("conntrack").args(&["-L", "-n"]).output();
+        let output = Command::new("conntrack").args(["-L", "-n"]).output();
 
         if let Ok(output) = output {
             let conntrack = String::from_utf8_lossy(&output.stdout);
@@ -322,10 +322,10 @@ impl NetFilter {
                     for (i, part) in parts.iter().enumerate() {
                         if i == 0 {
                             protocol = part;
-                        } else if part.starts_with("dst=") {
-                            dst_ip = Some(part[4..].to_string());
-                        } else if part.starts_with("dport=") {
-                            dst_port = part[6..].parse().ok();
+                        } else if let Some(value) = part.strip_prefix("dst=") {
+                            dst_ip = Some(value.to_string());
+                        } else if let Some(port_str) = part.strip_prefix("dport=") {
+                            dst_port = port_str.parse().ok();
                         }
                     }
 

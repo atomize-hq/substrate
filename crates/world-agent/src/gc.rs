@@ -129,7 +129,10 @@ pub fn delete_nft_table(ns: &str, world_id: &str) -> Result<()> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         if stderr.contains("No such file or directory") || stderr.contains("does not exist") {
-            debug!("nft table {} not found in netns {} (already gone)", table_name, ns);
+            debug!(
+                "nft table {} not found in netns {} (already gone)",
+                table_name, ns
+            );
         } else {
             debug!("Failed to delete nft table in {}: {}", ns, stderr);
         }
@@ -262,7 +265,10 @@ pub async fn sweep(ttl: Option<Duration>) -> Result<GcReport> {
 
         match cgroup_procs(&world_id) {
             Ok(procs) if !procs.is_empty() => {
-                debug!("World {} has active cgroup processes: {:?}", world_id, procs);
+                debug!(
+                    "World {} has active cgroup processes: {:?}",
+                    world_id, procs
+                );
                 report.kept.push(Kept {
                     name: ns.clone(),
                     reason: format!("active cgroup procs: {:?}", procs),
@@ -332,10 +338,7 @@ mod tests {
 
         assert_eq!(extract_world_id("not-substrate"), None);
 
-        assert_eq!(
-            extract_world_id("substrate-wld_"),
-            Some("wld_".to_string())
-        );
+        assert_eq!(extract_world_id("substrate-wld_"), Some("wld_".to_string()));
     }
 
     #[test]
@@ -364,9 +367,9 @@ mod tests {
 #[cfg(all(test, target_os = "linux"))]
 mod integration_tests {
     use super::*;
+    use once_cell::sync::Lazy;
     use std::process::Command;
     use std::sync::Mutex;
-    use once_cell::sync::Lazy;
 
     // Global mutex to ensure tests run serially
     static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
@@ -414,7 +417,8 @@ mod integration_tests {
         assert!(
             report.removed.contains(&test_ns.to_string()),
             "Test netns {} should be in removed list. Report: {:?}",
-            test_ns, report
+            test_ns,
+            report
         );
     }
 
