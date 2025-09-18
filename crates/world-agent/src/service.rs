@@ -1,7 +1,7 @@
 //! Core service implementation for world agent.
 
 use agent_api_types::{Budget, ExecuteRequest, ExecuteResponse};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use world_api::{WorldBackend, WorldHandle, WorldSpec};
@@ -122,7 +122,7 @@ impl WorldAgentService {
         let world = match self.backend.ensure_session(&spec) {
             Ok(w) => w,
             Err(e) => {
-                tracing::error!(error = %e, "ensure_session failed");
+                tracing::error!(error = %e, error_debug = ?e, "ensure_session failed");
                 return Err(anyhow::anyhow!("Failed to ensure session world").into());
             }
         };

@@ -35,6 +35,7 @@ members = [
     "crates/world-api",
     "crates/world",
     "crates/world-mac-lima",
+    "crates/world-backend-factory",
     "crates/world-agent",
     # Agent API (shared contract + proxy)
     "crates/agent-api-types",

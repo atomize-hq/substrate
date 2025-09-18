@@ -1,0 +1,16 @@
+[package]
+name = "world-backend-factory"
+version = "0.1.0"
+edition = "2021"
+description = "Platform-aware factory returning Arc<dyn WorldBackend>"
+
+[dependencies]
+anyhow = { workspace = true }
+world-api = { version = "0.1.0", path = "../world-api" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+world = { version = "0.1.1", path = "../world" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+world-mac-lima = { version = "0.1.0", path = "../world-mac-lima" }
+

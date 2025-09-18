@@ -3169,12 +3169,15 @@ dependencies = [
  "uuid",
  "world",
  "world-api",
+ "world-backend-factory",
 ]
 
 [[package]]
 name = "substrate-shell"
 version = "0.1.1"
 dependencies = [
+ "agent-api-client",
+ "agent-api-types",
  "anyhow",
  "assert_cmd",
  "atty",
@@ -3219,6 +3222,7 @@ dependencies = [
  "windows-sys 0.52.0",
  "world",
  "world-api",
+ "world-mac-lima",
 ]
 
 [[package]]
@@ -3243,6 +3247,7 @@ dependencies = [
  "which 6.0.3",
  "world",
  "world-api",
+ "world-backend-factory",
 ]
 
 [[package]]
@@ -4412,6 +4417,16 @@ dependencies = [
  "substrate-common",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "world-backend-factory"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "world",
+ "world-api",
+ "world-mac-lima",
 ]
 
 [[package]]

@@ -9,8 +9,8 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::path::PathBuf;
 use std::process::Command;
-use tokio::runtime::Runtime;
 use substrate_common::FsDiff;
+use tokio::runtime::Runtime;
 use world_api::{ExecRequest, ExecResult, WorldBackend, WorldHandle, WorldSpec};
 
 pub mod forwarding;
@@ -26,7 +26,7 @@ pub struct MacLimaBackend {
     vm_name: String,
     agent_socket: PathBuf,
     transport: Transport,
-    runtime: Runtime,
+    runtime: Option<Runtime>,
     forwarding: std::sync::Mutex<Option<ForwardingHandle>>,
     session_cache: std::sync::Mutex<Option<WorldHandle>>,
 }
@@ -48,10 +48,27 @@ impl MacLimaBackend {
             vm_name,
             agent_socket,
             transport,
-            runtime,
+            runtime: Some(runtime),
             forwarding: std::sync::Mutex::new(None),
             session_cache: std::sync::Mutex::new(None),
         })
+    }
+
+    // Helper to drive an async future whether or not a Tokio runtime is already active.
+    fn block_on_compat<F, T>(&self, fut: F) -> T
+    where
+        F: std::future::Future<Output = T>,
+    {
+        // If we're already inside a Tokio runtime (e.g., replay runner), use block_in_place
+        // to synchronously wait without nesting a runtime. Otherwise, use our private runtime.
+        if tokio::runtime::Handle::try_current().is_ok() {
+            tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(fut))
+        } else {
+            self.runtime
+                .as_ref()
+                .expect("internal runtime missing")
+                .block_on(fut)
+        }
     }
 
     fn new_runtime() -> Result<Runtime> {
@@ -110,7 +127,10 @@ impl MacLimaBackend {
                 .context("Failed to start Lima VM")?;
 
             if !status.success() {
-                anyhow::bail!("Failed to start Lima VM '{}'. Run scripts/mac/lima-doctor.sh for diagnostics", self.vm_name);
+                anyhow::bail!(
+                    "Failed to start Lima VM '{}'. Run scripts/mac/lima-doctor.sh for diagnostics",
+                    self.vm_name
+                );
             }
 
             // Wait for agent to be ready
@@ -137,12 +157,18 @@ impl MacLimaBackend {
 
             attempts += 1;
             if attempts % 5 == 0 {
-                tracing::debug!("Still waiting for world-agent... ({}/{})", attempts, max_attempts);
+                tracing::debug!(
+                    "Still waiting for world-agent... ({}/{})",
+                    attempts,
+                    max_attempts
+                );
             }
             std::thread::sleep(std::time::Duration::from_secs(2));
         }
 
-        anyhow::bail!("Agent failed to start within timeout. Run scripts/mac/lima-doctor.sh for diagnostics")
+        anyhow::bail!(
+            "Agent failed to start within timeout. Run scripts/mac/lima-doctor.sh for diagnostics"
+        )
     }
 
     fn test_agent_connection(&self) -> Result<()> {
@@ -157,7 +183,15 @@ impl MacLimaBackend {
                 // For VSock, we can't test connection before forwarding is established
                 // Just check if agent socket exists inside the VM
                 let output = Command::new("limactl")
-                    .args(["shell", &self.vm_name, "sudo", "-n", "test", "-S", "/run/substrate.sock"])
+                    .args([
+                        "shell",
+                        &self.vm_name,
+                        "sudo",
+                        "-n",
+                        "test",
+                        "-S",
+                        "/run/substrate.sock",
+                    ])
                     .output()
                     .context("Failed to check agent socket in VM")?;
 
@@ -175,7 +209,10 @@ impl MacLimaBackend {
     }
 
     fn ensure_forwarding(&self) -> Result<()> {
-        let mut forwarding = self.forwarding.lock().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+        let mut forwarding = self
+            .forwarding
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
         if forwarding.is_none() {
             eprintln!("DEBUG: Setting up forwarding for VM '{}'", self.vm_name);
             tracing::info!("Setting up forwarding for VM '{}'", self.vm_name);
@@ -187,7 +224,10 @@ impl MacLimaBackend {
     }
 
     fn get_agent_endpoint(&self) -> Result<agent_api_client::Transport> {
-        let forwarding = self.forwarding.lock().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+        let forwarding = self
+            .forwarding
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
         match forwarding.as_ref() {
             Some(handle) => match handle.kind() {
                 ForwardingKind::SshUds { path } => {
@@ -196,7 +236,7 @@ impl MacLimaBackend {
                 ForwardingKind::SshTcp { port } | ForwardingKind::Vsock { port } => {
                     Ok(agent_api_client::Transport::Tcp {
                         host: "127.0.0.1".to_string(),
-                        port: *port
+                        port: *port,
                     })
                 }
             },
@@ -224,8 +264,12 @@ impl MacLimaBackend {
 
         ExecResult {
             exit: resp.exit,
-            stdout: engine.decode(&resp.stdout_b64).unwrap_or_else(|_| resp.stdout_b64.into_bytes()),
-            stderr: engine.decode(&resp.stderr_b64).unwrap_or_else(|_| resp.stderr_b64.into_bytes()),
+            stdout: engine
+                .decode(&resp.stdout_b64)
+                .unwrap_or_else(|_| resp.stdout_b64.into_bytes()),
+            stderr: engine
+                .decode(&resp.stderr_b64)
+                .unwrap_or_else(|_| resp.stderr_b64.into_bytes()),
             scopes_used: resp.scopes_used,
             fs_diff: resp.fs_diff,
         }
@@ -247,7 +291,14 @@ impl Default for MacLimaBackend {
 impl Drop for MacLimaBackend {
     fn drop(&mut self) {
         tracing::debug!("Shutting down MacLimaBackend runtime");
-        // Runtime will be dropped automatically, but we log for debugging
+        // Drop the internal runtime outside of any active Tokio context to avoid panics
+        if let Some(rt) = self.runtime.take() {
+            if tokio::runtime::Handle::try_current().is_ok() {
+                let _ = std::thread::spawn(move || drop(rt)).join();
+            } else {
+                drop(rt);
+            }
+        }
     }
 }
 
@@ -258,7 +309,10 @@ impl WorldBackend for MacLimaBackend {
 
         // Cache session if requested
         if spec.reuse_session {
-            let cache = self.session_cache.lock().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+            let cache = self
+                .session_cache
+                .lock()
+                .map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
             if let Some(ref handle) = *cache {
                 tracing::debug!("Reusing cached world session: {}", handle.id);
                 return Ok(handle.clone());
@@ -267,21 +321,22 @@ impl WorldBackend for MacLimaBackend {
 
         // Verify connectivity via agent client
         let client = self.build_agent_client()?;
-        let caps = self.runtime.block_on(async {
-            client.capabilities().await
-        }).context("Failed to verify agent connectivity")?;
+        let caps = self
+            .block_on_compat(async { client.capabilities().await })
+            .context("Failed to verify agent connectivity")?;
 
         tracing::info!("Agent connectivity verified: {:?}", caps);
 
         // Generate world ID
         let world_id = format!("vm:{}", self.vm_name);
 
-        let handle = WorldHandle {
-            id: world_id,
-        };
+        let handle = WorldHandle { id: world_id };
 
         if spec.reuse_session {
-            let mut cache = self.session_cache.lock().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+            let mut cache = self
+                .session_cache
+                .lock()
+                .map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
             *cache = Some(handle.clone());
         }
 
@@ -296,9 +351,7 @@ impl WorldBackend for MacLimaBackend {
         let agent_req = self.convert_exec_request(&req);
 
         // Execute via agent
-        let resp = self.runtime.block_on(async {
-            client.execute(agent_req).await
-        })?;
+        let resp = self.block_on_compat(async { client.execute(agent_req).await })?;
 
         // Convert response
         Ok(self.convert_exec_response(resp))
@@ -309,9 +362,7 @@ impl WorldBackend for MacLimaBackend {
         let client = self.build_agent_client()?;
 
         // Get trace (which includes fs_diff)
-        let trace = self.runtime.block_on(async {
-            client.get_trace(span_id).await
-        })?;
+        let trace = self.block_on_compat(async { client.get_trace(span_id).await })?;
 
         // Extract fs_diff from trace response
         if let Some(fs_diff) = trace.get("fs_diff") {

@@ -162,6 +162,9 @@ All critical checks should show `[PASS]`. If any show `[FAIL]`, see the troubles
 | Permission errors | Socket operations fail | Ensure directories exist with correct permissions: `/run/substrate` (0750) |
 | DNS resolution issues | Network operations fail in VM | Check dnsmasq: `limactl shell substrate systemctl status dnsmasq` |
 | `sudo: unable to resolve host lima-substrate` | Sudo emits warning due to missing host mapping | `limactl shell substrate sudo bash -lc "grep -q 'lima-substrate' /etc/hosts || echo '127.0.1.1 lima-substrate' >> /etc/hosts"` |
+| `Exec format error` starting agent | Copied host-compiled binary into guest | Build inside VM: `limactl shell substrate` → `cargo build -p world-agent --release` → copy to `/usr/local/bin/substrate-world-agent` |
+| SSH UDS not creating local socket | SSH ControlMaster multiplexing interferes | Disable ControlMaster: add `-o ControlMaster=no -o ControlPath=none` |
+| TCP forwarding resets | SSH cannot forward TCP→UDS directly | Use SSH UDS; TCP fallback requires a guest TCP↔UDS bridge (e.g., `socat`) |
 
 ### Viewing Logs
 

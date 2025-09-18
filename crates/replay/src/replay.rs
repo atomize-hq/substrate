@@ -41,17 +41,14 @@ pub async fn execute_in_world(
     state: &ExecutionState,
     timeout_secs: u64,
 ) -> Result<ExecutionResult> {
-    // Use world-api backend on Linux when enabled
+    // Use world backend when available (macOS/Linux), else fallback
     if world_isolation_available() {
-        #[cfg(target_os = "linux")]
-        {
-            let verbose = std::env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1";
-            let start = std::time::Instant::now();
+        let verbose = std::env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1";
+        let start = std::time::Instant::now();
 
-            // Use world-api backend for consistent isolation
-            use world::LinuxLocalBackend;
-            use world_api::{ExecRequest, ResourceLimits, WorldBackend, WorldSpec};
-
+        // Cross-platform factory: macOS (Lima agent) and Linux (native)
+        if let Ok(backend) = world_backend_factory::factory() {
+            use world_api::{ExecRequest, ResourceLimits, WorldSpec};
             let spec = WorldSpec {
                 reuse_session: true,
                 isolate_network: true,
@@ -61,25 +58,20 @@ pub async fn execute_in_world(
                 project_dir: state.cwd.clone(),
                 always_isolate: true, // Force isolation for replay
             };
-
-            let backend = LinuxLocalBackend::new();
             match backend.ensure_session(&spec) {
                 Ok(handle) => {
                     let req = ExecRequest {
-                        cmd: format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''"))
-                            .to_string(),
+                        cmd: format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''")),
                         cwd: state.cwd.clone(),
                         env: state.env.clone(),
                         pty: false,
                         span_id: Some(state.span_id.clone()),
                     };
-
                     match backend.exec(&handle, req) {
                         Ok(res) => {
                             if verbose {
                                 eprintln!("[replay] world strategy: overlay");
                             }
-
                             let duration_ms = start.elapsed().as_millis() as u64;
                             let out = ExecutionResult {
                                 exit_code: res.exit,
@@ -98,7 +90,7 @@ pub async fn execute_in_world(
                             if verbose {
                                 eprintln!("[replay] warn: world exec failed: {}", e);
                             }
-                            // Fall through to legacy implementation or direct execution
+                            // Fall through to fallback
                         }
                     }
                 }
@@ -106,11 +98,16 @@ pub async fn execute_in_world(
                     if verbose {
                         eprintln!("[replay] warn: world session creation failed: {}", e);
                     }
-                    // Fall through to legacy implementation or direct execution
+                    // Fall through to fallback
                 }
             }
+        } else if verbose {
+            eprintln!("[replay] warn: no world backend available on this platform");
+        }
 
-            // Legacy fallback implementation (kept for compatibility)
+        // Legacy fallback implementation (Linux only); macOS/non-Linux direct fallback below
+        #[cfg(target_os = "linux")]
+        {
             let world_id = &state.span_id;
             let bash_cmd = format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''"));
             let start = std::time::Instant::now();
@@ -434,18 +431,18 @@ pub async fn execute_in_world(
 
 /// Check if world isolation backend is available
 fn world_isolation_available() -> bool {
-    // Check if world isolation is enabled and we're on Linux
-    #[cfg(target_os = "linux")]
+    // Default ON parity with shell: disable only when SUBSTRATE_WORLD=disabled
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
-        // Default to enabled, only disable if explicitly set to "disabled" or "0"
-        let world_var =
-            std::env::var("SUBSTRATE_REPLAY_USE_WORLD").unwrap_or_else(|_| "enabled".to_string());
-        world_var != "disabled" && world_var != "0"
+        let disabled = std::env::var("SUBSTRATE_WORLD")
+            .map(|v| v == "disabled")
+            .unwrap_or(false);
+        !disabled
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
-        false // World backend only available on Linux
+        false
     }
 }
 

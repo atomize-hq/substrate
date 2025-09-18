@@ -7,8 +7,8 @@ use agent_api_types::{ApiError, ExecuteRequest, ExecuteResponse};
 use anyhow::{Context, Result};
 use http_body_util::{BodyExt, Full};
 use hyper::{body::Bytes, Method, Request, Response, Uri};
-use hyper_util::client::legacy::Client;
 use hyper_util::client::legacy::connect::HttpConnector;
+use hyper_util::client::legacy::Client;
 use hyperlocal::{UnixClientExt, UnixConnector};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -37,8 +37,9 @@ impl AgentClient {
             Transport::UnixSocket { .. } => ClientKind::Unix(Client::unix()),
             Transport::Tcp { .. } => {
                 let http_connector = HttpConnector::new();
-                ClientKind::Tcp(Client::builder(hyper_util::rt::TokioExecutor::new())
-                    .build(http_connector))
+                ClientKind::Tcp(
+                    Client::builder(hyper_util::rt::TokioExecutor::new()).build(http_connector),
+                )
             }
         };
         Self { transport, client }

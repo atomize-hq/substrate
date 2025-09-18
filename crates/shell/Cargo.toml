@@ -51,6 +51,11 @@ hyperlocal = "0.8"
 futures = "0.3"
 base64 = "0.22"
 url = "2"
+agent-api-client = { version = "0.1.0", path = "../agent-api-client" }
+agent-api-types = { version = "0.1.0", path = "../agent-api-types" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+world-mac-lima = { version = "0.1.0", path = "../world-mac-lima" }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.29", features = ["process", "signal", "term", "fs", "time", "poll"] }

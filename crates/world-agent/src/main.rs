@@ -4,9 +4,9 @@ use anyhow::{Context, Result};
 use axum::routing::{get, post};
 use axum::Router;
 use hyperlocal::UnixServerExt;
-use std::path::Path;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
 use tracing::{info, warn};
 use tracing_subscriber::{fmt, EnvFilter};
 

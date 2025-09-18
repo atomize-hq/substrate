@@ -33,6 +33,16 @@ Status: living document capturing near-term and upcoming work. Keep concise, act
   - Optional helper: `substrate world install-agent` to copy/link the agent and a `world doctor` hint after install.
   - Container image: copy agent to `/usr/local/bin/substrate-world-agent` or set `SUBSTRATE_WORLD_AGENT_BIN` in entrypoint.
 
+- Optional TCP bridge for agent (Cross-platform: Linux/macOS/Windows)
+  - Goal: Provide an optional loopback TCP endpoint that bridges to the agent UDS for environments/tools requiring TCP.
+  - Linux: Add systemd units (socket + service) with `socat` to expose `127.0.0.1:17788` → `/run/substrate.sock`. Disabled by default.
+  - macOS: Mirror the same inside the Lima guest; shell keeps transport order (UDS/VSock preferred), uses TCP only when bridge is enabled and UDS unavailable.
+  - Windows: When Windows backend exists (e.g., WSL2 or native service), provide an equivalent optional loopback TCP bridge to the local agent endpoint.
+  - Security: Loopback only; document that it is a fallback, not a replacement. No TLS.
+  - Acceptance:
+    - `curl -sSf http://127.0.0.1:17788/v1/capabilities` works when bridge is enabled.
+    - Shell auto-selects TCP only when VSock/UDS are not available and the bridge is active.
+
 ## Hardening / Quality
 
 - Differentiate shell vs replay world warnings

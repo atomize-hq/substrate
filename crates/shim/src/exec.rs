@@ -464,13 +464,8 @@ fn collect_world_telemetry(span_id: &str) -> (Vec<String>, Option<FsDiff>) {
         }
     };
 
-    // Create world backend and collect telemetry
-    #[cfg(target_os = "linux")]
-    {
-        use world::LinuxLocalBackend;
-        use world_api::WorldBackend;
-
-        let backend = LinuxLocalBackend::new();
+    // Create world backend via factory and collect telemetry (macOS/Linux parity)
+    if let Ok(backend) = world_backend_factory::factory() {
         let handle = world_api::WorldHandle {
             id: world_id.clone(),
         };
@@ -484,16 +479,10 @@ fn collect_world_telemetry(span_id: &str) -> (Vec<String>, Option<FsDiff>) {
             }
         };
 
-        // For now, scopes are tracked in the session world's execute method
-        // and would need to be retrieved from there
+        // Scopes are returned from exec path; not re-fetched here
         let scopes_used = vec![];
-
         (scopes_used, fs_diff)
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-        // World backend only available on Linux for now
+    } else {
         (vec![], None)
     }
 }

@@ -54,14 +54,14 @@ impl SessionWorld {
     /// Set up the world isolation.
     fn setup(&mut self) -> Result<()> {
         tracing::info!("world.setup: creating directories");
-        self.create_directories().context("create_directories failed")?;
+        self.create_directories()
+            .context("create_directories failed")?;
 
         #[cfg(target_os = "linux")]
         {
             // Lightweight Linux setup for PTY: avoid unsharing/pivoting the current process.
             tracing::info!("world.setup: linux isolation");
-            self
-                .setup_linux_isolation()
+            self.setup_linux_isolation()
                 .context("setup_linux_isolation failed")?;
 
             // Create a named network namespace for this session world (best-effort)
@@ -84,9 +84,12 @@ impl SessionWorld {
             // Set up network filtering if enabled (scoped to netns when available)
             if self.spec.isolate_network {
                 tracing::info!("world.setup: installing nftables rules");
-                self
-                    .setup_network_filter()
-                    .context("setup_network_filter failed")?;
+                if let Err(e) = self.setup_network_filter() {
+                    tracing::warn!(
+                        "[agent] netfilter setup failed; continuing without network scoping: {}",
+                        e
+                    );
+                }
             }
         }
 
@@ -112,8 +115,22 @@ impl SessionWorld {
     }
 
     fn create_directories(&self) -> Result<()> {
-        std::fs::create_dir_all(&self.root_dir).context("Failed to create world root directory")?;
-        std::fs::create_dir_all(&self.cgroup_path).context("Failed to create cgroup directory")?;
+        if let Err(e) = std::fs::create_dir_all(&self.root_dir) {
+            tracing::error!(
+                error = %e,
+                path = %self.root_dir.display(),
+                "[world] failed to create world root directory"
+            );
+            return Err(e).context("Failed to create world root directory");
+        }
+        if let Err(e) = std::fs::create_dir_all(&self.cgroup_path) {
+            tracing::error!(
+                error = %e,
+                path = %self.cgroup_path.display(),
+                "[world] failed to create cgroup directory"
+            );
+            return Err(e).context("Failed to create cgroup directory");
+        }
         Ok(())
     }
 

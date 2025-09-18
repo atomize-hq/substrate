@@ -59,7 +59,10 @@ impl Drop for ForwardingHandle {
 
 /// Auto-select and establish forwarding.
 pub fn auto_select(vm_name: &str) -> Result<ForwardingHandle> {
-    eprintln!("DEBUG: Auto-selecting forwarding transport for VM '{}'", vm_name);
+    eprintln!(
+        "DEBUG: Auto-selecting forwarding transport for VM '{}'",
+        vm_name
+    );
     info!("Auto-selecting forwarding transport for VM '{}'", vm_name);
 
     // Try VSock first
@@ -125,10 +128,11 @@ fn create_vsock_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
 
     // Start vsock-proxy
     let child = Command::new("vsock-proxy")
-        .args(&[
-            "--vm", vm_name,
+        .args([
+            "--vm",
+            vm_name,
             &port.to_string(),
-            "unix:///run/substrate.sock"
+            "unix:///run/substrate.sock",
         ])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -162,8 +166,7 @@ fn create_ssh_uds_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
         .join(".substrate/sock");
 
     debug!("Creating socket directory: {}", socket_dir.display());
-    std::fs::create_dir_all(&socket_dir)
-        .context("Failed to create socket directory")?;
+    std::fs::create_dir_all(&socket_dir).context("Failed to create socket directory")?;
 
     // Set permissions to 0700
     #[cfg(unix)]
@@ -190,14 +193,20 @@ fn create_ssh_uds_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
     let vm_host = format!("lima-{}", vm_name);
 
     let ssh_args = vec![
-        "-F", &ssh_config_str,
-        "-o", "ControlMaster=no",
-        "-o", "ControlPath=none",
-        "-o", "ExitOnForwardFailure=yes",
-        "-o", "StreamLocalBindUnlink=yes",
-        "-L", &socket_forward,
+        "-F",
+        &ssh_config_str,
+        "-o",
+        "ControlMaster=no",
+        "-o",
+        "ControlPath=none",
+        "-o",
+        "ExitOnForwardFailure=yes",
+        "-o",
+        "StreamLocalBindUnlink=yes",
+        "-L",
+        &socket_forward,
         &vm_host,
-        "-N"
+        "-N",
     ];
 
     debug!("Running SSH command: ssh {:?}", ssh_args);
@@ -216,7 +225,10 @@ fn create_ssh_uds_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
     // Wait for socket to appear (up to ~10s)
     for i in 0..20 {
         if socket_path.exists() {
-            info!("SSH UDS forwarding established at {}", socket_path.display());
+            info!(
+                "SSH UDS forwarding established at {}",
+                socket_path.display()
+            );
             return Ok(ForwardingHandle {
                 kind: ForwardingKind::SshUds { path: socket_path },
                 child: Some(child),
@@ -226,9 +238,13 @@ fn create_ssh_uds_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
 
-    anyhow::bail!("SSH UDS forwarding failed to establish - socket never appeared at {}", socket_path.display())
+    anyhow::bail!(
+        "SSH UDS forwarding failed to establish - socket never appeared at {}",
+        socket_path.display()
+    )
 }
 
+#[allow(dead_code)]
 fn create_ssh_tcp_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
     let port = 17788u16;
 
@@ -239,14 +255,19 @@ fn create_ssh_tcp_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
 
     // Start SSH TCP forwarding (note: this requires a TCP<->UDS bridge in the guest to be usable)
     let child = Command::new("ssh")
-        .args(&[
-            "-F", &ssh_config_str,
-            "-o", "ControlMaster=no",
-            "-o", "ControlPath=none",
-            "-o", "ExitOnForwardFailure=yes",
-            "-L", &port_forward,
+        .args([
+            "-F",
+            &ssh_config_str,
+            "-o",
+            "ControlMaster=no",
+            "-o",
+            "ControlPath=none",
+            "-o",
+            "ExitOnForwardFailure=yes",
+            "-L",
+            &port_forward,
             &vm_host,
-            "-N"
+            "-N",
         ])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -301,7 +322,9 @@ mod tests {
     fn test_forwarding_kind_debug() {
         let kinds = vec![
             ForwardingKind::Vsock { port: 17788 },
-            ForwardingKind::SshUds { path: PathBuf::from("/tmp/test.sock") },
+            ForwardingKind::SshUds {
+                path: PathBuf::from("/tmp/test.sock"),
+            },
             ForwardingKind::SshTcp { port: 17788 },
         ];
 

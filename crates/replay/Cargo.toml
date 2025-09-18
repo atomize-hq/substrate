@@ -25,6 +25,7 @@ substrate-trace = { path = "../trace" }
 substrate-broker = { path = "../broker" }
 world = { path = "../world" }
 world-api = { path = "../world-api" }
+world-backend-factory = { path = "../world-backend-factory" }
 
 [dev-dependencies]
 tempdir = "0.3"

@@ -1,4 +1,6 @@
 pub mod lock;
+#[cfg(target_os = "macos")]
+mod platform_world;
 mod pty_exec;
 pub mod shim_deploy; // Made public for integration tests
 
@@ -12,7 +14,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::env;
 use std::io::{self, BufRead};
-use std::io::{Read as _, Write as _};
+// (avoid unused: import Read/Write locally where needed)
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
@@ -25,10 +27,6 @@ use substrate_trace::{append_to_trace, create_span_builder, init_trace, PolicyDe
 use uuid::Uuid;
 
 // Reedline imports
-use base64::engine::general_purpose::STANDARD as B64;
-use base64::Engine as _;
-use futures::SinkExt as _; // for send()
-use futures::StreamExt as _; // for next()
 use reedline::{
     default_emacs_keybindings, ColumnarMenu, Completer, DefaultValidator, Emacs,
     ExampleHighlighter, FileBackedHistory, KeyCode, KeyModifiers, MenuBuilder, Prompt,
@@ -46,6 +44,8 @@ use nix::sys::termios::{
     self, ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices,
     Termios,
 };
+#[cfg(target_os = "macos")]
+use platform_world as pw;
 use std::borrow::Cow;
 #[cfg(target_os = "linux")]
 use std::os::unix::io::AsRawFd;
@@ -320,6 +320,12 @@ pub struct ShellConfig {
 impl ShellConfig {
     pub fn from_args() -> Result<Self> {
         let cli = Cli::parse();
+
+        // macOS-only: apply CLI overrides to environment for platform detection precedence
+        #[cfg(target_os = "macos")]
+        {
+            // No mac-only CLI transport overrides; maintain 1:1 parity with Linux
+        }
 
         // Handle --version-json flag
         if cli.version_json {
@@ -1015,6 +1021,51 @@ pub fn run_shell() -> Result<i32> {
     // Initialize trace
     if let Err(e) = init_trace(None) {
         eprintln!("substrate: warning: failed to initialize trace: {}", e);
+    }
+
+    // Default-on world initialization (Linux only)
+    #[cfg(target_os = "macos")]
+    {
+        // Default ON (parity with Linux); allow disabling via env/CLI
+        let world_disabled = env::var("SUBSTRATE_WORLD")
+            .map(|v| v == "disabled")
+            .unwrap_or(false)
+            || config.no_world;
+        if !world_disabled {
+            // Auto-detect mac world context and ensure readiness
+            match pw::detect() {
+                Ok(ctx) => {
+                    if let Err(e) = (ctx.ensure_ready)() {
+                        // Degrade silently if ensure_ready fails
+                        eprintln!("substrate: mac world ensure_ready failed: {}", e);
+                    } else {
+                        // Set parity with Linux: world enabled + ID only
+                        std::env::set_var("SUBSTRATE_WORLD", "enabled");
+
+                        // Attempt to retrieve world id
+                        use world_api::{ResourceLimits, WorldSpec};
+                        let spec = WorldSpec {
+                            reuse_session: true,
+                            isolate_network: true,
+                            limits: ResourceLimits::default(),
+                            enable_preload: false,
+                            allowed_domains: substrate_broker::allowed_domains(),
+                            project_dir: std::env::current_dir()
+                                .unwrap_or_else(|_| std::path::PathBuf::from(".")),
+                            always_isolate: false,
+                        };
+                        if let Ok(handle) = ctx.backend.ensure_session(&spec) {
+                            std::env::set_var("SUBSTRATE_WORLD_ID", handle.id);
+                        }
+                    }
+                    pw::store_context_globally(ctx);
+                }
+                Err(e) => {
+                    // Degrade silently on mac as well
+                    eprintln!("substrate: mac world detection failed: {}", e);
+                }
+            }
+        }
     }
 
     // Default-on world initialization (Linux only)
@@ -2617,6 +2668,76 @@ fn execute_command(
 ) -> Result<ExitStatus> {
     let trimmed = command.trim();
 
+    // Prepare redacted command once (used for span + logging)
+    let redacted_for_logging = if std::env::var("SHIM_LOG_OPTS").as_deref() == Ok("raw") {
+        trimmed.to_string()
+    } else {
+        let toks = shell_words::split(trimmed)
+            .unwrap_or_else(|_| trimmed.split_whitespace().map(|s| s.to_string()).collect());
+        let mut out = Vec::new();
+        let mut i = 0;
+
+        while i < toks.len() {
+            let t = &toks[i];
+            let lt = t.to_lowercase();
+
+            if lt == "-u" || lt == "--user" || lt == "--password" || lt == "--token" || lt == "-p" {
+                out.push("***".into());
+                if i + 1 < toks.len() {
+                    out.push("***".into());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+                continue;
+            }
+
+            if t == "-H" || lt == "--header" {
+                out.push(t.clone());
+                if i + 1 < toks.len() {
+                    let hv = &toks[i + 1];
+                    let lower = hv.to_lowercase();
+                    let redacted = if lower.starts_with("authorization:")
+                        || lower.starts_with("x-api-key:")
+                        || lower.starts_with("x-auth-token:")
+                        || lower.starts_with("cookie:")
+                    {
+                        format!(
+                            "{}: ***",
+                            hv.split(':').next().unwrap_or("").trim_end_matches(':')
+                        )
+                    } else {
+                        hv.clone()
+                    };
+                    out.push(redacted);
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+                continue;
+            }
+
+            if t.contains('=') {
+                let (k, _) = t.split_once('=').unwrap();
+                let kl = k.to_lowercase();
+                if kl.contains("token")
+                    || kl.contains("password")
+                    || kl.contains("secret")
+                    || kl.contains("apikey")
+                    || kl.contains("api_key")
+                {
+                    out.push(format!("{k}=***"));
+                    i += 1;
+                    continue;
+                }
+            }
+
+            out.push(redact_sensitive(t));
+            i += 1;
+        }
+        out.join(" ")
+    };
+
     // Start span for command execution
     let policy_decision;
     let mut span = if std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
@@ -2682,7 +2803,7 @@ fn execute_command(
 
         // Create span with policy decision
         let mut builder = create_span_builder()
-            .with_command(trimmed)
+            .with_command(&redacted_for_logging)
             .with_cwd(cwd.to_str().unwrap_or("."));
 
         if let Some(pd) = policy_decision.clone() {
@@ -2747,6 +2868,50 @@ fn execute_command(
             }
         }
 
+        // Attempt world-agent PTY WS route on mac when world is enabled
+        #[cfg(target_os = "macos")]
+        {
+            let world_enabled = std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
+            let uds_exists = pw::get_context()
+                .map(|c| match &c.transport {
+                    pw::WorldTransport::Unix(p) => p.exists(),
+                    _ => false,
+                })
+                .unwrap_or(false);
+            if world_enabled || uds_exists {
+                let span_id_for_ws = span
+                    .as_ref()
+                    .map(|s| s.get_span_id().to_string())
+                    .unwrap_or_else(|| cmd_id.to_string());
+                match execute_world_pty_over_ws_macos(trimmed, &span_id_for_ws) {
+                    Ok(code) => {
+                        if let Some(active_span) = span.take() {
+                            let (scopes_used, fs_diff) =
+                                collect_world_telemetry(active_span.get_span_id());
+                            let _ = active_span.finish(code, scopes_used, fs_diff);
+                        }
+                        #[cfg(unix)]
+                        {
+                            use std::os::unix::process::ExitStatusExt;
+                            return Ok(ExitStatus::from_raw((code & 0xff) << 8));
+                        }
+                        #[cfg(windows)]
+                        {
+                            use std::os::windows::process::ExitStatusExt;
+                            return Ok(ExitStatus::from_raw(code as u32));
+                        }
+                    }
+                    Err(e) => {
+                        static WARNED: std::sync::Once = std::sync::Once::new();
+                        WARNED.call_once(|| {
+                            eprintln!("substrate: warn: world PTY over WS failed on mac, falling back to host PTY: {}", e);
+                        });
+                        // fall through to host PTY
+                    }
+                }
+            }
+        }
+
         // Use host PTY execution path as fallback
         let pty_status = pty_exec::execute_with_pty(config, trimmed, cmd_id, running_child_pid)?;
 
@@ -2798,79 +2963,7 @@ fn execute_command(
     let resolved = first_command_path(trimmed);
 
     // Redact sensitive information before logging (token-aware)
-    let redacted_command = if std::env::var("SHIM_LOG_OPTS").as_deref() == Ok("raw") {
-        trimmed.to_string()
-    } else {
-        let toks = shell_words::split(trimmed)
-            .unwrap_or_else(|_| trimmed.split_whitespace().map(|s| s.to_string()).collect());
-        let mut out = Vec::new();
-        let mut i = 0;
-
-        while i < toks.len() {
-            let t = &toks[i];
-            let lt = t.to_lowercase();
-
-            // Handle -u, --user, --password, --token, -p (redact both flag and value)
-            if lt == "-u" || lt == "--user" || lt == "--password" || lt == "--token" || lt == "-p" {
-                out.push("***".into()); // redact flag
-                if i + 1 < toks.len() {
-                    out.push("***".into()); // redact value
-                    i += 2;
-                } else {
-                    i += 1;
-                }
-                continue;
-            }
-
-            // Handle -H/--header specially to preserve header name
-            // Note: -H is case-sensitive, --header is case-insensitive
-            if t == "-H" || lt == "--header" {
-                out.push(t.clone()); // keep flag
-                if i + 1 < toks.len() {
-                    let hv = &toks[i + 1];
-                    let lower = hv.to_lowercase();
-                    let redacted = if lower.starts_with("authorization:")
-                        || lower.starts_with("x-api-key:")
-                        || lower.starts_with("x-auth-token:")
-                        || lower.starts_with("cookie:")
-                    {
-                        format!(
-                            "{}: ***",
-                            hv.split(':').next().unwrap_or("").trim_end_matches(':')
-                        )
-                    } else {
-                        hv.clone()
-                    };
-                    out.push(redacted);
-                    i += 2;
-                } else {
-                    i += 1;
-                }
-                continue;
-            }
-
-            // Handle inline forms (k=v)
-            if t.contains('=') {
-                let (k, _) = t.split_once('=').unwrap();
-                let kl = k.to_lowercase();
-                if kl.contains("token")
-                    || kl.contains("password")
-                    || kl.contains("secret")
-                    || kl.contains("apikey")
-                    || kl.contains("api_key")
-                {
-                    out.push(format!("{k}=***"));
-                    i += 1;
-                    continue;
-                }
-            }
-
-            // Default: use base redaction
-            out.push(redact_sensitive(t));
-            i += 1;
-        }
-        out.join(" ")
-    };
+    let redacted_command = redacted_for_logging.clone();
 
     // Log command start with redacted command and resolved path
     let start_extra = resolved.map(|p| json!({ "resolved_path": p }));
@@ -2882,6 +2975,42 @@ fn execute_command(
         start_extra,
     )?;
     let start_time = std::time::Instant::now();
+
+    // Route non-PTY commands through world agent (UDS/TCP) when world is enabled
+    #[cfg(target_os = "macos")]
+    {
+        let world_enabled = std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
+        let uds_exists = pw::get_context()
+            .map(|c| match &c.transport {
+                pw::WorldTransport::Unix(p) => p.exists(),
+                _ => false,
+            })
+            .unwrap_or(false);
+        if world_enabled || uds_exists {
+            if let Ok((exit_code, stdout, stderr, scopes_used, fs_diff_opt)) =
+                exec_non_pty_via_agent_macos(trimmed)
+            {
+                use std::io::{self, Write};
+                let _ = io::stdout().write_all(&stdout);
+                let _ = io::stderr().write_all(&stderr);
+                if let Some(active_span) = span {
+                    let _ = active_span.finish(exit_code, scopes_used, fs_diff_opt);
+                }
+                #[cfg(unix)]
+                {
+                    use std::os::unix::process::ExitStatusExt;
+                    return Ok(std::process::ExitStatus::from_raw((exit_code & 0xff) << 8));
+                }
+                #[cfg(windows)]
+                {
+                    use std::os::windows::process::ExitStatusExt;
+                    return Ok(std::process::ExitStatus::from_raw(exit_code as u32));
+                }
+            } else {
+                eprintln!("substrate: warn: mac world-agent exec failed, running direct");
+            }
+        }
+    }
 
     // Route non-PTY commands through world agent (UDS HTTP) when world is enabled (Linux only)
     #[cfg(target_os = "linux")]
@@ -3262,6 +3391,139 @@ fn ensure_world_agent_ready() -> anyhow::Result<()> {
     anyhow::bail!("world-agent readiness probe failed")
 }
 
+#[cfg(target_os = "macos")]
+fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyhow::Result<i32> {
+    use base64::Engine;
+    use futures::StreamExt;
+    use tungs::tungstenite::Message;
+
+    let ctx = pw::get_context().ok_or_else(|| anyhow::anyhow!("no platform world context"))?;
+    let rt = tokio::runtime::Runtime::new()?;
+    let code = rt.block_on(async move {
+        async fn handle_ws<S>(
+            ws: tungs::WebSocketStream<S>,
+            cmd: &str,
+            span_id: &str,
+        ) -> anyhow::Result<i32>
+        where
+            S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+        {
+            use futures::SinkExt;
+            let (mut sink, mut stream) = ws.split();
+
+            let cmd_sanitized = if let Some(rest) = cmd.strip_prefix(":pty ") {
+                rest
+            } else {
+                cmd
+            };
+            let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
+            let (cols, rows) = (80u16, 24u16);
+            let start = serde_json::json!({
+                "type": "start",
+                "cmd": cmd_sanitized,
+                "cwd": cwd,
+                "env": env_map,
+                "span_id": span_id,
+                "cols": cols,
+                "rows": rows,
+            });
+            sink.send(Message::Text(start.to_string()))
+                .await
+                .map_err(|e| anyhow::anyhow!("ws send start: {}", e))?;
+
+            // stdin forwarder
+            let mut stdin = tokio::io::stdin();
+            let stdin_task = tokio::spawn(async move {
+                use tokio::io::AsyncReadExt;
+                let mut buf = [0u8; 8192];
+                loop {
+                    match stdin.read(&mut buf).await {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            let b64 = base64::engine::general_purpose::STANDARD.encode(&buf[..n]);
+                            let frame = serde_json::json!({"type":"stdin", "data_b64": b64});
+                            if sink.send(Message::Text(frame.to_string())).await.is_err() {
+                                break;
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            });
+
+            let mut exit_code: i32 = 0;
+            while let Some(msg) = stream.next().await {
+                let msg = msg.map_err(|e| anyhow::anyhow!("ws recv: {}", e))?;
+                if msg.is_text() {
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&msg.to_string()) {
+                        match v.get("type").and_then(|t| t.as_str()) {
+                            Some("stdout") => {
+                                if let Some(b64) = v.get("data_b64").and_then(|x| x.as_str()) {
+                                    if let Ok(bytes) =
+                                        base64::engine::general_purpose::STANDARD.decode(b64)
+                                    {
+                                        use std::io::Write;
+                                        let _ = std::io::stdout().write_all(&bytes);
+                                        let _ = std::io::stdout().flush();
+                                    }
+                                }
+                            }
+                            Some("exit") => {
+                                exit_code =
+                                    v.get("code").and_then(|c| c.as_i64()).unwrap_or(0) as i32;
+                                break;
+                            }
+                            Some("error") => {
+                                if let Some(msg) = v.get("message").and_then(|m| m.as_str()) {
+                                    eprintln!("world-agent error: {}", msg);
+                                }
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+                } else if msg.is_close() {
+                    break;
+                }
+            }
+
+            stdin_task.abort();
+            Ok::<i32, anyhow::Error>(exit_code)
+        }
+
+        // Connect according to transport and delegate to generic handler
+        let url = url::Url::parse("ws://localhost/v1/stream").unwrap();
+        match &ctx.transport {
+            pw::WorldTransport::Unix(path) => {
+                let stream = UnixStream::connect(path)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("connect UDS: {}", e))?;
+                let (ws, _resp) = tungs::client_async(url, stream)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("ws handshake: {}", e))?;
+                handle_ws(ws, cmd, span_id).await
+            }
+            pw::WorldTransport::Tcp { host, port } => {
+                let ws_url = format!("ws://{}:{}/v1/stream", host, port);
+                let (ws, _resp) = tungs::connect_async(&ws_url)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("ws connect: {}", e))?;
+                handle_ws(ws, cmd, span_id).await
+            }
+            pw::WorldTransport::Vsock { port } => {
+                let ws_url = format!("ws://127.0.0.1:{}/v1/stream", port);
+                let (ws, _resp) = tungs::connect_async(&ws_url)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("ws connect: {}", e))?;
+                handle_ws(ws, cmd, span_id).await
+            }
+        }
+    })?;
+
+    Ok(code)
+}
+
 fn ok_status() -> Result<ExitStatus> {
     if cfg!(windows) {
         Command::new("cmd").arg("/C").arg("exit 0").status()
@@ -3481,6 +3743,60 @@ fn exec_non_pty_via_agent(cmd: &str) -> anyhow::Result<AgentExecResult> {
         None
     };
     Ok((exit_code, stdout, stderr, scopes_used, fs_diff_opt))
+}
+
+#[cfg(target_os = "macos")]
+type AgentExecResult = (
+    i32,
+    Vec<u8>,
+    Vec<u8>,
+    Vec<String>,
+    Option<substrate_common::FsDiff>,
+);
+
+#[cfg(target_os = "macos")]
+fn exec_non_pty_via_agent_macos(cmd: &str) -> anyhow::Result<AgentExecResult> {
+    use agent_api_client::AgentClient;
+    use agent_api_types::ExecuteRequest;
+    use base64::Engine;
+    let ctx = pw::get_context().ok_or_else(|| anyhow::anyhow!("no platform world context"))?;
+
+    // Build client from transport
+    let client = match &ctx.transport {
+        pw::WorldTransport::Unix(path) => AgentClient::unix_socket(path),
+        pw::WorldTransport::Tcp { host, port } => AgentClient::tcp(host, *port),
+        pw::WorldTransport::Vsock { port } => AgentClient::tcp("127.0.0.1", *port),
+    };
+
+    // Build request
+    let cwd = std::env::current_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        .display()
+        .to_string();
+    let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
+    let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+    let req = ExecuteRequest {
+        profile: None,
+        cmd: cmd.to_string(),
+        cwd: Some(cwd),
+        env: Some(env_map),
+        pty: false,
+        agent_id,
+        budget: None,
+    };
+
+    // Execute
+    let rt = tokio::runtime::Runtime::new()?;
+    let resp = rt.block_on(async move { client.execute(req).await })?;
+
+    let engine = base64::engine::general_purpose::STANDARD;
+    let stdout = engine
+        .decode(&resp.stdout_b64)
+        .unwrap_or_else(|_| resp.stdout_b64.into_bytes());
+    let stderr = engine
+        .decode(&resp.stderr_b64)
+        .unwrap_or_else(|_| resp.stderr_b64.into_bytes());
+    Ok((resp.exit, stdout, stderr, resp.scopes_used, resp.fs_diff))
 }
 
 fn execute_external(
