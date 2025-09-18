@@ -75,7 +75,7 @@ if limactl list substrate >/dev/null 2>&1; then
         fi
 
         # Check systemd service
-        if limactl shell substrate "systemctl is-active substrate-world-agent 2>/dev/null" >/dev/null 2>&1; then
+        if limactl shell substrate systemctl is-active substrate-world-agent >/dev/null 2>&1; then
             printf '\033[32m[PASS]\033[0m substrate-world-agent service is active\n'
         else
             printf '\033[31m[FAIL]\033[0m substrate-world-agent service is not active\n'
