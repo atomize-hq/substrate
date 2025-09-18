@@ -3,15 +3,21 @@
 //! This backend provides identical policy enforcement semantics to LinuxLocal
 //! by running a Linux VM via Lima and delegating to the world-agent inside.
 
+use agent_api_client::AgentClient;
+use agent_api_types::{ExecuteRequest, ExecuteResponse};
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use world_api::{ExecRequest, ExecResult, FsDiff, WorldBackend, WorldHandle, WorldSpec};
+use std::process::Command;
+use tokio::runtime::Runtime;
+use substrate_common::FsDiff;
+use world_api::{ExecRequest, ExecResult, WorldBackend, WorldHandle, WorldSpec};
 
+pub mod forwarding;
 pub mod transport;
 pub mod vm;
 
+pub use forwarding::{ForwardingHandle, ForwardingKind};
 pub use transport::Transport;
 pub use vm::LimaVM;
 
@@ -20,6 +26,9 @@ pub struct MacLimaBackend {
     vm_name: String,
     agent_socket: PathBuf,
     transport: Transport,
+    runtime: Runtime,
+    forwarding: std::sync::Mutex<Option<ForwardingHandle>>,
+    session_cache: std::sync::Mutex<Option<WorldHandle>>,
 }
 
 impl MacLimaBackend {
@@ -32,11 +41,24 @@ impl MacLimaBackend {
         // Auto-select best transport
         let transport = Transport::auto_select()?;
 
+        // Create dedicated runtime
+        let runtime = Self::new_runtime()?;
+
         Ok(Self {
             vm_name,
             agent_socket,
             transport,
+            runtime,
+            forwarding: std::sync::Mutex::new(None),
+            session_cache: std::sync::Mutex::new(None),
         })
+    }
+
+    fn new_runtime() -> Result<Runtime> {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .context("Failed to create tokio runtime")
     }
 
     pub fn new_with_vm_name(vm_name: String) -> Result<Self> {
@@ -46,6 +68,8 @@ impl MacLimaBackend {
     }
 
     fn ensure_vm_running(&self) -> Result<()> {
+        tracing::debug!("Checking if Lima VM '{}' is running", self.vm_name);
+
         // Check if VM exists and is running (robust JSON check)
         let output = Command::new("limactl")
             .args(["list", "--json"])
@@ -65,27 +89,34 @@ impl MacLimaBackend {
             status: String,
         }
 
-        let instances: Vec<Instance> =
-            serde_json::from_slice(&output.stdout).context("Failed to parse limactl output")?;
-
-        let running = instances
-            .iter()
-            .any(|i| i.name == self.vm_name && i.status == "Running");
+        // limactl list --json returns either a single object or an array
+        let running = if let Ok(instance) = serde_json::from_slice::<Instance>(&output.stdout) {
+            instance.name == self.vm_name && instance.status == "Running"
+        } else if let Ok(instances) = serde_json::from_slice::<Vec<Instance>>(&output.stdout) {
+            instances
+                .iter()
+                .any(|i| i.name == self.vm_name && i.status == "Running")
+        } else {
+            // If we can't parse, assume not running
+            false
+        };
 
         if !running {
             // Start VM (idempotent)
-            println!("Starting Lima VM '{}'...", self.vm_name);
+            tracing::info!("Starting Lima VM '{}'...", self.vm_name);
             let status = Command::new("limactl")
                 .args(["start", &self.vm_name, "--tty=false"])
                 .status()
                 .context("Failed to start Lima VM")?;
 
             if !status.success() {
-                anyhow::bail!("Failed to start Lima VM");
+                anyhow::bail!("Failed to start Lima VM '{}'. Run scripts/mac/lima-doctor.sh for diagnostics", self.vm_name);
             }
 
             // Wait for agent to be ready
             self.wait_for_agent()?;
+        } else {
+            tracing::debug!("Lima VM '{}' is already running", self.vm_name);
         }
 
         Ok(())
@@ -95,17 +126,23 @@ impl MacLimaBackend {
         let max_attempts = 30;
         let mut attempts = 0;
 
+        tracing::info!("Waiting for world-agent to be ready...");
+
         while attempts < max_attempts {
             // Try to connect to the agent socket
             if self.test_agent_connection().is_ok() {
+                tracing::info!("World-agent is ready");
                 return Ok(());
             }
 
             attempts += 1;
+            if attempts % 5 == 0 {
+                tracing::debug!("Still waiting for world-agent... ({}/{})", attempts, max_attempts);
+            }
             std::thread::sleep(std::time::Duration::from_secs(2));
         }
 
-        anyhow::bail!("Agent failed to start within timeout")
+        anyhow::bail!("Agent failed to start within timeout. Run scripts/mac/lima-doctor.sh for diagnostics")
     }
 
     fn test_agent_connection(&self) -> Result<()> {
@@ -117,8 +154,16 @@ impl MacLimaBackend {
                     .context("Failed to connect to agent socket")?;
             }
             Transport::VSock => {
-                // TODO: Implement VSock connection test
-                anyhow::bail!("VSock connection test not implemented");
+                // For VSock, we can't test connection before forwarding is established
+                // Just check if agent socket exists inside the VM
+                let output = Command::new("limactl")
+                    .args(["shell", &self.vm_name, "sudo", "-n", "test", "-S", "/run/substrate.sock"])
+                    .output()
+                    .context("Failed to check agent socket in VM")?;
+
+                if !output.status.success() {
+                    anyhow::bail!("Agent socket not found in VM");
+                }
             }
             Transport::TCP => {
                 // Test TCP connection
@@ -129,83 +174,67 @@ impl MacLimaBackend {
         Ok(())
     }
 
-    fn setup_socket_forwarding(&self) -> Result<()> {
-        match &self.transport {
-            Transport::VSock => {
-                // TODO: Implement VSock forwarding
-                eprintln!("⚠️  VSock forwarding not yet implemented, falling back to SSH");
-                self.setup_ssh_forwarding()
-            }
-            Transport::UnixSocket => self.setup_ssh_forwarding(),
-            Transport::TCP => self.setup_tcp_forwarding(),
+    fn ensure_forwarding(&self) -> Result<()> {
+        let mut forwarding = self.forwarding.lock().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+        if forwarding.is_none() {
+            eprintln!("DEBUG: Setting up forwarding for VM '{}'", self.vm_name);
+            tracing::info!("Setting up forwarding for VM '{}'", self.vm_name);
+            let handle = forwarding::auto_select(&self.vm_name)?;
+            eprintln!("DEBUG: Forwarding established: {:?}", handle.kind());
+            *forwarding = Some(handle);
+        }
+        Ok(())
+    }
+
+    fn get_agent_endpoint(&self) -> Result<agent_api_client::Transport> {
+        let forwarding = self.forwarding.lock().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+        match forwarding.as_ref() {
+            Some(handle) => match handle.kind() {
+                ForwardingKind::SshUds { path } => {
+                    Ok(agent_api_client::Transport::UnixSocket { path: path.clone() })
+                }
+                ForwardingKind::SshTcp { port } | ForwardingKind::Vsock { port } => {
+                    Ok(agent_api_client::Transport::Tcp {
+                        host: "127.0.0.1".to_string(),
+                        port: *port
+                    })
+                }
+            },
+            None => anyhow::bail!("Forwarding not established"),
         }
     }
 
-    fn setup_ssh_forwarding(&self) -> Result<()> {
-        // SSH stream-local forwarding (UDS → UDS)
-        let socket_dir = self
-            .agent_socket
-            .parent()
-            .ok_or_else(|| anyhow::anyhow!("Invalid agent socket path"))?;
-        std::fs::create_dir_all(socket_dir)?;
-
-        let _child = Command::new("ssh")
-            .args([
-                "-N",
-                "-L",
-                &format!("{}:/run/substrate.sock", self.agent_socket.display()),
-                &format!("lima-{}", self.vm_name),
-                "-o",
-                "StreamLocalBindUnlink=yes",
-                "-o",
-                "ExitOnForwardFailure=yes",
-                "-o",
-                "UserKnownHostsFile=/dev/null",
-                "-o",
-                "StrictHostKeyChecking=no",
-            ])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .context("Failed to start SSH forwarding")?;
-
-        // Give SSH time to establish the forward
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        Ok(())
+    /// Convert world_api::ExecRequest to agent_api_types::ExecuteRequest.
+    fn convert_exec_request(&self, req: &ExecRequest) -> ExecuteRequest {
+        ExecuteRequest {
+            profile: None,
+            cmd: req.cmd.clone(),
+            cwd: Some(req.cwd.to_string_lossy().to_string()),
+            env: Some(req.env.clone()),
+            pty: req.pty,
+            agent_id: "world-mac-lima".to_string(),
+            budget: None,
+        }
     }
 
-    fn setup_tcp_forwarding(&self) -> Result<()> {
-        // TCP loopback forwarding
-        let _child = Command::new("ssh")
-            .args([
-                "-N",
-                "-L",
-                "127.0.0.1:7788:127.0.0.1:7788",
-                &format!("lima-{}", self.vm_name),
-                "-o",
-                "UserKnownHostsFile=/dev/null",
-                "-o",
-                "StrictHostKeyChecking=no",
-            ])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .context("Failed to start TCP forwarding")?;
+    /// Convert agent_api_types::ExecuteResponse to world_api::ExecResult.
+    fn convert_exec_response(&self, resp: ExecuteResponse) -> ExecResult {
+        use base64::Engine;
+        let engine = base64::engine::general_purpose::STANDARD;
 
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        Ok(())
+        ExecResult {
+            exit: resp.exit,
+            stdout: engine.decode(&resp.stdout_b64).unwrap_or_else(|_| resp.stdout_b64.into_bytes()),
+            stderr: engine.decode(&resp.stderr_b64).unwrap_or_else(|_| resp.stderr_b64.into_bytes()),
+            scopes_used: resp.scopes_used,
+            fs_diff: resp.fs_diff,
+        }
     }
 
-    fn call_agent<T: Serialize, R: for<'de> Deserialize<'de>>(
-        &self,
-        _method: &str,
-        _params: &T,
-    ) -> Result<R> {
-        // TODO: Implement actual agent communication
-        // For now, return a placeholder error
-        anyhow::bail!("Agent communication not yet implemented")
+    /// Build an AgentClient based on current forwarding.
+    fn build_agent_client(&self) -> Result<AgentClient> {
+        let transport = self.get_agent_endpoint()?;
+        Ok(AgentClient::new(transport))
     }
 }
 
@@ -215,37 +244,91 @@ impl Default for MacLimaBackend {
     }
 }
 
+impl Drop for MacLimaBackend {
+    fn drop(&mut self) {
+        tracing::debug!("Shutting down MacLimaBackend runtime");
+        // Runtime will be dropped automatically, but we log for debugging
+    }
+}
+
 impl WorldBackend for MacLimaBackend {
     fn ensure_session(&self, spec: &WorldSpec) -> Result<WorldHandle> {
         self.ensure_vm_running()?;
-        self.setup_socket_forwarding()?;
+        self.ensure_forwarding()?;
 
-        // Forward to agent inside VM
-        let response: serde_json::Value = self.call_agent("ensure_session", spec)?;
+        // Cache session if requested
+        if spec.reuse_session {
+            let cache = self.session_cache.lock().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+            if let Some(ref handle) = *cache {
+                tracing::debug!("Reusing cached world session: {}", handle.id);
+                return Ok(handle.clone());
+            }
+        }
 
-        let world_id = response
-            .get("world_id")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Invalid response from agent"))?;
+        // Verify connectivity via agent client
+        let client = self.build_agent_client()?;
+        let caps = self.runtime.block_on(async {
+            client.capabilities().await
+        }).context("Failed to verify agent connectivity")?;
 
-        Ok(WorldHandle {
-            id: world_id.to_string(),
-        })
+        tracing::info!("Agent connectivity verified: {:?}", caps);
+
+        // Generate world ID
+        let world_id = format!("vm:{}", self.vm_name);
+
+        let handle = WorldHandle {
+            id: world_id,
+        };
+
+        if spec.reuse_session {
+            let mut cache = self.session_cache.lock().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+            *cache = Some(handle.clone());
+        }
+
+        Ok(handle)
     }
 
-    fn exec(&self, world: &WorldHandle, req: ExecRequest) -> Result<ExecResult> {
-        let params = (world, req);
-        self.call_agent("exec", &params)
+    fn exec(&self, _world: &WorldHandle, req: ExecRequest) -> Result<ExecResult> {
+        // Build agent client
+        let client = self.build_agent_client()?;
+
+        // Convert request
+        let agent_req = self.convert_exec_request(&req);
+
+        // Execute via agent
+        let resp = self.runtime.block_on(async {
+            client.execute(agent_req).await
+        })?;
+
+        // Convert response
+        Ok(self.convert_exec_response(resp))
     }
 
-    fn fs_diff(&self, world: &WorldHandle, span_id: &str) -> Result<FsDiff> {
-        let params = (world, span_id);
-        self.call_agent("fs_diff", &params)
+    fn fs_diff(&self, _world: &WorldHandle, span_id: &str) -> Result<FsDiff> {
+        // Build agent client
+        let client = self.build_agent_client()?;
+
+        // Get trace (which includes fs_diff)
+        let trace = self.runtime.block_on(async {
+            client.get_trace(span_id).await
+        })?;
+
+        // Extract fs_diff from trace response
+        if let Some(fs_diff) = trace.get("fs_diff") {
+            // Parse the fs_diff from the JSON value
+            let diff: FsDiff = serde_json::from_value(fs_diff.clone())
+                .context("Failed to parse fs_diff from trace")?;
+            Ok(diff)
+        } else {
+            // Return empty diff if not available
+            Ok(FsDiff::default())
+        }
     }
 
-    fn apply_policy(&self, world: &WorldHandle, spec: &WorldSpec) -> Result<()> {
-        let params = (world, spec);
-        let _: serde_json::Value = self.call_agent("apply_policy", &params)?;
+    fn apply_policy(&self, _world: &WorldHandle, _spec: &WorldSpec) -> Result<()> {
+        // TODO: Implement policy application when agent endpoint is available
+        // For now, this is a no-op as mentioned in the plan
+        tracing::debug!("Policy application not yet implemented for macOS backend");
         Ok(())
     }
 }

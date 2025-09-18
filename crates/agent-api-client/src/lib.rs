@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use http_body_util::{BodyExt, Full};
 use hyper::{body::Bytes, Method, Request, Response, Uri};
 use hyper_util::client::legacy::Client;
+use hyper_util::client::legacy::connect::HttpConnector;
 use hyperlocal::{UnixClientExt, UnixConnector};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -17,16 +18,29 @@ pub mod transport;
 
 pub use transport::Transport;
 
+/// Internal client type for handling different transports.
+enum ClientKind {
+    Unix(Client<UnixConnector, Full<Bytes>>),
+    Tcp(Client<HttpConnector, Full<Bytes>>),
+}
+
 /// Client for communicating with world-agent.
 pub struct AgentClient {
     transport: Transport,
-    client: Client<UnixConnector, Full<Bytes>>,
+    client: ClientKind,
 }
 
 impl AgentClient {
     /// Create a new client with the given transport.
     pub fn new(transport: Transport) -> Self {
-        let client = Client::unix();
+        let client = match &transport {
+            Transport::UnixSocket { .. } => ClientKind::Unix(Client::unix()),
+            Transport::Tcp { .. } => {
+                let http_connector = HttpConnector::new();
+                ClientKind::Tcp(Client::builder(hyper_util::rt::TokioExecutor::new())
+                    .build(http_connector))
+            }
+        };
         Self { transport, client }
     }
 
@@ -94,10 +108,16 @@ impl AgentClient {
             .body(Full::new(Bytes::new()))
             .context("Failed to build GET request")?;
 
-        self.client
-            .request(request)
-            .await
-            .context("Failed to send GET request")
+        match &self.client {
+            ClientKind::Unix(client) => client
+                .request(request)
+                .await
+                .context("Failed to send GET request"),
+            ClientKind::Tcp(client) => client
+                .request(request)
+                .await
+                .context("Failed to send GET request"),
+        }
     }
 
     /// Make a POST request with JSON body.
@@ -116,10 +136,16 @@ impl AgentClient {
             .body(Full::new(Bytes::from(json_body)))
             .context("Failed to build POST request")?;
 
-        self.client
-            .request(request)
-            .await
-            .context("Failed to send POST request")
+        match &self.client {
+            ClientKind::Unix(client) => client
+                .request(request)
+                .await
+                .context("Failed to send POST request"),
+            ClientKind::Tcp(client) => client
+                .request(request)
+                .await
+                .context("Failed to send POST request"),
+        }
     }
 
     /// Build URI for the given path based on transport.

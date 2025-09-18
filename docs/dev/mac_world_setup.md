@@ -40,13 +40,27 @@ This guide walks through setting up the Lima-based Linux world backend for Subst
 
 ## Installation Steps
 
+### Choosing a Profile (runtime vs. dev)
+
+Two Lima profiles are provided:
+- `docs/dev/lima/substrate.yaml` — runtime defaults (smaller footprint)
+- `docs/dev/lima/substrate-dev.yaml` — development profile (larger CPU/RAM/disk)
+
+For day-to-day use, the runtime profile is sufficient. For heavy development (builds, tracing, debugging), use the dev profile.
+
+To start with the dev profile from the repo root:
+```sh
+PROJECT="$(pwd)" envsubst < docs/dev/lima/substrate-dev.yaml > /tmp/substrate-dev.yaml
+limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
+```
+
 ### Step 1: Set up Lima VM
 
-1. **Start the Lima VM** using the provided helper script:
-   ```sh
-   # From the substrate repository root
-   scripts/mac/lima-warm.sh
-   ```
+1. **Start the Lima VM** using the provided helper script (runtime defaults):
+  ```sh
+  # From the substrate repository root
+  scripts/mac/lima-warm.sh
+  ```
 
    This script will:
    - Create a new Lima VM named "substrate" with Ubuntu 24.04
@@ -54,11 +68,13 @@ This guide walks through setting up the Lima-based Linux world backend for Subst
    - Configure the systemd service for substrate-world-agent
    - Mount your home directory (read-only) and project directory (read-write)
 
-2. **Verify VM is running**:
-   ```sh
-   limactl list substrate
-   # Should show status: Running
-   ```
+2. Or, to use the dev profile (heavier resources), start it explicitly as shown above.
+
+3. **Verify VM is running**:
+  ```sh
+  limactl list substrate
+  # Should show status: Running
+  ```
 
 ### Step 2: Build and Deploy World Agent
 

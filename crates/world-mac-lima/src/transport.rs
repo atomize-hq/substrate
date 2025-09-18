@@ -31,8 +31,8 @@ impl Transport {
     }
 
     fn vsock_available() -> bool {
-        // Check for VSock support
-        std::path::Path::new("/dev/vsock").exists()
+        // Check for vsock-proxy command
+        which::which("vsock-proxy").is_ok()
     }
 
     fn ssh_available() -> bool {

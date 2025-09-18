@@ -18,6 +18,7 @@ walkdir = "2"
 dns-lookup = "2"
 world-api = { path = "../world-api" }
 sha2.workspace = true
+tracing = "0.1"
 
 # Linux-specific dependencies
 [target.'cfg(target_os = "linux")'.dependencies]

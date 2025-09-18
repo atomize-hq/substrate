@@ -5,6 +5,8 @@ use axum::routing::{get, post};
 use axum::Router;
 use hyperlocal::UnixServerExt;
 use std::path::Path;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use tracing::{info, warn};
 use tracing_subscriber::{fmt, EnvFilter};
 
@@ -81,8 +83,21 @@ async fn main() -> Result<()> {
         info!("Periodic GC sweep disabled");
     }
 
-    // Serve the application over Unix socket using hyperlocal
-    hyper::Server::bind_unix(socket_path)?
+    // Bind the Unix socket server using hyperlocal
+    let server = hyper::Server::bind_unix(socket_path)?;
+
+    // Loosen socket permissions so non-root users inside the VM can connect
+    // This is safe inside the dedicated world VM and enables SSH UDS forwarding.
+    #[cfg(unix)]
+    {
+        if let Ok(meta) = std::fs::metadata(socket_path) {
+            let mut perms = meta.permissions();
+            perms.set_mode(0o666);
+            let _ = std::fs::set_permissions(socket_path, perms);
+        }
+    }
+
+    server
         .serve(app.into_make_service())
         .await
         .context("Server failed")?;

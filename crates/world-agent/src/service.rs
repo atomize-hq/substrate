@@ -119,10 +119,13 @@ impl WorldAgentService {
         };
 
         // Ensure world exists
-        let world = self
-            .backend
-            .ensure_session(&spec)
-            .context("Failed to ensure session world")?;
+        let world = match self.backend.ensure_session(&spec) {
+            Ok(w) => w,
+            Err(e) => {
+                tracing::error!(error = %e, "ensure_session failed");
+                return Err(anyhow::anyhow!("Failed to ensure session world").into());
+            }
+        };
 
         // Prepare execution request
         let exec_req = world_api::ExecRequest {
@@ -137,10 +140,13 @@ impl WorldAgentService {
         };
 
         // Execute command
-        let result = self
-            .backend
-            .exec(&world, exec_req)
-            .context("Command execution failed")?;
+        let result = match self.backend.exec(&world, exec_req) {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::error!(error = %e, "exec failed");
+                return Err(anyhow::anyhow!("Command execution failed").into());
+            }
+        };
 
         // Generate span ID
         let span_id = format!("spn_{}", uuid::Uuid::now_v7());

@@ -53,17 +53,22 @@ impl SessionWorld {
 
     /// Set up the world isolation.
     fn setup(&mut self) -> Result<()> {
-        self.create_directories()?;
+        tracing::info!("world.setup: creating directories");
+        self.create_directories().context("create_directories failed")?;
 
         #[cfg(target_os = "linux")]
         {
             // Lightweight Linux setup for PTY: avoid unsharing/pivoting the current process.
-            self.setup_linux_isolation()?;
+            tracing::info!("world.setup: linux isolation");
+            self
+                .setup_linux_isolation()
+                .context("setup_linux_isolation failed")?;
 
             // Create a named network namespace for this session world (best-effort)
             let ns_name = format!("substrate-{}", self.id);
             if crate::netns::NetNs::ip_available() {
                 // Create named netns and bring loopback up. Best-effort; ignore failures.
+                tracing::info!("world.setup: creating netns {}", ns_name);
                 let _ = std::process::Command::new("ip")
                     .args(["netns", "add", &ns_name])
                     .status();
@@ -78,7 +83,10 @@ impl SessionWorld {
 
             // Set up network filtering if enabled (scoped to netns when available)
             if self.spec.isolate_network {
-                self.setup_network_filter()?;
+                tracing::info!("world.setup: installing nftables rules");
+                self
+                    .setup_network_filter()
+                    .context("setup_network_filter failed")?;
             }
         }
 

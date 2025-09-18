@@ -1,5 +1,8 @@
-# Lima configuration for Substrate world backend on macOS
-# Copy this file to ~/.lima/substrate.yaml or use scripts/mac/lima-warm.sh to substitute PROJECT path.
+# Lima configuration for Substrate (dev profile) on macOS
+# Heavier resources for development and debugging.
+# Usage example (from repository root):
+#   PROJECT="$(pwd)" envsubst < docs/dev/lima/substrate-dev.yaml > /tmp/substrate-dev.yaml
+#   limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
 
 images:
   - location: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img"
@@ -10,9 +13,9 @@ images:
 vmType: "vz"
 rosetta:
   enabled: true
-cpus: 4
-memory: "4GiB"
-disk: "20GiB"
+cpus: 6
+memory: "8GiB"
+disk: "40GiB"
 mounts:
   - location: "$HOME"
     writable: false
@@ -26,8 +29,10 @@ provision:
       set -eux
       apt-get update
       DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        nftables iproute2 libseccomp-dev curl jq git python3 python3-pip \
-        build-essential dnsmasq openssh-server tmux unzip
+        nftables iproute2 libseccomp-dev curl jq git \
+        openssh-server dnsmasq unzip
+      # Optional dev conveniences (safe to remove for runtime)
+      DEBIAN_FRONTEND=noninteractive apt-get install -y tmux
       systemctl disable --now systemd-resolved || true
       cat >/etc/dnsmasq.d/substrate.conf <<'EOF'
       port=53
@@ -41,9 +46,10 @@ provision:
       echo 'nameserver 127.0.0.53' > /etc/resolv.conf
       sysctl -w kernel.unprivileged_userns_clone=1 || true
       mkdir -p /var/lib/substrate/overlay /run/substrate
-      # Ensure hostname resolves locally to silence sudo warnings
+      # Ensure hostname resolves to silence sudo warnings
       (hostnamectl set-hostname lima-substrate || true)
       grep -q 'lima-substrate' /etc/hosts || echo '127.0.1.1 lima-substrate' >> /etc/hosts
+      # Systemd unit for the world agent
       cat >/etc/systemd/system/substrate-world-agent.service <<'EOF'
       [Unit]
       Description=Substrate World Agent
@@ -66,7 +72,7 @@ provision:
       NoNewPrivileges=yes
       ProtectSystem=strict
       ProtectHome=read-only
-      ReadWritePaths=/var/lib/substrate /run /run/substrate /sys/fs/cgroup
+      ReadWritePaths=/var/lib/substrate /run /run/substrate
       CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE
       AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE
 
@@ -75,4 +81,4 @@ provision:
       EOF
       chmod 644 /etc/systemd/system/substrate-world-agent.service
       systemctl daemon-reload
-      # Binary copied later; leave service disabled until Phase 0.4
+      # Binary copied later; service enabled during Phase 0.4
