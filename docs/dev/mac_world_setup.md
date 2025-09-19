@@ -67,6 +67,7 @@ limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
    - Install required packages (nftables, iproute2, dnsmasq, etc.)
    - Configure the systemd service for substrate-world-agent
    - Mount your home directory (read-only) and project directory (read-write)
+   - Configure `/var/lib/substrate`, `/run/substrate`, and `/tmp` as guest writeable paths via `ReadWritePaths` (handled automatically by the provisioning script; no manual edits required)
 
 2. Or, to use the dev profile (heavier resources), start it explicitly as shown above.
 
@@ -142,6 +143,16 @@ All critical checks should show `[PASS]`. If any show `[FAIL]`, see the troubles
    limactl shell substrate journalctl -u substrate-world-agent -n 50
    ```
 
+### Substrate CLI Smoke Script
+
+Run the scripted end-to-end check from the repo root (uses the repository build of `substrate`):
+
+```sh
+PATH="$(pwd)/target/debug:$PATH" scripts/mac/smoke.sh
+```
+
+The script performs non-PTY, PTY, and replay runs, then validates that the replayed fs diff includes `world-mac-smoke/file.txt`.
+
 ## Helper Scripts
 
 - **`scripts/mac/lima-warm.sh`**: Start/create the Lima VM
@@ -190,12 +201,10 @@ scripts/mac/lima-warm.sh
 
 ## Environment Variables
 
-When Substrate shell integration is complete, these variables will be used:
+The shell manages transport detection automatically. The only knobs you should need are:
 
-- `SUBSTRATE_WORLD=enabled`: Enables world isolation
-- `SUBSTRATE_WORLD_TRANSPORT`: Set to `vsock`, `ssh-uds`, or `ssh-tcp` to force specific transport
-- `SUBSTRATE_WORLD_HOST`: Override host for TCP transport (default: 127.0.0.1)
-- `SUBSTRATE_WORLD_PORT`: Override port for TCP transport (default: 17788)
+- `SUBSTRATE_WORLD=disabled`: Temporarily bypass the world (defaults to `enabled`).
+- `SUBSTRATE_WORLD_ID`: Set by the shell; useful for correlating spans while debugging.
 
 ## Next Steps
 

@@ -66,7 +66,7 @@ Status: living document capturing near-term and upcoming work. Keep concise, act
 - Policy/broker expansion
   - Richer allowlist/egress policy plumbing into world sessions.
 
-- macOS backend enablement (Lima)
-  - Implement `world-mac-lima` agent calls via `agent-api-client` over SSH-forwarded UDS.
-  - Add shell macOS routing (ensure Lima ready, forward socket, use MacLimaBackend).
-  - Acceptance: `substrate -c` and replay work end-to-end on macOS using Lima world-agent; docs updated.
+- macOS backend enablement (Lima) — **DONE (2025-09)**
+  - Implemented `world-mac-lima` agent calls via `agent-api-client` with VSock/SSH fallbacks.
+  - Shell now routes macOS commands through Lima, ensures VM/forwarding, and mirrors Linux telemetry.
+  - Acceptance met: `scripts/mac/smoke.sh` validates non-PTY, PTY, and replay; docs refreshed (`docs/WORLD.md`, `docs/dev/mac_world_setup.md`, `docs/INSTALLATION.md`).
