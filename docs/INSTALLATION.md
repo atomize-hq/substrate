@@ -111,6 +111,7 @@ Always-World parity via Lima VM is available now.
 1. Follow `docs/dev/mac_world_setup.md` to install prerequisites, start the Lima VM (`scripts/mac/lima-warm.sh`), deploy `substrate-world-agent`, and run `scripts/mac/lima-doctor.sh`.
 2. After building the repo, validate end-to-end isolation with `PATH="$(pwd)/target/debug:$PATH" scripts/mac/smoke.sh` (non-PTY, PTY, replay + fs_diff assertion).
 3. Agent logs are accessible via `substrate sudo journalctl -u substrate-world-agent -n 200` (the CLI shells into the VM automatically).
+4. Use `substrate world doctor` (human or `--json`) for an at-a-glance health report covering Lima status, guest service responsiveness, and agent connectivity.
 
 ### Windows
 

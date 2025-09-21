@@ -118,9 +118,9 @@ Additional capabilities planned for later phases:
  - **[Graph](docs/GRAPH.md)** - Graph architecture and CLI (mock backend)
  - **[Privileged Tests](docs/HOWTO_PRIVILEGED_TESTS.md)** - Running isolation/netfilter tests on Linux
 
-### World Doctor (Linux)
+### World Doctor (Linux & macOS)
 
-Use the built-in doctor to check host capabilities and recommended dependencies for replay isolation:
+Use the built-in doctor to validate host readiness for isolation and macOS Lima provisioning:
 
 ```bash
 # Human-readable report
@@ -130,11 +130,18 @@ substrate world doctor
 substrate world doctor --json | jq .
 ```
 
-What it checks:
-- overlayfs kernel support (and best-effort modprobe overlay when privileged)
-- FUSE availability: `/dev/fuse` and `fuse-overlayfs` in PATH
+Linux report highlights:
+- overlayfs kernel support (with best-effort `modprobe overlay` when privileged)
+- FUSE availability: `/dev/fuse` and `fuse-overlayfs` in `PATH`
 - cgroup v2 presence, nft availability, and `kernel.dmesg_restrict`
 - Per-user runtime roots for overlay and copy-diff
+
+macOS report highlights:
+- Lima tooling (`limactl`), Virtualization.framework (`sysctl kern.hv_support`), and optional `vsock-proxy`
+- Lima VM `substrate` status plus SSH connectivity
+- Guest `substrate-world-agent` service, socket, and `/v1/capabilities` response
+- nftables availability and root filesystem usage inside the guest
+- JSON output nests these fields under `lima.{installed, vm_status, service_active, agent_socket, agent_caps_ok, vsock_proxy, ssh, nft, disk_usage}`
 
 Linux packaging note: we recommend installing `fuse-overlayfs` so Substrate can fall back to user-space overlay where kernel overlay mounts are unavailable. For example:
 - Debian/Ubuntu: `apt-get install -y fuse-overlayfs fuse3`

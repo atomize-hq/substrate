@@ -153,6 +153,17 @@ PATH="$(pwd)/target/debug:$PATH" scripts/mac/smoke.sh
 
 The script performs non-PTY, PTY, and replay runs, then validates that the replayed fs diff includes `world-mac-smoke/file.txt`.
 
+### Using `substrate world doctor`
+
+Once the VM is provisioned, prefer the CLI doctor for day-to-day checks:
+
+```sh
+target/debug/substrate world doctor
+target/debug/substrate world doctor --json | jq .
+```
+
+The macOS report verifies host prerequisites (limactl, virtualization, optional `vsock-proxy`), Lima VM state, guest service health, and agent responsiveness. The legacy `scripts/mac/lima-doctor.sh` script remains available for deeper troubleshooting but the CLI command is the canonical entry point.
+
 ## Helper Scripts
 
 - **`scripts/mac/lima-warm.sh`**: Start/create the Lima VM

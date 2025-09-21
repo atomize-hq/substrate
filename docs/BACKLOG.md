@@ -43,6 +43,14 @@ Status: living document capturing near-term and upcoming work. Keep concise, act
     - `curl -sSf http://127.0.0.1:17788/v1/capabilities` works when bridge is enabled.
     - Shell auto-selects TCP only when VSock/UDS are not available and the bridge is active.
 
+- macOS bootstrap automation
+  - Build a signed installer script (or helper binary) that validates macOS version/virtualization support, installs required Homebrew packages (`lima`, `jq`, `openssh`, `coreutils`, `gnused`, `gnu-tar`, `gettext`), provisions Lima, deploys `substrate-world-agent`, and runs doctor checks automatically.
+  - Acceptance: Fresh macOS host can run a single installer command and end up with the Lima VM, agent, and smoke test ready without manual steps.
+
+- macOS binary distribution
+  - Publish prebuilt `substrate` and `substrate-world-agent` artifacts (e.g., GitHub releases or Homebrew formula) so operators do not need a Rust toolchain to onboard.
+  - Acceptance: Installer/bootstrap script can download versioned binaries; manual instructions reference the published artifacts instead of local builds.
+
 ## Hardening / Quality
 
 - Differentiate shell vs replay world warnings
