@@ -118,7 +118,7 @@ Check both sides of the bridge:
 wsl -d substrate-wsl -- bash -lc 'systemctl status substrate-world-agent'
 
 # on Windows
-Get-Content "$env:LOCALAPPDATA\Substrate\logs\forwarder.log" -Tail 50
+Get-Content "$env:LOCALAPPDATA\Substrate\logs\forwarder.log" -Tail 50  # logs rotate daily (5 files, 10 MB each)
 ```
 
 ## Updating the agent binary
@@ -244,3 +244,4 @@ entry ID in the evidence log when documenting remediation.
 
 Follow the Phase 5 guardrails: execute steps in order, capture evidence after
 Each check, and stop immediately if a command fails.
+

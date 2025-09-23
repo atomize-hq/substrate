@@ -15,7 +15,8 @@ apply one of these fixes.
 - [T-006 Agent service not running](#t-006-agent-service-not-running)
 - [T-007 Doctor nftables failure](#t-007-doctor-nftables-failure)
 - [T-008 ConPTY or PTY stream failure](#t-008-conpty-or-pty-stream-failure)
-- [T-009 Path translation mismatch](#t-009-path-translation-mismatch)
+- [T-009 Path translation mismatch](#t-009-path-translation-mismatch)\n- [T-010 Forwarder log stale](#t-010-forwarder-log-stale)
+- [T-010 Forwarder log stale](#t-010-forwarder-log-stale)
 
 ### T-001 Virtualization disabled
 
@@ -223,3 +224,21 @@ import pathlib
 print(pathlib.Path('README.md').resolve())
 PY"
 ```
+
+
+### T-010 Forwarder log stale
+
+- **Symptom**: Doctor reports FAIL for `Forwarder Log` or the latest `forwarder.log` timestamp is older than expected.
+- **Likely cause**: The forwarder exited, cannot write to `%LOCALAPPDATA%\Substrate\logs`, or the system clock jumped backward.
+- **Remediation**:
+  1. Run `scripts/windows/wsl-stop.ps1` to terminate any stale forwarder processes.
+  2. Remove `%LOCALAPPDATA%\Substrate\logs\forwarder*.log*` if the directory is read-only and rerun warm.
+  3. Relaunch the forwarder via `scripts/windows/wsl-warm.ps1` and monitor the new log.
+- **Verify**:
+
+```powershell
+Get-ChildItem "$env:LOCALAPPDATA\Substrate\logs" -Filter 'forwarder*.log*' |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1
+```
+

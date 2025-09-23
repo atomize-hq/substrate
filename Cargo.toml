@@ -45,7 +45,7 @@ members = [
     "crates/broker", "crates/trace",
     # "crates/trace",   # TODO: Implement after broker
     "crates/telemetry-lib",
-    "crates/replay", "crates/substrate-graph",
+    "crates/replay", "crates/substrate-graph", "crates/forwarder",
 ]
 
 [workspace.dependencies]

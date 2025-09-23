@@ -127,7 +127,7 @@ if (Test-Path $pidFile) {
     Stop-Process -Id $existingPid -ErrorAction SilentlyContinue
     Remove-Item $pidFile -ErrorAction SilentlyContinue
 }
-$forwarderProcess = Start-Process -FilePath $forwarderHostPath -ArgumentList "--distro", $DistroName, "--pipe", $pipePath, "--log-dir", $logDir -WindowStyle Hidden -PassThru
+$forwarderProcess = Start-Process -FilePath $forwarderHostPath -ArgumentList "--distro", $DistroName, "--pipe", $pipePath, "--log-dir", $logDir, "--run-as-service" -WindowStyle Hidden -PassThru
 Set-Content $pidFile -Value $forwarderProcess.Id
 
 # Wait for pipe
@@ -142,3 +142,4 @@ while (-not (Test-Path $pipePath)) {
 Write-Info "Forwarder pipe ready"
 
 Write-Info "Warm complete"
+
