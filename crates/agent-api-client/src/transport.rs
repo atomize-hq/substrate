@@ -9,6 +9,9 @@ pub enum Transport {
     UnixSocket { path: PathBuf },
     /// TCP connection.
     Tcp { host: String, port: u16 },
+    /// Windows named pipe connection.
+    #[cfg(target_os = "windows")]
+    NamedPipe { path: PathBuf },
 }
 
 impl Transport {
@@ -21,14 +24,20 @@ impl Transport {
             Self::Tcp { host, port } => {
                 format!("TCP: {}:{}", host, port)
             }
+            #[cfg(target_os = "windows")]
+            Self::NamedPipe { path } => {
+                format!("Named pipe: {}", path.display())
+            }
         }
     }
 
     /// Check if this transport supports keepalive.
     pub fn supports_keepalive(&self) -> bool {
         match self {
-            Self::UnixSocket { .. } => false, // Unix sockets don't need keepalive
+            Self::UnixSocket { .. } => false,
             Self::Tcp { .. } => true,
+            #[cfg(target_os = "windows")]
+            Self::NamedPipe { .. } => false,
         }
     }
 }
@@ -49,6 +58,17 @@ mod tests {
             port: 8080,
         };
         assert_eq!(tcp_transport.description(), "TCP: localhost:8080");
+
+        #[cfg(target_os = "windows")]
+        {
+            let pipe_transport = Transport::NamedPipe {
+                path: PathBuf::from(r"\\.\pipe\substrate-agent"),
+            };
+            assert_eq!(
+                pipe_transport.description(),
+                "Named pipe: \\.\\pipe\\substrate-agent"
+            );
+        }
     }
 
     #[test]
@@ -63,5 +83,13 @@ mod tests {
             port: 8080,
         };
         assert!(tcp_transport.supports_keepalive());
+
+        #[cfg(target_os = "windows")]
+        {
+            let pipe_transport = Transport::NamedPipe {
+                path: PathBuf::from(r"\\.\pipe\substrate-agent"),
+            };
+            assert!(!pipe_transport.supports_keepalive());
+        }
     }
 }

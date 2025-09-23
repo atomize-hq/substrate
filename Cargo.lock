@@ -27,7 +27,6 @@ dependencies = [
  "http-body-util",
  "hyper 1.7.0",
  "hyper-util",
- "hyperlocal 0.9.1",
  "serde",
  "serde_json",
  "tempfile",
@@ -4591,6 +4590,22 @@ dependencies = [
  "ureq",
  "uuid",
  "which 4.4.2",
+ "world-api",
+]
+
+[[package]]
+name = "world-windows-wsl"
+version = "0.1.0"
+dependencies = [
+ "agent-api-client",
+ "agent-api-types",
+ "anyhow",
+ "base64 0.22.1",
+ "serde_json",
+ "substrate-common",
+ "tokio",
+ "tracing",
+ "uuid",
  "world-api",
 ]
 
