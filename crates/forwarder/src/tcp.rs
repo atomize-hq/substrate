@@ -16,7 +16,12 @@ pub async fn serve(
         .await
         .with_context(|| format!("failed to bind tcp listener on {addr}"))?;
     let local_addr = listener.local_addr().unwrap_or(addr);
-    tracing::info!(address = %local_addr, "listening on TCP bridge");
+    tracing::info!(
+        address = %local_addr,
+        target_mode = config.target_mode(),
+        target = %config.target(),
+        "listening on TCP bridge"
+    );
 
     let mut sessions: JoinSet<anyhow::Result<()>> = JoinSet::new();
     let mut counter: u64 = 0;

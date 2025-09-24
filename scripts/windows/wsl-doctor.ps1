@@ -60,7 +60,131 @@ function Test-NamedPipe {
     }
 }
 
+function Get-ForwarderTargetInfo {
+    param(
+        [string]$ConfigPath
+    )
+
+    $defaultUds = '/run/substrate.sock'
+    $defaultTcpPort = 61337
+
+    $override = $env:SUBSTRATE_FORWARDER_TARGET
+    if ($override) {
+        $clean = $override.Trim()
+        if (-not $clean) {
+            throw 'SUBSTRATE_FORWARDER_TARGET is empty'
+        }
+        $parts = $clean.Split(':', 2)
+        $mode = $parts[0].ToLowerInvariant()
+        $value = if ($parts.Length -gt 1) { $parts[1].Trim() } else { '' }
+        switch ($mode) {
+            'tcp' {
+                try {
+                    $port = if ($value) { [int]$value } else { $defaultTcpPort }
+                } catch {
+                    throw "Invalid TCP port in SUBSTRATE_FORWARDER_TARGET: '$value'"
+                }
+                if ($port -lt 1 -or $port -gt 65535) {
+                    throw "TCP port out of range in SUBSTRATE_FORWARDER_TARGET: $port"
+                }
+                return [PSCustomObject]@{
+                    Mode     = 'tcp'
+                    Endpoint = "127.0.0.1:$port"
+                    Source   = 'environment'
+                }
+            }
+            'uds' {
+                $path = if ($value) { $value } else { $defaultUds }
+                return [PSCustomObject]@{
+                    Mode     = 'uds'
+                    Endpoint = $path
+                    Source   = 'environment'
+                }
+            }
+            'unix' {
+                $path = if ($value) { $value } else { $defaultUds }
+                return [PSCustomObject]@{
+                    Mode     = 'uds'
+                    Endpoint = $path
+                    Source   = 'environment'
+                }
+            }
+            'unix_socket' {
+                $path = if ($value) { $value } else { $defaultUds }
+                return [PSCustomObject]@{
+                    Mode     = 'uds'
+                    Endpoint = $path
+                    Source   = 'environment'
+                }
+            }
+            default {
+                throw "Unsupported target mode in SUBSTRATE_FORWARDER_TARGET: $mode"
+            }
+        }
+    }
+
+    if ($ConfigPath -and (Test-Path $ConfigPath)) {
+        $content = Get-Content -Path $ConfigPath -Raw
+        $modeMatch = [regex]::Match($content, '(?im)^\s*mode\s*=\s*"(?<mode>[^"]+)"')
+        $mode = if ($modeMatch.Success) { $modeMatch.Groups['mode'].Value.ToLowerInvariant() } else { 'uds' }
+        $tcpMatch = [regex]::Match($content, '(?im)^\s*tcp_port\s*=\s*(?<port>\d+)')
+        $udsMatch = [regex]::Match($content, '(?im)^\s*uds_path\s*=\s*"(?<path>[^"]+)"')
+
+        switch ($mode) {
+            'tcp' {
+                try {
+                    $port = if ($tcpMatch.Success) { [int]$tcpMatch.Groups['port'].Value } else { $defaultTcpPort }
+                } catch {
+                    throw "Invalid tcp_port value in $ConfigPath"
+                }
+                if ($port -lt 1 -or $port -gt 65535) {
+                    throw "tcp_port out of range in $ConfigPath: $port"
+                }
+                return [PSCustomObject]@{
+                    Mode     = 'tcp'
+                    Endpoint = "127.0.0.1:$port"
+                    Source   = "config ($ConfigPath)"
+                }
+            }
+            'uds' {
+                $path = if ($udsMatch.Success) { $udsMatch.Groups['path'].Value } else { $defaultUds }
+                return [PSCustomObject]@{
+                    Mode     = 'uds'
+                    Endpoint = $path
+                    Source   = "config ($ConfigPath)"
+                }
+            }
+            'unix' {
+                $path = if ($udsMatch.Success) { $udsMatch.Groups['path'].Value } else { $defaultUds }
+                return [PSCustomObject]@{
+                    Mode     = 'uds'
+                    Endpoint = $path
+                    Source   = "config ($ConfigPath)"
+                }
+            }
+            'unix_socket' {
+                $path = if ($udsMatch.Success) { $udsMatch.Groups['path'].Value } else { $defaultUds }
+                return [PSCustomObject]@{
+                    Mode     = 'uds'
+                    Endpoint = $path
+                    Source   = "config ($ConfigPath)"
+                }
+            }
+            default {
+                throw "Unsupported target mode '$mode' in $ConfigPath"
+            }
+        }
+    }
+
+    return [PSCustomObject]@{
+        Mode     = 'uds'
+        Endpoint = $defaultUds
+        Source   = 'default'
+    }
+}
+
 $results = @()
+$forwarderConfigPath = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'Substrate\forwarder.toml' } else { $null }
 
 $results += Invoke-Check 'Virtualization' {
     $line = systeminfo | Select-String 'Virtualization'
@@ -119,6 +243,12 @@ $results += Invoke-Check 'Forwarder Pipe' {
     Test-NamedPipe -Path $pipePath -TimeoutMs 2000
 } 'Restart forwarder via wsl-warm.ps1'
 
+$results += Invoke-Check 'Forwarder Target' {
+    $info = Get-ForwarderTargetInfo -ConfigPath $forwarderConfigPath
+    "Mode=$($info.Mode); Endpoint=$($info.Endpoint); Source=$($info.Source)"
+} 'Set SUBSTRATE_FORWARDER_TARGET or update forwarder.toml [target]'
+
+
 $results += Invoke-Check 'Forwarder Log' {
     $logDir = Join-Path $env:LOCALAPPDATA 'Substrate\logs'
     if (-not (Test-Path $logDir)) { throw "Log directory missing: $logDir" }
@@ -174,3 +304,4 @@ if ($results.Status -contains 'FAIL') {
 } else {
     Write-Host "All checks PASS" -ForegroundColor Green
 }
+

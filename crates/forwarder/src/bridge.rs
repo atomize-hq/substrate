@@ -1,4 +1,4 @@
-use crate::config::ForwarderConfig;
+use crate::config::{BridgeTarget, ForwarderConfig};
 use crate::wsl;
 use anyhow::Context;
 use std::net::SocketAddr;
@@ -10,8 +10,15 @@ pub async fn run_pipe_session(
     config: Arc<ForwarderConfig>,
     session_id: u64,
 ) -> anyhow::Result<()> {
-    tracing::info!(session = session_id, kind = "pipe", "client connected");
-    run_session(&mut pipe, SessionKind::Pipe, config, session_id).await
+    let target = config.target().clone();
+    tracing::info!(
+        session = session_id,
+        kind = "pipe",
+        target_mode = target.mode(),
+        target = %target,
+        "client connected"
+    );
+    run_session(&mut pipe, SessionKind::Pipe, config, target, session_id).await
 }
 
 pub async fn run_tcp_session(
@@ -20,8 +27,23 @@ pub async fn run_tcp_session(
     config: Arc<ForwarderConfig>,
     session_id: u64,
 ) -> anyhow::Result<()> {
-    tracing::info!(session = session_id, kind = "tcp", peer = %peer, "client connected");
-    run_session(&mut stream, SessionKind::Tcp { peer }, config, session_id).await
+    let target = config.target().clone();
+    tracing::info!(
+        session = session_id,
+        kind = "tcp",
+        peer = %peer,
+        target_mode = target.mode(),
+        target = %target,
+        "client connected"
+    );
+    run_session(
+        &mut stream,
+        SessionKind::Tcp { peer },
+        config,
+        target,
+        session_id,
+    )
+    .await
 }
 
 enum SessionKind {
@@ -33,22 +55,42 @@ async fn run_session<S>(
     client: &mut S,
     kind: SessionKind,
     config: Arc<ForwarderConfig>,
+    target: BridgeTarget,
     session_id: u64,
 ) -> anyhow::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    let mut wsl_bundle = wsl::spawn(&config.distro)
-        .await
-        .with_context(|| format!("session {session_id}: failed to spawn WSL bridge"))?;
+    let mut wsl_bundle = wsl::spawn(&config.distro, &target).await.with_context(|| {
+        format!(
+            "session {session_id}: failed to spawn WSL bridge for {} via {}",
+            session_label(&kind),
+            target
+        )
+    })?;
 
     let mut stream = wsl_bundle.stream_mut();
     match tokio::io::copy_bidirectional(client, &mut stream).await {
         Ok((c2w, w2c)) => {
-            tracing::debug!(session = session_id, kind = %session_label(&kind), client_to_wsl = c2w, wsl_to_client = w2c, "stream closed");
+            tracing::debug!(
+                session = session_id,
+                kind = %session_label(&kind),
+                target_mode = target.mode(),
+                target = %target,
+                client_to_wsl = c2w,
+                wsl_to_client = w2c,
+                "stream closed"
+            );
         }
         Err(err) => {
-            tracing::warn!(session = session_id, kind = %session_label(&kind), error = %err, "bidirectional copy failed");
+            tracing::warn!(
+                session = session_id,
+                kind = %session_label(&kind),
+                target_mode = target.mode(),
+                target = %target,
+                error = %err,
+                "bidirectional copy failed"
+            );
         }
     }
 
@@ -56,7 +98,12 @@ where
         tracing::debug!(session = session_id, "client shutdown error: {err}");
     }
     if let Err(err) = stream.shutdown().await {
-        tracing::debug!(session = session_id, "WSL stream shutdown error: {err}");
+        tracing::debug!(
+            session = session_id,
+            target_mode = target.mode(),
+            target = %target,
+            "WSL stream shutdown error: {err}"
+        );
     }
 
     let status = wsl_bundle
@@ -64,7 +111,13 @@ where
         .await
         .with_context(|| format!("session {session_id}: failed to wait for WSL process"))?;
     if !status.success() {
-        tracing::warn!(session = session_id, exit = ?status.code(), "WSL bridge exited with failure");
+        tracing::warn!(
+            session = session_id,
+            target_mode = target.mode(),
+            target = %target,
+            exit = ?status.code(),
+            "WSL bridge exited with failure"
+        );
     }
 
     Ok(())

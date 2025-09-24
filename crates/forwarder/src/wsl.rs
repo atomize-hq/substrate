@@ -1,3 +1,4 @@
+use crate::config::BridgeTarget;
 use anyhow::Context;
 use std::io;
 use std::pin::Pin;
@@ -13,12 +14,32 @@ import selectors
 import socket
 import sys
 
-SOCKET_PATH = \"/run/substrate.sock\"
+DEFAULT_MODE = "uds"
+DEFAULT_UDS = "/run/substrate.sock"
+DEFAULT_TCP_HOST = "127.0.0.1"
+DEFAULT_TCP_PORT = 61337
+
+
+def connect():
+    mode = os.environ.get("SUBSTRATE_FORWARDER_TARGET_MODE", DEFAULT_MODE).lower()
+    if mode == "tcp":
+        host = os.environ.get("SUBSTRATE_FORWARDER_TARGET_HOST", DEFAULT_TCP_HOST)
+        port_value = os.environ.get("SUBSTRATE_FORWARDER_TARGET_PORT")
+        try:
+            port = int(port_value) if port_value else DEFAULT_TCP_PORT
+        except ValueError as exc:
+            raise RuntimeError(f"invalid tcp port: {port_value!r}") from exc
+        sock = socket.create_connection((host, port))
+    else:
+        path = os.environ.get("SUBSTRATE_FORWARDER_TARGET_ENDPOINT", DEFAULT_UDS)
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.connect(path)
+    sock.setblocking(False)
+    return sock
+
 
 def main():
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.connect(SOCKET_PATH)
-    sock.setblocking(False)
+    sock = connect()
 
     stdin_fd = sys.stdin.buffer.fileno()
     stdout = sys.stdout.buffer
@@ -53,7 +74,8 @@ def main():
                 else:
                     sock.sendall(data)
 
-if __name__ == \"__main__\":
+
+if __name__ == "__main__":
     main()
 "#;
 
@@ -118,16 +140,26 @@ impl WslStreamBundle {
     }
 }
 
-pub async fn spawn(distro: &str) -> anyhow::Result<WslStreamBundle> {
+pub async fn spawn(distro: &str, target: &BridgeTarget) -> anyhow::Result<WslStreamBundle> {
     let mut cmd = Command::new("wsl");
     cmd.arg("-d").arg(distro);
     cmd.arg("--");
     cmd.arg("python3");
     cmd.arg("-c").arg(BRIDGE_SCRIPT);
     cmd.env("PYTHONUNBUFFERED", "1");
-    cmd.stdin(std::process::Stdio::piped());
-    cmd.stdout(std::process::Stdio::piped());
-    cmd.stderr(std::process::Stdio::piped());
+
+    match target {
+        BridgeTarget::Uds { path } => {
+            cmd.env("SUBSTRATE_FORWARDER_TARGET_MODE", "uds");
+            cmd.env("SUBSTRATE_FORWARDER_TARGET_ENDPOINT", path);
+        }
+        BridgeTarget::Tcp { addr } => {
+            cmd.env("SUBSTRATE_FORWARDER_TARGET_MODE", "tcp");
+            cmd.env("SUBSTRATE_FORWARDER_TARGET_HOST", addr.ip().to_string());
+            cmd.env("SUBSTRATE_FORWARDER_TARGET_PORT", addr.port().to_string());
+            cmd.env("SUBSTRATE_FORWARDER_TARGET_ENDPOINT", addr.to_string());
+        }
+    }
 
     let mut child = cmd
         .spawn()

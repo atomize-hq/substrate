@@ -112,7 +112,12 @@ fn build_security_descriptor() -> anyhow::Result<SecurityDescriptor> {
 
 pub async fn serve(config: Arc<ForwarderConfig>, cancel: CancellationToken) -> anyhow::Result<()> {
     let listener = PipeListener::new(config.pipe_path.clone())?;
-    tracing::info!(pipe = %config.pipe_path, "listening on named pipe");
+    tracing::info!(
+        pipe = %config.pipe_path,
+        target_mode = config.target_mode(),
+        target = %config.target(),
+        "listening on named pipe"
+    );
 
     let mut sessions: JoinSet<anyhow::Result<()>> = JoinSet::new();
     let mut counter: u64 = 0;

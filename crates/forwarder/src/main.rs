@@ -39,6 +39,10 @@ struct Cli {
     #[arg(long)]
     log_dir: Option<PathBuf>,
 
+    /// Optional path to the forwarder configuration file (defaults to %LOCALAPPDATA%\Substrate\forwarder.toml)
+    #[arg(long)]
+    config: Option<PathBuf>,
+
     /// Run without console output (service-friendly)
     #[arg(long)]
     run_as_service: bool,
@@ -65,16 +69,24 @@ async fn main() -> anyhow::Result<()> {
     let _guard = logging::init(&log_dir, cli.run_as_service)
         .with_context(|| format!("failed to initialize logging at {}", log_dir.display()))?;
 
-    let config = Arc::new(ForwarderConfig {
-        distro: cli.distro.clone(),
-        pipe_path: cli.pipe.clone(),
-        tcp_bridge: cli.tcp_bridge,
-    });
+    let forwarder_config = ForwarderConfig::load(
+        cli.distro.clone(),
+        cli.pipe.clone(),
+        cli.tcp_bridge,
+        cli.config.clone(),
+    )
+    .with_context(|| "failed to load forwarder configuration")?;
+    let config = Arc::new(forwarder_config);
+
+    let config_path_display = cli.config.as_ref().map(|path| path.display().to_string());
 
     tracing::info!(
         distro = %config.distro,
         pipe = %config.pipe_path,
-        tcp_enabled = config.tcp_enabled(),
+        host_tcp_bridge = ?config.host_tcp_bridge,
+        target_mode = config.target_mode(),
+        target = %config.target(),
+        config_path = config_path_display.as_deref(),
         "starting substrate-forwarder"
     );
 
@@ -83,7 +95,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut join_set = JoinSet::new();
     join_set.spawn(pipe::serve(config.clone(), cancel.clone()));
-    if let Some(addr) = config.tcp_bridge {
+    if let Some(addr) = config.host_tcp_bridge {
         join_set.spawn(tcp::serve(addr, config.clone(), cancel.clone()));
     }
 
@@ -138,6 +150,7 @@ mod tests {
         assert_eq!(cli.distro, "substrate-wsl");
         assert_eq!(cli.pipe, r"\\.\pipe\substrate-agent");
         assert!(cli.tcp_bridge.is_none());
+        assert!(cli.config.is_none());
     }
 
     #[test]
@@ -152,12 +165,18 @@ mod tests {
             "127.0.0.1:5000",
             "--log-dir",
             "C:/tmp/logs",
+            "--config",
+            "C:/tmp/forwarder.toml",
             "--run-as-service",
         ]);
         assert_eq!(cli.distro, "alt");
         assert_eq!(cli.pipe, r"\\.\pipe\custom");
         assert_eq!(cli.tcp_bridge.unwrap().port(), 5000);
         assert!(cli.run_as_service);
-        assert_eq!(cli.log_dir.unwrap(), PathBuf::from("C:/tmp/logs"));
+        assert_eq!(cli.log_dir.as_ref().unwrap(), &PathBuf::from("C:/tmp/logs"));
+        assert_eq!(
+            cli.config.as_ref().unwrap(),
+            &PathBuf::from("C:/tmp/forwarder.toml")
+        );
     }
 }
