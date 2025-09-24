@@ -23,10 +23,12 @@ version = "0.1.1"
 dependencies = [
  "agent-api-types",
  "anyhow",
+ "async-trait",
  "dirs 5.0.1",
  "http-body-util",
  "hyper 1.7.0",
  "hyper-util",
+ "hyperlocal 0.8.0",
  "serde",
  "serde_json",
  "tempfile",

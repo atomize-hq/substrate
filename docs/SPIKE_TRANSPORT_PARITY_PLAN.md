@@ -11,7 +11,7 @@ Tracking IDs: T-011, T-012, (new) T-013 once filed
 ## Phase Status Matrix
 | Phase | Host Platform | Status | Last Updated | Reviewer | Evidence Log Anchor |
 |-------|---------------|--------|--------------|----------|----------------------|
-| W | Windows (WSL2) | Pending | _tbd_ | _tbd_ | windows_always_world.md#W |
+| W | Windows (WSL2) | In Progress | 2025-09-24T10:50:18-04:00 | _tbd_ | windows_always_world.md#W |
 | M | macOS (Lima) | Pending | _tbd_ | _tbd_ | macos_always_world.md#M |
 | L | Linux (Native) | Pending | _tbd_ | _tbd_ | linux_always_world.md#L |
 | Final Verification | All | Pending | _tbd_ | _tbd_ | windows_always_world.md#Final |

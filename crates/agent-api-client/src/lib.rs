@@ -3,65 +3,35 @@
 //! This crate provides the client implementation used by host-proxy to forward
 //! Agent API requests to world-agent running inside worlds/VMs.
 
+use std::path::Path;
+use std::sync::Arc;
+
 use agent_api_types::{ApiError, ExecuteRequest, ExecuteResponse};
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use http_body_util::{BodyExt, Full};
-#[cfg(target_os = "windows")]
-use hyper::client::conn::http1;
-use hyper::header::{HeaderValue, HOST};
-use hyper::{body::Bytes, Method, Request, Response, Uri};
-use hyper_util::client::legacy::connect::HttpConnector;
-use hyper_util::client::legacy::Client;
-use hyper_util::rt::TokioExecutor;
-#[cfg(target_os = "windows")]
-use hyper_util::rt::TokioIo;
-#[cfg(unix)]
-use hyperlocal::{UnixClientExt, UnixConnector};
+use hyper::{body::Bytes, Method, Request, Response};
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
-#[cfg(target_os = "windows")]
-use tokio::net::windows::named_pipe::ClientOptions;
 
 pub mod retry;
 pub mod transport;
 
-pub use transport::Transport;
-
-/// Internal client type for handling different transports.
-enum ClientKind {
-    #[cfg(unix)]
-    Unix(Client<UnixConnector, Full<Bytes>>),
-    Tcp(Client<HttpConnector, Full<Bytes>>),
-    #[cfg(target_os = "windows")]
-    NamedPipe {
-        path: PathBuf,
-    },
-}
+pub use transport::{build_connector, Connector, Transport, TransportMode};
 
 /// Client for communicating with world-agent.
 pub struct AgentClient {
     transport: Transport,
-    client: ClientKind,
+    connector: Arc<dyn Connector>,
 }
 
 impl AgentClient {
     /// Create a new client with the given transport.
     pub fn new(transport: Transport) -> Self {
-        let client = match &transport {
-            #[cfg(unix)]
-            Transport::UnixSocket { .. } => ClientKind::Unix(Client::unix()),
-            #[cfg(not(unix))]
-            Transport::UnixSocket { .. } => {
-                panic!("Unix socket transport is not supported on this platform")
-            }
-            Transport::Tcp { .. } => {
-                let http_connector = HttpConnector::new();
-                ClientKind::Tcp(Client::builder(TokioExecutor::new()).build(http_connector))
-            }
-            #[cfg(target_os = "windows")]
-            Transport::NamedPipe { path } => ClientKind::NamedPipe { path: path.clone() },
-        };
-        Self { transport, client }
+        let connector = build_connector(&transport)
+            .unwrap_or_else(|err| panic!("Unsupported transport: {err}"));
+        Self {
+            transport,
+            connector: Arc::from(connector),
+        }
     }
 
     /// Create a client that connects to the default Unix socket.
@@ -79,6 +49,26 @@ impl AgentClient {
             port,
         };
         Self::new(transport)
+    }
+
+    /// Return the transport metadata used by this client.
+    pub fn transport_mode(&self) -> TransportMode {
+        match &self.transport {
+            Transport::UnixSocket { .. } => TransportMode::Unix,
+            Transport::Tcp { .. } => TransportMode::Tcp,
+            #[cfg(target_os = "windows")]
+            Transport::NamedPipe { .. } => TransportMode::NamedPipe,
+        }
+    }
+
+    /// Optional human-readable endpoint for telemetry.
+    pub fn transport_endpoint(&self) -> Option<String> {
+        self.connector.endpoint()
+    }
+
+    /// Access the underlying transport configuration.
+    pub fn transport(&self) -> &Transport {
+        &self.transport
     }
 
     /// Execute a command via the agent API.
@@ -121,34 +111,22 @@ impl AgentClient {
 
     /// Make a GET request.
     async fn get(&self, path: &str) -> Result<Response<hyper::body::Incoming>> {
-        let uri = self.build_uri(path)?;
+        let uri = self
+            .connector
+            .build_uri(path)
+            .context("Failed to build GET URI")?;
         let mut request = Request::builder()
             .method(Method::GET)
             .uri(uri)
             .body(Full::new(Bytes::new()))
             .context("Failed to build GET request")?;
 
-        #[cfg(target_os = "windows")]
-        if matches!(self.client, ClientKind::NamedPipe { .. }) {
-            request
-                .headers_mut()
-                .entry(HOST)
-                .or_insert_with(|| HeaderValue::from_static("localhost"));
-        }
+        self.connector.prepare_request(&mut request);
 
-        match &self.client {
-            #[cfg(unix)]
-            ClientKind::Unix(client) => client
-                .request(request)
-                .await
-                .context("Failed to send GET request"),
-            ClientKind::Tcp(client) => client
-                .request(request)
-                .await
-                .context("Failed to send GET request"),
-            #[cfg(target_os = "windows")]
-            ClientKind::NamedPipe { path } => self.request_named_pipe(path, request).await,
-        }
+        self.connector
+            .execute(request)
+            .await
+            .context("Failed to send GET request")
     }
 
     /// Make a POST request with JSON body.
@@ -157,7 +135,10 @@ impl AgentClient {
         path: &str,
         body: &T,
     ) -> Result<Response<hyper::body::Incoming>> {
-        let uri = self.build_uri(path)?;
+        let uri = self
+            .connector
+            .build_uri(path)
+            .context("Failed to build POST URI")?;
         let json_body = serde_json::to_vec(body).context("Failed to serialize request body")?;
 
         let mut request = Request::builder()
@@ -167,74 +148,12 @@ impl AgentClient {
             .body(Full::new(Bytes::from(json_body)))
             .context("Failed to build POST request")?;
 
-        #[cfg(target_os = "windows")]
-        if matches!(self.client, ClientKind::NamedPipe { .. }) {
-            request
-                .headers_mut()
-                .entry(HOST)
-                .or_insert_with(|| HeaderValue::from_static("localhost"));
-        }
+        self.connector.prepare_request(&mut request);
 
-        match &self.client {
-            #[cfg(unix)]
-            ClientKind::Unix(client) => client
-                .request(request)
-                .await
-                .context("Failed to send POST request"),
-            ClientKind::Tcp(client) => client
-                .request(request)
-                .await
-                .context("Failed to send POST request"),
-            #[cfg(target_os = "windows")]
-            ClientKind::NamedPipe { path } => self.request_named_pipe(path, request).await,
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    async fn request_named_pipe(
-        &self,
-        pipe_path: &PathBuf,
-        request: Request<Full<Bytes>>,
-    ) -> Result<Response<hyper::body::Incoming>> {
-        let pipe = ClientOptions::new()
-            .open(pipe_path)
-            .with_context(|| format!("Failed to open named pipe {}", pipe_path.display()))?;
-        let io = TokioIo::new(pipe);
-        let (mut sender, connection) = http1::Builder::new()
-            .handshake(io)
+        self.connector
+            .execute(request)
             .await
-            .context("Failed to perform HTTP handshake over named pipe")?;
-
-        tokio::spawn(async move {
-            if let Err(err) = connection.await {
-                tracing::debug!(error = %err, "Named pipe connection closed with error");
-            }
-        });
-
-        sender
-            .send_request(request)
-            .await
-            .context("Failed to send request over named pipe")
-    }
-
-    /// Build URI for the given path based on transport.
-    fn build_uri(&self, path: &str) -> Result<Uri> {
-        match &self.transport {
-            #[cfg(unix)]
-            Transport::UnixSocket { path: socket_path } => {
-                let uri: Uri = hyperlocal::Uri::new(socket_path, path).into();
-                Ok(uri)
-            }
-            #[cfg(not(unix))]
-            Transport::UnixSocket { .. } => Err(anyhow::anyhow!(
-                "Unix socket transport is not available on this platform"
-            )),
-            Transport::Tcp { host, port } => format!("http://{}:{}{}", host, port, path)
-                .parse()
-                .context("Failed to build TCP URI"),
-            #[cfg(target_os = "windows")]
-            Transport::NamedPipe { .. } => path.parse().context("Failed to build named pipe URI"),
-        }
+            .context("Failed to send POST request")
     }
 
     /// Parse response body as JSON.
@@ -258,7 +177,7 @@ impl AgentClient {
 
             // Fallback to raw error message
             let error_text = String::from_utf8_lossy(&body_bytes);
-            return Err(anyhow::anyhow!("HTTP {} error: {}", status, error_text));
+            return Err(anyhow!("HTTP {} error: {}", status, error_text));
         }
 
         serde_json::from_slice(&body_bytes).context("Failed to parse JSON response")
@@ -270,6 +189,11 @@ impl AgentClient {
             Ok(_) => Ok(true),
             Err(_) => Ok(false),
         }
+    }
+
+    #[cfg(all(test, unix))]
+    fn build_uri_for_test(&self, path: &str) -> Result<hyper::Uri> {
+        self.connector.build_uri(path)
     }
 }
 
@@ -293,9 +217,10 @@ mod tests {
     fn test_client_creation() {
         let client = AgentClient::unix_socket("/tmp/test.sock");
 
-        match client.transport {
+        match client.transport() {
             Transport::UnixSocket { ref path } => {
                 assert_eq!(path, std::path::Path::new("/tmp/test.sock"));
+                assert_eq!(client.transport_mode(), TransportMode::Unix);
             }
             _ => panic!("Expected Unix socket transport"),
         }
@@ -305,10 +230,11 @@ mod tests {
     fn test_tcp_client_creation() {
         let client = AgentClient::tcp("localhost", 8080);
 
-        match client.transport {
+        match client.transport() {
             Transport::Tcp { ref host, port } => {
                 assert_eq!(host, "localhost");
-                assert_eq!(port, 8080);
+                assert_eq!(*port, 8080);
+                assert_eq!(client.transport_mode(), TransportMode::Tcp);
             }
             _ => panic!("Expected TCP transport"),
         }
@@ -319,7 +245,7 @@ mod tests {
     fn test_default_client() {
         let client = AgentClient::default();
 
-        match client.transport {
+        match client.transport() {
             Transport::UnixSocket { ref path } => {
                 assert!(path
                     .to_string_lossy()
@@ -333,13 +259,13 @@ mod tests {
     #[tokio::test]
     async fn test_uri_building() {
         let client = AgentClient::unix_socket("/tmp/test.sock");
-        let uri = client.build_uri("/v1/execute").unwrap();
+        let uri = client.build_uri_for_test("/v1/execute").unwrap();
 
         // hyperlocal URIs have a specific format
         assert!(uri.to_string().contains("/v1/execute"));
 
         let tcp_client = AgentClient::tcp("localhost", 8080);
-        let tcp_uri = tcp_client.build_uri("/v1/execute").unwrap();
+        let tcp_uri = tcp_client.build_uri_for_test("/v1/execute").unwrap();
         assert_eq!(tcp_uri.to_string(), "http://localhost:8080/v1/execute");
     }
 }
