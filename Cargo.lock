@@ -3253,6 +3253,7 @@ dependencies = [
  "windows-sys 0.52.0",
  "world",
  "world-api",
+ "world-backend-factory",
  "world-mac-lima",
 ]
 
@@ -4569,6 +4570,7 @@ dependencies = [
  "world",
  "world-api",
  "world-mac-lima",
+ "world-windows-wsl",
 ]
 
 [[package]]

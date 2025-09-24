@@ -136,6 +136,8 @@ Notes
 
 ## 7) Logging & Telemetry
 
+- Windows spans include an optional `fs_diff.display_path` map pairing canonical WSL paths with native Windows paths for telemetry consumers.
+
 - world-agent (PTY)
   - Logs: client connected; `start cmd=… cwd=… span_id=… cols=… rows=…`;
   - In‑world details: `world_id=… ns=… cgroup=… in_world=true` on PTY start

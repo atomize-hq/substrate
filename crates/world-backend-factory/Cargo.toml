@@ -14,3 +14,5 @@ world = { version = "0.1.1", path = "../world" }
 [target.'cfg(target_os = "macos")'.dependencies]
 world-mac-lima = { version = "0.1.0", path = "../world-mac-lima" }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+world-windows-wsl = { version = "0.1.0", path = "../world-windows-wsl" }

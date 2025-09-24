@@ -30,6 +30,7 @@ substrate-common = { version = "0.1.1", path = "../common" }
 substrate-broker = { version = "0.1.0", path = "../broker" }
 world = { version = "0.1.1", path = "../world" }
 world-api = { version = "0.1.0", path = "../world-api" }
+world-backend-factory = { version = "0.1.0", path = "../world-backend-factory" }
 # Dependencies for bundled binaries
 sha2 = "0.10"
 # PTY support dependencies
@@ -76,3 +77,4 @@ rustc_version = "0.4"
 
 [features]
 default = []
+

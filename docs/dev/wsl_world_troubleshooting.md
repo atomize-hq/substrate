@@ -242,3 +242,35 @@ Get-ChildItem "$env:LOCALAPPDATA\Substrate\logs" -Filter 'forwarder*.log*' |
   Select-Object -First 1
 ```
 
+### T-011 WSL CLI missing
+
+- **Symptom**: Doctor fails `WSL CLI` check or `Get-Command wsl` returns an error.
+- **Likely cause**: Windows Subsystem for Linux binaries were removed, WSL optional feature disabled, or PATH misconfigured.
+- **Remediation**:
+
+  1. Ensure the `Microsoft-Windows-Subsystem-Linux` optional feature is enabled.
+  1. Install the WSL package via `wsl --install` or the Microsoft Store if it was uninstalled.
+  1. Reboot and rerun the doctor script.
+
+- **Verify**:
+
+```powershell
+Get-Command wsl
+wsl --status
+```
+
+### T-012 Host drive not mounted
+
+- **Symptom**: Doctor reports FAIL for `WSL Mount (/mnt/c)` or path translation tests show Windows paths leaking into telemetry.
+- **Likely cause**: The WSL distro is configured with custom mounts, the `drvfs` mount failed, or `/etc/wsl.conf` disables automount.
+- **Remediation**:
+
+  1. Inspect `/etc/wsl.conf` inside the distro and ensure `[automount] enabled=true`.
+  1. Restart the distro (`wsl --terminate <distro>`), or reboot the host to rebuild mounts.
+  1. If automount is disabled intentionally, update scripts to mount the project path under `/mnt/c`.
+
+- **Verify**:
+
+```powershell
+wsl -d substrate-wsl -- bash -lc 'mount | grep /mnt/c'
+```

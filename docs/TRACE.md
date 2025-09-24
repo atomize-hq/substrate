@@ -66,7 +66,10 @@ jq 'select(.policy_decision.action == "deny")' ~/.substrate/trace.jsonl
   "fs_diff": {
     "writes": ["node_modules/..."],
     "mods": ["package-lock.json"],
-    "deletes": []
+    "deletes": [],
+    "display_path": {
+      "/mnt/c/projects/foo/node_modules": "C:\\projects\\foo\\node_modules"
+    }
   },
   "replay_context": {
     "env_hash": "abc123...",
@@ -81,6 +84,8 @@ jq 'select(.policy_decision.action == "deny")' ~/.substrate/trace.jsonl
   }
 }
 ```
+
+- Windows adds an optional `fs_diff.display_path` map that pairs canonical paths (e.g., `/mnt/c/...`) with native Windows representations; Linux and macOS omit this field.
 
 ## Architecture
 

@@ -81,11 +81,23 @@ $results += Invoke-Check 'VirtualMachinePlatform Feature' {
     "VirtualMachinePlatform: $($feature.State)"
 } 'Enable VirtualMachinePlatform feature and reboot'
 
+$results += Invoke-Check 'WSL CLI' {
+    $cmd = Get-Command wsl -ErrorAction Stop
+    "wsl.exe located at $($cmd.Source)"
+} 'Install Windows Subsystem for Linux binaries (T-011)'
+
 $results += Invoke-Check 'WSL Status' {
     $status = & wsl --status 2>&1
     if ($LASTEXITCODE -ne 0) { throw $status }
     $status
 } 'Run "wsl --install" or repair WSL'
+
+$results += Invoke-Check 'WSL Mount (/mnt/c)' {
+    $output = & wsl -d $DistroName -- bash -lc 'mount | grep "/mnt/c"'
+    if ($LASTEXITCODE -ne 0) { throw 'Host C: drive not mounted under /mnt/c' }
+    ($output -split "`n" | Select-Object -First 1).Trim()
+} 'Ensure /mnt/c is mounted inside the distro (T-012)'
+
 
 $results += Invoke-Check "Distro $DistroName" {
     $listing = & wsl -l -v | Out-String

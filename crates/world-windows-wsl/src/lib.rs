@@ -1,5 +1,6 @@
 #![cfg(target_os = "windows")]
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -187,13 +188,17 @@ impl WindowsWslBackend {
             .decode(&resp.stderr_b64)
             .unwrap_or_else(|_| resp.stderr_b64.clone().into_bytes());
 
-        ExecResult {
+        let mut result = ExecResult {
             exit: resp.exit,
             stdout,
             stderr,
             scopes_used: resp.scopes_used,
             fs_diff: resp.fs_diff,
+        };
+        if let Some(ref mut diff) = result.fs_diff {
+            self.normalize_diff(diff);
         }
+        result
     }
 
     fn to_wsl_path(&self, path: &Path) -> Result<String> {
@@ -214,9 +219,58 @@ impl WindowsWslBackend {
         }
     }
 
+    fn to_windows_display_path(&self, path: &Path) -> Option<String> {
+        let raw = path.to_str()?;
+        let stripped = raw.strip_prefix("/mnt/")?;
+        if let Some((prefix, rest)) = stripped.split_once('/') {
+            if prefix.eq_ignore_ascii_case("unc") {
+                if rest.is_empty() {
+                    return None;
+                }
+                let sep = std::path::MAIN_SEPARATOR.to_string();
+                let converted = rest.replace('/', sep.as_str());
+                return Some(format!("\\{}", converted));
+            }
+
+            if prefix.len() == 1 {
+                let drive = prefix.chars().next()?.to_ascii_uppercase();
+                let sep = std::path::MAIN_SEPARATOR.to_string();
+                let converted = rest.replace('/', sep.as_str());
+                if converted.is_empty() {
+                    return Some(format!("{drive}:{sep}", sep = std::path::MAIN_SEPARATOR));
+                }
+                return Some(format!(
+                    "{drive}:{sep}{converted}",
+                    sep = std::path::MAIN_SEPARATOR,
+                    converted = converted
+                ));
+            }
+        } else if stripped.len() == 1 {
+            let drive = stripped.chars().next()?.to_ascii_uppercase();
+            return Some(format!("{drive}:{sep}", sep = std::path::MAIN_SEPARATOR));
+        }
+
+        None
+    }
+
     fn normalize_diff(&self, diff: &mut FsDiff) {
-        // Placeholder for P2.4 path translation work.
-        let _ = diff;
+        let mut display = HashMap::new();
+        for path in diff
+            .writes
+            .iter()
+            .chain(diff.mods.iter())
+            .chain(diff.deletes.iter())
+        {
+            if let Some(display_path) = self.to_windows_display_path(path) {
+                display.insert(path.to_string_lossy().to_string(), display_path);
+            }
+        }
+
+        diff.display_path = if display.is_empty() {
+            None
+        } else {
+            Some(display)
+        };
     }
 
     fn generate_world_handle(&self) -> WorldHandle {
@@ -543,7 +597,10 @@ mod tests {
             stdout_b64: BASE64_STANDARD.encode(b"hello"),
             stderr_b64: BASE64_STANDARD.encode(b""),
             scopes_used: vec!["fs.write:/project".to_string()],
-            fs_diff: Some(AgentFsDiff::default()),
+            fs_diff: Some(AgentFsDiff {
+                writes: vec![PathBuf::from("/mnt/c/repo/new.txt")],
+                ..Default::default()
+            }),
         }));
 
         let spec = WorldSpec::default();
@@ -560,6 +617,12 @@ mod tests {
         assert_eq!(result.exit, 0);
         assert_eq!(result.stdout, b"hello");
         assert_eq!(result.stderr, b"");
+        let diff = result.fs_diff.expect("fs diff");
+        let map = diff.display_path.expect("display map");
+        assert_eq!(
+            map.get("/mnt/c/repo/new.txt"),
+            Some(&"C:\\repo\\new.txt".to_string())
+        );
 
         let recorded = agent.take_requests();
         assert_eq!(recorded.len(), 1);
@@ -589,5 +652,10 @@ mod tests {
         let diff = backend.fs_diff(&world, "span").expect("fs diff");
         assert_eq!(diff.writes.len(), 1);
         assert_eq!(diff.writes[0], PathBuf::from("/mnt/c/repo/new.txt"));
+        let display = diff.display_path.expect("display map");
+        assert_eq!(
+            display.get("/mnt/c/repo/new.txt"),
+            Some(&"C:\\repo\\new.txt".to_string())
+        );
     }
 }

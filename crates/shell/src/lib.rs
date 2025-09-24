@@ -702,6 +702,15 @@ impl ShellConfig {
         let shim_dir = substrate_common::paths::shims_dir()?;
 
         // Determine shell to use
+        #[cfg(target_os = "windows")]
+        {
+            if let Err(e) = platform_world::windows::ensure_world_ready(&cli) {
+                eprintln!(
+                    "substrate: warn: windows world initialization failed: {}",
+                    e
+                );
+            }
+        }
         let shell_path = if let Some(shell) = cli.shell {
             shell
         } else if cfg!(windows) {
@@ -3449,7 +3458,7 @@ fn execute_command(
                 #[cfg(windows)]
                 {
                     use std::os::windows::process::ExitStatusExt;
-                    return Ok(std::process::ExitStatus::from_raw(exit_code as u32));
+                    return Ok(ExitStatus::from_raw(exit_code as u32));
                 }
             } else {
                 eprintln!("substrate: warn: mac world-agent exec failed, running direct");
@@ -3457,6 +3466,43 @@ fn execute_command(
         }
     }
 
+    #[cfg(target_os = "windows")]
+    {
+        let world_enabled = std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
+        if world_enabled {
+            let span_id_for_exec = span.as_ref().map(|s| s.get_span_id().to_string());
+            match exec_non_pty_via_agent_windows(trimmed, span_id_for_exec) {
+                Ok((exit_code, stdout, stderr, scopes_used, fs_diff_opt)) => {
+                    use std::io::{self, Write};
+                    let _ = io::stdout().write_all(&stdout);
+                    let _ = io::stderr().write_all(&stderr);
+
+                    if let Some(active_span) = span {
+                        let mut diff_opt = fs_diff_opt;
+                        let diff_for_span = if diff_opt.is_some() {
+                            diff_opt
+                        } else {
+                            let (_, diff) = collect_world_telemetry(active_span.get_span_id());
+                            diff
+                        };
+                        let _ = active_span.finish(exit_code, scopes_used, diff_for_span);
+                    }
+
+                    use std::os::windows::process::ExitStatusExt;
+                    return Ok(ExitStatus::from_raw(exit_code as u32));
+                }
+                Err(e) => {
+                    static WARN_ONCE: std::sync::Once = std::sync::Once::new();
+                    WARN_ONCE.call_once(|| {
+                        eprintln!(
+                            "substrate: warn: windows world-agent exec failed, running direct: {}",
+                            e
+                        );
+                    });
+                }
+            }
+        }
+    }
     // Route non-PTY commands through world agent (UDS HTTP) when world is enabled (Linux only)
     #[cfg(target_os = "linux")]
     {
@@ -3483,7 +3529,7 @@ fn execute_command(
                 #[cfg(windows)]
                 {
                     use std::os::windows::process::ExitStatusExt;
-                    return Ok(std::process::ExitStatus::from_raw(exit_code as u32));
+                    return Ok(ExitStatus::from_raw(exit_code as u32));
                 }
             } else {
                 eprintln!("substrate: warn: shell world-agent exec failed, running direct");
@@ -4244,6 +4290,37 @@ fn exec_non_pty_via_agent_macos(cmd: &str) -> anyhow::Result<AgentExecResult> {
     Ok((resp.exit, stdout, stderr, resp.scopes_used, resp.fs_diff))
 }
 
+#[cfg(target_os = "windows")]
+type AgentExecResult = (
+    i32,
+    Vec<u8>,
+    Vec<u8>,
+    Vec<String>,
+    Option<substrate_common::FsDiff>,
+);
+
+#[cfg(target_os = "windows")]
+fn exec_non_pty_via_agent_windows(
+    cmd: &str,
+    span_id: Option<String>,
+) -> anyhow::Result<AgentExecResult> {
+    use platform_world::windows;
+    use world_api::WorldBackend as _;
+
+    let backend = windows::get_backend()?;
+    let handle = backend.ensure_session(&windows::world_spec())?;
+    std::env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
+    let request = windows::to_exec_request(cmd, span_id);
+    let result = backend.exec(&handle, request)?;
+    let world_api::ExecResult {
+        exit,
+        stdout,
+        stderr,
+        scopes_used,
+        fs_diff,
+    } = result;
+    Ok((exit, stdout, stderr, scopes_used, fs_diff))
+}
 fn execute_external(
     config: &ShellConfig,
     command: &str,

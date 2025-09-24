@@ -4,6 +4,7 @@
 //! the trace and world modules to track filesystem changes.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// Filesystem changes detected after command execution.
@@ -30,6 +31,10 @@ pub struct FsDiff {
         deserialize_with = "deserialize_paths"
     )]
     pub deletes: Vec<PathBuf>,
+
+    /// Optional mapping of canonical paths to platform-friendly display strings.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_path: Option<HashMap<String, String>>,
 
     /// Whether the diff was truncated due to size limits.
     #[serde(default, skip_serializing_if = "is_false")]
@@ -121,6 +126,7 @@ mod tests {
             truncated: false,
             tree_hash: None,
             summary: None,
+            display_path: None,
         };
 
         let json = serde_json::to_string(&diff).unwrap();
@@ -130,5 +136,23 @@ mod tests {
         let deserialized: FsDiff = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.writes.len(), 1);
         assert_eq!(deserialized.writes[0], PathBuf::from("/tmp/test.txt"));
+    }
+
+    #[test]
+    fn test_display_path_serialization() {
+        let mut diff = FsDiff::default();
+        diff.writes.push(PathBuf::from("/mnt/c/project/output.txt"));
+        let mut map = HashMap::new();
+        map.insert(
+            "/mnt/c/project/output.txt".to_string(),
+            "C:\\project\\output.txt".to_string(),
+        );
+        diff.display_path = Some(map.clone());
+
+        let json = serde_json::to_string(&diff).unwrap();
+        assert!(json.contains("display_path"));
+
+        let round_trip: FsDiff = serde_json::from_str(&json).unwrap();
+        assert_eq!(round_trip.display_path.unwrap(), map);
     }
 }

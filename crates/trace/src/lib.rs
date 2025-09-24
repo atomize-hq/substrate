@@ -546,18 +546,24 @@ mod tests {
 
     #[test]
     fn test_fs_diff() {
-        let diff = FsDiff {
+        let mut diff = FsDiff {
             writes: vec!["file1.txt".into()],
             mods: vec!["file2.txt".into()],
             deletes: vec![],
             truncated: false,
             tree_hash: None,
             summary: None,
+            display_path: None,
         };
+        diff.display_path = Some(std::collections::HashMap::from([(
+            "file1.txt".to_string(),
+            "C:\\path\\file1.txt".to_string(),
+        )]));
 
         let json = serde_json::to_string(&diff).unwrap();
         assert!(json.contains("\"writes\":[\"file1.txt\"]"));
         assert!(json.contains("\"mods\":[\"file2.txt\"]"));
+        assert!(json.contains("display_path"));
     }
 
     #[test]

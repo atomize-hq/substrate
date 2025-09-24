@@ -1,5 +1,7 @@
 //! Platform-specific world detection and context (macOS + Linux compatibility shell-facing API).
 
+#[cfg(target_os = "windows")]
+pub mod windows;
 use anyhow::Result;
 use std::fmt;
 use std::path::PathBuf;
