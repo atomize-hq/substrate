@@ -223,6 +223,7 @@ mod tests {
                 deletes: vec![],
                 truncated: false,
                 tree_hash: None,
+                display_path: None,
                 summary: None,
             }),
         };

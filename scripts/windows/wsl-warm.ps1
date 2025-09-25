@@ -12,6 +12,13 @@ function Write-Info($Message) { Write-Host "[INFO] $Message" -ForegroundColor Cy
 function Write-Warn($Message) { Write-Host "[WARN] $Message" -ForegroundColor Yellow }
 function Write-ErrorAndExit($Message) { Write-Host "[FAIL] $Message" -ForegroundColor Red; exit 1 }
 
+function Convert-ToWslPathFragment {
+    param([string]$Path)
+    $withoutDrive = ($Path -replace '^[A-Za-z]:\\', '')
+    ($withoutDrive -replace '\\', '/').TrimStart('/')
+}
+
+
 Write-Info "Starting wsl-warm for distro '$DistroName'"
 
 $projectPath = Resolve-Path $ProjectPath | Select-Object -ExpandProperty Path
@@ -29,7 +36,8 @@ if ($LASTEXITCODE -ne 0) {
 
 # Import distro if missing
 $distroList = & wsl -l -v | Out-String
-if ($distroList -notmatch [regex]::Escape($DistroName)) {
+$distroListClean = $distroList -replace "`0", ""
+if ($distroListClean -notmatch [regex]::Escape($DistroName)) {
     Write-Info "Importing distro '$DistroName'"
 
     if ($WhatIf) {
@@ -84,7 +92,8 @@ if (-not (Test-Path $hostProvisionPath)) {
 }
 
 Write-Info "Updating package cache and running provision script"
-& wsl -d $DistroName -- bash -lc "set -euo pipefail; cp /mnt/c/$(($projectPath -replace ':', '') -replace '\\','/')/docs/dev/wsl/provision.sh /tmp/provision.sh && chmod +x /tmp/provision.sh && sudo /tmp/provision.sh"
+$projectPathFragment = Convert-ToWslPathFragment $projectPath
+    & wsl -d $DistroName -- bash -lc "set -euo pipefail; cp /mnt/c/$projectPathFragment/docs/dev/wsl/provision.sh /tmp/provision.sh && sed -i 's/\r$//' /tmp/provision.sh && chmod +x /tmp/provision.sh && sudo /tmp/provision.sh"
 if ($LASTEXITCODE -ne 0) {
     Write-ErrorAndExit "Provision script failed"
 }
@@ -98,7 +107,7 @@ if (-not (Test-Path $agentHostPath)) {
 
 # Copy agent binary into WSL
 Write-Info "Copying world-agent into WSL"
-$agentUnixPath = ($projectPath -replace ':', '') -replace '\\','/'
+$agentUnixPath = $projectPathFragment
 & wsl -d $DistroName -- bash -lc "set -euo pipefail; sudo cp /mnt/c/$agentUnixPath/target/release/world-agent.exe /usr/local/bin/substrate-world-agent && sudo chmod 755 /usr/local/bin/substrate-world-agent"
 
 # Restart service
@@ -142,4 +151,5 @@ while (-not (Test-Path $pipePath)) {
 Write-Info "Forwarder pipe ready"
 
 Write-Info "Warm complete"
+
 

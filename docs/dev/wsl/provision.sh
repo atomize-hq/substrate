@@ -30,6 +30,7 @@ After=network.target
 
 [Service]
 Type=simple
+Environment="SUBSTRATE_AGENT_TCP_PORT=61337"
 ExecStart=/usr/local/bin/substrate-world-agent --socket /run/substrate.sock
 Restart=always
 User=root
