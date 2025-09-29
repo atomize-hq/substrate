@@ -1,5 +1,5 @@
 pub mod lock;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 mod platform_world;
 mod pty_exec;
 pub mod shim_deploy; // Made public for integration tests
@@ -23,7 +23,9 @@ use std::sync::Mutex;
 use std::thread;
 use substrate_broker::{detect_profile, evaluate, Decision};
 use substrate_common::{dedupe_path, log_schema, redact_sensitive};
-use substrate_trace::{append_to_trace, create_span_builder, init_trace, PolicyDecision};
+use substrate_trace::{
+    append_to_trace, create_span_builder, init_trace, PolicyDecision, TransportMeta,
+};
 use uuid::Uuid;
 
 // Reedline imports
@@ -44,9 +46,31 @@ use nix::sys::termios::{
     self, ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices,
     Termios,
 };
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use platform_world as pw;
 use std::borrow::Cow;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn world_transport_to_meta(transport: &pw::WorldTransport) -> TransportMeta {
+    match transport {
+        pw::WorldTransport::Unix(path) => TransportMeta {
+            mode: "unix".to_string(),
+            endpoint: Some(path.display().to_string()),
+        },
+        pw::WorldTransport::Tcp { host, port } => TransportMeta {
+            mode: "tcp".to_string(),
+            endpoint: Some(format!("{}:{}", host, port)),
+        },
+        pw::WorldTransport::Vsock { port } => TransportMeta {
+            mode: "vsock".to_string(),
+            endpoint: Some(format!("{}", port)),
+        },
+        #[cfg(target_os = "windows")]
+        pw::WorldTransport::NamedPipe(path) => TransportMeta {
+            mode: "named_pipe".to_string(),
+            endpoint: Some(path.display().to_string()),
+        },
+    }
+}
 #[cfg(target_os = "linux")]
 use std::os::unix::io::AsRawFd;
 #[cfg(unix)]
@@ -817,6 +841,20 @@ fn handle_world_command(cmd: &WorldCmd) -> Result<()> {
 fn world_doctor_main(json_mode: bool) -> i32 {
     world_doctor_macos::run(json_mode, &world_doctor_macos::SystemRunner)
 }
+#[cfg(target_os = "windows")]
+fn world_doctor_main(json_mode: bool) -> i32 {
+    if json_mode {
+        let out = json!({
+            "platform": std::env::consts::OS,
+            "ok": true,
+            "message": "world doctor for Windows not yet implemented"
+        });
+        println!("{}", serde_json::to_string_pretty(&out).unwrap());
+    } else {
+        eprintln!("substrate world doctor is not yet implemented on Windows");
+    }
+    0
+}
 
 #[cfg(target_os = "linux")]
 fn world_doctor_main(json_mode: bool) -> i32 {
@@ -1001,7 +1039,11 @@ fn world_doctor_main(json_mode: bool) -> i32 {
     }
 }
 
-#[cfg(all(not(target_os = "linux"), not(target_os = "macos")))]
+#[cfg(all(
+    not(target_os = "linux"),
+    not(target_os = "macos"),
+    not(target_os = "windows")
+))]
 fn world_doctor_main(json_mode: bool) -> i32 {
     if json_mode {
         let out = json!({
@@ -1478,6 +1520,32 @@ pub fn run_shell() -> Result<i32> {
     }
 
     // Default-on world initialization (Linux only)
+    #[cfg(target_os = "windows")]
+    {
+        let world_disabled = env::var("SUBSTRATE_WORLD")
+            .map(|v| v == "disabled")
+            .unwrap_or(false)
+            || config.no_world;
+        if !world_disabled {
+            match pw::detect() {
+                Ok(ctx) => {
+                    if let Err(e) = (ctx.ensure_ready)() {
+                        eprintln!("substrate: windows world ensure_ready failed: {}", e);
+                    } else {
+                        std::env::set_var("SUBSTRATE_WORLD", "enabled");
+                        if let Ok(handle) = ctx.backend.ensure_session(&pw::windows::world_spec()) {
+                            std::env::set_var("SUBSTRATE_WORLD_ID", handle.id);
+                        }
+                    }
+                    pw::store_context_globally(ctx);
+                }
+                Err(e) => {
+                    eprintln!("substrate: windows world detection failed: {}", e);
+                }
+            }
+        }
+    }
+
     #[cfg(target_os = "macos")]
     {
         // Default ON (parity with Linux); allow disabling via env/CLI
@@ -3441,6 +3509,12 @@ fn execute_command(
             })
             .unwrap_or(false);
         if world_enabled || uds_exists {
+            if let Some(active_span) = span.as_mut() {
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                if let Some(ctx) = pw::get_context() {
+                    active_span.set_transport(world_transport_to_meta(&ctx.transport));
+                }
+            }
             if let Ok((exit_code, stdout, stderr, scopes_used, fs_diff_opt)) =
                 exec_non_pty_via_agent_macos(trimmed)
             {
@@ -3470,6 +3544,11 @@ fn execute_command(
     {
         let world_enabled = std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
         if world_enabled {
+            if let Some(active_span) = span.as_mut() {
+                if let Some(ctx) = pw::get_context() {
+                    active_span.set_transport(world_transport_to_meta(&ctx.transport));
+                }
+            }
             let span_id_for_exec = span.as_ref().map(|s| s.get_span_id().to_string());
             match exec_non_pty_via_agent_windows(trimmed, span_id_for_exec) {
                 Ok((exit_code, stdout, stderr, scopes_used, fs_diff_opt)) => {
@@ -3506,6 +3585,12 @@ fn execute_command(
     // Route non-PTY commands through world agent (UDS HTTP) when world is enabled (Linux only)
     #[cfg(target_os = "linux")]
     {
+        if let Some(active_span) = span.as_mut() {
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            if let Some(ctx) = pw::get_context() {
+                active_span.set_transport(world_transport_to_meta(&ctx.transport));
+            }
+        }
         let world_enabled = env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
         let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
         if world_enabled || uds_exists {
@@ -4244,6 +4329,14 @@ type AgentExecResult = (
     Vec<String>,
     Option<substrate_common::FsDiff>,
 );
+#[cfg(target_os = "windows")]
+type AgentExecResult = (
+    i32,
+    Vec<u8>,
+    Vec<u8>,
+    Vec<String>,
+    Option<substrate_common::FsDiff>,
+);
 
 #[cfg(target_os = "macos")]
 fn exec_non_pty_via_agent_macos(cmd: &str) -> anyhow::Result<AgentExecResult> {
@@ -4291,35 +4384,49 @@ fn exec_non_pty_via_agent_macos(cmd: &str) -> anyhow::Result<AgentExecResult> {
 }
 
 #[cfg(target_os = "windows")]
-type AgentExecResult = (
-    i32,
-    Vec<u8>,
-    Vec<u8>,
-    Vec<String>,
-    Option<substrate_common::FsDiff>,
-);
-
-#[cfg(target_os = "windows")]
 fn exec_non_pty_via_agent_windows(
     cmd: &str,
-    span_id: Option<String>,
+    _span_id: Option<String>,
 ) -> anyhow::Result<AgentExecResult> {
+    use agent_api_types::ExecuteRequest;
+    use base64::Engine;
     use platform_world::windows;
     use world_api::WorldBackend as _;
 
     let backend = windows::get_backend()?;
     let handle = backend.ensure_session(&windows::world_spec())?;
     std::env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
-    let request = windows::to_exec_request(cmd, span_id);
-    let result = backend.exec(&handle, request)?;
-    let world_api::ExecResult {
-        exit,
-        stdout,
-        stderr,
-        scopes_used,
-        fs_diff,
-    } = result;
-    Ok((exit, stdout, stderr, scopes_used, fs_diff))
+
+    let client = windows::build_agent_client()?;
+
+    let cwd = std::env::current_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        .display()
+        .to_string();
+    let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
+    let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+
+    let req = ExecuteRequest {
+        profile: None,
+        cmd: cmd.to_string(),
+        cwd: Some(cwd),
+        env: Some(env_map),
+        pty: false,
+        agent_id,
+        budget: None,
+    };
+
+    let rt = tokio::runtime::Runtime::new()?;
+    let resp = rt.block_on(async move { client.execute(req).await })?;
+    let engine = base64::engine::general_purpose::STANDARD;
+    let stdout = engine
+        .decode(&resp.stdout_b64)
+        .unwrap_or_else(|_| resp.stdout_b64.as_bytes().to_vec());
+    let stderr = engine
+        .decode(&resp.stderr_b64)
+        .unwrap_or_else(|_| resp.stderr_b64.as_bytes().to_vec());
+
+    Ok((resp.exit, stdout, stderr, resp.scopes_used, resp.fs_diff))
 }
 fn execute_external(
     config: &ShellConfig,

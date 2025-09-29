@@ -3267,6 +3267,7 @@ dependencies = [
  "world-api",
  "world-backend-factory",
  "world-mac-lima",
+ "world-windows-wsl",
 ]
 
 [[package]]

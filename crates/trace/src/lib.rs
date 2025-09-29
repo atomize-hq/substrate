@@ -35,16 +35,22 @@ pub struct Span {
     pub scopes_used: Vec<String>,
     pub fs_diff: Option<FsDiff>,
     pub replay_context: Option<ReplayContext>,
-
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transport: Option<TransportMeta>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub graph_edges: Option<Vec<GraphEdge>>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub policy_decision: Option<PolicyDecision>,
 }
 
 // FsDiff is now imported from substrate_common
 pub use substrate_common::FsDiff;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransportMeta {
+    pub mode: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReplayContext {
@@ -262,6 +268,7 @@ impl SpanBuilder {
                 scopes_used: Vec::new(),
                 fs_diff: None,
                 replay_context: None,
+                transport: None,
                 graph_edges: None,
                 policy_decision: None,
             },
@@ -310,6 +317,7 @@ impl SpanBuilder {
             span_id,
             command: self.span.cmd,
             cwd: self.span.cwd,
+            transport: None,
         })
     }
 }
@@ -318,9 +326,14 @@ pub struct ActiveSpan {
     pub span_id: String,
     command: String,
     cwd: String,
+    transport: Option<TransportMeta>,
 }
 
 impl ActiveSpan {
+    pub fn set_transport(&mut self, transport: TransportMeta) {
+        self.transport = Some(transport);
+    }
+
     pub fn finish(
         self,
         exit_code: i32,
@@ -351,6 +364,7 @@ impl ActiveSpan {
             scopes_used: scopes,
             fs_diff,
             replay_context: Some(replay_context),
+            transport: self.transport,
             graph_edges: None,
             policy_decision: None,
         };
@@ -371,7 +385,6 @@ impl ActiveSpan {
         &self.span_id
     }
 }
-
 fn build_replay_context() -> Result<ReplayContext> {
     Ok(ReplayContext {
         path: env::var("PATH").ok(),

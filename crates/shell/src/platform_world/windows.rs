@@ -1,12 +1,54 @@
+use super::{PlatformWorldContext, WorldTransport};
 use crate::Cli;
+use agent_api_client::{AgentClient, Transport};
 use anyhow::Result;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Once, OnceLock};
 use world_api::{ExecRequest, ResourceLimits, WorldBackend, WorldSpec};
+use world_windows_wsl::WindowsWslBackend;
 
-static BACKEND: OnceLock<Arc<dyn WorldBackend>> = OnceLock::new();
+struct WindowsContext {
+    backend: Arc<WindowsWslBackend>,
+    backend_trait: Arc<dyn WorldBackend>,
+}
 
+static CONTEXT: OnceLock<WindowsContext> = OnceLock::new();
+
+fn context() -> Result<&'static WindowsContext> {
+    if let Some(ctx) = CONTEXT.get() {
+        return Ok(ctx);
+    }
+
+    let backend = Arc::new(WindowsWslBackend::new()?);
+    let backend_trait: Arc<dyn WorldBackend> = backend.clone();
+    let ctx = WindowsContext {
+        backend,
+        backend_trait,
+    };
+
+    let _ = CONTEXT.set(ctx);
+    Ok(CONTEXT.get().expect("windows context initialized"))
+}
+
+fn to_world_transport(transport: &Transport) -> WorldTransport {
+    match transport {
+        Transport::UnixSocket { path } => WorldTransport::Unix(path.clone()),
+        Transport::Tcp { host, port } => WorldTransport::Tcp {
+            host: host.clone(),
+            port: *port,
+        },
+        Transport::NamedPipe { path } => WorldTransport::NamedPipe(path.clone()),
+    }
+}
+
+fn socket_path_from_transport(transport: &Transport) -> PathBuf {
+    match transport {
+        Transport::UnixSocket { path } => path.clone(),
+        Transport::NamedPipe { path } => path.clone(),
+        Transport::Tcp { .. } => PathBuf::new(),
+    }
+}
 pub fn ensure_world_ready(cli: &Cli) -> Result<Option<String>> {
     ensure_world_ready_impl(cli, get_backend)
 }
@@ -42,9 +84,7 @@ where
 }
 
 pub fn get_backend() -> Result<Arc<dyn WorldBackend>> {
-    BACKEND
-        .get_or_try_init(|| world_backend_factory::factory())
-        .map(Arc::clone)
+    Ok(context()?.backend_trait.clone())
 }
 
 pub fn to_exec_request(cmd: &str, span_id: Option<String>) -> ExecRequest {
@@ -82,6 +122,31 @@ fn warn_once(message: String) {
     WARN_ONCE.call_once(move || {
         eprintln!("{}", message);
     });
+}
+
+pub fn detect() -> Result<PlatformWorldContext> {
+    let ctx = context()?;
+    let backend = ctx.backend_trait.clone();
+    let transport_config = ctx.backend.agent_transport();
+    let transport = to_world_transport(&transport_config);
+    let socket_path = socket_path_from_transport(&transport_config);
+    let ensure_backend = ctx.backend_trait.clone();
+    let ensure_ready = Box::new(move || {
+        let spec = world_spec();
+        ensure_backend.ensure_session(&spec).map(|_| ())
+    });
+
+    Ok(PlatformWorldContext {
+        backend,
+        transport,
+        socket_path,
+        ensure_ready,
+    })
+}
+
+pub fn build_agent_client() -> Result<AgentClient> {
+    let ctx = context()?;
+    Ok(ctx.backend.build_agent_client())
 }
 
 #[cfg(test)]

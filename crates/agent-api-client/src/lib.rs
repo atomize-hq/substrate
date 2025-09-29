@@ -51,6 +51,15 @@ impl AgentClient {
         Self::new(transport)
     }
 
+    #[cfg(target_os = "windows")]
+    /// Create a client that connects via a Windows named pipe.
+    pub fn named_pipe<P: AsRef<Path>>(pipe_path: P) -> Self {
+        let transport = Transport::NamedPipe {
+            path: pipe_path.as_ref().to_path_buf(),
+        };
+        Self::new(transport)
+    }
+
     /// Return the transport metadata used by this client.
     pub fn transport_mode(&self) -> TransportMode {
         match &self.transport {
@@ -237,6 +246,20 @@ mod tests {
                 assert_eq!(client.transport_mode(), TransportMode::Tcp);
             }
             _ => panic!("Expected TCP transport"),
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_named_pipe_client_creation() {
+        let client = AgentClient::named_pipe(r"\\.\pipe\substrate-agent");
+
+        match client.transport() {
+            Transport::NamedPipe { ref path } => {
+                assert_eq!(path, std::path::Path::new(r"\\.\pipe\substrate-agent"));
+                assert_eq!(client.transport_mode(), TransportMode::NamedPipe);
+            }
+            _ => panic!("Expected NamedPipe transport"),
         }
     }
 

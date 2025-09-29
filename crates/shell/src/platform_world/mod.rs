@@ -2,6 +2,11 @@
 
 #[cfg(target_os = "windows")]
 pub mod windows;
+#[cfg(target_os = "windows")]
+pub fn detect() -> Result<PlatformWorldContext> {
+    windows::detect()
+}
+
 use anyhow::Result;
 use std::fmt;
 use std::path::PathBuf;
@@ -12,8 +17,15 @@ use world_api::WorldBackend;
 #[derive(Clone, Debug)]
 pub enum WorldTransport {
     Unix(PathBuf),
-    Tcp { host: String, port: u16 },
-    Vsock { port: u16 },
+    Tcp {
+        host: String,
+        port: u16,
+    },
+    Vsock {
+        port: u16,
+    },
+    #[cfg(target_os = "windows")]
+    NamedPipe(PathBuf),
 }
 
 impl fmt::Display for WorldTransport {
@@ -22,6 +34,8 @@ impl fmt::Display for WorldTransport {
             WorldTransport::Unix(p) => write!(f, "unix:{}", p.display()),
             WorldTransport::Tcp { host, port } => write!(f, "tcp:{}:{}", host, port),
             WorldTransport::Vsock { port } => write!(f, "vsock:{}", port),
+            #[cfg(target_os = "windows")]
+            WorldTransport::NamedPipe(p) => write!(f, "pipe:{}", p.display()),
         }
     }
 }

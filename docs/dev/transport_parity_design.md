@@ -115,3 +115,4 @@ This document captures the transport architecture needed for cross-platform pari
 - docs/SPIKE_TRANSPORT_PARITY_PLAN.md
 - docs/project_management/logs/windows_always_world.md
 - docs/dev/wsl_world_setup.md (update pending)
+- docs/dev/windows_host_transport_plan.md (Windows host integration addendum)

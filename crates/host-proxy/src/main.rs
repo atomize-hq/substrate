@@ -5,7 +5,9 @@ use std::sync::Arc;
 
 use agent_api_core::build_router;
 use anyhow::{Context, Result};
-use host_proxy::{cleanup_socket, ensure_socket_dir, HostProxyService, ProxyConfig};
+use host_proxy::{
+    cleanup_socket, ensure_socket_dir, AgentTransportConfig, HostProxyService, ProxyConfig,
+};
 use tower::ServiceBuilder;
 use tower::ServiceExt;
 use tower_http::limit::RequestBodyLimitLayer;
@@ -107,8 +109,40 @@ fn load_config() -> Result<ProxyConfig> {
         config.host_socket = PathBuf::from(host_socket);
     }
 
-    if let Ok(agent_socket) = std::env::var("AGENT_SOCKET") {
-        config.agent_socket = PathBuf::from(agent_socket);
+    if let Ok(agent_transport) = std::env::var("AGENT_TRANSPORT") {
+        match agent_transport.as_str() {
+            "tcp" => {
+                let host =
+                    std::env::var("AGENT_TCP_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+                let port = std::env::var("AGENT_TCP_PORT")
+                    .ok()
+                    .and_then(|p| p.parse::<u16>().ok())
+                    .unwrap_or(17788);
+                config.agent = AgentTransportConfig::Tcp { host, port };
+            }
+            "named_pipe" => {
+                #[cfg(target_os = "windows")]
+                {
+                    let pipe = std::env::var("AGENT_PIPE_PATH")
+                        .unwrap_or_else(|_| r"\.\pipe\substrate-agent".to_string());
+                    config.agent = AgentTransportConfig::NamedPipe {
+                        path: PathBuf::from(pipe),
+                    };
+                }
+            }
+            "uds" | "unix" => {
+                if let Ok(agent_socket) = std::env::var("AGENT_SOCKET") {
+                    config.agent = AgentTransportConfig::Unix {
+                        path: PathBuf::from(agent_socket),
+                    };
+                }
+            }
+            _ => {}
+        }
+    } else if let Ok(agent_socket) = std::env::var("AGENT_SOCKET") {
+        config.agent = AgentTransportConfig::Unix {
+            path: PathBuf::from(agent_socket),
+        };
     }
 
     if let Ok(max_body) = std::env::var("MAX_BODY_SIZE") {

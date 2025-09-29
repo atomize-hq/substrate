@@ -5,6 +5,7 @@ Owner: Substrate Core (Windows strike team lead TBD)
 Created: 2025-09-23  
 Related Plans: docs/PHASE_5_ALWAYS_WORLD_WINDOWS_PLAN.md  
 Tracking IDs: T-011, T-012, (new) T-013 once filed
+Additional Windows Addendum: docs/dev/windows_host_transport_plan.md
 
 ---
 

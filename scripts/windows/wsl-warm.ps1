@@ -28,6 +28,11 @@ if (-not (Test-Path (Join-Path $projectPath 'Cargo.toml'))) {
     Write-ErrorAndExit "Project path does not contain Cargo.toml"
 }
 
+$cargoExe = Join-Path $env:USERPROFILE '.cargo\bin\cargo.exe'
+if (-not (Test-Path $cargoExe)) {
+    Write-ErrorAndExit "cargo.exe not found at $cargoExe. Install Rust on Windows host."
+}
+
 # Ensure WSL installed
 $wslStatus = & wsl --status 2>$null
 if ($LASTEXITCODE -ne 0) {
@@ -98,17 +103,22 @@ if ($LASTEXITCODE -ne 0) {
     Write-ErrorAndExit "Provision script failed"
 }
 
-# Build world-agent if absent
-$agentHostPath = Join-Path $projectPath 'target\\release\\world-agent.exe'
-if (-not (Test-Path $agentHostPath)) {
-    Write-Info "Building world-agent (release)"
-    cargo build -p world-agent --release
+# Build and install world-agent inside WSL
+Write-Info "Building world-agent (release) inside WSL"
+$buildScript = @"
+set -euo pipefail
+if [ -f ~/.cargo/env ]; then
+  . ~/.cargo/env
+fi
+cd /mnt/c/$projectPathFragment
+cargo build -p world-agent --release
+sudo install -m755 target/release/world-agent /usr/local/bin/substrate-world-agent
+"@
+$buildScript = $buildScript -replace "`r", ""
+& wsl -d $DistroName -- bash -lc $buildScript
+if ($LASTEXITCODE -ne 0) {
+    Write-ErrorAndExit "Failed to build/install world-agent inside WSL"
 }
-
-# Copy agent binary into WSL
-Write-Info "Copying world-agent into WSL"
-$agentUnixPath = $projectPathFragment
-& wsl -d $DistroName -- bash -lc "set -euo pipefail; sudo cp /mnt/c/$agentUnixPath/target/release/world-agent.exe /usr/local/bin/substrate-world-agent && sudo chmod 755 /usr/local/bin/substrate-world-agent"
 
 # Restart service
 Write-Info "Restarting substrate-world-agent service"
@@ -121,7 +131,7 @@ if ($LASTEXITCODE -ne 0) {
 $forwarderHostPath = Join-Path $projectPath 'target\\release\\substrate-forwarder.exe'
 if (-not (Test-Path $forwarderHostPath)) {
     Write-Info "Building substrate-forwarder (release)"
-    cargo build -p substrate-forwarder --release
+    & $cargoExe build -p substrate-forwarder --release
 }
 
 # Launch forwarder
@@ -151,5 +161,6 @@ while (-not (Test-Path $pipePath)) {
 Write-Info "Forwarder pipe ready"
 
 Write-Info "Warm complete"
+
 
 

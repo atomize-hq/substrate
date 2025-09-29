@@ -31,8 +31,9 @@ use rate_limit::RateLimiter;
 pub struct ProxyConfig {
     /// Path to the host-side Unix socket.
     pub host_socket: PathBuf,
-    /// Path to the world-agent Unix socket.
-    pub agent_socket: PathBuf,
+    /// Transport used to reach world-agent.
+    #[serde(default)]
+    pub agent: AgentTransportConfig,
     /// Maximum request body size in bytes.
     pub max_body_size: usize,
     /// Rate limiting configuration.
@@ -48,11 +49,45 @@ impl Default for ProxyConfig {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
         Self {
             host_socket: PathBuf::from(format!("{}/.substrate/sock/agent.sock", home)),
-            agent_socket: PathBuf::from("/run/substrate.sock"),
+            agent: AgentTransportConfig::default(),
             max_body_size: 10 * 1024 * 1024, // 10MB
             rate_limits: RateLimitConfig::default(),
             auth: AuthConfig::default(),
             request_timeout: 30,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "snake_case")]
+pub enum AgentTransportConfig {
+    Unix {
+        path: PathBuf,
+    },
+    Tcp {
+        host: String,
+        port: u16,
+    },
+    #[cfg(target_os = "windows")]
+    NamedPipe {
+        path: PathBuf,
+    },
+}
+
+impl Default for AgentTransportConfig {
+    fn default() -> Self {
+        #[cfg(target_os = "windows")]
+        {
+            return AgentTransportConfig::NamedPipe {
+                path: PathBuf::from(r"\.\pipe\substrate-agent"),
+            };
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            AgentTransportConfig::Unix {
+                path: PathBuf::from("/run/substrate.sock"),
+            }
         }
     }
 }
@@ -115,7 +150,13 @@ pub struct HostProxyService {
 impl HostProxyService {
     /// Create a new host proxy service.
     pub fn new(config: ProxyConfig) -> Result<Self> {
-        let client = Arc::new(AgentClient::unix_socket(&config.agent_socket));
+        let client = match &config.agent {
+            AgentTransportConfig::Unix { path } => AgentClient::unix_socket(path),
+            AgentTransportConfig::Tcp { host, port } => AgentClient::tcp(host, *port),
+            #[cfg(target_os = "windows")]
+            AgentTransportConfig::NamedPipe { path } => AgentClient::named_pipe(path),
+        };
+        let client = Arc::new(client);
         let rate_limiter = Arc::new(RwLock::new(RateLimiter::new(&config.rate_limits)));
         let auth_service = Arc::new(AuthService::new(&config.auth)?);
         let stats = Arc::new(RwLock::new(ProxyStats::default()));

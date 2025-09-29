@@ -101,7 +101,7 @@ impl WindowsWslBackend {
         }
     }
 
-    fn agent_transport(&self) -> Transport {
+    pub fn agent_transport(&self) -> Transport {
         if let Some((host, port)) = &self.forwarder_tcp {
             Transport::Tcp {
                 host: host.clone(),
@@ -112,6 +112,10 @@ impl WindowsWslBackend {
                 path: self.agent_pipe.clone(),
             }
         }
+    }
+
+    pub fn build_agent_client(&self) -> AgentClient {
+        AgentClient::new(self.agent_transport())
     }
 
     fn capabilities(&self) -> Result<Value> {
@@ -509,6 +513,10 @@ mod tests {
     }
 
     impl AgentApiMock for MockAgent {
+        pub fn build_agent_client(&self) -> AgentClient {
+            AgentClient::new(self.agent_transport())
+        }
+
         fn capabilities(&self) -> Result<Value> {
             self.capability_calls.fetch_add(1, Ordering::SeqCst);
             self.capabilities
