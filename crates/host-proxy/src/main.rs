@@ -1,22 +1,29 @@
 //! Host proxy server binary.
 
-use std::path::PathBuf;
-use std::sync::Arc;
+use anyhow::Result;
 
-use agent_api_core::build_router;
-use anyhow::{Context, Result};
-use host_proxy::{
-    cleanup_socket, ensure_socket_dir, AgentTransportConfig, HostProxyService, ProxyConfig,
+#[cfg(unix)]
+use {
+    agent_api_core::build_router,
+    anyhow::Context,
+    host_proxy::{
+        cleanup_socket, ensure_socket_dir, AgentTransportConfig, HostProxyService, ProxyConfig,
+    },
+    std::path::PathBuf,
+    std::sync::Arc,
+    tower::ServiceBuilder,
+    tower::ServiceExt,
+    tower_http::limit::RequestBodyLimitLayer,
+    tracing::info,
+    tracing_subscriber::prelude::*,
 };
-use tower::ServiceBuilder;
-use tower::ServiceExt;
-use tower_http::limit::RequestBodyLimitLayer;
-use tracing::info;
-use tracing_subscriber::prelude::*;
 
+#[cfg(not(unix))]
+use anyhow::anyhow;
+
+#[cfg(unix)]
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize tracing
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
         .with(
@@ -27,22 +34,17 @@ async fn main() -> Result<()> {
 
     info!("Starting host-proxy server");
 
-    // Load configuration
     let config = load_config()?;
     info!("Configuration loaded: {:?}", config);
 
-    // Ensure socket directory exists and clean up old socket
     ensure_socket_dir(&config.host_socket).await?;
     cleanup_socket(&config.host_socket).await?;
 
-    // Create the proxy service
     let service =
         Arc::new(HostProxyService::new(config.clone()).context("Failed to create proxy service")?);
 
-    // Build the router with agent API routes
     let api_router = build_router(service);
 
-    // Add middleware and additional routes
     let app = api_router
         .route(
             "/health",
@@ -57,14 +59,12 @@ async fn main() -> Result<()> {
                 .into_inner(),
         );
 
-    // Bind to Unix socket
     let socket_path = config.host_socket.clone();
     info!("Binding to Unix socket: {:?}", socket_path);
 
     let listener =
         tokio::net::UnixListener::bind(&socket_path).context("Failed to bind to Unix socket")?;
 
-    // Set socket permissions to be accessible
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -75,7 +75,6 @@ async fn main() -> Result<()> {
     info!("Host proxy listening on: {:?}", socket_path);
     info!("Ready to forward requests to world-agent");
 
-    // Accept loop for Unix socket connections
     loop {
         let (stream, _addr) = listener
             .accept()
@@ -100,49 +99,23 @@ async fn main() -> Result<()> {
     }
 }
 
-/// Load configuration from environment or defaults.
+#[cfg(not(unix))]
+fn main() -> Result<()> {
+    Err(anyhow!(
+        "host-proxy binary is not supported on this platform"
+    ))
+}
+
+#[cfg(unix)]
 fn load_config() -> Result<ProxyConfig> {
-    // Try to load from environment variables
     let mut config = ProxyConfig::default();
 
     if let Ok(host_socket) = std::env::var("HOST_PROXY_SOCKET") {
         config.host_socket = PathBuf::from(host_socket);
     }
 
-    if let Ok(agent_transport) = std::env::var("AGENT_TRANSPORT") {
-        match agent_transport.as_str() {
-            "tcp" => {
-                let host =
-                    std::env::var("AGENT_TCP_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
-                let port = std::env::var("AGENT_TCP_PORT")
-                    .ok()
-                    .and_then(|p| p.parse::<u16>().ok())
-                    .unwrap_or(17788);
-                config.agent = AgentTransportConfig::Tcp { host, port };
-            }
-            "named_pipe" => {
-                #[cfg(target_os = "windows")]
-                {
-                    let pipe = std::env::var("AGENT_PIPE_PATH")
-                        .unwrap_or_else(|_| r"\.\pipe\substrate-agent".to_string());
-                    config.agent = AgentTransportConfig::NamedPipe {
-                        path: PathBuf::from(pipe),
-                    };
-                }
-            }
-            "uds" | "unix" => {
-                if let Ok(agent_socket) = std::env::var("AGENT_SOCKET") {
-                    config.agent = AgentTransportConfig::Unix {
-                        path: PathBuf::from(agent_socket),
-                    };
-                }
-            }
-            _ => {}
-        }
-    } else if let Ok(agent_socket) = std::env::var("AGENT_SOCKET") {
-        config.agent = AgentTransportConfig::Unix {
-            path: PathBuf::from(agent_socket),
-        };
+    if let Some(agent_transport) = agent_transport_from_env()? {
+        config.agent = agent_transport;
     }
 
     if let Ok(max_body) = std::env::var("MAX_BODY_SIZE") {
@@ -153,7 +126,6 @@ fn load_config() -> Result<ProxyConfig> {
         config.request_timeout = timeout.parse().unwrap_or(config.request_timeout);
     }
 
-    // Rate limiting from env
     if let Ok(rpm) = std::env::var("RATE_LIMIT_RPM") {
         config.rate_limits.requests_per_minute = rpm.parse().unwrap_or(60);
     }
@@ -162,7 +134,6 @@ fn load_config() -> Result<ProxyConfig> {
         config.rate_limits.max_concurrent = max_concurrent.parse().unwrap_or(5);
     }
 
-    // Auth from env
     if let Ok(auth_enabled) = std::env::var("AUTH_ENABLED") {
         config.auth.enabled = auth_enabled.parse().unwrap_or(false);
     }
@@ -172,4 +143,51 @@ fn load_config() -> Result<ProxyConfig> {
     }
 
     Ok(config)
+}
+
+#[cfg(unix)]
+fn agent_transport_from_env() -> Result<Option<AgentTransportConfig>> {
+    if let Ok(value) = std::env::var("SUBSTRATE_AGENT_TRANSPORT") {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return Ok(Some(AgentTransportConfig::from_uri(trimmed)?));
+        }
+    }
+
+    if let Ok(value) = std::env::var("AGENT_TRANSPORT") {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            if let Ok(parsed) = AgentTransportConfig::from_uri(trimmed) {
+                return Ok(Some(parsed));
+            }
+
+            match trimmed.to_ascii_lowercase().as_str() {
+                "tcp" => {
+                    let host =
+                        std::env::var("AGENT_TCP_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+                    let port = std::env::var("AGENT_TCP_PORT")
+                        .ok()
+                        .and_then(|p| p.parse::<u16>().ok())
+                        .unwrap_or(17788);
+                    return Ok(Some(AgentTransportConfig::Tcp { host, port }));
+                }
+                "unix" | "uds" => {
+                    if let Ok(agent_socket) = std::env::var("AGENT_SOCKET") {
+                        return Ok(Some(AgentTransportConfig::Unix {
+                            path: PathBuf::from(agent_socket),
+                        }));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    if let Ok(agent_socket) = std::env::var("AGENT_SOCKET") {
+        return Ok(Some(AgentTransportConfig::Unix {
+            path: PathBuf::from(agent_socket),
+        }));
+    }
+
+    Ok(None)
 }

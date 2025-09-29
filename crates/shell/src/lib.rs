@@ -620,7 +620,6 @@ impl ShellConfig {
                     );
                     #[cfg(unix)]
                     {
-                        use std::path::PathBuf;
                         let uid = unsafe { libc::geteuid() };
                         let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
                             .ok()
@@ -661,7 +660,6 @@ impl ShellConfig {
                     );
                     #[cfg(unix)]
                     {
-                        use std::path::PathBuf;
                         let uid = unsafe { libc::geteuid() };
                         let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
                             .ok()
@@ -859,7 +857,6 @@ fn world_doctor_main(json_mode: bool) -> i32 {
 #[cfg(target_os = "linux")]
 fn world_doctor_main(json_mode: bool) -> i32 {
     use std::path::Path;
-    use std::path::PathBuf;
 
     // Helpers
     fn pass(msg: &str) {
@@ -5900,5 +5897,14 @@ mod tests {
             assert!(!needs_pty("git commit -e --no-edit"));
             assert!(!needs_pty("git commit --edit --no-edit"));
         });
+    }
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn transport_meta_named_pipe_mode() {
+        let meta = world_transport_to_meta(&pw::WorldTransport::NamedPipe(PathBuf::from(
+            r"\\.\pipe\substrate-agent",
+        )));
+        assert_eq!(meta.mode, "named_pipe");
+        assert_eq!(meta.endpoint.as_deref(), Some(r"\\.\pipe\substrate-agent"));
     }
 }
