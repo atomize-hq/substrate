@@ -139,7 +139,7 @@ fn resolve_target(
         .as_ref()
         .map(|o| o.mode)
         .or(file_target.mode)
-        .unwrap_or(TargetModeSetting::Uds);
+        .unwrap_or(TargetModeSetting::Tcp);
 
     match mode {
         TargetModeSetting::Uds => {
@@ -214,18 +214,46 @@ mod tests {
     }
 
     #[test]
-    fn default_target_is_uds_without_config() {
+    fn default_target_is_tcp_without_config() {
         let _guard = ENV_GUARD.lock().unwrap();
         reset_env();
+        let pipe = r"\\.\pipe\substrate";
         let config = ForwarderConfig::load(
             "distro".to_string(),
-            "\\\\.\\pipe\\substrate".to_string(),
+            pipe.to_string(),
             None,
             Some(PathBuf::from("does/not/exist.toml")),
         )
         .unwrap();
+        assert_eq!(config.target_mode(), "tcp");
+        assert_eq!(
+            config.target().to_string(),
+            format!("127.0.0.1:{}", DEFAULT_TCP_PORT)
+        );
+    }
+
+    #[test]
+    fn file_config_selects_uds_mode() {
+        let _guard = ENV_GUARD.lock().unwrap();
+        reset_env();
+        let path = temp_path("uds");
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let toml = "[target]\nmode = \"uds\"\nuds_path = \"/run/custom.sock\"\n";
+        fs::write(&path, toml).unwrap();
+
+        let pipe = r"\\.\pipe\substrate";
+        let config = ForwarderConfig::load(
+            "distro".to_string(),
+            pipe.to_string(),
+            None,
+            Some(path.clone()),
+        )
+        .unwrap();
+
         assert_eq!(config.target_mode(), "uds");
-        assert_eq!(config.target().to_string(), DEFAULT_UDS_PATH);
+        assert_eq!(config.target().to_string(), "/run/custom.sock");
     }
 
     #[test]
@@ -239,9 +267,10 @@ mod tests {
         let toml = "[target]\nmode = \"tcp\"\ntcp_port = 60001\n";
         fs::write(&path, toml).unwrap();
 
+        let pipe = r"\\.\pipe\substrate";
         let config = ForwarderConfig::load(
             "distro".to_string(),
-            "\\\\.\\pipe\\substrate".to_string(),
+            pipe.to_string(),
             None,
             Some(path.clone()),
         )
@@ -264,9 +293,10 @@ mod tests {
 
         std::env::set_var(TARGET_ENV, "tcp:60100");
 
+        let pipe = r"\\.\pipe\substrate";
         let config = ForwarderConfig::load(
             "distro".to_string(),
-            "\\\\.\\pipe\\substrate".to_string(),
+            pipe.to_string(),
             None,
             Some(path.clone()),
         )

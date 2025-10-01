@@ -1,12 +1,18 @@
 use crate::config::{BridgeTarget, ForwarderConfig};
 use crate::wsl;
 use anyhow::Context;
+use std::io;
 use std::net::SocketAddr;
+use std::os::windows::io::AsRawHandle;
 use std::sync::Arc;
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
+use tokio::net::windows::named_pipe::NamedPipeServer;
+use tokio::net::TcpStream;
+use windows::Win32::Foundation::HANDLE;
+use windows::Win32::Storage::FileSystem::FlushFileBuffers;
 
 pub async fn run_pipe_session(
-    mut pipe: tokio::net::windows::named_pipe::NamedPipeServer,
+    mut pipe: NamedPipeServer,
     config: Arc<ForwarderConfig>,
     session_id: u64,
 ) -> anyhow::Result<()> {
@@ -18,16 +24,46 @@ pub async fn run_pipe_session(
         target = %target,
         "client connected"
     );
-    run_session(&mut pipe, SessionKind::Pipe, config, target, session_id).await
+
+    let mut wsl_bundle = spawn_bridge(&config, &target, session_id, "pipe").await?;
+    {
+        let mut bridge_stream = wsl_bundle.stream_mut();
+        bridge_copy(session_id, "pipe", &target, &mut pipe, &mut bridge_stream).await;
+
+        match pipe.flush().await {
+            Ok(()) => tracing::trace!(session = session_id, "pipe async flush complete"),
+            Err(err) => tracing::debug!(session = session_id, "pipe async flush error: {err}"),
+        }
+        match flush_pipe_buffers(&pipe) {
+            Ok(()) => tracing::trace!(session = session_id, "FlushFileBuffers complete"),
+            Err(err) => tracing::debug!(session = session_id, "FlushFileBuffers error: {err}"),
+        }
+        match pipe.disconnect() {
+            Ok(()) => tracing::trace!(session = session_id, "pipe disconnect complete"),
+            Err(err) => tracing::debug!(session = session_id, "pipe disconnect error: {err}"),
+        }
+
+        if let Err(err) = bridge_stream.shutdown().await {
+            tracing::debug!(
+                session = session_id,
+                target_mode = target.mode(),
+                target = %target,
+                "WSL stream shutdown error: {err}"
+            );
+        }
+    }
+
+    finalize_bridge(wsl_bundle, session_id, &target).await
 }
 
 pub async fn run_tcp_session(
-    mut stream: tokio::net::TcpStream,
+    mut stream: TcpStream,
     peer: SocketAddr,
     config: Arc<ForwarderConfig>,
     session_id: u64,
 ) -> anyhow::Result<()> {
     let target = config.target().clone();
+    let label = format!("tcp:{peer}");
     tracing::info!(
         session = session_id,
         kind = "tcp",
@@ -36,77 +72,47 @@ pub async fn run_tcp_session(
         target = %target,
         "client connected"
     );
-    run_session(
-        &mut stream,
-        SessionKind::Tcp { peer },
-        config,
-        target,
-        session_id,
-    )
-    .await
-}
 
-enum SessionKind {
-    Pipe,
-    Tcp { peer: SocketAddr },
-}
+    let mut wsl_bundle = spawn_bridge(&config, &target, session_id, &label).await?;
+    {
+        let mut bridge_stream = wsl_bundle.stream_mut();
+        bridge_copy(session_id, &label, &target, &mut stream, &mut bridge_stream).await;
 
-async fn run_session<S>(
-    client: &mut S,
-    kind: SessionKind,
-    config: Arc<ForwarderConfig>,
-    target: BridgeTarget,
-    session_id: u64,
-) -> anyhow::Result<()>
-where
-    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
-    let mut wsl_bundle = wsl::spawn(&config.distro, &target).await.with_context(|| {
-        format!(
-            "session {session_id}: failed to spawn WSL bridge for {} via {}",
-            session_label(&kind),
-            target
-        )
-    })?;
-
-    let mut stream = wsl_bundle.stream_mut();
-    match tokio::io::copy_bidirectional(client, &mut stream).await {
-        Ok((c2w, w2c)) => {
+        if let Err(err) = stream.shutdown().await {
+            tracing::debug!(session = session_id, "tcp client shutdown error: {err}");
+        }
+        if let Err(err) = bridge_stream.shutdown().await {
             tracing::debug!(
                 session = session_id,
-                kind = %session_label(&kind),
                 target_mode = target.mode(),
                 target = %target,
-                client_to_wsl = c2w,
-                wsl_to_client = w2c,
-                "stream closed"
-            );
-        }
-        Err(err) => {
-            tracing::warn!(
-                session = session_id,
-                kind = %session_label(&kind),
-                target_mode = target.mode(),
-                target = %target,
-                error = %err,
-                "bidirectional copy failed"
+                "WSL stream shutdown error: {err}"
             );
         }
     }
 
-    if let Err(err) = client.shutdown().await {
-        tracing::debug!(session = session_id, "client shutdown error: {err}");
-    }
-    if let Err(err) = stream.shutdown().await {
-        tracing::debug!(
-            session = session_id,
-            target_mode = target.mode(),
-            target = %target,
-            "WSL stream shutdown error: {err}"
-        );
-    }
+    finalize_bridge(wsl_bundle, session_id, &target).await
+}
 
-    let status = wsl_bundle
+async fn spawn_bridge(
+    config: &ForwarderConfig,
+    target: &BridgeTarget,
+    session_id: u64,
+    label: &str,
+) -> anyhow::Result<wsl::WslStreamBundle> {
+    wsl::spawn(&config.distro, target, session_id, label)
+        .await
+        .with_context(|| {
+            format!("session {session_id}: failed to spawn WSL bridge for {label} via {target}")
+        })
+}
+
+async fn finalize_bridge(
+    bundle: wsl::WslStreamBundle,
+    session_id: u64,
+    target: &BridgeTarget,
+) -> anyhow::Result<()> {
+    let status = bundle
         .wait()
         .await
         .with_context(|| format!("session {session_id}: failed to wait for WSL process"))?;
@@ -123,9 +129,46 @@ where
     Ok(())
 }
 
-fn session_label(kind: &SessionKind) -> String {
-    match kind {
-        SessionKind::Pipe => "pipe".to_string(),
-        SessionKind::Tcp { peer } => format!("tcp:{peer}"),
+async fn bridge_copy<C, W>(
+    session_id: u64,
+    label: &str,
+    target: &BridgeTarget,
+    client: &mut C,
+    bridge: &mut W,
+) where
+    C: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+    W: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    match tokio::io::copy_bidirectional(client, bridge).await {
+        Ok((c2w, w2c)) => {
+            tracing::debug!(
+                session = session_id,
+                kind = label,
+                target_mode = target.mode(),
+                target = %target,
+                client_to_wsl = c2w,
+                wsl_to_client = w2c,
+                "stream closed"
+            );
+        }
+        Err(err) => {
+            tracing::warn!(
+                session = session_id,
+                kind = label,
+                target_mode = target.mode(),
+                target = %target,
+                error = %err,
+                "bidirectional copy failed"
+            );
+        }
     }
+}
+
+fn flush_pipe_buffers(pipe: &NamedPipeServer) -> io::Result<()> {
+    let handle = pipe.as_raw_handle();
+    unsafe {
+        FlushFileBuffers(HANDLE(handle as *mut _))
+            .map_err(|err| io::Error::from_raw_os_error(err.code().0 as i32))?;
+    }
+    Ok(())
 }

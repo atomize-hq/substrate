@@ -438,20 +438,20 @@ fn detect_tcp_forwarder() -> Result<Option<(String, u16)>> {
     }
 
     let tcp_enabled = std::env::var("SUBSTRATE_FORWARDER_TCP")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+        .unwrap_or(true);
 
-    if tcp_enabled {
-        let host = std::env::var("SUBSTRATE_FORWARDER_TCP_HOST")
-            .unwrap_or_else(|_| DEFAULT_TCP_ADDR.to_string());
-        let port = std::env::var("SUBSTRATE_FORWARDER_TCP_PORT")
-            .ok()
-            .and_then(|p| p.parse::<u16>().ok())
-            .unwrap_or(DEFAULT_TCP_PORT);
-        Ok(Some((host, port)))
-    } else {
-        Ok(None)
+    if !tcp_enabled {
+        return Ok(None);
     }
+
+    let host = std::env::var("SUBSTRATE_FORWARDER_TCP_HOST")
+        .unwrap_or_else(|_| DEFAULT_TCP_ADDR.to_string());
+    let port = std::env::var("SUBSTRATE_FORWARDER_TCP_PORT")
+        .ok()
+        .and_then(|p| p.parse::<u16>().ok())
+        .unwrap_or(DEFAULT_TCP_PORT);
+    Ok(Some((host, port)))
 }
 
 #[cfg(test)]

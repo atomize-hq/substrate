@@ -140,7 +140,12 @@ impl WslStreamBundle {
     }
 }
 
-pub async fn spawn(distro: &str, target: &BridgeTarget) -> anyhow::Result<WslStreamBundle> {
+pub async fn spawn(
+    distro: &str,
+    target: &BridgeTarget,
+    session_id: u64,
+    label: &str,
+) -> anyhow::Result<WslStreamBundle> {
     let mut cmd = Command::new("wsl");
     cmd.arg("-d").arg(distro);
     cmd.arg("--");
@@ -161,14 +166,26 @@ pub async fn spawn(distro: &str, target: &BridgeTarget) -> anyhow::Result<WslStr
         }
     }
 
+    // Ensure WSL receives these variables: WSLENV controls env propagation into the Linux environment
+    cmd.env(
+        "WSLENV",
+        "SUBSTRATE_FORWARDER_TARGET_MODE:SUBSTRATE_FORWARDER_TARGET_HOST:SUBSTRATE_FORWARDER_TARGET_PORT:SUBSTRATE_FORWARDER_TARGET_ENDPOINT",
+    );
+
+    use std::process::Stdio;
     let mut child = cmd
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
         .with_context(|| format!("failed to start wsl -d {distro}"))?;
     let stdin = child.stdin.take().context("missing child stdin")?;
     let stdout = child.stdout.take().context("missing child stdout")?;
     let stderr = child.stderr.take();
 
-    let stderr_task = stderr.map(|stderr| {
+    let lbl = label.to_string();
+    let sid = session_id;
+    let stderr_task = stderr.map(move |stderr| {
         tokio::spawn(async move {
             let mut reader = BufReader::new(stderr);
             let mut line = String::new();
@@ -179,11 +196,21 @@ pub async fn spawn(distro: &str, target: &BridgeTarget) -> anyhow::Result<WslStr
                     Ok(_) => {
                         let trimmed = line.trim_end();
                         if !trimmed.is_empty() {
-                            tracing::debug!(target = "forwarder::wsl", "stderr: {trimmed}");
+                            tracing::debug!(
+                                target = "forwarder::wsl",
+                                session = sid,
+                                kind = lbl,
+                                "stderr: {trimmed}"
+                            );
                         }
                     }
                     Err(err) => {
-                        tracing::debug!(target = "forwarder::wsl", "stderr read error: {err}");
+                        tracing::debug!(
+                            target = "forwarder::wsl",
+                            session = sid,
+                            kind = lbl,
+                            "stderr read error: {err}"
+                        );
                         break;
                     }
                 }

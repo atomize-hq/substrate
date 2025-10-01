@@ -16,20 +16,19 @@ $pidFile = Join-Path $env:LOCALAPPDATA 'Substrate\\forwarder.pid'
 if (Test-Path $pidFile) {
     Write-Info "Attempting to stop forwarder recorded in PID file"
     try {
-        $pid = [int](Get-Content $pidFile)
-        Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
-        Write-Info "Forwarder PID $pid terminated"
+        $forwarderPid = [int](Get-Content $pidFile)
+        Stop-Process -Id $forwarderPid -Force -ErrorAction SilentlyContinue
+        Write-Info "Forwarder PID $forwarderPid terminated"
     } catch {
-        Write-Warn "Unable to terminate PID in $pidFile: $_"
+        Write-Warn "Unable to terminate PID in ${pidFile}: $_"
     }
     Remove-Item $pidFile -ErrorAction SilentlyContinue
 }
 
-# Clean any stray forwarder processes owned by user
+# Clean any stray forwarder processes (regardless of install path)
 Get-Process -Name substrate-forwarder -ErrorAction SilentlyContinue |
-    Where-Object { $_.Path -like "*$($env:LOCALAPPDATA)*substrate-forwarder.exe" } |
     ForEach-Object {
-        Write-Warn "Stopping stray forwarder process Id=$($_.Id)"
+        Write-Warn "Stopping stray forwarder process Id=$($_.Id) Path=$($_.Path)"
         Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
     }
 

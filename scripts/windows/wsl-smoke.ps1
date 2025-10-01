@@ -29,6 +29,13 @@ if (-not $SkipWarm) {
     }
 }
 
+Invoke-Step "Forwarder pipe capabilities (HTTP 200)" {
+    $resp = pwsh -File scripts/windows/pipe-http.ps1 -PipePath "\\.\pipe\substrate-agent" -TimeoutSeconds 10
+    if ($LASTEXITCODE -ne 0) { throw $resp }
+    if ($resp -notmatch '^Status: .*200\s+OK') { throw "Unexpected status: $resp" }
+    $resp | Out-Host
+}
+
 Invoke-Step "Doctor checks" {
     pwsh -File scripts/windows/wsl-doctor.ps1 -DistroName $DistroName | Out-Host
 }

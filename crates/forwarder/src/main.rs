@@ -105,15 +105,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Some(res) = join_set.join_next() => {
             match res {
-                Ok(Ok(())) => {
-                    tracing::info!("listener task exited cleanly");
-                }
-                Ok(Err(err)) => {
-                    tracing::error!(error = %err, "listener task failed" );
-                }
-                Err(join_err) => {
-                    tracing::error!("listener task panicked: {join_err}");
-                }
+                Ok(Ok(())) => { tracing::info!("listener task exited cleanly"); }
+                Ok(Err(err)) => { tracing::error!(error = %err, "listener task failed" ); return Err(err); }
+                Err(join_err) => { tracing::error!("listener task panicked: {join_err}"); return Err(anyhow::anyhow!(join_err)); }
             }
             cancel.cancel();
         }

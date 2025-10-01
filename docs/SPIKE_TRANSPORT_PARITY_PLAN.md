@@ -12,7 +12,7 @@ Additional Windows Addendum: docs/dev/windows_host_transport_plan.md
 ## Phase Status Matrix
 | Phase | Host Platform | Status | Last Updated | Reviewer | Evidence Log Anchor |
 |-------|---------------|--------|--------------|----------|----------------------|
-| W | Windows (WSL2) | In Progress | 2025-09-24T10:50:18-04:00 | _tbd_ | windows_always_world.md#W |
+| W | Windows (WSL2) | Complete | 2025-09-30T16:47:43-04:00 | @spenser | windows_always_world.md#W |
 | M | macOS (Lima) | Pending | _tbd_ | _tbd_ | macos_always_world.md#M |
 | L | Linux (Native) | Pending | _tbd_ | _tbd_ | linux_always_world.md#L |
 | Final Verification | All | Pending | _tbd_ | _tbd_ | windows_always_world.md#Final |
@@ -176,11 +176,21 @@ Record outputs and mark sanity PASS/FAIL.
    ```
    Run inside WSL if runtime coverage is required.
 
-#### Step W6 - Host Crate Integration
-1. **`substrate-shell` updates** – Replace direct hyperlocal usage with the new `AgentClient` helpers in `crates/shell/src/platform_world/windows.rs` and related modules; ensure non-PTY commands use the connector abstraction.
-2. **`host-proxy` updates** – Update client initialization to honor transport configuration (`tcp`, `uds`, `named_pipe`).
-3. **Factory/backends** – Verify `world-backend-factory` (and dependents) choose transports without Unix-only imports on Windows.
+#### Step W6 - Host Integration & Forwarder Alignment
+1. **Forwarder loop & downstream target**
+   - Adopt the Tokio named-pipe accept pattern (`first_pipe_instance(true)`, pre-create the next instance, explicit `disconnect()` / `FlushFileBuffers`).
+   - Default the forwarder to bridge named pipe → TCP (`127.0.0.1:<port>` inside WSL); keep the Unix-socket path behind a feature flag for follow-up.
+2. **Warm tooling updates**
+   - Replace `Test-Path` with a `WaitNamedPipe` + client probe in `scripts/windows/wsl-warm.ps1` and document the behaviour in the setup/troubleshooting guides.
+3. **Host crates (`substrate-shell`, `host-proxy`, factories)**
+   - Consume the shared `AgentClient` builder, ensure telemetry reflects `named_pipe` or `tcp`, and gate Unix-only dependencies behind `cfg(unix)`.
 4. **Checks**
+   ```pwsh
+   cargo check -p substrate-forwarder
+   cargo test -p substrate-forwarder
+   cargo check -p substrate-shell
+   cargo check -p host-proxy
+   cargo check -p world-backend-factory
    ```pwsh
    cargo check -p substrate-shell
    cargo check -p host-proxy
@@ -219,7 +229,7 @@ Record outputs and mark sanity PASS/FAIL.
 - [ ] Docs & troubleshooting updated and linted.
 - [ ] Evidence log entry completed with branch/commit hash and handoff notes.
 - [ ] Code pushed to shared branch (`git push`).
-- [ ] Phase Status Matrix updated (Phase W → Complete with timestamp & reviewer).
+- [x] Phase Status Matrix updated (Phase W → Complete with timestamp & reviewer).
 - [ ] Next session kickoff prompt prepared (see Prompt Templates section) and attached to evidence log.
 
 ---
@@ -514,3 +524,4 @@ Make sure the resulting handoff reads like an operations runbook entry: concise 
 2. Ensure the resulting prompt is stored under “Next Actions / Handoff Notes” in the evidence log.
 
 ---
+

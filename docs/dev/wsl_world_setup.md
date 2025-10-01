@@ -74,7 +74,8 @@ The warm script performs these tasks:
   and configure the `substrate-world-agent` service.
 - Builds `substrate-forwarder` and `world-agent` if needed, copies the agent
   into WSL, and restarts the service.
-- Starts the Windows forwarder and waits for `\.\pipe\substrate-agent`.
+- Starts the Windows forwarder and probes `\.\pipe\substrate-agent` with a
+  client connect.
 
 Run the script from the repo root:
 
@@ -91,7 +92,8 @@ Sample success excerpt:
 [INFO] Project path: C:\workspace\substrate
 [INFO] Importing distro 'substrate-wsl'
 [INFO] Downloading Ubuntu WSL image (noble-wsl-amd64.wsl)
-[INFO] Waiting for forwarder pipe \.\pipe\substrate-agent
+[INFO] Probing forwarder pipe \.\pipe\substrate-agent
+[INFO] Forwarder pipe accepted probe in 420 ms
 [INFO] Forwarder pipe ready
 [INFO] Warm complete
 ```
@@ -118,7 +120,8 @@ Check both sides of the bridge:
 wsl -d substrate-wsl -- bash -lc 'systemctl status substrate-world-agent'
 
 # on Windows
-Get-Content "$env:LOCALAPPDATA\Substrate\logs\forwarder.log" -Tail 50  # logs rotate daily (5 files, 10 MB each)
+Get-Content "$env:LOCALAPPDATA\Substrate\logs\forwarder.log" -Tail 50
+# Logs rotate daily (5 files, 10 MB each)
 ```
 
 ## Updating the agent binary
@@ -207,10 +210,16 @@ Record the console output in the evidence log after each run.
   wsl -d substrate-wsl -- bash -lc 'journalctl -u substrate-world-agent -n 200'
   ```
 
-- **Tail forwarder log**
-
+- **Tail forwarder log:**
+<!-- markdownlint-disable-next-line MD031 -->
   ```powershell
   Get-Content "$env:LOCALAPPDATA\Substrate\logs\forwarder.log" -Tail 200 -Wait
+  ```
+
+- **Run forwarder with timeout** (manual debugging)
+
+  ```powershell
+  pwsh -File scripts/windows/start-forwarder.ps1 -DistroName substrate-wsl
   ```
 
 ## Troubleshooting
@@ -244,4 +253,3 @@ entry ID in the evidence log when documenting remediation.
 
 Follow the Phase 5 guardrails: execute steps in order, capture evidence after
 Each check, and stop immediately if a command fails.
-

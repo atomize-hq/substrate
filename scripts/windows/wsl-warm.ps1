@@ -2,6 +2,7 @@
 param(
     [string]$DistroName = 'substrate-wsl',
     [string]$ProjectPath = (Resolve-Path '..\\..' | Select-Object -ExpandProperty Path),
+    [string]$PipePath = '\\\\.\\pipe\\substrate-agent',
     [switch]$WhatIf
 )
 
@@ -138,7 +139,7 @@ if (-not (Test-Path $forwarderHostPath)) {
 Write-Info "Launching forwarder"
 $logDir = Join-Path $env:LOCALAPPDATA 'Substrate\\logs'
 New-Item -ItemType Directory -Force $logDir | Out-Null
-$pipePath = "\\\\.\\pipe\\substrate-agent"
+$pipePath = $PipePath
 $pidFile = Join-Path $env:LOCALAPPDATA 'Substrate\\forwarder.pid'
 if (Test-Path $pidFile) {
     Write-Warn "Forwarder PID file exists; attempting cleanup"
@@ -149,15 +150,41 @@ if (Test-Path $pidFile) {
 $forwarderProcess = Start-Process -FilePath $forwarderHostPath -ArgumentList "--distro", $DistroName, "--pipe", $pipePath, "--log-dir", $logDir, "--run-as-service" -WindowStyle Hidden -PassThru
 Set-Content $pidFile -Value $forwarderProcess.Id
 
-# Wait for pipe
-Write-Info "Waiting for forwarder pipe $pipePath"
-$timeout = [DateTime]::UtcNow.AddSeconds(30)
-while (-not (Test-Path $pipePath)) {
-    if ([DateTime]::UtcNow -gt $timeout) {
-        Write-ErrorAndExit "Forwarder pipe not available after 30s"
-    }
-    Start-Sleep -Seconds 1
+# Wait for pipe using an actual client probe with retries
+Write-Info "Probing forwarder pipe $pipePath"
+$stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+$pipeName = ($pipePath -replace '^\\\\\.\\pipe\\', '')
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+namespace Native {
+  public static class Win32 {
+    [DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+    public static extern bool WaitNamedPipe(string name, uint timeout);
+  }
 }
+"@
+
+# First wait for the server to create and pend connect
+if (-not ([Native.Win32]::WaitNamedPipe($pipePath, 30000))) {
+    # Fallback: poll for path existence for up to 30s
+    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    while (-not (Test-Path $pipePath)) {
+        if ([DateTime]::UtcNow -ge $deadline) {
+            $stopwatch.Stop()
+            $err = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+            Write-ErrorAndExit ("Forwarder pipe probe failed after {0:N0} ms: WaitNamedPipe error {1}; also path never appeared" -f $stopwatch.Elapsed.TotalMilliseconds, $err)
+        }
+        Start-Sleep -Milliseconds 250
+    }
+}
+
+# Then do a quick client connect/close to fully validate
+$client = [System.IO.Pipes.NamedPipeClientStream]::new('.', $pipeName, [System.IO.Pipes.PipeDirection]::InOut, [System.IO.Pipes.PipeOptions]::None)
+$client.Connect(2000)
+$client.Dispose()
+$stopwatch.Stop()
+Write-Info ("Forwarder pipe accepted probe in {0:N0} ms" -f $stopwatch.Elapsed.TotalMilliseconds)
 Write-Info "Forwarder pipe ready"
 
 Write-Info "Warm complete"
