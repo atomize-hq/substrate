@@ -62,7 +62,12 @@ $process = [System.Diagnostics.Process]::Start($psi)
 if (-not $WaitForExit) {
     # Probe readiness and return immediately
     Write-Info ("Waiting up to {0}s for pipe readiness" -f $ReadyTimeoutSeconds)
-    $pipeName = ($PipePath -replace '^\\\\\.\\pipe\\', '')
+    if ($PipePath -match '\\pipe\\(?<n>[^\\]+)$') {
+        $pipeName = $Matches['n']
+    } else {
+        $pipeName = $PipePath
+    }
+    Write-Info ("Using pipe name '{0}' from '{1}'" -f $pipeName, $PipePath)
     $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(1, $ReadyTimeoutSeconds))
     $ready = $false
     while ([DateTime]::UtcNow -lt $deadline) {

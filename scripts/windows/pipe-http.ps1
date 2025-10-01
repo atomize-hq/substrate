@@ -17,7 +17,14 @@ function Write-Fail($Message){ Write-Host "[FAIL] $Message" -ForegroundColor Red
 
 if (-not ($Path.StartsWith('/'))) { $Path = '/' + $Path }
 
-$pipeName = ($PipePath -replace '^\\\\\.\\pipe\\', '')
+# Tolerant pipe-name extraction: works for \\.\pipe\name, .\pipe\name, or just name
+if ($PipePath -match '\\pipe\\(?<n>[^\\]+)$') {
+    $pipeName = $Matches['n']
+} else {
+    $pipeName = $PipePath
+}
+Write-Info ("Using pipe name '{0}' from '{1}'" -f $pipeName, $PipePath)
+
 $client = [System.IO.Pipes.NamedPipeClientStream]::new('.', $pipeName, [System.IO.Pipes.PipeDirection]::InOut, [System.IO.Pipes.PipeOptions]::None)
 $client.Connect([Math]::Max(1000, $TimeoutSeconds * 1000))
 
@@ -38,41 +45,63 @@ $writer.Write($req)
 if ($Body.Length -gt 0) { $writer.Write($Body) }
 $writer.Flush()
 
-# Read response with deadline
-$deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
-$ms = New-Object System.IO.MemoryStream
-$buf = New-Object byte[] 8192
+# Read response with real timeout (header-first, then optional body)
+$deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(1, $TimeoutSeconds))
+
+# Tighten IO timeouts on the underlying stream
+try { $client.ReadTimeout = 1000; $client.WriteTimeout = 2000 } catch {}
+
+$enc   = [System.Text.Encoding]::ASCII
+$reader = New-Object System.IO.StreamReader($client, $enc, $false, 1024, $true)
+
+# 1) Read status line + headers
+$statusLine = $null
+$respHeaders = New-Object System.Collections.Generic.List[string]
 while ([DateTime]::UtcNow -lt $deadline) {
-    if (-not ($client.CanRead -and $client.IsConnected)) { break }
-    $n = $client.Read($buf, 0, $buf.Length)
-    if ($n -gt 0) {
-        $ms.Write($buf, 0, $n)
-        continue
-    }
-    Start-Sleep -Milliseconds 50
+    try { $line = $reader.ReadLine() } catch [System.IO.IOException] { continue }
+    if ($null -eq $line) { continue }
+    if ($statusLine -eq $null) { $statusLine = $line; continue }
+    if ($line -eq '') { break }
+    [void]$respHeaders.Add($line)
 }
-$client.Dispose()
+if (-not $statusLine) {
+    Write-Fail "No status line received before timeout"
+    $client.Dispose(); exit 2
+}
 
-$bytes = $ms.ToArray()
-if ($bytes.Length -eq 0) { Write-Fail 'No response'; exit 2 }
-$text = [Text.Encoding]::UTF8.GetString($bytes)
+# 2) Parse content-length (optional)
+$cl = $null
+foreach ($h in $respHeaders) { if ($h -match '^[Cc]ontent-[Ll]ength:\s*(\d+)\s*$') { $cl = [int]$matches[1]; break } }
 
-# Split headers/body
-$sep = "`r`n`r`n"
-$i = $text.IndexOf($sep)
-if ($i -lt 0) { $i = $text.IndexOf("`n`n") }
-if ($i -lt 0) { $i = $text.Length }
-$rawHeaders = $text.Substring(0, [Math]::Min($i, $text.Length))
-$body = if ($i -lt $text.Length) { $text.Substring($i + $sep.Length) } else { '' }
-$statusLine = ($rawHeaders -split "`r?`n")[0]
+# 3) Read body up to content-length (or until stream closes / deadline)
+$bodyBuilder = New-Object System.Text.StringBuilder
+if ($cl -ne $null -and $cl -gt 0) {
+    $remaining = $cl
+    $buf = New-Object byte[] 8192
+    while ($remaining -gt 0 -and [DateTime]::UtcNow -lt $deadline) {
+        try { $n = $reader.BaseStream.Read($buf, 0, [Math]::Min($buf.Length, $remaining)) } catch [System.IO.IOException] { continue }
+        if ($n -le 0) { break }
+        [void]$bodyBuilder.Append([Text.Encoding]::UTF8.GetString($buf,0,$n))
+        $remaining -= $n
+    }
+} else {
+    # No length -> attempt a single slice within timeout
+    $buf = New-Object byte[] 8192
+    try { $n = $reader.BaseStream.Read($buf, 0, $buf.Length) } catch [System.IO.IOException] { $n = 0 }
+    if ($n -gt 0) { [void]$bodyBuilder.Append([Text.Encoding]::UTF8.GetString($buf,0,$n)) }
+}
 
-Write-Output "Status: $statusLine"
-Write-Output "Headers:\n$rawHeaders"
-Write-Output "Body:\n$($body.Substring(0, [Math]::Min(400, $body.Length)))"
+# 4) Print and enforce expected status
+Write-Output ("Status: {0}" -f $statusLine)
+if ($respHeaders.Count -gt 0) {
+    Write-Output "Headers:"
+    ($respHeaders -join "`r`n") | Write-Output
+}
+$bodyText = $bodyBuilder.ToString()
+Write-Output "Body:"
+Write-Output ($bodyText.Substring(0, [Math]::Min(400, $bodyText.Length)))
 
 # Enforce expected status if requested
-try {
-    $code = [int](([regex]::Match($statusLine, 'HTTP/\d\.\d\s+(\d+)').Groups[1].Value))
-} catch { $code = 0 }
-if ($ExpectStatus -gt 0 -and $code -ne $ExpectStatus) { exit 3 }
-exit 0
+try { $code = [int](([regex]::Match($statusLine, 'HTTP/\d\.\d\s+(\d+)').Groups[1].Value)) } catch { $code = 0 }
+$client.Dispose()
+if ($ExpectStatus -gt 0 -and $code -ne $ExpectStatus) { exit 3 } else { exit 0 }

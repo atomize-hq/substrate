@@ -2,7 +2,7 @@
 param(
     [string]$DistroName = 'substrate-wsl',
     [string]$ProjectPath = (Resolve-Path '..\\..' | Select-Object -ExpandProperty Path),
-    [string]$PipePath = '\\\\.\\pipe\\substrate-agent',
+    [string]$PipePath = '\\.\pipe\substrate-agent',
     [switch]$WhatIf
 )
 
@@ -153,7 +153,12 @@ Set-Content $pidFile -Value $forwarderProcess.Id
 # Wait for pipe using an actual client probe with retries
 Write-Info "Probing forwarder pipe $pipePath"
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-$pipeName = ($pipePath -replace '^\\\\\.\\pipe\\', '')
+if ($pipePath -match '\\pipe\\(?<n>[^\\]+)$') {
+    $pipeName = $Matches['n']
+} else {
+    $pipeName = $pipePath
+}
+Write-Info ("Using pipe name '{0}' from '{1}'" -f $pipeName, $pipePath)
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
