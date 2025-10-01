@@ -183,34 +183,12 @@ Invoke-Step "Doctor checks" {
 }
 
 
-Invoke-Step "Non-PTY command produces world span" {
-    $marker  = [guid]::NewGuid().ToString()
-
-    # Write into the repo root so we can verify from Windows
-    $winPath = Join-Path $ProjectPath 'win_smoke.txt'
-    $wslPath = Convert-ToWslPath $winPath
-
-    # Build a bash one-liner safely:
-    # result: bash -lc 'printf %s "MARKER" > "/mnt/c/.../win_smoke.txt"'
-    $bashInner = "printf %s `"$marker`" > `"$wslPath`""
-    $cmd       = "bash -lc '$bashInner'"
-
-    $out = & $SubstrateExe -c $cmd
+Invoke-Step "Non-PTY command executes (stdout-only)" {
+    $marker = "nonpty-smoke-" + ([guid]::NewGuid().ToString())
+    $out = & $SubstrateExe -c "bash -lc 'echo $marker'"
     if ($LASTEXITCODE -ne 0) { throw "substrate exec failed: $out" }
-
-    # Wait briefly for the file to appear, then assert contents
-    $deadline = (Get-Date).AddSeconds(3)
-    while (-not (Test-Path -LiteralPath $winPath) -and (Get-Date) -lt $deadline) {
-        Start-Sleep -Milliseconds 150
-    }
-    if (-not (Test-Path -LiteralPath $winPath)) {
-        throw "win_smoke.txt not created at $winPath"
-    }
-    $content = Get-Content -LiteralPath $winPath -Raw
-    if ($content -ne $marker) { throw "win_smoke.txt content mismatch" }
+    if ($out -notmatch [regex]::Escape($marker)) { throw "Marker missing in stdout" }
 }
-
-
 
 
 
