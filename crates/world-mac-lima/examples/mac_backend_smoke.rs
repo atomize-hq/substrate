@@ -1,17 +1,19 @@
-//! Mac backend smoke test example
-//!
-//! This example exercises the MacLimaBackend to ensure it can:
-//! - Start/connect to Lima VM
-//! - Establish forwarding
-//! - Execute a command via agent
+// Mac backend smoke test example
 
+#[cfg(not(target_os = "macos"))]
+fn main() {
+    eprintln!("mac_backend_smoke example runs only on macOS; skipping.");
+}
+
+#[cfg(target_os = "macos")]
 use anyhow::Result;
+#[cfg(target_os = "macos")]
 use world_api::{ExecRequest, WorldBackend, WorldSpec};
+#[cfg(target_os = "macos")]
 use world_mac_lima::MacLimaBackend;
 
+#[cfg(target_os = "macos")]
 fn main() -> Result<()> {
-    // RUST_LOG env var affects library's internal logging
-
     println!("Creating MacLimaBackend...");
     let backend = MacLimaBackend::new()?;
 
@@ -38,9 +40,9 @@ fn main() -> Result<()> {
     );
 
     if res.exit == 0 {
-        println!("✅ Smoke test passed!");
+        println!("? Smoke test passed!");
     } else {
-        println!("❌ Command failed with exit code {}", res.exit);
+        println!("? Command failed with exit code {}", res.exit);
     }
 
     Ok(())

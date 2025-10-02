@@ -1,3 +1,4 @@
+#![cfg(target_os = "macos")]
 //! macOS world backend using Lima VM with Linux isolation inside.
 //!
 //! This backend provides identical policy enforcement semantics to LinuxLocal

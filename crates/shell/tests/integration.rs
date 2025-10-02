@@ -1,3 +1,4 @@
+#![cfg(unix)]
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
@@ -410,4 +411,4 @@ fn test_process_group_signal_handling() {
     // Verify the command completed successfully
     let log_content = fs::read_to_string(&log_file).unwrap();
     assert!(log_content.contains("command_complete"));
-}
+}

@@ -1,3 +1,4 @@
+#![cfg(unix)]
 //! Integration tests for Replay module
 
 use std::path::PathBuf;

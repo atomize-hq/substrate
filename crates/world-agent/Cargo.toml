@@ -22,7 +22,6 @@ thiserror = "1"
 axum = { version = "0.6", features = ["ws"] }
 futures-util = "0.3"
 hyper = "0.14"
-hyperlocal = "0.8"
 tokio-tungstenite = "0.21"
 portable-pty = "0.8"
 base64 = "0.22"
@@ -32,13 +31,16 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rand = "0.8"
 once_cell = "1"
 libc = "0.2"
-
-# Local dependencies
 substrate-common = { path = "../common" }
 agent-api-core = { path = "../agent-api-core" }
 agent-api-types = { path = "../agent-api-types" }
 world-api = { path = "../world-api" }
 substrate-broker = { path = "../broker" }
+
+[target.'cfg(unix)'.dependencies]
+hyperlocal = "0.8"
+
+# Local dependencies moved into main [dependencies] for cross-platform builds
 
 # Platform-specific world backends
 [target.'cfg(target_os = "linux")'.dependencies]

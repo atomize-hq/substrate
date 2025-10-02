@@ -12,14 +12,20 @@ use std::time::Instant;
 // TraceEvent will be imported when needed
 
 mod correlation;
+#[cfg(unix)]
 mod exec;
+#[cfg(unix)]
 mod file;
+#[cfg(unix)]
 mod network;
 
 pub use correlation::*;
+#[cfg(unix)]
 pub use exec::*;
+#[cfg(unix)]
 #[allow(unused_imports)]
 pub use file::*;
+#[cfg(unix)]
 pub use network::*;
 
 lazy_static! {

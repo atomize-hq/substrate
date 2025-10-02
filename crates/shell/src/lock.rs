@@ -105,7 +105,7 @@ impl ProcessLock {
 
                     return Ok(Self { _file: file });
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock || is_lock_busy(&e) => {
                     if start.elapsed() >= timeout {
                         return Err(anyhow::anyhow!(
                             "Timeout waiting for lock after {:?}",
@@ -120,6 +120,18 @@ impl ProcessLock {
             }
         }
     }
+}
+
+#[inline]
+fn is_lock_busy(err: &std::io::Error) -> bool {
+    #[cfg(windows)]
+    {
+        // Windows-specific share/lock violations that indicate the file is locked by another process
+        // ERROR_SHARING_VIOLATION = 32, ERROR_LOCK_VIOLATION = 33
+        match err.raw_os_error() { Some(32) | Some(33) => true, _ => false }
+    }
+    #[cfg(not(windows))]
+    { false }
 }
 
 impl Drop for ProcessLock {
@@ -207,11 +219,21 @@ mod tests {
     fn test_lock_info_written_correctly() {
         let temp_dir = TempDir::new().unwrap();
         let lock_path = temp_dir.path().join("info.lock");
-
-        let _lock = ProcessLock::acquire(&lock_path, Duration::from_millis(100)).unwrap();
+        let lock = ProcessLock::acquire(&lock_path, Duration::from_millis(100)).unwrap();
 
         // Read the lock file contents
-        let contents = std::fs::read_to_string(&lock_path).unwrap();
+        #[cfg(windows)]
+        let contents = {
+            // On Windows, reading a region-locked file can fail; read after dropping the lock
+            drop(lock);
+            std::fs::read_to_string(&lock_path).unwrap()
+        };
+        #[cfg(not(windows))]
+        let contents = {
+            let s = std::fs::read_to_string(&lock_path).unwrap();
+            drop(lock);
+            s
+        };
         let lock_info: LockInfo = serde_json::from_str(&contents).unwrap();
 
         assert_eq!(lock_info.pid, std::process::id());

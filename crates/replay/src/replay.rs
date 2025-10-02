@@ -583,6 +583,7 @@ mod tests {
         assert!(args.is_empty());
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_execute_direct_simple() {
         let state = ExecutionState {
@@ -601,6 +602,7 @@ mod tests {
         assert_eq!(String::from_utf8_lossy(&result.stdout).trim(), "test");
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_execute_direct_with_redirection() {
         let dir = tempdir().unwrap();

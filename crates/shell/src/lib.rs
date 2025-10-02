@@ -2942,7 +2942,17 @@ fn needs_pty(cmd: &str) -> bool {
     // Parse command properly using shell_words for quoted argument handling
     let tokens = match shell_words::split(cmd) {
         Ok(tokens) => tokens,
-        Err(_) => return false, // Malformed command, don't use PTY
+        Err(_) => {
+            // Fallback: on Windows, accept bare paths like C:\Foo\bar.exe
+            #[cfg(windows)]
+            {
+                vec![cmd.to_string()]
+            }
+            #[cfg(not(windows))]
+            {
+                return false; // Malformed command, don't use PTY
+            }
+        }
     };
 
     // Peel off wrapper commands to find the actual command
@@ -2955,9 +2965,20 @@ fn needs_pty(cmd: &str) -> bool {
         &tokens
     };
 
-    let first_token = working_tokens
-        .first()
-        .and_then(|s| Path::new(s).file_name())
+        // Windows-safe program extraction: prefer the program component from the original string
+    #[cfg(windows)]
+    let first_raw = {
+        // Try to extract <...>.exe from the original string regardless of spaces
+        let lower = cmd.to_ascii_lowercase();
+        if let Some(pos) = lower.find(".exe") {
+            &cmd[..pos+4]
+        } else {
+            working_tokens.first().map(|s| s.as_str()).unwrap_or("")
+        }
+    };
+    #[cfg(not(windows))]
+    let first_raw = working_tokens.first().map(|s| s.as_str()).unwrap_or("");let first_token = Path::new(first_raw)
+        .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("");
 
@@ -3005,6 +3026,10 @@ fn needs_pty(cmd: &str) -> bool {
 
     // Special SSH handling for -t/-T flags and remote commands
     if cmd_lower == "ssh" {
+        // If no args at all, assume interactive client
+        if working_tokens.len() == 1 {
+            return true;
+        }
         // Create lowercase versions for case-insensitive option checking
         let tokens_lc: Vec<String> = working_tokens
             .iter()
@@ -5908,3 +5933,4 @@ mod tests {
         assert_eq!(meta.endpoint.as_deref(), Some(r"\\.\pipe\substrate-agent"));
     }
 }
+

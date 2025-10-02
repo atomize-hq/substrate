@@ -14,6 +14,7 @@ use tokio::sync::Mutex;
 use tracing::info;
 // no atomic imports needed here
 
+#[cfg(unix)]
 fn parse_signal(sig: &str) -> Option<i32> {
     match sig {
         "INT" | "SIGINT" => Some(libc::SIGINT),
@@ -23,6 +24,9 @@ fn parse_signal(sig: &str) -> Option<i32> {
         _ => None,
     }
 }
+
+#[cfg(not(unix))]
+fn parse_signal(_sig: &str) -> Option<i32> { None }
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -367,10 +371,13 @@ pub async fn handle_ws_pty(
                             // Forward signal to child process if available
                             if let Some(pid) = child_pid {
                                 if let Some(signo) = parse_signal(&sig) {
-                                    // Safety: libc::kill is async-signal-safe; called on background task
-                                    unsafe { libc::kill(pid as libc::pid_t, signo) };
-                                    // best-effort: no response frame, just log on server side
-                                    info!("ws_pty: forwarded signal {} to pid {}", sig, pid);
+                                    #[cfg(unix)]
+                                    {
+                                        // Safety: libc::kill is async-signal-safe; called on background task
+                                        unsafe { libc::kill(pid as libc::pid_t, signo) };
+                                        // best-effort: no response frame, just log on server side
+                                        info!("ws_pty: forwarded signal {} to pid {}", sig, pid);
+                                    }
                                 }
                             }
                         }

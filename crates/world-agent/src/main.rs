@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use axum::routing::{get, post};
 use axum::Router;
 use hyper::server::accept::from_stream;
+#[cfg(unix)]
 use hyperlocal::UnixServerExt;
 use std::net::SocketAddr;
 #[cfg(unix)]
@@ -120,6 +121,7 @@ fn build_router(service: WorldAgentService) -> Router {
         .with_state(service)
 }
 
+#[cfg(unix)]
 async fn run_uds_server(
     router: Router,
     socket_path: PathBuf,
@@ -144,6 +146,16 @@ async fn run_uds_server(
 
     info!(socket = %socket_path.display(), "World agent listening on Unix socket");
     server.await.context("Unix socket server failed")
+}
+
+#[cfg(not(unix))]
+async fn run_uds_server(
+    _router: Router,
+    _socket_path: PathBuf,
+    _shutdown: CancellationToken,
+) -> Result<()> {
+    // UDS server is not available on non-Unix platforms; forwarder uses TCP inside WSL.
+    Ok(())
 }
 
 async fn run_tcp_server(router: Router, port: u16, shutdown: CancellationToken) -> Result<()> {
