@@ -191,6 +191,20 @@ Full log: `docs/project_management/logs/windows_always_world.md` (see the
 - **Host probe**: Modify `wsl-warm.ps1` temporarily to attempt
   `[System.IO.Pipes.NamedPipeClientStream]::new('.', 'substrate-agent', 'InOut')`
   and close it, measuring whether the forwarder accepts once.
+
+### Recommended Windows Pipe Probe (Canonical)
+
+- Use the status-line-only helper for a race-free health check of the forwarder’s named pipe. This avoids PowerShell `StreamReader.ReadLine()` quirks and body reads.
+
+```powershell
+pwsh -File scripts/windows/pipe-status.ps1 `
+  -PipePath '\\.\pipe\substrate-agent' `
+  -TimeoutSeconds 8 `
+  -ExpectStatus 200
+```
+
+- Acceptance: prints `HTTP/1.1 200 OK` within ≤ 8 seconds.
+- Always show the canonical, quoted PipePath `'\\.\pipe\substrate-agent'` in examples.
 - **Handle inspection**: Use Sysinternals `handle.exe` or PowerShell
   `Get-ChildItem \\\\.\\pipe\\` while the forwarder waits to verify the instance
   exists and identify owning PIDs.

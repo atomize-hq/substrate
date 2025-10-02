@@ -198,9 +198,15 @@ Record outputs and mark sanity PASS/FAIL.
    ```
 
 #### Step W7 - Telemetry & Documentation
-1. **Telemetry schema** – Update `substrate-trace` (and consumers) to include `transport.mode` plus optional endpoint metadata; add serialization tests.
-2. **Doctor & smoke scripts** – Modify `scripts/windows/wsl-smoke.ps1` and `scripts/windows/wsl-doctor.ps1` to assert expected transport mode.
-3. **Documentation** – Update `docs/dev/wsl_world_setup.md`, `docs/dev/wsl_world_troubleshooting.md`, and related operator guides; run `npx markdownlint-cli` across edited docs.
+1. **Telemetry schema** - Update `substrate-trace` (and consumers) to include `transport.mode` plus optional endpoint metadata; add serialization tests.
+2. **Doctor & smoke scripts**
+   - Standardize the Windows pipe health check on `scripts/windows/pipe-status.ps1` (status-line only).
+   - Acceptance: probe prints `HTTP/1.1 200 OK` within ≤ 8 seconds against the canonical pipe `\\.\pipe\substrate-agent`.
+   - Update `scripts/windows/wsl-smoke.ps1` to use `pipe-status.ps1` for the HTTP 200 check and keep restart resilience.
+3. **Documentation**
+   - Use single-line, quoted canonical PipePath examples: `'\\.\pipe\substrate-agent'`.
+   - Reference `scripts/windows/pipe-status.ps1` as the recommended probe in setup and troubleshooting docs.
+   - Run `npx markdownlint-cli` across edited docs.
 
 #### Step W8 - Validation & Evidence Capture
 1. **Workspace verification**

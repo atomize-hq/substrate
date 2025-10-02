@@ -96,8 +96,7 @@ Quick-Return Launcher (manual runs)
   ```powershell
   pwsh -File scripts/windows/start-forwarder.ps1 `
     -DistroName substrate-wsl `
-    -PipePath \\.
-    \pipe\substrate-agent `
+    -PipePath '\\\\.\\\\pipe\\\\substrate-agent' `
     -ReadyTimeoutSeconds 20
   ```
 
@@ -106,9 +105,8 @@ Quick-Return Launcher (manual runs)
 - For end-to-end checks, use the helper to probe over the pipe:
 
   ```powershell
-  pwsh -File scripts/windows/pipe-http.ps1 `
-    -PipePath \\.
-    \pipe\substrate-agent `
+  pwsh -File scripts/windows/pipe-status.ps1 `
+    -PipePath '\\\\.\\\\pipe\\\\substrate-agent' `
     -TimeoutSeconds 8 `
     -ExpectStatus 200
   ```
@@ -201,3 +199,4 @@ Use this when pausing work:
       evidence log under "Next Actions".
 - [ ] Phase Status Matrix left unchanged unless Step W6 or W8 exit criteria are
       satisfied.
+
