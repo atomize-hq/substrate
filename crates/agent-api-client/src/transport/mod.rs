@@ -182,6 +182,11 @@ impl Connector for NamedPipeConnectorImpl {
             .headers_mut()
             .entry(hyper::header::HOST)
             .or_insert_with(|| hyper::header::HeaderValue::from_static("localhost"));
+        // Use explicit close semantics over named pipes to avoid lingering connections
+        request
+            .headers_mut()
+            .entry(hyper::header::CONNECTION)
+            .or_insert_with(|| hyper::header::HeaderValue::from_static("close"));
     }
 
     async fn execute(&self, request: Request<Full<Bytes>>) -> Result<Response<Incoming>> {

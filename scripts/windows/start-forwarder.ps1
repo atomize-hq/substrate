@@ -7,7 +7,8 @@ param(
     [string]$RustLog = 'info',
     [string[]]$AdditionalArgs = @(),
     [switch]$WaitForExit,
-    [int]$ReadyTimeoutSeconds = 30
+    [int]$ReadyTimeoutSeconds = 30,
+    [string]$TcpBridge = $null
 )
 
 Set-StrictMode -Version Latest
@@ -41,6 +42,22 @@ $logDir = Join-Path $env:LOCALAPPDATA 'Substrate/logs'
 New-Item -ItemType Directory -Force $logDir | Out-Null
 
 $argumentList = @('--distro', $DistroName, '--pipe', $PipePath, '--log-dir', $logDir)
+# Optional host TCP bridge (opt-in via parameter or environment)
+if (-not $TcpBridge) {
+    $envFlag = ($env:SUBSTRATE_FORWARDER_TCP -as [string])
+    $envAddr = ($env:SUBSTRATE_FORWARDER_TCP_ADDR -as [string])
+    if ($envAddr) {
+        $TcpBridge = $envAddr
+    } elseif ($envFlag -and ($envFlag.Trim().ToLower() -in @('1','true','yes'))) {
+        $port = 17788
+        if ($env:SUBSTRATE_FORWARDER_TCP_PORT) { [void][int]::TryParse($env:SUBSTRATE_FORWARDER_TCP_PORT, [ref]$port) }
+        $TcpBridge = "127.0.0.1:$port"
+    }
+}
+if ($TcpBridge) {
+    Write-Info ("Enabling host TCP bridge at {0}" -f $TcpBridge)
+    $argumentList += @('--tcp-bridge', $TcpBridge)
+}
 if ($AdditionalArgs.Length -gt 0) {
     $argumentList += $AdditionalArgs
 }

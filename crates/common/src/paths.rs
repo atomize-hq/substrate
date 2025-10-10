@@ -22,14 +22,15 @@ pub fn old_shims_dir() -> Result<PathBuf> {
     // If SUBSTRATE_HOME is set (e.g., in tests), use its parent as the home base for the legacy dir
     if let Ok(override_home) = std::env::var("SUBSTRATE_HOME") {
         let base = PathBuf::from(override_home);
-        let home_base = base.parent().map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+        let home_base = base
+            .parent()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("."));
         return Ok(home_base.join(OLD_SHIM_DIR));
     }
-    Ok(
-        dirs::home_dir()
-            .ok_or_else(|| anyhow::anyhow!("No home directory found"))?
-            .join(OLD_SHIM_DIR),
-    )
+    Ok(dirs::home_dir()
+        .ok_or_else(|| anyhow::anyhow!("No home directory found"))?
+        .join(OLD_SHIM_DIR))
 }
 
 pub fn version_file() -> Result<PathBuf> {

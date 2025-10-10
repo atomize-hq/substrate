@@ -160,7 +160,21 @@ impl WindowsWslBackend {
                 self.warm_cmd
                     .run()
                     .context("wsl warm script failed to execute")?;
-                self.capabilities().map(|_| ())
+
+                // After warm, allow a short grace period for the agent to finish starting.
+                // Poll capabilities for a bounded window to avoid spurious re-warm.
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+                let mut last_err: Option<anyhow::Error> = None;
+                while std::time::Instant::now() < deadline {
+                    match self.capabilities() {
+                        Ok(_) => return Ok(()),
+                        Err(e) => {
+                            last_err = Some(e);
+                            std::thread::sleep(std::time::Duration::from_millis(200));
+                        }
+                    }
+                }
+                Err(last_err.unwrap_or_else(|| anyhow!("capabilities check failed after warm")))
             }
         }
     }
@@ -439,7 +453,8 @@ fn detect_tcp_forwarder() -> Result<Option<(String, u16)>> {
 
     let tcp_enabled = std::env::var("SUBSTRATE_FORWARDER_TCP")
         .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
-        .unwrap_or(true);
+        // Default: disabled unless explicitly opted-in. Named pipe is the canonical host path.
+        .unwrap_or(false);
 
     if !tcp_enabled {
         return Ok(None);

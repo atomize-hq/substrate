@@ -193,12 +193,25 @@ mod tests {
         let shim_dir = temp.path().join("shims");
         fs::create_dir(&shim_dir).unwrap();
 
-        let original_path = format!("/usr/bin:{}:/bin", shim_dir.display());
-        let paths = build_clean_search_path(&shim_dir, Some(original_path)).unwrap();
+        #[cfg(windows)]
+        {
+            let a = temp.path().join("A");
+            let b = temp.path().join("B");
+            fs::create_dir(&a).unwrap();
+            fs::create_dir(&b).unwrap();
+            let original_path = format!("{};{};{}", a.display(), shim_dir.display(), b.display());
+            let paths = build_clean_search_path(&shim_dir, Some(original_path)).unwrap();
+            assert_eq!(paths, vec![a, b]);
+        }
 
-        assert_eq!(paths.len(), 2);
-        assert_eq!(paths[0], PathBuf::from("/usr/bin"));
-        assert_eq!(paths[1], PathBuf::from("/bin"));
+        #[cfg(unix)]
+        {
+            let original_path = format!("/usr/bin:{}:/bin", shim_dir.display());
+            let paths = build_clean_search_path(&shim_dir, Some(original_path)).unwrap();
+            assert_eq!(paths.len(), 2);
+            assert_eq!(paths[0], PathBuf::from("/usr/bin"));
+            assert_eq!(paths[1], PathBuf::from("/bin"));
+        }
     }
 
     #[test]
@@ -207,15 +220,30 @@ mod tests {
         let shim_dir = temp.path().join("shims");
         fs::create_dir(&shim_dir).unwrap();
 
-        // PATH with duplicates
-        let original_path = "/usr/bin:/bin:/usr/bin:/usr/local/bin:/bin".to_string();
-        let paths = build_clean_search_path(&shim_dir, Some(original_path)).unwrap();
+        #[cfg(windows)]
+        {
+            let a = temp.path().join("A");
+            let b = temp.path().join("B");
+            let c = temp.path().join("C");
+            fs::create_dir(&a).unwrap();
+            fs::create_dir(&b).unwrap();
+            fs::create_dir(&c).unwrap();
+            let original_path = format!("{};{};{};{};{}", a.display(), b.display(), a.display(), c.display(), b.display());
+            let paths = build_clean_search_path(&shim_dir, Some(original_path)).unwrap();
+            assert_eq!(paths, vec![a, b, c]);
+        }
 
-        // Should be deduplicated
-        assert_eq!(paths.len(), 3);
-        assert_eq!(paths[0], PathBuf::from("/usr/bin"));
-        assert_eq!(paths[1], PathBuf::from("/bin"));
-        assert_eq!(paths[2], PathBuf::from("/usr/local/bin"));
+        #[cfg(unix)]
+        {
+            // PATH with duplicates
+            let original_path = "/usr/bin:/bin:/usr/bin:/usr/local/bin:/bin".to_string();
+            let paths = build_clean_search_path(&shim_dir, Some(original_path)).unwrap();
+            // Should be deduplicated
+            assert_eq!(paths.len(), 3);
+            assert_eq!(paths[0], PathBuf::from("/usr/bin"));
+            assert_eq!(paths[1], PathBuf::from("/bin"));
+            assert_eq!(paths[2], PathBuf::from("/usr/local/bin"));
+        }
     }
 
     #[test]

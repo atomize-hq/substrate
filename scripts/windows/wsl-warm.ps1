@@ -97,16 +97,24 @@ if (-not (Test-Path $hostProvisionPath)) {
     Write-ErrorAndExit "Provisioning script not found at $hostProvisionPath"
 }
 
-Write-Info "Updating package cache and running provision script"
-$projectPathFragment = Convert-ToWslPathFragment $projectPath
-    & wsl -d $DistroName -- bash -lc "set -euo pipefail; cp /mnt/c/$projectPathFragment/docs/dev/wsl/provision.sh /tmp/provision.sh && sed -i 's/\r$//' /tmp/provision.sh && chmod +x /tmp/provision.sh && sudo /tmp/provision.sh"
-if ($LASTEXITCODE -ne 0) {
-    Write-ErrorAndExit "Provision script failed"
-}
+Write-Info "Preflight agent health check"
+$isHealthy = $false
+try {
+    $status = & wsl -d $DistroName -- bash -lc "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:61337/v1/capabilities || true"
+    if ($status -eq '200') { $isHealthy = $true }
+} catch {}
 
-# Build and install world-agent inside WSL
-Write-Info "Building world-agent (release) inside WSL"
-$buildScript = @"
+if (-not $isHealthy) {
+    Write-Info "Updating package cache and running provision script"
+    $projectPathFragment = Convert-ToWslPathFragment $projectPath
+        & wsl -d $DistroName -- bash -lc "set -euo pipefail; cp /mnt/c/$projectPathFragment/docs/dev/wsl/provision.sh /tmp/provision.sh && sed -i 's/\r$//' /tmp/provision.sh && chmod +x /tmp/provision.sh && sudo /tmp/provision.sh"
+    if ($LASTEXITCODE -ne 0) {
+        Write-ErrorAndExit "Provision script failed"
+    }
+
+    # Build and install world-agent inside WSL
+    Write-Info "Building world-agent (release) inside WSL"
+    $buildScript = @"
 set -euo pipefail
 if [ -f ~/.cargo/env ]; then
   . ~/.cargo/env
@@ -115,17 +123,20 @@ cd /mnt/c/$projectPathFragment
 cargo build -p world-agent --release
 sudo install -m755 target/release/world-agent /usr/local/bin/substrate-world-agent
 "@
-$buildScript = $buildScript -replace "`r", ""
-& wsl -d $DistroName -- bash -lc $buildScript
-if ($LASTEXITCODE -ne 0) {
-    Write-ErrorAndExit "Failed to build/install world-agent inside WSL"
-}
+    $buildScript = $buildScript -replace "`r", ""
+    & wsl -d $DistroName -- bash -lc $buildScript
+    if ($LASTEXITCODE -ne 0) {
+        Write-ErrorAndExit "Failed to build/install world-agent inside WSL"
+    }
 
-# Restart service
-Write-Info "Restarting substrate-world-agent service"
-& wsl -d $DistroName -- bash -lc "sudo systemctl restart substrate-world-agent.service"
-if ($LASTEXITCODE -ne 0) {
-    Write-ErrorAndExit "Failed to restart agent service"
+    # Restart service
+    Write-Info "Restarting substrate-world-agent service"
+    & wsl -d $DistroName -- bash -lc "sudo systemctl restart substrate-world-agent.service"
+    if ($LASTEXITCODE -ne 0) {
+        Write-ErrorAndExit "Failed to restart agent service"
+    }
+} else {
+    Write-Info "Agent reports HTTP 200; skipping provision/build/restart"
 }
 
 # Build forwarder if needed
@@ -147,7 +158,23 @@ if (Test-Path $pidFile) {
     Stop-Process -Id $existingPid -ErrorAction SilentlyContinue
     Remove-Item $pidFile -ErrorAction SilentlyContinue
 }
-$forwarderProcess = Start-Process -FilePath $forwarderHostPath -ArgumentList "--distro", $DistroName, "--pipe", $pipePath, "--log-dir", $logDir, "--run-as-service" -WindowStyle Hidden -PassThru
+
+# Optional host TCP bridge (opt-in via environment)
+$tcpBridge = $null
+if ($env:SUBSTRATE_FORWARDER_TCP_ADDR) {
+    $tcpBridge = $env:SUBSTRATE_FORWARDER_TCP_ADDR
+} elseif ($env:SUBSTRATE_FORWARDER_TCP) {
+    $flag = $env:SUBSTRATE_FORWARDER_TCP.Trim().ToLower()
+    if ($flag -in @('1','true','yes')) {
+        $port = 17788
+        if ($env:SUBSTRATE_FORWARDER_TCP_PORT) { [void][int]::TryParse($env:SUBSTRATE_FORWARDER_TCP_PORT, [ref]$port) }
+        $tcpBridge = "127.0.0.1:$port"
+    }
+}
+
+$args = @("--distro", $DistroName, "--pipe", $pipePath, "--log-dir", $logDir, "--run-as-service")
+if ($tcpBridge) { $args += @("--tcp-bridge", $tcpBridge) }
+$forwarderProcess = Start-Process -FilePath $forwarderHostPath -ArgumentList $args -WindowStyle Hidden -PassThru
 Set-Content $pidFile -Value $forwarderProcess.Id
 
 # Wait for pipe using an actual client probe with retries

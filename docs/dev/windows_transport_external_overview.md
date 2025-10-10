@@ -18,8 +18,9 @@
   - Windows: WSL2 distro + Windows named pipe <-> Unix socket forwarder.
 - **Windows data path**:
   - `substrate-shell` resolves the agent transport via `world-windows-wsl`,
-    defaulting to loopback TCP inside WSL with a Unix-socket fallback when
-    required.
+    and communicates over a host named pipe to the forwarder by default.
+    The forwarder then targets loopback TCP inside WSL (default
+    `127.0.0.1:61337`), with a Unix-socket fallback when required.
   - `host-proxy` deserialises `TransportConfig` (named pipe vs TCP) and dials
     the forwarder, emitting telemetry for the selected mode.
   - `substrate-forwarder` exposes `\\\\.\\pipe\\substrate-agent`, accepts the host
@@ -246,3 +247,10 @@ pwsh -File scripts/windows/pipe-status.ps1 `
   `crates/agent-api-client/src/transport/*`.
 - Supplemental note: `readthis.md` contains GPT-5 PRO feedback on plan
   alignment (build artifact handling, vsock vs pipe, telemetry requirements).
+Transport defaults (Windows)
+- Host → forwarder: named pipe by default (`\\.\pipe\substrate-agent`).
+- Forwarder → agent (inside WSL): loopback TCP (`127.0.0.1:61337`) by default.
+- To opt into host TCP (host client → forwarder via TCP) instead of named pipe,
+  set `SUBSTRATE_FORWARDER_TCP=1` or provide an explicit
+  `SUBSTRATE_FORWARDER_TCP_ADDR=host:port`. If not set, the backend uses the
+  named pipe.

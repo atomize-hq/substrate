@@ -728,7 +728,7 @@ impl ShellConfig {
         {
             if let Err(e) = platform_world::windows::ensure_world_ready(&cli) {
                 eprintln!(
-                    "substrate: warn: windows world initialization failed: {}",
+                    "substrate: warn: windows world initialization failed: {:#}",
                     e
                 );
             }
@@ -1527,7 +1527,7 @@ pub fn run_shell() -> Result<i32> {
             match pw::detect() {
                 Ok(ctx) => {
                     if let Err(e) = (ctx.ensure_ready)() {
-                        eprintln!("substrate: windows world ensure_ready failed: {}", e);
+                        eprintln!("substrate: windows world ensure_ready failed: {:#}", e);
                     } else {
                         std::env::set_var("SUBSTRATE_WORLD", "enabled");
                         if let Ok(handle) = ctx.backend.ensure_session(&pw::windows::world_spec()) {
@@ -2965,19 +2965,20 @@ fn needs_pty(cmd: &str) -> bool {
         &tokens
     };
 
-        // Windows-safe program extraction: prefer the program component from the original string
+    // Windows-safe program extraction: prefer the program component from the original string
     #[cfg(windows)]
     let first_raw = {
         // Try to extract <...>.exe from the original string regardless of spaces
         let lower = cmd.to_ascii_lowercase();
         if let Some(pos) = lower.find(".exe") {
-            &cmd[..pos+4]
+            &cmd[..pos + 4]
         } else {
             working_tokens.first().map(|s| s.as_str()).unwrap_or("")
         }
     };
     #[cfg(not(windows))]
-    let first_raw = working_tokens.first().map(|s| s.as_str()).unwrap_or("");let first_token = Path::new(first_raw)
+    let first_raw = working_tokens.first().map(|s| s.as_str()).unwrap_or("");
+    let first_token = Path::new(first_raw)
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("");
@@ -4421,10 +4422,8 @@ fn exec_non_pty_via_agent_windows(
 
     let client = windows::build_agent_client()?;
 
-    let cwd = std::env::current_dir()
-        .unwrap_or_else(|_| std::path::PathBuf::from("."))
-        .display()
-        .to_string();
+    // Convert host CWD to WSL path so the agent (Linux) receives a valid working directory
+    let cwd = windows::current_dir_wsl()?;
     let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
 
@@ -5933,4 +5932,3 @@ mod tests {
         assert_eq!(meta.endpoint.as_deref(), Some(r"\\.\pipe\substrate-agent"));
     }
 }
-

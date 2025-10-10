@@ -1,3 +1,4 @@
+#![cfg(unix)]
 //! Integration tests for substrate shim
 //!
 //! These tests verify the complete shim execution flow, including the exact

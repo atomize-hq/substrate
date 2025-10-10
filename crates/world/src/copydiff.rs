@@ -347,6 +347,7 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
+    #[cfg(unix)]
     #[test]
     fn test_copydiff_detects_metadata_mod() {
         let tmp = TempDir::new().unwrap();
@@ -367,6 +368,7 @@ mod tests {
         assert!(diff.mods.iter().any(|p| p.to_string_lossy() == "file.txt"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_copydiff_detects_write_and_delete() {
         let tmp = TempDir::new().unwrap();

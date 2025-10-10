@@ -149,6 +149,40 @@ pub fn build_agent_client() -> Result<AgentClient> {
     Ok(ctx.backend.build_agent_client())
 }
 
+/// Convert a host Windows path to the corresponding WSL path string using the active backend.
+pub fn to_wsl_path_string(path: &std::path::Path) -> Result<String> {
+    use std::path::Path;
+    // If relative, resolve against current_dir then convert
+    let path = if path.is_relative() {
+        let joined = std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).join(path);
+        joined
+    } else {
+        path.to_path_buf()
+    };
+    let raw = path
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("path is not valid UTF-8: {}", path.display()))?;
+    let normalized = raw.replace('\\', "/");
+    if normalized.starts_with("//") {
+        // UNC path: //server/share/dir -> /mnt/unc/server/share/dir
+        let rest = normalized.trim_start_matches('/');
+        Ok(format!("/mnt/unc/{}", rest))
+    } else if let Some((drive, rest)) = normalized.split_once(':') {
+        // Drive letter path: C:/foo -> /mnt/c/foo
+        let rest = rest.trim_start_matches('/');
+        Ok(format!("/mnt/{}/{}", drive.to_lowercase(), rest))
+    } else {
+        // Already a Unix-style path
+        Ok(normalized)
+    }
+}
+
+/// Convert current working directory to a WSL path string.
+pub fn current_dir_wsl() -> Result<String> {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    to_wsl_path_string(&cwd)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

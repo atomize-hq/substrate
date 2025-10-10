@@ -26,7 +26,9 @@ fn parse_signal(sig: &str) -> Option<i32> {
 }
 
 #[cfg(not(unix))]
-fn parse_signal(_sig: &str) -> Option<i32> { None }
+fn parse_signal(_sig: &str) -> Option<i32> {
+    None
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type")]

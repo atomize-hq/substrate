@@ -122,6 +122,16 @@ Quick-Return Launcher (manual runs)
 4. Evidence: `systemctl status substrate-world-agent` showing TCP listener,
    forwarder log confirming TCP mode, and a successful warm run.
 
+Transport defaults (Windows backend)
+- The Windows backend now defaults to host named pipe for agent communication (via forwarder).
+- Host TCP fallback is opt-in. Enable explicitly with one of:
+  - `SUBSTRATE_FORWARDER_TCP=1` (uses `127.0.0.1:<port>`; see variables below), or
+  - `SUBSTRATE_FORWARDER_TCP_ADDR=host:port` (explicit socket address).
+- Optional tuning variables when TCP is enabled:
+  - `SUBSTRATE_FORWARDER_TCP_HOST` (default `127.0.0.1`)
+  - `SUBSTRATE_FORWARDER_TCP_PORT` (default `17788`)
+
+
 ### 3.4 Unix-Socket Fallback (Stage 2)
 
 _This remains follow-up work but document the approach now so it can be picked up
