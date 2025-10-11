@@ -210,3 +210,21 @@ Use this when pausing work:
 - [ ] Phase Status Matrix left unchanged unless Step W6 or W8 exit criteria are
       satisfied.
 
+## 7. Wrap‑Up Notes (Phase W)
+
+- Transport defaults (host → forwarder): named pipe by default. Host TCP opt‑in for soak via `SUBSTRATE_FORWARDER_TCP=1` (or `SUBSTRATE_FORWARDER_TCP_ADDR`).
+- Forwarder downstream (forwarder → agent in WSL): loopback TCP `127.0.0.1:61337` (systemd unit sets `SUBSTRATE_AGENT_TCP_PORT`).
+- Warm preflight: `wsl-warm.ps1` performs a bounded health check and skips apt/build/restart when `/v1/capabilities` returns 200.
+- Shell exec (Windows): current working directory is converted to a WSL path before agent calls.
+- Smoke & replay:
+  - See also: `docs/dev/windows_transport_external_overview.md` (Smoke & Replay Notes).
+  - Replay requires a `trace.jsonl` span; the smoke script skips replay when none exists and still passes.
+
+### Packaging/Install (Follow‑up)
+
+- Defer unified installer work (Windows/macOS/Linux) until platform phases M/L are wrapped:
+  - Shim deployment and PATH integration
+  - First‑run setup for trace location(s)
+  - Service/daemon setup where applicable
+
+

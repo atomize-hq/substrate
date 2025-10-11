@@ -225,6 +225,22 @@ pwsh -File scripts/windows/pipe-status.ps1 `
 - Maintain ASCII for scripts/docs and lint with `markdownlint-cli`.
 - Preserve warm/doctor script behaviour unless explicitly approved otherwise.
 
+## 13. Smoke & Replay Notes (Windows)
+
+- Smoke suite: `pwsh -File scripts/windows/wsl-smoke.ps1 -DistroName substrate-wsl`
+  - `-SkipWarm` preflights the forwarder; if the pipe probe fails it will auto‑start the forwarder and continue.
+  - Steps: status‑only pipe probe → doctor → non‑PTY → PTY → replay (guarded) → restart resilience.
+- Replay prerequisites:
+  - Requires a recent span in a trace file at `%LOCALAPPDATA%\Substrate\trace.jsonl` or `%USERPROFILE%\.substrate\trace.jsonl`.
+  - If no trace exists, the smoke script skips the replay step and still passes.
+  - To force replay via the agent: set `SUBSTRATE_REPLAY_USE_WORLD=1`.
+  - Optional diagnostics: set `SUBSTRATE_REPLAY_VERBOSE=1` to print command/cwd.
+  - For ad‑hoc testing you may seed a minimal span line with `span_id`, `cmd`, and a WSL path `cwd` (e.g., `/mnt/c`).
+- Transport during soak:
+  - Default host path remains named pipe. For soak/validation you can opt‑in to host TCP by setting `SUBSTRATE_FORWARDER_TCP=1` (or `SUBSTRATE_FORWARDER_TCP_ADDR=host:port`).
+  - Forwarder downstream remains loopback TCP inside WSL (`127.0.0.1:61337`).
+
+
 ## 12. Reference Packet for External Reviewer
 
 - Plans: `docs/PHASE_4_5_ALWAYS_WORLD_IMPLEMENTATION_PLAN.md`,
