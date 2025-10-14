@@ -154,7 +154,9 @@ pub fn to_wsl_path_string(path: &std::path::Path) -> Result<String> {
     use std::path::Path;
     // If relative, resolve against current_dir then convert
     let path = if path.is_relative() {
-        let joined = std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).join(path);
+        let joined = std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(path);
         joined
     } else {
         path.to_path_buf()

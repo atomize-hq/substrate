@@ -25,15 +25,16 @@ dependencies = [
  "anyhow",
  "async-trait",
  "dirs 5.0.1",
+ "hex",
  "http-body-util",
  "hyper 1.7.0",
  "hyper-util",
- "hyperlocal 0.8.0",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
+ "tower-service",
  "tracing",
 ]
 

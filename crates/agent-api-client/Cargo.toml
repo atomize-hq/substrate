@@ -19,9 +19,10 @@ tracing = "0.1"
 dirs = "5"
 agent-api-types = { path = "../agent-api-types" }
 async-trait = "0.1"
+tower-service = "0.3"
 
 [dev-dependencies]
 tempfile = "3"
 
 [target."cfg(unix)".dependencies]
-hyperlocal = "0.8"
+hex = "0.4"

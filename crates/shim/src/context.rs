@@ -228,7 +228,14 @@ mod tests {
             fs::create_dir(&a).unwrap();
             fs::create_dir(&b).unwrap();
             fs::create_dir(&c).unwrap();
-            let original_path = format!("{};{};{};{};{}", a.display(), b.display(), a.display(), c.display(), b.display());
+            let original_path = format!(
+                "{};{};{};{};{}",
+                a.display(),
+                b.display(),
+                a.display(),
+                c.display(),
+                b.display()
+            );
             let paths = build_clean_search_path(&shim_dir, Some(original_path)).unwrap();
             assert_eq!(paths, vec![a, b, c]);
         }

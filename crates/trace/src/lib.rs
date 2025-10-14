@@ -160,7 +160,18 @@ impl TraceOutput {
 
     fn write_span(&mut self, span: &Span) -> Result<()> {
         self.rotate_if_needed()?;
-        let json = serde_json::to_string(span)?;
+
+        // Serialize span and ensure both `cmd` and legacy `command` keys exist for compat.
+        let mut value = serde_json::to_value(span)?;
+        if let Some(obj) = value.as_object_mut() {
+            if !obj.contains_key("command") {
+                if let Some(cmd_value) = obj.get("cmd").cloned() {
+                    obj.insert("command".to_string(), cmd_value);
+                }
+            }
+        }
+
+        let json = serde_json::to_string(&value)?;
         writeln!(self.writer, "{}", json)?;
 
         if env::var("SHIM_FSYNC").unwrap_or_default() == "1" {

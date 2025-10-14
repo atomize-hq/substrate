@@ -1,21 +1,33 @@
 //! Transport layer abstraction for agent communication.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+#[cfg(unix)]
+use hex::{decode, encode};
 use http_body_util::Full;
 use hyper::body::Incoming;
 use hyper::{body::Bytes, Request, Response, Uri};
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::client::legacy::Client;
-use hyper_util::rt::TokioExecutor;
-#[cfg(target_os = "windows")]
-use hyper_util::rt::TokioIo;
+use hyper_util::rt::{TokioExecutor, TokioIo};
 #[cfg(unix)]
-use hyperlocal::{UnixClientExt, UnixConnector};
+use std::future::Future;
+#[cfg(unix)]
+use std::io;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
+#[cfg(unix)]
+use std::pin::Pin;
+#[cfg(unix)]
+use std::task::{Context as TaskContext, Poll};
 #[cfg(target_os = "windows")]
 use tokio::net::windows::named_pipe::ClientOptions;
+#[cfg(unix)]
+use tokio::net::UnixStream;
+#[cfg(unix)]
+use tower_service::Service;
 
 /// Transport options for communicating with world-agent.
 #[derive(Debug, Clone)]
@@ -87,7 +99,7 @@ pub trait Connector: Send + Sync {
 
 #[cfg(unix)]
 struct UnixConnectorImpl {
-    client: Client<UnixConnector, Full<Bytes>>,
+    client: Client<UnixConnectorService, Full<Bytes>>,
     path: PathBuf,
 }
 
@@ -103,7 +115,7 @@ impl Connector for UnixConnectorImpl {
     }
 
     fn build_uri(&self, path: &str) -> Result<Uri> {
-        let uri: Uri = hyperlocal::Uri::new(&self.path, path).into();
+        let uri = build_unix_uri(&self.path, path)?;
         Ok(uri)
     }
 
@@ -217,7 +229,7 @@ pub fn build_connector(transport: &Transport) -> Result<Box<dyn Connector>> {
     match transport {
         #[cfg(unix)]
         Transport::UnixSocket { path } => {
-            let client = Client::unix();
+            let client = build_unix_client();
             Ok(Box::new(UnixConnectorImpl {
                 client,
                 path: path.clone(),
@@ -240,6 +252,89 @@ pub fn build_connector(transport: &Transport) -> Result<Box<dyn Connector>> {
         Transport::NamedPipe { path } => {
             Ok(Box::new(NamedPipeConnectorImpl { path: path.clone() }))
         }
+    }
+}
+
+#[cfg(unix)]
+fn build_unix_client() -> Client<UnixConnectorService, Full<Bytes>> {
+    Client::builder(TokioExecutor::new()).build(UnixConnectorService::default())
+}
+
+#[cfg(unix)]
+fn build_unix_uri(socket: &Path, path: &str) -> Result<Uri> {
+    use anyhow::Context as _;
+    use std::borrow::Cow;
+
+    let socket_bytes = socket.as_os_str().as_bytes();
+    let encoded = encode(socket_bytes);
+
+    let normalized_path: Cow<'_, str> = if path.starts_with('/') {
+        Cow::Borrowed(path)
+    } else {
+        Cow::Owned(format!("/{}", path))
+    };
+
+    let uri_str = format!("unix://{}:0{}", encoded, normalized_path);
+    let uri = uri_str
+        .parse::<Uri>()
+        .context("Failed to parse Unix socket URI")?;
+    Ok(uri)
+}
+
+#[cfg(unix)]
+fn parse_unix_socket_path(uri: &Uri) -> io::Result<PathBuf> {
+    use std::ffi::OsStr;
+
+    if uri.scheme_str() != Some("unix") {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid URI scheme for Unix connector",
+        ));
+    }
+
+    let authority = uri.authority().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "authority missing in Unix connector URI",
+        )
+    })?;
+
+    let host = authority.host();
+    let bytes = decode(host).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "failed to decode Unix socket path from URI host",
+        )
+    })?;
+
+    let os_str = OsStr::from_bytes(&bytes);
+    Ok(PathBuf::from(os_str))
+}
+
+#[cfg(unix)]
+type UnixConnectorFuture =
+    Pin<Box<dyn Future<Output = io::Result<TokioIo<UnixStream>>> + Send + 'static>>;
+
+#[cfg(unix)]
+#[derive(Clone, Copy, Debug, Default)]
+struct UnixConnectorService;
+
+#[cfg(unix)]
+impl Service<Uri> for UnixConnectorService {
+    type Response = TokioIo<UnixStream>;
+    type Error = io::Error;
+    type Future = UnixConnectorFuture;
+
+    fn poll_ready(&mut self, _cx: &mut TaskContext<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, dst: Uri) -> Self::Future {
+        Box::pin(async move {
+            let path = parse_unix_socket_path(&dst)?;
+            let stream = UnixStream::connect(path).await?;
+            Ok(TokioIo::new(stream))
+        })
     }
 }
 

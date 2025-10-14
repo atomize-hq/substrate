@@ -1500,7 +1500,14 @@ mod world_doctor_macos {
 
         #[test]
         fn doctor_missing_vm_human() {
-            let responses = vec![("limactl".into(), vec!["--version".into()], failure_out())];
+            let responses = vec![
+                ("limactl".into(), vec!["--version".into()], failure_out()),
+                (
+                    "sysctl".into(),
+                    vec!["-n".into(), "kern.hv_support".into()],
+                    success_out("1\n"),
+                ),
+            ];
             let runner = MockRunner::new(responses);
             let exit = run(false, &runner);
             assert_eq!(exit, 2);
@@ -3538,8 +3545,20 @@ fn execute_command(
                     active_span.set_transport(world_transport_to_meta(&ctx.transport));
                 }
             }
+            let mut agent_command = trimmed.to_string();
+            if config.ci_mode && !config.no_exit_on_error {
+                let shell_name = Path::new(&config.shell_path)
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                if shell_name == "bash" || shell_name == "bash.exe" {
+                    agent_command = format!("set -euo pipefail; {trimmed}");
+                }
+            }
+
             if let Ok((exit_code, stdout, stderr, scopes_used, fs_diff_opt)) =
-                exec_non_pty_via_agent_macos(trimmed)
+                exec_non_pty_via_agent_macos(&agent_command)
             {
                 use std::io::{self, Write};
                 let _ = io::stdout().write_all(&stdout);
@@ -3547,6 +3566,17 @@ fn execute_command(
                 if let Some(active_span) = span {
                     let _ = active_span.finish(exit_code, scopes_used, fs_diff_opt);
                 }
+                let completion_extra = json!({
+                    log_schema::EXIT_CODE: exit_code,
+                    log_schema::DURATION_MS: start_time.elapsed().as_millis()
+                });
+                log_command_event(
+                    config,
+                    "command_complete",
+                    &redacted_command,
+                    cmd_id,
+                    Some(completion_extra),
+                )?;
                 #[cfg(unix)]
                 {
                     use std::os::unix::process::ExitStatusExt;
@@ -3573,7 +3603,19 @@ fn execute_command(
                 }
             }
             let span_id_for_exec = span.as_ref().map(|s| s.get_span_id().to_string());
-            match exec_non_pty_via_agent_windows(trimmed, span_id_for_exec) {
+            let mut agent_command = trimmed.to_string();
+            if config.ci_mode && !config.no_exit_on_error {
+                let shell_name = Path::new(&config.shell_path)
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                if shell_name == "bash" || shell_name == "bash.exe" {
+                    agent_command = format!("set -euo pipefail; {trimmed}");
+                }
+            }
+
+            match exec_non_pty_via_agent_windows(&agent_command, span_id_for_exec) {
                 Ok((exit_code, stdout, stderr, scopes_used, fs_diff_opt)) => {
                     use std::io::{self, Write};
                     let _ = io::stdout().write_all(&stdout);
@@ -3589,6 +3631,18 @@ fn execute_command(
                         };
                         let _ = active_span.finish(exit_code, scopes_used, diff_for_span);
                     }
+
+                    let completion_extra = json!({
+                        log_schema::EXIT_CODE: exit_code,
+                        log_schema::DURATION_MS: start_time.elapsed().as_millis()
+                    });
+                    log_command_event(
+                        config,
+                        "command_complete",
+                        &redacted_command,
+                        cmd_id,
+                        Some(completion_extra),
+                    )?;
 
                     use std::os::windows::process::ExitStatusExt;
                     return Ok(ExitStatus::from_raw(exit_code as u32));
@@ -3629,6 +3683,17 @@ fn execute_command(
                 if let Some(active_span) = span {
                     let _ = active_span.finish(exit_code, scopes_used, fs_diff_opt);
                 }
+                let completion_extra = json!({
+                    log_schema::EXIT_CODE: exit_code,
+                    log_schema::DURATION_MS: start_time.elapsed().as_millis()
+                });
+                log_command_event(
+                    config,
+                    "command_complete",
+                    &redacted_command,
+                    cmd_id,
+                    Some(completion_extra),
+                )?;
                 #[cfg(unix)]
                 {
                     use std::os::unix::process::ExitStatusExt;

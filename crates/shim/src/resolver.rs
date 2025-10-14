@@ -99,23 +99,35 @@ fn is_executable(path: &Path) -> bool {
         }
     }
 
-#[cfg(windows)]
-      {
-          use std::io::Read;
-          if let Ok(meta) = std::fs::metadata(path) {
-              if !meta.is_file() { return false; }
-              // Treat shebang scripts as executable
-              if let Ok(mut f) = std::fs::File::open(path) {
-                  let mut head = [0u8; 2];
-                  if f.read(&mut head).ok() == Some(2) && &head == b"#!" { return true; }
-              }
-              // Executable extensions on Windows
-              match path.extension().and_then(|e| e.to_str()).map(|s| s.to_ascii_lowercase()) {
-                  Some(ref ext) if ["exe","bat","cmd","com","ps1"].contains(&ext.as_str()) => true,
-                  _ => false,
-              }
-          } else { false }
-      }
+    #[cfg(windows)]
+    {
+        use std::io::Read;
+        if let Ok(meta) = std::fs::metadata(path) {
+            if !meta.is_file() {
+                return false;
+            }
+            // Treat shebang scripts as executable
+            if let Ok(mut f) = std::fs::File::open(path) {
+                let mut head = [0u8; 2];
+                if f.read(&mut head).ok() == Some(2) && &head == b"#!" {
+                    return true;
+                }
+            }
+            // Executable extensions on Windows
+            match path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|s| s.to_ascii_lowercase())
+            {
+                Some(ref ext) if ["exe", "bat", "cmd", "com", "ps1"].contains(&ext.as_str()) => {
+                    true
+                }
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
 }
 
 #[cfg(test)]
