@@ -135,6 +135,7 @@ fn is_lock_busy(err: &std::io::Error) -> bool {
     }
     #[cfg(not(windows))]
     {
+        let _ = err;
         false
     }
 }

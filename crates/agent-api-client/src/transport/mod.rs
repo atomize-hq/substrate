@@ -1,5 +1,8 @@
 //! Transport layer abstraction for agent communication.
 
+#[cfg(not(unix))]
+use std::path::PathBuf;
+#[cfg(unix)]
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};

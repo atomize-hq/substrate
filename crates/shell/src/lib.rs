@@ -20,7 +20,6 @@ use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::thread;
 use substrate_broker::{detect_profile, evaluate, Decision};
 use substrate_common::{dedupe_path, log_schema, redact_sensitive};
 use substrate_trace::{
@@ -35,10 +34,14 @@ use reedline::{
     PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus, Reedline, ReedlineEvent,
     ReedlineMenu, Signal, Span, Suggestion,
 };
+#[cfg_attr(target_os = "windows", allow(unused_imports))]
+use std::thread;
 #[cfg(unix)]
 use tokio::net::UnixStream;
 #[cfg(target_os = "linux")]
 use tokio::signal::unix::{signal, SignalKind};
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use tokio_tungstenite as tungs;
 // use nu_ansi_term::{Color, Style}; // Unused for now
 #[cfg(target_os = "linux")]
@@ -4487,7 +4490,6 @@ fn exec_non_pty_via_agent_windows(
     use agent_api_types::ExecuteRequest;
     use base64::Engine;
     use platform_world::windows;
-    use world_api::WorldBackend as _;
 
     let backend = windows::get_backend()?;
     let handle = backend.ensure_session(&windows::world_spec())?;

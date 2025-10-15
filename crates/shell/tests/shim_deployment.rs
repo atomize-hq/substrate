@@ -125,7 +125,7 @@ mod tests {
         // Clear any lingering environment variables
         std::env::remove_var("SUBSTRATE_NO_SHIMS");
 
-        let (temp, _mock_shim, original_home, original_path) = setup_test_env();
+        let (_temp, _mock_shim, original_home, original_path) = setup_test_env();
 
         let deployer = ShimDeployer::with_skip(false).unwrap();
         let status = deployer.ensure_deployed().unwrap();
@@ -293,7 +293,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_deployment_with_existing_substrate_dir() {
-        let (temp, _mock_shim, original_home, original_path) = setup_test_env();
+        let (_temp, _mock_shim, original_home, original_path) = setup_test_env();
 
         // Pre-create substrate directory with existing content
         let substrate_dir = substrate_common::paths::substrate_home().unwrap();
