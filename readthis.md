@@ -171,7 +171,7 @@ Everything else—the “always‑in‑world” flow, `WorldSpec.always_isolate`
 * **Provision WSL with systemd and agent install**
 
   ```bash
-  # inside docs/dev/wsl/provision.sh
+  # inside scripts/wsl/provision.sh
   cat >/etc/wsl.conf <<'EOF'
   [boot]
   systemd=true

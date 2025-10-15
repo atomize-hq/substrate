@@ -43,14 +43,14 @@ This guide walks through setting up the Lima-based Linux world backend for Subst
 ### Choosing a Profile (runtime vs. dev)
 
 Two Lima profiles are provided:
-- `docs/dev/lima/substrate.yaml` — runtime defaults (smaller footprint)
-- `docs/dev/lima/substrate-dev.yaml` — development profile (larger CPU/RAM/disk)
+- `scripts/mac/lima/substrate.yaml` — runtime defaults (smaller footprint)
+- `scripts/mac/lima/substrate-dev.yaml` — development profile (larger CPU/RAM/disk)
 
 For day-to-day use, the runtime profile is sufficient. For heavy development (builds, tracing, debugging), use the dev profile.
 
 To start with the dev profile from the repo root:
 ```sh
-PROJECT="$(pwd)" envsubst < docs/dev/lima/substrate-dev.yaml > /tmp/substrate-dev.yaml
+PROJECT="$(pwd)" envsubst < scripts/mac/lima/substrate-dev.yaml > /tmp/substrate-dev.yaml
 limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
 ```
 

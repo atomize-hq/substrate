@@ -97,7 +97,7 @@ Implementation will auto-detect in that order.
 
 ### 2.4 Pre-Implementation Artifacts (must exist before coding)
 
-1. **Lima profile** `docs/dev/lima/substrate.yaml` (see Appendix A).
+1. **Lima profile** `scripts/mac/lima/substrate.yaml` (see Appendix A).
 2. **Helper scripts** under `scripts/mac/`:
    - `lima-warm.sh`: injects `$PROJECT` path, starts VM, waits for readiness.
    - `lima-stop.sh`: stops VM gracefully.
@@ -158,12 +158,12 @@ Each phase contains numbered tasks. After each major task, run the sanity checks
 
 #### P0.1 Create Lima Profile
 
-- Create directory `docs/dev/lima/` (if missing).
+- Create directory `scripts/mac/lima/` (if missing).
 - Write `substrate.yaml` (Appendix A) with:
   - Virtiofs mounts.
   - Provision script installing packages, enabling dnsmasq, user namespaces, creating directories, copying systemd unit.
   - `vmType: "vz"`; set `cpus`, `memory`, `disk` defaults (e.g., 4 CPUs, 4GiB, 20GiB).
-- Validate YAML using `limactl validate docs/dev/lima/substrate.yaml`.
+- Validate YAML using `limactl validate scripts/mac/lima/substrate.yaml`.
 
 **Sanity Check (log evidence)**: `limactl validate` returns success.
 
@@ -468,7 +468,7 @@ Use this matrix after each major task (phase sub-steps). Record pass/fail and re
 
 | Phase.Task | Command(s) | Expected | Notes |
 |------------|------------|----------|-------|
-| P0.1 | `limactl validate docs/dev/lima/substrate.yaml` | "valid" | Fails if syntax error. |
+| P0.1 | `limactl validate scripts/mac/lima/substrate.yaml` | "valid" | Fails if syntax error. |
 | P0.2 | `bash scripts/mac/lima-warm.sh --project-path $(pwd)` | VM enters `Running` | Timeout → check virtualization, logs. |
 | P0.2 | `bash scripts/mac/lima-stop.sh` | No errors | VM stops gracefully. |
 | P0.2 | `bash scripts/mac/lima-doctor.sh` | Reports status; PASS/FAIL clearly labeled | Should fail with guidance if VM down. |
@@ -532,7 +532,7 @@ Rollout steps:
 
 ## 9. Appendices
 
-### Appendix A — Lima Profile (`docs/dev/lima/substrate.yaml`)
+### Appendix A — Lima Profile (`scripts/mac/lima/substrate.yaml`)
 
 ```yaml
 # Lima configuration for Substrate world backend on macOS
@@ -613,7 +613,7 @@ provision:
 #!/usr/bin/env bash
 set -euo pipefail
 PROJECT_PATH=${1:-$(pwd)}
-PROFILE=docs/dev/lima/substrate.yaml
+PROFILE=scripts/mac/lima/substrate.yaml
 TMP_PROFILE=$(mktemp)
 trap 'rm -f "$TMP_PROFILE"' EXIT
 PROJECT="$PROJECT_PATH" envsubst < "$PROFILE" > "$TMP_PROFILE"
@@ -808,8 +808,8 @@ Run with `cargo run --example mac_backend_smoke` (mac only; ensure VM ready).
 Goal: Ship a slim default Lima profile for end users while providing a documented, heavier dev profile.
 
 Tasks:
-- Create and publish `docs/dev/lima/substrate-dev.yaml` with larger CPU/RAM/disk for development.
-- Change the default runtime profile (`docs/dev/lima/substrate.yaml`) to a slim configuration (e.g., 2 CPUs, 2GiB RAM, 8GiB disk) once mac backend is stable.
+- Create and publish `scripts/mac/lima/substrate-dev.yaml` with larger CPU/RAM/disk for development.
+- Change the default runtime profile (`scripts/mac/lima/substrate.yaml`) to a slim configuration (e.g., 2 CPUs, 2GiB RAM, 8GiB disk) once mac backend is stable.
 - Update docs to make the slim profile the default in helper scripts and guides, and clearly recommend `substrate-dev.yaml` for development use cases (build/test heavy workflows).
 
 Sanity Check (log evidence):

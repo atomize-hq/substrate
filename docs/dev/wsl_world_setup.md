@@ -70,7 +70,7 @@ The warm script performs these tasks:
 
 - Downloads the latest Ubuntu 24.04 `.wsl` image from Canonical.
 - Imports (or upgrades) the `substrate-wsl` distribution as WSL2.
-- Executes `docs/dev/wsl/provision.sh` inside the distro to install packages
+- Executes `scripts/wsl/provision.sh` inside the distro to install packages
   and configure the `substrate-world-agent` service.
 - Builds `substrate-forwarder` and `world-agent` if needed, copies the agent
   into WSL, and restarts the service.

@@ -92,7 +92,7 @@ if ($WhatIf) {
 }
 
 # Copy provisioning script and run
-$hostProvisionPath = Join-Path $projectPath 'docs\\dev\\wsl\\provision.sh'
+$hostProvisionPath = Join-Path $projectPath 'scripts\\wsl\\provision.sh'
 if (-not (Test-Path $hostProvisionPath)) {
     Write-ErrorAndExit "Provisioning script not found at $hostProvisionPath"
 }
@@ -107,7 +107,7 @@ try {
 if (-not $isHealthy) {
     Write-Info "Updating package cache and running provision script"
     $projectPathFragment = Convert-ToWslPathFragment $projectPath
-        & wsl -d $DistroName -- bash -lc "set -euo pipefail; cp /mnt/c/$projectPathFragment/docs/dev/wsl/provision.sh /tmp/provision.sh && sed -i 's/\r$//' /tmp/provision.sh && chmod +x /tmp/provision.sh && sudo /tmp/provision.sh"
+        & wsl -d $DistroName -- bash -lc "set -euo pipefail; cp /mnt/c/$projectPathFragment/scripts/wsl/provision.sh /tmp/provision.sh && sed -i 's/\r$//' /tmp/provision.sh && chmod +x /tmp/provision.sh && sudo /tmp/provision.sh"
     if ($LASTEXITCODE -ne 0) {
         Write-ErrorAndExit "Provision script failed"
     }
@@ -220,6 +220,5 @@ Write-Info ("Forwarder pipe accepted probe in {0:N0} ms" -f $stopwatch.Elapsed.T
 Write-Info "Forwarder pipe ready"
 
 Write-Info "Warm complete"
-
 
 

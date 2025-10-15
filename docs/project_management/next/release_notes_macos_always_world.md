@@ -39,7 +39,7 @@
 
 ## References
 
-- Provisioning profile: `docs/dev/lima/substrate.yaml`
+- Provisioning profile: `scripts/mac/lima/substrate.yaml`
 - mac setup runbook: `docs/dev/mac_world_setup.md`
 - World architecture (Linux & mac): `docs/WORLD.md`
 - Installation overview with mac section: `docs/INSTALLATION.md`

@@ -167,7 +167,7 @@ Record outputs and mark sanity PASS/FAIL.
    - Update `crates/world-agent/src/main.rs` to read `SUBSTRATE_AGENT_TCP_PORT` and start a TCP listener bound to `127.0.0.1:<port>` alongside the Unix socket.
    - Ensure graceful shutdown covers both listeners.
 2. **Provisioning updates**
-   - Adjust `docs/dev/wsl/provision.sh` (and systemd unit) to export the TCP port when running under Windows.
+   - Adjust `scripts/wsl/provision.sh` (and systemd unit) to export the TCP port when running under Windows.
    - Document firewall requirements (localhost only) and verify nftables settings remain valid.
 3. **Tests**
    ```pwsh

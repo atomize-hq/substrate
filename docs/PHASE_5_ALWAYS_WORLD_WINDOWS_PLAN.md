@@ -227,7 +227,7 @@ Scope: Deliver Windows parity with the Linux/macOS "Always World" stack. Every e
    ```
 2. Sanity check: `Get-ChildItem docs\dev\wsl`, `Get-Content docs/project_management/logs/windows_always_world.md` (should be empty). Record in log.
 
-### P0.2 Provisioning Script (`docs/dev/wsl/provision.sh`)
+### P0.2 Provisioning Script (`scripts/wsl/provision.sh`)
 1. Copy Appendix A contents exactly into the file (use editor or PowerShell here-string). Ensure Unix line endings (LF). Example command:
    ```powershell
    @'
@@ -278,10 +278,10 @@ Scope: Deliver Windows parity with the Linux/macOS "Always World" stack. Every e
 
    systemctl daemon-reload
    systemctl enable substrate-world-agent.service
-   '@ | Set-Content -Path docs/dev/wsl/provision.sh -NoNewline
+   '@ | Set-Content -Path scripts/wsl/provision.sh -NoNewline
    ```
-2. Validate formatting: `wsl --system -- bash -lc "cd /mnt/c/workspace/substrate && bash -n docs/dev/wsl/provision.sh"` (requires WSL base distro). If WSL not yet installed, skip and note in log.
-3. Sanity check: `Get-Content docs/dev/wsl/provision.sh` matches Appendix A exactly.
+2. Validate formatting: `wsl --system -- bash -lc "cd /mnt/c/workspace/substrate && bash -n scripts/wsl/provision.sh"` (requires WSL base distro). If WSL not yet installed, skip and note in log.
+3. Sanity check: `Get-Content scripts/wsl/provision.sh` matches Appendix A exactly.
 
 ### P0.3 PowerShell Helper Scripts (Full Listings)
 Create the following files using the appendices:
@@ -552,7 +552,7 @@ Add to Appendix J cases like incorrect path translation (document expected vs ac
 
 ## 10. Appendices
 
-### Appendix A — Provisioning Script (`docs/dev/wsl/provision.sh`)
+### Appendix A — Provisioning Script (`scripts/wsl/provision.sh`)
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
@@ -661,7 +661,7 @@ if (-not (Test-Path $hostProvisionPath)) {
 }
 
 Write-Info "Updating package cache and running provision script"
-& wsl -d $DistroName -- bash -lc "set -euo pipefail; cp /mnt/c/$(($projectPath -replace ':', '') -replace '\\','/')/docs/dev/wsl/provision.sh /tmp/provision.sh && chmod +x /tmp/provision.sh && sudo /tmp/provision.sh"
+& wsl -d $DistroName -- bash -lc "set -euo pipefail; cp /mnt/c/$(($projectPath -replace ':', '') -replace '\\','/')/scripts/wsl/provision.sh /tmp/provision.sh && chmod +x /tmp/provision.sh && sudo /tmp/provision.sh"
 if ($LASTEXITCODE -ne 0) {
     Write-ErrorAndExit "Provision script failed"
 }

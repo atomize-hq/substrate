@@ -1,7 +1,7 @@
 # Lima configuration for Substrate (dev profile) on macOS
 # Heavier resources for development and debugging.
 # Usage example (from repository root):
-#   PROJECT="$(pwd)" envsubst < docs/dev/lima/substrate-dev.yaml > /tmp/substrate-dev.yaml
+#   PROJECT="$(pwd)" envsubst < scripts/mac/lima/substrate-dev.yaml > /tmp/substrate-dev.yaml
 #   limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
 
 images:

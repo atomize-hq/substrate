@@ -12,13 +12,13 @@
 - Reviewer: @spenser
 ## 2025-09-22T17:05:40-04:00 - P0.2 Provisioning Script
 
-- Command: Used PowerShell WriteAllText block to copy Appendix A into docs/dev/wsl/provision.sh with LF endings preserved.
+- Command: Used PowerShell WriteAllText block to copy Appendix A into scripts/wsl/provision.sh with LF endings preserved.
 - Output:
   - (no stdout; file written via API call)
 - Sanity Check:
   - wsl --status -> PASS (Default Distribution: Ubuntu; Default Version: 2)
-  - wsl --system -- bash -lc "cd /mnt/c/Users/spmcc/Documents/__Project_Code/substrate && bash -n docs/dev/wsl/provision.sh" -> PASS (exit code 0, no stdout)
-  - Get-Content docs/dev/wsl/provision.sh -> PASS (44 lines; first '#!/usr/bin/env bash', last 'systemctl enable substrate-world-agent.service')
+  - wsl --system -- bash -lc "cd /mnt/c/Users/spmcc/Documents/__Project_Code/substrate && bash -n scripts/wsl/provision.sh" -> PASS (exit code 0, no stdout)
+  - Get-Content scripts/wsl/provision.sh -> PASS (44 lines; first '#!/usr/bin/env bash', last 'systemctl enable substrate-world-agent.service')
 - Sanity Result: PASS
 - Notes: Byte inspection confirmed LF-only line endings.
 - Remediation: n/a

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PROJECT_PATH=${1:-$(pwd)}
-PROFILE=docs/dev/lima/substrate.yaml
+PROFILE=scripts/mac/lima/substrate.yaml
 TMP_PROFILE=$(mktemp)
 
 # Clean up temp file on exit
