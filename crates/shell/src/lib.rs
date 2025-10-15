@@ -3390,6 +3390,12 @@ fn execute_command(
             let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
             if world_enabled || uds_exists {
                 // Use span id if we have a span, otherwise fall back to cmd_id as a correlation hint
+                if let Some(active_span) = span.as_mut() {
+                    active_span.set_transport(TransportMeta {
+                        mode: "unix".to_string(),
+                        endpoint: Some("/run/substrate.sock".to_string()),
+                    });
+                }
                 let span_id_for_ws = span
                     .as_ref()
                     .map(|s| s.get_span_id().to_string())
@@ -3662,17 +3668,17 @@ fn execute_command(
     // Route non-PTY commands through world agent (UDS HTTP) when world is enabled (Linux only)
     #[cfg(target_os = "linux")]
     {
-        if let Some(active_span) = span.as_mut() {
-            #[cfg(any(target_os = "macos", target_os = "windows"))]
-            if let Some(ctx) = pw::get_context() {
-                active_span.set_transport(world_transport_to_meta(&ctx.transport));
-            }
-        }
         let world_enabled = env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
         let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
         if world_enabled || uds_exists {
             if world_enabled {
                 let _ = ensure_world_agent_ready();
+            }
+            if let Some(active_span) = span.as_mut() {
+                active_span.set_transport(TransportMeta {
+                    mode: "unix".to_string(),
+                    endpoint: Some("/run/substrate.sock".to_string()),
+                });
             }
             if let Ok((exit_code, stdout, stderr, scopes_used, fs_diff_opt)) =
                 exec_non_pty_via_agent(trimmed)
@@ -3761,6 +3767,10 @@ fn execute_command(
 
 #[cfg(target_os = "linux")]
 fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Result<i32> {
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine;
+    use futures::{SinkExt, StreamExt};
+
     // Ensure agent is ready
     ensure_world_agent_ready()?;
 
@@ -3822,7 +3832,7 @@ fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Result<i32> {
                 match stdin.read(&mut buf).await {
                     Ok(0) => break,
                     Ok(n) => {
-                        let b64 = B64.encode(&buf[..n]);
+                        let b64 = STANDARD.encode(&buf[..n]);
                         let frame = serde_json::json!({"type":"stdin", "data_b64": b64});
                         if sink_in
                             .lock()
@@ -3947,7 +3957,7 @@ fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Result<i32> {
                     match v.get("type").and_then(|t| t.as_str()) {
                         Some("stdout") => {
                             if let Some(b64) = v.get("data_b64").and_then(|x| x.as_str()) {
-                                if let Ok(bytes) = B64.decode(b64) {
+                                if let Ok(bytes) = STANDARD.decode(b64) {
                                     use std::io::Write;
                                     let _ = std::io::stdout().write_all(&bytes);
                                     let _ = std::io::stdout().flush();
@@ -3993,6 +4003,7 @@ fn ensure_world_agent_ready() -> anyhow::Result<()> {
 
     // Helper: quick readiness probe via HTTP-over-UDS
     fn probe_caps() -> bool {
+        use std::io::{Read, Write};
         match std::os::unix::net::UnixStream::connect(SOCK) {
             Ok(mut s) => {
                 let _ = s.set_read_timeout(Some(std::time::Duration::from_millis(150)));
@@ -4057,6 +4068,7 @@ fn ensure_world_agent_ready() -> anyhow::Result<()> {
 
 #[cfg(target_os = "macos")]
 fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyhow::Result<i32> {
+    use base64::engine::general_purpose::STANDARD;
     use base64::Engine;
     use futures::StreamExt;
     use tungs::tungstenite::Message;
@@ -4124,9 +4136,7 @@ fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyhow::Result<i
                         match v.get("type").and_then(|t| t.as_str()) {
                             Some("stdout") => {
                                 if let Some(b64) = v.get("data_b64").and_then(|x| x.as_str()) {
-                                    if let Ok(bytes) =
-                                        base64::engine::general_purpose::STANDARD.decode(b64)
-                                    {
+                                    if let Ok(bytes) = STANDARD.decode(b64) {
                                         use std::io::Write;
                                         let _ = std::io::stdout().write_all(&bytes);
                                         let _ = std::io::stdout().flush();
@@ -4323,6 +4333,8 @@ type AgentExecResult = (
 
 #[cfg(target_os = "linux")]
 fn exec_non_pty_via_agent(cmd: &str) -> anyhow::Result<AgentExecResult> {
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine;
     use std::io::{Read, Write};
     use std::os::unix::net::UnixStream;
     let sock_path = "/run/substrate.sock";
@@ -4380,12 +4392,8 @@ fn exec_non_pty_via_agent(cmd: &str) -> anyhow::Result<AgentExecResult> {
     let exit_code = v.get("exit").and_then(|x| x.as_i64()).unwrap_or(1) as i32;
     let stdout_b64 = v.get("stdout_b64").and_then(|x| x.as_str()).unwrap_or("");
     let stderr_b64 = v.get("stderr_b64").and_then(|x| x.as_str()).unwrap_or("");
-    let stdout = base64::engine::general_purpose::STANDARD
-        .decode(stdout_b64)
-        .unwrap_or_default();
-    let stderr = base64::engine::general_purpose::STANDARD
-        .decode(stderr_b64)
-        .unwrap_or_default();
+    let stdout = STANDARD.decode(stdout_b64).unwrap_or_default();
+    let stderr = STANDARD.decode(stderr_b64).unwrap_or_default();
     let scopes_used = v
         .get("scopes_used")
         .and_then(|x| x.as_array())

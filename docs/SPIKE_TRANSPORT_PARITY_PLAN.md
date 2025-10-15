@@ -14,7 +14,7 @@ Additional Windows Addendum: docs/dev/windows_host_transport_plan.md
 |-------|---------------|--------|--------------|----------|----------------------|
 | W | Windows (WSL2) | Complete | 2025-09-30T16:47:43-04:00 | @spenser | windows_always_world.md#W |
 | M | macOS (Lima) | Complete | 2025-10-15T13:13:55Z | @spenser | macos_always_world.md#M |
-| L | Linux (Native) | Pending | _tbd_ | _tbd_ | linux_always_world.md#L |
+| L | Linux (Native) | In Progress | 2025-10-15T14:52:36Z | @spenser | linux_always_world.md#L |
 | Final Verification | All | Pending | _tbd_ | _tbd_ | windows_always_world.md#Final |
 
 Update this table at the start and completion of each phase.
@@ -357,6 +357,14 @@ Update the Phase Status Matrix (Phase L → In Progress) when starting and recor
    sudo apt-get update
    sudo apt-get install -y build-essential pkg-config libssl-dev libsystemd-dev
    ```
+3. Provision the world-agent systemd service (run helper without sudo; it will prompt when elevation is required):
+   ```bash
+   scripts/linux/world-provision.sh
+   systemctl status substrate-world-agent --no-pager
+   sudo ls -l /run/substrate.sock
+   sudo curl --unix-socket /run/substrate.sock http://localhost/v1/capabilities | jq .
+   ```
+   Record whether provisioning succeeded; if sudo privileges are unavailable, log the blocker and escalate before continuing.
 
 #### Step L1 - Repository Sync
 1. Synchronize repository:
@@ -403,7 +411,7 @@ Update the Phase Status Matrix (Phase L → In Progress) when starting and recor
    ```
 
 #### Step L5 - Documentation & Handoff Prep
-1. Update Linux-specific docs (`docs/dev/linux_world_setup.md`, troubleshooting) if steps changed.
+1. Update Linux-specific docs (`docs/WORLD.md`, troubleshooting) if steps changed.
 2. Run `npx markdownlint-cli` on modified docs.
 3. Summarize observations, risks, and outstanding TODOs in the evidence log.
 4. Prepare the Final Verification kickoff prompt referencing Windows/macOS/Linux evidence anchors.

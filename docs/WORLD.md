@@ -28,10 +28,10 @@ Helper scripts (`scripts/mac/lima-*.sh`, `scripts/mac/smoke.sh`) keep the Lima e
 
 ## 2) Execution Paths (Linux & macOS)
 
-Always‑on by default (unless disabled via `SUBSTRATE_WORLD=disabled`):
+Always-on by default (unless disabled via `SUBSTRATE_WORLD=disabled`):
 
-- Non‑PTY commands
-  - Shell POSTs to `world-agent /v1/execute` over a Unix socket (Linux) or forwarded socket (macOS). The shell auto‑starts or ensures availability before sending the request.
+- Non-PTY commands
+  - Shell POSTs to `world-agent /v1/execute` over a Unix socket (Linux) or forwarded socket (macOS). The shell auto-starts or ensures availability before sending the request.
   - Response returns `exit`, `stdout_b64`, `stderr_b64`, `scopes_used`, and `fs_diff` (when available). The shell attaches `fs_diff` to the span on both platforms.
 
 - PTY commands (interactive/TUIs)
@@ -45,6 +45,23 @@ Always‑on by default (unless disabled via `SUBSTRATE_WORLD=disabled`):
   - If the agent/socket is unavailable or a transport handshake fails, the shell prints exactly one warning and runs on the host path for that command. Subsequent commands continue to attempt world routing.
 
 Windows currently degrades to host execution with a friendly notice.
+
+---
+
+### Native Linux provisioning helper
+
+- Run `scripts/linux/world-provision.sh` from the repository root (without `sudo`) to install the
+  world-agent under `/usr/local/bin`, write the systemd unit, and enable the
+  service. The script uses `sudo` for filesystem and systemd operations and
+  will prompt if elevated credentials are required.
+- After provisioning, verify the socket and capabilities:
+  ```bash
+  systemctl status substrate-world-agent --no-pager
+  sudo ls -l /run/substrate.sock
+  sudo curl --unix-socket /run/substrate.sock http://localhost/v1/capabilities | jq .
+  ```
+- Provisioning is idempotent; rerun the helper whenever the agent binary
+  changes or the service needs to be repaired.
 
 ---
 
