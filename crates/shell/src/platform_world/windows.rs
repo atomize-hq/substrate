@@ -2,7 +2,6 @@ use super::{PlatformWorldContext, WorldTransport};
 use crate::Cli;
 use agent_api_client::{AgentClient, Transport};
 use anyhow::Result;
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Once, OnceLock};
 use world_api::{ExecRequest, ResourceLimits, WorldBackend, WorldSpec};
@@ -87,16 +86,6 @@ pub fn get_backend() -> Result<Arc<dyn WorldBackend>> {
     Ok(context()?.backend_trait.clone())
 }
 
-pub fn to_exec_request(cmd: &str, span_id: Option<String>) -> ExecRequest {
-    ExecRequest {
-        cmd: cmd.to_string(),
-        cwd: current_dir(),
-        env: collect_env(),
-        pty: false,
-        span_id,
-    }
-}
-
 pub fn world_spec() -> WorldSpec {
     WorldSpec {
         reuse_session: true,
@@ -107,10 +96,6 @@ pub fn world_spec() -> WorldSpec {
         project_dir: current_dir(),
         always_isolate: false,
     }
-}
-
-fn collect_env() -> HashMap<String, String> {
-    std::env::vars().collect()
 }
 
 fn current_dir() -> PathBuf {
@@ -258,17 +243,5 @@ mod tests {
         let result = ensure_world_ready_impl(&cli, || Ok(backend.clone())).unwrap();
         assert!(result.is_none());
         assert_eq!(calls.load(Ordering::SeqCst), 0);
-    }
-
-    #[test]
-    fn to_exec_request_captures_environment() {
-        std::env::set_var("SUBSTRATE_TEST_ENV", "1");
-        let req = to_exec_request("echo hi", Some("span".to_string()));
-        assert_eq!(req.cmd, "echo hi");
-        assert_eq!(req.pty, false);
-        assert_eq!(req.span_id.as_deref(), Some("span"));
-        assert_eq!(req.cwd, super::current_dir());
-        assert_eq!(req.env.get("SUBSTRATE_TEST_ENV"), Some(&"1".to_string()));
-        std::env::remove_var("SUBSTRATE_TEST_ENV");
     }
 }

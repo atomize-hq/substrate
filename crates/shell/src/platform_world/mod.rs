@@ -28,6 +28,9 @@ pub enum WorldTransport {
     NamedPipe(PathBuf),
 }
 
+#[cfg(target_os = "windows")]
+const _: Option<WorldTransport> = Some(WorldTransport::Vsock { port: 0 });
+
 impl fmt::Display for WorldTransport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

@@ -720,11 +720,6 @@ fn verify_process_group(pid: Option<u32>) {
     }
 }
 
-#[cfg(not(unix))]
-fn verify_process_group(_pid: Option<u32>) {
-    // No-op on non-Unix platforms
-}
-
 // Minimal terminal guard - ONLY sets stdin to raw mode for input forwarding
 // Does NOT touch stdout to avoid display corruption
 struct MinimalTerminalGuard {
@@ -859,20 +854,6 @@ mod tests {
             assert!(!status_signal.success());
             assert_eq!(status_signal.signal(), Some(9));
         }
-    }
-
-    #[cfg(not(unix))]
-    #[test]
-    fn test_non_unix_signal_and_verify_process_group() {
-        let status = PtyExitStatus {
-            code: Some(0),
-            signal: None,
-        };
-        assert_eq!(status.signal(), None);
-
-        // verify_process_group is a no-op on non-Unix platforms
-        verify_process_group(Some(42));
-        verify_process_group(None);
     }
 
     #[test]

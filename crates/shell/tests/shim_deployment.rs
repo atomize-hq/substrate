@@ -39,7 +39,7 @@ mod tests {
         let original_home = std::env::var("HOME").ok();
         let original_path = std::env::var("PATH").ok();
         #[cfg(windows)]
-        let original_userprofile = std::env::var("USERPROFILE").ok();
+        let _original_userprofile = std::env::var("USERPROFILE").ok();
 
         // Point Substrate home to the temp directory (portable across OSes)
         let sub_home = temp.path().join(".substrate");

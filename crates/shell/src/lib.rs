@@ -3516,6 +3516,8 @@ fn execute_command(
 
         #[cfg(windows)]
         {
+            // Ensure Windows builds exercise signal() accessor even though it always returns None.
+            let _ = pty_status.signal();
             // 🔥 EXPERT FIX: Don't shift bits on Windows - use raw code directly
             use std::os::windows::process::ExitStatusExt;
             let code = pty_status.code().unwrap_or(0) as u32;

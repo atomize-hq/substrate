@@ -62,6 +62,7 @@ impl WorldAgentService {
     }
 
     /// Ensure a session world (thin wrapper over backend)
+    #[cfg(target_os = "linux")]
     pub fn ensure_session_world(&self, spec: &WorldSpec) -> Result<WorldHandle> {
         self.backend.ensure_session(spec)
     }
