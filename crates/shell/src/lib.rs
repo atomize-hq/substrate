@@ -3671,9 +3671,11 @@ fn execute_command(
     // Route non-PTY commands through world agent (UDS HTTP) when world is enabled (Linux only)
     #[cfg(target_os = "linux")]
     {
-        let world_enabled = env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
+        let world_env = env::var("SUBSTRATE_WORLD").unwrap_or_default();
+        let world_enabled = world_env == "enabled";
+        let world_disabled = world_env == "disabled" || config.no_world;
         let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
-        if world_enabled || uds_exists {
+        if world_enabled || (!world_disabled && uds_exists) {
             if world_enabled {
                 let _ = ensure_world_agent_ready();
             }
@@ -4566,14 +4568,11 @@ fn execute_external(
         cmd.arg("/C").arg(command);
     } else {
         // Unix shells (bash, sh, zsh, etc.)
-        if config.ci_mode && !config.no_exit_on_error && is_bash {
-            cmd.arg("-o")
-                .arg("errexit")
-                .arg("-o")
-                .arg("pipefail")
-                .arg("-o")
-                .arg("nounset");
-        }
+        let command = if config.ci_mode && !config.no_exit_on_error && is_bash {
+            format!("set -euo pipefail; {command}")
+        } else {
+            command.to_string()
+        };
         cmd.arg("-c").arg(command);
     }
 
