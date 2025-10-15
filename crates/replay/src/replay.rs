@@ -570,6 +570,7 @@ pub async fn replay_sequence(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use tempfile::tempdir;
 
     #[test]

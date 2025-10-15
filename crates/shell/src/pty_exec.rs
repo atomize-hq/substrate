@@ -485,21 +485,16 @@ fn handle_pty_io(
         )))
     };
 
-    // Clone for the stdin thread
-    let writer_for_thread = Arc::clone(&writer);
-
-    // 🔥 CRITICAL FIX: Declare stdin_thread handle outside platform blocks
-    // 🔥 MUST-FIX: Initialize to None to avoid uninitialized variable on non-Unix
-    let stdin_join: Option<thread::JoinHandle<()>>;
-
     // Platform-specific stdin handling
     #[cfg(unix)]
-    {
+    let stdin_join: Option<thread::JoinHandle<()>> = {
+        // Clone for the stdin thread
+        let writer_for_thread = Arc::clone(&writer);
         // Unix: Spawn thread to copy stdin to PTY (will be joined after child exits)
         // CRITICAL FIX: Use non-blocking I/O to prevent stealing input after PTY exit
         let done_writer = Arc::clone(&done);
         let cmd_id_stdin = cmd_id.to_string();
-        stdin_join = Some(thread::spawn(move || {
+        Some(thread::spawn(move || {
             let mut stdin = io::stdin();
             let mut buffer = vec![0u8; 4096];
 
@@ -578,13 +573,11 @@ fn handle_pty_io(
                     }
                 }
             }
-        }));
-    }
+        }))
+    };
 
     #[cfg(windows)]
     {
-        stdin_join = None; // Windows doesn't use per-command threads
-
         // Windows: Use global input forwarder to avoid thread leak
         // Set the current PTY writer and wake the forwarder thread
         // TODO: Properly handle writer cloning on Windows

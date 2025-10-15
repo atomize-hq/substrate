@@ -30,6 +30,18 @@ fn parse_signal(_sig: &str) -> Option<i32> {
     None
 }
 
+#[cfg(unix)]
+fn forward_signal(child_pid: Option<i32>, sig: &str) {
+    if let (Some(pid), Some(signo)) = (child_pid, parse_signal(sig)) {
+        // Safety: libc::kill is async-signal-safe and we are not accessing shared data
+        unsafe { libc::kill(pid as libc::pid_t, signo) };
+        info!("ws_pty: forwarded signal {} to pid {}", sig, pid);
+    }
+}
+
+#[cfg(not(unix))]
+fn forward_signal(_child_pid: Option<i32>, _sig: &str) {}
+
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ClientMessage {
@@ -149,10 +161,25 @@ pub async fn handle_ws_pty(
     let (cmd, cwd, env, _span_id, cols, rows) = start_msg;
 
     // Prepare in-world session context (best-effort)
+    #[cfg(target_os = "linux")]
     let mut world_id_for_logs: String = "-".to_string();
+    #[cfg(not(target_os = "linux"))]
+    let world_id_for_logs: String = "-".to_string();
+
+    #[cfg(target_os = "linux")]
     let mut ns_name_opt: Option<String> = None;
+    #[cfg(not(target_os = "linux"))]
+    let ns_name_opt: Option<String> = None;
+
+    #[cfg(target_os = "linux")]
     let mut cgroup_path_opt: Option<std::path::PathBuf> = None;
+    #[cfg(not(target_os = "linux"))]
+    let cgroup_path_opt: Option<std::path::PathBuf> = None;
+
+    #[cfg(target_os = "linux")]
     let mut in_world = false;
+    #[cfg(not(target_os = "linux"))]
+    let in_world = false;
     #[cfg(target_os = "linux")]
     {
         use world_api::{ResourceLimits, WorldSpec};
@@ -370,18 +397,8 @@ pub async fn handle_ws_pty(
                             let _ = master_clone.lock().await.resize(size);
                         }
                         Ok(ClientMessage::Signal { sig }) => {
-                            // Forward signal to child process if available
-                            if let Some(pid) = child_pid {
-                                if let Some(signo) = parse_signal(&sig) {
-                                    #[cfg(unix)]
-                                    {
-                                        // Safety: libc::kill is async-signal-safe; called on background task
-                                        unsafe { libc::kill(pid as libc::pid_t, signo) };
-                                        // best-effort: no response frame, just log on server side
-                                        info!("ws_pty: forwarded signal {} to pid {}", sig, pid);
-                                    }
-                                }
-                            }
+                            // Forward signal to child process if available (platform-specific)
+                            forward_signal(child_pid, &sig);
                         }
                         _ => {} // Ignore other message types
                     }
