@@ -13,7 +13,7 @@ Additional Windows Addendum: docs/dev/windows_host_transport_plan.md
 | Phase | Host Platform | Status | Last Updated | Reviewer | Evidence Log Anchor |
 |-------|---------------|--------|--------------|----------|----------------------|
 | W | Windows (WSL2) | Complete | 2025-09-30T16:47:43-04:00 | @spenser | windows_always_world.md#W |
-| M | macOS (Lima) | Pending | _tbd_ | _tbd_ | macos_always_world.md#M |
+| M | macOS (Lima) | Complete | 2025-10-15T13:13:55Z | @spenser | macos_always_world.md#M |
 | L | Linux (Native) | Pending | _tbd_ | _tbd_ | linux_always_world.md#L |
 | Final Verification | All | Pending | _tbd_ | _tbd_ | windows_always_world.md#Final |
 
@@ -299,12 +299,12 @@ Update the Phase Status Matrix (Phase M → In Progress) when starting and recor
 #### Step M4 - Lima Environment Smoke Validation
 1. Warm the environment and execute diagnostics:
    ```bash
-   ./scripts/macos/lima-warm.sh
-   ./scripts/macos/lima-doctor.sh
+   ./scripts/mac/lima-warm.sh
+   ./scripts/mac/lima-doctor.sh
    ```
 2. Run the smoke suite:
    ```bash
-   ./scripts/macos/lima-smoke.sh
+   ./scripts/mac/smoke.sh
    ```
    Capture logs showing `transport.mode = "unix"` and PTY success.
 
@@ -530,4 +530,3 @@ Make sure the resulting handoff reads like an operations runbook entry: concise 
 2. Ensure the resulting prompt is stored under “Next Actions / Handoff Notes” in the evidence log.
 
 ---
-

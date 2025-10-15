@@ -24,6 +24,7 @@ if [ ! -x "$SUBSTRATE_BIN" ]; then
   (cd "$REPO_ROOT" && cargo build --bin substrate >/dev/null)
 fi
 
+rm -rf "$REPO_ROOT/world-mac-smoke"
 "$SCRIPTS_ROOT"/lima-warm.sh
 "$SUBSTRATE_BIN" -c 'echo smoke-nonpty'
 "$SUBSTRATE_BIN" --pty -c 'printf smoke-pty\n'
@@ -31,7 +32,7 @@ trace_log="${SHIM_TRACE_LOG:-$HOME/.substrate/trace.jsonl}"
 mkdir -p "$(dirname "$trace_log")"
 
 "$SUBSTRATE_BIN" -c 'rm -rf world-mac-smoke'
-PAYLOAD_CMD="(cd /src 2>/dev/null || cd \"$REPO_ROOT\") && /usr/bin/env python3 -c \"import pathlib; p=pathlib.Path('world-mac-smoke'); p.mkdir(exist_ok=True); (p/'file.txt').write_text('data\\n')\""
+PAYLOAD_CMD="(cd /src 2>/dev/null || cd \"$REPO_ROOT\") && (test -d world-mac-smoke || mkdir world-mac-smoke) && printf 'data\n' > world-mac-smoke/file.txt"
 "$SUBSTRATE_BIN" -c "$PAYLOAD_CMD"
 
 if [ ! -f "$trace_log" ]; then
@@ -50,4 +51,4 @@ fi
 
 "$SUBSTRATE_BIN" --replay "$span" --replay-verbose
 "$SUBSTRATE_BIN" --trace "$span" | tee /tmp/world-mac-replay.json
-jq '.fs_diff.writes' /tmp/world-mac-replay.json | grep 'world-mac-smoke/file.txt'
+jq '.fs_diff | ((.writes // []) + (.mods // []))' /tmp/world-mac-replay.json | grep 'world-mac-smoke/file.txt'
