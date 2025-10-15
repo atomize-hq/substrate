@@ -25,11 +25,6 @@ fn parse_signal(sig: &str) -> Option<i32> {
     }
 }
 
-#[cfg(not(unix))]
-fn parse_signal(_sig: &str) -> Option<i32> {
-    None
-}
-
 #[cfg(unix)]
 fn forward_signal(child_pid: Option<i32>, sig: &str) {
     if let (Some(pid), Some(signo)) = (child_pid, parse_signal(sig)) {

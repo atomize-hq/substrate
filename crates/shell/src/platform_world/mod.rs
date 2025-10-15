@@ -58,6 +58,18 @@ pub fn get_context() -> Option<Arc<PlatformWorldContext>> {
     GLOBAL_CTX.get().cloned()
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn vsock_variant_displays_port() {
+        let transport = WorldTransport::Vsock { port: 17788 };
+        assert_eq!(transport.to_string(), "vsock:17788");
+    }
+}
+
 #[cfg(target_os = "macos")]
 pub fn detect() -> Result<PlatformWorldContext> {
     use world_mac_lima::MacLimaBackend;

@@ -348,7 +348,7 @@ fn files_differ(a: &Path, b: &Path) -> bool {
     ba[..ra] != bb[..rb]
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use tempfile::TempDir;

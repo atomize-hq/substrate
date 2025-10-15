@@ -177,11 +177,6 @@ pub(crate) fn initialize_global_sigwinch_handler() {
     pty_exec::initialize_global_sigwinch_handler_impl();
 }
 
-#[cfg(not(unix))]
-pub(crate) fn initialize_global_sigwinch_handler() {
-    // No-op on non-Unix platforms
-}
-
 const BASH_PREEXEC_SCRIPT: &str = r#"# Substrate PTY command logging
 # Source user's bashrc ONLY in interactive shells
 [[ $- == *i* ]] && [[ -f ~/.bashrc ]] && source ~/.bashrc
@@ -1957,14 +1952,23 @@ fn run_script_mode(config: &ShellConfig, script_path: &Path) -> Result<i32> {
     // Log script completion
     let duration = start_time.elapsed();
     #[allow(unused_mut)]
+    #[cfg(unix)]
     let mut extra = json!({
         log_schema::EXIT_CODE: status.code().unwrap_or(-1),
         log_schema::DURATION_MS: duration.as_millis()
     });
 
+    #[cfg(not(unix))]
+    let extra = json!({
+        log_schema::EXIT_CODE: status.code().unwrap_or(-1),
+        log_schema::DURATION_MS: duration.as_millis()
+    });
+
     #[cfg(unix)]
-    if let Some(sig) = status.signal() {
-        extra["term_signal"] = json!(sig);
+    {
+        if let Some(sig) = status.signal() {
+            extra["term_signal"] = json!(sig);
+        }
     }
 
     log_command_event(
@@ -3631,12 +3635,12 @@ fn execute_command(
                     let _ = io::stderr().write_all(&stderr);
 
                     if let Some(active_span) = span {
-                        let mut diff_opt = fs_diff_opt;
-                        let diff_for_span = if diff_opt.is_some() {
-                            diff_opt
-                        } else {
-                            let (_, diff) = collect_world_telemetry(active_span.get_span_id());
-                            diff
+                        let diff_for_span = match fs_diff_opt {
+                            Some(diff) => Some(diff),
+                            None => {
+                                let (_, diff) = collect_world_telemetry(active_span.get_span_id());
+                                diff
+                            }
                         };
                         let _ = active_span.finish(exit_code, scopes_used, diff_for_span);
                     }
@@ -3736,14 +3740,23 @@ fn execute_command(
 
     // Log command completion with redacted command
     let duration = start_time.elapsed();
+    #[cfg(unix)]
     let mut extra = json!({
         log_schema::EXIT_CODE: status.code().unwrap_or(-1),
         log_schema::DURATION_MS: duration.as_millis()
     });
 
+    #[cfg(not(unix))]
+    let extra = json!({
+        log_schema::EXIT_CODE: status.code().unwrap_or(-1),
+        log_schema::DURATION_MS: duration.as_millis()
+    });
+
     #[cfg(unix)]
-    if let Some(sig) = status.signal() {
-        extra["term_signal"] = json!(sig);
+    {
+        if let Some(sig) = status.signal() {
+            extra["term_signal"] = json!(sig);
+        }
     }
 
     log_command_event(

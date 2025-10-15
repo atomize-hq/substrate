@@ -475,7 +475,8 @@ fn handle_pty_io(
 ) -> Result<PtyExitStatus> {
     let done = Arc::new(AtomicBool::new(false));
 
-    // Get writer for stdin->pty (wrap in Arc<Mutex<Option>> so we can drop it from main thread)
+    // Platform-specific stdin handling
+    #[cfg(unix)]
     let writer = {
         let master = pty_master.lock().unwrap();
         Arc::new(Mutex::new(Some(
@@ -485,7 +486,6 @@ fn handle_pty_io(
         )))
     };
 
-    // Platform-specific stdin handling
     #[cfg(unix)]
     let stdin_join: Option<thread::JoinHandle<()>> = {
         // Clone for the stdin thread
@@ -859,6 +859,20 @@ mod tests {
             assert!(!status_signal.success());
             assert_eq!(status_signal.signal(), Some(9));
         }
+    }
+
+    #[cfg(not(unix))]
+    #[test]
+    fn test_non_unix_signal_and_verify_process_group() {
+        let status = PtyExitStatus {
+            code: Some(0),
+            signal: None,
+        };
+        assert_eq!(status.signal(), None);
+
+        // verify_process_group is a no-op on non-Unix platforms
+        verify_process_group(Some(42));
+        verify_process_group(None);
     }
 
     #[test]
