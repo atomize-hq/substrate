@@ -674,3 +674,19 @@ amed_pipe.
   - Document the host TCP soak recommendation for early validation; default remains named pipe.
 
 
+
+## 2025-10-15T19:51:55Z - W8 Smoke Suite (post-provision)
+- Branch/Commit: feature/world-isolation@ae3e5f31f1cd6e9f1028edc21fa86e73a9f87271
+- Command(s):
+  ```powershell
+  pwsh -File scripts\windows\wsl-smoke.ps1 -DistroName substrate-wsl
+  ```
+- Output Summary:
+  - Warm step detected healthy agent, rebuilt `substrate-forwarder` (release), and relaunched the pipe bridge; provisioning helper was skipped (HTTP 200 preflight).
+  - Smoke suite PASS: non-PTY, PTY, forwarder restart all succeeded; replay skipped (CLI absent in distro) per plan.
+  - Forwarder restart sequence stopped the distro, relaunched warm, and revalidated the pipe in ~214 ms.
+  - Prior to smoke, Windows workspace build/tests (`cargo fmt`, `cargo check`, `cargo test`) completed successfully.
+- Sanity Check: PASS – Windows transport validation complete with fresh smoke evidence.
+- Remediation: n/a
+- Next Actions / Handoff Notes: Ready to proceed with Final Verification; refer to latest trace entries for `transport.mode = "named_pipe"` confirmation.
+- Reviewer: _pending_

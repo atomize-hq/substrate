@@ -141,14 +141,15 @@ fn copy_tree(from: &Path, to: &Path) -> Result<()> {
                         format!("copy {} -> {}", entry.path().display(), dest.display())
                     })?;
                 } else if entry.file_type().is_symlink() {
-                    // Preserve symlink
-                    if let Ok(target) = fs::read_link(entry.path()) {
-                        if let Some(parent) = dest.parent() {
-                            fs::create_dir_all(parent)?;
+                    #[cfg(unix)]
+                    {
+                        if let Ok(target) = fs::read_link(entry.path()) {
+                            if let Some(parent) = dest.parent() {
+                                fs::create_dir_all(parent)?;
+                            }
+                            std::os::unix::fs::symlink(target, &dest)
+                                .with_context(|| format!("symlink {}", dest.display()))?;
                         }
-                        #[cfg(unix)]
-                        std::os::unix::fs::symlink(target, &dest)
-                            .with_context(|| format!("symlink {}", dest.display()))?;
                     }
                 }
             }
@@ -263,10 +264,15 @@ struct Meta {
 fn meta_of(path: &Path) -> Meta {
     let md = fs::symlink_metadata(path).ok();
     let mut kind = "?".to_string();
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut mode = 0u32;
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut uid = 0u32;
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut gid = 0u32;
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut mtime_sec = 0i64;
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut mtime_nsec = 0i64;
     let mut symlink_target: Option<PathBuf> = None;
 
