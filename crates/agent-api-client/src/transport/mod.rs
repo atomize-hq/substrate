@@ -260,7 +260,7 @@ pub fn build_connector(transport: &Transport) -> Result<Box<dyn Connector>> {
 
 #[cfg(unix)]
 fn build_unix_client() -> Client<UnixConnectorService, Full<Bytes>> {
-    Client::builder(TokioExecutor::new()).build(UnixConnectorService::default())
+    Client::builder(TokioExecutor::new()).build(UnixConnectorService)
 }
 
 #[cfg(unix)]

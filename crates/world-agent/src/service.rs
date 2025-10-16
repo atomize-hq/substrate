@@ -124,7 +124,7 @@ impl WorldAgentService {
             Ok(w) => w,
             Err(e) => {
                 tracing::error!(error = %e, error_debug = ?e, "ensure_session failed");
-                return Err(anyhow::anyhow!("Failed to ensure session world").into());
+                return Err(anyhow::anyhow!("Failed to ensure session world"));
             }
         };
 
@@ -145,7 +145,7 @@ impl WorldAgentService {
             Ok(r) => r,
             Err(e) => {
                 tracing::error!(error = %e, "exec failed");
-                return Err(anyhow::anyhow!("Command execution failed").into());
+                return Err(anyhow::anyhow!("Command execution failed"));
             }
         };
 

@@ -1,0 +1,48 @@
+name: CI (Linux World)
+
+on:
+  push:
+    branches:
+      - feature/world-isolation
+  pull_request:
+    branches:
+      - feature/world-isolation
+
+jobs:
+  linux:
+    name: linux / cargo tests
+    runs-on: ubuntu-24.04
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Cargo fmt
+        run: cargo fmt --all -- --check
+
+      - name: Cargo check
+        run: cargo check --workspace --all-targets
+
+      - name: Cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Cargo test
+        run: cargo test --workspace --all-targets

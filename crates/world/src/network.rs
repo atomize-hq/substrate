@@ -47,17 +47,16 @@ impl NetworkIsolation {
     fn setup_nftables(&self, ns_name: &str) -> Result<()> {
         use std::process::Command;
 
-        let rules = format!(
-            r#"
+        let rules = r#"
             nft add table inet substrate
-            nft add set inet substrate allowed_ips {{ type ipv4_addr; flags interval; }}
-            nft add chain inet substrate output {{ type filter hook output priority 0; }}
+            nft add set inet substrate allowed_ips { type ipv4_addr; flags interval; }
+            nft add chain inet substrate output { type filter hook output priority 0; }
             nft add rule inet substrate output ip daddr @allowed_ips tcp dport 443 accept
             nft add rule inet substrate output ip daddr 127.0.0.0/8 accept
             nft add rule inet substrate output ip6 daddr ::/0 drop
             nft add rule inet substrate output drop
             "#
-        );
+        .to_string();
 
         // Execute rules in the network namespace
         Command::new("ip")

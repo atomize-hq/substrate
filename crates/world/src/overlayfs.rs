@@ -617,8 +617,10 @@ mod tests {
                     || error_str.contains("Invalid argument")
                     || error_str.contains("Failed to mount overlayfs")
                 {
-                    println!("Skipping overlay mount test (overlayfs not supported in this environment): {}", e);
-                    return;
+                    println!(
+                        "Skipping overlay mount test (overlayfs not supported in this environment): {}",
+                        e
+                    );
                 } else {
                     panic!("Unexpected error mounting overlayfs: {}", e);
                 }

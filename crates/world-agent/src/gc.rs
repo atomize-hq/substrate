@@ -30,8 +30,7 @@ const NETNS_PREFIX: &str = "substrate-";
 const WORLD_ID_PREFIX: &str = "wld_";
 
 fn extract_world_id(ns_name: &str) -> Option<String> {
-    if ns_name.starts_with(NETNS_PREFIX) {
-        let without_prefix = &ns_name[NETNS_PREFIX.len()..];
+    if let Some(without_prefix) = ns_name.strip_prefix(NETNS_PREFIX) {
         if without_prefix.starts_with(WORLD_ID_PREFIX) {
             return Some(without_prefix.to_string());
         }
@@ -41,7 +40,7 @@ fn extract_world_id(ns_name: &str) -> Option<String> {
 
 pub fn list_netns() -> Result<Vec<String>> {
     let output = Command::new("ip")
-        .args(&["netns", "list"])
+        .args(["netns", "list"])
         .output()
         .context("Failed to list network namespaces")?;
 
@@ -70,7 +69,7 @@ pub fn list_netns() -> Result<Vec<String>> {
 
 pub fn netns_pids(ns: &str) -> Result<Vec<i32>> {
     let output = Command::new("ip")
-        .args(&["netns", "pids", ns])
+        .args(["netns", "pids", ns])
         .output()
         .context(format!("Failed to get PIDs for netns {}", ns))?;
 
@@ -111,7 +110,7 @@ pub fn delete_nft_table(ns: &str, world_id: &str) -> Result<()> {
     let table_name = format!("substrate_{}", world_id);
 
     let output = Command::new("timeout")
-        .args(&[
+        .args([
             "2",
             "ip",
             "netns",
@@ -121,7 +120,7 @@ pub fn delete_nft_table(ns: &str, world_id: &str) -> Result<()> {
             "delete",
             "table",
             "inet",
-            &table_name,
+            table_name.as_str(),
         ])
         .output()
         .context(format!("Failed to delete nft table for {}", ns))?;
@@ -145,7 +144,7 @@ pub fn delete_nft_table(ns: &str, world_id: &str) -> Result<()> {
 
 pub fn delete_netns(ns: &str) -> Result<()> {
     let output = Command::new("ip")
-        .args(&["netns", "delete", ns])
+        .args(["netns", "delete", ns])
         .output()
         .context(format!("Failed to delete netns {}", ns))?;
 
@@ -369,7 +368,7 @@ mod integration_tests {
     use super::*;
     use once_cell::sync::Lazy;
     use std::process::Command;
-    use std::sync::Mutex;
+    use tokio::sync::Mutex;
 
     // Global mutex to ensure tests run serially
     static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
@@ -380,7 +379,7 @@ mod integration_tests {
 
     #[tokio::test]
     async fn test_gc_sweep_removes_empty_netns() {
-        let _guard = TEST_MUTEX.lock().unwrap();
+        let _guard = TEST_MUTEX.lock().await;
 
         if !is_root() {
             eprintln!("Skipping root-only test");
@@ -391,11 +390,11 @@ mod integration_tests {
 
         // Clean up any existing test namespace
         let _ = Command::new("ip")
-            .args(&["netns", "delete", test_ns])
+            .args(["netns", "delete", test_ns])
             .output();
 
         let output = Command::new("ip")
-            .args(&["netns", "add", test_ns])
+            .args(["netns", "add", test_ns])
             .output()
             .expect("Failed to create test netns");
 
@@ -404,14 +403,14 @@ mod integration_tests {
         }
 
         let _ = Command::new("ip")
-            .args(&["-n", test_ns, "link", "set", "lo", "up"])
+            .args(["-n", test_ns, "link", "set", "lo", "up"])
             .output();
 
         let report = sweep(None).await.expect("Sweep failed");
 
         // Clean up after test
         let _ = Command::new("ip")
-            .args(&["netns", "delete", test_ns])
+            .args(["netns", "delete", test_ns])
             .output();
 
         assert!(
@@ -424,7 +423,7 @@ mod integration_tests {
 
     #[tokio::test]
     async fn test_gc_sweep_keeps_netns_with_process() {
-        let _guard = TEST_MUTEX.lock().unwrap();
+        let _guard = TEST_MUTEX.lock().await;
 
         if !is_root() {
             eprintln!("Skipping root-only test");
@@ -435,11 +434,11 @@ mod integration_tests {
 
         // Clean up any existing test namespace
         let _ = Command::new("ip")
-            .args(&["netns", "delete", test_ns])
+            .args(["netns", "delete", test_ns])
             .output();
 
         let output = Command::new("ip")
-            .args(&["netns", "add", test_ns])
+            .args(["netns", "add", test_ns])
             .output()
             .expect("Failed to create test netns");
 
@@ -448,7 +447,7 @@ mod integration_tests {
         }
 
         let mut child = Command::new("ip")
-            .args(&["netns", "exec", test_ns, "sleep", "60"])
+            .args(["netns", "exec", test_ns, "sleep", "60"])
             .spawn()
             .expect("Failed to start process in netns");
 
@@ -467,7 +466,7 @@ mod integration_tests {
         std::thread::sleep(std::time::Duration::from_millis(100));
 
         let _ = Command::new("ip")
-            .args(&["netns", "delete", test_ns])
+            .args(["netns", "delete", test_ns])
             .output();
 
         assert!(
