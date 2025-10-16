@@ -1,12 +1,12 @@
-name: CI (Linux World)
+name: CI feature/*
 
 on:
   push:
     branches:
-      - feature/world-isolation
+      - feature/*
   pull_request:
     branches:
-      - feature/world-isolation
+      - feature/*
 
 jobs:
   linux:
@@ -17,6 +17,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libseccomp-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
