@@ -4,28 +4,42 @@ use predicates::prelude::*;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command as StdCommand;
 use std::sync::OnceLock;
 use tempfile::{Builder, TempDir};
 
 /// Helper function to get the substrate binary from workspace root
 fn get_substrate_binary() -> Command {
-    // Try to get workspace dir from environment, fall back to relative path
+    ensure_substrate_built();
+    let mut cmd = Command::new(binary_path());
+    cmd.env("TMPDIR", shared_tmpdir());
+    cmd.env("SUBSTRATE_WORLD", "disabled");
+    cmd
+}
+
+fn ensure_substrate_built() {
+    static BUILD_ONCE: OnceLock<()> = OnceLock::new();
+    BUILD_ONCE.get_or_init(|| {
+        let status = StdCommand::new("cargo")
+            .args(["build", "-p", "substrate"])
+            .status()
+            .expect("failed to invoke cargo build -p substrate");
+        assert!(status.success(), "cargo build -p substrate failed");
+    });
+}
+
+fn binary_path() -> String {
     let binary_name = if cfg!(windows) {
         "substrate.exe"
     } else {
         "substrate"
     };
 
-    let binary_path = if let Ok(workspace_dir) = std::env::var("CARGO_WORKSPACE_DIR") {
+    if let Ok(workspace_dir) = std::env::var("CARGO_WORKSPACE_DIR") {
         format!("{}/target/debug/{}", workspace_dir, binary_name)
     } else {
-        // Fallback: relative path from crates/shell/tests to workspace root
         format!("../../target/debug/{}", binary_name)
-    };
-    let mut cmd = Command::new(binary_path);
-    cmd.env("TMPDIR", shared_tmpdir());
-    cmd.env("SUBSTRATE_WORLD", "disabled");
-    cmd
+    }
 }
 
 fn shared_tmpdir() -> &'static Path {
