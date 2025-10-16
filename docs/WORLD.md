@@ -134,20 +134,22 @@ Notes
 
 ## 6) Shell Behavior
 
-- Default‑on world (Linux & macOS)
+- Default‑on world (Linux, macOS, Windows)
   - On startup, the shell ensures a session world and sets `SUBSTRATE_WORLD=enabled` plus `SUBSTRATE_WORLD_ID`.
   - macOS builds warm the Lima VM, establish forwarding, and reuse the same backend factory used on Linux.
+  - Windows hosts call `platform_world::windows::ensure_world_ready`, which provisions/warms the `substrate-wsl` distro (via the PowerShell helpers) and keeps the world agent reachable through the forwarder named pipe.
 - Routing
-  - Non‑PTY: POST to `/v1/execute` over UDS (Linux) or the forwarded socket/port (macOS).
-  - PTY: use WS to `/v1/stream` over the active transport; fallback to host PTY otherwise.
+  - Non‑PTY: POST to `/v1/execute` over UDS (Linux) or the forwarded socket/port (macOS/Windows).
+  - PTY: use WS to `/v1/stream` over the active transport; fallback to host PTY only if world startup fails.
 - Prompt safety
   - The REPL wraps PTY runs in `reedline::suspend_guard()` to avoid prompt corruption during external output.
 - Readiness & auto‑spawn
   - The shell probes `/v1/capabilities`; if stale socket is found, it removes it.
   - If the agent isn’t running, the shell attempts to spawn it (Linux dev flow: `target/debug/world-agent`).
-  - On macOS the shell invokes the Lima backend ensure path, which starts the VM if needed and establishes the first working transport before proceeding.
+  - macOS invokes the Lima backend ensure path to boot the VM and wire up its tunnel.
+  - Windows triggers the forwarder warm routine; see `docs/cross-platform/wsl_world_setup.md` for the underlying PowerShell flow.
 - Fallback
-  - Exactly one warning is printed if the WS/agent path fails, then host execution proceeds.
+  - Exactly one warning is printed if the world cannot be reached; execution continues on the host in that situation.
 
 ---
 
@@ -168,7 +170,7 @@ Notes
 ## 8) Environment Variables
 
 - Core
-  - `SUBSTRATE_WORLD=enabled|disabled` (default: enabled on Linux & macOS)
+  - `SUBSTRATE_WORLD=enabled|disabled` (default: enabled on all platforms – the shell flips it to `enabled` after `ensure_world_ready` succeeds)
   - `SUBSTRATE_WORLD_ID` (set by the shell on ensure)
   - `SUBSTRATE_AGENT_ID` (tracing/attribution; defaults to "human")
 - PTY/WS

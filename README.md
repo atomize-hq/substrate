@@ -38,6 +38,22 @@ substrate
 # That's it! Shims are deployed automatically on first run
 ```
 
+### Windows Quick Start
+
+On Windows 11, Substrate shells run inside the `substrate-wsl` distribution to match the Linux isolation stack. Provision or refresh the distro with PowerShell 7:
+
+```powershell
+pwsh -File scripts\windows\wsl-warm.ps1 -DistroName substrate-wsl -ProjectPath (Resolve-Path .)
+```
+
+After the warm step, run `substrate` from the workspace (or your PATH) and it will automatically connect to the world agent inside WSL. Validate the bridge, PTY, and replay flows with the smoke script:
+
+```powershell
+pwsh -File scripts\windows\wsl-smoke.ps1
+```
+
+Detailed setup guidance, doctor output, and troubleshooting live in [`docs/cross-platform/wsl_world_setup.md`](docs/cross-platform/wsl_world_setup.md).
+
 ### Shim Deployment
 
 Substrate automatically deploys command shims on first run. The shims are:
@@ -77,7 +93,6 @@ sudo cp target/release/substrate* /usr/local/bin/
 - **Policy Engine**: YAML-based policies for command allowlists, resource limits, and approval workflows
 - **Agent API**: REST endpoints for AI assistants to execute commands with budgets and scope controls
 - **Graph Intelligence**: Kuzu database tracking command relationships and file dependencies
-- **Cross-Platform**: macOS support via Lima VMs, Windows via WSL2
 
 ### Future Features Pipeline
 
@@ -117,8 +132,10 @@ Additional capabilities planned for later phases:
  - **[Replay](docs/REPLAY.md)** - Replaying traced commands (with Linux isolation option)
  - **[Graph](docs/GRAPH.md)** - Graph architecture and CLI (mock backend)
  - **[Privileged Tests](docs/HOWTO_PRIVILEGED_TESTS.md)** - Running isolation/netfilter tests on Linux
+ - **[Windows World Setup](docs/cross-platform/wsl_world_setup.md)** - WSL2 provisioning, warm/doctor/smoke automation, and troubleshooting
+ - **[Transport Parity Design](docs/cross-platform/transport_parity_design.md)** - The cross-platform transport architecture that underpins Windows parity
 
-### World Doctor (Linux & macOS)
+### World Doctor & Host Readiness
 
 Use the built-in doctor to validate host readiness for isolation and macOS Lima provisioning:
 
@@ -142,6 +159,12 @@ macOS report highlights:
 - Guest `substrate-world-agent` service, socket, and `/v1/capabilities` response
 - nftables availability and root filesystem usage inside the guest
 - JSON output nests these fields under `lima.{installed, vm_status, service_active, agent_socket, agent_caps_ok, vsock_proxy, ssh, nft, disk_usage}`
+
+On Windows, run the PowerShell doctor to verify WSL, forwarder, and agent health:
+
+```powershell
+pwsh -File scripts\windows\wsl-doctor.ps1 -DistroName substrate-wsl -Verbose
+```
 
 Linux packaging note: we recommend installing `fuse-overlayfs` so Substrate can fall back to user-space overlay where kernel overlay mounts are unavailable. For example:
 - Debian/Ubuntu: `apt-get install -y fuse-overlayfs fuse3`

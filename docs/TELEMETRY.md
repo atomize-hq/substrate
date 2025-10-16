@@ -80,8 +80,9 @@ ENV LD_PRELOAD=/usr/lib/substrate/telemetry.so
 - **Production**: Run inside Lima VM (MacLima backend)
 
 ### Windows
-- **Status**: 🚫 Not Supported
-- **Future**: May support via WSL2
+- **Status**: ✅ Supported inside the `substrate-wsl` world (the library runs in the Linux guest). Native Win32 interception is not provided.
+- **Mechanism**: Injected automatically by the world backend when telemetry is enabled, identical to the Linux flow.
+- **Notes**: Use the PowerShell warm/doctors in `docs/cross-platform/wsl_world_setup.md` to provision the WSL distro before relying on telemetry.
 
 ## Event Format
 

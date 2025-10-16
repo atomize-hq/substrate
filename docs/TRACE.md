@@ -17,13 +17,10 @@ The Substrate Trace module (`crates/trace`) provides comprehensive span-based tr
 
 ### Enabling Trace
 
-Trace functionality is only active when Phase 4 features are enabled:
+Trace functionality is active by default whenever you launch the Substrate shell: the CLI calls `ensure_world_ready` and sets `SUBSTRATE_WORLD=enabled` on Linux, macOS (Lima), and Windows (WSL). If you need to emit spans from a custom wrapper or test harness, export the variables manually before launching the command:
 
 ```bash
-# Enable Phase 4 features (includes trace)
 export SUBSTRATE_WORLD=enabled
-
-# Run commands - spans are automatically generated
 substrate -c "npm install"
 ```
 
@@ -85,7 +82,7 @@ jq 'select(.policy_decision.action == "deny")' ~/.substrate/trace.jsonl
 }
 ```
 
-- Windows adds an optional `fs_diff.display_path` map that pairs canonical paths (e.g., `/mnt/c/...`) with native Windows representations; Linux and macOS omit this field.
+- Windows adds an optional `fs_diff.display_path` map that pairs canonical paths (e.g., `/mnt/c/...`) with native Windows representations; Linux and macOS omit this field. The map is populated by the `world-windows-wsl` backend and available whenever a diff is returned.
 
 ## Architecture
 
