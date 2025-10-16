@@ -114,16 +114,12 @@ fn is_executable(path: &Path) -> bool {
                 }
             }
             // Executable extensions on Windows
-            match path
-                .extension()
-                .and_then(|e| e.to_str())
-                .map(|s| s.to_ascii_lowercase())
-            {
-                Some(ref ext) if ["exe", "bat", "cmd", "com", "ps1"].contains(&ext.as_str()) => {
-                    true
-                }
-                _ => false,
-            }
+            matches!(
+                path.extension()
+                    .and_then(|e| e.to_str())
+                    .map(|s| s.to_ascii_lowercase()),
+                Some(ref ext) if ["exe", "bat", "cmd", "com", "ps1"].contains(&ext.as_str())
+            )
         } else {
             false
         }

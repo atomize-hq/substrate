@@ -459,16 +459,12 @@ fn is_executable(path: &std::path::Path) -> bool {
                 }
             }
             // Executable extensions on Windows
-            match path
-                .extension()
-                .and_then(|e| e.to_str())
-                .map(|s| s.to_ascii_lowercase())
-            {
-                Some(ref ext) if ["exe", "bat", "cmd", "com", "ps1"].contains(&ext.as_str()) => {
-                    true
-                }
-                _ => false,
-            }
+            matches!(
+                path.extension()
+                    .and_then(|e| e.to_str())
+                    .map(|s| s.to_ascii_lowercase()),
+                Some(ref ext) if ["exe", "bat", "cmd", "com", "ps1"].contains(&ext.as_str())
+            )
         } else {
             false
         }
@@ -622,7 +618,7 @@ mod tests {
         #[cfg(unix)]
         std::fs::write(&fake_bin, "#!/bin/bash\necho 'bypass test'").unwrap();
         #[cfg(windows)]
-        std::fs::write(&fake_bin.with_extension("exe"), "@echo bypass test").unwrap();
+        std::fs::write(fake_bin.with_extension("exe"), "@echo bypass test").unwrap();
 
         #[cfg(unix)]
         {
