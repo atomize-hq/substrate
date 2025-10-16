@@ -97,6 +97,11 @@ mod tests {
         } else {
             std::env::remove_var("PATH");
         }
+
+        #[cfg(windows)]
+        {
+            let _ = std::env::var("USERPROFILE");
+        }
     }
 
     #[test]
