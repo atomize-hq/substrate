@@ -171,7 +171,6 @@ Linux packaging note: we recommend installing `fuse-overlayfs` so Substrate can 
 - Fedora/RHEL/CentOS: `dnf install -y fuse-overlayfs`
 - Arch/Manjaro: `pacman -S --needed fuse-overlayfs`
 
-
 ## Getting Help
 
 - **Issues**: Report bugs via [GitHub Issues](https://github.com/your-org/substrate/issues)
@@ -184,4 +183,4 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) for deta
 
 ---
 
-**Secure AI-assisted development, powered by Rust**
+Secure AI-assisted development, powered by Rust.

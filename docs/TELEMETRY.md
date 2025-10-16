@@ -69,20 +69,22 @@ ENV LD_PRELOAD=/usr/lib/substrate/telemetry.so
 ## Platform Support
 
 ### Linux
-- **Status**: ✅ Fully Supported
+
+- **Status**: ✅ Fully supported inside native Linux worlds
 - **Mechanism**: `LD_PRELOAD` with `dlsym(RTLD_NEXT, ...)`
 - **Testing**: Native and containerized environments
 
-### macOS
-- **Status**: ⚠️ Limited Support
-- **Issue**: System Integrity Protection (SIP) blocks `DYLD_INSERT_LIBRARIES` for system binaries
-- **Solution**: Use Docker containers or Lima VMs for testing
-- **Production**: Run inside Lima VM (MacLima backend)
+### macOS (Lima guest)
 
-### Windows
-- **Status**: ✅ Supported inside the `substrate-wsl` world (the library runs in the Linux guest). Native Win32 interception is not provided.
-- **Mechanism**: Injected automatically by the world backend when telemetry is enabled, identical to the Linux flow.
-- **Notes**: Use the PowerShell warm/doctors in `docs/cross-platform/wsl_world_setup.md` to provision the WSL distro before relying on telemetry.
+- **Status**: ✅ Supported inside the Lima VM guest (recommended workflow)
+- **Mechanism**: Identical to Linux; the guest injects the `.so` via `LD_PRELOAD`
+- **Notes**: Host-level `DYLD_INSERT_LIBRARIES` is still blocked by SIP, so rely on `scripts/mac/lima-warm.sh` / `smoke.sh` to operate inside the guest
+
+### Windows (WSL guest)
+
+- **Status**: ✅ Supported inside the `substrate-wsl` world (the telemetry library runs in the Linux guest)
+- **Mechanism**: Same LD_PRELOAD flow inside WSL; there is no native Win32 interception today
+- **Notes**: Provision the distro with `scripts/windows/wsl-warm.ps1` and verify with `wsl-doctor.ps1` / `wsl-smoke.ps1`
 
 ## Event Format
 
@@ -105,7 +107,7 @@ Events are logged as JSONL to the trace file:
 
 ## Integration with Substrate
 
-The telemetry library is designed to be injected when worlds are created:
+The telemetry library is designed to be injected when worlds are created. The current world specifications keep `enable_preload` set to `false` by default; toggle it (or set the environment variables manually) when you are ready to capture syscall telemetry:
 
 ```rust
 // In world backend

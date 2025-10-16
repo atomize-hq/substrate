@@ -1,7 +1,7 @@
 # Phase 5 — Windows "Always World" Implementation Plan
 
-Status: Draft (awaiting review)  
-Owner: Substrate Core  
+Status: Complete (validated across WSL/macOS/Linux)  
+Owner: Substrate Core (Windows strike team)  
 Scope: Deliver Windows parity with the Linux/macOS "Always World" stack. Every entry point (`substrate`, PTY, replay, shim, agent API) must execute inside a WSL2-hosted Linux world and return identical telemetry, isolation semantics, and user experience. This document assumes no prior knowledge of the repository—follow each step exactly, gather evidence for every sanity check, and escalate if anything diverges from expectations.
 
 > **Execution Guardrails**
