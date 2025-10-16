@@ -87,7 +87,7 @@ mod tests {
 
         #[cfg(windows)]
         {
-            if let Some(up) = std::env::var("USERPROFILE").ok() {
+            if let Ok(up) = std::env::var("USERPROFILE") {
                 let _ = up; // suppress unused warning if not needed
             }
         }
