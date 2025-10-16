@@ -720,6 +720,11 @@ fn verify_process_group(pid: Option<u32>) {
     }
 }
 
+#[cfg(not(unix))]
+fn verify_process_group(_pid: Option<u32>) {
+    // No-op on non-Unix platforms
+}
+
 // Minimal terminal guard - ONLY sets stdin to raw mode for input forwarding
 // Does NOT touch stdout to avoid display corruption
 struct MinimalTerminalGuard {

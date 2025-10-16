@@ -4,7 +4,7 @@ use agent_api_client::{AgentClient, Transport};
 use anyhow::Result;
 use std::path::PathBuf;
 use std::sync::{Arc, Once, OnceLock};
-use world_api::{ExecRequest, ResourceLimits, WorldBackend, WorldSpec};
+use world_api::{ResourceLimits, WorldBackend, WorldSpec};
 use world_windows_wsl::WindowsWslBackend;
 
 struct WindowsContext {
