@@ -1,5 +1,3 @@
-#![cfg(target_os = "windows")]
-
 use crate::config::ForwarderConfig;
 use anyhow::Context;
 use clap::Parser;
