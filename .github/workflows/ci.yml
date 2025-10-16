@@ -1,79 +1,69 @@
 name: CI
 
+name: CI
+
 on:
   push:
-    branches: [ main, develop ]
+    branches:
+      - main
+      - develop
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
 
 env:
   CARGO_TERM_COLOR: always
   CARGO_WORKSPACE_DIR: ${{ github.workspace }}
 
 jobs:
-  test:
-    name: Test
+  build-and-test:
+    name: ${{ matrix.os }} / cargo tests
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false  # Allow other OS tests to continue even if one fails
+      fail-fast: false  # keep main non-fail-fast
       matrix:
-        os: [ubuntu-24.04, macos-14]
-        rust: [1.89.0]
-
+        os: [ubuntu-24.04, windows-2022, macos-14]
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_WORKSPACE_DIR: ${{ github.workspace }}
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        toolchain: ${{ matrix.rust }}
-        components: rustfmt, clippy
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libseccomp-dev
 
-    - name: Cache dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.89.0
+          components: rustfmt, clippy
 
-    - name: Check formatting
-      run: cargo fmt --all -- --check
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
-    - name: Run clippy
-      run: cargo clippy --workspace -- -D warnings
+      - name: Cargo fmt
+        run: cargo fmt --all -- --check
 
-    - name: Build debug
-      run: cargo build --workspace
+      - name: Cargo check
+        run: cargo check --workspace --all-targets
 
-    - name: Debug test environment
-      run: |
-        echo "Working directory: $(pwd)"
-        echo "CARGO_WORKSPACE_DIR: ${CARGO_WORKSPACE_DIR}"
-        echo "Rust version: $(rustc --version)"
-        echo "Debug binary exists: $(ls -la target/debug/substrate* 2>/dev/null || echo 'NOT FOUND')"
-        echo "Home directory: $HOME"
-        echo "Temp directory: ${{ runner.temp }}"
-        echo "Current shell: $SHELL"
-        echo "OS: ${{ matrix.os }}"
-      shell: bash
+      - name: Cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
-    - name: Run tests
-      run: cargo test --workspace --verbose
-      env:
-        RUST_BACKTRACE: 1
+      - name: Cargo build (debug)
+        run: cargo build --workspace
 
-    - name: Build release
-      run: cargo build --release
-
-    - name: Test binaries exist
-      shell: bash
-      run: |
-        test -f target/release/substrate
-        test -f target/release/substrate-shim
-        echo "✅ Both binaries built successfully"
-
+      - name: Cargo test
+        run: cargo test --workspace --all-targets
