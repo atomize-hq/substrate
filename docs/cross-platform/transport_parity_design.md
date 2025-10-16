@@ -17,8 +17,9 @@ This document captures the transport architecture needed for cross-platform pari
   gated loopback TCP listener.
 - Telemetry records the active transport in every span to aid
   troubleshooting and parity verification.
-- macOS Lima uses the Unix connector via the shared socket today.
-  Provisioning will switch to vsock once the Lima package bundles the required tooling.
+- macOS transport auto‑selects: VSock when available (via `vsock-proxy`),
+  otherwise UDS via SSH, with TCP as a fallback. The Unix connector is used
+  when SSH‑forwarded UDS is selected.
 
 ## Component Relationships (ASCII Diagram)
 
@@ -77,11 +78,20 @@ This document captures the transport architecture needed for cross-platform pari
   [target]
   mode = "tcp"           # other option: "uds"
   tcp_port = 61337
-  uds_path = "\\\\wsl$\\substrate-wsl\run\substrate.sock"
+  uds_path = "/run/substrate.sock"
   ```
 
 - Environment override: `SUBSTRATE_FORWARDER_TARGET=tcp|uds` for testing.
-- Logging: startup emits `forwarder.target=<mode>` in JSON logs.
+- Logging: startup emits JSON fields with `target_mode` (e.g. `tcp` or `uds`)
+  and `target` (e.g. `127.0.0.1:61337` or `/run/substrate.sock`).
+
+### Windows Host Path Defaults
+
+- Default host → forwarder path is the Windows named pipe `\\.\pipe\substrate-agent`.
+- Client → forwarder can optionally use host TCP during soak/validation by
+  setting `SUBSTRATE_FORWARDER_TCP=1` or `SUBSTRATE_FORWARDER_TCP_ADDR=host:port`.
+- Forwarder → agent (inside WSL) defaults to loopback TCP `127.0.0.1:61337`
+  (enabled by systemd unit via `SUBSTRATE_AGENT_TCP_PORT`).
 
 ## World Agent Dual Listener
 
