@@ -168,7 +168,7 @@ fn flush_pipe_buffers(pipe: &NamedPipeServer) -> io::Result<()> {
     let handle = pipe.as_raw_handle();
     unsafe {
         FlushFileBuffers(HANDLE(handle as *mut _))
-            .map_err(|err| io::Error::from_raw_os_error(err.code().0 as i32))?;
+            .map_err(|err| io::Error::from_raw_os_error(err.code().0))?;
     }
     Ok(())
 }

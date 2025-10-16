@@ -45,8 +45,7 @@ impl PipeListener {
     }
 
     fn create_server(&self) -> io::Result<NamedPipeServer> {
-        let mut descriptor =
-            build_security_descriptor().map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+        let mut descriptor = build_security_descriptor().map_err(io::Error::other)?;
         let mut attributes = SECURITY_ATTRIBUTES {
             nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
             lpSecurityDescriptor: descriptor.as_mut_ptr() as *mut c_void,
@@ -155,7 +154,7 @@ fn build_security_descriptor() -> anyhow::Result<SecurityDescriptor> {
             &mut raw_descriptor,
             None,
         )
-        .map_err(|err| anyhow::Error::from(err))?;
+        .map_err(anyhow::Error::from)?;
 
         let ptr = raw_descriptor.0;
         let length = GetSecurityDescriptorLength(raw_descriptor) as usize;

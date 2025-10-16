@@ -81,9 +81,9 @@ impl Default for AgentTransportConfig {
     fn default() -> Self {
         #[cfg(target_os = "windows")]
         {
-            return AgentTransportConfig::NamedPipe {
+            AgentTransportConfig::NamedPipe {
                 path: PathBuf::from(r"\.\pipe\substrate-agent"),
-            };
+            }
         }
 
         #[cfg(not(target_os = "windows"))]
