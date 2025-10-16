@@ -128,10 +128,7 @@ fn is_lock_busy(err: &std::io::Error) -> bool {
     {
         // Windows-specific share/lock violations that indicate the file is locked by another process
         // ERROR_SHARING_VIOLATION = 32, ERROR_LOCK_VIOLATION = 33
-        match err.raw_os_error() {
-            Some(32) | Some(33) => true,
-            _ => false,
-        }
+        matches!(err.raw_os_error(), Some(32) | Some(33))
     }
     #[cfg(not(windows))]
     {
