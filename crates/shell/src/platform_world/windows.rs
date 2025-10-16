@@ -176,7 +176,7 @@ mod tests {
     use clap::Parser;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
-    use world_api::{ExecResult, FsDiff, WorldHandle};
+    use world_api::{ExecRequest, ExecResult, FsDiff, WorldHandle};
 
     #[derive(Clone)]
     struct StubBackend {
