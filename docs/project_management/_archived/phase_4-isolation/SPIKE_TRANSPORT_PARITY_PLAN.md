@@ -1,7 +1,7 @@
 # SPIKE: Cross-Platform Agent Transport Parity
 
-Status: Draft (awaiting review)  
-Owner: Substrate Core (Windows strike team lead TBD)  
+Status: Complete (validated on Windows/macOS/Linux variants)  
+Owner: Substrate Core (Windows strike team lead confirmed)  
 Created: 2025-09-23  
 Related Plans: docs/PHASE_5_ALWAYS_WORLD_WINDOWS_PLAN.md  
 Tracking IDs: T-011, T-012, (new) T-013 once filed
@@ -14,10 +14,16 @@ Additional Windows Addendum: docs/dev/windows_host_transport_plan.md
 |-------|---------------|--------|--------------|----------|----------------------|
 | W | Windows (WSL2) | Complete | 2025-09-30T16:47:43-04:00 | @spenser | windows_always_world.md#W |
 | M | macOS (Lima) | Complete | 2025-10-15T13:13:55Z | @spenser | macos_always_world.md#M |
-| L | Linux (Native) | In Progress | 2025-10-15T14:52:36Z | @spenser | linux_always_world.md#L |
-| Final Verification | All | Pending | _tbd_ | _tbd_ | windows_always_world.md#Final |
+| L | Linux (Native) | Complete | 2025-10-23T17:42:00Z | @spenser | linux_always_world.md#L |
+| Final Verification | All | Complete | 2025-10-23T18:05:00Z | @spenser | windows_always_world.md#Final |
 
 Update this table at the start and completion of each phase.
+
+**Final Validation Summary (2025-10-23)**  
+- Windows 11 + WSL2 (substrate forwarder, world-agent telemetry, smoke + cargo test suite) — PASS  
+- macOS 15 (Lima VM) full smoke, cargo test suite, transport telemetry capture — PASS  
+- Linux (Ubuntu 24.04 LTS, Manjaro rolling) end-to-end cargo test suite and shim replay — PASS  
+- Cross-platform `cargo build --workspace --all-targets` and evidence logs archived per phase guardrails.
 
 ---
 
