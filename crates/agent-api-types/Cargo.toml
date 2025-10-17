@@ -1,10 +1,10 @@
 [package]
 name = "agent-api-types"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 edition = "2021"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
-substrate-common = { path = "../common" }
+substrate-common = { version = "0.2.0-beta.1", path = "../common" }
