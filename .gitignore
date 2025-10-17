@@ -9,4 +9,5 @@ test_pty.sh
 debug.log
 crates/shell/test.py
 DISTRIBUTION.md
+release
 releases/
