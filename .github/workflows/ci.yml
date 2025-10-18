@@ -1,4 +1,4 @@
-name: CI
+name: CI main
 
 on:
   push:
@@ -8,16 +8,12 @@ on:
     branches:
       - main
 
-env:
-  CARGO_TERM_COLOR: always
-  CARGO_WORKSPACE_DIR: ${{ github.workspace }}
-
 jobs:
   build-and-test:
     name: ${{ matrix.os }} / cargo tests
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false  # keep main non-fail-fast
+      fail-fast: false
       matrix:
         os: [ubuntu-24.04, windows-2022, macos-14]
     env:
