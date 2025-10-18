@@ -1,6 +1,6 @@
 [package]
 name = "substrate-shell"
-version = "0.1.1"
+version = "0.2.0-beta.1"
 edition = "2021"
 rust-version = "1.89"
 authors = ["Atomize"]
@@ -26,7 +26,11 @@ shell-words = "1.1"
 gethostname = "0.4"
 which = "6"
 ctrlc = "3.4"
-substrate-common = { version = "0.1.1", path = "../common" }
+substrate-common = { version = "0.2.0-beta.1", path = "../common" }
+substrate-broker = { version = "0.1.0", path = "../broker" }
+world = { version = "0.1.1", path = "../world" }
+world-api = { version = "0.1.0", path = "../world-api" }
+world-backend-factory = { version = "0.1.0", path = "../world-backend-factory" }
 # Dependencies for bundled binaries
 sha2 = "0.10"
 # PTY support dependencies
@@ -39,13 +43,28 @@ dirs = "5"
 fs2 = "0.4"        # For cross-platform file locking
 tempfile = "3.8"   # For atomic deployment
 serde = { version = "1.0", features = ["derive"] }
+substrate-trace = { version = "0.2.0-beta.1", path = "../trace" }
+substrate-replay = { version = "0.1.0", path = "../replay" }
+substrate-graph = { version = "0.1.0", path = "../substrate-graph" }
+tokio = { version = "1.32", features = ["rt", "signal"] }
+tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }
+futures = "0.3"
+base64 = "0.22"
+url = "2"
+agent-api-client = { version = "0.2.0-beta.1", path = "../agent-api-client" }
+agent-api-types = { version = "0.2.0-beta.1", path = "../agent-api-types" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+world-mac-lima = { version = "0.1.0", path = "../world-mac-lima" }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.29", features = ["process", "signal", "term", "fs", "time", "poll"] }
 libc = "0.2"
+hyperlocal = "0.8"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.52", features = ["Win32_Foundation", "Win32_System_Console"] }
+world-windows-wsl = { version = "0.1.0", path = "../world-windows-wsl" }
 
 [dev-dependencies]
 assert_cmd = "2.0"
@@ -59,3 +78,5 @@ rustc_version = "0.4"
 
 [features]
 default = []
+
+

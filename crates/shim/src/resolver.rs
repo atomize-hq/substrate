@@ -101,9 +101,28 @@ fn is_executable(path: &Path) -> bool {
 
     #[cfg(windows)]
     {
-        std::fs::metadata(path)
-            .map(|m| m.is_file())
-            .unwrap_or(false)
+        use std::io::Read;
+        if let Ok(meta) = std::fs::metadata(path) {
+            if !meta.is_file() {
+                return false;
+            }
+            // Treat shebang scripts as executable
+            if let Ok(mut f) = std::fs::File::open(path) {
+                let mut head = [0u8; 2];
+                if f.read(&mut head).ok() == Some(2) && &head == b"#!" {
+                    return true;
+                }
+            }
+            // Executable extensions on Windows
+            matches!(
+                path.extension()
+                    .and_then(|e| e.to_str())
+                    .map(|s| s.to_ascii_lowercase()),
+                Some(ref ext) if ["exe", "bat", "cmd", "com", "ps1"].contains(&ext.as_str())
+            )
+        } else {
+            false
+        }
     }
 }
 

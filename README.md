@@ -38,6 +38,22 @@ substrate
 # That's it! Shims are deployed automatically on first run
 ```
 
+### Windows Quick Start
+
+On Windows 11, Substrate shells run inside the `substrate-wsl` distribution to match the Linux isolation stack. Provision or refresh the distro with PowerShell 7:
+
+```powershell
+pwsh -File scripts\windows\wsl-warm.ps1 -DistroName substrate-wsl -ProjectPath (Resolve-Path .)
+```
+
+After the warm step, run `substrate` from the workspace (or your PATH) and it will automatically connect to the world agent inside WSL. Validate the bridge, PTY, and replay flows with the smoke script:
+
+```powershell
+pwsh -File scripts\windows\wsl-smoke.ps1
+```
+
+Detailed setup guidance, doctor output, and troubleshooting live in [`docs/cross-platform/wsl_world_setup.md`](docs/cross-platform/wsl_world_setup.md).
+
 ### Shim Deployment
 
 Substrate automatically deploys command shims on first run. The shims are:
@@ -77,7 +93,6 @@ sudo cp target/release/substrate* /usr/local/bin/
 - **Policy Engine**: YAML-based policies for command allowlists, resource limits, and approval workflows
 - **Agent API**: REST endpoints for AI assistants to execute commands with budgets and scope controls
 - **Graph Intelligence**: Kuzu database tracking command relationships and file dependencies
-- **Cross-Platform**: macOS support via Lima VMs, Windows via WSL2
 
 ### Future Features Pipeline
 
@@ -114,6 +129,47 @@ Additional capabilities planned for later phases:
 - **[Development](docs/DEVELOPMENT.md)** - Building, testing, and architecture
 - **[Contributing](CONTRIBUTING.md)** - How to contribute to the project
 - **[Security](SECURITY.md)** - Security model and vulnerability reporting
+ - **[Replay](docs/REPLAY.md)** - Replaying traced commands (with Linux isolation option)
+ - **[Graph](docs/GRAPH.md)** - Graph architecture and CLI (mock backend)
+ - **[Privileged Tests](docs/HOWTO_PRIVILEGED_TESTS.md)** - Running isolation/netfilter tests on Linux
+ - **[Windows World Setup](docs/cross-platform/wsl_world_setup.md)** - WSL2 provisioning, warm/doctor/smoke automation, and troubleshooting
+ - **[Transport Parity Design](docs/cross-platform/transport_parity_design.md)** - The cross-platform transport architecture that underpins Windows parity
+
+### World Doctor & Host Readiness
+
+Use the built-in doctor to validate host readiness for isolation and macOS Lima provisioning:
+
+```bash
+# Human-readable report
+substrate world doctor
+
+# JSON for CI
+substrate world doctor --json | jq .
+```
+
+Linux report highlights:
+- overlayfs kernel support (with best-effort `modprobe overlay` when privileged)
+- FUSE availability: `/dev/fuse` and `fuse-overlayfs` in `PATH`
+- cgroup v2 presence, nft availability, and `kernel.dmesg_restrict`
+- Per-user runtime roots for overlay and copy-diff
+
+macOS report highlights:
+- Lima tooling (`limactl`), Virtualization.framework (`sysctl kern.hv_support`), and optional `vsock-proxy`
+- Lima VM `substrate` status plus SSH connectivity
+- Guest `substrate-world-agent` service, socket, and `/v1/capabilities` response
+- nftables availability and root filesystem usage inside the guest
+- JSON output nests these fields under `lima.{installed, vm_status, service_active, agent_socket, agent_caps_ok, vsock_proxy, ssh, nft, disk_usage}`
+
+On Windows, run the PowerShell doctor to verify WSL, forwarder, and agent health:
+
+```powershell
+pwsh -File scripts\windows\wsl-doctor.ps1 -DistroName substrate-wsl -Verbose
+```
+
+Linux packaging note: we recommend installing `fuse-overlayfs` so Substrate can fall back to user-space overlay where kernel overlay mounts are unavailable. For example:
+- Debian/Ubuntu: `apt-get install -y fuse-overlayfs fuse3`
+- Fedora/RHEL/CentOS: `dnf install -y fuse-overlayfs`
+- Arch/Manjaro: `pacman -S --needed fuse-overlayfs`
 
 ## Getting Help
 
@@ -127,4 +183,4 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) for deta
 
 ---
 
-**Secure AI-assisted development, powered by Rust**
+Secure AI-assisted development, powered by Rust.

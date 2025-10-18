@@ -1,0 +1,21 @@
+[package]
+name = "world-windows-wsl"
+version = "0.1.0"
+edition = "2021"
+description = "Windows world backend delegating to WSL world-agent"
+license = "MIT"
+
+[dependencies]
+anyhow = { workspace = true }
+agent-api-client = { path = "../agent-api-client" }
+agent-api-types = { path = "../agent-api-types" }
+base64 = "0.22"
+serde_json = { workspace = true }
+substrate-common = { path = "../common" }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
+tracing = "0.1"
+uuid = { workspace = true }
+world-api = { path = "../world-api" }
+
+[dev-dependencies]
+serde_json = { workspace = true }

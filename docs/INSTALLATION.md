@@ -70,7 +70,7 @@ substrate --shim-skip     # Skip deployment for this run
 # To use shims for command interception, add to PATH:
 export PATH="$HOME/.substrate/shims:$PATH"
 export SHIM_ORIGINAL_PATH="$PATH"  # Save original PATH
-export SHIM_TRACE_LOG="$HOME/.trace_shell.jsonl"
+export SHIM_TRACE_LOG="$HOME/.substrate/trace.jsonl"
 
 # Clear command cache
 hash -r
@@ -95,7 +95,7 @@ export BASH_ENV="$HOME/.substrate_bashenv"
 
 # Test integration
 bash -c 'which git; git --version'
-tail -1 ~/.trace_shell.jsonl | jq '.'
+tail -1 ~/.substrate/trace.jsonl | jq '.'
 ```
 
 ## Platform-Specific Setup
@@ -106,8 +106,12 @@ Full native support with all features available.
 
 ### macOS
 
-Current: Full support except for some advanced isolation features.
-Future: Lima VM integration for complete feature parity.
+Always-World parity via Lima VM is available now.
+
+1. Follow `docs/dev/mac_world_setup.md` to install prerequisites, start the Lima VM (`scripts/mac/lima-warm.sh`), deploy `substrate-world-agent`, and run `scripts/mac/lima-doctor.sh`.
+2. After building the repo, validate end-to-end isolation with `PATH="$(pwd)/target/debug:$PATH" scripts/mac/smoke.sh` (non-PTY, PTY, replay + fs_diff assertion).
+3. Agent logs are accessible via `substrate sudo journalctl -u substrate-world-agent -n 200` (the CLI shells into the VM automatically).
+4. Use `substrate world doctor` (human or `--json`) for an at-a-glance health report covering Lima status, guest service responsiveness, and agent connectivity.
 
 ### Windows
 
@@ -126,7 +130,7 @@ substrate> exit
 
 # Command tracing
 git --version
-tail -1 ~/.trace_shell.jsonl
+tail -1 ~/.substrate/trace.jsonl
 ```
 
 ## Troubleshooting

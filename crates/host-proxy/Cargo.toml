@@ -1,0 +1,41 @@
+[package]
+name = "host-proxy"
+version = "0.1.0"
+edition = "2021"
+authors = ["Atomize"]
+description = "Host-side API gateway for Agent API with auth, rate limiting, and request forwarding"
+license = "MIT"
+
+[[bin]]
+name = "host-proxy"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = { workspace = true }
+tokio = { version = "1", features = ["full"] }
+uuid = { workspace = true }
+thiserror = "1"
+axum = "0.7"
+hyper = "1"
+tower = "0.5"
+tower-http = { version = "0.5", features = ["limit", "trace", "auth"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio-stream = { version = "0.1", features = ["net"] }
+hyper-util = { version = "0.1", features = ["server", "service", "server-auto", "tokio"] }
+async-trait = "0.1"
+futures = "0.3"
+chrono = "0.4"
+
+# Local dependencies
+agent-api-client = { version = "0.2.0-beta.1", path = "../agent-api-client" }
+agent-api-core = { version = "0.2.0-beta.1", path = "../agent-api-core" }
+agent-api-types = { version = "0.2.0-beta.1", path = "../agent-api-types" }
+
+[dev-dependencies]
+tempfile = "3"
+
+[target.'cfg(unix)'.dependencies]
+hyperlocal = "0.9"

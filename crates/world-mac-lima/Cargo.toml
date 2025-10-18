@@ -1,0 +1,27 @@
+[package]
+name = "world-mac-lima"
+version = "0.1.1"
+edition = "2021"
+authors = ["Atomize"]
+description = "macOS world backend using Lima VM with Linux isolation inside"
+license = "MIT"
+
+[dependencies]
+anyhow = { workspace = true }
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }
+serde_json = { workspace = true }
+substrate-common = { path = "../common" }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+ureq = "2"
+uuid = { workspace = true }
+thiserror = "1"
+which = "4"
+world-api = { path = "../world-api" }
+agent-api-client = { path = "../agent-api-client" }
+agent-api-types = { path = "../agent-api-types" }
+dirs = "6.0.0"
+
+[dev-dependencies]
+tempfile = "3"

@@ -38,9 +38,16 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let original_home = std::env::var("HOME").ok();
         let original_path = std::env::var("PATH").ok();
+        #[cfg(windows)]
+        let _original_userprofile = std::env::var("USERPROFILE").ok();
 
-        // Set HOME to temp directory
+        // Point Substrate home to the temp directory (portable across OSes)
+        let sub_home = temp.path().join(".substrate");
+        std::env::set_var("SUBSTRATE_HOME", &sub_home);
+        // Also set HOME/USERPROFILE for any code that still consults them indirectly
         std::env::set_var("HOME", temp.path());
+        #[cfg(windows)]
+        std::env::set_var("USERPROFILE", temp.path());
 
         // Create a bin directory for our mock shim
         let bin_dir = temp.path().join("bin");
@@ -50,6 +57,15 @@ mod tests {
         let mock_shim = create_mock_shim_binary(&bin_dir);
 
         // Add bin directory to PATH
+        #[cfg(windows)]
+        let new_path = format!(
+            "{};{}",
+            bin_dir.display(),
+            original_path
+                .as_deref()
+                .unwrap_or(r"C:\\Windows\\System32;C:\\Windows")
+        );
+        #[cfg(not(windows))]
         let new_path = format!(
             "{}:{}",
             bin_dir.display(),
@@ -62,16 +78,29 @@ mod tests {
 
     /// Helper to restore environment after test
     fn restore_env(original_home: Option<String>, original_path: Option<String>) {
+        std::env::remove_var("SUBSTRATE_HOME");
         if let Some(home) = original_home {
             std::env::set_var("HOME", home);
         } else {
             std::env::remove_var("HOME");
         }
 
+        #[cfg(windows)]
+        {
+            if let Ok(up) = std::env::var("USERPROFILE") {
+                let _ = up; // suppress unused warning if not needed
+            }
+        }
+
         if let Some(path) = original_path {
             std::env::set_var("PATH", path);
         } else {
             std::env::remove_var("PATH");
+        }
+
+        #[cfg(windows)]
+        {
+            let _ = std::env::var("USERPROFILE");
         }
     }
 
@@ -101,7 +130,7 @@ mod tests {
         // Clear any lingering environment variables
         std::env::remove_var("SUBSTRATE_NO_SHIMS");
 
-        let (temp, _mock_shim, original_home, original_path) = setup_test_env();
+        let (_temp, _mock_shim, original_home, original_path) = setup_test_env();
 
         let deployer = ShimDeployer::with_skip(false).unwrap();
         let status = deployer.ensure_deployed().unwrap();
@@ -110,7 +139,7 @@ mod tests {
         assert_eq!(status, DeploymentStatus::Deployed);
 
         // Verify shims directory exists
-        let shims_dir = temp.path().join(".substrate/shims");
+        let shims_dir = substrate_common::paths::shims_dir().unwrap();
         assert!(shims_dir.exists(), "Shims directory should exist");
 
         // Verify at least one shim exists
@@ -269,10 +298,10 @@ mod tests {
     #[test]
     #[serial]
     fn test_deployment_with_existing_substrate_dir() {
-        let (temp, _mock_shim, original_home, original_path) = setup_test_env();
+        let (_temp, _mock_shim, original_home, original_path) = setup_test_env();
 
         // Pre-create substrate directory with existing content
-        let substrate_dir = temp.path().join(".substrate");
+        let substrate_dir = substrate_common::paths::substrate_home().unwrap();
         fs::create_dir_all(&substrate_dir).unwrap();
         fs::write(substrate_dir.join("existing.txt"), "content").unwrap();
 

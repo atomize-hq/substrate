@@ -101,7 +101,7 @@ Security considerations and vulnerability reporting for Substrate.
 
 - Review log files regularly
 - Use credential redaction (avoid SHIM_LOG_OPTS=raw in production)
-- Implement external log rotation
+- Ensure log size bounds via built-in rotation (TRACE_LOG_MAX_MB/TRACE_LOG_KEEP). Use external tooling for archival/backup if required.
 - Monitor for unexpected command patterns
 
 **Environment Security**:
@@ -189,7 +189,7 @@ Phase 4 security worlds will address:
 - **Personal Data**: Command lines may contain personal information
 - **Credentials**: Automatic redaction with bypass option
 - **Audit Trails**: Comprehensive logging for compliance requirements
-- **Data Retention**: External log rotation and archival
+- **Data Retention**: Built-in rotation limits on-disk size; use external archival/backup to meet retention policies.
 
 ### Regulatory Frameworks
 

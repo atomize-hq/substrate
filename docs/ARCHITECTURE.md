@@ -200,8 +200,8 @@ interface LogEntry {
 
 ### Log File Management
 
-- Default location: `~/.trace_shell.jsonl`
-- Automatic rotation at configurable size (default: environment controlled)
+- Default location: `~/.substrate/trace.jsonl`
+- Automatic rotation around ~100MB (configurable via `TRACE_LOG_MAX_MB`), keeps last 3 files (configurable via `TRACE_LOG_KEEP`)
 - Files created with 0o600 permissions (user-only access)
 - Best-effort logging: failures don't interrupt command execution
 

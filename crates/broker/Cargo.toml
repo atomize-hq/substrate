@@ -1,0 +1,33 @@
+[package]
+name = "substrate-broker"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+tokio = { version = "1.38", features = ["fs", "sync", "rt", "time"] }
+tracing = "0.1"
+glob = "0.3"
+once_cell = "1.20"
+dirs = "5.0"
+notify = "7.0"
+crossbeam = "0.8"
+
+# For interactive approvals
+dialoguer = "0.11"
+colored = "2.1"
+
+# For hot-reload
+inotify = { version = "0.11", optional = true }
+
+[dev-dependencies]
+tempfile = "3.14"
+tokio = { version = "1.38", features = ["rt", "macros", "test-util"] }
+
+[features]
+default = []
+hot-reload = ["inotify"]
+policy-watcher = []

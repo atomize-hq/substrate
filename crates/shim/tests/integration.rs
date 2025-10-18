@@ -1,3 +1,4 @@
+#![cfg(unix)]
 //! Integration tests for substrate shim
 //!
 //! These tests verify the complete shim execution flow, including the exact
@@ -147,7 +148,7 @@ fn test_claude_code_hash_pinning_scenario() -> Result<()> {
     let full_path = format!("{shimmed_path}:/usr/bin:/bin");
 
     let output = std::process::Command::new("/bin/bash")
-        .args(["-lc", "/usr/bin/which testcmd; echo found-testcmd"])
+        .args(["-c", "/usr/bin/which testcmd; echo found-testcmd"])
         .env("PATH", &full_path)
         .output()?;
 
@@ -168,7 +169,7 @@ fn test_claude_code_hash_pinning_scenario() -> Result<()> {
     );
 
     let output = std::process::Command::new("/bin/bash")
-        .args(["-lc", &hash_command])
+        .args(["-c", &hash_command])
         .env("PATH", &full_path)
         .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
         .output()?;

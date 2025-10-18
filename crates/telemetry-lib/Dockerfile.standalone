@@ -1,0 +1,62 @@
+# Build telemetry library standalone
+FROM rust:1.89 AS builder
+
+WORKDIR /build
+
+# Copy telemetry library files only
+COPY crates/telemetry-lib /build/telemetry-lib
+COPY crates/common /build/common
+
+# Create a minimal workspace just for building
+RUN echo '[workspace]\n\
+members = ["telemetry-lib", "common"]\n\
+resolver = "2"\n\
+\n\
+[workspace.dependencies]\n\
+anyhow = "1.0"\n\
+serde_json = "1.0"' > Cargo.toml
+
+# Build the library
+WORKDIR /build/telemetry-lib
+RUN cargo build --release
+
+# Runtime test image
+FROM ubuntu:22.04
+
+RUN apt-get update && apt-get install -y \
+    python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /substrate
+
+# Copy the built library
+COPY --from=builder /build/target/release/libsubstrate_telemetry.so /usr/lib/substrate/telemetry.so
+
+# Create simple test to verify library loads
+RUN echo '#!/bin/bash\n\
+echo "=== Substrate Telemetry Library Test ==="\n\
+echo\n\
+export SUBSTRATE_SESSION_ID="test_$(date +%s)"\n\
+export SUBSTRATE_TRACE_LOG="/tmp/trace.jsonl"\n\
+echo "Session: $SUBSTRATE_SESSION_ID"\n\
+echo "Trace: $SUBSTRATE_TRACE_LOG"\n\
+echo\n\
+echo "Test 1: Check library loads"\n\
+LD_PRELOAD=/usr/lib/substrate/telemetry.so echo "Library loaded successfully"\n\
+echo\n\
+echo "Test 2: Simple file operation"\n\
+LD_PRELOAD=/usr/lib/substrate/telemetry.so sh -c "echo test > /tmp/test.txt && cat /tmp/test.txt"\n\
+echo\n\
+echo "Test 3: System call"\n\
+LD_PRELOAD=/usr/lib/substrate/telemetry.so sh -c "ls /etc | head -3"\n\
+echo\n\
+echo "=== Results ==="\n\
+if [ -f "$SUBSTRATE_TRACE_LOG" ]; then\n\
+    echo "Events captured: $(wc -l < $SUBSTRATE_TRACE_LOG)"\n\
+    echo "First 3 events:"\n\
+    head -3 "$SUBSTRATE_TRACE_LOG"\n\
+else\n\
+    echo "WARNING: No trace log found"\n\
+fi' > /substrate/test.sh && chmod +x /substrate/test.sh
+
+CMD ["/substrate/test.sh"]

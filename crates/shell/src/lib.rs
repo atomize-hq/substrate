@@ -1,8 +1,9 @@
 pub mod lock;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+mod platform_world;
 mod pty_exec;
 pub mod shim_deploy; // Made public for integration tests
 
-use pty_exec::execute_with_pty;
 use shim_deploy::{DeploymentStatus, ShimDeployer};
 
 use anyhow::{Context, Result};
@@ -12,15 +13,18 @@ use lazy_static::lazy_static;
 use serde_json::json;
 use std::collections::HashMap;
 use std::env;
-use std::fs::OpenOptions;
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead};
+// (avoid unused: import Read/Write locally where needed)
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::thread;
+use substrate_broker::{detect_profile, evaluate, Decision};
 use substrate_common::{dedupe_path, log_schema, redact_sensitive};
+use substrate_trace::{
+    append_to_trace, create_span_builder, init_trace, PolicyDecision, TransportMeta,
+};
 use uuid::Uuid;
 
 // Reedline imports
@@ -30,10 +34,126 @@ use reedline::{
     PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus, Reedline, ReedlineEvent,
     ReedlineMenu, Signal, Span, Suggestion,
 };
+#[cfg_attr(target_os = "windows", allow(unused_imports))]
+use std::thread;
+#[cfg(unix)]
+use tokio::net::UnixStream;
+#[cfg(target_os = "linux")]
+use tokio::signal::unix::{signal, SignalKind};
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use tokio_tungstenite as tungs;
 // use nu_ansi_term::{Color, Style}; // Unused for now
+#[cfg(target_os = "linux")]
+use nix::sys::termios::{
+    self, ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices,
+    Termios,
+};
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use platform_world as pw;
 use std::borrow::Cow;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn world_transport_to_meta(transport: &pw::WorldTransport) -> TransportMeta {
+    match transport {
+        pw::WorldTransport::Unix(path) => TransportMeta {
+            mode: "unix".to_string(),
+            endpoint: Some(path.display().to_string()),
+        },
+        pw::WorldTransport::Tcp { host, port } => TransportMeta {
+            mode: "tcp".to_string(),
+            endpoint: Some(format!("{}:{}", host, port)),
+        },
+        pw::WorldTransport::Vsock { port } => TransportMeta {
+            mode: "vsock".to_string(),
+            endpoint: Some(format!("{}", port)),
+        },
+        #[cfg(target_os = "windows")]
+        pw::WorldTransport::NamedPipe(path) => TransportMeta {
+            mode: "named_pipe".to_string(),
+            endpoint: Some(path.display().to_string()),
+        },
+    }
+}
+#[cfg(target_os = "linux")]
+use std::os::unix::io::AsRawFd;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
+
+#[cfg(target_os = "linux")]
+fn get_term_size() -> (u16, u16) {
+    // Try to read the current terminal size; fall back to 80x24
+    let fd = std::io::stdout().as_raw_fd();
+    let mut ws: libc::winsize = libc::winsize {
+        ws_row: 0,
+        ws_col: 0,
+        ws_xpixel: 0,
+        ws_ypixel: 0,
+    };
+    unsafe {
+        if libc::ioctl(fd, libc::TIOCGWINSZ, &mut ws) == 0 {
+            let cols = if ws.ws_col == 0 { 80 } else { ws.ws_col };
+            let rows = if ws.ws_row == 0 { 24 } else { ws.ws_row };
+            return (cols, rows);
+        }
+    }
+    (80, 24)
+}
+
+#[cfg(target_os = "linux")]
+struct RawModeGuard {
+    file: std::fs::File,
+    orig: Termios,
+}
+
+#[cfg(target_os = "linux")]
+impl RawModeGuard {
+    fn new_for_tty() -> anyhow::Result<Self> {
+        // Open controlling terminal
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/tty")?;
+        let mut tio = termios::tcgetattr(&file).map_err(|e| anyhow::anyhow!("tcgetattr: {}", e))?;
+        let orig = tio.clone();
+        // Configure raw mode (manual equivalent of cfmakeraw)
+        tio.input_flags.remove(
+            InputFlags::BRKINT
+                | InputFlags::ICRNL
+                | InputFlags::INPCK
+                | InputFlags::ISTRIP
+                | InputFlags::IXON,
+        );
+        tio.control_flags.insert(ControlFlags::CS8);
+        tio.local_flags
+            .remove(LocalFlags::ECHO | LocalFlags::ICANON | LocalFlags::IEXTEN | LocalFlags::ISIG);
+        tio.output_flags.remove(OutputFlags::OPOST);
+        // Set read to return as soon as 1 byte is available
+        let vmin = SpecialCharacterIndices::VMIN as usize;
+        let vtime = SpecialCharacterIndices::VTIME as usize;
+        tio.control_chars[vmin] = 1;
+        tio.control_chars[vtime] = 0;
+        termios::tcsetattr(&file, SetArg::TCSANOW, &tio)
+            .map_err(|e| anyhow::anyhow!("tcsetattr: {}", e))?;
+        Ok(Self { file, orig })
+    }
+
+    fn for_stdin_if_tty() -> anyhow::Result<Option<Self>> {
+        if !atty::is(atty::Stream::Stdin) {
+            return Ok(None);
+        }
+        match Self::new_for_tty() {
+            Ok(g) => Ok(Some(g)),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for RawModeGuard {
+    fn drop(&mut self) {
+        let _ = termios::tcsetattr(&self.file, SetArg::TCSANOW, &self.orig);
+    }
+}
 
 // Global flag to prevent double SIGINT handling - must be pub(crate) for pty_exec access
 pub(crate) static PTY_ACTIVE: AtomicBool = AtomicBool::new(false);
@@ -55,11 +175,6 @@ lazy_static! {
 #[cfg(unix)]
 pub(crate) fn initialize_global_sigwinch_handler() {
     pty_exec::initialize_global_sigwinch_handler_impl();
-}
-
-#[cfg(not(unix))]
-pub(crate) fn initialize_global_sigwinch_handler() {
-    // No-op on non-Unix platforms
 }
 
 const BASH_PREEXEC_SCRIPT: &str = r#"# Substrate PTY command logging
@@ -125,6 +240,10 @@ pub struct Cli {
     #[arg(long = "shim-status", conflicts_with_all = &["command", "script", "shim_deploy", "shim_remove"])]
     pub shim_status: bool,
 
+    /// Show shim deployment status as JSON (CI-friendly)
+    #[arg(long = "shim-status-json", conflicts_with_all = &["command", "script", "shim_deploy", "shim_remove"])]
+    pub shim_status_json: bool,
+
     /// Skip shim deployment check
     #[arg(long = "shim-skip")]
     pub shim_skip: bool,
@@ -136,6 +255,66 @@ pub struct Cli {
     /// Remove all deployed shims
     #[arg(long = "shim-remove", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status"])]
     pub shim_remove: bool,
+
+    /// Show trace information for a span ID
+    #[arg(long = "trace", value_name = "SPAN_ID", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status", "shim_remove", "replay"])]
+    pub trace: Option<String>,
+
+    /// Replay a traced command by span ID
+    #[arg(long = "replay", value_name = "SPAN_ID", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status", "shim_remove", "trace"])]
+    pub replay: Option<String>,
+
+    /// Verbose output during replay (prints command, cwd, mode, and capability warnings)
+    #[arg(long = "replay-verbose", requires = "replay")]
+    pub replay_verbose: bool,
+
+    /// Disable world isolation (Linux only)
+    #[arg(long = "no-world")]
+    pub no_world: bool,
+
+    /// Graph commands (ingest/status/what-changed)
+    #[command(subcommand)]
+    pub sub: Option<SubCommands>,
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum SubCommands {
+    Graph(GraphCmd),
+    World(WorldCmd),
+}
+
+#[derive(clap::Args, Debug)]
+pub struct GraphCmd {
+    #[command(subcommand)]
+    pub action: GraphAction,
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum GraphAction {
+    Ingest {
+        file: std::path::PathBuf,
+    },
+    Status,
+    WhatChanged {
+        span_id: String,
+        #[arg(long, default_value_t = 100)]
+        limit: usize,
+    },
+}
+
+#[derive(clap::Args, Debug)]
+pub struct WorldCmd {
+    #[command(subcommand)]
+    pub action: WorldAction,
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum WorldAction {
+    Doctor {
+        /// Output machine-readable JSON for CI
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -156,12 +335,19 @@ pub struct ShellConfig {
     pub ci_mode: bool,
     pub no_exit_on_error: bool,
     pub skip_shims: bool,
+    pub no_world: bool,
     pub env_vars: HashMap<String, String>,
 }
 
 impl ShellConfig {
     pub fn from_args() -> Result<Self> {
         let cli = Cli::parse();
+
+        // macOS-only: apply CLI overrides to environment for platform detection precedence
+        #[cfg(target_os = "macos")]
+        {
+            // No mac-only CLI transport overrides; maintain 1:1 parity with Linux
+        }
 
         // Handle --version-json flag
         if cli.version_json {
@@ -219,34 +405,169 @@ impl ShellConfig {
             std::process::exit(0);
         }
 
+        // Handle --shim-status-json flag (CI)
+        if cli.shim_status_json {
+            if env::var("SUBSTRATE_NO_SHIMS").is_ok() {
+                let out = json!({
+                    "status": "disabled",
+                    "deployed": false,
+                    "version": serde_json::Value::Null,
+                    "location": substrate_common::paths::shims_dir().ok(),
+                    "commands_total": serde_json::Value::Null,
+                    "commands_present": serde_json::Value::Null,
+                    "missing": [],
+                    "path_ok": serde_json::Value::Null,
+                    "path_first": serde_json::Value::Null,
+                    "exit": 0
+                });
+                println!("{}", serde_json::to_string_pretty(&out)?);
+                std::process::exit(0);
+            }
+
+            let shims_dir = substrate_common::paths::shims_dir()?;
+            let version_file = substrate_common::paths::version_file()?;
+
+            if !shims_dir.exists() {
+                let out = json!({
+                    "status": "not_deployed",
+                    "deployed": false,
+                    "version": serde_json::Value::Null,
+                    "location": shims_dir,
+                    "commands_total": 0,
+                    "commands_present": 0,
+                    "missing": [],
+                    "path_ok": serde_json::Value::Null,
+                    "path_first": env::var("PATH").ok().and_then(|p| p.split(if cfg!(windows){';'} else {':'}).next().map(|s| s.to_string())),
+                    "exit": 1
+                });
+                println!("{}", serde_json::to_string_pretty(&out)?);
+                std::process::exit(1);
+            }
+
+            // PATH check
+            let path_str = env::var("PATH").unwrap_or_default();
+            let sep = if cfg!(windows) { ';' } else { ':' };
+            let first_path = path_str.split(sep).next().unwrap_or("").to_string();
+            let shims_dir_str = shims_dir.display().to_string();
+            let path_ok = first_path == shims_dir_str;
+
+            if let Ok(content) = std::fs::read_to_string(&version_file) {
+                let info: serde_json::Value = serde_json::from_str(&content)?;
+                let current_version = env!("CARGO_PKG_VERSION");
+                let file_version = info
+                    .get("version")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+
+                let mut total_cmds: usize = 0;
+                let mut present_cmds: usize = 0;
+                let mut missing_list: Vec<String> = Vec::new();
+                let mut missing_any = false;
+                if let Some(commands) = info.get("commands").and_then(|c| c.as_array()) {
+                    let expected: Vec<String> = commands
+                        .iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect();
+                    total_cmds = expected.len();
+                    for cmd in &expected {
+                        let path = shims_dir.join(cmd);
+                        if path.exists() {
+                            present_cmds += 1;
+                        } else {
+                            missing_list.push(cmd.clone());
+                        }
+                    }
+                    if !missing_list.is_empty() {
+                        missing_any = true;
+                    }
+                }
+
+                let mut exit_code = 0;
+                let status_str = if missing_any {
+                    exit_code = 1;
+                    "needs_redeploy"
+                } else if file_version != current_version {
+                    exit_code = 1;
+                    "update_available"
+                } else {
+                    "up_to_date"
+                };
+
+                let out = json!({
+                    "status": status_str,
+                    "deployed": true,
+                    "version": file_version,
+                    "deployed_at": info.get("deployed_at").cloned().unwrap_or(serde_json::Value::Null),
+                    "location": shims_dir,
+                    "commands_total": total_cmds,
+                    "commands_present": present_cmds,
+                    "missing": missing_list,
+                    "path_ok": path_ok,
+                    "path_first": first_path,
+                    "exit": exit_code
+                });
+                println!("{}", serde_json::to_string_pretty(&out)?);
+                std::process::exit(exit_code);
+            } else {
+                let out = json!({
+                    "status": "needs_redeploy",
+                    "deployed": true,
+                    "version": serde_json::Value::Null,
+                    "deployed_at": serde_json::Value::Null,
+                    "location": shims_dir,
+                    "commands_total": serde_json::Value::Null,
+                    "commands_present": serde_json::Value::Null,
+                    "missing": [],
+                    "path_ok": path_ok,
+                    "path_first": first_path,
+                    "exit": 1
+                });
+                println!("{}", serde_json::to_string_pretty(&out)?);
+                std::process::exit(1);
+            }
+        }
+
         // Handle --shim-status flag
         if cli.shim_status {
+            // Respect explicit disable
+            if env::var("SUBSTRATE_NO_SHIMS").is_ok() {
+                println!("Shims: Deployment disabled (SUBSTRATE_NO_SHIMS=1)");
+                println!("Status: Skipped");
+                std::process::exit(0);
+            }
+
             let shims_dir = substrate_common::paths::shims_dir()?;
             let version_file = substrate_common::paths::version_file()?;
 
             if !shims_dir.exists() {
                 println!("Shims: Not deployed");
+                println!("Suggestion: run `substrate` once or `substrate --shim-deploy`");
                 std::process::exit(1);
             }
+
+            // PATH check (warn only)
+            let path_str = env::var("PATH").unwrap_or_default();
+            let sep = if cfg!(windows) { ';' } else { ':' };
+            let first_path = path_str.split(sep).next().unwrap_or("");
+            let shims_dir_str = shims_dir.display().to_string();
+            let path_ok = first_path == shims_dir_str;
+
+            let mut exit_code = 0i32;
+            let printed_header = false;
 
             if let Ok(content) = std::fs::read_to_string(&version_file) {
                 let info: serde_json::Value = serde_json::from_str(&content)?;
                 println!("Shims: Deployed");
-                println!(
-                    "Version: {}",
-                    info.get("version").unwrap_or(&json!("unknown"))
-                );
-                println!("Location: {shims_dir:?}");
 
-                // Check if update is available
+                // Version
                 let current_version = env!("CARGO_PKG_VERSION");
-                if info.get("version").and_then(|v| v.as_str()) != Some(current_version) {
-                    println!("Status: Update available (current: {current_version})");
-                } else {
-                    println!("Status: Up to date");
-                }
+                let file_version = info
+                    .get("version")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+                println!("Version: {}", file_version);
 
-                // Show deployment timestamp if available
+                // Deployed at
                 if let Some(deployed_at) = info.get("deployed_at") {
                     if let Some(secs) = deployed_at.get("secs_since_epoch").and_then(|s| s.as_i64())
                     {
@@ -257,15 +578,131 @@ impl ShellConfig {
                     }
                 }
 
-                // Show command count if available
+                println!("Location: {}", shims_dir.display());
+
+                // Commands presence check
+                let mut missing_any = false;
                 if let Some(commands) = info.get("commands").and_then(|c| c.as_array()) {
-                    println!("Commands: {} shims", commands.len());
+                    let expected: Vec<String> = commands
+                        .iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect();
+                    let mut missing = Vec::new();
+                    for cmd in &expected {
+                        let path = shims_dir.join(cmd);
+                        if !path.exists() {
+                            missing.push(cmd.clone());
+                        }
+                    }
+                    if missing.is_empty() {
+                        println!("Commands: {} shims", expected.len());
+                    } else {
+                        println!(
+                            "Commands: {}/{} shims (missing: {})",
+                            expected.len() - missing.len(),
+                            expected.len(),
+                            missing.join(", ")
+                        );
+                        exit_code = 1;
+                        missing_any = true;
+                    }
                 }
+
+                // PATH line
+                if path_ok {
+                    println!("PATH: OK ({} is first)", shims_dir.display());
+                } else {
+                    println!(
+                        "PATH: WARN (shims dir is not first; current PATH begins with: {})",
+                        first_path
+                    );
+                    #[cfg(unix)]
+                    {
+                        let uid = unsafe { libc::geteuid() };
+                        let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
+                            .ok()
+                            .map(PathBuf::from)
+                            .filter(|p| p.is_dir())
+                            .unwrap_or_else(|| PathBuf::from("/tmp"));
+                        let marker = runtime_dir.join(format!("substrate_path_hint_shown_{}", uid));
+                        if !marker.exists() {
+                            println!("Suggestion: export PATH=\"{}:$PATH\"", shims_dir.display());
+                            let _ = std::fs::write(&marker, b"1");
+                        }
+                    }
+                }
+
+                // Status line
+                if missing_any {
+                    println!("Status: Needs redeploy");
+                } else if file_version != current_version {
+                    println!("Status: Update available (current: {current_version})");
+                    exit_code = 1;
+                } else if exit_code == 0 {
+                    println!("Status: Up to date");
+                }
+
+                std::process::exit(exit_code);
             } else {
-                println!("Shims: Deployed (version unknown)");
-                println!("Location: {shims_dir:?}");
+                // Version file missing -> treat as needs redeploy
+                if !printed_header {
+                    println!("Shims: Deployed (version unknown)");
+                }
+                println!("Location: {}", shims_dir.display());
+                if path_ok {
+                    println!("PATH: OK ({} is first)", shims_dir.display());
+                } else {
+                    println!(
+                        "PATH: WARN (shims dir is not first; current PATH begins with: {})",
+                        first_path
+                    );
+                    #[cfg(unix)]
+                    {
+                        let uid = unsafe { libc::geteuid() };
+                        let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
+                            .ok()
+                            .map(PathBuf::from)
+                            .filter(|p| p.is_dir())
+                            .unwrap_or_else(|| PathBuf::from("/tmp"));
+                        let marker = runtime_dir.join(format!("substrate_path_hint_shown_{}", uid));
+                        if !marker.exists() {
+                            println!("Suggestion: export PATH=\"{}:$PATH\"", shims_dir.display());
+                            let _ = std::fs::write(&marker, b"1");
+                        }
+                    }
+                }
+                println!("Status: Needs redeploy (version file missing)");
+                std::process::exit(1);
             }
+        }
+
+        // Handle --trace flag
+        if let Some(span_id) = cli.trace {
+            handle_trace_command(&span_id)?;
             std::process::exit(0);
+        }
+
+        // Handle --replay flag
+        if let Some(span_id) = cli.replay {
+            if cli.replay_verbose {
+                env::set_var("SUBSTRATE_REPLAY_VERBOSE", "1");
+            }
+            handle_replay_command(&span_id)?;
+            std::process::exit(0);
+        }
+
+        // Handle subcommands
+        if let Some(sub) = &cli.sub {
+            match sub {
+                SubCommands::Graph(graph_cmd) => {
+                    handle_graph_command(graph_cmd)?;
+                    std::process::exit(0);
+                }
+                SubCommands::World(world_cmd) => {
+                    handle_world_command(world_cmd)?;
+                    std::process::exit(0);
+                }
+            }
         }
 
         let session_id = env::var("SHIM_SESSION_ID").unwrap_or_else(|_| Uuid::now_v7().to_string());
@@ -276,7 +713,7 @@ impl ShellConfig {
 
         let trace_log_file = env::var("SHIM_TRACE_LOG")
             .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from(&home).join(".trace_shell.jsonl"));
+            .unwrap_or_else(|_| PathBuf::from(&home).join(".substrate/trace.jsonl"));
 
         let original_path = env::var("SHIM_ORIGINAL_PATH")
             .or_else(|_| env::var("PATH"))
@@ -285,6 +722,15 @@ impl ShellConfig {
         let shim_dir = substrate_common::paths::shims_dir()?;
 
         // Determine shell to use
+        #[cfg(target_os = "windows")]
+        {
+            if let Err(e) = platform_world::windows::ensure_world_ready(&cli) {
+                eprintln!(
+                    "substrate: warn: windows world initialization failed: {:#}",
+                    e
+                );
+            }
+        }
         let shell_path = if let Some(shell) = cli.shell {
             shell
         } else if cfg!(windows) {
@@ -324,13 +770,859 @@ impl ShellConfig {
             ci_mode: cli.ci_mode,
             no_exit_on_error: cli.no_exit_on_error,
             skip_shims: cli.shim_skip,
+            no_world: cli.no_world,
             env_vars: HashMap::new(),
         })
     }
 }
 
+fn handle_graph_command(cmd: &GraphCmd) -> Result<()> {
+    use substrate_graph::{connect_mock, GraphConfig, GraphService};
+    let cfg = GraphConfig {
+        backend: "mock".into(),
+        db_path: substrate_graph::default_graph_path()?,
+    };
+    let mut svc = connect_mock(cfg).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    svc.ensure_schema()
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    match &cmd.action {
+        GraphAction::Status => {
+            let s = svc.status().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            println!("graph status: {}", s);
+        }
+        GraphAction::Ingest { file } => {
+            use std::io::{BufRead, BufReader};
+            let f = std::fs::File::open(file)?;
+            let reader = BufReader::new(f);
+            let mut n = 0usize;
+            for line in reader.lines() {
+                let line = line?;
+                if line.trim().is_empty() {
+                    continue;
+                }
+                if let Ok(span) = serde_json::from_str::<substrate_trace::Span>(&line) {
+                    svc.ingest_span(&span)
+                        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+                    n += 1;
+                }
+            }
+            println!("ingested {} spans (mock)", n);
+        }
+        GraphAction::WhatChanged { span_id, limit } => {
+            let items = svc
+                .what_changed(span_id, *limit)
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            if items.is_empty() {
+                println!("no changes recorded for span {}", span_id);
+            } else {
+                for fc in items {
+                    println!("{}\t{}", fc.change, fc.path);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn handle_world_command(cmd: &WorldCmd) -> Result<()> {
+    match &cmd.action {
+        WorldAction::Doctor { json } => {
+            let code = world_doctor_main(*json);
+            std::process::exit(code);
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn world_doctor_main(json_mode: bool) -> i32 {
+    world_doctor_macos::run(json_mode, &world_doctor_macos::SystemRunner)
+}
+#[cfg(target_os = "windows")]
+fn world_doctor_main(json_mode: bool) -> i32 {
+    if json_mode {
+        let out = json!({
+            "platform": std::env::consts::OS,
+            "ok": true,
+            "message": "world doctor for Windows not yet implemented"
+        });
+        println!("{}", serde_json::to_string_pretty(&out).unwrap());
+    } else {
+        eprintln!("substrate world doctor is not yet implemented on Windows");
+    }
+    0
+}
+
+#[cfg(target_os = "linux")]
+fn world_doctor_main(json_mode: bool) -> i32 {
+    use std::path::Path;
+
+    // Helpers
+    fn pass(msg: &str) {
+        println!("PASS  | {}", msg);
+    }
+    fn warn(msg: &str) {
+        println!("WARN  | {}", msg);
+    }
+    // fn fail(msg: &str) { println!("FAIL  | {}", msg); }
+
+    fn overlay_present() -> bool {
+        std::fs::read_to_string("/proc/filesystems")
+            .ok()
+            .map(|s| s.contains("overlay"))
+            .unwrap_or(false)
+    }
+
+    fn try_modprobe_overlay_if_root() {
+        let is_root = unsafe { libc::geteuid() } == 0;
+        if !is_root {
+            return;
+        }
+        let _ = Command::new("modprobe").arg("overlay").status();
+    }
+
+    fn fuse_dev_present() -> bool {
+        Path::new("/dev/fuse").exists()
+    }
+    fn fuse_bin_present() -> bool {
+        which::which("fuse-overlayfs").is_ok()
+    }
+    fn cgroup_v2_present() -> bool {
+        Path::new("/sys/fs/cgroup/cgroup.controllers").exists()
+    }
+    fn nft_present() -> bool {
+        Command::new("nft")
+            .arg("--version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .ok()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+    fn dmesg_restrict() -> Option<String> {
+        Command::new("sh")
+            .arg("-lc")
+            .arg("sysctl -n kernel.dmesg_restrict 2>/dev/null || echo n/a")
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .map(|s| s.trim().to_string())
+    }
+    fn overlay_root() -> PathBuf {
+        let uid = unsafe { libc::geteuid() } as u32;
+        if uid == 0 {
+            return PathBuf::from("/var/lib/substrate/overlay");
+        }
+        if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
+            if !xdg.is_empty() {
+                return PathBuf::from(xdg).join("substrate/overlay");
+            }
+        }
+        let run = PathBuf::from(format!("/run/user/{}/substrate/overlay", uid));
+        if run.parent().unwrap_or(Path::new("/run")).exists() {
+            return run;
+        }
+        PathBuf::from(format!("/tmp/substrate-{}-overlay", uid))
+    }
+    fn copydiff_root() -> PathBuf {
+        let uid = unsafe { libc::geteuid() } as u32;
+        if uid == 0 {
+            return PathBuf::from("/var/lib/substrate/copydiff");
+        }
+        if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
+            if !xdg.is_empty() {
+                return PathBuf::from(xdg).join("substrate/copydiff");
+            }
+        }
+        let run = PathBuf::from(format!("/run/user/{}/substrate/copydiff", uid));
+        if run.parent().unwrap_or(Path::new("/run")).exists() {
+            return run;
+        }
+        PathBuf::from(format!("/tmp/substrate-{}-copydiff", uid))
+    }
+
+    // overlay
+    let mut overlay_ok = overlay_present();
+    if !json_mode {
+        println!("== substrate world doctor ==");
+        if overlay_ok {
+            pass("overlayfs: present");
+        } else {
+            warn("overlayfs: not present; attempting modprobe overlay (root only)");
+            try_modprobe_overlay_if_root();
+            overlay_ok = overlay_present();
+            if overlay_ok {
+                pass("overlayfs: present after modprobe");
+            } else {
+                warn("overlayfs: unavailable");
+            }
+        }
+    } else {
+        // still try modprobe if root to improve signal
+        if !overlay_ok {
+            try_modprobe_overlay_if_root();
+            overlay_ok = overlay_present();
+        }
+    }
+
+    // fuse
+    let fuse_dev = fuse_dev_present();
+    let fuse_bin = fuse_bin_present();
+    if !json_mode {
+        if fuse_dev && fuse_bin {
+            pass("fuse-overlayfs: /dev/fuse present and binary found");
+        } else if fuse_dev || fuse_bin {
+            warn(&format!(
+                "fuse-overlayfs: partial ({}, {})",
+                if fuse_dev {
+                    "/dev/fuse"
+                } else {
+                    "missing /dev/fuse"
+                },
+                if fuse_bin {
+                    "binary found"
+                } else {
+                    "missing binary"
+                }
+            ));
+        } else {
+            warn("fuse-overlayfs: not available");
+        }
+    }
+
+    let cgv2 = cgroup_v2_present();
+    let nft = nft_present();
+    let dmsg = dmesg_restrict().unwrap_or_else(|| "n/a".to_string());
+    let o_root = overlay_root();
+    let c_root = copydiff_root();
+
+    if !json_mode {
+        if cgv2 {
+            pass("cgroup v2: present");
+        } else {
+            warn("cgroup v2: missing");
+        }
+        if nft {
+            pass("nft: present");
+        } else {
+            warn("nft: missing");
+        }
+        println!("INFO  | dmesg_restrict={}", dmsg);
+        println!("INFO  | overlay_root: {}", o_root.display());
+        println!("INFO  | copydiff_root: {}", c_root.display());
+    } else {
+        let ok = overlay_ok || (fuse_dev && fuse_bin);
+        let out = json!({
+            "platform": std::env::consts::OS,
+            "overlay_present": overlay_ok,
+            "fuse": {"dev": fuse_dev, "bin": fuse_bin},
+            "cgroup_v2": cgv2,
+            "nft_present": nft,
+            "dmesg_restrict": dmsg,
+            "overlay_root": o_root,
+            "copydiff_root": c_root,
+            "ok": ok,
+        });
+        println!("{}", serde_json::to_string_pretty(&out).unwrap());
+    }
+
+    // Exit code policy
+    if overlay_ok || (fuse_dev && fuse_bin) {
+        0
+    } else {
+        2
+    }
+}
+
+#[cfg(all(
+    not(target_os = "linux"),
+    not(target_os = "macos"),
+    not(target_os = "windows")
+))]
+fn world_doctor_main(json_mode: bool) -> i32 {
+    if json_mode {
+        let out = json!({
+            "platform": std::env::consts::OS,
+            "overlay_present": serde_json::Value::Null,
+            "fuse": {"dev": serde_json::Value::Null, "bin": serde_json::Value::Null},
+            "cgroup_v2": serde_json::Value::Null,
+            "nft_present": serde_json::Value::Null,
+            "dmesg_restrict": serde_json::Value::Null,
+            "overlay_root": serde_json::Value::Null,
+            "copydiff_root": serde_json::Value::Null,
+            "ok": true
+        });
+        println!("{}", serde_json::to_string_pretty(&out).unwrap());
+    } else {
+        eprintln!("substrate world doctor currently supports Linux and macOS");
+        println!("overlay: N/A");
+        println!("fuse-overlayfs: N/A");
+        println!("cgroup v2: N/A");
+        println!("nft: N/A");
+        println!("dmesg_restrict: N/A");
+    }
+    0
+}
+
+#[cfg(target_os = "macos")]
+mod world_doctor_macos {
+    use super::*;
+    use serde_json::Value;
+    use std::process::Command;
+
+    pub(super) trait CommandRunner {
+        fn run(&self, program: &str, args: &[&str]) -> CommandOutput;
+    }
+
+    #[derive(Debug, Clone, Default)]
+    pub(super) struct CommandOutput {
+        pub success: bool,
+        pub stdout: String,
+    }
+
+    pub(super) struct SystemRunner;
+
+    impl CommandRunner for SystemRunner {
+        fn run(&self, program: &str, args: &[&str]) -> CommandOutput {
+            match Command::new(program).args(args).output() {
+                Ok(output) => CommandOutput {
+                    success: output.status.success(),
+                    stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+                },
+                Err(_) => CommandOutput {
+                    success: false,
+                    stdout: String::new(),
+                },
+            }
+        }
+    }
+
+    pub(super) fn run(json_mode: bool, runner: &dyn CommandRunner) -> i32 {
+        let mut ok = true;
+
+        let mut lima_info = LimaInfo::default();
+
+        let pass = |msg: &str| println!("PASS  | {}", msg);
+        let warn = |msg: &str| println!("WARN  | {}", msg);
+        let fail = |msg: &str| println!("FAIL  | {}", msg);
+        let info = |msg: &str| println!("INFO  | {}", msg);
+
+        if !json_mode {
+            println!("== substrate world doctor (macOS) ==");
+        }
+
+        // Host checks
+        lima_info.installed = runner.run("limactl", &["--version"]).success;
+        if !json_mode {
+            if lima_info.installed {
+                pass("limactl: present");
+            } else {
+                fail("limactl: not found");
+            }
+        }
+        ok &= lima_info.installed;
+
+        let virtualization = runner.run("sysctl", &["-n", "kern.hv_support"]);
+        lima_info.virtualization = virtualization.success && virtualization.stdout.trim() == "1";
+        if !json_mode {
+            if lima_info.virtualization {
+                pass("Virtualization.framework available");
+            } else {
+                fail("Virtualization.framework unavailable (sysctl kern.hv_support != 1)");
+            }
+        }
+        ok &= lima_info.virtualization;
+
+        lima_info.vsock_proxy = which::which("vsock-proxy").is_ok();
+        if !json_mode {
+            if lima_info.vsock_proxy {
+                pass("vsock-proxy: present");
+            } else {
+                warn("vsock-proxy: not found (SSH forwarding will be used)");
+            }
+        }
+
+        // VM checks
+        if lima_info.installed {
+            let vm = runner.run("limactl", &["list", "substrate", "--json"]);
+            if vm.success {
+                match serde_json::from_str::<Value>(&vm.stdout) {
+                    Ok(value) => {
+                        lima_info.vm_status = value
+                            .get("status")
+                            .and_then(Value::as_str)
+                            .unwrap_or("unknown")
+                            .to_string();
+                    }
+                    Err(err) => {
+                        lima_info.vm_status = format!("parse-error: {err}");
+                    }
+                }
+            } else {
+                lima_info.vm_status = "missing".into();
+            }
+        } else {
+            lima_info.vm_status = "unknown".into();
+        }
+
+        if !json_mode {
+            match lima_info.vm_status.as_str() {
+                "Running" => pass("Lima VM 'substrate' running"),
+                "missing" => {
+                    warn("Lima VM 'substrate' not found");
+                    ok = false;
+                }
+                status => {
+                    warn(&format!(
+                        "Lima VM 'substrate' not running (status: {status})"
+                    ));
+                    ok = false;
+                }
+            }
+        } else if lima_info.vm_status != "Running" {
+            ok = false;
+        }
+
+        if lima_info.vm_status == "Running" {
+            // SSH connectivity
+            let ssh = runner.run("limactl", &["shell", "substrate", "uname", "-a"]);
+            lima_info.ssh_ok = ssh.success;
+            if !json_mode {
+                if lima_info.ssh_ok {
+                    pass("SSH connectivity to Lima guest");
+                } else {
+                    warn("SSH connectivity failed (limactl shell substrate uname -a)");
+                }
+            }
+
+            // systemd service status
+            lima_info.service_active = runner
+                .run(
+                    "limactl",
+                    &[
+                        "shell",
+                        "substrate",
+                        "systemctl",
+                        "is-active",
+                        "substrate-world-agent",
+                    ],
+                )
+                .success;
+            if !json_mode {
+                if lima_info.service_active {
+                    pass("substrate-world-agent service active");
+                } else {
+                    fail("substrate-world-agent service not active");
+                }
+            }
+            ok &= lima_info.service_active;
+
+            // Agent socket exists
+            lima_info.agent_socket = runner
+                .run(
+                    "limactl",
+                    &[
+                        "shell",
+                        "substrate",
+                        "sudo",
+                        "-n",
+                        "test",
+                        "-S",
+                        "/run/substrate.sock",
+                    ],
+                )
+                .success;
+            if !json_mode {
+                if lima_info.agent_socket {
+                    pass("Agent socket present (/run/substrate.sock)");
+                } else {
+                    warn("Agent socket missing in guest");
+                }
+            }
+
+            // Capabilities check
+            lima_info.agent_caps_ok = runner
+                .run(
+                    "limactl",
+                    &[
+                        "shell",
+                        "substrate",
+                        "sudo",
+                        "-n",
+                        "timeout",
+                        "5",
+                        "curl",
+                        "--fail",
+                        "--unix-socket",
+                        "/run/substrate.sock",
+                        "http://localhost/v1/capabilities",
+                    ],
+                )
+                .success;
+            if !json_mode {
+                if lima_info.agent_caps_ok {
+                    pass("Agent responded to capabilities request");
+                } else {
+                    fail("Agent not responding to capabilities request");
+                }
+            }
+            ok &= lima_info.agent_socket && lima_info.agent_caps_ok;
+
+            // nftables (info)
+            lima_info.nft_available = runner
+                .run("limactl", &["shell", "substrate", "which", "nft"])
+                .success;
+            if !json_mode {
+                if lima_info.nft_available {
+                    info("nftables available in guest");
+                } else {
+                    warn("nftables not found in guest");
+                }
+            }
+
+            // disk usage info
+            let disk = runner.run("limactl", &["shell", "substrate", "df", "-h", "/"]);
+            if !json_mode {
+                if disk.success {
+                    if let Some(line) = disk.stdout.lines().last() {
+                        info(&format!("disk usage: {}", line));
+                    }
+                } else {
+                    warn("Unable to query disk usage inside guest");
+                }
+            } else {
+                lima_info.disk_usage = disk
+                    .stdout
+                    .lines()
+                    .next_back()
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+            }
+        }
+
+        if json_mode {
+            let mut lima = json!({
+                "installed": lima_info.installed,
+                "virtualization": lima_info.virtualization,
+                "vm_status": lima_info.vm_status,
+                "service_active": lima_info.service_active,
+                "agent_socket": lima_info.agent_socket,
+                "agent_caps_ok": lima_info.agent_caps_ok,
+                "vsock_proxy": lima_info.vsock_proxy,
+                "ssh": lima_info.ssh_ok,
+                "nft": lima_info.nft_available,
+            });
+
+            if !lima_info.disk_usage.is_empty() {
+                lima["disk_usage"] = json!(lima_info.disk_usage);
+            }
+
+            let out = json!({
+                "platform": "macos",
+                "lima": lima,
+                "ok": ok,
+            });
+            println!("{}", serde_json::to_string_pretty(&out).unwrap());
+        }
+
+        if ok {
+            0
+        } else {
+            2
+        }
+    }
+
+    #[derive(Default)]
+    struct LimaInfo {
+        installed: bool,
+        virtualization: bool,
+        vm_status: String,
+        ssh_ok: bool,
+        service_active: bool,
+        agent_socket: bool,
+        agent_caps_ok: bool,
+        vsock_proxy: bool,
+        nft_available: bool,
+        disk_usage: String,
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::collections::VecDeque;
+
+        use std::cell::RefCell;
+
+        struct MockRunner {
+            responses: RefCell<VecDeque<(String, Vec<String>, CommandOutput)>>,
+        }
+
+        impl MockRunner {
+            fn new(responses: Vec<(String, Vec<String>, CommandOutput)>) -> Self {
+                Self {
+                    responses: RefCell::new(VecDeque::from(responses)),
+                }
+            }
+        }
+
+        impl CommandRunner for MockRunner {
+            fn run(&self, program: &str, args: &[&str]) -> CommandOutput {
+                if let Some((expected_prog, expected_args, output)) =
+                    self.responses.borrow_mut().pop_front()
+                {
+                    assert_eq!(expected_prog, program);
+                    assert_eq!(
+                        expected_args,
+                        args.iter().map(|s| s.to_string()).collect::<Vec<_>>()
+                    );
+                    output
+                } else {
+                    panic!("unexpected command: {} {:?}", program, args);
+                }
+            }
+        }
+
+        fn success_out(stdout: &str) -> CommandOutput {
+            CommandOutput {
+                success: true,
+                stdout: stdout.into(),
+            }
+        }
+
+        fn failure_out() -> CommandOutput {
+            CommandOutput {
+                success: false,
+                stdout: String::new(),
+            }
+        }
+
+        #[test]
+        fn doctor_ok_json() {
+            let vm_json = r#"{"status":"Running"}"#;
+            let responses = vec![
+                (
+                    "limactl".into(),
+                    vec!["--version".into()],
+                    success_out("Lima v1"),
+                ),
+                (
+                    "sysctl".into(),
+                    vec!["-n".into(), "kern.hv_support".into()],
+                    success_out("1\n"),
+                ),
+                (
+                    "limactl".into(),
+                    vec!["list".into(), "substrate".into(), "--json".into()],
+                    success_out(vm_json),
+                ),
+                (
+                    "limactl".into(),
+                    vec![
+                        "shell".into(),
+                        "substrate".into(),
+                        "uname".into(),
+                        "-a".into(),
+                    ],
+                    success_out("Linux"),
+                ),
+                (
+                    "limactl".into(),
+                    vec![
+                        "shell".into(),
+                        "substrate".into(),
+                        "systemctl".into(),
+                        "is-active".into(),
+                        "substrate-world-agent".into(),
+                    ],
+                    success_out("active\n"),
+                ),
+                (
+                    "limactl".into(),
+                    vec![
+                        "shell".into(),
+                        "substrate".into(),
+                        "sudo".into(),
+                        "-n".into(),
+                        "test".into(),
+                        "-S".into(),
+                        "/run/substrate.sock".into(),
+                    ],
+                    success_out(""),
+                ),
+                (
+                    "limactl".into(),
+                    vec![
+                        "shell".into(),
+                        "substrate".into(),
+                        "sudo".into(),
+                        "-n".into(),
+                        "timeout".into(),
+                        "5".into(),
+                        "curl".into(),
+                        "--fail".into(),
+                        "--unix-socket".into(),
+                        "/run/substrate.sock".into(),
+                        "http://localhost/v1/capabilities".into(),
+                    ],
+                    success_out("{}"),
+                ),
+                (
+                    "limactl".into(),
+                    vec![
+                        "shell".into(),
+                        "substrate".into(),
+                        "which".into(),
+                        "nft".into(),
+                    ],
+                    success_out("/usr/sbin/nft\n"),
+                ),
+                (
+                    "limactl".into(),
+                    vec![
+                        "shell".into(),
+                        "substrate".into(),
+                        "df".into(),
+                        "-h".into(),
+                        "/".into(),
+                    ],
+                    success_out(
+                        "Filesystem size used avail use% mounted\n/dev/root 10G 5G 5G 50% /\n",
+                    ),
+                ),
+            ];
+            let runner = MockRunner::new(responses);
+            let exit = run(true, &runner);
+            assert_eq!(exit, 0);
+        }
+
+        #[test]
+        fn doctor_missing_vm_human() {
+            let responses = vec![
+                ("limactl".into(), vec!["--version".into()], failure_out()),
+                (
+                    "sysctl".into(),
+                    vec!["-n".into(), "kern.hv_support".into()],
+                    success_out("1\n"),
+                ),
+            ];
+            let runner = MockRunner::new(responses);
+            let exit = run(false, &runner);
+            assert_eq!(exit, 2);
+        }
+    }
+}
+
 pub fn run_shell() -> Result<i32> {
     let config = ShellConfig::from_args()?;
+
+    // Initialize trace
+    if let Err(e) = init_trace(None) {
+        eprintln!("substrate: warning: failed to initialize trace: {}", e);
+    }
+
+    // Default-on world initialization (Linux only)
+    #[cfg(target_os = "windows")]
+    {
+        let world_disabled = env::var("SUBSTRATE_WORLD")
+            .map(|v| v == "disabled")
+            .unwrap_or(false)
+            || config.no_world;
+        if !world_disabled {
+            match pw::detect() {
+                Ok(ctx) => {
+                    if let Err(e) = (ctx.ensure_ready)() {
+                        eprintln!("substrate: windows world ensure_ready failed: {:#}", e);
+                    } else {
+                        std::env::set_var("SUBSTRATE_WORLD", "enabled");
+                        if let Ok(handle) = ctx.backend.ensure_session(&pw::windows::world_spec()) {
+                            std::env::set_var("SUBSTRATE_WORLD_ID", handle.id);
+                        }
+                    }
+                    pw::store_context_globally(ctx);
+                }
+                Err(e) => {
+                    eprintln!("substrate: windows world detection failed: {}", e);
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // Default ON (parity with Linux); allow disabling via env/CLI
+        let world_disabled = env::var("SUBSTRATE_WORLD")
+            .map(|v| v == "disabled")
+            .unwrap_or(false)
+            || config.no_world;
+        if !world_disabled {
+            // Auto-detect mac world context and ensure readiness
+            match pw::detect() {
+                Ok(ctx) => {
+                    if let Err(e) = (ctx.ensure_ready)() {
+                        // Degrade silently if ensure_ready fails
+                        eprintln!("substrate: mac world ensure_ready failed: {}", e);
+                    } else {
+                        // Set parity with Linux: world enabled + ID only
+                        std::env::set_var("SUBSTRATE_WORLD", "enabled");
+
+                        // Attempt to retrieve world id
+                        use world_api::{ResourceLimits, WorldSpec};
+                        let spec = WorldSpec {
+                            reuse_session: true,
+                            isolate_network: true,
+                            limits: ResourceLimits::default(),
+                            enable_preload: false,
+                            allowed_domains: substrate_broker::allowed_domains(),
+                            project_dir: std::env::current_dir()
+                                .unwrap_or_else(|_| std::path::PathBuf::from(".")),
+                            always_isolate: false,
+                        };
+                        if let Ok(handle) = ctx.backend.ensure_session(&spec) {
+                            std::env::set_var("SUBSTRATE_WORLD_ID", handle.id);
+                        }
+                    }
+                    pw::store_context_globally(ctx);
+                }
+                Err(e) => {
+                    // Degrade silently on mac as well
+                    eprintln!("substrate: mac world detection failed: {}", e);
+                }
+            }
+        }
+    }
+
+    // Default-on world initialization (Linux only)
+    #[cfg(target_os = "linux")]
+    {
+        use world::LinuxLocalBackend;
+        use world_api::{ResourceLimits, WorldBackend, WorldSpec};
+        let world_disabled = env::var("SUBSTRATE_WORLD")
+            .map(|v| v == "disabled")
+            .unwrap_or(false)
+            || config.no_world;
+        if !world_disabled {
+            let spec = WorldSpec {
+                reuse_session: true,
+                isolate_network: true,
+                limits: ResourceLimits::default(),
+                enable_preload: false,
+                allowed_domains: substrate_broker::allowed_domains(),
+                project_dir: env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+                always_isolate: false, // Default: use heuristic-based isolation
+            };
+            let backend = LinuxLocalBackend::new();
+            match backend.ensure_session(&spec) {
+                Ok(handle) => {
+                    env::set_var("SUBSTRATE_WORLD", "enabled");
+                    env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
+                }
+                Err(_e) => {
+                    // Degrade silently: world may be unavailable in this environment.
+                }
+            }
+        }
+    }
 
     // Deploy shims if needed (non-blocking, continues on error)
     // Skip if either the CLI flag is set or the environment variable is set
@@ -466,11 +1758,11 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
 
                 let cmd_id = Uuid::now_v7().to_string();
 
-                // Key change: Use suspend guard for PTY commands
+                // Use suspend guard for PTY commands and route via execute_command (WS PTY when enabled)
                 if needs_pty_exec {
                     // Suspend Reedline while PTY command runs
                     let _guard = line_editor.suspend_guard();
-                    match execute_with_pty(config, &line, &cmd_id, running_child_pid.clone()) {
+                    match execute_command(config, &line, &cmd_id, running_child_pid.clone()) {
                         Ok(status) => {
                             if !status.success() {
                                 #[cfg(unix)]
@@ -660,14 +1952,23 @@ fn run_script_mode(config: &ShellConfig, script_path: &Path) -> Result<i32> {
     // Log script completion
     let duration = start_time.elapsed();
     #[allow(unused_mut)]
+    #[cfg(unix)]
     let mut extra = json!({
         log_schema::EXIT_CODE: status.code().unwrap_or(-1),
         log_schema::DURATION_MS: duration.as_millis()
     });
 
+    #[cfg(not(unix))]
+    let extra = json!({
+        log_schema::EXIT_CODE: status.code().unwrap_or(-1),
+        log_schema::DURATION_MS: duration.as_millis()
+    });
+
     #[cfg(unix)]
-    if let Some(sig) = status.signal() {
-        extra["term_signal"] = json!(sig);
+    {
+        if let Some(sig) = status.signal() {
+            extra["term_signal"] = json!(sig);
+        }
     }
 
     log_command_event(
@@ -787,6 +2088,286 @@ pub fn needs_shell(cmd: &str) -> bool {
     })
 }
 
+/// Handle trace command - show trace information for a span ID
+fn handle_trace_command(span_id: &str) -> Result<()> {
+    use std::fs::File;
+    use std::io::{BufRead, BufReader};
+
+    // Get trace file location
+    let trace_file = env::var("SHIM_TRACE_LOG")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .expect("Cannot determine home directory")
+                .join(".substrate/trace.jsonl")
+        });
+
+    if !trace_file.exists() {
+        eprintln!("Trace file not found: {}", trace_file.display());
+        eprintln!("Make sure tracing is enabled with SUBSTRATE_WORLD=enabled");
+        std::process::exit(1);
+    }
+
+    // Read trace file and find the span
+    let file = File::open(&trace_file)?;
+    let reader = BufReader::new(file);
+    let mut found: Option<serde_json::Value> = None;
+
+    for line in reader.lines() {
+        let line = line?;
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
+            if let Some(id) = json.get("span_id").and_then(|v| v.as_str()) {
+                if id == span_id {
+                    // Prefer command_complete if multiple entries exist
+                    let is_complete =
+                        json.get("event_type").and_then(|v| v.as_str()) == Some("command_complete");
+                    match &found {
+                        None => found = Some(json),
+                        Some(current) => {
+                            let current_is_complete =
+                                current.get("event_type").and_then(|v| v.as_str())
+                                    == Some("command_complete");
+                            if is_complete && !current_is_complete {
+                                found = Some(json);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(json) = found {
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        eprintln!("Span ID not found: {}", span_id);
+        std::process::exit(1);
+    }
+
+    Ok(())
+}
+
+/// Handle replay command - replay a traced command by span ID
+fn handle_replay_command(span_id: &str) -> Result<()> {
+    use std::fs::File;
+    use std::io::{BufRead, BufReader};
+
+    // Get trace file location
+    let trace_file = env::var("SHIM_TRACE_LOG")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .expect("Cannot determine home directory")
+                .join(".substrate/trace.jsonl")
+        });
+
+    if !trace_file.exists() {
+        eprintln!("Trace file not found: {}", trace_file.display());
+        eprintln!("Make sure tracing is enabled with SUBSTRATE_WORLD=enabled");
+        std::process::exit(1);
+    }
+
+    // Load the trace for the span
+    let file = File::open(&trace_file)?;
+    let reader = BufReader::new(file);
+    let mut trace_entry = None;
+
+    for line in reader.lines() {
+        let line = line?;
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
+            if let Some(id) = json.get("span_id").and_then(|v| v.as_str()) {
+                if id == span_id {
+                    trace_entry = Some(json);
+                    break;
+                }
+            }
+        }
+    }
+
+    let entry = trace_entry.ok_or_else(|| anyhow::anyhow!("Span ID not found: {}", span_id))?;
+
+    // Extract command information from the trace
+    let command = entry
+        .get("cmd")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("No command found in trace"))?;
+
+    let cwd = entry
+        .get("cwd")
+        .and_then(|v| v.as_str())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| env::current_dir().unwrap());
+
+    let session_id = entry
+        .get("session_id")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .unwrap_or_else(|| Uuid::now_v7().to_string());
+
+    // Verbose header
+    if env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1"
+        || env::args().any(|a| a == "--replay-verbose")
+    {
+        eprintln!("[replay] span_id: {}", span_id);
+        eprintln!("[replay] command: {}", command);
+        eprintln!("[replay] cwd: {}", cwd.display());
+        eprintln!("[replay] mode: bash -lc");
+    }
+
+    // Parse command into command and args
+    let parts: Vec<&str> = command.split_whitespace().collect();
+    let (cmd, args) = if !parts.is_empty() {
+        (
+            parts[0].to_string(),
+            parts[1..].iter().map(|s| s.to_string()).collect(),
+        )
+    } else {
+        (command.to_string(), Vec::new())
+    };
+
+    // Create execution state
+    let state = substrate_replay::replay::ExecutionState {
+        raw_cmd: command.to_string(),
+        command: cmd,
+        args,
+        cwd,
+        env: HashMap::new(), // Could extract from trace if captured
+        stdin: None,
+        session_id,
+        span_id: span_id.to_string(),
+    };
+
+    // Execute with replay (choose world isolation; default enabled, allow opt-out)
+    let runtime = tokio::runtime::Runtime::new()?;
+    // Respect --no-world flag, then environment variable override, else default enabled
+    let no_world_flag = env::args().any(|a| a == "--no-world");
+    let use_world = if no_world_flag {
+        false
+    } else {
+        match env::var("SUBSTRATE_REPLAY_USE_WORLD") {
+            Ok(val) => val != "0" && val != "disabled",
+            Err(_) => true,
+        }
+    };
+    // Best-effort capability warnings when world isolation requested but not available
+    if cfg!(target_os = "linux") && use_world {
+        // cgroup v2
+        if !PathBuf::from("/sys/fs/cgroup/cgroup.controllers").exists() {
+            eprintln!("[replay] warn: cgroup v2 not mounted; world cgroups will not activate");
+        }
+        // overlayfs
+        let overlay_ok = std::fs::read_to_string("/proc/filesystems")
+            .ok()
+            .map(|s| s.contains("overlay"))
+            .unwrap_or(false);
+        if !overlay_ok {
+            eprintln!("[replay] warn: overlayfs not present; fs_diff will be unavailable");
+        }
+        // nftables
+        let nft_ok = std::process::Command::new("nft")
+            .arg("--version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .ok()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !nft_ok {
+            eprintln!("[replay] warn: nft not available; netfilter scoping/logging disabled");
+        }
+        // dmesg restrict
+        if let Ok(out) = std::process::Command::new("sh")
+            .arg("-lc")
+            .arg("sysctl -n kernel.dmesg_restrict 2>/dev/null || echo n/a")
+            .output()
+        {
+            if let Ok(s) = String::from_utf8(out.stdout) {
+                if s.trim() == "1" {
+                    eprintln!(
+                        "[replay] warn: kernel.dmesg_restrict=1; LOG lines may not be visible"
+                    );
+                }
+            }
+        }
+    }
+
+    let result = if use_world {
+        runtime.block_on(async { substrate_replay::replay::execute_in_world(&state, 60).await })?
+    } else {
+        runtime.block_on(async { substrate_replay::replay::execute_direct(&state, 60).await })?
+    };
+
+    // Display results
+    println!("Exit code: {}", result.exit_code);
+    if !result.stdout.is_empty() {
+        println!("\nStdout:");
+        println!("{}", String::from_utf8_lossy(&result.stdout));
+    }
+    if !result.stderr.is_empty() {
+        println!("\nStderr:");
+        println!("{}", String::from_utf8_lossy(&result.stderr));
+    }
+
+    if let Some(fs_diff) = result.fs_diff {
+        if !fs_diff.is_empty() {
+            println!("\nFilesystem changes:");
+            for write in &fs_diff.writes {
+                println!("  + {}", write.display());
+            }
+            for modify in &fs_diff.mods {
+                println!("  ~ {}", modify.display());
+            }
+            for delete in &fs_diff.deletes {
+                println!("  - {}", delete.display());
+            }
+        }
+    }
+
+    std::process::exit(result.exit_code);
+}
+
+/// Collect filesystem diff and network scopes from world backend
+#[allow(unused_variables)]
+fn collect_world_telemetry(
+    _span_id: &str,
+) -> (Vec<String>, Option<substrate_common::fs_diff::FsDiff>) {
+    // Try to get world handle from environment
+    let world_id = match env::var("SUBSTRATE_WORLD_ID") {
+        Ok(id) => id,
+        Err(_) => {
+            // No world ID, return empty telemetry
+            return (vec![], None);
+        }
+    };
+
+    // Create world backend and collect telemetry
+    #[cfg(target_os = "linux")]
+    {
+        use world::LinuxLocalBackend;
+        use world_api::WorldBackend;
+
+        let backend = LinuxLocalBackend::new();
+        let handle = world_api::WorldHandle {
+            id: world_id.clone(),
+        };
+
+        // Try to get filesystem diff
+        let fs_diff = backend.fs_diff(&handle, _span_id).ok(); // PTY sessions may run in a separate process; missing cache is expected
+
+        // For now, scopes are tracked in the session world's execute method
+        // and would need to be retrieved from there
+        let scopes_used = vec![];
+
+        (scopes_used, fs_diff)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        // World backend only available on Linux for now
+        (vec![], None)
+    }
+}
+
 #[cfg(test)]
 mod proptest_tests {
     use super::*;
@@ -868,6 +2449,34 @@ mod proptest_tests {
             let command = format!("{} {}", cmd, stderr_redirect);
             prop_assert!(needs_shell(&command));
         }
+    }
+}
+
+#[cfg(test)]
+mod fs_diff_parse_tests {
+    #[test]
+    fn test_parse_fs_diff_from_agent_json() {
+        let sample = r#"{
+            "exit":0,
+            "span_id":"spn_x",
+            "stdout_b64":"",
+            "stderr_b64":"",
+            "scopes_used":["tcp:example.com:443"],
+            "fs_diff":{
+                "writes":["/tmp/t/a.txt"],
+                "mods":[],
+                "deletes":[],
+                "truncated":false
+            }
+        }"#;
+        let v: serde_json::Value = serde_json::from_str(sample).unwrap();
+        let fd_val = v.get("fs_diff").cloned().unwrap();
+        let diff: substrate_common::FsDiff = serde_json::from_value(fd_val).unwrap();
+        assert_eq!(diff.writes.len(), 1);
+        assert_eq!(diff.writes[0], std::path::PathBuf::from("/tmp/t/a.txt"));
+        assert!(diff.mods.is_empty());
+        assert!(diff.deletes.is_empty());
+        assert!(!diff.truncated);
     }
 }
 
@@ -1347,7 +2956,17 @@ fn needs_pty(cmd: &str) -> bool {
     // Parse command properly using shell_words for quoted argument handling
     let tokens = match shell_words::split(cmd) {
         Ok(tokens) => tokens,
-        Err(_) => return false, // Malformed command, don't use PTY
+        Err(_) => {
+            // Fallback: on Windows, accept bare paths like C:\Foo\bar.exe
+            #[cfg(windows)]
+            {
+                vec![cmd.to_string()]
+            }
+            #[cfg(not(windows))]
+            {
+                return false; // Malformed command, don't use PTY
+            }
+        }
     };
 
     // Peel off wrapper commands to find the actual command
@@ -1360,9 +2979,21 @@ fn needs_pty(cmd: &str) -> bool {
         &tokens
     };
 
-    let first_token = working_tokens
-        .first()
-        .and_then(|s| Path::new(s).file_name())
+    // Windows-safe program extraction: prefer the program component from the original string
+    #[cfg(windows)]
+    let first_raw = {
+        // Try to extract <...>.exe from the original string regardless of spaces
+        let lower = cmd.to_ascii_lowercase();
+        if let Some(pos) = lower.find(".exe") {
+            &cmd[..pos + 4]
+        } else {
+            working_tokens.first().map(|s| s.as_str()).unwrap_or("")
+        }
+    };
+    #[cfg(not(windows))]
+    let first_raw = working_tokens.first().map(|s| s.as_str()).unwrap_or("");
+    let first_token = Path::new(first_raw)
+        .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("");
 
@@ -1410,6 +3041,10 @@ fn needs_pty(cmd: &str) -> bool {
 
     // Special SSH handling for -t/-T flags and remote commands
     if cmd_lower == "ssh" {
+        // If no args at all, assume interactive client
+        if working_tokens.len() == 1 {
+            return true;
+        }
         // Create lowercase versions for case-insensitive option checking
         let tokens_lc: Vec<String> = working_tokens
             .iter()
@@ -1592,48 +3227,8 @@ fn execute_command(
 ) -> Result<ExitStatus> {
     let trimmed = command.trim();
 
-    // Check if PTY should be used (force overrides disable)
-    let disabled = is_pty_disabled();
-    let forced = is_force_pty_command(trimmed);
-    let should_use_pty = forced || (!disabled && needs_pty(trimmed));
-
-    if should_use_pty {
-        // Use PTY execution path for interactive commands
-        let pty_status = pty_exec::execute_with_pty(config, trimmed, cmd_id, running_child_pid)?;
-
-        // Convert PtyExitStatus to std::process::ExitStatus for compatibility
-        // NOTE: This is a documented compatibility shim using from_raw
-        // The actual exit information is preserved in logs
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::ExitStatusExt;
-            if let Some(signal) = pty_status.signal {
-                // Terminated by signal: set low 7 bits to the signal number
-                // This makes status.signal() work correctly
-                return Ok(ExitStatus::from_raw(signal & 0x7f));
-            } else if let Some(code) = pty_status.code {
-                // Normal exit: code in bits 8-15
-                return Ok(ExitStatus::from_raw((code & 0xff) << 8));
-            } else {
-                return Ok(ExitStatus::from_raw(0));
-            }
-        }
-
-        #[cfg(windows)]
-        {
-            // 🔥 EXPERT FIX: Don't shift bits on Windows - use raw code directly
-            use std::os::windows::process::ExitStatusExt;
-            let code = pty_status.code.unwrap_or(0) as u32;
-            return Ok(ExitStatus::from_raw(code));
-        }
-    }
-
-    // Continue with existing implementation for non-PTY commands...
-    // Compute resolved path from raw command before redaction
-    let resolved = first_command_path(trimmed);
-
-    // Redact sensitive information before logging (token-aware)
-    let redacted_command = if std::env::var("SHIM_LOG_OPTS").as_deref() == Ok("raw") {
+    // Prepare redacted command once (used for span + logging)
+    let redacted_for_logging = if std::env::var("SHIM_LOG_OPTS").as_deref() == Ok("raw") {
         trimmed.to_string()
     } else {
         let toks = shell_words::split(trimmed)
@@ -1645,11 +3240,10 @@ fn execute_command(
             let t = &toks[i];
             let lt = t.to_lowercase();
 
-            // Handle -u, --user, --password, --token, -p (redact both flag and value)
             if lt == "-u" || lt == "--user" || lt == "--password" || lt == "--token" || lt == "-p" {
-                out.push("***".into()); // redact flag
+                out.push("***".into());
                 if i + 1 < toks.len() {
-                    out.push("***".into()); // redact value
+                    out.push("***".into());
                     i += 2;
                 } else {
                     i += 1;
@@ -1657,10 +3251,8 @@ fn execute_command(
                 continue;
             }
 
-            // Handle -H/--header specially to preserve header name
-            // Note: -H is case-sensitive, --header is case-insensitive
             if t == "-H" || lt == "--header" {
-                out.push(t.clone()); // keep flag
+                out.push(t.clone());
                 if i + 1 < toks.len() {
                     let hv = &toks[i + 1];
                     let lower = hv.to_lowercase();
@@ -1684,7 +3276,6 @@ fn execute_command(
                 continue;
             }
 
-            // Handle inline forms (k=v)
             if t.contains('=') {
                 let (k, _) = t.split_once('=').unwrap();
                 let kl = k.to_lowercase();
@@ -1700,12 +3291,246 @@ fn execute_command(
                 }
             }
 
-            // Default: use base redaction
             out.push(redact_sensitive(t));
             i += 1;
         }
         out.join(" ")
     };
+
+    // Start span for command execution
+    let policy_decision;
+    let mut span = if std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
+        // Policy evaluation (Phase 4)
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
+        // Detect and load .substrate-profile if present
+        let _ = detect_profile(&cwd);
+
+        let decision = evaluate(trimmed, cwd.to_str().unwrap_or("."), None);
+
+        // Convert broker Decision to trace PolicyDecision
+        policy_decision = match &decision {
+            Ok(Decision::Allow) => Some(PolicyDecision {
+                action: "allow".to_string(),
+                reason: None,
+                restrictions: None,
+            }),
+            Ok(Decision::AllowWithRestrictions(restrictions)) => {
+                eprintln!(
+                    "substrate: command requires restrictions: {:?}",
+                    restrictions
+                );
+                // Convert Restriction objects to strings for trace
+                let restriction_strings: Vec<String> = restrictions
+                    .iter()
+                    .map(|r| format!("{:?}:{}", r.type_, r.value))
+                    .collect();
+                Some(PolicyDecision {
+                    action: "allow_with_restrictions".to_string(),
+                    reason: None,
+                    restrictions: Some(restriction_strings),
+                })
+            }
+            Ok(Decision::Deny(reason)) => {
+                eprintln!("substrate: command denied by policy: {}", reason);
+                Some(PolicyDecision {
+                    action: "deny".to_string(),
+                    reason: Some(reason.clone()),
+                    restrictions: None,
+                })
+            }
+            Err(e) => {
+                eprintln!("substrate: policy check failed: {}", e);
+                None
+            }
+        };
+
+        // Handle denial
+        if let Ok(Decision::Deny(_)) = decision {
+            // Return failure status
+            #[cfg(unix)]
+            {
+                use std::os::unix::process::ExitStatusExt;
+                return Ok(ExitStatus::from_raw(126 << 8)); // Cannot execute
+            }
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::ExitStatusExt;
+                return Ok(ExitStatus::from_raw(126));
+            }
+        }
+
+        // Create span with policy decision
+        let mut builder = create_span_builder()
+            .with_command(&redacted_for_logging)
+            .with_cwd(cwd.to_str().unwrap_or("."));
+
+        if let Some(pd) = policy_decision.clone() {
+            builder = builder.with_policy_decision(pd);
+        }
+
+        // Set parent span ID in environment for child processes
+        match builder.start() {
+            Ok(span) => {
+                std::env::set_var("SHIM_PARENT_SPAN", span.get_span_id());
+                Some(span)
+            }
+            Err(e) => {
+                eprintln!("substrate: failed to create span: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    // Check if PTY should be used (force overrides disable)
+    let disabled = is_pty_disabled();
+    let forced = is_force_pty_command(trimmed);
+    let should_use_pty = forced || (!disabled && needs_pty(trimmed));
+
+    if should_use_pty {
+        // Attempt world-agent PTY WS route on Linux when world is enabled or agent socket exists
+        #[cfg(target_os = "linux")]
+        {
+            let world_enabled = std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
+            let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
+            if world_enabled || uds_exists {
+                // Use span id if we have a span, otherwise fall back to cmd_id as a correlation hint
+                if let Some(active_span) = span.as_mut() {
+                    active_span.set_transport(TransportMeta {
+                        mode: "unix".to_string(),
+                        endpoint: Some("/run/substrate.sock".to_string()),
+                    });
+                }
+                let span_id_for_ws = span
+                    .as_ref()
+                    .map(|s| s.get_span_id().to_string())
+                    .unwrap_or_else(|| cmd_id.to_string());
+                match execute_world_pty_over_ws(trimmed, &span_id_for_ws) {
+                    Ok(code) => {
+                        if let Some(active_span) = span.take() {
+                            let (scopes_used, fs_diff) =
+                                collect_world_telemetry(active_span.get_span_id());
+                            let _ = active_span.finish(code, scopes_used, fs_diff);
+                        }
+                        #[cfg(unix)]
+                        {
+                            use std::os::unix::process::ExitStatusExt;
+                            return Ok(ExitStatus::from_raw((code & 0xff) << 8));
+                        }
+                        #[cfg(windows)]
+                        {
+                            use std::os::windows::process::ExitStatusExt;
+                            return Ok(ExitStatus::from_raw(code as u32));
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("substrate: warn: world PTY over WS failed, falling back to host PTY: {}", e);
+                        // fall through to host PTY
+                    }
+                }
+            }
+        }
+
+        // Attempt world-agent PTY WS route on mac when world is enabled
+        #[cfg(target_os = "macos")]
+        {
+            let world_enabled = std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
+            let uds_exists = pw::get_context()
+                .map(|c| match &c.transport {
+                    pw::WorldTransport::Unix(p) => p.exists(),
+                    _ => false,
+                })
+                .unwrap_or(false);
+            if world_enabled || uds_exists {
+                let span_id_for_ws = span
+                    .as_ref()
+                    .map(|s| s.get_span_id().to_string())
+                    .unwrap_or_else(|| cmd_id.to_string());
+                match execute_world_pty_over_ws_macos(trimmed, &span_id_for_ws) {
+                    Ok(code) => {
+                        if let Some(active_span) = span.take() {
+                            let (scopes_used, fs_diff) =
+                                collect_world_telemetry(active_span.get_span_id());
+                            let _ = active_span.finish(code, scopes_used, fs_diff);
+                        }
+                        #[cfg(unix)]
+                        {
+                            use std::os::unix::process::ExitStatusExt;
+                            return Ok(ExitStatus::from_raw((code & 0xff) << 8));
+                        }
+                        #[cfg(windows)]
+                        {
+                            use std::os::windows::process::ExitStatusExt;
+                            return Ok(ExitStatus::from_raw(code as u32));
+                        }
+                    }
+                    Err(e) => {
+                        static WARNED: std::sync::Once = std::sync::Once::new();
+                        WARNED.call_once(|| {
+                            eprintln!("substrate: warn: world PTY over WS failed on mac, falling back to host PTY: {}", e);
+                        });
+                        // fall through to host PTY
+                    }
+                }
+            }
+        }
+
+        // Use host PTY execution path as fallback
+        let pty_status = pty_exec::execute_with_pty(config, trimmed, cmd_id, running_child_pid)?;
+
+        // Finish span if we created one (PTY path)
+        if let Some(active_span) = span {
+            let exit_code = pty_status
+                .code()
+                .or_else(|| pty_status.success().then_some(0))
+                .unwrap_or(-1);
+            // Collect scopes and fs_diff from world backend if enabled
+            let (scopes_used, fs_diff) =
+                if env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
+                    collect_world_telemetry(active_span.get_span_id())
+                } else {
+                    (vec![], None)
+                };
+            let _ = active_span.finish(exit_code, scopes_used, fs_diff);
+        }
+
+        // Convert PtyExitStatus to std::process::ExitStatus for compatibility
+        // NOTE: This is a documented compatibility shim using from_raw
+        // The actual exit information is preserved in logs
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            if let Some(signal) = pty_status.signal() {
+                // Terminated by signal: set low 7 bits to the signal number
+                // This makes status.signal() work correctly
+                return Ok(ExitStatus::from_raw(signal & 0x7f));
+            } else if let Some(code) = pty_status.code() {
+                // Normal exit: code in bits 8-15
+                return Ok(ExitStatus::from_raw((code & 0xff) << 8));
+            } else {
+                return Ok(ExitStatus::from_raw(0));
+            }
+        }
+
+        #[cfg(windows)]
+        {
+            // Ensure Windows builds exercise signal() accessor even though it always returns None.
+            let _ = pty_status.signal();
+            // 🔥 EXPERT FIX: Don't shift bits on Windows - use raw code directly
+            use std::os::windows::process::ExitStatusExt;
+            let code = pty_status.code().unwrap_or(0) as u32;
+            return Ok(ExitStatus::from_raw(code));
+        }
+    }
+
+    // Continue with existing implementation for non-PTY commands...
+    // Compute resolved path from raw command before redaction
+    let resolved = first_command_path(trimmed);
+
+    // Redact sensitive information before logging (token-aware)
+    let redacted_command = redacted_for_logging.clone();
 
     // Log command start with redacted command and resolved path
     let start_extra = resolved.map(|p| json!({ "resolved_path": p }));
@@ -1717,6 +3542,190 @@ fn execute_command(
         start_extra,
     )?;
     let start_time = std::time::Instant::now();
+
+    // Route non-PTY commands through world agent (UDS/TCP) when world is enabled
+    #[cfg(target_os = "macos")]
+    {
+        let world_enabled = std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
+        let uds_exists = pw::get_context()
+            .map(|c| match &c.transport {
+                pw::WorldTransport::Unix(p) => p.exists(),
+                _ => false,
+            })
+            .unwrap_or(false);
+        if world_enabled || uds_exists {
+            if let Some(active_span) = span.as_mut() {
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                if let Some(ctx) = pw::get_context() {
+                    active_span.set_transport(world_transport_to_meta(&ctx.transport));
+                }
+            }
+            let mut agent_command = trimmed.to_string();
+            if config.ci_mode && !config.no_exit_on_error {
+                let shell_name = Path::new(&config.shell_path)
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                if shell_name == "bash" || shell_name == "bash.exe" {
+                    agent_command = format!("set -euo pipefail; {trimmed}");
+                }
+            }
+
+            if let Ok((exit_code, stdout, stderr, scopes_used, fs_diff_opt)) =
+                exec_non_pty_via_agent_macos(&agent_command)
+            {
+                use std::io::{self, Write};
+                let _ = io::stdout().write_all(&stdout);
+                let _ = io::stderr().write_all(&stderr);
+                if let Some(active_span) = span {
+                    let _ = active_span.finish(exit_code, scopes_used, fs_diff_opt);
+                }
+                let completion_extra = json!({
+                    log_schema::EXIT_CODE: exit_code,
+                    log_schema::DURATION_MS: start_time.elapsed().as_millis()
+                });
+                log_command_event(
+                    config,
+                    "command_complete",
+                    &redacted_command,
+                    cmd_id,
+                    Some(completion_extra),
+                )?;
+                #[cfg(unix)]
+                {
+                    use std::os::unix::process::ExitStatusExt;
+                    return Ok(std::process::ExitStatus::from_raw((exit_code & 0xff) << 8));
+                }
+                #[cfg(windows)]
+                {
+                    use std::os::windows::process::ExitStatusExt;
+                    return Ok(ExitStatus::from_raw(exit_code as u32));
+                }
+            } else {
+                eprintln!("substrate: warn: mac world-agent exec failed, running direct");
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let world_enabled = std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
+        if world_enabled {
+            if let Some(active_span) = span.as_mut() {
+                if let Some(ctx) = pw::get_context() {
+                    active_span.set_transport(world_transport_to_meta(&ctx.transport));
+                }
+            }
+            let span_id_for_exec = span.as_ref().map(|s| s.get_span_id().to_string());
+            let mut agent_command = trimmed.to_string();
+            if config.ci_mode && !config.no_exit_on_error {
+                let shell_name = Path::new(&config.shell_path)
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                if shell_name == "bash" || shell_name == "bash.exe" {
+                    agent_command = format!("set -euo pipefail; {trimmed}");
+                }
+            }
+
+            match exec_non_pty_via_agent_windows(&agent_command, span_id_for_exec) {
+                Ok((exit_code, stdout, stderr, scopes_used, fs_diff_opt)) => {
+                    use std::io::{self, Write};
+                    let _ = io::stdout().write_all(&stdout);
+                    let _ = io::stderr().write_all(&stderr);
+
+                    if let Some(active_span) = span {
+                        let diff_for_span = match fs_diff_opt {
+                            Some(diff) => Some(diff),
+                            None => {
+                                let (_, diff) = collect_world_telemetry(active_span.get_span_id());
+                                diff
+                            }
+                        };
+                        let _ = active_span.finish(exit_code, scopes_used, diff_for_span);
+                    }
+
+                    let completion_extra = json!({
+                        log_schema::EXIT_CODE: exit_code,
+                        log_schema::DURATION_MS: start_time.elapsed().as_millis()
+                    });
+                    log_command_event(
+                        config,
+                        "command_complete",
+                        &redacted_command,
+                        cmd_id,
+                        Some(completion_extra),
+                    )?;
+
+                    use std::os::windows::process::ExitStatusExt;
+                    return Ok(ExitStatus::from_raw(exit_code as u32));
+                }
+                Err(e) => {
+                    static WARN_ONCE: std::sync::Once = std::sync::Once::new();
+                    WARN_ONCE.call_once(|| {
+                        eprintln!(
+                            "substrate: warn: windows world-agent exec failed, running direct: {}",
+                            e
+                        );
+                    });
+                }
+            }
+        }
+    }
+    // Route non-PTY commands through world agent (UDS HTTP) when world is enabled (Linux only)
+    #[cfg(target_os = "linux")]
+    {
+        let world_env = env::var("SUBSTRATE_WORLD").unwrap_or_default();
+        let world_enabled = world_env == "enabled";
+        let world_disabled = world_env == "disabled" || config.no_world;
+        let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
+        if world_enabled || (!world_disabled && uds_exists) {
+            if world_enabled {
+                let _ = ensure_world_agent_ready();
+            }
+            if let Some(active_span) = span.as_mut() {
+                active_span.set_transport(TransportMeta {
+                    mode: "unix".to_string(),
+                    endpoint: Some("/run/substrate.sock".to_string()),
+                });
+            }
+            if let Ok((exit_code, stdout, stderr, scopes_used, fs_diff_opt)) =
+                exec_non_pty_via_agent(trimmed)
+            {
+                use std::io::{self, Write};
+                let _ = io::stdout().write_all(&stdout);
+                let _ = io::stderr().write_all(&stderr);
+                if let Some(active_span) = span {
+                    let _ = active_span.finish(exit_code, scopes_used, fs_diff_opt);
+                }
+                let completion_extra = json!({
+                    log_schema::EXIT_CODE: exit_code,
+                    log_schema::DURATION_MS: start_time.elapsed().as_millis()
+                });
+                log_command_event(
+                    config,
+                    "command_complete",
+                    &redacted_command,
+                    cmd_id,
+                    Some(completion_extra),
+                )?;
+                #[cfg(unix)]
+                {
+                    use std::os::unix::process::ExitStatusExt;
+                    return Ok(std::process::ExitStatus::from_raw((exit_code & 0xff) << 8));
+                }
+                #[cfg(windows)]
+                {
+                    use std::os::windows::process::ExitStatusExt;
+                    return Ok(ExitStatus::from_raw(exit_code as u32));
+                }
+            } else {
+                eprintln!("substrate: warn: shell world-agent exec failed, running direct");
+            }
+        }
+    }
 
     // Check for built-in commands only in interactive mode or for simple commands
     // Complex commands with shell operators must be handled by the external shell
@@ -1733,14 +3742,23 @@ fn execute_command(
 
     // Log command completion with redacted command
     let duration = start_time.elapsed();
+    #[cfg(unix)]
     let mut extra = json!({
         log_schema::EXIT_CODE: status.code().unwrap_or(-1),
         log_schema::DURATION_MS: duration.as_millis()
     });
 
+    #[cfg(not(unix))]
+    let extra = json!({
+        log_schema::EXIT_CODE: status.code().unwrap_or(-1),
+        log_schema::DURATION_MS: duration.as_millis()
+    });
+
     #[cfg(unix)]
-    if let Some(sig) = status.signal() {
-        extra["term_signal"] = json!(sig);
+    {
+        if let Some(sig) = status.signal() {
+            extra["term_signal"] = json!(sig);
+        }
     }
 
     log_command_event(
@@ -1751,7 +3769,453 @@ fn execute_command(
         Some(extra),
     )?;
 
+    // Finish span if we created one
+    if let Some(active_span) = span {
+        let exit_code = status.code().unwrap_or(-1);
+        // Collect scopes and fs_diff from world backend if enabled
+        let (scopes_used, fs_diff) = if env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled"
+        {
+            collect_world_telemetry(active_span.get_span_id())
+        } else {
+            (vec![], None)
+        };
+        let _ = active_span.finish(exit_code, scopes_used, fs_diff);
+    }
+
     Ok(status)
+}
+
+#[cfg(target_os = "linux")]
+fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Result<i32> {
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine;
+    use futures::{SinkExt, StreamExt};
+
+    // Ensure agent is ready
+    ensure_world_agent_ready()?;
+
+    // Connect UDS and do WS handshake
+    let rt = tokio::runtime::Runtime::new()?;
+    let code = rt.block_on(async move {
+        let stream = UnixStream::connect("/run/substrate.sock")
+            .await
+            .map_err(|e| anyhow::anyhow!("connect UDS: {}", e))?;
+        let url = url::Url::parse("ws://localhost/v1/stream").unwrap();
+        let (ws, _resp) = tungs::client_async(url, stream)
+            .await
+            .map_err(|e| anyhow::anyhow!("ws handshake: {}", e))?;
+        let (sink, mut stream) = ws.split();
+        let sink = std::sync::Arc::new(tokio::sync::Mutex::new(sink));
+
+        if std::env::var("SUBSTRATE_WS_DEBUG").ok().as_deref() == Some("1") {
+            eprintln!("using world-agent PTY WS");
+        }
+
+        // Prepare start frame (strip optional ":pty " prefix used in REPL to force PTY)
+        let cmd_sanitized = if let Some(rest) = cmd.strip_prefix(":pty ") {
+            rest
+        } else {
+            cmd
+        };
+        let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
+        #[cfg(target_os = "linux")]
+        let (cols, rows) = get_term_size();
+        #[cfg(not(target_os = "linux"))]
+        let (cols, rows) = (80u16, 24u16);
+        let start = serde_json::json!({
+            "type": "start",
+            "cmd": cmd_sanitized,
+            "cwd": cwd,
+            "env": env_map,
+            "span_id": span_id,
+            "cols": cols,
+            "rows": rows,
+        });
+        sink.lock()
+            .await
+            .send(tungs::tungstenite::Message::Text(start.to_string()))
+            .await
+            .map_err(|e| anyhow::anyhow!("ws send start: {}", e))?;
+
+        // Enter raw mode on the local terminal and ensure restoration
+        #[cfg(target_os = "linux")]
+        let _raw_guard = RawModeGuard::for_stdin_if_tty()?;
+
+        // Spawn stdin forwarder (raw bytes)
+        let sink_in = sink.clone();
+        let stdin_task = tokio::spawn(async move {
+            use tokio::io::AsyncReadExt;
+            let mut stdin = tokio::io::stdin();
+            let mut buf = [0u8; 8192];
+            loop {
+                match stdin.read(&mut buf).await {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        let b64 = STANDARD.encode(&buf[..n]);
+                        let frame = serde_json::json!({"type":"stdin", "data_b64": b64});
+                        if sink_in
+                            .lock()
+                            .await
+                            .send(tungs::tungstenite::Message::Text(frame.to_string()))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+
+        // Spawn resize watcher (SIGWINCH)
+        #[cfg(target_os = "linux")]
+        let resize_task = {
+            let sink_resize = sink.clone();
+            let mut sig = signal(SignalKind::window_change())
+                .map_err(|e| anyhow::anyhow!("sigwinch subscribe: {}", e))?;
+            tokio::spawn(async move {
+                while sig.recv().await.is_some() {
+                    let (c, r) = get_term_size();
+                    let frame = serde_json::json!({"type":"resize", "cols": c, "rows": r});
+                    if sink_resize
+                        .lock()
+                        .await
+                        .send(tungs::tungstenite::Message::Text(frame.to_string()))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            })
+        };
+
+        // Spawn Unix signal forwarders (INT, TERM, HUP, QUIT) → WS Signal frames
+        #[cfg(target_os = "linux")]
+        let signal_tasks = {
+            let mut tasks = Vec::new();
+
+            // SIGINT
+            if let Ok(mut sig) = signal(SignalKind::interrupt()) {
+                let s = sink.clone();
+                tasks.push(tokio::spawn(async move {
+                    while sig.recv().await.is_some() {
+                        let frame = serde_json::json!({"type":"signal", "sig": "INT"});
+                        if s.lock()
+                            .await
+                            .send(tungs::tungstenite::Message::Text(frame.to_string()))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                }));
+            }
+            // SIGTERM
+            if let Ok(mut sig) = signal(SignalKind::terminate()) {
+                let s = sink.clone();
+                tasks.push(tokio::spawn(async move {
+                    while sig.recv().await.is_some() {
+                        let frame = serde_json::json!({"type":"signal", "sig": "TERM"});
+                        if s.lock()
+                            .await
+                            .send(tungs::tungstenite::Message::Text(frame.to_string()))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                }));
+            }
+            // SIGHUP
+            if let Ok(mut sig) = signal(SignalKind::hangup()) {
+                let s = sink.clone();
+                tasks.push(tokio::spawn(async move {
+                    while sig.recv().await.is_some() {
+                        let frame = serde_json::json!({"type":"signal", "sig": "HUP"});
+                        if s.lock()
+                            .await
+                            .send(tungs::tungstenite::Message::Text(frame.to_string()))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                }));
+            }
+            // SIGQUIT
+            if let Ok(mut sig) = signal(SignalKind::quit()) {
+                let s = sink.clone();
+                tasks.push(tokio::spawn(async move {
+                    while sig.recv().await.is_some() {
+                        let frame = serde_json::json!({"type":"signal", "sig": "QUIT"});
+                        if s.lock()
+                            .await
+                            .send(tungs::tungstenite::Message::Text(frame.to_string()))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                }));
+            }
+
+            tasks
+        };
+
+        let mut exit_code: i32 = 0;
+        while let Some(msg) = stream.next().await {
+            let msg = msg.map_err(|e| anyhow::anyhow!("ws recv: {}", e))?;
+            if msg.is_text() {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&msg.to_string()) {
+                    match v.get("type").and_then(|t| t.as_str()) {
+                        Some("stdout") => {
+                            if let Some(b64) = v.get("data_b64").and_then(|x| x.as_str()) {
+                                if let Ok(bytes) = STANDARD.decode(b64) {
+                                    use std::io::Write;
+                                    let _ = std::io::stdout().write_all(&bytes);
+                                    let _ = std::io::stdout().flush();
+                                }
+                            }
+                        }
+                        Some("exit") => {
+                            exit_code = v.get("code").and_then(|c| c.as_i64()).unwrap_or(0) as i32;
+                            break;
+                        }
+                        Some("error") => {
+                            if let Some(msg) = v.get("message").and_then(|m| m.as_str()) {
+                                eprintln!("world-agent error: {}", msg);
+                            }
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+            } else if msg.is_close() {
+                break;
+            }
+        }
+
+        // Cleanup background tasks
+        stdin_task.abort();
+        #[cfg(target_os = "linux")]
+        {
+            resize_task.abort();
+            for t in signal_tasks {
+                t.abort();
+            }
+        }
+        Ok::<i32, anyhow::Error>(exit_code)
+    })?;
+    Ok(code)
+}
+
+#[cfg(target_os = "linux")]
+fn ensure_world_agent_ready() -> anyhow::Result<()> {
+    use std::path::Path;
+    const SOCK: &str = "/run/substrate.sock";
+
+    // Helper: quick readiness probe via HTTP-over-UDS
+    fn probe_caps() -> bool {
+        use std::io::{Read, Write};
+        match std::os::unix::net::UnixStream::connect(SOCK) {
+            Ok(mut s) => {
+                let _ = s.set_read_timeout(Some(std::time::Duration::from_millis(150)));
+                let _ = s.set_write_timeout(Some(std::time::Duration::from_millis(150)));
+                let req = b"GET /v1/capabilities HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+                if s.write_all(req).is_ok() {
+                    let mut buf = [0u8; 512];
+                    if let Ok(n) = s.read(&mut buf) {
+                        return n > 0
+                            && std::str::from_utf8(&buf[..n])
+                                .unwrap_or("")
+                                .contains(" 200 ");
+                    }
+                }
+                false
+            }
+            Err(_) => false,
+        }
+    }
+
+    // Fast path: already ready
+    if probe_caps() {
+        return Ok(());
+    }
+
+    // Clean up stale socket if present (no responding server)
+    if Path::new(SOCK).exists() {
+        let _ = std::fs::remove_file(SOCK);
+    }
+
+    // Try to spawn agent
+    let candidate_bins = [
+        std::env::var("SUBSTRATE_WORLD_AGENT_BIN").ok(),
+        which::which("substrate-world-agent")
+            .ok()
+            .map(|p| p.display().to_string()),
+        Some("target/debug/world-agent".to_string()),
+    ];
+    let bin = candidate_bins
+        .into_iter()
+        .flatten()
+        .find(|p| std::path::Path::new(p).exists())
+        .ok_or_else(|| anyhow::anyhow!("world-agent binary not found"))?;
+
+    std::process::Command::new(&bin)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| anyhow::anyhow!("spawn world-agent: {}", e))?;
+
+    // Wait up to ~1s for readiness
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1000);
+    while std::time::Instant::now() < deadline {
+        if probe_caps() {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    anyhow::bail!("world-agent readiness probe failed")
+}
+
+#[cfg(target_os = "macos")]
+fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyhow::Result<i32> {
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine;
+    use futures::StreamExt;
+    use tungs::tungstenite::Message;
+
+    let ctx = pw::get_context().ok_or_else(|| anyhow::anyhow!("no platform world context"))?;
+    let rt = tokio::runtime::Runtime::new()?;
+    let code = rt.block_on(async move {
+        async fn handle_ws<S>(
+            ws: tungs::WebSocketStream<S>,
+            cmd: &str,
+            span_id: &str,
+        ) -> anyhow::Result<i32>
+        where
+            S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+        {
+            use futures::SinkExt;
+            let (mut sink, mut stream) = ws.split();
+
+            let cmd_sanitized = if let Some(rest) = cmd.strip_prefix(":pty ") {
+                rest
+            } else {
+                cmd
+            };
+            let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
+            let (cols, rows) = (80u16, 24u16);
+            let start = serde_json::json!({
+                "type": "start",
+                "cmd": cmd_sanitized,
+                "cwd": cwd,
+                "env": env_map,
+                "span_id": span_id,
+                "cols": cols,
+                "rows": rows,
+            });
+            sink.send(Message::Text(start.to_string()))
+                .await
+                .map_err(|e| anyhow::anyhow!("ws send start: {}", e))?;
+
+            // stdin forwarder
+            let mut stdin = tokio::io::stdin();
+            let stdin_task = tokio::spawn(async move {
+                use tokio::io::AsyncReadExt;
+                let mut buf = [0u8; 8192];
+                loop {
+                    match stdin.read(&mut buf).await {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            let b64 = base64::engine::general_purpose::STANDARD.encode(&buf[..n]);
+                            let frame = serde_json::json!({"type":"stdin", "data_b64": b64});
+                            if sink.send(Message::Text(frame.to_string())).await.is_err() {
+                                break;
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            });
+
+            let mut exit_code: i32 = 0;
+            while let Some(msg) = stream.next().await {
+                let msg = msg.map_err(|e| anyhow::anyhow!("ws recv: {}", e))?;
+                if msg.is_text() {
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&msg.to_string()) {
+                        match v.get("type").and_then(|t| t.as_str()) {
+                            Some("stdout") => {
+                                if let Some(b64) = v.get("data_b64").and_then(|x| x.as_str()) {
+                                    if let Ok(bytes) = STANDARD.decode(b64) {
+                                        use std::io::Write;
+                                        let _ = std::io::stdout().write_all(&bytes);
+                                        let _ = std::io::stdout().flush();
+                                    }
+                                }
+                            }
+                            Some("exit") => {
+                                exit_code =
+                                    v.get("code").and_then(|c| c.as_i64()).unwrap_or(0) as i32;
+                                break;
+                            }
+                            Some("error") => {
+                                if let Some(msg) = v.get("message").and_then(|m| m.as_str()) {
+                                    eprintln!("world-agent error: {}", msg);
+                                }
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+                } else if msg.is_close() {
+                    break;
+                }
+            }
+
+            stdin_task.abort();
+            Ok::<i32, anyhow::Error>(exit_code)
+        }
+
+        // Connect according to transport and delegate to generic handler
+        let url = url::Url::parse("ws://localhost/v1/stream").unwrap();
+        match &ctx.transport {
+            pw::WorldTransport::Unix(path) => {
+                let stream = UnixStream::connect(path)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("connect UDS: {}", e))?;
+                let (ws, _resp) = tungs::client_async(url, stream)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("ws handshake: {}", e))?;
+                handle_ws(ws, cmd, span_id).await
+            }
+            pw::WorldTransport::Tcp { host, port } => {
+                let ws_url = format!("ws://{}:{}/v1/stream", host, port);
+                let (ws, _resp) = tungs::connect_async(&ws_url)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("ws connect: {}", e))?;
+                handle_ws(ws, cmd, span_id).await
+            }
+            pw::WorldTransport::Vsock { port } => {
+                let ws_url = format!("ws://127.0.0.1:{}/v1/stream", port);
+                let (ws, _resp) = tungs::connect_async(&ws_url)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("ws connect: {}", e))?;
+                handle_ws(ws, cmd, span_id).await
+            }
+        }
+    })?;
+
+    Ok(code)
 }
 
 fn ok_status() -> Result<ExitStatus> {
@@ -1878,6 +4342,205 @@ fn handle_builtin(
     Ok(builtin_result)
 }
 
+#[cfg(target_os = "linux")]
+type AgentExecResult = (
+    i32,
+    Vec<u8>,
+    Vec<u8>,
+    Vec<String>,
+    Option<substrate_common::FsDiff>,
+);
+
+#[cfg(target_os = "linux")]
+fn exec_non_pty_via_agent(cmd: &str) -> anyhow::Result<AgentExecResult> {
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine;
+    use std::io::{Read, Write};
+    use std::os::unix::net::UnixStream;
+    let sock_path = "/run/substrate.sock";
+    let mut stream =
+        UnixStream::connect(sock_path).map_err(|e| anyhow::anyhow!("connect UDS: {}", e))?;
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(3)))
+        .ok();
+    stream
+        .set_write_timeout(Some(std::time::Duration::from_secs(3)))
+        .ok();
+
+    let cwd = std::env::current_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        .display()
+        .to_string();
+    let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
+    let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+    let body = serde_json::json!({
+        "profile": null,
+        "cmd": cmd,
+        "cwd": cwd,
+        "env": env_map,
+        "pty": false,
+        "agent_id": agent_id,
+        "budget": null
+    })
+    .to_string();
+    let req = format!(
+        "POST /v1/execute HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{}",
+        body.len(), body
+    );
+    stream
+        .write_all(req.as_bytes())
+        .map_err(|e| anyhow::anyhow!("uds write: {}", e))?;
+
+    let mut resp = Vec::new();
+    stream
+        .read_to_end(&mut resp)
+        .map_err(|e| anyhow::anyhow!("uds read: {}", e))?;
+    let resp_str = String::from_utf8_lossy(&resp);
+    let mut parts = resp_str.splitn(2, "\r\n\r\n");
+    let header = parts.next().unwrap_or("");
+    let body = parts.next().unwrap_or("");
+    // Parse status line
+    let status_line = header.lines().next().unwrap_or("");
+    if !status_line.contains("200") {
+        return Err(anyhow::anyhow!(format!(
+            "agent exec failed: {}",
+            status_line
+        )));
+    }
+    let v: serde_json::Value =
+        serde_json::from_str(body).map_err(|e| anyhow::anyhow!("parse json: {}", e))?;
+    let exit_code = v.get("exit").and_then(|x| x.as_i64()).unwrap_or(1) as i32;
+    let stdout_b64 = v.get("stdout_b64").and_then(|x| x.as_str()).unwrap_or("");
+    let stderr_b64 = v.get("stderr_b64").and_then(|x| x.as_str()).unwrap_or("");
+    let stdout = STANDARD.decode(stdout_b64).unwrap_or_default();
+    let stderr = STANDARD.decode(stderr_b64).unwrap_or_default();
+    let scopes_used = v
+        .get("scopes_used")
+        .and_then(|x| x.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|s| s.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+    let fs_diff_opt = if let Some(fd) = v.get("fs_diff") {
+        if fd.is_null() {
+            None
+        } else {
+            let diff: substrate_common::FsDiff = serde_json::from_value(fd.clone())
+                .map_err(|e| anyhow::anyhow!("parse fs_diff: {}", e))?;
+            Some(diff)
+        }
+    } else {
+        None
+    };
+    Ok((exit_code, stdout, stderr, scopes_used, fs_diff_opt))
+}
+
+#[cfg(target_os = "macos")]
+type AgentExecResult = (
+    i32,
+    Vec<u8>,
+    Vec<u8>,
+    Vec<String>,
+    Option<substrate_common::FsDiff>,
+);
+#[cfg(target_os = "windows")]
+type AgentExecResult = (
+    i32,
+    Vec<u8>,
+    Vec<u8>,
+    Vec<String>,
+    Option<substrate_common::FsDiff>,
+);
+
+#[cfg(target_os = "macos")]
+fn exec_non_pty_via_agent_macos(cmd: &str) -> anyhow::Result<AgentExecResult> {
+    use agent_api_client::AgentClient;
+    use agent_api_types::ExecuteRequest;
+    use base64::Engine;
+    let ctx = pw::get_context().ok_or_else(|| anyhow::anyhow!("no platform world context"))?;
+
+    // Build client from transport
+    let client = match &ctx.transport {
+        pw::WorldTransport::Unix(path) => AgentClient::unix_socket(path),
+        pw::WorldTransport::Tcp { host, port } => AgentClient::tcp(host, *port),
+        pw::WorldTransport::Vsock { port } => AgentClient::tcp("127.0.0.1", *port),
+    };
+
+    // Build request
+    let cwd = std::env::current_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        .display()
+        .to_string();
+    let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
+    let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+    let req = ExecuteRequest {
+        profile: None,
+        cmd: cmd.to_string(),
+        cwd: Some(cwd),
+        env: Some(env_map),
+        pty: false,
+        agent_id,
+        budget: None,
+    };
+
+    // Execute
+    let rt = tokio::runtime::Runtime::new()?;
+    let resp = rt.block_on(async move { client.execute(req).await })?;
+
+    let engine = base64::engine::general_purpose::STANDARD;
+    let stdout = engine
+        .decode(&resp.stdout_b64)
+        .unwrap_or_else(|_| resp.stdout_b64.into_bytes());
+    let stderr = engine
+        .decode(&resp.stderr_b64)
+        .unwrap_or_else(|_| resp.stderr_b64.into_bytes());
+    Ok((resp.exit, stdout, stderr, resp.scopes_used, resp.fs_diff))
+}
+
+#[cfg(target_os = "windows")]
+fn exec_non_pty_via_agent_windows(
+    cmd: &str,
+    _span_id: Option<String>,
+) -> anyhow::Result<AgentExecResult> {
+    use agent_api_types::ExecuteRequest;
+    use base64::Engine;
+    use platform_world::windows;
+
+    let backend = windows::get_backend()?;
+    let handle = backend.ensure_session(&windows::world_spec())?;
+    std::env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
+
+    let client = windows::build_agent_client()?;
+
+    // Convert host CWD to WSL path so the agent (Linux) receives a valid working directory
+    let cwd = windows::current_dir_wsl()?;
+    let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
+    let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+
+    let req = ExecuteRequest {
+        profile: None,
+        cmd: cmd.to_string(),
+        cwd: Some(cwd),
+        env: Some(env_map),
+        pty: false,
+        agent_id,
+        budget: None,
+    };
+
+    let rt = tokio::runtime::Runtime::new()?;
+    let resp = rt.block_on(async move { client.execute(req).await })?;
+    let engine = base64::engine::general_purpose::STANDARD;
+    let stdout = engine
+        .decode(&resp.stdout_b64)
+        .unwrap_or_else(|_| resp.stdout_b64.as_bytes().to_vec());
+    let stderr = engine
+        .decode(&resp.stderr_b64)
+        .unwrap_or_else(|_| resp.stderr_b64.as_bytes().to_vec());
+
+    Ok((resp.exit, stdout, stderr, resp.scopes_used, resp.fs_diff))
+}
 fn execute_external(
     config: &ShellConfig,
     command: &str,
@@ -1920,14 +4583,11 @@ fn execute_external(
         cmd.arg("/C").arg(command);
     } else {
         // Unix shells (bash, sh, zsh, etc.)
-        if config.ci_mode && !config.no_exit_on_error && is_bash {
-            cmd.arg("-o")
-                .arg("errexit")
-                .arg("-o")
-                .arg("pipefail")
-                .arg("-o")
-                .arg("nounset");
-        }
+        let command = if config.ci_mode && !config.no_exit_on_error && is_bash {
+            format!("set -euo pipefail; {command}")
+        } else {
+            command.to_string()
+        };
         cmd.arg("-c").arg(command);
     }
 
@@ -2002,24 +4662,7 @@ fn first_command_path(cmd: &str) -> Option<String> {
     which::which(first).ok().map(|pb| pb.display().to_string())
 }
 
-fn maybe_rotate_log(path: &Path) -> Result<()> {
-    const MAX_BYTES: u64 = 50 * 1024 * 1024; // 50MB default
-
-    // Check environment variable for custom limit
-    let max_bytes = env::var("TRACE_LOG_MAX_MB")
-        .ok()
-        .and_then(|v| v.parse::<u64>().ok())
-        .map(|mb| mb * 1024 * 1024)
-        .unwrap_or(MAX_BYTES);
-
-    if let Ok(meta) = std::fs::metadata(path) {
-        if meta.len() > max_bytes {
-            let bak = path.with_extension("jsonl.1");
-            let _ = std::fs::rename(path, bak);
-        }
-    }
-    Ok(())
-}
+// Note: removed unused maybe_rotate_log helper to avoid dead_code warnings.
 
 fn log_command_event(
     config: &ShellConfig,
@@ -2072,47 +4715,10 @@ fn log_command_event(
         }
     }
 
-    // Ensure log directory exists - CRITICAL: Don't swallow errors
-    if let Some(dir) = config.trace_log_file.parent() {
-        std::fs::create_dir_all(dir)
-            .with_context(|| format!("Failed to create log directory: {}", dir.display()))?;
-    }
-
-    // Rotate log if it's too large
-    maybe_rotate_log(&config.trace_log_file)?;
-
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&config.trace_log_file)?;
-
-    // Set permissions on first creation
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(
-            &config.trace_log_file,
-            std::fs::Permissions::from_mode(0o600),
-        );
-    }
-
-    // Ensure single-line JSON by escaping newlines
-    let mut line = log_entry.to_string();
-    if line.contains('\n') {
-        line = line.replace('\n', "\\n");
-    }
-    writeln!(file, "{line}").with_context(|| {
-        format!(
-            "Failed to write log entry to: {}",
-            config.trace_log_file.display()
-        )
-    })?;
-
-    // Optional fsync for durability
-    if env::var("SHIM_FSYNC").as_deref() == Ok("1") {
-        file.flush()?;
-        file.sync_all()?;
-    }
+    // Route all event writes through unified trace; writer handles rotation
+    // Ensure trace is initialized first when world is enabled
+    let _ = init_trace(None);
+    append_to_trace(&log_entry)?;
 
     Ok(())
 }
@@ -3404,5 +6010,14 @@ mod tests {
             assert!(!needs_pty("git commit -e --no-edit"));
             assert!(!needs_pty("git commit --edit --no-edit"));
         });
+    }
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn transport_meta_named_pipe_mode() {
+        let meta = world_transport_to_meta(&pw::WorldTransport::NamedPipe(PathBuf::from(
+            r"\\.\pipe\substrate-agent",
+        )));
+        assert_eq!(meta.mode, "named_pipe");
+        assert_eq!(meta.endpoint.as_deref(), Some(r"\\.\pipe\substrate-agent"));
     }
 }
