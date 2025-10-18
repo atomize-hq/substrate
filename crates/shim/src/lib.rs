@@ -290,8 +290,9 @@ mod version_tests {
         );
 
         // Verify that the version string exists and follows expected format
+        let pkg_version = env!("CARGO_PKG_VERSION");
         assert!(
-            SHIM_VERSION.starts_with("0.1.1"),
+            SHIM_VERSION.starts_with(pkg_version),
             "Version should start with package version"
         );
     }
