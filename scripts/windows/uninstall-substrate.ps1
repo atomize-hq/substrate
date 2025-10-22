@@ -48,8 +48,8 @@ $profileTargets = @($PROFILE.CurrentUserAllHosts, $PROFILE.CurrentUserCurrentHos
 
 Write-Log "Stopping forwarder (if running)"
 if (Test-Path $forwarderPidPath) {
-    $pid = Get-Content -Path $forwarderPidPath -ErrorAction SilentlyContinue
-    if ($pid -and -not $dry) {
+    $forwarderPid = Get-Content -Path $forwarderPidPath -ErrorAction SilentlyContinue
+    if ($forwarderPid -and -not $dry) {
         try { Stop-Process -Id [int]$pid -ErrorAction SilentlyContinue } catch {}
     }
     if ($dry) {
