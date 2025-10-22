@@ -42,6 +42,16 @@ The installer will:
   `boot.systemd=true` under `[boot]` in `/etc/wsl.conf`, then `wsl --shutdown`.
 - `sudo`, `curl`, `tar`, and `jq` must be available on the host.
 
+During installation the script:
+- Sanitises the current PATH (removes any stale shims) and records it in
+  `SHIM_ORIGINAL_PATH`.
+- Deploys fresh shims and writes `~/.substrate_bashenv`, including a trampoline
+  if `BASH_ENV` was already set, so automated shells inherit the right PATH.
+- Installs `substrate-world-agent` as a systemd service and runs
+  `substrate world doctor --json` **without** the shim directory in either PATH
+  or `SHIM_ORIGINAL_PATH`, mirroring the macOS installer’s behaviour and
+  avoiding self-referential shim lookups during the doctor check.
+
 **Offline install**
 
 ```bash
@@ -94,6 +104,8 @@ After the script completes:
   substrate --shim-status
   substrate world doctor --json | jq '.'
   ```
+  (The installer already ran the doctor using PATH values without the shim
+  directory, so this re-run should match what the script saw.)
 - **Windows:**
   ```powershell
   . "$env:LOCALAPPDATA\Substrate\substrate-profile.ps1"

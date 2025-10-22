@@ -27,12 +27,11 @@ Familiarize yourself with the following locations before making changes:
 1. **PowerShell Installer**
    - Create a canonical script (e.g., `scripts/windows/install-substrate.ps1`) that:
      - Detects Windows version, verifies WSL is enabled, and checks that the target distro has systemd enabled (or guides the user to enable it).
-     - Downloads the latest Windows bundle (TBD packaging format) or consumes a local `--Archive` override (mirror Linux flags: `--Version`, `--Prefix`, `--NoWorld`, `--NoShims`, `--DryRun`).
-     - Installs host binaries (forwarder, CLI) to `%LOCALAPPDATA%\Substrate` (matching the Unix prefix layout).
-     - Deploys PATH environment changes for PowerShell, Command Prompt, and optionally Git Bash while preserving existing PATH.
-     - Provisions the WSL backend (import/ensure `substrate-wsl` distro, install Linux world-agent inside WSL, enable systemd services if required).
-     - Bridges Windows host ↔ WSL transport (ensure `substrate-forwarder` service or scheduled task runs, aligned with existing design docs under `docs/cross-platform/transport_parity_design.md`).
-     - Runs validation commands: host `substrate world doctor --json`, WSL smoke tests (`scripts/windows/wsl-smoke.ps1`), and surface actionable errors.
+     - Downloads the Windows ZIP or consumes a local `-Archive` override (mirrors Linux flags `-Version`, `-Prefix`, `-NoWorld`, `-NoShims`, `-DryRun`, `-DistroName`).
+     - Installs host binaries to `%LOCALAPPDATA%\Substrate`, writes a profile helper (`substrate-profile.ps1`) that prepends `bin\` and `shims\`, and records the original PATH.
+     - Skips shim deployment when `-NoShims` is present; otherwise runs `substrate.exe --shim-deploy` once.
+     - If world provisioning is enabled, warms/imports `substrate-wsl`, installs the Linux `world-agent` binary inside WSL (using the bundled copy if Cargo isn’t available), and starts the forwarder.
+     - Runs `substrate.exe world doctor --json` using only the installed bin directory plus the original PATH (no shim directory) so diagnostic checks mirror the Linux/macOS installers.
    - Ensure the installer can be invoked via `powershell -ExecutionPolicy Bypass -File ...` and via `iex (irm ...)` once a short URL is provided. Use the GitHub raw URL placeholder for now.
 
 2. **PowerShell Uninstaller**
