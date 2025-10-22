@@ -122,7 +122,7 @@ try {
     $releaseRoot = if ($dry) {
         Join-Path $extractRoot 'SIMULATED_ROOT'
     } else {
-        $entries = Get-ChildItem -Path $extractRoot
+        $entries = @(Get-ChildItem -Path $extractRoot)
         if ($entries.Count -eq 1 -and $entries[0].PSIsContainer) {
             $entries[0].FullName
         } else {
