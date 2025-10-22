@@ -103,10 +103,15 @@ fi
 log "Removing world-agent binary from /usr/local/bin (if present)..."
 maybe_sudo rm -f /usr/local/bin/substrate-world-agent || true
 
-log "Removing Lima VM..."
-if command -v limactl >/dev/null 2>&1 && limactl list 2>/dev/null | grep -q substrate; then
-  limactl stop substrate || true
-  limactl delete substrate || true
+if command -v limactl >/dev/null 2>&1; then
+  # Only relevant on macOS hosts where Lima is installed.
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    log "Removing Lima VM..."
+    if limactl list 2>/dev/null | grep -q substrate; then
+      limactl stop substrate || true
+      limactl delete substrate || true
+    fi
+  fi
 fi
 
 log "Checking for host symlinks..."
