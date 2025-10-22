@@ -38,7 +38,7 @@ print_usage() {
   cat <<'EOF'
 Substrate Installer
 Usage:
-  curl -fsSL https://releases.atomizehq.com/substrate/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/substrate/install-substrate.sh | bash
   # (Windows host) powershell -ExecutionPolicy Bypass -File install-substrate.ps1
 
 Options:
@@ -69,6 +69,17 @@ run_cmd() {
 require_cmd() {
   local cmd="$1"
   command -v "${cmd}" >/dev/null 2>&1 || fatal "Required command '${cmd}' not found. Please install it and re-run."
+}
+
+compute_file_sha256() {
+  local file="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "${file}" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "${file}" | awk '{print $1}'
+  else
+    fatal "Neither sha256sum nor shasum found; cannot verify checksums."
+  fi
 }
 
 detect_platform() {
@@ -173,6 +184,33 @@ ensure_macos_prereqs() {
   fi
 }
 
+ensure_linux_prereqs() {
+  require_cmd curl
+  require_cmd tar
+  require_cmd jq
+  require_cmd sudo
+
+  if ! command -v sha256sum >/dev/null 2>&1 && ! command -v shasum >/dev/null 2>&1; then
+    fatal "Missing sha256sum (preferred) or shasum for checksum verification. Install coreutils/perl-Digest-SHA or rerun with --dry-run."
+  fi
+
+  if [[ "${NO_WORLD}" -eq 0 ]]; then
+    if ! command -v systemctl >/dev/null 2>&1; then
+      fatal "systemctl not found. Install systemd tooling or re-run with --no-world to skip world provisioning."
+    fi
+
+    local init_comm
+    init_comm="$(ps -p 1 -o comm= 2>/dev/null || true)"
+    if [[ "${init_comm}" != "systemd" ]]; then
+      if [[ "${IS_WSL}" -eq 1 ]]; then
+        fatal "WSL distribution not running systemd (pid 1: ${init_comm:-unknown}). Enable systemd in /etc/wsl.conf or re-run with --no-world."
+      else
+        fatal "Systemd is not PID 1 (detected '${init_comm:-unknown}'). Boot into a systemd-based userland or install with --no-world."
+      fi
+    fi
+  fi
+}
+
 download_file() {
   local source="$1"
   local destination="$2"
@@ -245,7 +283,7 @@ verify_checksum() {
   fi
 
   local actual
-  actual="$(shasum -a 256 "${archive_path}" | awk '{print $1}')"
+  actual="$(compute_file_sha256 "${archive_path}")"
 
   if [[ "${expected}" != "${actual}" ]]; then
     fatal "Checksum mismatch for ${artifact_name}: expected ${expected}, got ${actual}"
@@ -467,6 +505,80 @@ provision_macos_world() {
   run_cmd limactl shell substrate sudo systemctl enable --now substrate-world-agent
 }
 
+provision_linux_world() {
+  local version_dir="$1"
+
+  if [[ "${NO_WORLD}" -eq 1 ]]; then
+    log "Skipping world provisioning (--no-world)."
+    return
+  fi
+
+  local world_agent=""
+  if [[ -x "${version_dir}/bin/world-agent" ]]; then
+    world_agent="${version_dir}/bin/world-agent"
+  elif [[ -x "${version_dir}/bin/linux/world-agent" ]]; then
+    world_agent="${version_dir}/bin/linux/world-agent"
+  fi
+
+  if [[ -z "${world_agent}" ]]; then
+    fatal "Linux world-agent binary not found in release bundle under ${version_dir}/bin."
+  fi
+
+  log "Installing Linux world agent systemd service..."
+
+  local service_path="/etc/systemd/system/substrate-world-agent.service"
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    printf '[%s][dry-run] sudo install -Dm0755 %s /usr/local/bin/substrate-world-agent\n' "${INSTALLER_NAME}" "${world_agent}" >&2
+    printf '[%s][dry-run] sudo install -d -m0750 /run/substrate /var/lib/substrate\n' "${INSTALLER_NAME}" >&2
+    printf '[%s][dry-run] Write systemd unit to %s\n' "${INSTALLER_NAME}" "${service_path}" >&2
+    printf '[%s][dry-run] sudo systemctl daemon-reload && sudo systemctl enable --now substrate-world-agent\n' "${INSTALLER_NAME}" >&2
+    return
+  fi
+
+  run_cmd sudo install -Dm0755 "${world_agent}" /usr/local/bin/substrate-world-agent
+  run_cmd sudo install -d -m0750 /run/substrate
+  run_cmd sudo install -d -m0750 /var/lib/substrate
+
+  local unit_file
+  unit_file="${TMPDIR}/substrate-world-agent.service"
+  cat > "${unit_file}" <<'UNIT'
+[Unit]
+Description=Substrate World Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/substrate-world-agent
+Restart=always
+RestartSec=5
+Environment=RUST_LOG=info
+Environment=SUBSTRATE_AGENT_TCP_PORT=61337
+RuntimeDirectory=substrate
+RuntimeDirectoryMode=0750
+StateDirectory=substrate
+StateDirectoryMode=0750
+WorkingDirectory=/var/lib/substrate
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+  run_cmd sudo install -Dm0644 "${unit_file}" "${service_path}"
+  run_cmd sudo systemctl daemon-reload
+  run_cmd sudo systemctl enable --now substrate-world-agent
+  run_cmd sudo systemctl status substrate-world-agent --no-pager --lines=10 || true
+}
+
 run_world_checks() {
   local substrate_bin="$1"
   if [[ "${DRY_RUN}" -eq 1 ]]; then
@@ -525,6 +637,70 @@ install_macos() {
   log "Installation complete. Open a new terminal or 'source ~/.substrate_bashenv' to refresh PATH."
 }
 
+linux_artifact_name() {
+  case "${ARCH}" in
+    x86_64|amd64)
+      printf 'substrate-v%s-linux_x86_64.tar.gz' "${VERSION}"
+      ;;
+    aarch64|arm64)
+      printf 'substrate-v%s-linux_aarch64.tar.gz' "${VERSION}"
+      ;;
+    *)
+      fatal "Unsupported Linux architecture: ${ARCH}"
+      ;;
+  esac
+}
+
+install_linux() {
+  ensure_linux_prereqs
+
+  local artifact
+  artifact="$(linux_artifact_name)"
+  local archive_path="${TMPDIR}/${artifact}"
+  download_artifact "${artifact}" "${archive_path}"
+
+  local checksums_path="${TMPDIR}/SHA256SUMS"
+  if download_checksums "${checksums_path}"; then
+    verify_checksum "${archive_path}" "${checksums_path}" "${artifact}"
+  fi
+
+  local extract_dir="${TMPDIR}/extract"
+  extract_archive "${archive_path}" "${extract_dir}"
+  local release_root
+  release_root="$(find_extracted_root "${extract_dir}")"
+
+  local versions_dir="${PREFIX}/versions"
+  local version_dir="${versions_dir}/${VERSION}"
+  local bin_dir="${PREFIX}/bin"
+  local shim_dir="${PREFIX}/shims"
+
+  log "Installing to ${version_dir}"
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    printf '[%s][dry-run] mkdir -p %s\n' "${INSTALLER_NAME}" "${versions_dir}" >&2
+    printf '[%s][dry-run] rm -rf %s\n' "${INSTALLER_NAME}" "${version_dir}" >&2
+    printf '[%s][dry-run] copy contents of %s into %s\n' "${INSTALLER_NAME}" "${release_root}" "${version_dir}" >&2
+  else
+    mkdir -p "${versions_dir}"
+    rm -rf "${version_dir}"
+    mkdir -p "${version_dir}"
+    cp -R "${release_root}"/. "${version_dir}"/
+  fi
+
+  link_binaries "${version_dir}" "${bin_dir}"
+  ensure_shell_integration "${shim_dir}" "${bin_dir}"
+
+  local substrate_bin="${bin_dir}/substrate"
+  deploy_shims "${substrate_bin}"
+  provision_linux_world "${version_dir}"
+  run_world_checks "${substrate_bin}"
+
+  if [[ "${IS_WSL}" -eq 1 ]]; then
+    log "Detected WSL environment. Windows host components (forwarder, uninstall) must be managed via PowerShell scripts."
+  fi
+
+  log "Installation complete. Open a new terminal or 'source ~/.substrate_bashenv' to refresh PATH."
+}
+
 main() {
   parse_args "$@"
   detect_platform
@@ -535,8 +711,7 @@ main() {
       install_macos
       ;;
     linux)
-      warn "Automated Linux installation flow not yet implemented. Refer to docs/install/linux.md."
-      exit 2
+      install_linux
       ;;
     windows)
       warn "Automated Windows (PowerShell) installation flow not yet implemented. Refer to docs/install/windows.md."

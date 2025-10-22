@@ -1,105 +1,100 @@
-# Substrate Uninstall / Teardown (macOS)
+# Substrate Uninstall / Teardown Guide (v0.2.0-beta)
 
-Follow this checklist to completely remove any Substrate installation, the Lima
-world backend, and associated shims on macOS arm64.
-
-## Quick Uninstall Script
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/uninstall-substrate.sh | bash
-```
-
-This script stops running processes, removes PATH snippets, deletes Substrate
-state, and tears down the Lima VM. Run it from any terminal, then open a fresh
-shell so PATH updates take effect.
-
-## Manual Checklist
-
-### 1. Stop Running Processes
+Use this guide to remove Substrate, its shims, and world backends on macOS,
+Linux, or Windows (WSL). Each section references the bundled
+`scripts/substrate/uninstall-substrate.sh` script, which you can run directly via
+curl or from the release archive.
 
 ```bash
-pgrep -fl substrate      # Inspect any substrate-related processes
-pkill -f substrate       # Stop lingering CLI processes
+curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/substrate/uninstall-substrate.sh | bash
 ```
 
-If an older shimmed command is still running (for example an editor launched
-through the shim), stop it manually before continuing.
+## Common Cleanup Steps
 
-### 2. Shut Down and Delete the Lima VM
+Regardless of platform, the script:
+
+1. Stops running `substrate` processes (`pkill -f substrate`).
+2. Removes installer-managed PATH/BASH_ENV snippets from `~/.zshrc`,
+   `~/.bashrc`, and `~/.bash_profile`.
+3. Deletes `~/.substrate*` state, shim directories, history files, and locks.
+4. Clears the shell command hash table (`hash -r`).
+
+If you manually edited additional shell files, remove the Substrate snippet
+manually after running the script.
+
+## Linux & Windows (WSL)
+
+### Scripted Removal
 
 ```bash
-limactl list | grep substrate || true
-limactl stop substrate       # Gracefully stop the VM if present
-limactl delete substrate     # Remove the instance and all state
+./scripts/substrate/uninstall-substrate.sh
 ```
 
-If `limactl delete` reports that no instance exists, you can move on.
+Additional automated steps on systemd hosts:
 
-### 3. Remove Shims and Local State
+- Stops and disables the `substrate-world-agent` systemd service.
+- Removes `/etc/systemd/system/substrate-world-agent.service` and reloads
+  systemd.
+- Deletes `/usr/local/bin/substrate-world-agent`, `/var/lib/substrate`, and the
+  `/run/substrate` runtime directory.
 
-If the `substrate` binary is still available:
+### Manual Verification
 
 ```bash
-substrate --shim-remove   # Cleanly remove all deployed shims
+systemctl status substrate-world-agent       # Should be "Unit not found"
+ls -l /usr/local/bin | grep substrate        # No world-agent binary
+ls ~/.substrate                              # Should report "No such file"
 ```
 
-Then delete any residual state:
+For WSL, run the script inside the distribution where you installed Substrate.
+Shut down the distro afterwards (`wsl --shutdown`) if you want to reclaim memory
+immediately.
+
+## macOS (arm64)
+
+### Scripted Removal
 
 ```bash
-rm -rf ~/.substrate
-rm -f ~/.substrate_bashenv ~/.substrate_history ~/.substrate_preexec
-hash -r                  # Clear the shell command cache
+./scripts/substrate/uninstall-substrate.sh
 ```
 
-### 4. Remove Installed Binaries
+macOS-specific actions:
 
-Tarball / bundle installs typically place binaries under the extracted
-directory (for the beta bundle this was `.../macos_arm64/bin`). Remove the
-directory that was added to `PATH`:
+- Stops and deletes the `substrate` Lima VM via `limactl`.
+- Leaves the system `/usr/local/bin` untouched unless you manually copied
+  binaries there. Remove any custom symlinks yourself.
+
+### Manual Verification
 
 ```bash
-rm -rf /path/to/substrate/install/bin
+limactl list | grep substrate            # Should return nothing
+ls -l /usr/local/bin | grep substrate    # Remove leftover symlinks if present
+which -a substrate                       # Should report "no substrate"
 ```
 
-If you installed via Cargo:
+## Windows Host (PowerShell)
 
-```bash
-cargo uninstall substrate || true
-rm -f ~/.cargo/bin/substrate ~/.cargo/bin/supervisor
+```powershell
+pwsh -File scripts/windows/uninstall-substrate.ps1 -RemoveWSLDistro
 ```
 
-Check for leftover symlinks or copies in common locations:
+- Omit `-RemoveWSLDistro` to keep the distro but stop services and remove PATH
+  updates.
+- The script stops the host forwarder, removes the PowerShell profile snippet,
+  deletes `$env:LOCALAPPDATA\Substrate`, disables the agent inside WSL, and
+  optionally unregisters the distro.
 
-```bash
-ls -l /usr/local/bin | grep substrate
-ls -l ~/bin | grep substrate
-```
+## Troubleshooting
 
-Delete any matches that were created manually.
+- **Permission denied removing system files (macOS/Linux)**: rerun the script
+  with a user that has `sudo` privileges (`sudo ./scripts/substrate/uninstall-substrate.sh`).
+- **Permission denied removing system files (Windows)**: rerun the PowerShell
+  script in an elevated prompt.
+- **Systemd reports lingering unit**: check `/etc/systemd/system` for a cached
+  unit installed by an older release, remove it manually, and run
+  `sudo systemctl daemon-reload`.
+- **Lima VM still appears**: run `limactl delete substrate` manually; confirm no
+  snapshot or template locks are present in `~/Library/Application Support/Lima`.
 
-### 5. Undo PATH Modifications
-
-If you exported the bundle’s `bin` directory earlier, remove that snippet from
-your shell rc files:
-
-- `~/.zshrc`
-- `~/.bashrc`
-- `~/.bash_profile`
-
-After editing, start a new shell session (or `source` the file) so the changes
-take effect.
-
-### 6. Verify Removal
-
-Run these checks to ensure nothing remains:
-
-```bash
-which -a substrate     # Should report “no substrate in PATH”
-substrate --version    # Should report “command not found”
-limactl list           # Should not list a “substrate” instance
-ls ~/.substrate        # Should print “No such file or directory”
-```
-
-All commands should confirm that Substrate binaries, shims, and the Lima world
-are gone. When needed, reboot or log out to clear any cached PATH settings for
-other sessions.
+After removal, open a fresh shell session to ensure environment variables are
+cleared.

@@ -1,169 +1,158 @@
-# Installation Guide
+# Installation Guide (v0.2.0-beta)
 
-Complete setup guide for Substrate command tracing and AI agent platform.
+Substrate ships release bundles with a cross-platform installer that deploys the
+CLI, shim launcher, and world backend in one step. The same script is used by
+our `curl | bash` flow and the offline bundles published under
+`https://releases.atomizehq.com/substrate/`.
 
-## Prerequisites
+## Supported Platforms
 
-- **Rust 1.74+** - Required for uuid v7 features
-- **Git** - For cloning the repository
-- **Platform**: Linux, macOS, or Windows (via WSL2)
+- **Linux**: systemd-based distributions with `sudo`, `curl`, `tar`, and `jq`
+  available. The world backend runs as a systemd service (`substrate-world-agent`).
+- **Windows 11 / 10 (22H2+) with WSL2 + systemd**: run the Linux installer from
+  inside the WSL distribution after enabling systemd via `/etc/wsl.conf`.
+- **macOS 14+ (arm64)**: requires Apple Virtualization Framework and Lima (the
+  installer verifies both).
 
-## Installation Options
+> ℹ️ Windows PowerShell automation for the host is forthcoming. Today, the
+> Windows host workflow is "install from within WSL" using the Linux steps
+> below.
 
-### Option 1: Install from crates.io (Recommended)
+## Quick Install (Release Bundles)
+
+### Linux / WSL (systemd)
 
 ```bash
-# Install substrate (includes automatic shim deployment)
-cargo install substrate
-
-# That's it! Shims are deployed automatically on first run
-substrate --version
-
-# Verify installation
-which substrate  # Should show ~/.cargo/bin/substrate
+curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/substrate/install-substrate.sh | bash
 ```
 
-### Option 2: Build from Source
+The installer will:
+
+1. Download `substrate-v<version>-linux_<arch>.tar.gz` from the release bucket
+2. Place the bundle under `~/.substrate/versions/<version>`
+3. Link `~/.substrate/bin/*` and prepend shims to your shell PATH via
+   `~/.substrate_bashenv`
+4. Install `substrate-world-agent` under `/usr/local/bin` and manage the
+   systemd service (`/etc/systemd/system/substrate-world-agent.service`)
+5. Run `substrate world doctor --json` for a final readiness report
+
+**Prerequisites**
+
+- PID 1 must be `systemd` (`ps -p 1 -o comm=`). On WSL, enable systemd by adding
+  `boot.systemd=true` under `[boot]` in `/etc/wsl.conf`, then `wsl --shutdown`.
+- `sudo`, `curl`, `tar`, and `jq` must be available on the host.
+
+**Offline install**
 
 ```bash
-# Clone and build
-git clone <repository-url>
+./scripts/substrate/install-substrate.sh --archive /path/to/substrate-v0.2.0-beta-linux_x86_64.tar.gz
+```
+
+Use the copy of `scripts/substrate/install-substrate.sh` shipped inside the bundle. The script
+accepts the same flags as the hosted version (`--version`, `--prefix`,
+`--no-world`, `--no-shims`, `--dry-run`).
+
+### macOS (arm64)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/substrate/install-substrate.sh | bash
+```
+
+The macOS flow mirrors the Linux installer but additionally:
+
+- Verifies Apple Virtualization Framework support (`kern.hv_support == 1`)
+- Requires the Lima CLI (`limactl`) to be installed beforehand
+- Provisions the Lima VM (`scripts/mac/lima-warm.sh`) and copies the Linux
+  `world-agent` into the guest
+
+**Manual Lima preparation** is documented in `docs/WORLD.md`.
+
+### Windows Host (PowerShell)
+
+```powershell
+pwsh -File scripts/windows/install-substrate.ps1
+```
+
+- Flags mirror the Unix installer: `-Version`, `-Prefix`, `-Archive`,
+  `-NoWorld`, `-NoShims`, `-DryRun`, `-DistroName`.
+- Defaults to `$env:LOCALAPPDATA\Substrate` and provisions the
+  `substrate-wsl` distro unless `-NoWorld` is supplied.
+- Hosted one-liner:
+  ```powershell
+  irm https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/windows/install-substrate.ps1 | iex
+  ```
+- Requires WSL2 (with systemd enabled inside the distro) and PowerShell 7+.
+
+## Post-Install Checks
+
+After the script completes:
+
+- **macOS / Linux / WSL:**
+  ```bash
+  source ~/.substrate_bashenv
+  substrate --version
+  substrate --shim-status
+  substrate world doctor --json | jq '.'
+  ```
+- **Windows:**
+  ```powershell
+  . "$env:LOCALAPPDATA\Substrate\substrate-profile.ps1"
+  substrate.exe --shim-status
+  substrate.exe world doctor --json | ConvertFrom-Json | Select-Object status,message
+  ```
+
+If `world doctor` surfaces failures, consult `docs/WORLD.md` and the troubleshooting
+appendices for the relevant platform.
+
+## Installer Options Reference
+
+| Flag | Purpose |
+| ---- | ------- |
+| `--version <semver>` | Install a specific published release (default: `0.2.0-beta`) |
+| `--prefix <path>` | Override the installation prefix (default: `~/.substrate`) |
+| `--no-world` | Skip provisioning the world backend (requires manual setup) |
+| `--no-shims` | Skip shim deployment (useful for CI images) |
+| `--dry-run` | Print all actions without executing them |
+| `--archive <path>` | Install from a local tarball instead of downloading |
+
+When using a non-default prefix, remember to export
+`PATH="<prefix>/shims:<prefix>/bin:$PATH"` in your shell or automation.
+
+## Manual Build (Developers)
+
+Developers working on Substrate itself can still build from source:
+
+```bash
+git clone https://github.com/atomize-hq/substrate.git
 cd substrate
 cargo build --release
-
-# Install to system PATH
-sudo cp target/release/substrate* /usr/local/bin/
-
-# Verify installation
-substrate --version
-which substrate  # Should show /usr/local/bin/substrate
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-## Component Installation
-
-### Core Shell
-
-The main `substrate` binary provides the interactive shell:
+To run the locally built binaries without using the installer:
 
 ```bash
-# Optional: Install to PATH
-sudo cp target/release/substrate /usr/local/bin/
-substrate --version
+export PATH="$(pwd)/target/release:$PATH"
+substrate --shim-deploy
+substrate world doctor
 ```
 
-### Command Interception (Shimming)
+This path is primarily intended for contributors; production installations
+should prefer the release installer so that policies, shims, and world services
+stay in sync with bundled expectations.
 
-Substrate automatically deploys command shims on first run. No manual setup required!
+## Troubleshooting Highlights
 
-```bash
-# Automatic deployment happens on first run
-substrate
+- **No shim interception**: ensure `~/.substrate/shims` is first in `PATH`, then
+  run `hash -r`.
+- **World doctor fails (Linux/WSL)**: confirm `systemctl status
+  substrate-world-agent` reports `active (running)` and that `/run/substrate.sock`
+  exists (`sudo ls -l /run/substrate.sock`).
+- **WSL systemd disabled**: edit `/etc/wsl.conf`, set `[boot]\nsystemd=true`, run
+  `wsl --shutdown`, and reopen the distribution.
+- **macOS virtualization disabled**: enable "Virtualization" in System Settings
+  → Privacy & Security, then rerun the installer.
 
-# Check deployment status
-substrate --shim-status
-
-# Manual management (optional)
-substrate --shim-deploy   # Force redeployment
-substrate --shim-remove   # Remove all shims
-substrate --shim-skip     # Skip deployment for this run
-
-# To use shims for command interception, add to PATH:
-export PATH="$HOME/.substrate/shims:$PATH"
-export SHIM_ORIGINAL_PATH="$PATH"  # Save original PATH
-export SHIM_TRACE_LOG="$HOME/.substrate/trace.jsonl"
-
-# Clear command cache
-hash -r
-
-# Verify installation
-which git  # Should show: ~/.substrate/shims/git
-git --version  # Should work normally with logging
-```
-
-**Note**: Shims are deployed as:
-- **Symlinks on Unix/macOS** (efficient, instant updates)
-- **File copies on Windows** (for compatibility)
-
-### Non-Interactive Shell Support
-
-For AI agent integration (Claude Code, etc.):
-
-```bash
-# Create BASH_ENV file
-./scripts/create_bashenv.sh
-export BASH_ENV="$HOME/.substrate_bashenv"
-
-# Test integration
-bash -c 'which git; git --version'
-tail -1 ~/.substrate/trace.jsonl | jq '.'
-```
-
-## Platform-Specific Setup
-
-### Linux
-
-Full native support with all features available.
-
-### macOS
-
-Always-World parity via Lima VM is available now.
-
-1. Follow `docs/dev/mac_world_setup.md` to install prerequisites, start the Lima VM (`scripts/mac/lima-warm.sh`), deploy `substrate-world-agent`, and run `scripts/mac/lima-doctor.sh`.
-2. After building the repo, validate end-to-end isolation with `PATH="$(pwd)/target/debug:$PATH" scripts/mac/smoke.sh` (non-PTY, PTY, replay + fs_diff assertion).
-3. Agent logs are accessible via `substrate sudo journalctl -u substrate-world-agent -n 200` (the CLI shells into the VM automatically).
-4. Use `substrate world doctor` (human or `--json`) for an at-a-glance health report covering Lima status, guest service responsiveness, and agent connectivity.
-
-### Windows
-
-Current: Basic support via ConPTY.
-Future: WSL2 integration for full feature support.
-
-## Verification
-
-Test your installation:
-
-```bash
-# Interactive shell
-substrate
-substrate> git status
-substrate> exit
-
-# Command tracing
-git --version
-tail -1 ~/.substrate/trace.jsonl
-```
-
-## Troubleshooting
-
-### Common Issues
-
-**Commands not intercepted**:
-- Verify shim directory is first in PATH
-- Run `hash -r` to clear shell cache
-- Check `SHIM_ORIGINAL_PATH` excludes shim directory
-
-**Permission errors**:
-- Verify shim binaries are executable: `chmod +x ~/.substrate/shims/*`
-- Check log file permissions and directory access
-
-**Emergency recovery**:
-```bash
-# Remove all shims using CLI
-substrate --shim-remove
-
-# Or manual cleanup
-export PATH="$SHIM_ORIGINAL_PATH"
-rm -rf ~/.substrate/shims
-
-# Disable automatic deployment
-export SUBSTRATE_NO_SHIMS=1
-substrate
-```
-
-For detailed troubleshooting, see [USAGE.md](USAGE.md#troubleshooting).
-
-## Next Steps
-
-- **Usage Patterns**: See [USAGE.md](USAGE.md) for shell usage and integration examples
-- **Configuration**: See [CONFIGURATION.md](CONFIGURATION.md) for environment variables and settings
-- **Development**: See [DEVELOPMENT.md](DEVELOPMENT.md) for building and testing
+For deeper diagnostics, tail `~/.substrate/trace.jsonl` and rerun
+`substrate world doctor --json` to capture a fresh health report.

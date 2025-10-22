@@ -24,7 +24,7 @@ Every shimmed command runs inside the Lima VM. Host-only binaries (macOS builds)
 
 ### Installer Integration
 
-- `install-substrate.sh --sync-deps` prompts after shim deployment: “Install Linux versions of git/node/python? [Y/n]”
+- `scripts/substrate/install-substrate.sh --sync-deps` prompts after shim deployment: “Install Linux versions of git/node/python? [Y/n]”
 - Users can rerun `substrate world deps sync` later.
 
 ## Manifest Concept

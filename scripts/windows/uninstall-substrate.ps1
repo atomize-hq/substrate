@@ -1,0 +1,125 @@
+#!/usr/bin/env pwsh
+<#!
+.SYNOPSIS
+    Uninstall Substrate on Windows hosts via PowerShell.
+.DESCRIPTION
+    Stops forwarder processes, removes PATH/profile integrations, deletes the
+    local installation prefix, and optionally tears down the WSL distro used by
+    Substrate.
+.PARAMETER Prefix
+    Installation prefix to remove (defaults to %LOCALAPPDATA%\Substrate).
+.PARAMETER DistroName
+    WSL distribution name to clean up (defaults to substrate-wsl).
+.PARAMETER RemoveWSLDistro
+    Unregister the WSL distribution after stopping services.
+.PARAMETER DryRun
+    Print actions without executing them.
+.EXAMPLE
+    pwsh -File uninstall-substrate.ps1
+.EXAMPLE
+    pwsh -File uninstall-substrate.ps1 -RemoveWSLDistro
+#>
+
+[CmdletBinding()]
+param(
+    [string]$Prefix = (Join-Path $env:LOCALAPPDATA 'Substrate'),
+    [string]$DistroName = 'substrate-wsl',
+    [switch]$RemoveWSLDistro,
+    [switch]$DryRun
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+function Write-Log {
+    param([string]$Message)
+    Write-Host "[substrate-uninstall] $Message"
+}
+function Write-Warn {
+    param([string]$Message)
+    Write-Host "[substrate-uninstall][WARN] $Message" -ForegroundColor Yellow
+}
+
+$dry = $DryRun.IsPresent
+$forwarderPidPath = Join-Path $env:LOCALAPPDATA 'Substrate\forwarder.pid'
+$profileScript = Join-Path $Prefix 'substrate-profile.ps1'
+$profilePattern = '# Added by Substrate installer \(Windows\)\r?\nif \(Test-Path ''[^'']+''\) \{\r?\n    \. ''[^'']+''\r?\n\}\r?\n?'
+$profileTargets = @($PROFILE.CurrentUserAllHosts, $PROFILE.CurrentUserCurrentHost) | Where-Object { $_ }
+
+Write-Log "Stopping forwarder (if running)"
+if (Test-Path $forwarderPidPath) {
+    $pid = Get-Content -Path $forwarderPidPath -ErrorAction SilentlyContinue
+    if ($pid -and -not $dry) {
+        try { Stop-Process -Id [int]$pid -ErrorAction SilentlyContinue } catch {}
+    }
+    if ($dry) {
+        Write-Log "[dry-run] Remove-Item $forwarderPidPath"
+    } else {
+        Remove-Item -Force -Path $forwarderPidPath -ErrorAction SilentlyContinue
+    }
+}
+
+Write-Log "Removing profile snippet"
+foreach ($target in $profileTargets | Select-Object -Unique) {
+    if (-not (Test-Path $target)) { continue }
+    $content = if ($dry) { Get-Content -Raw -Path $target } else { Get-Content -Raw -Path $target -ErrorAction SilentlyContinue }
+    if (-not $content) { continue }
+    $updated = [regex]::Replace($content, $profilePattern, '', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if ($updated -ne $content) {
+        if ($dry) {
+            Write-Log "[dry-run] Update $target to remove Substrate snippet"
+        } else {
+            $normalized = $updated.TrimEnd() + [Environment]::NewLine
+            Set-Content -Path $target -Value $normalized -Encoding UTF8
+        }
+    }
+}
+
+if ($dry) {
+    Write-Log "[dry-run] Remove profile helper at $profileScript"
+} else {
+    Remove-Item -Force -Path $profileScript -ErrorAction SilentlyContinue
+}
+
+Write-Log "Clearing installation directory: $Prefix"
+if ($dry) {
+    Write-Log "[dry-run] Remove-Item -Recurse -Force -Path $Prefix"
+} else {
+    if (Test-Path $Prefix) {
+        Remove-Item -Recurse -Force -Path $Prefix
+    }
+}
+
+Write-Log "Cleaning shim cache"
+if ($dry) {
+    Write-Log "[dry-run] Remove-Item -Recurse -Force -Path $env:USERPROFILE\.substrate*"
+} else {
+    Get-ChildItem -Path $env:USERPROFILE -Filter '.substrate*' -ErrorAction SilentlyContinue |
+        ForEach-Object { Remove-Item -Recurse -Force -Path $_.FullName -ErrorAction SilentlyContinue }
+}
+
+Write-Log "Stopping substrate-world-agent inside WSL (if present)"
+if ($dry) {
+    Write-Log "[dry-run] wsl -d $DistroName -- bash -lc 'sudo systemctl disable --now substrate-world-agent.service'"
+} else {
+    try {
+        & wsl -d $DistroName -- bash -lc "sudo systemctl disable --now substrate-world-agent.service" | Out-Null
+    } catch {
+        Write-Warn "Unable to disable substrate-world-agent inside $DistroName: $($_.Exception.Message)"
+    }
+}
+
+if ($RemoveWSLDistro.IsPresent) {
+    Write-Log "Unregistering WSL distro $DistroName"
+    if ($dry) {
+        Write-Log "[dry-run] wsl --unregister $DistroName"
+    } else {
+        try {
+            & wsl --unregister $DistroName
+        } catch {
+            Write-Warn "Failed to unregister $DistroName: $($_.Exception.Message)"
+        }
+    }
+}
+
+Write-Log "Uninstall complete. Open a new PowerShell session to refresh PATH."

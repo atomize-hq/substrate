@@ -25,12 +25,16 @@ Write-Info "Starting wsl-warm for distro '$DistroName'"
 $projectPath = Resolve-Path $ProjectPath | Select-Object -ExpandProperty Path
 Write-Info "Project path: $projectPath"
 
-if (-not (Test-Path (Join-Path $projectPath 'Cargo.toml'))) {
-    Write-ErrorAndExit "Project path does not contain Cargo.toml"
+$projectHasCargo = Test-Path (Join-Path $projectPath 'Cargo.toml')
+$packagedWorldAgent = Join-Path $projectPath 'bin\\linux\\world-agent'
+$usesBundledArtifacts = -not $projectHasCargo
+
+if (-not $projectHasCargo -and -not (Test-Path $packagedWorldAgent)) {
+    Write-ErrorAndExit "Project path must contain Cargo.toml or a packaged bin\\linux\\world-agent"
 }
 
 $cargoExe = Join-Path $env:USERPROFILE '.cargo\bin\cargo.exe'
-if (-not (Test-Path $cargoExe)) {
+if (-not $usesBundledArtifacts -and -not (Test-Path $cargoExe)) {
     Write-ErrorAndExit "cargo.exe not found at $cargoExe. Install Rust on Windows host."
 }
 
@@ -107,14 +111,15 @@ try {
 if (-not $isHealthy) {
     Write-Info "Updating package cache and running provision script"
     $projectPathFragment = Convert-ToWslPathFragment $projectPath
-        & wsl -d $DistroName -- bash -lc "set -euo pipefail; cp /mnt/c/$projectPathFragment/scripts/wsl/provision.sh /tmp/provision.sh && sed -i 's/\r$//' /tmp/provision.sh && chmod +x /tmp/provision.sh && sudo /tmp/provision.sh"
+    & wsl -d $DistroName -- bash -lc "set -euo pipefail; cp /mnt/c/$projectPathFragment/scripts/wsl/provision.sh /tmp/provision.sh && sed -i 's/\r$//' /tmp/provision.sh && chmod +x /tmp/provision.sh && sudo /tmp/provision.sh"
     if ($LASTEXITCODE -ne 0) {
         Write-ErrorAndExit "Provision script failed"
     }
 
-    # Build and install world-agent inside WSL
-    Write-Info "Building world-agent (release) inside WSL"
-    $buildScript = @"
+    if ($projectHasCargo) {
+        # Build and install world-agent inside WSL
+        Write-Info "Building world-agent (release) inside WSL"
+        $buildScript = @"
 set -euo pipefail
 if [ -f ~/.cargo/env ]; then
   . ~/.cargo/env
@@ -123,10 +128,18 @@ cd /mnt/c/$projectPathFragment
 cargo build -p world-agent --release
 sudo install -m755 target/release/world-agent /usr/local/bin/substrate-world-agent
 "@
-    $buildScript = $buildScript -replace "`r", ""
-    & wsl -d $DistroName -- bash -lc $buildScript
-    if ($LASTEXITCODE -ne 0) {
-        Write-ErrorAndExit "Failed to build/install world-agent inside WSL"
+        $buildScript = $buildScript -replace "`r", ""
+        & wsl -d $DistroName -- bash -lc $buildScript
+        if ($LASTEXITCODE -ne 0) {
+            Write-ErrorAndExit "Failed to build/install world-agent inside WSL"
+        }
+    } else {
+        Write-Info "Installing packaged world-agent into WSL"
+        $agentFragment = Convert-ToWslPathFragment (Join-Path $projectPath 'bin\\linux\\world-agent')
+        & wsl -d $DistroName -- bash -lc "set -euo pipefail; sudo install -m755 /mnt/c/$agentFragment /usr/local/bin/substrate-world-agent"
+        if ($LASTEXITCODE -ne 0) {
+            Write-ErrorAndExit "Failed to install packaged world-agent"
+        }
     }
 
     # Restart service
@@ -139,11 +152,18 @@ sudo install -m755 target/release/world-agent /usr/local/bin/substrate-world-age
     Write-Info "Agent reports HTTP 200; skipping provision/build/restart"
 }
 
-# Build forwarder if needed
-$forwarderHostPath = Join-Path $projectPath 'target\\release\\substrate-forwarder.exe'
-if (-not (Test-Path $forwarderHostPath)) {
-    Write-Info "Building substrate-forwarder (release)"
-    & $cargoExe build -p substrate-forwarder --release
+# Build forwarder if needed or use packaged binary
+if ($projectHasCargo) {
+    $forwarderHostPath = Join-Path $projectPath 'target\\release\\substrate-forwarder.exe'
+    if (-not (Test-Path $forwarderHostPath)) {
+        Write-Info "Building substrate-forwarder (release)"
+        & $cargoExe build -p substrate-forwarder --release
+    }
+} else {
+    $forwarderHostPath = Join-Path $projectPath 'bin\\substrate-forwarder.exe'
+    if (-not (Test-Path $forwarderHostPath)) {
+        Write-ErrorAndExit "Packaged substrate-forwarder.exe not found at $forwarderHostPath"
+    }
 }
 
 # Launch forwarder
@@ -220,5 +240,3 @@ Write-Info ("Forwarder pipe accepted probe in {0:N0} ms" -f $stopwatch.Elapsed.T
 Write-Info "Forwarder pipe ready"
 
 Write-Info "Warm complete"
-
-
