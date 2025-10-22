@@ -105,7 +105,7 @@ if ($dry) {
     try {
         & wsl -d $DistroName -- bash -lc "sudo systemctl disable --now substrate-world-agent.service" | Out-Null
     } catch {
-        Write-Warn "Unable to disable substrate-world-agent inside $DistroName: $($_.Exception.Message)"
+        Write-Warn "Unable to disable substrate-world-agent inside $DistroName: $((Get-Variable _ -Scope 0 -ValueOnly).Exception.Message)"
     }
 }
 
@@ -117,7 +117,7 @@ if ($RemoveWSLDistro.IsPresent) {
         try {
             & wsl --unregister $DistroName
         } catch {
-            Write-Warn "Failed to unregister $DistroName: $($_.Exception.Message)"
+            Write-Warn "Failed to unregister $DistroName: $((Get-Variable _ -Scope 0 -ValueOnly).Exception.Message)"
         }
     }
 }
