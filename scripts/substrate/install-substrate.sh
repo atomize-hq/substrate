@@ -20,6 +20,7 @@ TMPDIR=""
 PLATFORM=""
 ARCH=""
 IS_WSL=0
+ORIGINAL_PATH="${PATH}"
 
 log() {
   printf '[%s] %s\n' "${INSTALLER_NAME}" "$*" >&2
@@ -80,6 +81,25 @@ compute_file_sha256() {
   else
     fatal "Neither sha256sum nor shasum found; cannot verify checksums."
   fi
+}
+
+sanitize_env_path() {
+  if [[ -n "${SHIM_ORIGINAL_PATH:-}" ]]; then
+    PATH="${SHIM_ORIGINAL_PATH}"
+  else
+    local shim_dir="${HOME}/.substrate/shims"
+    local IFS=':'
+    local parts=($PATH)
+    local filtered=()
+    for entry in "${parts[@]}"; do
+      if [[ "${entry}" == "${shim_dir}" ]]; then
+        continue
+      fi
+      filtered+=("${entry}")
+    done
+    PATH="$(IFS=':'; printf '%s' "${filtered[*]}")"
+  fi
+  export PATH
 }
 
 detect_platform() {
@@ -702,6 +722,7 @@ install_linux() {
 }
 
 main() {
+  sanitize_env_path
   parse_args "$@"
   detect_platform
   prepare_tmpdir
