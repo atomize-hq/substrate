@@ -177,7 +177,12 @@ if (-not `$env:SHIM_ORIGINAL_PATH) {
     `$env:SHIM_ORIGINAL_PATH = `$env:PATH
 }
 `$desired = @(`$shimDir, `$binDir)
-`$pathParts = (`$env:PATH -split ';') | Where-Object { `$_ -and (`$desired -notcontains `$_) }
+`$pathParts = @()
+foreach (`$part in (`$env:PATH -split ';')) {
+    if (`$part -and (`$desired -notcontains `$part)) {
+        `$pathParts += `$part
+    }
+}
 `$env:PATH = (`$desired + `$pathParts) -join ';'
 "@
 
