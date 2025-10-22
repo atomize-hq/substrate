@@ -632,7 +632,7 @@ install_macos() {
   local substrate_bin="${bin_dir}/substrate"
   deploy_shims "${substrate_bin}"
   provision_macos_world "${version_dir}"
-  run_world_checks "${substrate_bin}"
+  PATH="${shim_dir}:${bin_dir}:${PATH}" SUBSTRATE_ROOT="${PREFIX}" run_world_checks "${substrate_bin}"
 
   log "Installation complete. Open a new terminal or 'source ~/.substrate_bashenv' to refresh PATH."
 }
@@ -692,7 +692,7 @@ install_linux() {
   local substrate_bin="${bin_dir}/substrate"
   deploy_shims "${substrate_bin}"
   provision_linux_world "${version_dir}"
-  run_world_checks "${substrate_bin}"
+  PATH="${shim_dir}:${bin_dir}:${PATH}" SUBSTRATE_ROOT="${PREFIX}" run_world_checks "${substrate_bin}"
 
   if [[ "${IS_WSL}" -eq 1 ]]; then
     log "Detected WSL environment. Windows host components (forwarder, uninstall) must be managed via PowerShell scripts."
