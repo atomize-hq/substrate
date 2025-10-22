@@ -655,6 +655,7 @@ install_macos() {
   provision_macos_world "${version_dir}"
   local doctor_path
   doctor_path="${shim_dir}:${bin_dir}:${ORIGINAL_PATH}"
+  log "Doctor PATH: ${doctor_path}"
   PATH="${doctor_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" run_world_checks "${substrate_bin}"
 
   log "Installation complete. Open a new terminal or 'source ~/.substrate_bashenv' to refresh PATH."
@@ -717,6 +718,7 @@ install_linux() {
   provision_linux_world "${version_dir}"
   local doctor_path
   doctor_path="${shim_dir}:${bin_dir}:${ORIGINAL_PATH}"
+  log "Doctor PATH: ${doctor_path}"
   PATH="${doctor_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" run_world_checks "${substrate_bin}"
 
   if [[ "${IS_WSL}" -eq 1 ]]; then
