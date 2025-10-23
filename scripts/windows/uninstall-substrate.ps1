@@ -98,7 +98,21 @@ if ($dry) {
     Write-Log "[dry-run] Remove-Item -Recurse -Force -Path $Prefix"
 } else {
     if (Test-Path $Prefix) {
-        Remove-Item -Recurse -Force -Path $Prefix -ErrorAction Stop
+        Write-Log "Terminating WSL distro $DistroName (if running)"
+        try { & wsl --terminate $DistroName | Out-Null } catch {}
+        try {
+            Remove-Item -Recurse -Force -Path $Prefix -ErrorAction Stop
+        } catch {
+            Write-Warn ("Failed to remove {0}: {1}" -f $Prefix, $_.Exception.Message)
+            Write-Warn "Attempting 'wsl --shutdown' and retry"
+            try {
+                & wsl --shutdown | Out-Null
+                Start-Sleep -Seconds 2
+                Remove-Item -Recurse -Force -Path $Prefix -ErrorAction Stop
+            } catch {
+                Write-Warn ("Unable to remove {0} after shutdown: {1}" -f $Prefix, $_.Exception.Message)
+            }
+        }
     }
 }
 
