@@ -59,6 +59,15 @@ if (Test-Path $forwarderPidPath) {
     }
 }
 
+# Kill any lingering forwarder processes owned by this user (after removing PID file)
+if (-not $dry) {
+    Get-Process substrate-forwarder -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -like "$Prefix\\bin\\substrate-forwarder.exe" } |
+        ForEach-Object {
+            try { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue } catch {}
+        }
+}
+
 Write-Log "Removing profile snippet"
 foreach ($target in $profileTargets | Select-Object -Unique) {
     if (-not (Test-Path $target)) { continue }
@@ -86,7 +95,7 @@ if ($dry) {
     Write-Log "[dry-run] Remove-Item -Recurse -Force -Path $Prefix"
 } else {
     if (Test-Path $Prefix) {
-        Remove-Item -Recurse -Force -Path $Prefix
+        Remove-Item -Recurse -Force -Path $Prefix -ErrorAction Stop
     }
 }
 
