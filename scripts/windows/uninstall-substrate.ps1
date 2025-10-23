@@ -50,7 +50,7 @@ Write-Log "Stopping forwarder (if running)"
 if (Test-Path $forwarderPidPath) {
     $forwarderPid = Get-Content -Path $forwarderPidPath -ErrorAction SilentlyContinue
     if ($forwarderPid -and -not $dry) {
-        try { Stop-Process -Id [int]$pid -ErrorAction SilentlyContinue } catch {}
+        try { Stop-Process -Id [int]$forwarderPid -ErrorAction SilentlyContinue } catch {}
     }
     if ($dry) {
         Write-Log "[dry-run] Remove-Item $forwarderPidPath"
