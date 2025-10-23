@@ -98,20 +98,33 @@ if ($dry) {
     Write-Log "[dry-run] Remove-Item -Recurse -Force -Path $Prefix"
 } else {
     if (Test-Path $Prefix) {
-        Write-Log "Terminating WSL distro $DistroName (if running)"
-        try { & wsl --terminate $DistroName | Out-Null } catch {}
-        try {
-            Remove-Item -Recurse -Force -Path $Prefix -ErrorAction Stop
-        } catch {
-            Write-Warn ("Failed to remove {0}: {1}" -f $Prefix, $_.Exception.Message)
-            Write-Warn "Attempting 'wsl --shutdown' and retry"
-            try {
-                & wsl --shutdown | Out-Null
-                Start-Sleep -Seconds 2
-                Remove-Item -Recurse -Force -Path $Prefix -ErrorAction Stop
-            } catch {
-                Write-Warn ("Unable to remove {0} after shutdown: {1}" -f $Prefix, $_.Exception.Message)
+        $children = Get-ChildItem -Path $Prefix -Force -ErrorAction SilentlyContinue
+        foreach ($child in $children) {
+            if ($child.Name -ieq 'wsl') {
+                if (-not $RemoveWSLDistro.IsPresent) {
+                    Write-Warn "Leaving $($child.FullName) (substrate-wsl still registered)."
+                    continue
+                }
+
+                Write-Log "Terminating WSL distro $DistroName (if running)"
+                try { & wsl --terminate $DistroName | Out-Null } catch {}
+
+                try {
+                    Remove-Item -Recurse -Force -Path $child.FullName -ErrorAction Stop
+                } catch {
+                    Write-Warn ("Unable to remove {0}: {1}" -f $child.FullName, $_.Exception.Message)
+                }
+                continue
             }
+
+            try {
+                Remove-Item -Recurse -Force -Path $child.FullName -ErrorAction SilentlyContinue
+            } catch {}
+        }
+
+        # Remove the prefix directory if it is now empty
+        if (-not (Get-ChildItem -Path $Prefix -Force -ErrorAction SilentlyContinue)) {
+            Remove-Item -Force -Path $Prefix -ErrorAction SilentlyContinue
         }
     }
 }
