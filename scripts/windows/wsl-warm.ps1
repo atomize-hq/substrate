@@ -56,8 +56,26 @@ if ($distroListClean -notmatch [regex]::Escape($DistroName)) {
     }
 
     $baseUrl = 'https://cdimage.ubuntu.com/ubuntu-wsl/noble/daily-live/current'
-    $arch = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture
-    if ($arch -eq [System.Runtime.InteropServices.Architecture]::Arm64) {
+    $arch = $null
+    try {
+        $arch = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture
+    } catch {
+        $envArch = $env:PROCESSOR_ARCHITECTURE
+        if ($envArch) {
+            if ($envArch -match 'ARM64') {
+                $arch = 'Arm64'
+            } else {
+                $arch = 'X64'
+            }
+        }
+    }
+
+    if (-not $arch) {
+        Write-Warn "Unable to detect architecture via RuntimeInformation; defaulting to x64 WSL image"
+        $arch = 'X64'
+    }
+
+    if (($arch -is [string] -and $arch -ieq 'Arm64') -or ($arch -is [System.Runtime.InteropServices.Architecture] -and $arch -eq [System.Runtime.InteropServices.Architecture]::Arm64)) {
         $imageName = 'noble-wsl-arm64.wsl'
     } else {
         $imageName = 'noble-wsl-amd64.wsl'
