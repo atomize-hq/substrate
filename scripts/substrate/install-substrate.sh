@@ -890,6 +890,7 @@ UNIT
   run_cmd sudo install -Dm0644 "${unit_file}" "${service_path}"
   run_cmd sudo systemctl daemon-reload
   run_cmd sudo systemctl enable --now substrate-world-agent
+  run_cmd sudo systemctl restart substrate-world-agent
   run_cmd sudo systemctl status substrate-world-agent --no-pager --lines=10 || true
 }
 
@@ -953,7 +954,16 @@ install_macos() {
   log "Doctor PATH: ${doctor_original_path}"
   PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" run_world_checks "${substrate_bin}"
 
-  log "Installation complete. Open a new terminal or 'source ~/.substrate_bashenv' to refresh PATH."
+  if [[ "${DRY_RUN}" -eq 0 ]]; then
+    if [ -f "${HOME}/.substrate_bashenv" ]; then
+      # shellcheck disable=SC1090
+      source "${HOME}/.substrate_bashenv" 2>/dev/null || true
+    fi
+    log "Sourced ~/.substrate_bashenv; environment ready."
+    log "Installation complete. Start using Substrate in this shell or any new terminals."
+  else
+    log "Installation complete (dry run). Open a new terminal or 'source ~/.substrate_bashenv' when running for real."
+  fi
 }
 
 linux_artifact_name() {
