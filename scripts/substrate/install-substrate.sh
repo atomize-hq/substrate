@@ -847,9 +847,16 @@ provision_linux_world() {
   run_cmd sudo install -d -m0750 /run/substrate
   run_cmd sudo install -d -m0750 /var/lib/substrate
 
+  local home_path
+  if [[ -n "${HOME}" ]]; then
+    home_path="$(cd "${HOME}" && pwd)"
+  else
+    home_path="/home"
+  fi
+
   local unit_file
   unit_file="${TMPDIR}/substrate-world-agent.service"
-  cat > "${unit_file}" <<'UNIT'
+  cat > "${unit_file}" <<UNIT
 [Unit]
 Description=Substrate World Agent
 After=network-online.target
@@ -872,7 +879,7 @@ StandardError=journal
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
+ReadWritePaths=${home_path} /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE
 
