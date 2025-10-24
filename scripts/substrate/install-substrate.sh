@@ -384,7 +384,7 @@ export SUBSTRATE_ROOT="${PREFIX}"
 if [ -z "\${SHIM_ORIGINAL_PATH:-}" ]; then
   export SHIM_ORIGINAL_PATH="\${PATH}"
 fi
-export PATH="${shim_dir}:${bin_dir}:\${PATH}"
+export PATH="${shim_dir}:${bin_dir}:\${SHIM_ORIGINAL_PATH}"
 export SHIM_ORIGINAL_PATH
 EOF
     mv "${bashenv}.tmp" "${bashenv}"
@@ -470,6 +470,49 @@ deploy_shims() {
 
   log "Deploying shims..."
   run_cmd "${substrate_bin}" --shim-deploy
+}
+
+harden_shim_symlinks() {
+  local shims_dir="$1"
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    printf '[%s][dry-run] Normalize shims in %s to real binaries\n' "${INSTALLER_NAME}" "${shims_dir}" >&2
+    return
+  fi
+
+  if [[ ! -d "${shims_dir}" ]]; then
+    return
+  fi
+
+  local converted=0
+  while IFS= read -r -d '' shim_path; do
+    local link_target
+    link_target="$(readlink "${shim_path}")" || continue
+
+    local resolved_target
+    if [[ "${link_target}" == /* ]]; then
+      resolved_target="${link_target}"
+    else
+      local shim_dirname
+      shim_dirname="$(cd "$(dirname "${shim_path}")" && pwd -P)"
+      resolved_target="${shim_dirname}/${link_target}"
+    fi
+
+    if [[ ! -e "${resolved_target}" ]]; then
+      continue
+    fi
+
+    rm -f "${shim_path}"
+    if ! ln "${resolved_target}" "${shim_path}" 2>/dev/null; then
+      cp "${resolved_target}" "${shim_path}"
+      chmod +x "${shim_path}" 2>/dev/null || true
+    fi
+    converted=1
+  done < <(find "${shims_dir}" -maxdepth 1 -type l -print0 2>/dev/null)
+
+  if [[ ${converted} -eq 1 ]]; then
+    log "Normalized shim binaries in ${shims_dir}"
+  fi
 }
 
 provision_macos_world() {
@@ -652,6 +695,7 @@ install_macos() {
 
   local substrate_bin="${bin_dir}/substrate"
   deploy_shims "${substrate_bin}"
+  harden_shim_symlinks "${shim_dir}"
   provision_macos_world "${version_dir}"
   local doctor_path
   local doctor_original_path
@@ -716,6 +760,7 @@ install_linux() {
 
   local substrate_bin="${bin_dir}/substrate"
   deploy_shims "${substrate_bin}"
+  harden_shim_symlinks "${shim_dir}"
   provision_linux_world "${version_dir}"
   local doctor_path
   local doctor_original_path
