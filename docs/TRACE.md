@@ -160,7 +160,7 @@ sequenceDiagram
 
 ### Key Design Decisions
 
-1. **Lazy Initialization**: Trace only initializes when `SUBSTRATE_WORLD=enabled`, keeping Phase 1-3 functionality unchanged.
+1. **Initialization Strategy**: The shell and shim call `substrate_trace::init_trace()` during startup so spans are recorded even when `SUBSTRATE_WORLD` is disabled; world-specific metadata (policy decisions, fs_diff) is appended when isolation is active.
 
 2. **Environment-Based Correlation**: Parent span IDs are passed via `SHIM_PARENT_SPAN` environment variable, enabling correlation across process boundaries without IPC.
 

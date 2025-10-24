@@ -38,7 +38,7 @@ substrate-common (base utilities)
 - **Platform-optimized deployment**: 
   - Unix/macOS: Symlinks to single binary (efficient, instant updates)
   - Windows: File copies for each command (compatibility)
-- **Version tracking**: Embedded version via `env!("CARGO_PKG_VERSION")` at compile time
+- **Version tracking**: Build script emits `SHIM_VERSION` (Cargo version plus optional git hash) for runtime reporting, while the deployment check compares the `.version` file against `CARGO_PKG_VERSION` to trigger redeploys
 - **Path resolution with caching**: Intelligent caching for binary resolution performance
 - **Depth tracking**: Uses `SHIM_DEPTH` environment variable to track nested execution levels
 - **Session correlation**: UUIDv7-based session IDs for command chain tracking
@@ -47,29 +47,32 @@ substrate-common (base utilities)
 - **Parent correlation**: Links to shell cmd_id via `SHIM_PARENT_CMD_ID`
 
 **Current Module Structure**:
-```rust
-substrate-shim/
-├── main.rs           # Entry point, minimal logic
-├── lib.rs            # Public API, orchestration
-├── context.rs        # Environment detection and configuration
-├── resolver.rs       # Binary path resolution with caching
-├── exec.rs           # Process execution and signal handling
-└── logger.rs         # Structured logging implementation
+```text
+src/
+└── shim_main.rs        # Binary entry point calling `substrate_shim::run_shim()`
+
+crates/shim/
+├── lib.rs              # Library surface re-exporting shim APIs
+├── context.rs          # Environment detection and configuration helpers
+├── resolver.rs         # Binary path resolution with caching
+├── exec.rs             # `run_shim` orchestration, policy checks, process spawn
+└── logger.rs           # Structured logging helpers and fingerprinting
 ```
 
 **Critical Code Paths**:
-```rust
-main() 
-  → detect_context()          // Environment setup via context.rs
-  → should_skip_shimming()    // Check SHIM_ACTIVE for bypass
-    ↓ (if set)
-  → execute_real_binary_bypass() // Direct execution, bypass logging
-    ↓ (if not set)
-  → setup_execution_env()     // Set SHIM_ACTIVE, CALLER, CALL_STACK
-  → resolve_real_binary()     // Path resolution with caching (resolver.rs)
-  → log_command_start()       // Pre-execution logging (logger.rs)
-  → execute_command()         // Fork/exec with signal forwarding (exec.rs)
-  → log_command_complete()    // Post-execution logging with exit status
+```text
+run_shim()
+  → ShimContext::from_current_exe()        // Determine invocation metadata
+  → ShimContext::is_bypass_enabled()       // Honor SHIM_BYPASS escape hatch
+     ↳ handle_bypass_mode() if set
+  → ctx.should_skip_shimming()             // Skip nested shims via SHIM_ACTIVE
+     ↳ execute_real_binary_bypass() when true
+  → ctx.setup_execution_env()              // Establish correlation env vars
+  → resolve_real_binary()                  // Locate the real executable
+  → quick_check(...)                       // Fast policy probe when world enabled
+  → spawn real binary (Command)            // Forward signals/stdio
+  → log_execution(...)                     // Persist structured log entry
+  → span.finish(...) + collect_world_telemetry() (if tracing enabled)
 ```
 
 ### 2. Shell (`crates/shell/`)
@@ -107,10 +110,11 @@ substrate/
 - **CLI control**: `--shim-status`, `--shim-deploy`, `--shim-remove`, `--shim-skip`
 
 **Built-in Commands**:
-- Handled directly without spawning external processes in `execute_builtin()` function
-- State changes (cd, export) modify shell environment
-- Logged as `builtin_command` events
-- Current built-ins: cd, pwd, export, unset, exit, quit
+- Handled directly without spawning external processes in `handle_builtin()` (`crates/shell/src/lib.rs`)
+- State-changing built-ins (`cd`, `export`, `unset`) mutate the shell environment in-process
+- Logged as `builtin_command` events for trace correlation
+- Supported built-ins: `cd`, `pwd`, `export`, `unset`
+- Interactive loop (`run_repl`) intercepts `exit`/`quit` locally; they are not exposed through `handle_builtin()`
 
 **PTY Support**:
 - **Unix/macOS**: Full support using `portable-pty` crate
@@ -278,7 +282,7 @@ All shim-related environment variables use the `SHIM_` prefix, shell-specific us
 ### Path Resolution Security
 
 1. **SHIM_ORIGINAL_PATH validation**: Must not contain shim directory
-2. **Binary fingerprinting**: SHA-256 hash of resolved binary (implemented in resolver.rs)
+2. **Binary fingerprinting**: SHA-256 hash of the shim binary recorded by `logger::get_shim_fingerprint()`
 3. **Permission checks**: Executable bit verification
 4. **PATH sanitization**: Prevents injection attacks
 
@@ -312,7 +316,7 @@ All shim-related environment variables use the `SHIM_` prefix, shell-specific us
 
 ### Rust Version Requirements
 
-- **MSRV**: 1.74+ (required for uuid v7 features)
+- **MSRV**: 1.89 (workspace `Cargo.toml` `rust-version`)
 - **Edition**: 2021 throughout workspace
 
 ### Adding New Features
@@ -358,10 +362,12 @@ All shim-related environment variables use the `SHIM_` prefix, shell-specific us
 
 ### Planned Enhancements
 
-The OLD_ARCHITECTURE.md file contains detailed plans for future enhancements including:
+Historical planning notes now live in the Phase 4/5 documents under
+`docs/project_management/`, and active roadmap items are tracked in
+`docs/BACKLOG.md`. Highlights include:
 - Advanced shell features (job control, aliases, completion)
-- Windows full support improvements
-- Observability improvements (metrics export, streaming API)
+- Windows isolation hardening and transport improvements
+- Observability upgrades (metrics export, streaming API)
 - Extension points for custom redaction and shell plugins
 
 ### Extension Points

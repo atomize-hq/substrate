@@ -47,7 +47,7 @@ To disable world isolation (not recommended for security reasons):
 - Pass `--no-world` on the command line, or
 - Set `SUBSTRATE_REPLAY_USE_WORLD=disabled` or `SUBSTRATE_REPLAY_USE_WORLD=0`
 
-On non-Linux platforms, replay falls back to direct execution without isolation or `fs_diff`.
+On macOS and Linux, replay uses the world backend (Lima on macOS, local namespaces on Linux) to collect `fs_diff` and scopes. Other platforms fall back to direct execution without isolation or `fs_diff`.
 
 ## Tips
 

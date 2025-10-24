@@ -26,7 +26,7 @@ The Substrate Telemetry Library (`crates/telemetry-lib/`) provides syscall-level
 ### Design Principles
 
 - **Telemetry Only**: Never enforces policy, only observes
-- **Minimal Overhead**: <10ms per intercepted call
+- **Minimal Overhead**: Designed for low overhead (internal measurements target <10 ms per intercepted call; measure in your deployment)
 - **Correlation Preserved**: Session/span IDs flow through fork/exec
 - **Safe Defaults**: Skips system paths to avoid recursion
 
@@ -162,8 +162,8 @@ First 3 events: [JSON events displayed]
 
 ## Performance
 
-- **Initialization**: ~1ms on first syscall
-- **Per-syscall overhead**: <10ms including JSON serialization
+- **Initialization**: Target ~1 ms on first syscall (profile in situ for precise numbers)
+- **Per-syscall overhead**: Target <10 ms including JSON serialization
 - **File I/O**: Buffered writes with periodic flush
 - **Memory**: Minimal - only session info cached
 

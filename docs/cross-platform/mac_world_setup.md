@@ -79,19 +79,21 @@ limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
 
 ### Step 2: Build and Deploy World Agent
 
-1. **Build the world-agent binary** on the host:
+1. **Compile inside the Lima guest** (recommended):
    ```sh
-   cargo build -p world-agent --release
+   # Build from the mounted project directory
+   limactl shell substrate bash -lc 'cd /src && cargo build -p world-agent --release'
    ```
 
-2. **Copy the binary into the VM**:
+2. **Install the binary inside the VM**:
    ```sh
-   limactl copy target/release/world-agent substrate:/tmp/world-agent
-
-   # Move to proper location and set permissions inside VM
-   limactl shell substrate sudo mv /tmp/world-agent /usr/local/bin/substrate-world-agent
-   limactl shell substrate sudo chmod 755 /usr/local/bin/substrate-world-agent
+   limactl shell substrate sudo install -m755 /src/target/release/world-agent /usr/local/bin/substrate-world-agent
    ```
+
+   > **Alternative:** Cross-compile on the host using a Linux target (e.g.
+   > `cargo build -p world-agent --release --target aarch64-unknown-linux-gnu`) and
+   > copy the resulting binary into the guest. Avoid copying the default macOS
+   > build—Mach-O binaries cannot run inside the Linux VM.
 
 3. **Verify the binary works**:
    ```sh

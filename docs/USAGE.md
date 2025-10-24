@@ -34,12 +34,15 @@ substrate --ci -c "make test"
 
 ### Built-in Commands
 
-The shell includes cross-platform built-ins:
+The shell includes cross-platform built-ins handled without spawning a child process:
 - `cd [dir]` - Change directory (supports `cd -`)
 - `pwd` - Print working directory
 - `export VAR=value` - Set environment variables
 - `unset VAR` - Remove environment variables
-- `exit` / `quit` - Exit the shell
+
+`exit` / `quit` are intercepted by the interactive REPL loop and are not routed
+through the builtin handler when running non-interactively (`substrate -c`,
+scripts, etc.).
 
 ## PTY Support
 
@@ -177,7 +180,7 @@ SHIM_BYPASS=1 git status
 ```bash
 # Enable comprehensive debugging
 export RUST_LOG=debug
-export SHIM_LOG_OPTS=raw,resolve
+export SHIM_LOG_OPTS=raw      # or set to resolve to log resolved paths
 export SUBSTRATE_PTY_DEBUG=1
 
 # Test with debugging

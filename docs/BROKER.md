@@ -9,8 +9,8 @@ The Substrate Policy Broker (`crates/broker`) provides security policy evaluatio
 - **Dual-mode operation**: Observe (log violations) or Enforce (block execution)
 - **Two evaluation paths**: `quick_check()` for shims (fast), `evaluate()` for shell (comprehensive)
 - **Profile auto-detection**: Discovers `.substrate-profile` files by walking up directory tree
-- **Interactive approvals**: Risk-assessed approval prompts with persistent caching
-- **Hot-reload capable**: Watch and reload policies without restart
+- **Interactive approvals (enforce mode)**: Risk-assessed approval prompts with caching when the broker is switched out of observe-only operation
+- **Optional policy watcher**: File-system hot-reload available behind the `policy-watcher` Cargo feature or in tests
 - **Restriction hints**: Suggests isolation requirements for world backend
 
 ## Quick Usage Guide
@@ -18,12 +18,16 @@ The Substrate Policy Broker (`crates/broker`) provides security policy evaluatio
 ### 1. Enable the Broker
 
 ```bash
-# Enable policy enforcement (default is observe mode)
+# Enable policy evaluation (shell defaults to observe-only mode)
 export SUBSTRATE_WORLD=enabled
 
 # Run commands through substrate
-substrate -c "echo hello"  # Evaluated by broker
+substrate -c "echo hello"  # Evaluated by broker (violations logged)
 ```
+
+> **Note:** Moving from observe to enforce mode requires calling
+> `substrate_broker::set_observe_only(false)` (or equivalent initialization) in
+> the host application. The current `substrate` binary keeps enforcement off by default.
 
 ### 2. Create a Policy Profile
 

@@ -61,18 +61,29 @@ YAML-based policies for comprehensive control:
 id: default
 name: Development Policy
 
-commands:
-  allowed: ["git *", "npm *", "cargo *"]
-  denied: ["sudo *", "rm -rf /"]
-  isolated: ["pip install *", "npm install *"]
+cmd_allowed:
+  - "git *"
+  - "npm *"
+  - "cargo *"
+cmd_denied:
+  - "sudo *"
+  - "rm -rf /"
+cmd_isolated:
+  - "pip install *"
+  - "npm install *"
 
-fs:
-  write: ["$PROJECT/**", "/tmp/**"]
-  read: ["/**"]
+fs_write:
+  - "$PROJECT/**"
+  - "/tmp/**"
+fs_read:
+  - "**"
 
-net:
-  allowed: ["github.com", "npmjs.org", "crates.io"]
-  egress_budget: "1GB"
+net_allowed:
+  - "github.com"
+  - "npmjs.org"
+  - "crates.io"
+limits:
+  max_egress_bytes: 1073741824
 ```
 
 ### Graph Intelligence
@@ -80,9 +91,11 @@ net:
 Kuzu database for command relationship analysis:
 
 ```bash
-# Query command relationships
-substrate graph what-wrote package.json
-substrate graph trace-deps node_modules/
+# Inspect graph status
+substrate graph status
+
+# Show files touched by a span
+substrate graph what-changed <SPAN_ID> --limit 25
 
 # Replay command sequences
 substrate replay span_abc123

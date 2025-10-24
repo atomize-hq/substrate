@@ -5,20 +5,20 @@ Keep concise, actionable, and security-focused.
 
 ## Near-Term (Next 1–2 sprints)
 
-- Auto-start world-agent on shell startup (Linux)
-  - Goal: “Always World” UX without manual agent management.
-  - Behavior: On shell start, if `SUBSTRATE_WORLD` is not disabled and
-    `/run/substrate.sock` is absent or stale, spawn `world-agent` and wait for
-    readiness; degrade only on explicit `--no-world` or env disable.
-  - Constraints: UDS-only, no TLS; idempotent start; single warning on failure; remove stale socket before bind.
-  - Acceptance:
-    - `substrate -c 'echo hi'` uses world by default on Linux with no manual steps.
-    - One-time, clear log lines for: spawn attempt, readiness OK, or fallback.
-    - Works in Podman privileged container and on native Linux.
+- ~~Auto-start world-agent on shell startup (Linux)~~ **(Done)**
+  - Implementation: `run_shell()` now initializes the Linux backend, flips
+    `SUBSTRATE_WORLD=enabled`, sets `SUBSTRATE_WORLD_ID`, and uses
+    `ensure_session()` before handling commands (`crates/shell/src/lib.rs:1576-1620`).
+  - Notes: macOS and Windows paths share the same default-on behavior; the Linux
+    helper still attempts to spawn `world-agent` if `/run/substrate.sock` is
+    stale (`crates/shell/src/lib.rs:3680-3687`).
 
-- Non-PTY agent auto-start parity (shell)
-  - Reuse the PTY `ensure_world_agent_ready()` flow for non-PTY world HTTP path before `exec_non_pty_via_agent`.
-  - Acceptance: No more “world exec failed, running direct” when world is enabled and agent binary is available.
+- ~~Non-PTY agent auto-start parity (shell)~~ **(Done)**
+  - Implementation: Non-PTY routing now calls `ensure_world_agent_ready()` when
+    worlds are enabled (Linux HTTP path) and records transport metadata for
+    macOS/Windows agent calls (`crates/shell/src/lib.rs:3680-3703`, `3560-3663`).
+  - Result: The shell only falls back to host execution after a single warning
+    when the agent cannot be reached; routine runs stay in-world by default.
 
 - Return fs_diff via agent HTTP execute
   - Extend `agent-api-types::ExecuteResponse` to include `fs_diff: Option<FsDiff>`; plumb through `world-agent` service.

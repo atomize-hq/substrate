@@ -17,7 +17,6 @@ apply one of these fixes.
 - [T-008 ConPTY or PTY stream failure](#t-008-conpty-or-pty-stream-failure)
 - [T-009 Path translation mismatch](#t-009-path-translation-mismatch)
 - [T-010 Forwarder log stale](#t-010-forwarder-log-stale)
-- [T-010 Forwarder log stale](#t-010-forwarder-log-stale)
 - [T-011 Pipe name already in use](#t-011-pipe-name-already-in-use)
 
 ### T-001 Virtualization disabled

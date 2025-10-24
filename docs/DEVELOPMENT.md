@@ -239,7 +239,7 @@ match command {
 
 ```bash
 export RUST_LOG=debug
-export SHIM_LOG_OPTS=raw,resolve
+export SHIM_LOG_OPTS=raw      # or set to resolve to log resolved paths
 export SUBSTRATE_PTY_DEBUG=1
 ```
 

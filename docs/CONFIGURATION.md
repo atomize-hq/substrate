@@ -68,7 +68,7 @@ Environment variables and advanced configuration options for Substrate.
 
 ```bash
 export RUST_LOG=debug
-export SHIM_LOG_OPTS=raw,resolve
+export SHIM_LOG_OPTS=raw
 export SUBSTRATE_PTY_DEBUG=1
 export SHIM_CACHE_BUST=1
 ```
@@ -89,7 +89,7 @@ export SHIM_FSYNC=1
 # Force cache invalidation
 export SHIM_CACHE_BUST=1
 
-# Enable path resolution logging
+# Enable path resolution logging (sets resolve mode only)
 export SHIM_LOG_OPTS=resolve
 ```
 
@@ -124,8 +124,10 @@ export SHIM_LOG_OPTS=raw
 # Include binary resolution paths
 export SHIM_LOG_OPTS=resolve
 
-# Combined options
-export SHIM_LOG_OPTS=raw,resolve
+# Switch between raw (no redaction) and resolve (log resolved paths) explicitly
+# These modes are mutually exclusive
+# export SHIM_LOG_OPTS=raw
+# export SHIM_LOG_OPTS=resolve
 ```
 
 ## Security Settings

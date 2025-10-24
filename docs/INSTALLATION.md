@@ -9,14 +9,13 @@ our `curl | bash` flow and the offline bundles published under
 
 - **Linux**: systemd-based distributions with `sudo`, `curl`, `tar`, and `jq`
   available. The world backend runs as a systemd service (`substrate-world-agent`).
-- **Windows 11 / 10 (22H2+) with WSL2 + systemd**: run the Linux installer from
-  inside the WSL distribution after enabling systemd via `/etc/wsl.conf`.
+- **Windows 11 / 10 (22H2+) with WSL2 + systemd**: install via the bundled PowerShell script (`scripts/windows/install-substrate.ps1`), which provisions the `substrate-wsl` distro after enabling systemd in `/etc/wsl.conf`.
 - **macOS 14+ (arm64)**: requires Apple Virtualization Framework and Lima (the
   installer verifies both).
 
-> ℹ️ Windows PowerShell automation for the host is forthcoming. Today, the
-> Windows host workflow is "install from within WSL" using the Linux steps
-> below.
+> ℹ️ PowerShell automation is available—use the Windows instructions below to
+> install from the host. Manual installation from inside WSL remains an option
+> if you prefer the Linux script.
 
 ## Quick Install (Release Bundles)
 
