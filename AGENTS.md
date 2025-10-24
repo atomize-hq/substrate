@@ -8,7 +8,7 @@ Substrate is the secure execution layer that sits between AI agents and a develo
 - `crates/shell`: interactive REPL, PTY plumbing, shim deployment, and world orchestration.
 - `crates/shim`: PATH interception, depth tracking (`SHIM_DEPTH`), and structured logging of every spawned process.
 - `crates/common`: shared log schema, redaction helpers, filesystem diff types.
-- `crates/world*`: platform-specific backends. `world` uses namespaces/cgroups/nftables on Linux; `world-mac-lima` boots a Lima VM and tunnels to `world-agent`; `world-windows-wsl` warms a WSL distro and brokers named-pipe/TCP access.
+- `crates/world*`: platform-specific backends. `world` uses namespaces/cgroups/nftables on Linux; `world-mac-lima` boots a Lima VM and tunnels to `world-agent`; `world-windows-wsl` warms a WSL distro and brokers named-pipe/TCP access (functional but experimental).
 - `crates/world-agent`: the in-world daemon exposing REST (`/v1/execute`) and WebSocket (`/v1/stream`) APIs with fs diff collection.
 - `crates/agent-api-*`: shared request/response models, async client, and host proxy helpers for third-party agents.
 - `crates/broker`, `forwarder`, `host-proxy`, `telemetry-lib`, `replay`, `substrate-graph`: policy decisions, transport glue, telemetry pipelines, replay tooling, and optional graph analytics.
@@ -18,7 +18,7 @@ Substrate is the secure execution layer that sits between AI agents and a develo
 
 ## Execution Architecture
 1. Shell loads policy via the broker (`substrate_broker::evaluate`), ensures shims are deployed (`ShimDeployer`), and initializes tracing (`substrate_trace::init_trace`).
-2. The shim intercepts PATH lookups, logs `command_start` spans, enforces quick policy checks, and forwards invocation metadata.
+2. The shim intercepts PATH lookups, writes structured execution events (via `logger::log_execution`), performs fast policy checks, and forwards invocation metadata to trace spans.
 3. The shell consults the world backend selected by `world-backend-factory`, issuing `/v1/execute` for non-PTY runs or upgrading to `/v1/stream` for interactive workloads.
 4. `world-agent` executes inside a per-session world: Linux uses cgroup v2 + netns + overlayfs; macOS proxies into a Lima VM via VSock/SSH; Windows calls into WSL using named pipes or a TCP forwarder.
 5. Results, filesystem diffs, and policy decisions are recorded by `crates/trace`, producing JSONL spans in `~/.substrate/trace.jsonl` (or `SHIM_TRACE_LOG`). Optional replay (`crates/replay`) can rebuild environments from those spans.

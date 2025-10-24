@@ -33,7 +33,7 @@ cargo clippy -- -D warnings
 
 ### Rust Guidelines
 
-- **MSRV**: Rust 1.74+ required
+- **MSRV**: Rust 1.89+ required
 - **Edition**: Use Rust 2021 edition
 - **Formatting**: Use `cargo fmt` with default settings
 - **Linting**: Address all `cargo clippy` warnings
@@ -106,12 +106,12 @@ Include in your pull request:
 - **Documentation**: Usage examples and guides
 - **Testing**: Increase test coverage
 
-### Future Features
+### Roadmap Highlights
 
-- **Security Worlds**: Isolation and policy engine (Phase 4)
-- **Agent API**: RESTful interface for AI assistants
-- **Graph Analysis**: Command relationship tracking
-- **Cross-Platform**: Lima and WSL2 integration
+- **Security Worlds Enhancements**: Continue hardening Linux/macOS isolation and improving Windows parity.
+- **Policy Engine Evolution**: Expand enforcement pathways, approvals, and restriction surfaces.
+- **Agent API & Budgets**: Extend `world-agent` REST/WS endpoints with per-agent budgets and scope negotiation.
+- **Graph Analysis**: Integrate Kuzu-backed storage for relationship queries beyond the current mock backend.
 
 ## Bug Reports
 
@@ -127,8 +127,8 @@ Include in your pull request:
 ```markdown
 **Environment**
 - OS: macOS 14.0
-- Rust: 1.74.0
-- Substrate: v0.1.0
+- Rust: 1.89.0
+- Substrate: v0.2.0-beta.1
 
 **Steps to Reproduce**
 1. Run `substrate -c "git status"`

@@ -25,35 +25,32 @@ Security considerations and vulnerability reporting for Substrate.
 - PTY security with terminal state restoration
 - Session correlation prevents command confusion
 
-### Future Security Architecture (Phase 4)
+### Ongoing Security Architecture Work
 
 **World-Based Isolation**:
 
-- Filesystem isolation via namespaces and overlayfs
-- Network filtering via nftables/iptables
-- Resource limits via cgroups v2
-- Syscall filtering via seccomp
+- Default-on worlds for Linux and macOS (Lima) with overlay/copy-diff handling
+- Network scoping via nftables (best-effort) and named namespaces
+- Resource limits via cgroups v2 with graceful degradation when unavailable
+- Future: Additional seccomp hardening and Windows parity improvements (the current WSL backend is functional but experimental)
 
 **Policy Enforcement**:
 
-- YAML-based security policies with JSON schema validation
-- Command allowlists and denylists with pattern matching
-- Interactive approval workflows with diff previews
-- Automatic policy reloading with atomic updates
+- YAML-based policies with allow/deny/isolate rules (observe mode by default)
+- Command pattern matching via glob-like rules
+- Roadmap: opt-in enforcement, approvals in CLI flows, and hot-reload behind optional watcher feature
 
 **Agent Security**:
 
-- Per-agent execution budgets and rate limiting
-- Scope-based permission tokens via sealed file descriptors
-- Audit logging for all agent interactions
-- Resource usage tracking and enforcement
+- `world-agent` REST/WS endpoints with span-level audit logging
+- Roadmap: per-agent execution budgets, scope tokens, and richer telemetry export
 
 ## Supported Versions
 
 | Version | Supported |
 | ------- | --------- |
-| 0.1.x   | Yes       |
-| < 0.1.0 | No        |
+| 0.2.x   | Yes       |
+| < 0.2.0 | No        |
 
 ## Reporting Vulnerabilities
 
@@ -61,7 +58,7 @@ Security considerations and vulnerability reporting for Substrate.
 
 **DO NOT** create public GitHub issues for security vulnerabilities.
 
-**Instead**, Uue GitHub's private vulnerability reporting
+**Instead**, use GitHub's private vulnerability reporting
 
 ### What to Include
 

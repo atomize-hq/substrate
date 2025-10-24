@@ -2,9 +2,10 @@
 # Windows WSL World Setup Guide
 
 This guide explains how to provision and maintain the `substrate-wsl`
-distribution that powers the Windows Always World stack. Follow these steps so
-every `substrate` command executes inside WSL with full telemetry and
-isolation.
+distribution that powers the Windows Always World stack. The WSL backend is
+functional but experimental—expect ongoing updates and occasional rough edges.
+Follow these steps so every `substrate` command executes inside WSL with full
+telemetry and isolation.
 
 ## Prerequisites
 

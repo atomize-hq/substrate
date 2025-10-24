@@ -9,7 +9,7 @@ our `curl | bash` flow and the offline bundles published under
 
 - **Linux**: systemd-based distributions with `sudo`, `curl`, `tar`, and `jq`
   available. The world backend runs as a systemd service (`substrate-world-agent`).
-- **Windows 11 / 10 (22H2+) with WSL2 + systemd**: install via the bundled PowerShell script (`scripts/windows/install-substrate.ps1`), which provisions the `substrate-wsl` distro after enabling systemd in `/etc/wsl.conf`.
+- **Windows 11 / 10 (22H2+) with WSL2 + systemd**: install via the bundled PowerShell script (`scripts/windows/install-substrate.ps1`), which provisions the `substrate-wsl` distro after enabling systemd in `/etc/wsl.conf`. The WSL backend is functional but experimental—expect ongoing updates.
 - **macOS 14+ (arm64)**: requires Apple Virtualization Framework and Lima (the
   installer verifies both).
 

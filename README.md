@@ -2,7 +2,7 @@
 
 > Substrate is the secure execution layer that sits between AI agents and your computer - providing isolation, audit trails, and centralized policy control.
 
-[![Rust](https://img.shields.io/badge/rust-1.74%2B-orange.svg)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-1.89%2B-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build](https://img.shields.io/badge/build-passing-green.svg)](#development)
 
@@ -19,7 +19,7 @@ Substrate transforms development workflows by serving as the **secure middleware
 
 ## Current State
 
-Today, Substrate provides a production-ready **command tracing ecosystem**:
+Today, Substrate delivers a cross-platform **command tracing stack**:
 
 - **Custom Shell**: Interactive REPL with PTY support and comprehensive logging
 - **Binary Shimming**: Transparent command interception for full observability
@@ -29,20 +29,24 @@ Today, Substrate provides a production-ready **command tracing ecosystem**:
 ## Quick Start
 
 ```bash
-# 1. Install from crates.io
-cargo install substrate
+# 1. Run the installer (Linux/macOS)
+curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/substrate/install-substrate.sh | bash
 
-# 2. Start the interactive shell
+# 2. Source the environment helpers and start the shell
+source ~/.substrate_bashenv
 substrate
 
-# That's it! Shims are deployed automatically on first run
+# Shims are deployed automatically on first run
 ```
 
 ### Windows Quick Start
 
-On Windows 11, Substrate shells run inside the `substrate-wsl` distribution to match the Linux isolation stack. Provision or refresh the distro with PowerShell 7:
+On Windows 11, Substrate shells run inside the `substrate-wsl` distribution to match the Linux isolation stack. The WSL backend is **functional but experimental**, so expect occasional rough edges. Use the installer (PowerShell 7) to provision or refresh the distro:
 
 ```powershell
+pwsh -File scripts\windows\install-substrate.ps1 -DistroName substrate-wsl
+
+# Regenerate / warm the distro manually if you are iterating locally
 pwsh -File scripts\windows\wsl-warm.ps1 -DistroName substrate-wsl -ProjectPath (Resolve-Path .)
 ```
 
@@ -78,21 +82,25 @@ export SUBSTRATE_NO_SHIMS=1
 substrate
 ```
 
-### Alternative: Build from Source
+### Alternative: Build from Source (development)
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/atomize-hq/substrate.git
 cd substrate
 cargo build --release
-sudo cp target/release/substrate* /usr/local/bin/
 ```
 
-## What's Coming
+> **Note:** Building only the `substrate` binary does not provision the world
+> agent, installer assets, or shims. To mirror a full install, run the platform
+> installer (Linux/macOS script or Windows PowerShell) after rebuilding, or copy
+> the auxiliary binaries and scripts into place manually.
 
-- **Security Worlds**: Isolated execution environments with filesystem and network controls
-- **Policy Engine**: YAML-based policies for command allowlists, resource limits, and approval workflows
-- **Agent API**: REST endpoints for AI assistants to execute commands with budgets and scope controls
-- **Graph Intelligence**: Kuzu database tracking command relationships and file dependencies
+## Ongoing Work
+
+- **Security Worlds Enhancements**: Default-on worlds ship for Linux, macOS (via Lima), and Windows (via WSL **functional but experimental**); active work includes tightening isolation policies and expanding telemetry around world sessions.
+- **Policy Engine Evolution**: The broker today enforces allow/deny/isolate rules in observe mode by default; future milestones include opt-in enforcement flows and richer restriction types.
+- **Agent API Maturation**: `world-agent` already exposes REST/WebSocket endpoints for shell integration—planned work adds per-agent budgets and scope negotiation for third-party assistants.
+- **Graph Intelligence Roadmap**: The `substrate-graph` crate ships with a mock backend; Kuzu-powered ingestion and query tooling remain active development areas.
 
 ### Future Features Pipeline
 
