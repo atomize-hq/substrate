@@ -21,6 +21,9 @@ PLATFORM=""
 ARCH=""
 IS_WSL=0
 ORIGINAL_PATH="${PATH}"
+PKG_MANAGER=""
+APT_UPDATED=0
+SUDO_CMD=()
 
 log() {
   printf '[%s] %s\n' "${INSTALLER_NAME}" "$*" >&2
@@ -67,9 +70,238 @@ run_cmd() {
   "$@"
 }
 
+command_exists() {
+  local cmd="$1"
+  if command -v "${cmd}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local fallback=""
+  case "${cmd}" in
+    nft|ip)
+      fallback="/usr/sbin/${cmd}"
+      ;;
+    systemctl)
+      fallback="/usr/bin/systemctl"
+      ;;
+  esac
+
+  if [[ -n "${fallback}" && -x "${fallback}" ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
 require_cmd() {
   local cmd="$1"
-  command -v "${cmd}" >/dev/null 2>&1 || fatal "Required command '${cmd}' not found. Please install it and re-run."
+  command_exists "${cmd}" || fatal "Required command '${cmd}' not found. Please install it and re-run."
+}
+
+initialize_sudo() {
+  if [[ ${#SUDO_CMD[@]} -gt 0 ]]; then
+    return
+  fi
+
+  if [[ "${EUID}" -ne 0 ]]; then
+    if command -v sudo >/dev/null 2>&1; then
+      SUDO_CMD=(sudo)
+    else
+      fatal "This installer requires 'sudo' when run as a non-root user. Install sudo or re-run the installer as root."
+    fi
+  fi
+}
+
+detect_package_manager() {
+  if [[ -n "${PKG_MANAGER}" ]]; then
+    return 0
+  fi
+
+  if command -v apt-get >/dev/null 2>&1; then
+    PKG_MANAGER="apt-get"
+    return 0
+  fi
+  if command -v dnf >/dev/null 2>&1; then
+    PKG_MANAGER="dnf"
+    return 0
+  fi
+  if command -v yum >/dev/null 2>&1; then
+    PKG_MANAGER="yum"
+    return 0
+  fi
+  if command -v pacman >/dev/null 2>&1; then
+    PKG_MANAGER="pacman"
+    return 0
+  fi
+  if command -v zypper >/dev/null 2>&1; then
+    PKG_MANAGER="zypper"
+    return 0
+  fi
+
+  return 1
+}
+
+resolve_package_for_command() {
+  local cmd="$1"
+
+  case "${PKG_MANAGER}" in
+    apt-get)
+      case "${cmd}" in
+        curl) echo "curl" ;;
+        tar) echo "tar" ;;
+        jq) echo "jq" ;;
+        fuse-overlayfs) echo "fuse-overlayfs fuse3" ;;
+        nft) echo "nftables" ;;
+        ip) echo "iproute2" ;;
+        sha256sum) echo "coreutils" ;;
+        systemctl) echo "systemd" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    dnf|yum)
+      case "${cmd}" in
+        curl) echo "curl" ;;
+        tar) echo "tar" ;;
+        jq) echo "jq" ;;
+        fuse-overlayfs) echo "fuse-overlayfs" ;;
+        nft) echo "nftables" ;;
+        ip) echo "iproute" ;;
+        sha256sum) echo "coreutils" ;;
+        systemctl) echo "systemd" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    pacman)
+      case "${cmd}" in
+        curl) echo "curl" ;;
+        tar) echo "tar" ;;
+        jq) echo "jq" ;;
+        fuse-overlayfs) echo "fuse-overlayfs" ;;
+        nft) echo "nftables" ;;
+        ip) echo "iproute2" ;;
+        sha256sum) echo "coreutils" ;;
+        systemctl) echo "systemd" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    zypper)
+      case "${cmd}" in
+        curl) echo "curl" ;;
+        tar) echo "tar" ;;
+        jq) echo "jq" ;;
+        fuse-overlayfs) echo "fuse-overlayfs" ;;
+        nft) echo "nftables" ;;
+        ip) echo "iproute2" ;;
+        sha256sum) echo "coreutils" ;;
+        systemctl) echo "systemd" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
+
+install_packages() {
+  local packages=()
+  packages=("$@")
+  if [[ ${#packages[@]} -eq 0 ]]; then
+    return
+  fi
+
+  case "${PKG_MANAGER}" in
+    apt-get)
+      log "Installing packages: ${packages[*]}"
+      if [[ "${DRY_RUN}" -eq 1 ]]; then
+        printf '[%s][dry-run] %s apt-get update\n' "${INSTALLER_NAME}" "${SUDO_CMD[*]:-}" >&2
+        printf '[%s][dry-run] %s apt-get install -y %s\n' "${INSTALLER_NAME}" "${SUDO_CMD[*]:-}" "${packages[*]}" >&2
+        return
+      fi
+      if [[ ${APT_UPDATED} -eq 0 ]]; then
+        run_cmd "${SUDO_CMD[@]}" apt-get update
+        APT_UPDATED=1
+      fi
+      run_cmd "${SUDO_CMD[@]}" apt-get install -y "${packages[@]}"
+      ;;
+    dnf)
+      log "Installing packages: ${packages[*]}"
+      run_cmd "${SUDO_CMD[@]}" dnf install -y "${packages[@]}"
+      ;;
+    yum)
+      log "Installing packages: ${packages[*]}"
+      run_cmd "${SUDO_CMD[@]}" yum install -y "${packages[@]}"
+      ;;
+    pacman)
+      log "Installing packages: ${packages[*]}"
+      run_cmd "${SUDO_CMD[@]}" pacman -Sy --noconfirm --needed "${packages[@]}"
+      ;;
+    zypper)
+      log "Installing packages: ${packages[*]}"
+      run_cmd "${SUDO_CMD[@]}" zypper --non-interactive install "${packages[@]}"
+      ;;
+    *)
+      fatal "Unsupported package manager. Install required commands manually and re-run."
+      ;;
+  esac
+}
+
+ensure_linux_packages_for_commands() {
+  initialize_sudo
+  local commands=("$@")
+  local missing_cmds=()
+  for cmd in "${commands[@]}"; do
+    if ! command_exists "${cmd}"; then
+      missing_cmds+=("${cmd}")
+    fi
+  done
+
+  if [[ ${#missing_cmds[@]} -eq 0 ]]; then
+    return
+  fi
+
+  if ! detect_package_manager; then
+    fatal "Unable to detect supported package manager. Install required commands (${missing_cmds[*]}) manually and re-run."
+  fi
+
+  declare -A pkg_set=()
+  local cmd pkg_list
+  for cmd in "${missing_cmds[@]}"; do
+    pkg_list="$(resolve_package_for_command "${cmd}")"
+    if [[ -z "${pkg_list}" ]]; then
+      warn "No package mapping for '${cmd}' under ${PKG_MANAGER}; please install it manually."
+      continue
+    fi
+    for pkg in ${pkg_list}; do
+      pkg_set["${pkg}"]=1
+    done
+  done
+
+  if [[ ${#pkg_set[@]} -eq 0 ]]; then
+    return
+  fi
+
+  local packages=()
+  for pkg in "${!pkg_set[@]}"; do
+    packages+=("${pkg}")
+  done
+
+  install_packages "${packages[@]}"
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    return
+  fi
+
+  # Re-check after installation.
+  local remaining=()
+  for cmd in "${missing_cmds[@]}"; do
+    if ! command_exists "${cmd}"; then
+      remaining+=("${cmd}")
+    fi
+  done
+  if [[ ${#remaining[@]} -gt 0 ]]; then
+    fatal "Unable to install required commands: ${remaining[*]}. Install them manually and re-run."
+  fi
 }
 
 compute_file_sha256() {
@@ -206,19 +438,30 @@ ensure_macos_prereqs() {
 }
 
 ensure_linux_prereqs() {
+  ensure_linux_packages_for_commands curl tar jq
   require_cmd curl
   require_cmd tar
   require_cmd jq
-  require_cmd sudo
 
-  if ! command -v sha256sum >/dev/null 2>&1 && ! command -v shasum >/dev/null 2>&1; then
-    fatal "Missing sha256sum (preferred) or shasum for checksum verification. Install coreutils/perl-Digest-SHA or rerun with --dry-run."
+  if [[ "${EUID}" -ne 0 ]]; then
+    if ! command_exists sudo; then
+      fatal "This installer requires 'sudo' when run as a non-root user. Install sudo or re-run the installer as root."
+    fi
+  fi
+
+  if ! command_exists sha256sum && ! command_exists shasum; then
+    ensure_linux_packages_for_commands sha256sum
+    if ! command_exists sha256sum && ! command_exists shasum; then
+      fatal "Missing sha256sum (preferred) or shasum for checksum verification. Install coreutils/perl-Digest-SHA or rerun with --dry-run."
+    fi
   fi
 
   if [[ "${NO_WORLD}" -eq 0 ]]; then
-    if ! command -v systemctl >/dev/null 2>&1; then
-      fatal "systemctl not found. Install systemd tooling or re-run with --no-world to skip world provisioning."
-    fi
+    ensure_linux_packages_for_commands systemctl fuse-overlayfs nft ip
+    require_cmd systemctl
+    require_cmd fuse-overlayfs
+    require_cmd nft
+    require_cmd ip
 
     local init_comm
     init_comm="$(ps -p 1 -o comm= 2>/dev/null || true)"
