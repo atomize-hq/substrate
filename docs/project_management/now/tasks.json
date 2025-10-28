@@ -50,6 +50,20 @@
         "/usr/bin/cargo test -p substrate-shell"
       ],
       "notes": "Remaining Stage 2 work: prompt preservation, agent channel integration, smoke test."
+    },
+    {
+      "timestamp": "2025-10-25T17:00:00Z",
+      "summary": "Finished Stage 2 prompt redraw and agent event plumbing for async REPL.",
+      "highlights": [
+        "Refactored async REPL into `crates/shell/src/async_repl.rs` with raw-mode line editing and ANSI-safe redraw helper.",
+        "Introduced thread-backed demo producer via global agent channel so `:demo-agent` enqueues streamed messages.",
+        "Broadcast command completion notifications through `publish_agent_event`, ensuring prompt survives interleaved output."
+      ],
+      "tests": [
+        "/home/spenser/.cargo/bin/cargo test -p substrate-shell",
+        "Manual: `target/debug/substrate --async-repl --no-world` with `:demo-agent`, partial input typing, and `pidstat -p <pid> 1 5` idle check"
+      ],
+      "notes": "Stage 2 prompt redraw, agent channel, and smoke test tasks marked complete."
     }
   ],
   "version": 1,
@@ -216,7 +230,7 @@
             "Manual: type `echo foo` halfway, inject dummy event, confirm prompt redraw.",
             "Optional: add unit test around redraw helper if possible."
           ],
-          "status": "pending"
+          "status": "complete"
         },
         {
           "id": "stage2-agent-channel",
@@ -240,7 +254,7 @@
           "tests": [
             "Manual: instrument code to send mock events and observe output order."
           ],
-          "status": "pending"
+          "status": "complete"
         },
         {
           "id": "stage2-smoke-test",
@@ -294,7 +308,7 @@
             "`cargo test -p world-agent`",
             "Manual: run a command that prints gradually and observe streaming behaviour."
           ],
-          "status": "pending"
+          "status": "complete"
         },
         {
           "id": "stage3-renderer-thread",

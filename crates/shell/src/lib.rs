@@ -1,3 +1,4 @@
+pub(crate) mod async_repl;
 pub mod lock;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod platform_world;
@@ -13,7 +14,7 @@ use lazy_static::lazy_static;
 use serde_json::json;
 use std::collections::HashMap;
 use std::env;
-use std::io::{self, BufRead, IsTerminal, Write};
+use std::io::{self, BufRead, IsTerminal};
 // (avoid unused: import Read/Write locally where needed)
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
@@ -25,9 +26,6 @@ use substrate_common::{dedupe_path, log_schema, redact_sensitive};
 use substrate_trace::{
     append_to_trace, create_span_builder, init_trace, PolicyDecision, TransportMeta,
 };
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::runtime::Builder as TokioRuntimeBuilder;
-use tokio::sync::mpsc;
 use uuid::Uuid;
 
 // Reedline imports
@@ -1689,7 +1687,7 @@ pub fn run_shell() -> Result<i32> {
     match &config.mode {
         ShellMode::Interactive { use_pty: _ } => {
             if config.async_repl {
-                run_async_repl(&config)
+                async_repl::run_async_repl(&config)
             } else {
                 // PTY mode is now handled within run_interactive_shell on a per-command basis
                 run_interactive_shell(&config)
@@ -1699,102 +1697,6 @@ pub fn run_shell() -> Result<i32> {
         ShellMode::Script(path) => run_script_mode(&config, path),
         ShellMode::Pipe => run_pipe_mode(&config),
     }
-}
-
-fn run_async_repl(config: &ShellConfig) -> Result<i32> {
-    println!("Substrate v{}", env!("CARGO_PKG_VERSION"));
-    println!("Session ID: {}", config.session_id);
-    println!("Logging to: {}", config.trace_log_file.display());
-
-    let running_child_pid = Arc::new(AtomicI32::new(0));
-    setup_signal_handlers(running_child_pid.clone())?;
-
-    let prompt = if config.ci_mode { "> " } else { "substrate> " };
-
-    let mut stdout = io::stdout();
-    write!(stdout, "{}", prompt)?;
-    stdout.flush().ok();
-
-    let rt = TokioRuntimeBuilder::new_current_thread()
-        .enable_all()
-        .build()
-        .context("failed to initialize async REPL runtime")?;
-
-    let shared_config = Arc::new(config.clone());
-
-    rt.block_on(async move {
-        let stdin = BufReader::new(tokio::io::stdin());
-        let mut lines = stdin.lines();
-        let (agent_tx, mut agent_rx) = mpsc::unbounded_channel::<String>();
-        let _agent_tx_guard = agent_tx; // reserved for future agent integration
-
-        loop {
-            tokio::select! {
-                line = lines.next_line() => {
-                    match line {
-                        Ok(Some(line)) => {
-                            let trimmed = line.trim();
-                            if trimmed.is_empty() {
-                                let mut stdout = io::stdout();
-                                write!(stdout, "\r{}", prompt)?;
-                                stdout.flush().ok();
-                                continue;
-                            }
-
-                            if matches!(trimmed, "exit" | "quit") {
-                                break;
-                            }
-
-                            let cmd_id = Uuid::now_v7().to_string();
-                            let config_clone = (*shared_config).clone();
-                            let command = trimmed.to_string();
-                            let status = execute_command(
-                                &config_clone,
-                                &command,
-                                &cmd_id,
-                                running_child_pid.clone(),
-                            )?;
-
-                            if !status.success() {
-                                #[cfg(unix)]
-                                if let Some(sig) = status.signal() {
-                                    eprintln!("Command terminated by signal {sig}");
-                                } else {
-                                    eprintln!(
-                                        "Command failed with status: {}",
-                                        status.code().unwrap_or(-1)
-                                    );
-                                }
-                                #[cfg(not(unix))]
-                                eprintln!(
-                                    "Command failed with status: {}",
-                                    status.code().unwrap_or(-1)
-                                );
-                            }
-
-                            let mut stdout = io::stdout();
-                            write!(stdout, "\n{}", prompt)?;
-                            stdout.flush().ok();
-                        }
-                        Ok(None) => break,
-                        Err(e) => {
-                            eprintln!("Error: {e}");
-                            break;
-                        }
-                    }
-                }
-                Some(event) = agent_rx.recv() => {
-                    let mut stdout = io::stdout();
-                    write!(stdout, "\n{event}\n{}", prompt)?;
-                    stdout.flush().ok();
-                }
-            }
-        }
-
-        Ok::<_, anyhow::Error>(())
-    })?;
-
-    Ok(0)
 }
 
 fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
