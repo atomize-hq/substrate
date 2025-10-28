@@ -2547,7 +2547,6 @@ dependencies = [
 [[package]]
 name = "reedline"
 version = "0.41.0"
-source = "git+https://github.com/atomize-hq/reedline#6ab63fd0fcae46fe97ded2c54fd3247ba75cce4c"
 dependencies = [
  "chrono",
  "crossterm",

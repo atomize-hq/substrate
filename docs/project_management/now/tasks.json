@@ -60,7 +60,7 @@
             "Manual: `powermetrics --samplers tasks -i 5` or `top` showing near-zero CPU while shell idles.",
             "Automated: `cargo test -p substrate-shell` (existing suite) passes."
           ],
-          "status": "pending"
+          "status": "complete"
         },
         {
           "id": "stage1-idle-verification",

@@ -63,4 +63,4 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [patch.crates-io]
-reedline = { git = "https://github.com/atomize-hq/reedline" }
+reedline = { path = "third_party/reedline" }
