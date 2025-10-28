@@ -45,7 +45,7 @@ serde = { version = "1.0", features = ["derive"] }
 substrate-trace = { version = "0.2.0-beta.1", path = "../trace" }
 substrate-replay = { version = "0.1.0", path = "../replay" }
 substrate-graph = { version = "0.1.0", path = "../substrate-graph" }
-tokio = { version = "1.32", features = ["rt", "signal"] }
+tokio = { version = "1.32", features = ["rt", "signal", "sync", "time", "io-util", "io-std"] }
 tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }
 futures = "0.3"
 base64 = "0.22"
@@ -77,4 +77,3 @@ rustc_version = "0.4"
 
 [features]
 default = []
-

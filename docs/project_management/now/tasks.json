@@ -1,4 +1,57 @@
 {
+  "session_log": [
+    {
+      "timestamp": "2025-10-24T14:20:00Z",
+      "summary": "Stage 1 gating/backoff complete; updated shell to use std IsTerminal and added dev shim helper.",
+      "highlights": [
+        "Replaced atty usage with std::io::IsTerminal across shell (`crates/shell/src/lib.rs`, `crates/shell/Cargo.toml`, `Cargo.lock`).",
+        "Added early TTY exit in `run_shell` and PTY heuristics, stopping busy-spin when stdin/stdout are not TTYs.",
+        "Vendor-rebased Reedline fork under `third_party/reedline/` to adjust poll backoff, wiring consumers via `[patch.crates-io]`.",
+        "Introduced `scripts/substrate/dev-shim-bootstrap.sh` for local shim install/uninstall cycles."
+      ],
+      "tests": [
+        "/usr/bin/cargo test -p substrate-shell"
+      ],
+      "notes": "Stage 1 tasks `stage1-tty-gating` and `stage1-input-backoff` marked complete."
+    },
+    {
+      "timestamp": "2025-10-24T14:55:00Z",
+      "summary": "Verified idle CPU relief and documented measurements.",
+      "highlights": [
+        "Captured `top -b -d 1 -n 5 -p <pid>` sample showing 0.0% CPU at idle after fixes.",
+        "Annotated Stage 1 doc with timestamped verification note.",
+        "Updated tasks.json to set `stage1-idle-verification` status."
+      ],
+      "tests": [],
+      "notes": "Stage 1 complete; ready to start Stage 2."
+    },
+    {
+      "timestamp": "2025-10-24T15:05:00Z",
+      "summary": "Added `--async-repl` flag plumbing and docs (Stage 2 kickoff).",
+      "highlights": [
+        "Extended Clap CLI (`crates/shell/src/lib.rs`) and ShellConfig to carry `async_repl` flag.",
+        "Documented flag in `docs/USAGE.md` and `docs/CONFIGURATION.md`.",
+        "Marked `stage2-cli-flag` task complete."
+      ],
+      "tests": [
+        "/usr/bin/cargo test -p substrate-shell"
+      ],
+      "notes": "Async loop implementation pending."
+    },
+    {
+      "timestamp": "2025-10-24T15:30:00Z",
+      "summary": "Implemented async REPL skeleton with tokio runtime (Stage 2 progress).",
+      "highlights": [
+        "Added `run_async_repl` with Tokio current-thread runtime, stdin `tokio::select!`, and placeholder agent channel.",
+        "Expanded tokio features and derived `Clone` for `ShellConfig`.",
+        "Updated tasks.json to set `stage2-async-loop` status."
+      ],
+      "tests": [
+        "/usr/bin/cargo test -p substrate-shell"
+      ],
+      "notes": "Remaining Stage 2 work: prompt preservation, agent channel integration, smoke test."
+    }
+  ],
   "version": 1,
   "goal": "Eliminate the Reedline busy-spin while delivering an async, prompt-safe agent output pipeline across macOS/Linux/Windows, then roll it out with confidence.",
   "source": "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md",
@@ -138,7 +191,7 @@
             "`cargo fmt --all && cargo clippy --workspace --all-targets`",
             "Manual: run `substrate --async-repl` and ensure prompt operates line-by-line."
           ],
-          "status": "pending"
+          "status": "complete"
         },
         {
           "id": "stage2-prompt-redraw",
