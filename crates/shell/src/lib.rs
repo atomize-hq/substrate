@@ -1,3 +1,4 @@
+pub(crate) mod agent_events;
 pub(crate) mod async_repl;
 pub mod lock;
 #[cfg(any(target_os = "macos", target_os = "windows"))]

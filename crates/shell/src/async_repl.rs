@@ -1,7 +1,8 @@
 use std::io::{self, Write};
 use std::process::ExitStatus;
 use std::sync::atomic::AtomicI32;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::Arc;
+use std::thread;
 
 use anyhow::{Context, Result};
 use crossterm::cursor::{Hide, Show};
@@ -12,15 +13,18 @@ use crossterm::event::{
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use crossterm::ExecutableCommand;
 use futures::StreamExt;
+use serde_json::Value;
 use std::time::Duration;
 use tokio::runtime::Builder as TokioRuntimeBuilder;
-use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio::task;
 use uuid::Uuid;
 
-use super::{execute_command, setup_signal_handlers, ShellConfig};
+use crate::agent_events::{
+    agent_event_sender, clear_agent_event_sender, init_event_channel, publish_agent_event,
+};
+use substrate_common::agent_events::{AgentEvent, AgentEventKind};
 
-static AGENT_EVENT_SENDER: OnceLock<Mutex<Option<UnboundedSender<AgentEvent>>>> = OnceLock::new();
+use super::{execute_command, setup_signal_handlers, ShellConfig};
 
 const CLEAR_LINE: &str = "\r\x1b[K";
 
@@ -49,8 +53,7 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         let mut stdout = io::stdout();
         redraw_prompt(&mut stdout, &prompt, "")?;
 
-        let (agent_tx, mut agent_rx) = mpsc::unbounded_channel::<AgentEvent>();
-        store_agent_sender(agent_tx.clone());
+        let mut agent_rx = init_event_channel();
 
         let mut input_stream = EventStream::new().fuse();
         let mut current_input = String::new();
@@ -162,64 +165,13 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
             }
         }
 
-        clear_agent_sender();
+        clear_agent_event_sender();
         terminal_guard.pause()?;
 
         Ok::<_, anyhow::Error>(())
     })?;
 
     Ok(0)
-}
-
-#[derive(Debug, Clone)]
-pub struct AgentEvent {
-    label: String,
-    message: String,
-}
-
-impl AgentEvent {
-    pub fn new(label: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            label: label.into(),
-            message: message.into(),
-        }
-    }
-
-    fn display_line(&self) -> String {
-        format!("[{}] {}", self.label, self.message)
-    }
-}
-
-pub(crate) fn publish_agent_event(event: AgentEvent) -> bool {
-    if let Some(lock) = AGENT_EVENT_SENDER.get() {
-        if let Ok(guard) = lock.lock() {
-            if let Some(sender) = guard.as_ref() {
-                return sender.send(event).is_ok();
-            }
-        }
-    }
-    false
-}
-
-pub(crate) fn agent_event_sender() -> Option<UnboundedSender<AgentEvent>> {
-    AGENT_EVENT_SENDER
-        .get()
-        .and_then(|lock| lock.lock().ok().and_then(|guard| guard.as_ref().cloned()))
-}
-
-fn store_agent_sender(sender: UnboundedSender<AgentEvent>) {
-    let cell = AGENT_EVENT_SENDER.get_or_init(|| Mutex::new(None));
-    if let Ok(mut guard) = cell.lock() {
-        *guard = Some(sender);
-    }
-}
-
-fn clear_agent_sender() {
-    if let Some(lock) = AGENT_EVENT_SENDER.get() {
-        if let Ok(mut guard) = lock.lock() {
-            guard.take();
-        }
-    }
 }
 
 struct RawTerminalGuard {
@@ -270,7 +222,13 @@ fn render_agent_event(
     buffer: &str,
     event: &AgentEvent,
 ) -> io::Result<()> {
-    write!(stdout, "{CLEAR_LINE}{}\r\n", event.display_line())?;
+    let agent = if event.agent_id.is_empty() {
+        "agent"
+    } else {
+        event.agent_id.as_str()
+    };
+    let message = extract_event_message(&event.kind, &event.data);
+    write!(stdout, "{CLEAR_LINE}[{agent}] {message}\r\n")?;
     redraw_prompt(stdout, prompt, buffer)
 }
 
@@ -324,22 +282,30 @@ fn report_nonzero_status(status: &ExitStatus) {
 }
 
 fn emit_command_event(command: &str, status: &ExitStatus) {
-    let message = if status.success() {
-        format!("Command `{command}` completed successfully")
-    } else {
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::ExitStatusExt;
-            if status.signal().is_some() {
-                return;
-            }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if status.signal().is_some() {
+            return;
         }
+    }
 
+    let event = if status.success() {
+        AgentEvent::message(
+            "shell",
+            AgentEventKind::TaskEnd,
+            format!("Command `{command}` completed successfully"),
+        )
+    } else {
         let code = status.code().unwrap_or(-1);
-        format!("Command `{command}` exited with status {code}")
+        AgentEvent::message(
+            "shell",
+            AgentEventKind::Alert,
+            format!("Command `{command}` exited with status {code}"),
+        )
     };
 
-    let _ = publish_agent_event(AgentEvent::new("shell", message));
+    let _ = publish_agent_event(event);
 }
 
 fn schedule_demo_events() {
@@ -362,10 +328,34 @@ fn schedule_demo_events() {
         ),
     ];
 
-    std::thread::spawn(move || {
+    thread::spawn(move || {
         for (delay, message) in events {
-            std::thread::sleep(delay);
-            let _ = publish_agent_event(AgentEvent::new("demo", message));
+            thread::sleep(delay);
+            let _ = publish_agent_event(AgentEvent::message(
+                "demo",
+                AgentEventKind::TaskProgress,
+                message,
+            ));
         }
     });
+}
+
+fn extract_event_message(kind: &AgentEventKind, data: &Value) -> String {
+    if let Some(msg) = data.get("message").and_then(Value::as_str) {
+        return msg.to_string();
+    }
+
+    if let Some(chunk) = data.get("chunk").and_then(Value::as_str) {
+        let stream = data
+            .get("stream")
+            .and_then(Value::as_str)
+            .unwrap_or("stdout");
+        return format!("{}: {}", stream, chunk);
+    }
+
+    if data.is_null() {
+        kind.to_string()
+    } else {
+        data.to_string()
+    }
 }

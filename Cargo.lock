@@ -3170,6 +3170,7 @@ name = "substrate-common"
 version = "0.2.0-beta.1"
 dependencies = [
  "anyhow",
+ "chrono",
  "dirs 5.0.1",
  "serde",
  "serde_json",

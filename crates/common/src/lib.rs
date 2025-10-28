@@ -2,9 +2,11 @@
 
 use std::collections::HashSet;
 
+pub mod agent_events;
 pub mod fs_diff;
 pub mod paths;
 
+pub use agent_events::{AgentEvent, AgentEventKind};
 pub use fs_diff::FsDiff;
 
 /// Deduplicate PATH-like strings while preserving order
