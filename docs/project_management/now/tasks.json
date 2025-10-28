@@ -113,7 +113,7 @@
             "`cargo test -p substrate-shell`",
             "Manual: launch with and without flag to ensure selection works."
           ],
-          "status": "pending"
+          "status": "complete"
         },
         {
           "id": "stage2-async-loop",

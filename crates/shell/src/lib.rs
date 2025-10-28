@@ -256,6 +256,10 @@ pub struct Cli {
     #[arg(long = "shim-remove", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status"])]
     pub shim_remove: bool,
 
+    /// Enable experimental async REPL loop
+    #[arg(long = "async-repl", conflicts_with_all = &["command", "script"])]
+    pub async_repl: bool,
+
     /// Show trace information for a span ID
     #[arg(long = "trace", value_name = "SPAN_ID", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status", "shim_remove", "replay"])]
     pub trace: Option<String>,
@@ -336,6 +340,7 @@ pub struct ShellConfig {
     pub no_exit_on_error: bool,
     pub skip_shims: bool,
     pub no_world: bool,
+    pub async_repl: bool,
     pub env_vars: HashMap<String, String>,
 }
 
@@ -773,6 +778,7 @@ impl ShellConfig {
             no_exit_on_error: cli.no_exit_on_error,
             skip_shims: cli.shim_skip,
             no_world: cli.no_world,
+            async_repl: cli.async_repl,
             env_vars: HashMap::new(),
         })
     }

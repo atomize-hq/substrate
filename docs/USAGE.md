@@ -16,6 +16,18 @@ substrate> npm test
 substrate> exit
 ```
 
+### Async REPL (preview)
+
+```bash
+substrate --async-repl
+```
+
+The `--async-repl` flag opts into the event-driven loop described in the
+Phase 4 concurrent output design. It currently provides line-by-line input with
+the same prompt banner while we finish wiring prompt preservation and agent
+streaming. Advanced Reedline features (history search, completion menus) will
+return in a later stage once the async renderer is fully integrated.
+
 ### Command Execution
 
 ```bash
