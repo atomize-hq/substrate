@@ -81,7 +81,7 @@
           "tests": [
             "Manual data collection only; no automated test required."
           ],
-          "status": "pending"
+          "status": "complete"
         }
       ]
     },
