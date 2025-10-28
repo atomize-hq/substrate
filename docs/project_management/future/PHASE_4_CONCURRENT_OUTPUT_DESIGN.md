@@ -4,6 +4,14 @@
 
 The original ExternalPrinter implementation for concurrent output caused 2.4% idle CPU usage due to polling every 100ms, even when no messages were being sent. This was discovered and fixed in Phase 3.75.
 
+### Field Evidence (macOS 15.6.1)
+
+- Running `substrate` headless on macOS with no TTY attached pegs one core at ~100% (Activity Monitor and `powermetrics --samplers tasks -i 5` show ~1000 ms/s CPU usage).
+- `sample` traces show the main thread cycling through `reedline::engine::Reedline::read_line → crossterm::event::read → read()` with no blocking, indicating a busy loop.
+- RSS remains ~6 MB, so it is purely a CPU/energy issue.
+- Immediate mitigations include: only starting the REPL when stdin is a TTY, adding backoff to the poll loop, or moving to an async event stream.
+- This real-world observation reinforces the need to implement the async/concurrent output design.
+
  
 
 Host-proxy context: Agents typically connect to a host UDS/TCP endpoint exposed by the host-proxy, which forwards to world-agent inside the world/VM. This does not change REPL logic; agent messages arrive over an async channel.

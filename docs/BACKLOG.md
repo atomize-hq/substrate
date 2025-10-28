@@ -5,6 +5,12 @@ Keep concise, actionable, and security-focused.
 
 ## Near-Term (Next 1–2 sprints)
 
+- **Top Priority – Fix REPL busy-spin / async agent output**
+  - Resolve the Reedline/crossterm busy loop that pegs a CPU core when idle (gate on TTY,
+    introduce backoff, or adopt the async event loop from the Phase 4 concurrent output design).
+  - See `docs/project_management/future/PHASE_4_CONCURRENT_OUTPUT_DESIGN.md` for context and remediation notes.
+  - Implement the async agent output path so events can stream without prompt corruption.
+
 - **High Priority – Global configuration UX**
   - Introduce `~/.substrate/config.toml` for persistent defaults (world behavior,
     broker enforcement toggle, default profiles).
@@ -16,6 +22,22 @@ Keep concise, actionable, and security-focused.
   - Add shell built-ins/commands (`:config`, `:profile load`, `:world status`,
     `:shims status`, etc.) to view and adjust settings without restarting.
   - Surface doctor/shim status inside the REPL so users don’t have to exit.
+
+- **High Priority – Command hook engine**
+  - Implement the hook system described in `docs/project_management/future/COMMAND_HOOKS_IMPLEMENTATION_PLAN.md`
+    (hook definitions, matcher/condition/action pipeline, shim & shell integration).
+  - Provide `~/.substrate/hooks.yaml` scaffolding plus CLI commands to list/enable/disable hooks.
+
+
+- **High Priority – Graph intelligence backend**
+  - Finish the Kuzu-backed implementation outlined in `docs/project_management/future/PHASE_4_5_ADVANCED_FEATURES_PLAN.md`:
+    ingestion pipeline, schema, query interface, and CLI.
+  - Replace the current mock-only `substrate-graph` crate with a real backend.
+
+- **Follow-up – Replay isolation polish**
+  - Most of the Phase 4.5 isolation plan shipped (per-replay netns + nft scoping), but optional
+    enhancements remain: nft cgroup matching fallback, documentation updates (DEV_PODMAN_LINUX_TESTING.md,
+    COMPLETE_FIXES_PHASE4_PRE45.md), and diagnostic tooling for leftover netns/rules.
 
 - ~~Auto-start world-agent on shell startup (Linux)~~ **(Done)**
   - Implementation: `run_shell()` now initializes the Linux backend, flips
