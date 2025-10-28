@@ -3224,7 +3224,6 @@ dependencies = [
  "agent-api-types",
  "anyhow",
  "assert_cmd",
- "atty",
  "base64 0.22.1",
  "chrono",
  "clap",

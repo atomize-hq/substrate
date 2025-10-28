@@ -1,0 +1,493 @@
+{
+  "version": 1,
+  "goal": "Eliminate the Reedline busy-spin while delivering an async, prompt-safe agent output pipeline across macOS/Linux/Windows, then roll it out with confidence.",
+  "source": "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md",
+  "meta": [
+    "Stage 1 mitigations are temporary safety nets; once Stage 2 async REPL ships and proves stable, remove or behind feature flag.",
+    "Stage 2 introduces the runtime flag `--async-repl` (and matching cargo feature if required) that later stages assume is present.",
+    "Stages are sequential; do not begin Stage 3 streaming work until Stage 2 async loop passes smoke testing.",
+    "See PHASE_4_CONCURRENT_OUTPUT_DESIGN.md \u00a7Async REPL (lines 30-155) and PHASE_4_5_ADVANCED_FEATURES_PLAN.md \u00a7Part A / Appendix B for design intent.",
+    "Manual testing expectations are tracked in Stage 4; gather evidence (screenshots, command outputs) for PR review."
+  ],
+  "stages": [
+    {
+      "name": "Stage 1: Immediate Busy-Spin Mitigation",
+      "overview": "Short-lived guardrails to stop the macOS core burn while the async path is under construction.",
+      "tasks": [
+        {
+          "id": "stage1-tty-gating",
+          "title": "Gate interactive REPL on real TTY",
+          "description": "Detect non-TTY stdin at startup and skip the Reedline loop (enter headless mode or exit with guidance).",
+          "references": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md (Stage 1, item 1)",
+            "docs/project_management/future/PHASE_4_CONCURRENT_OUTPUT_DESIGN.md#L9-L13"
+          ],
+          "files": [
+            "crates/shell/src/lib.rs",
+            "crates/shell/src/bin.rs"
+          ],
+          "dependencies": [],
+          "acceptance": [
+            "Launching `substrate` with stdin redirected (e.g. `echo` or `systemd` service) no longer enters the interactive loop.",
+            "When no TTY is present, the process exits gracefully or runs in headless mode without reporting Reedline errors."
+          ],
+          "tests": [
+            "Manual: `printf '' | target/debug/substrate` should exit without high CPU usage.",
+            "Optional: add unit test around new `is_tty` helper if feasible."
+          ],
+          "status": "complete"
+        },
+        {
+          "id": "stage1-input-backoff",
+          "title": "Add interim poll/backoff to current loop",
+          "description": "Wrap crossterm event polling with a timeout plus short sleep so the legacy Reedline loop no longer busy spins on macOS.",
+          "references": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md (Stage 1, item 2)",
+            "docs/project_management/future/PHASE_4_CONCURRENT_OUTPUT_DESIGN.md#L22-L27"
+          ],
+          "files": [
+            "crates/shell/src/lib.rs",
+            "third_party/reedline"
+          ],
+          "dependencies": [
+            "stage1-tty-gating"
+          ],
+          "acceptance": [
+            "Idle `substrate` on macOS reports <0.5% CPU before async work begins.",
+            "Reedline responsiveness (tab completion, history) remains unaffected by the timeout."
+          ],
+          "tests": [
+            "Manual: `powermetrics --samplers tasks -i 5` or `top` showing near-zero CPU while shell idles.",
+            "Automated: `cargo test -p substrate-shell` (existing suite) passes."
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "stage1-idle-verification",
+          "title": "Verify near-zero idle CPU after mitigations",
+          "description": "Record before/after measurements to confirm Stage 1 changes solved the immediate regression.",
+          "references": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md (Stage 1, item 3)"
+          ],
+          "files": [],
+          "dependencies": [
+            "stage1-tty-gating",
+            "stage1-input-backoff"
+          ],
+          "acceptance": [
+            "Documented measurements (<0.1% CPU target) attached to issue/PR.",
+            "Mac idle scenario reproduced in CI or local script if possible."
+          ],
+          "tests": [
+            "Manual data collection only; no automated test required."
+          ],
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "name": "Stage 2: Async Event Infrastructure (Prompt-Friendly)",
+      "overview": "Introduce the async REPL path behind `--async-repl`, keeping prompt integrity even without streaming agents yet.",
+      "tasks": [
+        {
+          "id": "stage2-cli-flag",
+          "title": "Introduce --async-repl opt-in path",
+          "description": "Add clap flag/config toggle plus cargo feature (if needed) to route interactive sessions into the async loop.",
+          "references": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md (Stage 2, item 1)",
+            "docs/project_management/future/PHASE_4_CONCURRENT_OUTPUT_DESIGN.md#L83-L101"
+          ],
+          "files": [
+            "crates/shell/src/lib.rs",
+            "crates/shell/src/config.rs",
+            "crates/shell/src/cli.rs"
+          ],
+          "dependencies": [
+            "stage1-idle-verification"
+          ],
+          "acceptance": [
+            "`substrate --async-repl` runs the new async path; legacy behavior remains default.",
+            "Flag is documented in `--help` output and config docs if applicable."
+          ],
+          "tests": [
+            "`cargo test -p substrate-shell`",
+            "Manual: launch with and without flag to ensure selection works."
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "stage2-async-loop",
+          "title": "Implement async_run_repl with tokio::select!",
+          "description": "Build the async loop waiting on stdin lines and agent event receiver without busy waits.",
+          "references": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md (Stage 2, item 2)",
+            "docs/project_management/future/PHASE_4_CONCURRENT_OUTPUT_DESIGN.md#L50-L129"
+          ],
+          "files": [
+            "crates/shell/src/async_repl.rs",
+            "crates/shell/src/lib.rs"
+          ],
+          "dependencies": [
+            "stage2-cli-flag"
+          ],
+          "acceptance": [
+            "Async loop handles EOF, Ctrl+C/D, and empty input without panic.",
+            "No polling\u2014verified by reading code path or using tracing logs (optional)."
+          ],
+          "tests": [
+            "`cargo fmt --all && cargo clippy --workspace --all-targets`",
+            "Manual: run `substrate --async-repl` and ensure prompt operates line-by-line."
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "stage2-prompt-redraw",
+          "title": "Preserve prompt when printing async events",
+          "description": "Implement carriage-return clear or Reedline suspend guard so async prints don\u2019t corrupt current input.",
+          "references": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md (Stage 2, item 3)",
+            "docs/project_management/future/PHASE_4_CONCURRENT_OUTPUT_DESIGN.md#L70-L78"
+          ],
+          "files": [
+            "crates/shell/src/async_repl.rs",
+            "third_party/reedline"
+          ],
+          "dependencies": [
+            "stage2-async-loop"
+          ],
+          "acceptance": [
+            "Typing while triggering a dummy event restores the prompt and partial input.",
+            "ANSI control handling verified on macOS and Linux terminals."
+          ],
+          "tests": [
+            "Manual: type `echo foo` halfway, inject dummy event, confirm prompt redraw.",
+            "Optional: add unit test around redraw helper if possible."
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "stage2-agent-channel",
+          "title": "Wire initial agent event channel",
+          "description": "Set up tokio mpsc sender/receiver and spawn prototype listener that feeds events into async loop.",
+          "references": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md (Stage 2, item 4)",
+            "PHASE_4_CONCURRENT_OUTPUT_DESIGN.md#L108-L127"
+          ],
+          "files": [
+            "crates/shell/src/async_repl.rs",
+            "crates/shell/src/lib.rs"
+          ],
+          "dependencies": [
+            "stage2-async-loop"
+          ],
+          "acceptance": [
+            "Dummy event sender prints lines via async loop without blocking stdin.",
+            "Channel is globally accessible for later stages."
+          ],
+          "tests": [
+            "Manual: instrument code to send mock events and observe output order."
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "stage2-smoke-test",
+          "title": "Smoke-test async mode",
+          "description": "Exercise async path with dummy agent events, confirming idle CPU near zero and no regressions.",
+          "references": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md (Stage 2, item 5)"
+          ],
+          "files": [],
+          "dependencies": [
+            "stage2-agent-channel",
+            "stage2-prompt-redraw"
+          ],
+          "acceptance": [
+            "Idle async mode consumes <0.1% CPU on macOS and Linux.",
+            "Basic commands run successfully via async loop."
+          ],
+          "tests": [
+            "Manual powermetrics/top capture documented with screenshots or logs."
+          ],
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "name": "Stage 3: Concurrent Agent Output Integration",
+      "overview": "Stream real agent output through the shell using the non-polling renderer from the Phase 4.5 plan.",
+      "tasks": [
+        {
+          "id": "stage3-stream-source",
+          "title": "Enable streaming agent output",
+          "description": "Upgrade world-agent/host-proxy to push stdout/stderr chunks (start simple with direct WS) while remaining Hub-compatible later.",
+          "references": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md (Stage 3, items 1-3)",
+            "docs/project_management/future/PHASE_4_5_ADVANCED_FEATURES_PLAN.md#L942-L964"
+          ],
+          "files": [
+            "crates/world-agent/src/handlers.rs",
+            "crates/world-agent/src/service.rs",
+            "crates/shell/src/lib.rs",
+            "crates/host-proxy/src/lib.rs"
+          ],
+          "dependencies": [
+            "stage2-smoke-test"
+          ],
+          "acceptance": [
+            "Non-PTY commands stream output incrementally rather than buffering entire result.",
+            "API maintains backwards compatibility (tests for existing ExecuteResponse still pass)."
+          ],
+          "tests": [
+            "`cargo test -p world-agent`",
+            "Manual: run a command that prints gradually and observe streaming behaviour."
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "stage3-renderer-thread",
+          "title": "Start blocking renderer thread with Reedline suspend",
+          "description": "Spawn background thread that blocking-recv on event channel, uses suspend_guard/ANSI clears, and redraws prompt.",
+          "references": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md (Stage 3, items 4-6)",
+            "PHASE_4_5_ADVANCED_FEATURES_PLAN.md#L978-L998"
+          ],
+          "files": [
+            "crates/shell/src/async_repl.rs",
+            "third_party/reedline"
+          ],
+          "dependencies": [
+            "stage3-stream-source"
+          ],
+          "acceptance": [
+            "Renderer prints agent lines above the prompt without corruption on macOS/Linux/Windows.",
+            "Thread terminates cleanly on shell exit (no orphan handles)."
+          ],
+          "tests": [
+            "Manual: run streaming command while typing; ensure prompt stays intact.",
+            "Automated: consider integration test injecting synthetic events (optional)."
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "stage3-event-plumbing",
+          "title": "Define AgentEvent struct and global channel",
+          "description": "Create shared event schema (id, kind, payload) and OnceCell sender accessible by shell/world components.",
+          "references": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md (Stage 3, item 6)",
+            "PHASE_4_5_ADVANCED_FEATURES_PLAN.md#L48-L88"
+          ],
+          "files": [
+            "crates/common/src/lib.rs",
+            "crates/shell/src/async_repl.rs",
+            "crates/world-agent/src/service.rs"
+          ],
+          "dependencies": [
+            "stage3-renderer-thread"
+          ],
+          "acceptance": [
+            "Event struct serialises/deserialises for future Hub usage.",
+            "Sender initialised once per process and reused by command execution path."
+          ],
+          "tests": [
+            "Unit tests for AgentEvent serde if practical."
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "stage3-command-refactor",
+          "title": "Refactor non-PTY execute path for streaming",
+          "description": "Adjust execute_command/exec_non_pty_via_* to enter streaming mode, finish spans/logs on completion events, and avoid blocking main loop.",
+          "references": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md (Stage 3, item 3)",
+            "PHASE_4_5_ADVANCED_FEATURES_PLAN.md#AppendixB"
+          ],
+          "files": [
+            "crates/shell/src/lib.rs",
+            "crates/shell/src/async_repl.rs",
+            "crates/shell/src/pty_exec.rs"
+          ],
+          "dependencies": [
+            "stage3-event-plumbing"
+          ],
+          "acceptance": [
+            "command_start log emitted before streaming begins; command_complete emitted after final event with correct exit code and fs_diff.",
+            "Existing integration test `test_command_start_finish_json_roundtrip` still passes."
+          ],
+          "tests": [
+            "`cargo test -p substrate-shell`",
+            "Manual: run long `sleep`/`printf` combination and inspect trace logs."
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "stage3-cross-platform",
+          "title": "Implement platform transports for events",
+          "description": "Ensure Linux (UDS), macOS (VSock/SSH tunnel), and Windows (TCP/pipe) transports deliver streaming events to the shell.",
+          "references": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md (Stage 3, item 4)",
+            "PHASE_4_5_ADVANCED_FEATURES_PLAN.md#L956-L972"
+          ],
+          "files": [
+            "crates/shell/src/platform_world/mod.rs",
+            "crates/shell/src/platform_world/windows.rs",
+            "crates/host-proxy/src/lib.rs",
+            "docs/CONFIGURATION.md"
+          ],
+          "dependencies": [
+            "stage3-command-refactor"
+          ],
+          "acceptance": [
+            "Streaming confirmed on macOS Lima, Linux native, and Windows WSL (manual evidence for each).",
+            "Transport metadata recorded in trace spans/telemetry where applicable."
+          ],
+          "tests": [
+            "Manual platform checks; capture logs/metrics for PR."
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "stage3-high-throughput-validation",
+          "title": "Exercise high-volume and multi-agent scenarios",
+          "description": "Stress renderer with bursty output, multiple agents, and ensure Ctrl+C / shutdown signals operate cleanly.",
+          "references": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md (Stage 3, item 5)"
+          ],
+          "files": [],
+          "dependencies": [
+            "stage3-cross-platform"
+          ],
+          "acceptance": [
+            "Renderer keeps up with >=1000 events/sec without prompt corruption.",
+            "Ctrl+C interrupts streamed command while listener thread terminates without panic."
+          ],
+          "tests": [
+            "Manual stress script (document commands)."
+          ],
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "name": "Stage 4: Testing, Metrics & Rollout",
+      "overview": "Codify automated coverage, document metrics, and plan the safe rollout of async REPL as default.",
+      "tasks": [
+        {
+          "id": "stage4-automated-tests",
+          "title": "Add automated coverage for streaming REPL",
+          "description": "Add integration/unit tests simulating agent events and verifying interleaved output and log sequencing.",
+          "references": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md (Stage 4, item 1)"
+          ],
+          "files": [
+            "crates/shell/tests/integration.rs",
+            "crates/shell/src/async_repl.rs"
+          ],
+          "dependencies": [
+            "stage3-command-refactor"
+          ],
+          "acceptance": [
+            "New tests fail on regressions and pass in clean build; cover command_start/command_complete timing.",
+            "CI runs `cargo test --workspace -- --nocapture` without flakiness."
+          ],
+          "tests": [
+            "`cargo test --workspace -- --nocapture` in CI/local."
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "stage4-idle-metrics",
+          "title": "Document idle CPU benchmarks",
+          "description": "Record final idle CPU on macOS & Linux (async mode with agents connected) and store results in project docs or PR.",
+          "references": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md (Stage 4, item 2)"
+          ],
+          "files": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md"
+          ],
+          "dependencies": [
+            "stage4-automated-tests"
+          ],
+          "acceptance": [
+            "Powermetrics/top screenshots or logs show <0.1% CPU idle with async mode active.",
+            "Benchmarks linked in PR or release notes."
+          ],
+          "tests": [
+            "Manual measurement only (document commands)."
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "stage4-prompt-checks",
+          "title": "Manual prompt integrity drills",
+          "description": "Run scripted scenarios (typing mid-output, long lines, control chars) and confirm prompt redraw holds up.",
+          "references": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md (Stage 4, item 3)"
+          ],
+          "files": [],
+          "dependencies": [
+            "stage4-idle-metrics"
+          ],
+          "acceptance": [
+            "Checklist of scenarios completed with no display corruption; include transcript or video if possible."
+          ],
+          "tests": [
+            "Manual test script as appendix or README section."
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "stage4-observability",
+          "title": "Improve mode logging/metrics",
+          "description": "Emit logs/metrics noting active REPL mode and potential polling regressions for field observability.",
+          "references": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md (Stage 4, item 4)",
+            "docs/TRACE.md",
+            "docs/TELEMETRY.md"
+          ],
+          "files": [
+            "crates/shell/src/lib.rs",
+            "crates/telemetry-lib/src/lib.rs",
+            "docs/TRACE.md"
+          ],
+          "dependencies": [
+            "stage4-prompt-checks"
+          ],
+          "acceptance": [
+            "Startup logs include REPL mode; telemetry counters or spans track async events.",
+            "Documentation updated with new fields/toggles."
+          ],
+          "tests": [
+            "`cargo test -p telemetry-lib` (if applicable)",
+            "Manual: inspect trace JSON for new metadata."
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "stage4-rollout",
+          "title": "Plan async REPL rollout",
+          "description": "Outline strategy to make async mode default, add fallback flag, and retire sync loop per migration plan.",
+          "references": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md (Stage 4, item 5)",
+            "PHASE_4_CONCURRENT_OUTPUT_DESIGN.md#L138-L155"
+          ],
+          "files": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md",
+            "docs/RELEASE_NOTES.md",
+            "docs/CONFIGURATION.md"
+          ],
+          "dependencies": [
+            "stage4-observability"
+          ],
+          "acceptance": [
+            "Documented rollout plan with toggles, timeline, and rollback steps approved by stakeholders.",
+            "Sync loop clearly marked legacy or removed once rollout complete."
+          ],
+          "tests": [
+            "N/A \u2013 planning/documentation deliverable."
+          ],
+          "status": "pending"
+        }
+      ]
+    }
+  ]
+}

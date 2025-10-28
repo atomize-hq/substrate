@@ -13,7 +13,7 @@ use lazy_static::lazy_static;
 use serde_json::json;
 use std::collections::HashMap;
 use std::env;
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, IsTerminal};
 // (avoid unused: import Read/Write locally where needed)
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
@@ -138,7 +138,7 @@ impl RawModeGuard {
     }
 
     fn for_stdin_if_tty() -> anyhow::Result<Option<Self>> {
-        if !atty::is(atty::Stream::Stdin) {
+        if !io::stdin().is_terminal() {
             return Ok(None);
         }
         match Self::new_for_tty() {
@@ -748,11 +748,13 @@ impl ShellConfig {
         };
 
         // Determine mode
+        let stdin_is_tty = io::stdin().is_terminal();
+
         let mode = if let Some(cmd) = cli.command {
             ShellMode::Wrap(cmd)
         } else if let Some(script) = cli.script {
             ShellMode::Script(script)
-        } else if !atty::is(atty::Stream::Stdin) {
+        } else if !stdin_is_tty {
             ShellMode::Pipe
         } else {
             // Ensure PTY is only used on Unix systems
@@ -1515,6 +1517,17 @@ mod world_doctor_macos {
 
 pub fn run_shell() -> Result<i32> {
     let config = ShellConfig::from_args()?;
+
+    if matches!(config.mode, ShellMode::Interactive { .. }) {
+        let stdin_is_tty = io::stdin().is_terminal();
+        let stdout_is_tty = io::stdout().is_terminal();
+        if !(stdin_is_tty && stdout_is_tty) {
+            eprintln!(
+                "substrate: no interactive TTY detected on stdin/stdout; exiting. Use -c, --script, or pipe commands instead."
+            );
+            return Ok(0);
+        }
+    }
 
     // Initialize trace
     if let Err(e) = init_trace(None) {
@@ -2910,8 +2923,12 @@ fn needs_pty(cmd: &str) -> bool {
     let is_test_mode = std::env::var("TEST_MODE").is_ok();
 
     // If parent stdio isn't a TTY, never use PTY (skip in test mode)
-    if !is_test_mode && (!atty::is(atty::Stream::Stdin) || !atty::is(atty::Stream::Stdout)) {
-        return false;
+    if !is_test_mode {
+        let stdin_is_tty = io::stdin().is_terminal();
+        let stdout_is_tty = io::stdout().is_terminal();
+        if !(stdin_is_tty && stdout_is_tty) {
+            return false;
+        }
     }
 
     // Optional: Enable pipeline-last TUI detection
@@ -4671,6 +4688,10 @@ fn log_command_event(
     cmd_id: &str,
     extra: Option<serde_json::Value>,
 ) -> Result<()> {
+    let stdin_is_tty = io::stdin().is_terminal();
+    let stdout_is_tty = io::stdout().is_terminal();
+    let stderr_is_tty = io::stderr().is_terminal();
+
     let mut log_entry = json!({
         log_schema::TIMESTAMP: Utc::now().to_rfc3339(),
         log_schema::EVENT_TYPE: event_type,
@@ -4687,9 +4708,9 @@ fn log_command_event(
         "cwd": env::current_dir()?.display().to_string(),
         "host": gethostname::gethostname().to_string_lossy().to_string(),
         "shell": config.shell_path,
-        "isatty_stdin": atty::is(atty::Stream::Stdin),
-        "isatty_stdout": atty::is(atty::Stream::Stdout),
-        "isatty_stderr": atty::is(atty::Stream::Stderr),
+        "isatty_stdin": stdin_is_tty,
+        "isatty_stdout": stdout_is_tty,
+        "isatty_stderr": stderr_is_tty,
         "pty": matches!(&config.mode, ShellMode::Interactive { use_pty: true }),
     });
 
