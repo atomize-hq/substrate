@@ -5,6 +5,18 @@ Keep concise, actionable, and security-focused.
 
 ## Near-Term (Next 1–2 sprints)
 
+- **High Priority – Global configuration UX**
+  - Introduce `~/.substrate/config.toml` for persistent defaults (world behavior,
+    broker enforcement toggle, default profiles).
+  - Provide CLI commands to scaffold (`substrate config init`) and edit the
+    config.
+  - Ensure CLI flags/env vars still override file settings.
+
+- **High Priority – Interactive configuration commands**
+  - Add shell built-ins/commands (`:config`, `:profile load`, `:world status`,
+    `:shims status`, etc.) to view and adjust settings without restarting.
+  - Surface doctor/shim status inside the REPL so users don’t have to exit.
+
 - ~~Auto-start world-agent on shell startup (Linux)~~ **(Done)**
   - Implementation: `run_shell()` now initializes the Linux backend, flips
     `SUBSTRATE_WORLD=enabled`, sets `SUBSTRATE_WORLD_ID`, and uses

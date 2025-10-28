@@ -135,7 +135,7 @@ Command Input
      │                                    │
      ▼                                    ▼
 [Approval Check]                    [World Backend]
-     │                               (Phase 4 - TODO)
+     │                               
      ▼
 [ALLOW] ──▶ Execute
 ```
