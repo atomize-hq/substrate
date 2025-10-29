@@ -1,0 +1,44 @@
+top - 09:05:59 up 13 days, 23:28,  1 user,  load average: 1.90, 2.47, 2.27
+Tasks: 1 total, 0 running, 1 sleep, 0 d-sleep, 0 stopped, 0 zombie
+%Cpu(s):  1.5 us,  4.0 sy,  0.0 ni, 94.1 id,  0.0 wa,  0.0 hi,  0.5 si,  0.0 st 
+MiB Mem :  64092.0 total,   5164.4 free,  27093.4 used,  34024.3 buff/cache     
+MiB Swap:  32046.0 total,  31115.0 free,    931.0 used.  36998.6 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+1066635 spenser   20   0  223764  12152  10956 S   0.0   0.0   0:00.00 substra+
+
+top - 09:06:00 up 13 days, 23:28,  1 user,  load average: 1.90, 2.47, 2.27
+Tasks: 1 total, 0 running, 1 sleep, 0 d-sleep, 0 stopped, 0 zombie
+%Cpu(s):  4.5 us,  4.6 sy,  0.0 ni, 90.9 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem :  64092.0 total,   5164.4 free,  27093.4 used,  34024.3 buff/cache     
+MiB Swap:  32046.0 total,  31115.0 free,    931.0 used.  36998.6 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+1066635 spenser   20   0  223764  12152  10956 S   0.0   0.0   0:00.00 substra+
+
+top - 09:06:01 up 13 days, 23:28,  1 user,  load average: 1.90, 2.47, 2.27
+Tasks: 1 total, 0 running, 1 sleep, 0 d-sleep, 0 stopped, 0 zombie
+%Cpu(s):  4.3 us,  4.9 sy,  0.0 ni, 90.7 id,  0.0 wa,  0.1 hi,  0.1 si,  0.0 st 
+MiB Mem :  64092.0 total,   5164.4 free,  27093.4 used,  34024.3 buff/cache     
+MiB Swap:  32046.0 total,  31115.0 free,    931.0 used.  36998.6 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+1066635 spenser   20   0  223764  12152  10956 S   0.0   0.0   0:00.00 substra+
+
+top - 09:06:02 up 13 days, 23:28,  1 user,  load average: 1.90, 2.47, 2.27
+Tasks: 1 total, 0 running, 1 sleep, 0 d-sleep, 0 stopped, 0 zombie
+%Cpu(s):  3.7 us,  4.8 sy,  0.0 ni, 91.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem :  64092.0 total,   5172.8 free,  27085.0 used,  34024.3 buff/cache     
+MiB Swap:  32046.0 total,  31115.0 free,    931.0 used.  37007.0 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+1066635 spenser   20   0  223764  12152  10956 S   0.0   0.0   0:00.00 substra+
+
+top - 09:06:03 up 13 days, 23:28,  1 user,  load average: 1.90, 2.47, 2.27
+Tasks: 1 total, 0 running, 1 sleep, 0 d-sleep, 0 stopped, 0 zombie
+%Cpu(s):  4.4 us,  4.9 sy,  0.0 ni, 90.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem :  64092.0 total,   5172.8 free,  27085.0 used,  34024.3 buff/cache     
+MiB Swap:  32046.0 total,  31115.0 free,    931.0 used.  37007.0 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+1066635 spenser   20   0  223764  12152  10956 S   0.0   0.0   0:00.00 substra+

@@ -107,6 +107,33 @@
         "source /home/spenser/.substrate/dev-shim-env.sh && /usr/bin/cargo test -p substrate-shell --test integration"
       ],
       "notes": "Stage 3 validation now complete; ready to roll into Stage 4 tasks."
+    },
+    {
+      "timestamp": "2025-10-29T13:00:00Z",
+      "summary": "Stage 4 automated streaming tests landed.",
+      "highlights": [
+        "Added unit coverage for :demo-burst scheduling (crates/shell/src/agent_events.rs) and stream-frame handling (crates/shell/src/lib.rs).",
+        "Validated burst helper and stream chunk path via `source /home/spenser/.substrate/dev-shim-env.sh && /usr/bin/cargo test -p substrate-shell`.",
+        "Introduced scripts/dev/async_repl_stress.py for repeatable throughput checks (\u224819.7k events/sec)."
+      ],
+      "tests": [
+        "source /home/spenser/.substrate/dev-shim-env.sh && /usr/bin/cargo test -p substrate-shell",
+        "python scripts/dev/async_repl_stress.py --agents 4 --events 500 --delay-ms 0"
+      ],
+      "notes": "Stage4-automated-tests marked completed; moving on to idle metric capture."
+    },
+    {
+      "timestamp": "2025-10-29T13:06:30Z",
+      "summary": "Captured async idle CPU metrics on Linux for Stage 4.",
+      "highlights": [
+        "New helper scripts/dev/async_repl_metrics.py records top output during async idle sessions.",
+        "Log stored at docs/project_management/now/stage4_idle_top_linux.txt shows substrate idling at ~0% CPU across five samples.",
+        "Cleaned stray async processes before measurement to ensure accuracy."
+      ],
+      "tests": [
+        "python scripts/dev/async_repl_metrics.py"
+      ],
+      "notes": "Stage4-idle-metrics now completed; macOS capture still pending for future coverage."
     }
   ],
   "version": 1,
@@ -502,7 +529,7 @@
           "tests": [
             "`cargo test --workspace -- --nocapture` in CI/local."
           ],
-          "status": "pending"
+          "status": "completed"
         },
         {
           "id": "stage4-idle-metrics",
@@ -524,7 +551,7 @@
           "tests": [
             "Manual measurement only (document commands)."
           ],
-          "status": "pending"
+          "status": "completed"
         },
         {
           "id": "stage4-prompt-checks",

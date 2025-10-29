@@ -174,3 +174,41 @@ pub(crate) fn schedule_demo_burst(agent_count: usize, events_per_agent: usize, d
         });
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    use tokio::runtime::Runtime;
+
+    #[test]
+    fn schedule_demo_burst_emits_expected_events() {
+        let rt = Runtime::new().expect("runtime");
+        rt.block_on(async {
+            let mut rx = init_event_channel();
+            schedule_demo_burst(2, 5, Duration::from_millis(0));
+            let mut counts: HashMap<String, usize> = HashMap::new();
+            let mut completions = 0;
+            let expected_stream = 2 * 5;
+            while completions < 2 || counts.values().sum::<usize>() < expected_stream {
+                let ev = rx.recv().await.expect("event");
+                match ev.kind {
+                    AgentEventKind::PtyData => {
+                        *counts.entry(ev.agent_id).or_default() += 1;
+                    }
+                    AgentEventKind::TaskEnd => {
+                        completions += 1;
+                    }
+                    _ => {}
+                }
+            }
+            assert!(
+                counts.values().all(|&n| n == 5),
+                "each agent should emit all chunks: {:?}",
+                counts
+            );
+            assert_eq!(completions, 2);
+        });
+        clear_agent_event_sender();
+    }
+}

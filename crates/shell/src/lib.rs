@@ -4553,6 +4553,82 @@ fn parse_demo_burst_command(input: &str) -> Option<(usize, usize, u64)> {
     Some((agents, events, delay_ms))
 }
 
+#[cfg(test)]
+mod streaming_tests {
+    use super::*;
+    use crate::agent_events::{clear_agent_event_sender, init_event_channel};
+    use substrate_common::agent_events::AgentEventKind;
+    use tokio::runtime::Runtime;
+
+    #[test]
+    fn parse_demo_burst_command_defaults() {
+        assert_eq!(parse_demo_burst_command(":demo-burst"), Some((4, 400, 0)));
+        assert_eq!(
+            parse_demo_burst_command(":demo-burst 3 10 5"),
+            Some((3, 10, 5))
+        );
+        assert!(parse_demo_burst_command(":other").is_none());
+    }
+
+    #[test]
+    fn consume_agent_stream_buffer_emits_agent_events() {
+        let rt = Runtime::new().expect("runtime");
+        rt.block_on(async {
+            let mut rx = init_event_channel();
+
+            let frames = [
+                ExecuteStreamFrame::Stdout {
+                    chunk_b64: BASE64.encode("hello"),
+                },
+                ExecuteStreamFrame::Stderr {
+                    chunk_b64: BASE64.encode("oops"),
+                },
+                ExecuteStreamFrame::Exit {
+                    exit: 0,
+                    span_id: "spn_test".into(),
+                    scopes_used: vec!["scope:a".into()],
+                    fs_diff: None,
+                },
+            ];
+
+            let mut buffer = Vec::new();
+            for frame in frames {
+                let mut line = serde_json::to_vec(&frame).expect("serialize frame");
+                line.push(b'\n');
+                buffer.extend(line);
+            }
+
+            let mut exit_code = None;
+            let mut scopes_used = Vec::new();
+            let mut fs_diff = None;
+
+            consume_agent_stream_buffer(
+                "tester",
+                &mut buffer,
+                &mut exit_code,
+                &mut scopes_used,
+                &mut fs_diff,
+            )
+            .expect("consume stream");
+
+            let stdout_event = rx.recv().await.expect("stdout event");
+            assert_eq!(stdout_event.kind, AgentEventKind::PtyData);
+            assert_eq!(stdout_event.data["chunk"], "hello");
+            assert_eq!(stdout_event.data["stream"], "stdout");
+
+            let stderr_event = rx.recv().await.expect("stderr event");
+            assert_eq!(stderr_event.kind, AgentEventKind::PtyData);
+            assert_eq!(stderr_event.data["chunk"], "oops");
+            assert_eq!(stderr_event.data["stream"], "stderr");
+
+            assert_eq!(exit_code, Some(0));
+            assert_eq!(scopes_used, vec!["scope:a".to_string()]);
+            assert!(fs_diff.is_none());
+        });
+        clear_agent_event_sender();
+    }
+}
+
 fn build_agent_client_and_request(
     cmd: &str,
 ) -> anyhow::Result<(
