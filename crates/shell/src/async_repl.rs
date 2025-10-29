@@ -21,6 +21,7 @@ use crate::agent_events::{
     clear_agent_event_sender, format_event_line, init_event_channel, publish_command_completion,
     schedule_demo_burst, schedule_demo_events,
 };
+use crate::ReplSessionTelemetry;
 use substrate_common::agent_events::AgentEvent;
 
 use super::{execute_command, setup_signal_handlers, ShellConfig};
@@ -48,6 +49,7 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
     rt.block_on(async move {
         let mut terminal_guard = RawTerminalGuard::new()
             .context("failed to prepare terminal for async REPL")?;
+        let mut telemetry = ReplSessionTelemetry::new(shared_config.clone(), "async");
 
         let mut stdout = io::stdout();
         redraw_prompt(&mut stdout, &prompt, "")?;
@@ -66,6 +68,8 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                             if !matches!(key_event.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
                                 continue;
                             }
+
+                            telemetry.record_input_event();
 
                             if handle_control_key(
                                 &key_event,
@@ -152,6 +156,7 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
                                     terminal_guard.resume()?;
                                     publish_command_completion(&trimmed_owned, &status);
+                                    telemetry.record_command();
                                     redraw_prompt(&mut stdout, &prompt, &current_input)?;
                                     // Re-create the event stream to keep crossterm in sync after 
                                     // toggling raw mode for the executed command.
@@ -176,6 +181,7 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     }
                 }
                 Some(event) = agent_rx.recv() => {
+                    telemetry.record_agent_event();
                     render_agent_event(&mut stdout, &prompt, &current_input, &event)?;
                 }
             }

@@ -216,6 +216,15 @@ crates/trace/
    - Reconstructs environment from replay_context
    - Enables regression testing and debugging
 
+## REPL Observability
+
+Interactive sessions now emit lightweight status events so operators can see which REPL engine is active and how much work it processed. Two JSON records are appended per session:
+
+- `repl_status` (`stage: "start"`) – written when the interactive loop boots. Captures `repl_mode` (`"async"` or `"sync"`), whether CI mode is active, if worlds are disabled, and the target shell binary.
+- `repl_status` (`stage: "stop"`) – emitted on exit with per-session counters: `metrics.input_events`, `metrics.agent_events`, and `metrics.commands_executed`. These counters help spot busy-spin regressions (e.g., a high `input_events`/`agent_events` ratio when idle).
+
+In addition, `command_start` / `command_complete` log entries now include a `repl_mode` field whenever the shell is in interactive mode, making it easier to correlate command history with the REPL implementation that executed it.
+
 ## Recent Enhancements
 
 ### ✅ PR#10 Complete: Overlayfs & Network Filtering  

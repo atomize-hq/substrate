@@ -30,6 +30,7 @@ use substrate_common::{agent_events::AgentEvent, dedupe_path, log_schema, redact
 use substrate_trace::{
     append_to_trace, create_span_builder, init_trace, PolicyDecision, TransportMeta,
 };
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::agent_events::{
@@ -1715,6 +1716,8 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
     println!("Session ID: {}", config.session_id);
     println!("Logging to: {}", config.trace_log_file.display());
 
+    let mut telemetry = ReplSessionTelemetry::new(Arc::new(config.clone()), "sync");
+
     // Set up history file with proper initialization
     let hist_path = dirs::home_dir()
         .map(|p| p.join(".substrate_history"))
@@ -1848,6 +1851,7 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
                             }
 
                             publish_command_completion(trimmed, &status);
+                            telemetry.record_command();
                         }
                         Err(e) => eprintln!("Error: {e}"),
                     }
@@ -1873,6 +1877,7 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
                             }
 
                             publish_command_completion(trimmed, &status);
+                            telemetry.record_command();
                         }
                         Err(e) => eprintln!("Error: {e}"),
                     }
@@ -4918,6 +4923,106 @@ fn first_command_path(cmd: &str) -> Option<String> {
 
 // Note: removed unused maybe_rotate_log helper to avoid dead_code warnings.
 
+#[derive(Default, Debug, Clone)]
+pub(crate) struct ReplMetrics {
+    input_events: u64,
+    agent_events: u64,
+    commands_executed: u64,
+}
+
+pub(crate) struct ReplSessionTelemetry {
+    config: Arc<ShellConfig>,
+    mode: &'static str,
+    metrics: ReplMetrics,
+}
+
+impl ReplSessionTelemetry {
+    pub(crate) fn new(config: Arc<ShellConfig>, mode: &'static str) -> Self {
+        let telemetry = Self {
+            config,
+            mode,
+            metrics: ReplMetrics::default(),
+        };
+
+        if let Err(err) = log_repl_event(&telemetry.config, mode, "start", None) {
+            warn!(target = "substrate::shell", error = %err, "failed to append REPL start event");
+        }
+
+        telemetry
+    }
+
+    pub(crate) fn record_input_event(&mut self) {
+        self.metrics.input_events = self.metrics.input_events.saturating_add(1);
+    }
+
+    pub(crate) fn record_agent_event(&mut self) {
+        self.metrics.agent_events = self.metrics.agent_events.saturating_add(1);
+    }
+
+    pub(crate) fn record_command(&mut self) {
+        self.metrics.commands_executed = self.metrics.commands_executed.saturating_add(1);
+    }
+}
+
+impl Drop for ReplSessionTelemetry {
+    fn drop(&mut self) {
+        if let Err(err) = log_repl_event(&self.config, self.mode, "stop", Some(&self.metrics)) {
+            warn!(target = "substrate::shell", error = %err, "failed to append REPL stop event");
+        }
+    }
+}
+
+fn log_repl_event(
+    config: &ShellConfig,
+    mode: &str,
+    stage: &str,
+    metrics: Option<&ReplMetrics>,
+) -> Result<()> {
+    let mut entry = json!({
+        log_schema::TIMESTAMP: Utc::now().to_rfc3339(),
+        log_schema::EVENT_TYPE: "repl_status",
+        log_schema::SESSION_ID: config.session_id,
+        log_schema::COMPONENT: "shell",
+        "stage": stage,
+        "repl_mode": mode,
+        "ci_mode": config.ci_mode,
+        "async_enabled": config.async_repl,
+        "no_world": config.no_world,
+        "shell": config.shell_path,
+    });
+
+    if let ShellMode::Interactive { use_pty } = &config.mode {
+        entry["interactive_use_pty"] = json!(*use_pty);
+    }
+
+    let (input_events, agent_events, commands_executed) = metrics
+        .map(|m| (m.input_events, m.agent_events, m.commands_executed))
+        .unwrap_or((0, 0, 0));
+
+    if metrics.is_some() {
+        entry["metrics"] = json!({
+            "input_events": input_events,
+            "agent_events": agent_events,
+            "commands_executed": commands_executed,
+        });
+    }
+
+    let _ = init_trace(None);
+    append_to_trace(&entry)?;
+
+    info!(
+        target = "substrate::shell",
+        repl_mode = mode,
+        stage,
+        input_events,
+        agent_events,
+        commands_executed,
+        "repl_status"
+    );
+
+    Ok(())
+}
+
 fn log_command_event(
     config: &ShellConfig,
     event_type: &str,
@@ -4950,6 +5055,10 @@ fn log_command_event(
         "isatty_stderr": stderr_is_tty,
         "pty": matches!(&config.mode, ShellMode::Interactive { use_pty: true }),
     });
+
+    if matches!(&config.mode, ShellMode::Interactive { .. }) {
+        log_entry["repl_mode"] = json!(if config.async_repl { "async" } else { "sync" });
+    }
 
     // Add build version if available
     if let Ok(build) = env::var("SHIM_BUILD") {

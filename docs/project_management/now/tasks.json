@@ -134,6 +134,20 @@
         "python scripts/dev/async_repl_metrics.py"
       ],
       "notes": "Stage4-idle-metrics now completed; macOS capture still pending for future coverage."
+    },
+    {
+      "timestamp": "2025-10-30T16:00:00Z",
+      "summary": "Automated prompt drills and added REPL observability hooks for Stage 4.",
+      "highlights": [
+        "Introduced scripts/dev/async_repl_prompt_checks.py to exercise typing, long-line, and backspace scenarios while streaming agent output; transcript stored at docs/project_management/now/stage4_prompt_checks_transcript.txt.",
+        "Interactive shell now logs repl_status start/stop events with input/agent/command counters, and `repl_mode` is tagged on command span logs.",
+        "Updated docs/TRACE.md with the new observability section covering REPL mode tagging and metrics."
+      ],
+      "tests": [
+        "python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage4_prompt_checks_transcript.txt",
+        "/usr/bin/cargo test -p substrate-shell"
+      ],
+      "notes": "Stage4-prompt-checks and stage4-observability marked complete; next up is rollout planning."
     }
   ],
   "version": 1,
@@ -560,7 +574,10 @@
           "references": [
             "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md (Stage 4, item 3)"
           ],
-          "files": [],
+          "files": [
+            "scripts/dev/async_repl_prompt_checks.py",
+            "docs/project_management/now/stage4_prompt_checks_transcript.txt"
+          ],
           "dependencies": [
             "stage4-idle-metrics"
           ],
@@ -568,9 +585,9 @@
             "Checklist of scenarios completed with no display corruption; include transcript or video if possible."
           ],
           "tests": [
-            "Manual test script as appendix or README section."
+            "python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage4_prompt_checks_transcript.txt"
           ],
-          "status": "pending"
+          "status": "completed"
         },
         {
           "id": "stage4-observability",
@@ -583,7 +600,8 @@
           ],
           "files": [
             "crates/shell/src/lib.rs",
-            "crates/telemetry-lib/src/lib.rs",
+            "crates/shell/src/async_repl.rs",
+            "crates/shell/Cargo.toml",
             "docs/TRACE.md"
           ],
           "dependencies": [
@@ -594,10 +612,10 @@
             "Documentation updated with new fields/toggles."
           ],
           "tests": [
-            "`cargo test -p telemetry-lib` (if applicable)",
+            "/usr/bin/cargo test -p substrate-shell",
             "Manual: inspect trace JSON for new metadata."
           ],
-          "status": "pending"
+          "status": "completed"
         },
         {
           "id": "stage4-rollout",

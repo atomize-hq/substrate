@@ -1,0 +1,38 @@
+# Stage 4 Prompt Integrity Drills
+
+## Scenario 1: typing while events stream
+:demo-agent:demo-agent
+[Ksubstrate> echo typing while agents streamech[K[demo] Demo agent event #1
+[Ksubstrate> echo typing [K[demo] Demo agent event #2
+[Ksubstrate> echo typing while agents st[K[demo] Demo agent event #3
+[Ksubstrate> echo typing while agents stream
+[?25htyping while agents stream
+[?25l[Ksubstrate> 
+## Scenario 2: long command under bursty output
+:demo-agent[K[shell] Command `echo typing while agents stream` completed successfully
+[Ksubstrate> :demo-agent:demo-agent
+[Ksubstrate> :demo-agent:demo-agent
+[Ksubstrate> echo XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX:demo-agent
+[Ksubstrate> ech[K[demo] Demo agent event #1
+[Ksubstrate> ech[K[demo] Demo agent event #1
+[Ksubstrate> echo[K[demo] Demo agent event #1
+[Ksubstrate> echo XXXXXXXXX[K[demo] Demo agent event #2
+[Ksubstrate> echo XXXXXXXXXX[K[demo] Demo agent event #2
+[Ksubstrate> echo XXXXXXXXXXX[K[demo] Demo agent event #2
+[Ksubstrate> echo XXXXXXXXXXXXXXXXXXXXXXXXXXXXX[K[demo] Demo agent event #3
+[Ksubstrate> echo XXXXXXXXXXXXXXXXXXXXXXXXXXXXX[K[demo] Demo agent event #3
+[Ksubstrate> echo XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[K[demo] Demo agent event #3
+[Ksubstrate> echo XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+[?25hXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+[?25l[Ksubstrate> [K[shell] Command `echo XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX` completed successfully
+[Ksubstrate> 
+## Scenario 3: backspace edits during events
+:demo-agentecho control-casecheck:demo-agent
+[Ksubstrate> echo[K[demo] Demo agent event #1
+[Ksubstrate> echo control-c[K[demo] Demo agent event #2
+[Ksubstrate> echo control-case[K[K[K[K[Kcheck[K[demo] Demo agent event #3
+[Ksubstrate> echo controlcheck
+[?25hcontrolcheck
+[?25l[Ksubstrate> [K[shell] Command `echo controlcheck` completed successfully
+[Ksubstrate> exitexit
+[?25h
