@@ -139,3 +139,38 @@ pub(crate) fn schedule_demo_events() {
         }
     });
 }
+
+pub(crate) fn schedule_demo_burst(agent_count: usize, events_per_agent: usize, delay: Duration) {
+    if agent_event_sender().is_none() {
+        return;
+    }
+
+    let agent_count = agent_count.max(1).min(16);
+    let events_per_agent = events_per_agent.max(1).min(10_000);
+
+    for agent_idx in 0..agent_count {
+        let agent = format!("burst-{agent_idx:02}");
+        thread::spawn({
+            let agent_name = agent.clone();
+            move || {
+                for event_idx in 0..events_per_agent {
+                    let message = format!("chunk #{event_idx:05}");
+                    let is_stderr = event_idx % 20 == 0;
+                    let _ = publish_agent_event(AgentEvent::stream_chunk(
+                        agent_name.as_str(),
+                        is_stderr,
+                        message,
+                    ));
+                    if !delay.is_zero() {
+                        thread::sleep(delay);
+                    }
+                }
+                let _ = publish_agent_event(AgentEvent::message(
+                    agent_name.clone(),
+                    AgentEventKind::TaskEnd,
+                    "burst complete",
+                ));
+            }
+        });
+    }
+}

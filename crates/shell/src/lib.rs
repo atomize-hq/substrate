@@ -34,7 +34,7 @@ use uuid::Uuid;
 
 use crate::agent_events::{
     clear_agent_event_sender, format_event_line, init_event_channel, publish_agent_event,
-    publish_command_completion, schedule_demo_events,
+    publish_command_completion, schedule_demo_burst, schedule_demo_events,
 };
 
 // Reedline imports
@@ -1805,6 +1805,15 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
 
                 if trimmed == ":demo-agent" {
                     schedule_demo_events();
+                    continue;
+                }
+
+                if let Some((agents, events, delay_ms)) = parse_demo_burst_command(trimmed) {
+                    schedule_demo_burst(agents, events, std::time::Duration::from_millis(delay_ms));
+                    println!(
+                        "[demo] scheduled burst: agents={}, events_per_agent={}, delay_ms={}",
+                        agents, events, delay_ms
+                    );
                     continue;
                 }
 
@@ -4521,6 +4530,29 @@ fn emit_stream_chunk(agent_label: &str, data: &[u8], is_stderr: bool) {
     ));
 }
 
+fn parse_demo_burst_command(input: &str) -> Option<(usize, usize, u64)> {
+    let rest = input.strip_prefix(":demo-burst")?.trim();
+    if rest.is_empty() {
+        return Some((4, 400, 0));
+    }
+
+    let mut parts = rest.split_whitespace();
+    let agents = parts
+        .next()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(4);
+    let events = parts
+        .next()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(400);
+    let delay_ms = parts
+        .next()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(0);
+
+    Some((agents, events, delay_ms))
+}
+
 fn build_agent_client_and_request(
     cmd: &str,
 ) -> anyhow::Result<(
@@ -4776,7 +4808,7 @@ where
     std::thread::spawn(move || {
         let mut buf = [0u8; 8192];
         loop {
-            match reader.read(&mut buf) {
+            match std::io::Read::read(&mut reader, &mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
                     emit_stream_chunk(&agent_label, &buf[..n], is_stderr);

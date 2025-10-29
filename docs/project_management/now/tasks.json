@@ -93,6 +93,20 @@
         "source /home/spenser/.substrate/dev-shim-env.sh && /usr/bin/cargo test -p substrate-shell --test integration"
       ],
       "notes": "Stage 3 streaming refactor landed; remaining task is high-throughput validation before moving to Stage 4."
+    },
+    {
+      "timestamp": "2025-10-27T20:05:00Z",
+      "summary": "Completed Stage 3 high-throughput validation with demo burst helper and Ctrl+C checks.",
+      "highlights": [
+        "Added :demo-burst helper and stress script (scripts/dev/async_repl_stress.py) to fan out multi-agent events.",
+        "Measured 4x500 burst at ~19.7k events/sec; Ctrl+C cleanly interrupts busy stream.",
+        "Captured run output in docs/project_management/now/stage3_high_throughput_run_2025-10-27.txt."
+      ],
+      "tests": [
+        "python scripts/dev/async_repl_stress.py --agents 4 --events 500 --delay-ms 0",
+        "source /home/spenser/.substrate/dev-shim-env.sh && /usr/bin/cargo test -p substrate-shell --test integration"
+      ],
+      "notes": "Stage 3 validation now complete; ready to roll into Stage 4 tasks."
     }
   ],
   "version": 1,
@@ -459,7 +473,7 @@
           "tests": [
             "Manual stress script (document commands)."
           ],
-          "status": "pending"
+          "status": "completed"
         }
       ]
     },

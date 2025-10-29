@@ -2,6 +2,7 @@ use std::io::{self, Write};
 use std::process::ExitStatus;
 use std::sync::atomic::AtomicI32;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use crossterm::cursor::{Hide, Show};
@@ -18,7 +19,7 @@ use uuid::Uuid;
 
 use crate::agent_events::{
     clear_agent_event_sender, format_event_line, init_event_channel, publish_command_completion,
-    schedule_demo_events,
+    schedule_demo_burst, schedule_demo_events,
 };
 use substrate_common::agent_events::AgentEvent;
 
@@ -111,6 +112,23 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
                                     if trimmed == ":demo-agent" {
                                         schedule_demo_events();
+                                        redraw_prompt(&mut stdout, &prompt, &current_input)?;
+                                        continue;
+                                    }
+
+                                    if let Some((agents, events, delay_ms)) =
+                                        parse_demo_burst(trimmed)
+                                    {
+                                        schedule_demo_burst(
+                                            agents,
+                                            events,
+                                            Duration::from_millis(delay_ms),
+                                        );
+                                        writeln!(
+                                            stdout,
+                                            "[demo] scheduled burst: agents={}, events_per_agent={}, delay_ms={}",
+                                            agents, events, delay_ms
+                                        )?;
                                         redraw_prompt(&mut stdout, &prompt, &current_input)?;
                                         continue;
                                     }
@@ -272,4 +290,27 @@ fn report_nonzero_status(status: &ExitStatus) {
         "Command failed with status: {}",
         status.code().unwrap_or(-1)
     );
+}
+
+fn parse_demo_burst(input: &str) -> Option<(usize, usize, u64)> {
+    let rest = input.strip_prefix(":demo-burst")?.trim();
+    if rest.is_empty() {
+        return Some((4, 400, 0));
+    }
+
+    let mut parts = rest.split_whitespace();
+    let agents = parts
+        .next()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(4);
+    let events = parts
+        .next()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(400);
+    let delay_ms = parts
+        .next()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(0);
+
+    Some((agents, events, delay_ms))
 }

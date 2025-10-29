@@ -1,0 +1,2 @@
+Ctrl+C interruption: ok
+Burst completed: agents=4 events=500 delay_ms=0 duration=0.101s rate=19735.4 ev/s
