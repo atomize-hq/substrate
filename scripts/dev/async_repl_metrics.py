@@ -44,7 +44,7 @@ def main() -> None:
     parser.add_argument("--samples", type=int, default=5)
     args = parser.parse_args()
 
-    cmd = "source ~/.substrate/dev-shim-env.sh && target/debug/substrate --async-repl --no-world"
+    cmd = "source ~/.substrate/dev-shim-env.sh && target/debug/substrate --no-world"
     child = pexpect.spawn(
         "bash",
         ["-lc", cmd],

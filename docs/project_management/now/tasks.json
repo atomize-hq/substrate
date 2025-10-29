@@ -148,6 +148,20 @@
         "/usr/bin/cargo test -p substrate-shell"
       ],
       "notes": "Stage4-prompt-checks and stage4-observability marked complete; next up is rollout planning."
+    },
+    {
+      "timestamp": "2025-10-30T18:00:00Z",
+      "summary": "Flipped async REPL on by default with fallback flag documented (Stage 4 rollout).",
+      "highlights": [
+        "CLI now defaults to async mode; new `--legacy-repl` flag re-enables the synchronous Reedline loop for emergency use.",
+        "Updated developer docs (USAGE/CONFIGURATION + Phase 4 plan) to describe the rollout and escape hatch.",
+        "Refreshed automation scripts to rely on the default async mode and retained telemetry coverage for both loops."
+      ],
+      "tests": [
+        "target/debug/substrate --legacy-repl --no-world",
+        "/usr/bin/cargo test -p substrate-shell"
+      ],
+      "notes": "Stage4-rollout complete; next milestone is pruning legacy code once the fallback stops seeing usage."
     }
   ],
   "version": 1,
@@ -626,9 +640,12 @@
             "PHASE_4_CONCURRENT_OUTPUT_DESIGN.md#L138-L155"
           ],
           "files": [
-            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md",
-            "docs/RELEASE_NOTES.md",
-            "docs/CONFIGURATION.md"
+            "crates/shell/src/lib.rs",
+            "scripts/dev/async_repl_prompt_checks.py",
+            "scripts/dev/async_repl_metrics.py",
+            "docs/USAGE.md",
+            "docs/CONFIGURATION.md",
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md"
           ],
           "dependencies": [
             "stage4-observability"
@@ -638,9 +655,10 @@
             "Sync loop clearly marked legacy or removed once rollout complete."
           ],
           "tests": [
-            "N/A \u2013 planning/documentation deliverable."
+            "Manual: run `target/debug/substrate --legacy-repl --no-world` and confirm the prompt loads.",
+            "/usr/bin/cargo test -p substrate-shell"
           ],
-          "status": "pending"
+          "status": "completed"
         }
       ]
     }

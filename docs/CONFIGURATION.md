@@ -53,7 +53,10 @@ Environment variables and advanced configuration options for Substrate.
 | `--no-exit-on-error` | Continue on error in CI mode | `substrate --ci --no-exit-on-error` |
 | `--pty` | Force PTY for command | `substrate --pty -c "vim"` |
 | `--version-json` | Output version info as JSON | `substrate --version-json` |
-| `--async-repl` | Opt into the async REPL preview loop | `substrate --async-repl` |
+| `--legacy-repl` | Fall back to the legacy synchronous REPL | `substrate --legacy-repl` |
+
+> **Note:** `--async-repl` is still accepted for compatibility but no longer
+> required—the async loop is the default interactive experience.
 
 ## Integration Variables
 

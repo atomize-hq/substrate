@@ -16,17 +16,18 @@ substrate> npm test
 substrate> exit
 ```
 
-### Async REPL (preview)
+### Legacy REPL (fallback)
+
+The async, event-driven REPL now powers interactive sessions by default and
+streams agent output without busy-spinning. If you hit a regression, you can
+drop back to the synchronous Reedline loop with:
 
 ```bash
-substrate --async-repl
+substrate --legacy-repl
 ```
 
-The `--async-repl` flag opts into the event-driven loop described in the
-Phase 4 concurrent output design. It currently provides line-by-line input with
-the same prompt banner while we finish wiring prompt preservation and agent
-streaming. Advanced Reedline features (history search, completion menus) will
-return in a later stage once the async renderer is fully integrated.
+Use this flag only for troubleshooting; new features land exclusively in the
+async path.
 
 ### Command Execution
 

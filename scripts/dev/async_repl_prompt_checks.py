@@ -48,7 +48,7 @@ def expect_prompt(child: "pexpect.spawn", *, timeout: int = 30) -> None:
 def spawn_async_shell() -> "pexpect.spawn":
     cmd = (
         "source ~/.substrate/dev-shim-env.sh && "
-        "target/debug/substrate --async-repl --no-world"
+        "target/debug/substrate --no-world"
     )
     child = pexpect.spawn("bash", ["-lc", cmd], encoding="utf-8", timeout=60)
     expect_prompt(child)

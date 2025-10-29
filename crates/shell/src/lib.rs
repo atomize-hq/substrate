@@ -269,9 +269,13 @@ pub struct Cli {
     #[arg(long = "shim-remove", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status"])]
     pub shim_remove: bool,
 
-    /// Enable experimental async REPL loop
-    #[arg(long = "async-repl", conflicts_with_all = &["command", "script"])]
+    /// Force the async REPL loop (default)
+    #[arg(long = "async-repl", conflicts_with_all = &["command", "script", "legacy_repl"])]
     pub async_repl: bool,
+
+    /// Use the legacy synchronous REPL implementation
+    #[arg(long = "legacy-repl", conflicts_with_all = &["command", "script", "async_repl"])]
+    pub legacy_repl: bool,
 
     /// Show trace information for a span ID
     #[arg(long = "trace", value_name = "SPAN_ID", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status", "shim_remove", "replay"])]
@@ -781,6 +785,14 @@ impl ShellConfig {
             ShellMode::Interactive { use_pty }
         };
 
+        let async_repl_enabled = if cli.legacy_repl {
+            false
+        } else if cli.async_repl {
+            true
+        } else {
+            true
+        };
+
         Ok(ShellConfig {
             mode,
             session_id,
@@ -792,7 +804,7 @@ impl ShellConfig {
             no_exit_on_error: cli.no_exit_on_error,
             skip_shims: cli.shim_skip,
             no_world: cli.no_world,
-            async_repl: cli.async_repl,
+            async_repl: async_repl_enabled,
             env_vars: HashMap::new(),
         })
     }
