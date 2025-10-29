@@ -114,6 +114,7 @@ fn build_router(service: WorldAgentService) -> Router {
     Router::new()
         .route("/v1/capabilities", get(handlers::capabilities))
         .route("/v1/execute", post(handlers::execute))
+        .route("/v1/execute/stream", post(handlers::execute_stream))
         .route("/v1/stream", get(handlers::stream))
         .route("/v1/trace/:span_id", get(handlers::get_trace))
         .route("/v1/request_scopes", post(handlers::request_scopes))

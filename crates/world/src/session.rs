@@ -170,13 +170,7 @@ impl SessionWorld {
                 self.fs_by_span.insert(id.clone(), diff);
             }
         } else {
-            // Execute directly on host (for now)
-            output = std::process::Command::new("sh")
-                .arg("-c")
-                .arg(cmd)
-                .current_dir(cwd)
-                .envs(&env)
-                .output()
+            output = crate::exec::execute_shell_command(cmd, cwd, &env, false)
                 .context("Failed to execute command")?;
         }
 

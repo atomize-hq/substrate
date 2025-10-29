@@ -17,21 +17,24 @@ use std::collections::HashMap;
 use std::env;
 use std::io::{self, BufRead, IsTerminal};
 // (avoid unused: import Read/Write locally where needed)
+use agent_api_types::ExecuteStreamFrame;
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 use substrate_broker::{detect_profile, evaluate, Decision};
-use substrate_common::{dedupe_path, log_schema, redact_sensitive};
+use substrate_common::{agent_events::AgentEvent, dedupe_path, log_schema, redact_sensitive};
 use substrate_trace::{
     append_to_trace, create_span_builder, init_trace, PolicyDecision, TransportMeta,
 };
 use uuid::Uuid;
 
 use crate::agent_events::{
-    clear_agent_event_sender, format_event_line, init_event_channel, publish_command_completion,
-    schedule_demo_events,
+    clear_agent_event_sender, format_event_line, init_event_channel, publish_agent_event,
+    publish_command_completion, schedule_demo_events,
 };
 
 // Reedline imports
@@ -199,6 +202,8 @@ __substrate_preexec() {
 }
 trap '__substrate_preexec' DEBUG
 "#;
+
+const SHELL_AGENT_ID: &str = "shell";
 
 #[derive(Parser, Debug)]
 #[command(name = "substrate")]
@@ -3606,19 +3611,17 @@ fn execute_command(
     )?;
     let start_time = std::time::Instant::now();
 
-    // Route non-PTY commands through world agent (UDS/TCP) when world is enabled
+    // Attempt to route non-PTY commands through the world agent when available
+    let mut agent_result: Option<AgentStreamOutcome> = None;
+
     #[cfg(target_os = "macos")]
     {
         let world_enabled = std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
         let uds_exists = pw::get_context()
-            .map(|c| match &c.transport {
-                pw::WorldTransport::Unix(p) => p.exists(),
-                _ => false,
-            })
+            .map(|c| matches!(&c.transport, pw::WorldTransport::Unix(path) if path.exists()))
             .unwrap_or(false);
         if world_enabled || uds_exists {
             if let Some(active_span) = span.as_mut() {
-                #[cfg(any(target_os = "macos", target_os = "windows"))]
                 if let Some(ctx) = pw::get_context() {
                     active_span.set_transport(world_transport_to_meta(&ctx.transport));
                 }
@@ -3634,53 +3637,31 @@ fn execute_command(
                     agent_command = format!("set -euo pipefail; {trimmed}");
                 }
             }
-
-            if let Ok((exit_code, stdout, stderr, scopes_used, fs_diff_opt)) =
-                exec_non_pty_via_agent_macos(&agent_command)
-            {
-                use std::io::{self, Write};
-                let _ = io::stdout().write_all(&stdout);
-                let _ = io::stderr().write_all(&stderr);
-                if let Some(active_span) = span {
-                    let _ = active_span.finish(exit_code, scopes_used, fs_diff_opt);
+            match stream_non_pty_via_agent(&agent_command) {
+                Ok(outcome) => agent_result = Some(outcome),
+                Err(e) => {
+                    static WARN_ONCE: std::sync::Once = std::sync::Once::new();
+                    WARN_ONCE.call_once(|| {
+                        eprintln!(
+                            "substrate: warn: mac world-agent exec failed, running direct: {}",
+                            e
+                        );
+                    });
                 }
-                let completion_extra = json!({
-                    log_schema::EXIT_CODE: exit_code,
-                    log_schema::DURATION_MS: start_time.elapsed().as_millis()
-                });
-                log_command_event(
-                    config,
-                    "command_complete",
-                    &redacted_command,
-                    cmd_id,
-                    Some(completion_extra),
-                )?;
-                #[cfg(unix)]
-                {
-                    use std::os::unix::process::ExitStatusExt;
-                    return Ok(std::process::ExitStatus::from_raw((exit_code & 0xff) << 8));
-                }
-                #[cfg(windows)]
-                {
-                    use std::os::windows::process::ExitStatusExt;
-                    return Ok(ExitStatus::from_raw(exit_code as u32));
-                }
-            } else {
-                eprintln!("substrate: warn: mac world-agent exec failed, running direct");
             }
         }
     }
 
     #[cfg(target_os = "windows")]
     {
-        let world_enabled = std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
-        if world_enabled {
+        let world_env = std::env::var("SUBSTRATE_WORLD").unwrap_or_default();
+        let context = pw::get_context();
+        if (world_env == "enabled" || context.is_some()) && !config.no_world {
             if let Some(active_span) = span.as_mut() {
-                if let Some(ctx) = pw::get_context() {
+                if let Some(ctx) = context.clone() {
                     active_span.set_transport(world_transport_to_meta(&ctx.transport));
                 }
             }
-            let span_id_for_exec = span.as_ref().map(|s| s.get_span_id().to_string());
             let mut agent_command = trimmed.to_string();
             if config.ci_mode && !config.no_exit_on_error {
                 let shell_name = Path::new(&config.shell_path)
@@ -3692,39 +3673,8 @@ fn execute_command(
                     agent_command = format!("set -euo pipefail; {trimmed}");
                 }
             }
-
-            match exec_non_pty_via_agent_windows(&agent_command, span_id_for_exec) {
-                Ok((exit_code, stdout, stderr, scopes_used, fs_diff_opt)) => {
-                    use std::io::{self, Write};
-                    let _ = io::stdout().write_all(&stdout);
-                    let _ = io::stderr().write_all(&stderr);
-
-                    if let Some(active_span) = span {
-                        let diff_for_span = match fs_diff_opt {
-                            Some(diff) => Some(diff),
-                            None => {
-                                let (_, diff) = collect_world_telemetry(active_span.get_span_id());
-                                diff
-                            }
-                        };
-                        let _ = active_span.finish(exit_code, scopes_used, diff_for_span);
-                    }
-
-                    let completion_extra = json!({
-                        log_schema::EXIT_CODE: exit_code,
-                        log_schema::DURATION_MS: start_time.elapsed().as_millis()
-                    });
-                    log_command_event(
-                        config,
-                        "command_complete",
-                        &redacted_command,
-                        cmd_id,
-                        Some(completion_extra),
-                    )?;
-
-                    use std::os::windows::process::ExitStatusExt;
-                    return Ok(ExitStatus::from_raw(exit_code as u32));
-                }
+            match stream_non_pty_via_agent(&agent_command) {
+                Ok(outcome) => agent_result = Some(outcome),
                 Err(e) => {
                     static WARN_ONCE: std::sync::Once = std::sync::Once::new();
                     WARN_ONCE.call_once(|| {
@@ -3737,7 +3687,7 @@ fn execute_command(
             }
         }
     }
-    // Route non-PTY commands through world agent (UDS HTTP) when world is enabled (Linux only)
+
     #[cfg(target_os = "linux")]
     {
         let world_env = env::var("SUBSTRATE_WORLD").unwrap_or_default();
@@ -3745,48 +3695,52 @@ fn execute_command(
         let world_disabled = world_env == "disabled" || config.no_world;
         let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
         if world_enabled || (!world_disabled && uds_exists) {
-            if world_enabled {
-                let _ = ensure_world_agent_ready();
-            }
             if let Some(active_span) = span.as_mut() {
                 active_span.set_transport(TransportMeta {
                     mode: "unix".to_string(),
                     endpoint: Some("/run/substrate.sock".to_string()),
                 });
             }
-            if let Ok((exit_code, stdout, stderr, scopes_used, fs_diff_opt)) =
-                exec_non_pty_via_agent(trimmed)
-            {
-                use std::io::{self, Write};
-                let _ = io::stdout().write_all(&stdout);
-                let _ = io::stderr().write_all(&stderr);
-                if let Some(active_span) = span {
-                    let _ = active_span.finish(exit_code, scopes_used, fs_diff_opt);
+            match stream_non_pty_via_agent(trimmed) {
+                Ok(outcome) => agent_result = Some(outcome),
+                Err(e) => {
+                    eprintln!(
+                        "substrate: warn: shell world-agent exec failed, running direct: {}",
+                        e
+                    );
                 }
-                let completion_extra = json!({
-                    log_schema::EXIT_CODE: exit_code,
-                    log_schema::DURATION_MS: start_time.elapsed().as_millis()
-                });
-                log_command_event(
-                    config,
-                    "command_complete",
-                    &redacted_command,
-                    cmd_id,
-                    Some(completion_extra),
-                )?;
-                #[cfg(unix)]
-                {
-                    use std::os::unix::process::ExitStatusExt;
-                    return Ok(std::process::ExitStatus::from_raw((exit_code & 0xff) << 8));
-                }
-                #[cfg(windows)]
-                {
-                    use std::os::windows::process::ExitStatusExt;
-                    return Ok(ExitStatus::from_raw(exit_code as u32));
-                }
-            } else {
-                eprintln!("substrate: warn: shell world-agent exec failed, running direct");
             }
+        }
+    }
+
+    if let Some(outcome) = agent_result {
+        if let Some(active_span) = span {
+            let _ = active_span.finish(
+                outcome.exit_code,
+                outcome.scopes_used.clone(),
+                outcome.fs_diff.clone(),
+            );
+        }
+        let completion_extra = json!({
+            log_schema::EXIT_CODE: outcome.exit_code,
+            log_schema::DURATION_MS: start_time.elapsed().as_millis()
+        });
+        log_command_event(
+            config,
+            "command_complete",
+            &redacted_command,
+            cmd_id,
+            Some(completion_extra),
+        )?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            return Ok(ExitStatus::from_raw((outcome.exit_code & 0xff) << 8));
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::ExitStatusExt;
+            return Ok(ExitStatus::from_raw(outcome.exit_code as u32));
         }
     }
 
@@ -4405,205 +4359,287 @@ fn handle_builtin(
     Ok(builtin_result)
 }
 
-#[cfg(target_os = "linux")]
-type AgentExecResult = (
-    i32,
-    Vec<u8>,
-    Vec<u8>,
-    Vec<String>,
-    Option<substrate_common::FsDiff>,
-);
+struct AgentStreamOutcome {
+    exit_code: i32,
+    scopes_used: Vec<String>,
+    fs_diff: Option<substrate_common::FsDiff>,
+}
+
+fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStreamOutcome> {
+    let (client, request, agent_id) = build_agent_client_and_request(command)?;
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(async move {
+        use agent_api_types::ApiError;
+        use http_body_util::BodyExt;
+
+        let response = client.execute_stream(request).await?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let body_bytes = response
+                .into_body()
+                .collect()
+                .await
+                .map_err(|e| anyhow::anyhow!("stream read failed: {}", e))?
+                .to_bytes();
+            if let Ok(api_error) = serde_json::from_slice::<ApiError>(&body_bytes) {
+                anyhow::bail!("API error: {}", api_error);
+            }
+            let text = String::from_utf8_lossy(&body_bytes);
+            anyhow::bail!("HTTP {} error: {}", status, text);
+        }
+
+        process_agent_stream(response.into_body(), agent_id).await
+    })
+}
+
+async fn process_agent_stream(
+    mut body: hyper::body::Incoming,
+    agent_label: String,
+) -> anyhow::Result<AgentStreamOutcome> {
+    use http_body_util::BodyExt;
+
+    let mut buffer = Vec::new();
+    let mut exit_code = None;
+    let mut scopes_used = Vec::new();
+    let mut fs_diff = None;
+
+    while let Some(frame) = body.frame().await {
+        let frame = frame.map_err(|e| anyhow::anyhow!("stream frame error: {}", e))?;
+        if let Some(data) = frame.data_ref() {
+            buffer.extend_from_slice(data);
+            consume_agent_stream_buffer(
+                &agent_label,
+                &mut buffer,
+                &mut exit_code,
+                &mut scopes_used,
+                &mut fs_diff,
+            )?;
+        }
+    }
+
+    if !buffer.is_empty() {
+        consume_agent_stream_buffer(
+            &agent_label,
+            &mut buffer,
+            &mut exit_code,
+            &mut scopes_used,
+            &mut fs_diff,
+        )?;
+    }
+
+    let exit_code =
+        exit_code.ok_or_else(|| anyhow::anyhow!("agent stream completed without exit frame"))?;
+
+    Ok(AgentStreamOutcome {
+        exit_code,
+        scopes_used,
+        fs_diff,
+    })
+}
+
+fn consume_agent_stream_buffer(
+    agent_label: &str,
+    buffer: &mut Vec<u8>,
+    exit_code: &mut Option<i32>,
+    scopes_used: &mut Vec<String>,
+    fs_diff: &mut Option<substrate_common::FsDiff>,
+) -> anyhow::Result<()> {
+    use anyhow::Context as _;
+
+    while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
+        let line: Vec<u8> = buffer.drain(..=pos).collect();
+        if line.len() <= 1 {
+            continue;
+        }
+        let payload = &line[..line.len() - 1];
+        if payload.is_empty() {
+            continue;
+        }
+
+        let frame: ExecuteStreamFrame = serde_json::from_slice(payload).with_context(|| {
+            format!(
+                "invalid agent stream frame: {}",
+                String::from_utf8_lossy(payload)
+            )
+        })?;
+
+        match frame {
+            ExecuteStreamFrame::Start { .. } => {}
+            ExecuteStreamFrame::Stdout { chunk_b64 } => {
+                let bytes = BASE64
+                    .decode(chunk_b64.as_bytes())
+                    .map_err(|e| anyhow::anyhow!("invalid stdout chunk: {}", e))?;
+                emit_stream_chunk(agent_label, &bytes, false);
+            }
+            ExecuteStreamFrame::Stderr { chunk_b64 } => {
+                let bytes = BASE64
+                    .decode(chunk_b64.as_bytes())
+                    .map_err(|e| anyhow::anyhow!("invalid stderr chunk: {}", e))?;
+                emit_stream_chunk(agent_label, &bytes, true);
+            }
+            ExecuteStreamFrame::Event { event } => {
+                let _ = publish_agent_event(event);
+            }
+            ExecuteStreamFrame::Exit {
+                exit,
+                scopes_used: scopes,
+                fs_diff: diff,
+                ..
+            } => {
+                *exit_code = Some(exit);
+                *scopes_used = scopes;
+                *fs_diff = diff;
+            }
+            ExecuteStreamFrame::Error { message } => {
+                eprintln!("world-agent error: {}", message);
+                anyhow::bail!(message);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn emit_stream_chunk(agent_label: &str, data: &[u8], is_stderr: bool) {
+    use std::io::Write;
+
+    if is_stderr {
+        let mut stderr = io::stderr();
+        let _ = stderr.write_all(data);
+        let _ = stderr.flush();
+    } else {
+        let mut stdout = io::stdout();
+        let _ = stdout.write_all(data);
+        let _ = stdout.flush();
+    }
+
+    let text = String::from_utf8_lossy(data);
+    let _ = publish_agent_event(AgentEvent::stream_chunk(
+        agent_label,
+        is_stderr,
+        text.to_string(),
+    ));
+}
+
+fn build_agent_client_and_request(
+    cmd: &str,
+) -> anyhow::Result<(
+    agent_api_client::AgentClient,
+    agent_api_types::ExecuteRequest,
+    String,
+)> {
+    build_agent_client_and_request_impl(cmd)
+}
 
 #[cfg(target_os = "linux")]
-fn exec_non_pty_via_agent(cmd: &str) -> anyhow::Result<AgentExecResult> {
-    use base64::engine::general_purpose::STANDARD;
-    use base64::Engine;
-    use std::io::{Read, Write};
-    use std::os::unix::net::UnixStream;
-    let sock_path = "/run/substrate.sock";
-    let mut stream =
-        UnixStream::connect(sock_path).map_err(|e| anyhow::anyhow!("connect UDS: {}", e))?;
-    stream
-        .set_read_timeout(Some(std::time::Duration::from_secs(3)))
-        .ok();
-    stream
-        .set_write_timeout(Some(std::time::Duration::from_secs(3)))
-        .ok();
+fn build_agent_client_and_request_impl(
+    cmd: &str,
+) -> anyhow::Result<(
+    agent_api_client::AgentClient,
+    agent_api_types::ExecuteRequest,
+    String,
+)> {
+    use agent_api_client::AgentClient;
+    use agent_api_types::ExecuteRequest;
 
+    ensure_world_agent_ready()?;
+
+    let client = AgentClient::unix_socket("/run/substrate.sock");
     let cwd = std::env::current_dir()
         .unwrap_or_else(|_| std::path::PathBuf::from("."))
         .display()
         .to_string();
     let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-    let body = serde_json::json!({
-        "profile": null,
-        "cmd": cmd,
-        "cwd": cwd,
-        "env": env_map,
-        "pty": false,
-        "agent_id": agent_id,
-        "budget": null
-    })
-    .to_string();
-    let req = format!(
-        "POST /v1/execute HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{}",
-        body.len(), body
-    );
-    stream
-        .write_all(req.as_bytes())
-        .map_err(|e| anyhow::anyhow!("uds write: {}", e))?;
 
-    let mut resp = Vec::new();
-    stream
-        .read_to_end(&mut resp)
-        .map_err(|e| anyhow::anyhow!("uds read: {}", e))?;
-    let resp_str = String::from_utf8_lossy(&resp);
-    let mut parts = resp_str.splitn(2, "\r\n\r\n");
-    let header = parts.next().unwrap_or("");
-    let body = parts.next().unwrap_or("");
-    // Parse status line
-    let status_line = header.lines().next().unwrap_or("");
-    if !status_line.contains("200") {
-        return Err(anyhow::anyhow!(format!(
-            "agent exec failed: {}",
-            status_line
-        )));
-    }
-    let v: serde_json::Value =
-        serde_json::from_str(body).map_err(|e| anyhow::anyhow!("parse json: {}", e))?;
-    let exit_code = v.get("exit").and_then(|x| x.as_i64()).unwrap_or(1) as i32;
-    let stdout_b64 = v.get("stdout_b64").and_then(|x| x.as_str()).unwrap_or("");
-    let stderr_b64 = v.get("stderr_b64").and_then(|x| x.as_str()).unwrap_or("");
-    let stdout = STANDARD.decode(stdout_b64).unwrap_or_default();
-    let stderr = STANDARD.decode(stderr_b64).unwrap_or_default();
-    let scopes_used = v
-        .get("scopes_used")
-        .and_then(|x| x.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|s| s.as_str().map(|s| s.to_string()))
-                .collect()
-        })
-        .unwrap_or_default();
-    let fs_diff_opt = if let Some(fd) = v.get("fs_diff") {
-        if fd.is_null() {
-            None
-        } else {
-            let diff: substrate_common::FsDiff = serde_json::from_value(fd.clone())
-                .map_err(|e| anyhow::anyhow!("parse fs_diff: {}", e))?;
-            Some(diff)
-        }
-    } else {
-        None
+    let request = ExecuteRequest {
+        profile: None,
+        cmd: cmd.to_string(),
+        cwd: Some(cwd),
+        env: Some(env_map),
+        pty: false,
+        agent_id: agent_id.clone(),
+        budget: None,
     };
-    Ok((exit_code, stdout, stderr, scopes_used, fs_diff_opt))
+
+    Ok((client, request, agent_id))
 }
 
 #[cfg(target_os = "macos")]
-type AgentExecResult = (
-    i32,
-    Vec<u8>,
-    Vec<u8>,
-    Vec<String>,
-    Option<substrate_common::FsDiff>,
-);
-#[cfg(target_os = "windows")]
-type AgentExecResult = (
-    i32,
-    Vec<u8>,
-    Vec<u8>,
-    Vec<String>,
-    Option<substrate_common::FsDiff>,
-);
-
-#[cfg(target_os = "macos")]
-fn exec_non_pty_via_agent_macos(cmd: &str) -> anyhow::Result<AgentExecResult> {
+fn build_agent_client_and_request_impl(
+    cmd: &str,
+) -> anyhow::Result<(
+    agent_api_client::AgentClient,
+    agent_api_types::ExecuteRequest,
+    String,
+)> {
     use agent_api_client::AgentClient;
     use agent_api_types::ExecuteRequest;
-    use base64::Engine;
-    let ctx = pw::get_context().ok_or_else(|| anyhow::anyhow!("no platform world context"))?;
 
-    // Build client from transport
+    let ctx = pw::get_context().ok_or_else(|| anyhow::anyhow!("no platform world context"))?;
+    (ctx.ensure_ready.as_ref())()?;
+
     let client = match &ctx.transport {
         pw::WorldTransport::Unix(path) => AgentClient::unix_socket(path),
         pw::WorldTransport::Tcp { host, port } => AgentClient::tcp(host, *port),
         pw::WorldTransport::Vsock { port } => AgentClient::tcp("127.0.0.1", *port),
     };
 
-    // Build request
     let cwd = std::env::current_dir()
         .unwrap_or_else(|_| std::path::PathBuf::from("."))
         .display()
         .to_string();
     let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-    let req = ExecuteRequest {
+
+    let request = ExecuteRequest {
         profile: None,
         cmd: cmd.to_string(),
         cwd: Some(cwd),
         env: Some(env_map),
         pty: false,
-        agent_id,
+        agent_id: agent_id.clone(),
         budget: None,
     };
 
-    // Execute
-    let rt = tokio::runtime::Runtime::new()?;
-    let resp = rt.block_on(async move { client.execute(req).await })?;
-
-    let engine = base64::engine::general_purpose::STANDARD;
-    let stdout = engine
-        .decode(&resp.stdout_b64)
-        .unwrap_or_else(|_| resp.stdout_b64.into_bytes());
-    let stderr = engine
-        .decode(&resp.stderr_b64)
-        .unwrap_or_else(|_| resp.stderr_b64.into_bytes());
-    Ok((resp.exit, stdout, stderr, resp.scopes_used, resp.fs_diff))
+    Ok((client, request, agent_id))
 }
 
 #[cfg(target_os = "windows")]
-fn exec_non_pty_via_agent_windows(
+fn build_agent_client_and_request_impl(
     cmd: &str,
-    _span_id: Option<String>,
-) -> anyhow::Result<AgentExecResult> {
+) -> anyhow::Result<(
+    agent_api_client::AgentClient,
+    agent_api_types::ExecuteRequest,
+    String,
+)> {
+    use agent_api_client::AgentClient;
     use agent_api_types::ExecuteRequest;
-    use base64::Engine;
     use platform_world::windows;
 
     let backend = windows::get_backend()?;
     let handle = backend.ensure_session(&windows::world_spec())?;
+    std::env::set_var("SUBSTRATE_WORLD", "enabled");
     std::env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
 
     let client = windows::build_agent_client()?;
-
-    // Convert host CWD to WSL path so the agent (Linux) receives a valid working directory
     let cwd = windows::current_dir_wsl()?;
     let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
 
-    let req = ExecuteRequest {
+    let request = ExecuteRequest {
         profile: None,
         cmd: cmd.to_string(),
         cwd: Some(cwd),
         env: Some(env_map),
         pty: false,
-        agent_id,
+        agent_id: agent_id.clone(),
         budget: None,
     };
 
-    let rt = tokio::runtime::Runtime::new()?;
-    let resp = rt.block_on(async move { client.execute(req).await })?;
-    let engine = base64::engine::general_purpose::STANDARD;
-    let stdout = engine
-        .decode(&resp.stdout_b64)
-        .unwrap_or_else(|_| resp.stdout_b64.as_bytes().to_vec());
-    let stderr = engine
-        .decode(&resp.stderr_b64)
-        .unwrap_or_else(|_| resp.stderr_b64.as_bytes().to_vec());
-
-    Ok((resp.exit, stdout, stderr, resp.scopes_used, resp.fs_diff))
+    Ok((client, request, agent_id))
 }
+
 fn execute_external(
     config: &ShellConfig,
     command: &str,
@@ -4670,10 +4706,10 @@ fn execute_external(
         set_bashenv_trampoline(&mut cmd);
     }
 
-    // Handle I/O based on mode - always inherit stdin for better compatibility
+    // Handle I/O based on mode - always inherit stdin for better compatibility and stream output ourselves
     cmd.stdin(Stdio::inherit());
-    cmd.stdout(Stdio::inherit());
-    cmd.stderr(Stdio::inherit());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
 
     // Make child process a group leader on Unix
     #[cfg(unix)]
@@ -4693,6 +4729,15 @@ fn execute_external(
         .spawn()
         .with_context(|| format!("Failed to execute: {command}"))?;
 
+    let stdout_thread = child
+        .stdout
+        .take()
+        .map(|pipe| spawn_host_stream_thread(pipe, false, SHELL_AGENT_ID.to_string()));
+    let stderr_thread = child
+        .stderr
+        .take()
+        .map(|pipe| spawn_host_stream_thread(pipe, true, SHELL_AGENT_ID.to_string()));
+
     let child_pid = child.id() as i32;
     running_child_pid.store(child_pid, Ordering::SeqCst);
 
@@ -4700,10 +4745,48 @@ fn execute_external(
         .wait()
         .with_context(|| format!("Failed to wait for command: {command}"))?;
 
-    // Clear the running PID
     running_child_pid.store(0, Ordering::SeqCst);
 
+    if let Some(handle) = stdout_thread {
+        match handle.join() {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => eprintln!("substrate: warn: stdout stream error: {}", e),
+            Err(e) => eprintln!("substrate: warn: stdout stream thread panicked: {:?}", e),
+        }
+    }
+    if let Some(handle) = stderr_thread {
+        match handle.join() {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => eprintln!("substrate: warn: stderr stream error: {}", e),
+            Err(e) => eprintln!("substrate: warn: stderr stream thread panicked: {:?}", e),
+        }
+    }
+
     Ok(status)
+}
+
+fn spawn_host_stream_thread<R>(
+    mut reader: R,
+    is_stderr: bool,
+    agent_label: String,
+) -> std::thread::JoinHandle<anyhow::Result<()>>
+where
+    R: std::io::Read + Send + 'static,
+{
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 8192];
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    emit_stream_chunk(&agent_label, &buf[..n], is_stderr);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(anyhow::anyhow!("pipe read failed: {}", e)),
+            }
+        }
+        Ok(())
+    })
 }
 
 fn first_command_path(cmd: &str) -> Option<String> {
@@ -4855,6 +4938,10 @@ fn setup_signal_handlers(running_child_pid: Arc<AtomicI32>) -> Result<()> {
                             let _ = killpg(pgid, signal);
                         }
                     }
+                }
+
+                if sig == SIGTERM || sig == SIGQUIT {
+                    std::process::exit(128 + sig);
                 }
             }
         });

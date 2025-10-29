@@ -1,9 +1,21 @@
 //! Core service implementation for world agent.
 
-use agent_api_types::{Budget, ExecuteRequest, ExecuteResponse};
-use anyhow::Result;
+use agent_api_types::{Budget, ExecuteRequest, ExecuteResponse, ExecuteStreamFrame};
+use anyhow::{Context, Result};
+use axum::{
+    body::{boxed, Bytes, StreamBody},
+    http::StatusCode,
+    response::Response,
+};
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
+use futures_util::StreamExt;
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::sync::{Arc, RwLock};
+use tokio::task;
+use tokio_stream::wrappers::UnboundedReceiverStream;
+use world::stream::{install_stream_sink, StreamKind, StreamSink};
 use world_api::{WorldBackend, WorldHandle, WorldSpec};
 
 /// Main service running inside the world.
@@ -155,17 +167,117 @@ impl WorldAgentService {
         Ok(ExecuteResponse {
             exit: result.exit,
             span_id,
-            stdout_b64: base64::Engine::encode(
-                &base64::engine::general_purpose::STANDARD,
-                result.stdout,
-            ),
-            stderr_b64: base64::Engine::encode(
-                &base64::engine::general_purpose::STANDARD,
-                result.stderr,
-            ),
+            stdout_b64: BASE64.encode(result.stdout),
+            stderr_b64: BASE64.encode(result.stderr),
             scopes_used: result.scopes_used,
             fs_diff: result.fs_diff,
         })
+    }
+
+    /// Execute a command and stream incremental output frames via NDJSON.
+    pub async fn execute_stream(&self, req: ExecuteRequest) -> Result<Response> {
+        if req.agent_id.is_empty() {
+            anyhow::bail!("agent_id is required for API calls");
+        }
+
+        if req.pty {
+            anyhow::bail!("PTY streaming is handled via /v1/stream");
+        }
+
+        if let Some(budget) = req.budget.clone() {
+            let mut budgets = self.budgets.write().unwrap();
+            let tracker = budgets
+                .entry(req.agent_id.clone())
+                .or_insert_with(|| AgentBudgetTracker::new(&req.agent_id, budget));
+            if !tracker.can_execute() {
+                anyhow::bail!("Budget exceeded: max executions reached");
+            }
+            tracker.decrement_exec();
+        }
+
+        let spec = WorldSpec {
+            reuse_session: true,
+            isolate_network: true,
+            limits: world_api::ResourceLimits::default(),
+            enable_preload: false,
+            allowed_domains: substrate_broker::allowed_domains(),
+            project_dir: req
+                .cwd
+                .clone()
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default()),
+            always_isolate: true,
+        };
+
+        let world = match self.backend.ensure_session(&spec) {
+            Ok(w) => w,
+            Err(e) => {
+                tracing::error!(error = %e, error_debug = ?e, "ensure_session failed");
+                anyhow::bail!("Failed to ensure session world");
+            }
+        };
+
+        let mut exec_req = world_api::ExecRequest {
+            cmd: req.cmd.clone(),
+            cwd: req
+                .cwd
+                .clone()
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default()),
+            env: req.env.clone().unwrap_or_default(),
+            pty: false,
+            span_id: None,
+        };
+
+        let span_id = format!("spn_{}", uuid::Uuid::now_v7());
+        exec_req.span_id = Some(span_id.clone());
+
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<ExecuteStreamFrame>();
+        let _ = tx.send(ExecuteStreamFrame::Start {
+            span_id: span_id.clone(),
+        });
+
+        let backend = self.backend.clone();
+        let agent_id = req.agent_id.clone();
+        task::spawn_blocking(move || {
+            let sink = Arc::new(StreamingSink::new(tx.clone()));
+            let guard = install_stream_sink(sink);
+            let result = backend.exec(&world, exec_req);
+            drop(guard);
+
+            match result {
+                Ok(exec_result) => {
+                    let frame = ExecuteStreamFrame::Exit {
+                        exit: exec_result.exit,
+                        span_id,
+                        scopes_used: exec_result.scopes_used,
+                        fs_diff: exec_result.fs_diff,
+                    };
+                    let _ = tx.send(frame);
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, agent = agent_id, "exec failed");
+                    let _ = tx.send(ExecuteStreamFrame::Error {
+                        message: e.to_string(),
+                    });
+                }
+            }
+        });
+
+        let stream = UnboundedReceiverStream::new(rx).map(|frame| {
+            let mut payload = serde_json::to_vec(&frame).expect("serialize frame");
+            payload.push(b'\n');
+            Ok::<Bytes, Infallible>(Bytes::from(payload))
+        });
+
+        let body = boxed(StreamBody::new(stream));
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header("content-type", "application/x-ndjson")
+            .body(body)
+            .context("Failed to build streaming response")?;
+
+        Ok(response)
     }
 
     /// Get trace information for a span.
@@ -183,6 +295,30 @@ impl WorldAgentService {
         Ok(serde_json::json!({
             "status": "not_implemented"
         }))
+    }
+}
+
+struct StreamingSink {
+    tx: tokio::sync::mpsc::UnboundedSender<ExecuteStreamFrame>,
+}
+
+impl StreamingSink {
+    fn new(tx: tokio::sync::mpsc::UnboundedSender<ExecuteStreamFrame>) -> Self {
+        Self { tx }
+    }
+}
+
+impl StreamSink for StreamingSink {
+    fn write(&self, kind: StreamKind, chunk: &[u8]) {
+        if chunk.is_empty() {
+            return;
+        }
+        let encoded = BASE64.encode(chunk);
+        let frame = match kind {
+            StreamKind::Stdout => ExecuteStreamFrame::Stdout { chunk_b64: encoded },
+            StreamKind::Stderr => ExecuteStreamFrame::Stderr { chunk_b64: encoded },
+        };
+        let _ = self.tx.send(frame);
     }
 }
 
@@ -215,8 +351,8 @@ mod tests {
         let resp = agent_api_types::ExecuteResponse {
             exit: 0,
             span_id: "spn_test".to_string(),
-            stdout_b64: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, b"ok"),
-            stderr_b64: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, b""),
+            stdout_b64: BASE64.encode(b"ok"),
+            stderr_b64: BASE64.encode(b""),
             scopes_used: vec!["tcp:example.com:443".to_string()],
             fs_diff: Some(substrate_common::FsDiff {
                 writes: vec![std::path::PathBuf::from("/tmp/a.txt")],

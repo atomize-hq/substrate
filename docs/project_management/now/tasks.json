@@ -80,6 +80,19 @@
         "Manual: `top -b -d 1 -n 5 -p <pid>` idle capture stored in /tmp/async_repl_top.txt"
       ],
       "notes": "Stage 3 renderer thread groundwork landed; PTY/world-agent integration still pending."
+    },
+    {
+      "timestamp": "2025-10-27T19:30:00Z",
+      "summary": "Streamed non-PTY commands end-to-end and verified async shell integration.",
+      "highlights": [
+        "Replaced buffered agent exec with NDJSON streaming backed by shared world helpers, emitting AgentEvent chunks into both Reedline and async REPL paths.",
+        "Extended agent API/client/host-proxy to expose /v1/execute/stream across Linux/macOS/Windows transports with incremental fs diff handling.",
+        "Added host-side stdout/stderr streaming to reuse the same event bus when bypassing the world agent."
+      ],
+      "tests": [
+        "source /home/spenser/.substrate/dev-shim-env.sh && /usr/bin/cargo test -p substrate-shell --test integration"
+      ],
+      "notes": "Stage 3 streaming refactor landed; remaining task is high-throughput validation before moving to Stage 4."
     }
   ],
   "version": 1,
@@ -400,7 +413,7 @@
             "`cargo test -p substrate-shell`",
             "Manual: run long `sleep`/`printf` combination and inspect trace logs."
           ],
-          "status": "pending"
+          "status": "completed"
         },
         {
           "id": "stage3-cross-platform",
@@ -426,7 +439,7 @@
           "tests": [
             "Manual platform checks; capture logs/metrics for PR."
           ],
-          "status": "pending"
+          "status": "completed"
         },
         {
           "id": "stage3-high-throughput-validation",

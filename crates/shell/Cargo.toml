@@ -53,6 +53,8 @@ base64 = "0.22"
 url = "2"
 agent-api-client = { version = "0.2.0-beta.1", path = "../agent-api-client" }
 agent-api-types = { version = "0.2.0-beta.1", path = "../agent-api-types" }
+http-body-util = "0.1"
+hyper = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 world-mac-lima = { version = "0.1.0", path = "../world-mac-lima" }

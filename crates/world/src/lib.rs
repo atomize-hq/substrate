@@ -10,12 +10,14 @@ pub mod cgroups;
 pub mod copydiff;
 pub mod diff;
 pub mod dns;
+pub mod exec;
 pub mod isolation;
 pub mod netfilter;
 pub mod netns;
 pub mod network;
 pub mod overlayfs;
 pub mod session;
+pub mod stream;
 
 pub use session::SessionWorld;
 

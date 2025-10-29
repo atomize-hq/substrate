@@ -28,6 +28,7 @@ hyper-util = { version = "0.1", features = ["server", "service", "server-auto", 
 async-trait = "0.1"
 futures = "0.3"
 chrono = "0.4"
+http-body-util = "0.1"
 
 # Local dependencies
 agent-api-client = { version = "0.2.0-beta.1", path = "../agent-api-client" }

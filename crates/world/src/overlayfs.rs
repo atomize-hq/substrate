@@ -533,12 +533,7 @@ pub fn execute_with_overlay(
         rel = PathBuf::from(".");
     }
     let target_dir = merged_dir.join(&rel);
-    let output = std::process::Command::new("sh")
-        .arg("-lc")
-        .arg(cmd)
-        .current_dir(&target_dir)
-        .envs(env)
-        .output()
+    let output = crate::exec::execute_shell_command(cmd, &target_dir, env, true)
         .context("Failed to execute command in overlay")?;
 
     // Compute diff before cleanup

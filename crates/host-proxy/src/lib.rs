@@ -15,6 +15,8 @@ use agent_api_core::AgentService;
 use agent_api_types::{ApiError, ExecuteRequest, ExecuteResponse};
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
+use axum::{body::Body, response::Response};
+use http_body_util::BodyExt;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::debug;
@@ -218,6 +220,40 @@ impl AgentService for HostProxyService {
         self.update_stats(&agent_id, duration, true).await;
 
         Ok(result)
+    }
+
+    async fn execute_stream(&self, req: ExecuteRequest) -> Result<Response, ApiError> {
+        let start = Instant::now();
+        let agent_id = req.agent_id.clone();
+
+        if self.config.auth.enabled {
+            self.auth_service.verify_agent(&agent_id).await?;
+        }
+
+        self.check_rate_limit(&agent_id).await?;
+
+        debug!(
+            "Forwarding streaming execute request for agent: {}",
+            agent_id
+        );
+
+        let response = tokio::time::timeout(
+            Duration::from_secs(self.config.request_timeout),
+            self.client.execute_stream(req),
+        )
+        .await
+        .map_err(|_| ApiError::Internal("Request timeout".to_string()))?
+        .map_err(|e| ApiError::Internal(format!("Failed to forward request: {}", e)))?;
+
+        let (parts, body) = response.into_parts();
+        let stream = body.into_data_stream();
+        let body = Body::from_stream(stream);
+        let response = Response::from_parts(parts, body);
+
+        let duration = start.elapsed();
+        self.update_stats(&agent_id, duration, true).await;
+
+        Ok(response)
     }
 
     async fn get_trace(&self, span_id: String) -> Result<serde_json::Value, ApiError> {

@@ -5,7 +5,7 @@ use agent_api_types::{ApiError, ExecuteRequest, ExecuteResponse};
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
-    response::{IntoResponse, Json as ResponseJson},
+    response::{IntoResponse, Json as ResponseJson, Response},
 };
 use serde_json::{json, Value};
 
@@ -62,6 +62,17 @@ pub async fn execute(
         .map_err(|e| ApiErrorResponse(ApiError::Internal(e.to_string())))?;
 
     Ok(ResponseJson(response))
+}
+
+/// Execute a command and stream incremental output.
+pub async fn execute_stream(
+    State(service): State<WorldAgentService>,
+    Json(req): Json<ExecuteRequest>,
+) -> Result<Response, ApiErrorResponse> {
+    service
+        .execute_stream(req)
+        .await
+        .map_err(|e| ApiErrorResponse(ApiError::Internal(e.to_string())))
 }
 
 /// Handle WebSocket upgrade for PTY streaming.

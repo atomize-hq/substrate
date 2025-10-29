@@ -9,7 +9,7 @@ use std::sync::Arc;
 use agent_api_types::{ApiError, ExecuteRequest, ExecuteResponse};
 use anyhow::{anyhow, Context, Result};
 use http_body_util::{BodyExt, Full};
-use hyper::{body::Bytes, Method, Request, Response};
+use hyper::{body::Bytes, Method, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 
 pub mod retry;
@@ -80,6 +80,15 @@ impl AgentClient {
         &self.transport
     }
 
+    fn map_http_error(status: StatusCode, body_bytes: &[u8]) -> anyhow::Error {
+        if let Ok(api_error) = serde_json::from_slice::<ApiError>(body_bytes) {
+            anyhow!("API error: {}", api_error)
+        } else {
+            let error_text = String::from_utf8_lossy(body_bytes);
+            anyhow!("HTTP {} error: {}", status, error_text)
+        }
+    }
+
     /// Execute a command via the agent API.
     pub async fn execute(&self, request: ExecuteRequest) -> Result<ExecuteResponse> {
         let response = self
@@ -88,6 +97,31 @@ impl AgentClient {
             .context("Failed to execute command")?;
 
         self.parse_response(response).await
+    }
+
+    /// Execute a command and stream incremental output frames.
+    pub async fn execute_stream(
+        &self,
+        request: ExecuteRequest,
+    ) -> Result<Response<hyper::body::Incoming>> {
+        let response = self
+            .post("/v1/execute/stream", &request)
+            .await
+            .context("Failed to initiate streaming execute")?;
+
+        if response.status().is_success() {
+            return Ok(response);
+        }
+
+        let status = response.status();
+        let body_bytes = response
+            .into_body()
+            .collect()
+            .await
+            .context("Failed to read error body")?
+            .to_bytes();
+
+        Err(Self::map_http_error(status, &body_bytes))
     }
 
     /// Get agent capabilities.
@@ -179,14 +213,7 @@ impl AgentClient {
             .to_bytes();
 
         if !status.is_success() {
-            // Try to parse as API error first
-            if let Ok(api_error) = serde_json::from_slice::<ApiError>(&body_bytes) {
-                return Err(anyhow::anyhow!("API error: {}", api_error));
-            }
-
-            // Fallback to raw error message
-            let error_text = String::from_utf8_lossy(&body_bytes);
-            return Err(anyhow!("HTTP {} error: {}", status, error_text));
+            return Err(Self::map_http_error(status, &body_bytes));
         }
 
         serde_json::from_slice(&body_bytes).context("Failed to parse JSON response")

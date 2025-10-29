@@ -16,6 +16,11 @@ use axum::{
 pub trait AgentService: Send + Sync + 'static {
     async fn execute(&self, req: ExecuteRequest) -> Result<ExecuteResponse, ApiError>;
     async fn get_trace(&self, span_id: String) -> Result<serde_json::Value, ApiError>;
+    async fn execute_stream(&self, _req: ExecuteRequest) -> Result<Response, ApiError> {
+        Err(ApiError::BadRequest(
+            "streaming execution not supported".to_string(),
+        ))
+    }
 }
 
 // Wrapper type for ApiError to implement IntoResponse
@@ -57,6 +62,7 @@ where
     let state = AppState { svc };
     Router::new()
         .route("/v1/execute", post(handle_execute::<S>))
+        .route("/v1/execute/stream", post(handle_execute_stream::<S>))
         .route("/v1/trace/:span_id", get(handle_get_trace::<S>))
         .with_state(state)
 }
@@ -67,6 +73,17 @@ async fn handle_execute<S: AgentService>(
 ) -> Result<Json<ExecuteResponse>, ApiErrorResponse> {
     let resp = state.svc.execute(req).await.map_err(ApiErrorResponse)?;
     Ok(Json(resp))
+}
+
+async fn handle_execute_stream<S: AgentService>(
+    State(state): State<AppState<S>>,
+    Json(req): Json<ExecuteRequest>,
+) -> Result<Response, ApiErrorResponse> {
+    state
+        .svc
+        .execute_stream(req)
+        .await
+        .map_err(ApiErrorResponse)
 }
 
 async fn handle_get_trace<S: AgentService>(
