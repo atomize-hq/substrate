@@ -2,7 +2,6 @@ use std::io::{self, Write};
 use std::process::ExitStatus;
 use std::sync::atomic::AtomicI32;
 use std::sync::Arc;
-use std::thread;
 
 use anyhow::{Context, Result};
 use crossterm::cursor::{Hide, Show};
@@ -13,16 +12,15 @@ use crossterm::event::{
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use crossterm::ExecutableCommand;
 use futures::StreamExt;
-use serde_json::Value;
-use std::time::Duration;
 use tokio::runtime::Builder as TokioRuntimeBuilder;
 use tokio::task;
 use uuid::Uuid;
 
 use crate::agent_events::{
-    agent_event_sender, clear_agent_event_sender, init_event_channel, publish_agent_event,
+    clear_agent_event_sender, format_event_line, init_event_channel, publish_command_completion,
+    schedule_demo_events,
 };
-use substrate_common::agent_events::{AgentEvent, AgentEventKind};
+use substrate_common::agent_events::AgentEvent;
 
 use super::{execute_command, setup_signal_handlers, ShellConfig};
 
@@ -135,7 +133,7 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                     report_nonzero_status(&status);
 
                                     terminal_guard.resume()?;
-                                    emit_command_event(&trimmed_owned, &status);
+                                    publish_command_completion(&trimmed_owned, &status);
                                     redraw_prompt(&mut stdout, &prompt, &current_input)?;
                                     // Re-create the event stream to keep crossterm in sync after 
                                     // toggling raw mode for the executed command.
@@ -222,13 +220,8 @@ fn render_agent_event(
     buffer: &str,
     event: &AgentEvent,
 ) -> io::Result<()> {
-    let agent = if event.agent_id.is_empty() {
-        "agent"
-    } else {
-        event.agent_id.as_str()
-    };
-    let message = extract_event_message(&event.kind, &event.data);
-    write!(stdout, "{CLEAR_LINE}[{agent}] {message}\r\n")?;
+    let line = format_event_line(event);
+    write!(stdout, "{CLEAR_LINE}{line}\r\n")?;
     redraw_prompt(stdout, prompt, buffer)
 }
 
@@ -279,83 +272,4 @@ fn report_nonzero_status(status: &ExitStatus) {
         "Command failed with status: {}",
         status.code().unwrap_or(-1)
     );
-}
-
-fn emit_command_event(command: &str, status: &ExitStatus) {
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::ExitStatusExt;
-        if status.signal().is_some() {
-            return;
-        }
-    }
-
-    let event = if status.success() {
-        AgentEvent::message(
-            "shell",
-            AgentEventKind::TaskEnd,
-            format!("Command `{command}` completed successfully"),
-        )
-    } else {
-        let code = status.code().unwrap_or(-1);
-        AgentEvent::message(
-            "shell",
-            AgentEventKind::Alert,
-            format!("Command `{command}` exited with status {code}"),
-        )
-    };
-
-    let _ = publish_agent_event(event);
-}
-
-fn schedule_demo_events() {
-    if agent_event_sender().is_none() {
-        return;
-    }
-
-    let events = vec![
-        (
-            Duration::from_millis(300),
-            "Demo agent event #1".to_string(),
-        ),
-        (
-            Duration::from_millis(820),
-            "Demo agent event #2".to_string(),
-        ),
-        (
-            Duration::from_millis(1350),
-            "Demo agent event #3".to_string(),
-        ),
-    ];
-
-    thread::spawn(move || {
-        for (delay, message) in events {
-            thread::sleep(delay);
-            let _ = publish_agent_event(AgentEvent::message(
-                "demo",
-                AgentEventKind::TaskProgress,
-                message,
-            ));
-        }
-    });
-}
-
-fn extract_event_message(kind: &AgentEventKind, data: &Value) -> String {
-    if let Some(msg) = data.get("message").and_then(Value::as_str) {
-        return msg.to_string();
-    }
-
-    if let Some(chunk) = data.get("chunk").and_then(Value::as_str) {
-        let stream = data
-            .get("stream")
-            .and_then(Value::as_str)
-            .unwrap_or("stdout");
-        return format!("{}: {}", stream, chunk);
-    }
-
-    if data.is_null() {
-        kind.to_string()
-    } else {
-        data.to_string()
-    }
 }

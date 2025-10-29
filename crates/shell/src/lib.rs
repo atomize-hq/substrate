@@ -29,12 +29,17 @@ use substrate_trace::{
 };
 use uuid::Uuid;
 
+use crate::agent_events::{
+    clear_agent_event_sender, format_event_line, init_event_channel, publish_command_completion,
+    schedule_demo_events,
+};
+
 // Reedline imports
 use reedline::{
     default_emacs_keybindings, ColumnarMenu, Completer, DefaultValidator, Emacs,
-    ExampleHighlighter, FileBackedHistory, KeyCode, KeyModifiers, MenuBuilder, Prompt,
-    PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus, Reedline, ReedlineEvent,
-    ReedlineMenu, Signal, Span, Suggestion,
+    ExampleHighlighter, ExternalPrinter, FileBackedHistory, KeyCode, KeyModifiers, MenuBuilder,
+    Prompt, PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus, Reedline,
+    ReedlineEvent, ReedlineMenu, Signal, Span, Suggestion,
 };
 #[cfg_attr(target_os = "windows", allow(unused_imports))]
 use std::thread;
@@ -1745,6 +1750,19 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
     // Create a simple transient prompt for after command execution
     let transient_prompt = SubstratePrompt::new(config.ci_mode);
 
+    let printer = ExternalPrinter::<String>::new(256);
+    let printer_sender = printer.sender();
+    let mut agent_rx = init_event_channel();
+
+    let renderer_handle = thread::spawn(move || {
+        while let Some(event) = agent_rx.blocking_recv() {
+            let line = format_event_line(&event);
+            if printer_sender.send(line).is_err() {
+                break;
+            }
+        }
+    });
+
     let mut line_editor = Reedline::create()
         .with_history(history)
         .with_edit_mode(edit_mode)
@@ -1754,7 +1772,8 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
         .with_transient_prompt(Box::new(transient_prompt))
         .with_menu(ReedlineMenu::EngineCompleter(Box::new(
             ColumnarMenu::default().with_name("completion_menu"),
-        )));
+        )))
+        .with_external_printer(printer);
 
     // Set up the host command decider for PTY commands
 
@@ -1768,13 +1787,20 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
 
         match sig {
             Ok(Signal::Success(line)) => {
-                if line.trim().is_empty() {
+                let trimmed = line.trim();
+
+                if trimmed.is_empty() {
                     continue;
                 }
 
                 // Check for exit commands
-                if matches!(line.trim(), "exit" | "quit") {
+                if matches!(trimmed, "exit" | "quit") {
                     break;
+                }
+
+                if trimmed == ":demo-agent" {
+                    schedule_demo_events();
+                    continue;
                 }
 
                 // Determine if this needs PTY
@@ -1806,6 +1832,8 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
                                     status.code().unwrap_or(-1)
                                 );
                             }
+
+                            publish_command_completion(trimmed, &status);
                         }
                         Err(e) => eprintln!("Error: {e}"),
                     }
@@ -1829,6 +1857,8 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
                                     status.code().unwrap_or(-1)
                                 );
                             }
+
+                            publish_command_completion(trimmed, &status);
                         }
                         Err(e) => eprintln!("Error: {e}"),
                     }
@@ -1853,6 +1883,9 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
     if let Err(e) = line_editor.sync_history() {
         log::warn!("Failed to save history: {e}");
     }
+
+    clear_agent_event_sender();
+    let _ = renderer_handle.join();
 
     Ok(0)
 }

@@ -64,6 +64,22 @@
         "Manual: `target/debug/substrate --async-repl --no-world` with `:demo-agent`, partial input typing, and `pidstat -p <pid> 1 5` idle check"
       ],
       "notes": "Stage 2 prompt redraw, agent channel, and smoke test tasks marked complete."
+    },
+    {
+      "timestamp": "2025-10-26T18:30:00Z",
+      "summary": "Hooked shared agent event bus and non-polling renderer into both REPL modes (Stage 3 kickoff).",
+      "highlights": [
+        "Added `agent_events` module to `substrate-common` and shell, centralising the global channel and event formatting.",
+        "Async REPL now renders structured agent events via shared helpers; interactive Reedline path streams events through `ExternalPrinter` with prompt-safe redraw.",
+        "Command completion notifications, demo helper, and idle CPU checks verified against the new infrastructure."
+      ],
+      "tests": [
+        "/home/spenser/.cargo/bin/cargo check -p substrate-shell",
+        "/home/spenser/.cargo/bin/cargo test -p substrate-shell",
+        "Manual: `target/debug/substrate --no-world`, run `:demo-agent` while typing to confirm prompt integrity and streaming output",
+        "Manual: `top -b -d 1 -n 5 -p <pid>` idle capture stored in /tmp/async_repl_top.txt"
+      ],
+      "notes": "Stage 3 renderer thread groundwork landed; PTY/world-agent integration still pending."
     }
   ],
   "version": 1,
@@ -333,7 +349,7 @@
             "Manual: run streaming command while typing; ensure prompt stays intact.",
             "Automated: consider integration test injecting synthetic events (optional)."
           ],
-          "status": "pending"
+          "status": "complete"
         },
         {
           "id": "stage3-event-plumbing",
@@ -358,7 +374,7 @@
           "tests": [
             "Unit tests for AgentEvent serde if practical."
           ],
-          "status": "pending"
+          "status": "complete"
         },
         {
           "id": "stage3-command-refactor",

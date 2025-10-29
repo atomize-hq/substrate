@@ -2578,6 +2578,7 @@ name = "reedline"
 version = "0.41.0"
 dependencies = [
  "chrono",
+ "crossbeam",
  "crossterm 0.28.1",
  "fd-lock",
  "itertools 0.13.0",
