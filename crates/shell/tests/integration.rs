@@ -4,14 +4,12 @@ use predicates::prelude::*;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-#[cfg(target_os = "macos")]
 use std::process::Command as StdCommand;
 use std::sync::OnceLock;
 use tempfile::{Builder, TempDir};
 
 /// Helper function to get the substrate binary from workspace root
 fn get_substrate_binary() -> Command {
-    #[cfg(target_os = "macos")]
     ensure_substrate_built();
 
     let mut cmd = Command::new(binary_path());
@@ -20,7 +18,6 @@ fn get_substrate_binary() -> Command {
     cmd
 }
 
-#[cfg(target_os = "macos")]
 fn ensure_substrate_built() {
     static BUILD_ONCE: OnceLock<()> = OnceLock::new();
     BUILD_ONCE.get_or_init(|| {
@@ -32,16 +29,6 @@ fn ensure_substrate_built() {
     });
 }
 
-#[cfg(target_os = "macos")]
-fn binary_path() -> String {
-    if let Ok(workspace_dir) = std::env::var("CARGO_WORKSPACE_DIR") {
-        format!("{}/target/debug/substrate", workspace_dir)
-    } else {
-        "../../target/debug/substrate".to_string()
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
 fn binary_path() -> String {
     let binary_name = if cfg!(windows) {
         "substrate.exe"
@@ -342,18 +329,8 @@ fn test_sigterm_exit_code() {
 
     // Test that SIGTERM results in exit code 143 (128 + 15)
     // Note: This test is disabled on macOS due to signal handling differences
-    let binary_name = if cfg!(windows) {
-        "substrate.exe"
-    } else {
-        "substrate"
-    };
-
-    let binary_path = if let Ok(workspace_dir) = std::env::var("CARGO_WORKSPACE_DIR") {
-        format!("{}/target/debug/{}", workspace_dir, binary_name)
-    } else {
-        format!("../../target/debug/{}", binary_name)
-    };
-    let substrate_bin = std::path::PathBuf::from(binary_path);
+    ensure_substrate_built();
+    let substrate_bin = std::path::PathBuf::from(binary_path());
 
     let mut child = StdCommand::new(substrate_bin)
         .arg("--no-world")

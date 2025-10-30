@@ -9,6 +9,17 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 /// Global sender storage so any component can publish agent events.
 static AGENT_EVENT_SENDER: OnceLock<Mutex<Option<UnboundedSender<AgentEvent>>>> = OnceLock::new();
 
+#[cfg(test)]
+static EVENT_TEST_GUARD: OnceLock<Mutex<()>> = OnceLock::new();
+
+#[cfg(test)]
+pub(crate) fn acquire_event_test_guard() -> std::sync::MutexGuard<'static, ()> {
+    EVENT_TEST_GUARD
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .expect("event channel test guard poisoned")
+}
+
 /// Initialise the global event channel and return the receiver for consumers.
 pub(crate) fn init_event_channel() -> UnboundedReceiver<AgentEvent> {
     let (tx, rx) = mpsc::unbounded_channel::<AgentEvent>();
@@ -183,6 +194,7 @@ mod tests {
 
     #[test]
     fn schedule_demo_burst_emits_expected_events() {
+        let _guard = super::acquire_event_test_guard();
         let rt = Runtime::new().expect("runtime");
         rt.block_on(async {
             let mut rx = init_event_channel();

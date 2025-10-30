@@ -4599,6 +4599,7 @@ mod streaming_tests {
 
     #[test]
     fn consume_agent_stream_buffer_emits_agent_events() {
+        let _guard = crate::agent_events::acquire_event_test_guard();
         let rt = Runtime::new().expect("runtime");
         rt.block_on(async {
             let mut rx = init_event_channel();
