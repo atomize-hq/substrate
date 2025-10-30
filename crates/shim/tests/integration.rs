@@ -277,10 +277,17 @@ fn test_session_correlation() -> Result<()> {
     // Generate session ID
     let session_id = uuid::Uuid::now_v7().to_string();
 
+    let path_env = format!(
+        "{}:{}",
+        shim_dir.to_string_lossy(),
+        bin_dir.to_string_lossy()
+    );
+
     // Run multiple commands with same session ID
     for i in 1..=3 {
-        let output = std::process::Command::new(&shim_binary)
+        let output = std::process::Command::new("test_cmd")
             .arg(i.to_string())
+            .env("PATH", &path_env)
             .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
             .env("SHIM_TRACE_LOG", &log_file)
             .env("SHIM_SESSION_ID", &session_id)
