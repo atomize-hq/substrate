@@ -482,8 +482,18 @@
             "`cargo test -p substrate-shell`",
             "Manual: run long `sleep`/`printf` combination and inspect trace logs."
           ],
-          "status": "completed"
-        },
+      "status": "completed"
+    },
+    {
+      "timestamp": "2025-10-30T20:30:00Z",
+      "summary": "Documented remaining async REPL editing gaps and scheduled follow-up stage.",
+      "highlights": [
+        "Captured missing line-editing features (history, cursor movement, visual caret) as Stage 5 work items.",
+        "Clarified that --legacy-repl remains the temporary workaround until Reedline parity returns."
+      ],
+      "tests": [],
+      "notes": "Stage 4 remains complete; Stage 5 will cover advanced editor support."
+    }
         {
           "id": "stage3-cross-platform",
           "title": "Implement platform transports for events",
@@ -659,6 +669,34 @@
             "/usr/bin/cargo test -p substrate-shell"
           ],
           "status": "completed"
+        }
+      ],
+      "next": [
+        {
+          "id": "stage5-editor-parity",
+          "title": "Restore advanced line editing in async REPL",
+          "description": "Port Reedline history/cursor features into the async loop while keeping prompt-safe agent streaming.",
+          "references": [
+            "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md",
+            "docs/USAGE.md"
+          ],
+          "files": [
+            "crates/shell/src/async_repl.rs",
+            "crates/shell/src/lib.rs",
+            "docs/USAGE.md"
+          ],
+          "dependencies": [
+            "stage4-rollout"
+          ],
+          "acceptance": [
+            "Async REPL supports history navigation (up/down) and cursor movement (left/right).",
+            "Visual caret renders and multiline editing works while streaming agent output.",
+            "Manual regression confirms prompt integrity with active streaming."
+          ],
+          "tests": [
+            "Manual: exercise history/cursor edits mid-stream" 
+          ],
+          "status": "pending"
         }
       ]
     }

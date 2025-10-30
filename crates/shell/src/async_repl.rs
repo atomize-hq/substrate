@@ -17,6 +17,7 @@ use tokio::runtime::Builder as TokioRuntimeBuilder;
 use tokio::task;
 use uuid::Uuid;
 
+use super::is_shell_stream_event;
 use crate::agent_events::{
     clear_agent_event_sender, format_event_line, init_event_channel, publish_command_completion,
     schedule_demo_burst, schedule_demo_events,
@@ -181,6 +182,9 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     }
                 }
                 Some(event) = agent_rx.recv() => {
+                    if is_shell_stream_event(&event) {
+                        continue;
+                    }
                     telemetry.record_agent_event();
                     render_agent_event(&mut stdout, &prompt, &current_input, &event)?;
                 }

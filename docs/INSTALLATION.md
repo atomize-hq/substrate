@@ -153,6 +153,27 @@ This path is primarily intended for contributors; production installations
 should prefer the release installer so that policies, shims, and world services
 stay in sync with bundled expectations.
 
+### Dev Convenience Scripts
+
+The repository also ships helper scripts that mirror the production layout while
+using your workspace build artifacts:
+
+```bash
+scripts/substrate/dev-install-substrate.sh --profile debug   # or --profile release
+source ~/.substrate/dev-shim-env.sh                          # refresh PATH/SHIM_ORIGINAL_PATH
+
+# Later, to remove the dev wiring:
+scripts/substrate/dev-uninstall-substrate.sh
+```
+
+These scripts build `substrate`, `substrate-shim`, `substrate-forwarder`,
+`host-proxy`, and (on supported platforms) `world-agent`, symlink them into
+`~/.substrate/bin`, and deploy shim wrappers that point back to
+`target/<profile>`. The generated `~/.substrate/dev-shim-env.sh` prepends both
+the bin and shim directories to `PATH` while preserving `SHIM_ORIGINAL_PATH`, so
+interactive sessions and the world backend see the same clean view of your
+tooling.
+
 ## Troubleshooting Highlights
 
 - **No shim interception**: ensure `~/.substrate/shims` is first in `PATH`, then

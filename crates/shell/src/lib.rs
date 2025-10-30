@@ -26,7 +26,10 @@ use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 use substrate_broker::{detect_profile, evaluate, Decision};
-use substrate_common::{agent_events::AgentEvent, dedupe_path, log_schema, redact_sensitive};
+use substrate_common::{
+    agent_events::{AgentEvent, AgentEventKind},
+    dedupe_path, log_schema, paths as substrate_paths, redact_sensitive,
+};
 use substrate_trace::{
     append_to_trace, create_span_builder, init_trace, PolicyDecision, TransportMeta,
 };
@@ -205,6 +208,10 @@ trap '__substrate_preexec' DEBUG
 "#;
 
 const SHELL_AGENT_ID: &str = "shell";
+
+fn is_shell_stream_event(event: &AgentEvent) -> bool {
+    event.agent_id == SHELL_AGENT_ID && matches!(event.kind, AgentEventKind::PtyData)
+}
 
 #[derive(Parser, Debug)]
 #[command(name = "substrate")]
@@ -1776,6 +1783,9 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
 
     let renderer_handle = thread::spawn(move || {
         while let Some(event) = agent_rx.blocking_recv() {
+            if is_shell_stream_event(&event) {
+                continue;
+            }
             let line = format_event_line(&event);
             if printer_sender.send(line).is_err() {
                 break;
@@ -4674,7 +4684,7 @@ fn build_agent_client_and_request_impl(
         .unwrap_or_else(|_| std::path::PathBuf::from("."))
         .display()
         .to_string();
-    let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
+    let env_map = build_world_env_map();
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
 
     let request = ExecuteRequest {
@@ -4688,6 +4698,43 @@ fn build_agent_client_and_request_impl(
     };
 
     Ok((client, request, agent_id))
+}
+
+fn build_world_env_map() -> std::collections::HashMap<String, String> {
+    use std::collections::HashMap;
+
+    let mut env_map: HashMap<String, String> = std::env::vars().collect();
+
+    if let Ok(original_path) = std::env::var("SHIM_ORIGINAL_PATH") {
+        env_map.insert("PATH".to_string(), original_path.clone());
+        #[cfg(windows)]
+        {
+            env_map.insert("Path".to_string(), original_path);
+        }
+    } else if let Ok(shim_dir) = substrate_paths::shims_dir() {
+        if let Some(current_path) = env_map.get("PATH").cloned() {
+            let separator = if cfg!(windows) { ';' } else { ':' };
+            let shim_str = shim_dir.to_string_lossy();
+            let filtered: String = current_path
+                .split(separator)
+                .filter(|segment| segment != &shim_str)
+                .filter(|segment| !segment.is_empty())
+                .collect::<Vec<&str>>()
+                .join(&separator.to_string());
+            env_map.insert("PATH".to_string(), filtered);
+        }
+    }
+
+    for key in [
+        "SHIM_ACTIVE",
+        "SHIM_CALLER",
+        "SHIM_CALL_STACK",
+        "SHIM_DEPTH",
+    ] {
+        env_map.remove(key);
+    }
+
+    env_map
 }
 
 #[cfg(target_os = "macos")]
@@ -4714,7 +4761,7 @@ fn build_agent_client_and_request_impl(
         .unwrap_or_else(|_| std::path::PathBuf::from("."))
         .display()
         .to_string();
-    let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
+    let env_map = build_world_env_map();
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
 
     let request = ExecuteRequest {
@@ -4749,7 +4796,7 @@ fn build_agent_client_and_request_impl(
 
     let client = windows::build_agent_client()?;
     let cwd = windows::current_dir_wsl()?;
-    let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
+    let env_map = build_world_env_map();
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
 
     let request = ExecuteRequest {

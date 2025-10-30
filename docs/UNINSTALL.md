@@ -27,7 +27,7 @@ manually after running the script.
 ### Scripted Removal
 
 ```bash
-./scripts/substrate/uninstall-substrate.sh
+sudo env HOME="$HOME" ./scripts/substrate/uninstall-substrate.sh
 ```
 
 Additional automated steps on systemd hosts:
@@ -55,7 +55,7 @@ immediately.
 ### Scripted Removal
 
 ```bash
-./scripts/substrate/uninstall-substrate.sh
+sudo env HOME="$HOME" ./scripts/substrate/uninstall-substrate.sh
 ```
 
 macOS-specific actions:
