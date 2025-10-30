@@ -301,15 +301,25 @@ fn test_session_correlation() -> Result<()> {
     let lines: Vec<&str> = log_content.lines().collect();
     assert_eq!(lines.len(), 3, "Should have 3 log entries");
 
-    for line in lines {
+    let mut depths = Vec::new();
+
+    for line in &lines {
         assert!(line.contains(&format!("\"session_id\":\"{session_id}\"")));
         assert!(line.contains("\"command\":\"test_cmd\""));
+
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
+            if let Some(depth) = value.get("depth").and_then(|d| d.as_i64()).or_else(|| {
+                value
+                    .get("depth")
+                    .and_then(|d| d.as_u64().map(|v| v as i64))
+            }) {
+                depths.push(depth as i32);
+            }
+        }
     }
 
-    // Verify depth progression
-    assert!(log_content.contains("\"depth\":0"));
-    assert!(log_content.contains("\"depth\":1"));
-    assert!(log_content.contains("\"depth\":2"));
+    depths.sort();
+    assert_eq!(depths, vec![0, 1, 2], "Expected depth progression 0→1→2");
 
     Ok(())
 }
