@@ -5,6 +5,7 @@
 
 use anyhow::{anyhow, Context, Result};
 use std::env;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 /// Environment variable names used by the shim system
@@ -39,17 +40,40 @@ impl ShimContext {
     /// Create context from current executable and environment
     pub fn from_current_exe() -> Result<Self> {
         let exe = env::current_exe().context("Failed to get current executable path")?;
+        let canonical_exe = exe.canonicalize().unwrap_or_else(|_| exe.clone());
 
-        let shim_dir = exe
+        let mut shim_dir = exe
             .parent()
             .ok_or_else(|| anyhow!("Executable has no parent directory"))?
             .to_path_buf();
 
-        let command_name = exe
+        let mut command_name = exe
             .file_name()
             .ok_or_else(|| anyhow!("Executable has no filename"))?
             .to_string_lossy()
             .to_string();
+
+        if let Some(invoked) = env::args_os().next() {
+            if !invoked.is_empty() {
+                if let Some(invoked_path) = resolve_invoked_path(&invoked, &canonical_exe) {
+                    if let Some(parent) = invoked_path.parent() {
+                        shim_dir = parent.to_path_buf();
+                    }
+                    if let Some(name) = invoked_path.file_name() {
+                        command_name = name.to_string_lossy().to_string();
+                    } else {
+                        command_name = invoked.to_string_lossy().to_string();
+                    }
+                } else {
+                    let invoked_path = PathBuf::from(&invoked);
+                    if let Some(name) = invoked_path.file_name() {
+                        command_name = name.to_string_lossy().to_string();
+                    } else {
+                        command_name = invoked.to_string_lossy().to_string();
+                    }
+                }
+            }
+        }
 
         let original_path = env::var(ORIGINAL_PATH_VAR).ok();
         let search_paths = build_clean_search_path(&shim_dir, original_path)?;
@@ -143,6 +167,77 @@ fn build_safe_call_stack(current: &str, new_cmd: &str) -> String {
     }
 
     items.join(",")
+}
+
+fn resolve_invoked_path(invoked: &OsStr, canonical_exe: &Path) -> Option<PathBuf> {
+    if invoked.is_empty() {
+        return None;
+    }
+
+    let invoked_path = PathBuf::from(invoked);
+
+    if invoked_path.is_absolute() || invoked_path.components().count() > 1 {
+        let candidate = if invoked_path.is_absolute() {
+            invoked_path
+        } else {
+            env::current_dir().ok()?.join(invoked_path)
+        };
+        return check_candidate(&candidate, canonical_exe);
+    }
+
+    let path_var = env::var_os("PATH")?;
+    for dir in env::split_paths(&path_var) {
+        if dir.as_os_str().is_empty() {
+            continue;
+        }
+        if let Some(found) = find_candidate_in_dir(&dir, invoked, canonical_exe) {
+            return Some(found);
+        }
+    }
+
+    None
+}
+
+fn check_candidate(candidate: &Path, canonical_exe: &Path) -> Option<PathBuf> {
+    if let Ok(canon) = candidate.canonicalize() {
+        if canon == canonical_exe {
+            return Some(candidate.to_path_buf());
+        }
+    }
+    None
+}
+
+#[cfg(windows)]
+fn find_candidate_in_dir(dir: &Path, base: &OsStr, canonical_exe: &Path) -> Option<PathBuf> {
+    let base_path = dir.join(base);
+    if let Some(found) = check_candidate(&base_path, canonical_exe) {
+        return Some(found);
+    }
+
+    if Path::new(base).extension().is_some() {
+        return None;
+    }
+
+    let pathext = env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
+    for ext in pathext.split(';') {
+        let trimmed = ext.trim_start_matches('.').trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let mut candidate = base_path.clone();
+        candidate.set_extension(trimmed);
+        if let Some(found) = check_candidate(&candidate, canonical_exe) {
+            return Some(found);
+        }
+    }
+
+    None
+}
+
+#[cfg(not(windows))]
+fn find_candidate_in_dir(dir: &Path, base: &OsStr, canonical_exe: &Path) -> Option<PathBuf> {
+    let candidate = dir.join(base);
+    check_candidate(&candidate, canonical_exe)
 }
 
 /// Build clean search path excluding shim directory
