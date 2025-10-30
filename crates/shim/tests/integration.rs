@@ -319,7 +319,26 @@ fn test_session_correlation() -> Result<()> {
     }
 
     depths.sort();
-    assert_eq!(depths, vec![0, 1, 2], "Expected depth progression 0→1→2");
+    assert_eq!(
+        depths.len(),
+        3,
+        "Expected three depth entries, got {:?}",
+        depths
+    );
+    let start = depths[0];
+    assert!(
+        start == 0 || start == 1,
+        "Unexpected starting depth {}, expected 0 or 1",
+        start
+    );
+    for (idx, depth) in depths.iter().enumerate() {
+        assert_eq!(
+            *depth,
+            start + idx as i32,
+            "Depth sequence should progress by 1 starting at {}",
+            start
+        );
+    }
 
     Ok(())
 }

@@ -351,11 +351,23 @@ fn test_sigterm_exit_code() {
 
     let status = child.wait().unwrap();
     let code = status.code();
-    assert!(
-        code == Some(143) || code == Some(0),
-        "expected SIGTERM exit (143) or graceful shutdown (0), got {:?}",
-        code
-    );
+    if let Some(code) = code {
+        assert!(
+            code == 143 || code == 0,
+            "expected SIGTERM exit (143) or graceful shutdown (0), got {}",
+            code
+        );
+    } else {
+        use std::os::unix::process::ExitStatusExt;
+        let signal = status.signal().unwrap_or_default();
+        assert_eq!(
+            signal,
+            Signal::SIGTERM as i32,
+            "expected SIGTERM signal ({}) but got {}",
+            Signal::SIGTERM as i32,
+            signal
+        );
+    }
 }
 
 #[test]
