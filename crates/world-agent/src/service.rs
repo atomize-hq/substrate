@@ -15,6 +15,7 @@ use std::convert::Infallible;
 use std::sync::{Arc, RwLock};
 use tokio::task;
 use tokio_stream::wrappers::UnboundedReceiverStream;
+#[cfg(target_os = "linux")]
 use world::stream::{install_stream_sink, StreamKind, StreamSink};
 use world_api::{WorldBackend, WorldHandle, WorldSpec};
 
@@ -175,6 +176,7 @@ impl WorldAgentService {
     }
 
     /// Execute a command and stream incremental output frames via NDJSON.
+    #[cfg(target_os = "linux")]
     pub async fn execute_stream(&self, req: ExecuteRequest) -> Result<Response> {
         if req.agent_id.is_empty() {
             anyhow::bail!("agent_id is required for API calls");
@@ -280,6 +282,11 @@ impl WorldAgentService {
         Ok(response)
     }
 
+    #[cfg(not(target_os = "linux"))]
+    pub async fn execute_stream(&self, _req: ExecuteRequest) -> Result<Response> {
+        anyhow::bail!("World agent streaming is only supported on Linux");
+    }
+
     /// Get trace information for a span.
     pub async fn get_trace(&self, span_id: &str) -> Result<serde_json::Value> {
         // TODO: Implement trace retrieval
@@ -298,16 +305,19 @@ impl WorldAgentService {
     }
 }
 
+#[cfg(target_os = "linux")]
 struct StreamingSink {
     tx: tokio::sync::mpsc::UnboundedSender<ExecuteStreamFrame>,
 }
 
+#[cfg(target_os = "linux")]
 impl StreamingSink {
     fn new(tx: tokio::sync::mpsc::UnboundedSender<ExecuteStreamFrame>) -> Self {
         Self { tx }
     }
 }
 
+#[cfg(target_os = "linux")]
 impl StreamSink for StreamingSink {
     fn write(&self, kind: StreamKind, chunk: &[u8]) {
         if chunk.is_empty() {
