@@ -202,6 +202,21 @@
         "/usr/bin/cargo test -p substrate-shell"
       ],
       "notes": "Shared builder now centralises history/completer/keymaps for future async adapter integration."
+    },
+    {
+      "timestamp": "2025-11-01T18:05:00Z",
+      "summary": "Wired async REPL to shared Reedline core for history/completion parity.",
+      "highlights": [
+        "Replaced manual async editor loop with AsyncReedlineAdapter that feeds Reedline::process_events (crates/shell/src/async_repl.rs, third_party/reedline/src/engine.rs).",
+        "Hooked agent streaming via ExternalPrinter in async mode and added Stage 5 prompt drill automation script entry.",
+        "Bumped crossterm to 0.28.1 to align with Reedline event types and regenerated async prompt drill tooling."
+      ],
+      "tests": [
+        "/usr/bin/cargo test -p substrate-shell",
+        "/usr/bin/cargo fmt -- --check",
+        "Manual: python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage4_prompt_checks_transcript.txt --stage5-log docs/project_management/now/stage5_prompt_checks_transcript.txt (requires functional substrate world environment)."
+      ],
+      "notes": "Script prepares Stage 5 transcript capture; execute once substrate runtime is available."
     }
   ],
   "version": 1,
@@ -793,10 +808,12 @@
           ],
           "tests": [
             "/usr/bin/cargo test -p substrate-shell",
-            "Manual: run async REPL twice, inspect ~/.substrate_history for new entries",
-            "Manual: python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage5_prompt_checks_transcript.txt (updated with Stage 5 scenario)"
+            "/usr/bin/cargo fmt -- --check",
+            "Manual: run async REPL twice, inspect ~/.substrate_history",
+            "Manual: python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage4_prompt_checks_transcript.txt --stage5-log docs/project_management/now/stage5_prompt_checks_transcript.txt"
           ],
-          "status": "pending"
+          "status": "completed",
+          "notes": "Async REPL now reuses Reedline via process_events; run Stage 5 prompt script when environment is available."
         },
         {
           "id": "stage5-cursor-multiline",
@@ -941,10 +958,12 @@
       ],
       "tests": [
         "/usr/bin/cargo test -p substrate-shell",
-        "Manual: run async REPL twice, inspect ~/.substrate_history for new entries",
-        "Manual: python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage5_prompt_checks_transcript.txt (updated with Stage 5 scenario)"
+        "/usr/bin/cargo fmt -- --check",
+        "Manual: run async REPL twice, inspect ~/.substrate_history",
+        "Manual: python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage4_prompt_checks_transcript.txt --stage5-log docs/project_management/now/stage5_prompt_checks_transcript.txt"
       ],
-      "status": "pending"
+      "status": "completed",
+      "notes": "Async REPL now reuses Reedline via process_events; run Stage 5 prompt script when environment is available."
     },
     {
       "id": "stage5-cursor-multiline",

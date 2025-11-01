@@ -47,7 +47,9 @@ def expect_prompt(child: "pexpect.spawn", *, timeout: int = 30) -> None:
 
 def spawn_async_shell() -> "pexpect.spawn":
     cmd = (
-        "source ~/.substrate/dev-shim-env.sh && "
+        "if [ -f ~/.substrate/dev-shim-env.sh ]; then "
+        "source ~/.substrate/dev-shim-env.sh; "
+        "fi; "
         "target/debug/substrate --no-world"
     )
     child = pexpect.spawn("bash", ["-lc", cmd], encoding="utf-8", timeout=60)
@@ -124,20 +126,76 @@ def run_drills(log_path: Path) -> None:
         log_file.write("# Stage 4 Prompt Integrity Drills\n")
         log_file.flush()
 
+    child = spawn_async_shell()
+    child.logfile = log_file
+    try:
+        log_file.write("\n## Scenario 1: typing while events stream\n")
+        log_file.flush()
+        scenario_typing_mid_stream(child)
+
+        log_file.write("\n## Scenario 2: long command under bursty output\n")
+        log_file.flush()
+        scenario_long_line_burst(child)
+
+        log_file.write("\n## Scenario 3: backspace edits during events\n")
+        log_file.flush()
+        scenario_control_chars(child)
+
+        _send_command(child, "exit")
+        child.expect(pexpect.EOF)
+    finally:
+        child.close()
+
+
+def run_stage5_checks(log_path: Path) -> None:
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("w", encoding="utf-8") as log_file:
+        log_file.write("# Stage 5 History & Completion Drills\n")
+        log_file.flush()
+
+        # Session 1: populate history and exercise completion while streaming.
         child = spawn_async_shell()
         child.logfile = log_file
         try:
-            log_file.write("\n## Scenario 1: typing while events stream\n")
+            log_file.write("\n## Session 1: populate history and test completion with streaming output\n")
             log_file.flush()
-            scenario_typing_mid_stream(child)
 
-            log_file.write("\n## Scenario 2: long command under bursty output\n")
-            log_file.flush()
-            scenario_long_line_burst(child)
+            _send_command(child, "echo stage5-history")
+            expect_prompt(child)
 
-            log_file.write("\n## Scenario 3: backspace edits during events\n")
+            child.send(":demo-agent\r")
+            expect_prompt(child)
+
+            # Begin typing while demo events stream.
+            child.send("ec")
+            time.sleep(0.05)
+            child.send("\t")
+            time.sleep(0.05)
+            child.send("ho stage5-completion")
+            child.send("\r")
+            child.expect("stage5-completion\r\n")
+            expect_prompt(child)
+
+            _send_command(child, ":demo-agent")
+            expect_prompt(child)
+
+            _send_command(child, "exit")
+            child.expect(pexpect.EOF)
+        finally:
+            child.close()
+
+        # Session 2: verify history persistence across fresh shell.
+        child = spawn_async_shell()
+        child.logfile = log_file
+        try:
+            log_file.write("\n## Session 2: verify history recall in new session\n")
             log_file.flush()
-            scenario_control_chars(child)
+
+            child.send("\x1b[A")  # Up arrow
+            child.expect("echo stage5-completion")
+            child.send("\r")
+            child.expect("stage5-completion\r\n")
+            expect_prompt(child)
 
             _send_command(child, "exit")
             child.expect(pexpect.EOF)
@@ -151,12 +209,21 @@ def main(argv: list[str] | None = None) -> int:
         "--log",
         type=Path,
         default=Path("docs/project_management/now/stage4_prompt_checks_transcript.txt"),
-        help="Path to write the captured transcript.",
+        help="Path to write the Stage 4 transcript.",
+    )
+    parser.add_argument(
+        "--stage5-log",
+        type=Path,
+        default=Path("docs/project_management/now/stage5_prompt_checks_transcript.txt"),
+        help="Path to write the Stage 5 transcript.",
     )
     args = parser.parse_args(argv)
 
     run_drills(args.log)
     print(f"Prompt drill transcript written to {args.log}")
+
+    run_stage5_checks(args.stage5_log)
+    print(f"Stage 5 transcript written to {args.stage5_log}")
     return 0
 
 

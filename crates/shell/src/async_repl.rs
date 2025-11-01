@@ -6,13 +6,11 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use crossterm::cursor::{Hide, Show};
-use crossterm::event::{
-    Event as CtEvent, EventStream, KeyCode as CtKeyCode, KeyEvent, KeyEventKind,
-    KeyModifiers as CtKeyModifiers,
-};
+use crossterm::event::{Event as CtEvent, EventStream, KeyEventKind};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use crossterm::ExecutableCommand;
 use futures::StreamExt;
+use reedline::{ExternalPrinter, Reedline, Signal, SuspendGuard};
 use tokio::runtime::Builder as TokioRuntimeBuilder;
 use tokio::task;
 use uuid::Uuid;
@@ -22,12 +20,10 @@ use crate::agent_events::{
     clear_agent_event_sender, format_event_line, init_event_channel, publish_command_completion,
     schedule_demo_burst, schedule_demo_events,
 };
+use crate::editor;
 use crate::ReplSessionTelemetry;
-use substrate_common::agent_events::AgentEvent;
 
 use super::{execute_command, setup_signal_handlers, ShellConfig};
-
-const CLEAR_LINE: &str = "\r\x1b[K";
 
 pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
     println!("Substrate v{}", env!("CARGO_PKG_VERSION"));
@@ -36,9 +32,6 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
     let running_child_pid = Arc::new(AtomicI32::new(0));
     setup_signal_handlers(running_child_pid.clone())?;
-
-    let prompt = if config.ci_mode { "> " } else { "substrate> " };
-    let prompt = prompt.to_string();
 
     let rt = TokioRuntimeBuilder::new_current_thread()
         .enable_all()
@@ -52,61 +45,37 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
             .context("failed to prepare terminal for async REPL")?;
         let mut telemetry = ReplSessionTelemetry::new(shared_config.clone(), "async");
 
-        let mut stdout = io::stdout();
-        redraw_prompt(&mut stdout, &prompt, "")?;
+        let mut adapter = AsyncReedlineAdapter::new(&shared_config)
+            .context("failed to initialize async Reedline adapter")?;
+        adapter
+            .render_prompt()
+            .context("failed to render initial prompt")?;
 
         let mut agent_rx = init_event_channel();
+        let agent_printer = adapter.printer_handle();
 
         let mut input_stream = EventStream::new().fuse();
-        let mut current_input = String::new();
         let mut should_exit = false;
 
         while !should_exit {
             tokio::select! {
                 maybe_event = input_stream.next() => {
                     match maybe_event {
-                        Some(Ok(CtEvent::Key(key_event))) => {
-                            if !matches!(key_event.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
-                                continue;
+                        Some(Ok(event)) => {
+                            if let CtEvent::Key(ref key_event) = event {
+                                if !matches!(key_event.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
+                                    continue;
+                                }
+                                telemetry.record_input_event();
                             }
 
-                            telemetry.record_input_event();
-
-                            if handle_control_key(
-                                &key_event,
-                                &mut stdout,
-                                &prompt,
-                                &mut current_input,
-                                &mut should_exit,
-                            )? {
-                                continue;
-                            }
-
-                            match key_event.code {
-                                CtKeyCode::Char(c) => {
-                                    current_input.push(c);
-                                    write!(stdout, "{c}")?;
-                                    stdout.flush().ok();
-                                }
-                                CtKeyCode::Backspace => {
-                                    if current_input.pop().is_some() {
-                                        write!(stdout, "\u{8}\x1b[K")?;
-                                        stdout.flush().ok();
-                                    }
-                                }
-                                CtKeyCode::Tab => {
-                                    current_input.push('\t');
-                                    write!(stdout, "\t")?;
-                                    stdout.flush().ok();
-                                }
-                                CtKeyCode::Enter => {
-                                    let command = std::mem::take(&mut current_input);
-                                    write!(stdout, "\r\n")?;
-                                    stdout.flush().ok();
-
+                            match adapter.handle_event(event)? {
+                                AdapterAction::Continue => {}
+                                AdapterAction::Submit(command) => {
                                     let trimmed = command.trim();
+
                                     if trimmed.is_empty() {
-                                        redraw_prompt(&mut stdout, &prompt, &current_input)?;
+                                        adapter.render_prompt().context("failed to redraw prompt")?;
                                         continue;
                                     }
 
@@ -117,29 +86,27 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
                                     if trimmed == ":demo-agent" {
                                         schedule_demo_events();
-                                        redraw_prompt(&mut stdout, &prompt, &current_input)?;
+                                        adapter.render_prompt().context("failed to redraw prompt after demo agent")?;
                                         continue;
                                     }
 
-                                    if let Some((agents, events, delay_ms)) =
-                                        parse_demo_burst(trimmed)
-                                    {
+                                    if let Some((agents, events, delay_ms)) = parse_demo_burst(trimmed) {
                                         schedule_demo_burst(
                                             agents,
                                             events,
                                             Duration::from_millis(delay_ms),
                                         );
-                                        writeln!(
-                                            stdout,
+                                        println!(
                                             "[demo] scheduled burst: agents={}, events_per_agent={}, delay_ms={}",
                                             agents, events, delay_ms
-                                        )?;
-                                        redraw_prompt(&mut stdout, &prompt, &current_input)?;
+                                        );
+                                        adapter.render_prompt().context("failed to redraw prompt after demo burst")?;
                                         continue;
                                     }
 
                                     let trimmed_owned = trimmed.to_string();
 
+                                    let reedline_guard = adapter.suspend_for_command();
                                     terminal_guard.pause()?;
 
                                     let config_clone = (*shared_config).clone();
@@ -156,24 +123,23 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                     report_nonzero_status(&status);
 
                                     terminal_guard.resume()?;
+                                    drop(reedline_guard);
+
                                     publish_command_completion(&trimmed_owned, &status);
                                     telemetry.record_command();
-                                    redraw_prompt(&mut stdout, &prompt, &current_input)?;
-                                    // Re-create the event stream to keep crossterm in sync after 
-                                    // toggling raw mode for the executed command.
+                                    adapter.render_prompt().context("failed to redraw prompt after command")?;
+                                    let _ = adapter.sync_history();
                                     input_stream = EventStream::new().fuse();
                                 }
-                                CtKeyCode::Esc => {
-                                    current_input.clear();
-                                    redraw_prompt(&mut stdout, &prompt, &current_input)?;
+                                AdapterAction::Interrupt => {
+                                    println!("^C");
+                                    adapter.render_prompt().context("failed to redraw prompt after interrupt")?;
                                 }
-                                _ => {}
+                                AdapterAction::Exit => {
+                                    should_exit = true;
+                                }
                             }
                         }
-                        Some(Ok(CtEvent::Resize(_, _))) => {
-                            redraw_prompt(&mut stdout, &prompt, &current_input)?;
-                        }
-                        Some(Ok(_)) => {}
                         Some(Err(e)) => {
                             eprintln!("stdin event error: {e}");
                             break;
@@ -186,11 +152,27 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                         continue;
                     }
                     telemetry.record_agent_event();
-                    render_agent_event(&mut stdout, &prompt, &current_input, &event)?;
+                    let _ = agent_printer.print(format_event_line(&event));
+                    if let Some(action) = adapter
+                        .flush_external_messages()
+                        .context("failed to flush agent output")?
+                    {
+                        match action {
+                            AdapterAction::Interrupt => {
+                                println!("^C");
+                                adapter.render_prompt().context("failed to redraw prompt after interrupt")?;
+                            }
+                            AdapterAction::Exit => {
+                                should_exit = true;
+                            }
+                            AdapterAction::Submit(_) | AdapterAction::Continue => {}
+                        }
+                    }
                 }
             }
         }
 
+        let _ = adapter.sync_history();
         clear_agent_event_sender();
         terminal_guard.pause()?;
 
@@ -198,6 +180,80 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
     })?;
 
     Ok(0)
+}
+
+#[derive(Debug)]
+enum AdapterAction {
+    Continue,
+    Submit(String),
+    Interrupt,
+    Exit,
+}
+
+struct AsyncReedlineAdapter {
+    editor: Reedline,
+    prompt: editor::SubstratePrompt,
+    printer: ExternalPrinter<String>,
+}
+
+impl AsyncReedlineAdapter {
+    fn new(config: &ShellConfig) -> Result<Self> {
+        let editor::EditorSetup {
+            line_editor,
+            printer,
+        } = editor::build_editor(config)?;
+        Ok(Self {
+            editor: line_editor,
+            prompt: editor::make_prompt(config.ci_mode),
+            printer,
+        })
+    }
+
+    fn handle_event(&mut self, event: CtEvent) -> Result<AdapterAction> {
+        if let CtEvent::Key(ref key_event) = event {
+            if !matches!(key_event.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
+                return Ok(AdapterAction::Continue);
+            }
+        }
+
+        if let Some(signal) = self.editor.process_events(&self.prompt, vec![event])? {
+            return Ok(Self::signal_to_action(signal));
+        }
+
+        Ok(AdapterAction::Continue)
+    }
+
+    fn flush_external_messages(&mut self) -> Result<Option<AdapterAction>> {
+        Ok(self
+            .editor
+            .process_events(&self.prompt, Vec::new())?
+            .map(Self::signal_to_action))
+    }
+
+    fn render_prompt(&mut self) -> Result<()> {
+        self.editor.force_repaint(&self.prompt)?;
+        Ok(())
+    }
+
+    fn suspend_for_command(&mut self) -> SuspendGuard<'_> {
+        self.editor.suspend_guard()
+    }
+
+    fn sync_history(&mut self) -> io::Result<()> {
+        self.editor.sync_history()
+    }
+
+    fn printer_handle(&self) -> ExternalPrinter<String> {
+        self.printer.clone()
+    }
+
+    fn signal_to_action(signal: Signal) -> AdapterAction {
+        match signal {
+            Signal::Success(command) => AdapterAction::Submit(command),
+            Signal::CtrlC => AdapterAction::Interrupt,
+            Signal::CtrlD => AdapterAction::Exit,
+        }
+    }
 }
 
 struct RawTerminalGuard {
@@ -234,51 +290,6 @@ impl Drop for RawTerminalGuard {
     fn drop(&mut self) {
         let _ = self.pause();
         let _ = io::stdout().flush();
-    }
-}
-
-fn redraw_prompt(stdout: &mut io::Stdout, prompt: &str, buffer: &str) -> io::Result<()> {
-    write!(stdout, "{CLEAR_LINE}{prompt}{buffer}")?;
-    stdout.flush()
-}
-
-fn render_agent_event(
-    stdout: &mut io::Stdout,
-    prompt: &str,
-    buffer: &str,
-    event: &AgentEvent,
-) -> io::Result<()> {
-    let line = format_event_line(event);
-    write!(stdout, "{CLEAR_LINE}{line}\r\n")?;
-    redraw_prompt(stdout, prompt, buffer)
-}
-
-fn handle_control_key(
-    key_event: &KeyEvent,
-    stdout: &mut io::Stdout,
-    prompt: &str,
-    current_input: &mut String,
-    should_exit: &mut bool,
-) -> Result<bool> {
-    if !key_event.modifiers.contains(CtKeyModifiers::CONTROL) {
-        return Ok(false);
-    }
-
-    match key_event.code {
-        CtKeyCode::Char('c') | CtKeyCode::Char('C') => {
-            current_input.clear();
-            write!(stdout, "\r\n")?;
-            redraw_prompt(stdout, prompt, current_input)?;
-            return Ok(true);
-        }
-        CtKeyCode::Char('d') | CtKeyCode::Char('D') => {
-            if current_input.is_empty() {
-                *should_exit = true;
-                write!(stdout, "\r\n")?;
-            }
-            return Ok(true);
-        }
-        _ => Ok(false),
     }
 }
 

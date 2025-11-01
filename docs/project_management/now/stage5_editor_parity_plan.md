@@ -113,8 +113,10 @@ Stage 5 brings the async REPL up to feature parity with the legacy Reedline-driv
   1. Async mode must load and sync the same `FileBackedHistory` instance used by the sync REPL, writing back on exit.
   2. Completion menu (`ColumnarMenu` registered as `completion_menu`) should display when the user presses Tab, just as in the legacy loop.
   3. Confirm history persistence by running the async REPL twice and inspecting `~/.substrate_history` for the new entries.
+- **Implementation status**: `AsyncReedlineAdapter` now drives Reedline via `process_events` (see `crates/shell/src/async_repl.rs` and `third_party/reedline/src/engine.rs:752-805`), so history/completion behavior matches the sync REPL while keeping the async event loop.
 - **Agent-output compatibility**: Document how the completion popup coexists with streaming agent events (e.g., the adapter defers redraw while menus are visible).
 - **Testing guidance**: Encourage extending `scripts/dev/async_repl_prompt_checks.py` with a Stage 5 scenario that triggers history recall mid-stream and capture the transcript to `docs/project_management/now/stage5_prompt_checks_transcript.txt`.
+- **Tooling**: `scripts/dev/async_repl_prompt_checks.py` now emits both Stage 4 and Stage 5 transcripts (use `--stage5-log` to capture history/completion runs).
 
 ### stage5-cursor-multiline
 - **Event mapping**: Detail how crossterm key events (`CtKeyCode::Left`, `Right`, `Home`, `End`, `Enter` with modifiers) map to the corresponding `ReedlineEvent::Edit` commands. Reference `third_party/reedline/src/engine.rs:874-1010` for canonical handling.
