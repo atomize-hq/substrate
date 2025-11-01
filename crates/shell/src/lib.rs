@@ -1,5 +1,6 @@
 pub(crate) mod agent_events;
 pub(crate) mod async_repl;
+mod editor;
 pub mod lock;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod platform_world;
@@ -42,12 +43,7 @@ use crate::agent_events::{
 };
 
 // Reedline imports
-use reedline::{
-    default_emacs_keybindings, ColumnarMenu, Completer, DefaultValidator, Emacs,
-    ExampleHighlighter, ExternalPrinter, FileBackedHistory, KeyCode, KeyModifiers, MenuBuilder,
-    Prompt, PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus, Reedline,
-    ReedlineEvent, ReedlineMenu, Signal, Span, Suggestion,
-};
+use reedline::Signal;
 #[cfg_attr(target_os = "windows", allow(unused_imports))]
 use std::thread;
 #[cfg(unix)]
@@ -65,7 +61,6 @@ use nix::sys::termios::{
 };
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use platform_world as pw;
-use std::borrow::Cow;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 fn world_transport_to_meta(transport: &pw::WorldTransport) -> TransportMeta {
     match transport {
@@ -1737,73 +1732,27 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
 
     let mut telemetry = ReplSessionTelemetry::new(Arc::new(config.clone()), "sync");
 
-    // Set up history file with proper initialization
-    let hist_path = dirs::home_dir()
-        .map(|p| p.join(".substrate_history"))
-        .unwrap_or_else(|| PathBuf::from(".substrate_history"));
+    let prompt = editor::make_prompt(config.ci_mode);
 
-    // Ensure history file exists and is accessible
-    if !hist_path.exists() {
-        std::fs::File::create(&hist_path)?;
-    }
+    let editor::EditorSetup {
+        mut line_editor,
+        printer,
+    } = editor::build_editor(config)?;
 
-    let history = Box::new(
-        FileBackedHistory::with_file(100_000, hist_path.clone())
-            .expect("Error configuring history file"),
-    );
-
-    // Create custom prompt
-    let prompt = SubstratePrompt::new(config.ci_mode);
-
-    // Configure keybindings
-    let mut keybindings = default_emacs_keybindings();
-    keybindings.add_binding(
-        KeyModifiers::NONE,
-        KeyCode::Tab,
-        ReedlineEvent::Menu("completion_menu".to_string()),
-    );
-    keybindings.add_binding(
-        KeyModifiers::CONTROL,
-        KeyCode::Char('l'),
-        ReedlineEvent::ClearScreen,
-    );
-
-    // Create completer
-    let completer = Box::new(SubstrateCompleter::new(config));
-
-    // Create the line editor
-    let edit_mode = Box::new(Emacs::new(keybindings));
-
-    // Create a simple transient prompt for after command execution
-    let transient_prompt = SubstratePrompt::new(config.ci_mode);
-
-    let printer = ExternalPrinter::<String>::new(256);
-    let printer_sender = printer.sender();
     let mut agent_rx = init_event_channel();
 
     let renderer_handle = thread::spawn(move || {
+        let printer = printer;
         while let Some(event) = agent_rx.blocking_recv() {
             if is_shell_stream_event(&event) {
                 continue;
             }
             let line = format_event_line(&event);
-            if printer_sender.send(line).is_err() {
+            if printer.print(line).is_err() {
                 break;
             }
         }
     });
-
-    let mut line_editor = Reedline::create()
-        .with_history(history)
-        .with_edit_mode(edit_mode)
-        .with_completer(completer)
-        .with_highlighter(Box::new(ExampleHighlighter::default()))
-        .with_validator(Box::new(DefaultValidator))
-        .with_transient_prompt(Box::new(transient_prompt))
-        .with_menu(ReedlineMenu::EngineCompleter(Box::new(
-            ColumnarMenu::default().with_name("completion_menu"),
-        )))
-        .with_external_printer(printer);
 
     // Set up the host command decider for PTY commands
 
@@ -5225,126 +5174,6 @@ fn setup_signal_handlers(running_child_pid: Arc<AtomicI32>) -> Result<()> {
     }
 
     Ok(())
-}
-
-// Custom prompt implementation with signal handling
-struct SubstratePrompt {
-    ci_mode: bool,
-}
-
-impl SubstratePrompt {
-    fn new(ci_mode: bool) -> Self {
-        Self { ci_mode }
-    }
-}
-
-impl Prompt for SubstratePrompt {
-    fn render_prompt_left(&self) -> Cow<'_, str> {
-        if self.ci_mode {
-            Cow::Borrowed("> ")
-        } else {
-            Cow::Borrowed("substrate> ")
-        }
-    }
-
-    fn render_prompt_right(&self) -> Cow<'_, str> {
-        Cow::Borrowed("")
-    }
-
-    fn render_prompt_indicator(&self, _edit_mode: PromptEditMode) -> Cow<'_, str> {
-        Cow::Borrowed("")
-    }
-
-    fn render_prompt_multiline_indicator(&self) -> Cow<'_, str> {
-        Cow::Borrowed("::: ")
-    }
-
-    fn render_prompt_history_search_indicator(
-        &self,
-        history_search: PromptHistorySearch,
-    ) -> Cow<'_, str> {
-        match history_search.status {
-            PromptHistorySearchStatus::Passing => Cow::Borrowed("(history search) "),
-            PromptHistorySearchStatus::Failing => Cow::Borrowed("(failing search) "),
-        }
-    }
-}
-
-// NEW: Completer implementation (command completion is a new feature, not a port)
-struct SubstrateCompleter {
-    commands: Vec<String>,
-}
-
-impl SubstrateCompleter {
-    fn new(config: &ShellConfig) -> Self {
-        // Use PATH from config.original_path
-        let commands = collect_commands_from_path(&config.original_path);
-        Self { commands }
-    }
-}
-
-impl Completer for SubstrateCompleter {
-    fn complete(&mut self, line: &str, pos: usize) -> Vec<Suggestion> {
-        // Extract the word being completed
-        let word = extract_word_at_pos(line, pos);
-
-        // Filter commands that start with the current word
-        // Limit to first 100 suggestions for performance
-        self.commands
-            .iter()
-            .filter(|cmd| cmd.starts_with(word))
-            .take(100)
-            .map(|cmd| Suggestion {
-                value: cmd.clone(),
-                description: None,
-                extra: None,
-                span: Span::new(pos - word.len(), pos),
-                append_whitespace: true,
-                style: None,
-            })
-            .collect()
-    }
-}
-
-// Helper functions for completion
-fn collect_commands_from_path(path: &str) -> Vec<String> {
-    let mut commands = Vec::new();
-    for dir in path.split(':') {
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                if let Ok(metadata) = entry.metadata() {
-                    if metadata.is_file() && is_executable(&metadata) {
-                        if let Some(name) = entry.file_name().to_str() {
-                            commands.push(name.to_string());
-                        }
-                    }
-                }
-            }
-        }
-    }
-    commands.sort();
-    commands.dedup();
-    commands
-}
-
-#[cfg(unix)]
-fn is_executable(metadata: &std::fs::Metadata) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    metadata.permissions().mode() & 0o111 != 0
-}
-
-#[cfg(not(unix))]
-fn is_executable(_metadata: &std::fs::Metadata) -> bool {
-    // On Windows, check file extensions (simplified for now)
-    true
-}
-
-fn extract_word_at_pos(line: &str, pos: usize) -> &str {
-    let start = line[..pos]
-        .rfind(|c: char| c.is_whitespace())
-        .map(|i| i + 1)
-        .unwrap_or(0);
-    &line[start..pos]
 }
 
 #[cfg(test)]

@@ -36,17 +36,75 @@ Stage 5 brings the async REPL up to feature parity with the legacy Reedline-driv
 ## Detailed Task Guidance
 
 ### Design Decision Record {#design-decision}
-Populate this section during `stage5-design-async-reedline`. Summarize the chosen adapter architecture, rejected alternatives, and any follow-up items.
+- **Decision (2025-11-01):** Implement an in-process `AsyncReedlineAdapter` that wraps Reedline's editor state and painter while the Tokio main loop drives crossterm input and agent output. We will keep the async shell single-threaded for stdin/agent processing and use a shared stdout lock (via `std::sync::Mutex<Stdout>`) to serialize redraws with Reedline's painter helpers.
+- **Status:** Accepted. Implementation will begin with `stage5-shared-editor-core`.
+- **Alternatives considered:**
+  - *Run the full Reedline event loop on a blocking thread and proxy input/output over channels.* Rejected because it re-introduces a busy wait on macOS (Reedline polls within its loop) and complicates shutdown/TTY handoff across platforms.
+  - *Rewrite the async editor without Reedline.* Rejected due to the high cost of re-creating history, completion, and undo stacks, and because it would diverge from our vendored Reedline fork (`third_party/reedline`).
+- **Consequences:**
+  - Requires extracting Reedline configuration into a shared builder so the adapter can borrow the same keymaps/history/completion pipeline (`crates/shell/src/lib.rs:1736-1928`).
+  - Demands explicit stdout coordination with existing helpers (see `render_agent_event` in `crates/shell/src/async_repl.rs:240-254`) to avoid prompt corruption.
+  - Permits future optimization (e.g., alternative adapters) without touching command execution paths.
+- **Follow-up:**
+  - Add a hidden `--minimal-async-editor` debug flag only if adapter instability is observed in later stages; until then, rely on `--legacy-repl` as the escape hatch. Should we ship the debug flag, update `docs/USAGE.md` and `docs/CONFIGURATION.md` in `stage5-regression-validation`.
 
 ### stage5-design-async-reedline
 #### Async Reedline Adapter
-- **Deliverables**: An expanded "Async Reedline Adapter" section in this plan plus a short ADR-style note inside `docs/project_management/now/stage5_editor_parity_plan.md#design-decision` (create the anchor) that records why we chose an adapter rather than a blocking Reedline loop. Include the rejection reasoning for the alternative.
-- **Adapter outline**: Describe the Rust surface you expect to implement (`AsyncReedlineAdapter` struct with methods such as `process_event`, `handle_agent_event`, `pause_for_command`, `resume_after_command`). Reference the existing synchronous editor at `crates/shell/src/lib.rs:1736-1928` for the history/completion setup and note which pieces will be shared.
-- **Stdout / locking**: Document how stdout writes stay serialized—e.g., via a shared `Mutex<Stdout>` or by reusing Reedline`s painter APIs—and confirm the approach against the `render_agent_event` helper (`crates/shell/src/async_repl.rs:240-254`).
-- **Fallback guidance**: Specify how we expose a debug escape hatch (e.g., `--minimal-async-editor`) if the adapter misbehaves and where that flag should be documented.
+- **Deliverables**: This section documents the adapter design and the design decision record above. The adapter plan includes diagrams/text covering event flow, concurrency, stdout coordination, and fallback strategy.
+- **Architecture Summary**:
+  - The async shell (`run_async_repl`, `crates/shell/src/async_repl.rs:35-199`) keeps ownership of the Tokio loop. We introduce an `AsyncReedlineAdapter` that encapsulates Reedline state (editor, painter, prompt) and exposes non-blocking methods to mutate that state.
+  - The adapter holds:
+    - `editor`: wrapped Reedline engine configured via the shared builder extracted in `stage5-shared-editor-core`.
+    - `painter`: borrowed from Reedline to handle redraws after edits/agent events.
+    - `stdout_lock`: `Arc<Mutex<Stdout>>` shared with agent-event rendering to serialize writes.
+    - `pending_menu_state`: tracks whether completion UI is visible so agent output can defer repaint until menu is hidden.
+  - Event queues:
+    - `input_rx`: async `Stream` of `crossterm::Event` (already produced by `EventStream::new().fuse()`).
+    - `agent_rx`: `tokio::sync::mpsc::Receiver<AgentEvent>` from `init_event_channel()`.
+    - Both feed into `tokio::select!` (existing loop) but the adapter converts each event and returns a set of painting commands.
+- **Adapter API Outline** (minimal surface):
+  ```rust
+  pub struct AsyncReedlineAdapter {
+      editor: Reedline,
+      painter: ReedlinePainter,
+      stdout: Arc<Mutex<Stdout>>, // shared with agent renderer
+      prompt: Box<dyn Prompt>,
+      buffer_cache: String,
+      menu_active: bool,
+  }
+
+  impl AsyncReedlineAdapter {
+      pub fn handle_key_event(&mut self, event: KeyEvent) -> AdapterAction;
+      pub fn handle_control(&mut self, event: KeyEvent) -> AdapterAction; // keeps Ctrl+C/D semantics
+      pub fn handle_agent_event(&mut self, evt: &AgentEvent) -> io::Result<()>;
+      pub fn suspend_for_command<F>(&mut self, f: F) -> Result<ExitStatus>
+          where F: FnOnce() -> Result<ExitStatus>;
+      pub fn redraw_prompt(&mut self) -> io::Result<()>;
+      pub fn drain_history(&mut self) -> io::Result<()>; // flush history on exit
+  }
+  ```
+  `AdapterAction` enumerates responses for the outer loop: `Continue`, `Submit(String)`, `Exit`, `Redraw`.
+- **Event Flow**:
+  1. Tokio reads `KeyEvent` from crossterm and calls `handle_key_event`. The adapter translates to `ReedlineEvent` via the same parsing logic used in `third_party/reedline/src/engine.rs:874-1010`, but without blocking.
+  2. `handle_key_event` mutates the Reedline editor and uses `painter` to repaint if necessary. Stdout writes occur within a `stdout_lock` guard so that concurrent agent output (see `render_agent_event` helper) cannot interleave mid-draw.
+  3. When `AdapterAction::Submit(cmd)` is returned, the outer loop pauses raw mode (via `RawTerminalGuard`) exactly as today, executes the command (spawn_blocking), and resumes through `suspend_for_command`.
+  4. Agent events arrive via `agent_rx`; `handle_agent_event` formats lines with existing `format_event_line` but uses the adapter's painter to temporarily hide the prompt, print the event, and restore the buffer.
+- **Stdout / Locking**: Adopt a shared `Arc<Mutex<Stdout>>` created in `run_async_repl` and passed into both the adapter and the agent event handler. All prompt redraws and agent prints acquire this mutex to serialize writes. This mirrors the current synchronous approach (which relies on Reedline's `ExternalPrinter`) and maintains compatibility with `render_agent_event` (`crates/shell/src/async_repl.rs:240-254`).
+- **Prompt & History Coordination**:
+  - History is still provided by `FileBackedHistory::with_file` using `~/.substrate_history` (`crates/shell/src/lib.rs:1742-1759`). The builder created in `stage5-shared-editor-core` will supply the history handle to the adapter.
+  - The adapter caches the current buffer (`buffer_cache`) so agent events can restore partially typed lines. On redraw, it prints `CLEAR_LINE`, prompt text, and cached buffer, matching the semantics of `redraw_prompt` today.
+- **Telemetry**: Keep existing telemetry hooks (`ReplSessionTelemetry::record_input_event` and `record_agent_event`) in the outer loop. Adapter exposes callbacks so we can inject additional telemetry later (e.g., `record_completion_popup`).
+- **Fallback strategy**: Continue recommending `--legacy-repl` for production fallback. If the adapter introduces instability, we will introduce `--minimal-async-editor` (same async loop with line-editing stripped) behind a hidden flag and document it in `docs/USAGE.md`/`docs/CONFIGURATION.md` during `stage5-regression-validation`. Until then, no extra flag is planned.
+- **Compatibility checks**: Confirm adapter honors platform-specific terminal modes:
+  - macOS: ensure vsock/tty bridging (no changes, adapter remains host-side).
+  - Windows: guard `stdout_lock` usage with `crate::platform::windows` newline handling to preserve CRLF semantics when Reedline painter writes to conhost.
+- **Open edges for subsequent tasks**:
+  - Evaluate whether Reedline's menu drawing (completion UI) requires additional locking beyond stdout (tracked in `stage5-history-completions`).
+  - Consider exposing an adapter method `handle_resize` so we can reuse `resize` handling currently in `run_async_repl`.
 
 ### stage5-shared-editor-core
 - **Implementation goals**: Factor the Reedline builder (prompt, keybindings, history, completer, menus) into a new helper module (`crates/shell/src/editor.rs`). The helper must return a configured `Reedline` instance and the associated metadata (history path, external printer) without altering the `run_interactive_shell` behavior.
+- **Implemented structure**: `build_editor` now returns `EditorSetup { line_editor, printer }`, and `make_prompt` exposes the reusable `SubstratePrompt` for both sync and async REPL paths.
 - **Regression guard**: Note in this plan (and in the task acceptance criteria) that `target/debug/substrate --legacy-repl --no-world` must still provide completion, history recall, and the same prompt styling as before refactor.
 - **History setup reference**: Call out the existing file-backed history located at `~/.substrate_history` (see `crates/shell/src/lib.rs:1742-1759`) so the extraction keeps the path and file-creation semantics intact.
 

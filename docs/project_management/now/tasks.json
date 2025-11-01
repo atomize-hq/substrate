@@ -175,6 +175,33 @@
       ],
       "tests": [],
       "notes": "Stage 5 tasks depend on Stage 4 rollout; doc records open questions for completions and debug flags."
+    },
+    {
+      "timestamp": "2025-11-01T17:05:00Z",
+      "summary": "Completed Stage 5 async Reedline adapter design.",
+      "highlights": [
+        "Documented AsyncReedlineAdapter architecture, event flow, and stdout locking in stage5_editor_parity_plan.md.",
+        "Recorded design decision comparing adapter vs. blocking Reedline loop with consequences and follow-up actions.",
+        "Confirmed debug fallback strategy relies on --legacy-repl unless instability forces a minimal editor flag later."
+      ],
+      "tests": [
+        "Manual: verified updated stage5_editor_parity_plan.md against crates/shell/src/lib.rs:1736-1928 and crates/shell/src/async_repl.rs:35-254."
+      ],
+      "notes": "No new debug flag introduced; existing --legacy-repl remains documented fallback."
+    },
+    {
+      "timestamp": "2025-11-01T17:40:00Z",
+      "summary": "Extracted shared Reedline builder for sync/async parity groundwork.",
+      "highlights": [
+        "Introduced crates/shell/src/editor.rs with build_editor/make_prompt returning EditorSetup { line_editor, printer }.",
+        "Refactored run_interactive_shell to consume shared builder and ExternalPrinter handle while preserving agent streaming thread.",
+        "Ran cargo fmt --check and cargo test -p substrate-shell to confirm no regressions."
+      ],
+      "tests": [
+        "/usr/bin/cargo fmt -- --check",
+        "/usr/bin/cargo test -p substrate-shell"
+      ],
+      "notes": "Shared builder now centralises history/completer/keymaps for future async adapter integration."
     }
   ],
   "version": 1,
@@ -707,9 +734,10 @@
           ],
           "tests": [
             "Manual: review updated docs/project_management/now/stage5_editor_parity_plan.md against code references.",
-            "Manual: confirm docs/USAGE.md and docs/CONFIGURATION.md mention debug fallback flag if added."
+            "Manual: confirm fallback strategy relies on existing --legacy-repl (no new flag required)."
           ],
-          "status": "pending"
+          "status": "completed",
+          "notes": "Design locked; proceed to stage5-shared-editor-core using documented adapter surface."
         },
         {
           "id": "stage5-shared-editor-core",
@@ -739,7 +767,8 @@
             "Manual: target/debug/substrate --legacy-repl --no-world",
             "Manual: target/debug/substrate --no-world --async-repl (default)"
           ],
-          "status": "pending"
+          "status": "completed",
+          "notes": "Shared editor module builds Reedline and returns EditorSetup { line_editor, printer } for sync/async reuse."
         },
         {
           "id": "stage5-history-completions",
@@ -853,9 +882,10 @@
       ],
       "tests": [
         "Manual: review updated docs/project_management/now/stage5_editor_parity_plan.md against code references.",
-        "Manual: confirm docs/USAGE.md and docs/CONFIGURATION.md mention debug fallback flag if added."
+        "Manual: confirm fallback strategy relies on existing --legacy-repl (no new flag required)."
       ],
-      "status": "pending"
+      "status": "completed",
+      "notes": "Design locked; proceed to stage5-shared-editor-core using documented adapter surface."
     },
     {
       "id": "stage5-shared-editor-core",
@@ -885,7 +915,8 @@
         "Manual: target/debug/substrate --legacy-repl --no-world",
         "Manual: target/debug/substrate --no-world --async-repl (default)"
       ],
-      "status": "pending"
+      "status": "completed",
+      "notes": "Shared editor module builds Reedline and returns EditorSetup { line_editor, printer } for sync/async reuse."
     },
     {
       "id": "stage5-history-completions",
