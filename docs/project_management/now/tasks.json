@@ -162,6 +162,19 @@
         "/usr/bin/cargo test -p substrate-shell"
       ],
       "notes": "Stage4-rollout complete; next milestone is pruning legacy code once the fallback stops seeing usage."
+    },
+    {
+      "timestamp": "2025-11-01T16:20:00Z",
+      "summary": "Outlined Stage 5 editor parity plan and broke work into actionable tasks.",
+      "highlights": [
+        "Reviewed prior Stage 1-4 deliverables and current async REPL implementation to identify gaps.",
+        "Authored stage5_editor_parity_plan.md capturing the async Reedline adapter approach and risk analysis.",
+        "Split Stage 5 into design, shared core, history/completion, cursor/multiline, and regression validation tasks.",
+        "Expanded stage5_editor_parity_plan.md with per-task deliverables, code references, and log/metrics expectations for Stage 5 execution.",
+        "Updated Stage 5 task acceptance/tests to mandate history verification, prompt drill transcripts, and idle-metrics artifacts in docs/project_management/now/."
+      ],
+      "tests": [],
+      "notes": "Stage 5 tasks depend on Stage 4 rollout; doc records open questions for completions and debug flags."
     }
   ],
   "version": 1,
@@ -482,18 +495,18 @@
             "`cargo test -p substrate-shell`",
             "Manual: run long `sleep`/`printf` combination and inspect trace logs."
           ],
-      "status": "completed"
-    },
-    {
-      "timestamp": "2025-10-30T20:30:00Z",
-      "summary": "Documented remaining async REPL editing gaps and scheduled follow-up stage.",
-      "highlights": [
-        "Captured missing line-editing features (history, cursor movement, visual caret) as Stage 5 work items.",
-        "Clarified that --legacy-repl remains the temporary workaround until Reedline parity returns."
-      ],
-      "tests": [],
-      "notes": "Stage 4 remains complete; Stage 5 will cover advanced editor support."
-    }
+          "status": "completed"
+        },
+        {
+          "timestamp": "2025-10-30T20:30:00Z",
+          "summary": "Documented remaining async REPL editing gaps and scheduled follow-up stage.",
+          "highlights": [
+            "Captured missing line-editing features (history, cursor movement, visual caret) as Stage 5 work items.",
+            "Clarified that --legacy-repl remains the temporary workaround until Reedline parity returns."
+          ],
+          "tests": [],
+          "notes": "Stage 4 remains complete; Stage 5 will cover advanced editor support."
+        },
         {
           "id": "stage3-cross-platform",
           "title": "Implement platform transports for events",
@@ -673,32 +686,292 @@
       ],
       "next": [
         {
-          "id": "stage5-editor-parity",
-          "title": "Restore advanced line editing in async REPL",
-          "description": "Port Reedline history/cursor features into the async loop while keeping prompt-safe agent streaming.",
+          "id": "stage5-design-async-reedline",
+          "title": "Finalize async Reedline adapter design",
+          "description": "Document the event translation strategy for reusing Reedline in the async REPL, covering adapter responsibilities, stdout locking, and fallback modes.",
           "references": [
+            "docs/project_management/now/stage5_editor_parity_plan.md",
             "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md",
-            "docs/USAGE.md"
+            "third_party/reedline"
           ],
           "files": [
-            "crates/shell/src/async_repl.rs",
-            "crates/shell/src/lib.rs",
-            "docs/USAGE.md"
+            "docs/project_management/now/stage5_editor_parity_plan.md"
           ],
           "dependencies": [
             "stage4-rollout"
           ],
           "acceptance": [
-            "Async REPL supports history navigation (up/down) and cursor movement (left/right).",
-            "Visual caret renders and multiline editing works while streaming agent output.",
-            "Manual regression confirms prompt integrity with active streaming."
+            "Plan doc section 'Async Reedline Adapter' details struct/method outline and stdout locking strategy, with code references to crates/shell/src/lib.rs:1736-1928 and crates/shell/src/async_repl.rs:240-254.",
+            "#design-decision section records the chosen adapter, the rejected blocking-Reedline alternative, and fallback flag guidance.",
+            "Any new debug flag (e.g., --minimal-async-editor) is described in docs/USAGE.md and docs/CONFIGURATION.md."
           ],
           "tests": [
-            "Manual: exercise history/cursor edits mid-stream" 
+            "Manual: review updated docs/project_management/now/stage5_editor_parity_plan.md against code references.",
+            "Manual: confirm docs/USAGE.md and docs/CONFIGURATION.md mention debug fallback flag if added."
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "stage5-shared-editor-core",
+          "title": "Extract shared Reedline editor core",
+          "description": "Factor prompt/completer/history setup into a reusable builder used by both sync and async REPL paths, keeping feature flags aligned.",
+          "references": [
+            "docs/project_management/now/stage5_editor_parity_plan.md",
+            "crates/shell/src/lib.rs",
+            "crates/shell/src/async_repl.rs"
+          ],
+          "files": [
+            "crates/shell/src/lib.rs",
+            "crates/shell/src/async_repl.rs",
+            "crates/shell/src/editor.rs"
+          ],
+          "dependencies": [
+            "stage5-design-async-reedline"
+          ],
+          "acceptance": [
+            "Shared builder in crates/shell/src/editor.rs (or equivalent module) constructs Reedline with prompts, keybindings, history, completer, and menus identical to legacy path.",
+            "Legacy sync REPL (`target/debug/substrate --legacy-repl --no-world`) still provides Tab completion, history recall, and prompt styling post-refactor.",
+            "Async path consumes the same builder without duplicating configuration."
+          ],
+          "tests": [
+            "/usr/bin/cargo test -p substrate-shell",
+            "/usr/bin/cargo fmt -- --check",
+            "Manual: target/debug/substrate --legacy-repl --no-world",
+            "Manual: target/debug/substrate --no-world --async-repl (default)"
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "stage5-history-completions",
+          "title": "Enable history and completions in async mode",
+          "description": "Wire the async REPL to the shared history backend and completion menus, including persistent storage and :demo-agent compatibility.",
+          "references": [
+            "docs/project_management/now/stage5_editor_parity_plan.md",
+            "docs/USAGE.md"
+          ],
+          "files": [
+            "crates/shell/src/async_repl.rs",
+            "crates/shell/src/editor.rs",
+            "docs/USAGE.md"
+          ],
+          "dependencies": [
+            "stage5-shared-editor-core"
+          ],
+          "acceptance": [
+            "Async REPL loads and syncs ~/.substrate_history via FileBackedHistory, verified by running two sessions and seeing appended commands.",
+            "Tab-triggered completion menu (ColumnarMenu named 'completion_menu') renders in async mode alongside streaming agent output.",
+            "Completion/history interactions during agent events leave the prompt/input intact."
+          ],
+          "tests": [
+            "/usr/bin/cargo test -p substrate-shell",
+            "Manual: run async REPL twice, inspect ~/.substrate_history for new entries",
+            "Manual: python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage5_prompt_checks_transcript.txt (updated with Stage 5 scenario)"
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "stage5-cursor-multiline",
+          "title": "Implement cursor-aware multiline editing",
+          "description": "Translate crossterm input events to Reedline events inside async loop to provide left/right movement, multi-line editing, and undo/redo while streaming.",
+          "references": [
+            "docs/project_management/now/stage5_editor_parity_plan.md",
+            "third_party/reedline/src/engine.rs"
+          ],
+          "files": [
+            "crates/shell/src/async_repl.rs",
+            "third_party/reedline/src/engine.rs"
+          ],
+          "dependencies": [
+            "stage5-history-completions"
+          ],
+          "acceptance": [
+            "Async REPL supports Left/Right/Home/End cursor movement and multi-line editing mapped through ReedlineEvent::Edit.",
+            "Agent event redraw restores caret position for multi-line buffers under load.",
+            "Undo/redo shortcuts (Ctrl+_ and Ctrl+Shift+- on Windows) operate in async mode, confirmed manually.",
+            "Stage 5 scenario added to scripts/dev/async_repl_prompt_checks.py captures multi-line editing with interleaved agent output."
+          ],
+          "tests": [
+            "Manual: python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage5_prompt_checks_transcript.txt",
+            "Manual: exercise undo/redo and cursor movement in async REPL under :demo-agent load"
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "stage5-regression-validation",
+          "title": "Stage 5 validation and docs",
+          "description": "Extend automated tests, capture idle CPU metrics, and update docs/release notes to reflect async editor parity rollout.",
+          "references": [
+            "docs/project_management/now/stage5_editor_parity_plan.md",
+            "docs/USAGE.md",
+            "docs/CONFIGURATION.md"
+          ],
+          "files": [
+            "crates/shell/tests",
+            "docs/USAGE.md",
+            "docs/CONFIGURATION.md",
+            "docs/project_management/now/stage5_editor_parity_plan.md"
+          ],
+          "dependencies": [
+            "stage5-cursor-multiline"
+          ],
+          "acceptance": [
+            "New/updated integration tests under crates/shell/tests cover async Reedline history and cursor behavior.",
+            "Idle CPU measurements saved to docs/project_management/now/stage5_idle_metrics_<platform>.txt for each OS exercised.",
+            "Stage 5 prompt drill transcript stored at docs/project_management/now/stage5_prompt_checks_transcript.txt and linked in session_log.",
+            "Docs/USAGE.md, docs/CONFIGURATION.md, and CHANGELOG.md describe restored editor parity and any new flags."
+          ],
+          "tests": [
+            "/usr/bin/cargo test -p substrate-shell -- --nocapture",
+            "Manual: python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage5_prompt_checks_transcript.txt",
+            "Manual: python scripts/dev/async_repl_metrics.py --output docs/project_management/now/stage5_idle_metrics_<platform>.txt --samples 5 (per platform)"
           ],
           "status": "pending"
         }
       ]
+    }
+  ],
+  "next": [
+    {
+      "id": "stage5-design-async-reedline",
+      "title": "Finalize async Reedline adapter design",
+      "description": "Document the event translation strategy for reusing Reedline in the async REPL, covering adapter responsibilities, stdout locking, and fallback modes.",
+      "references": [
+        "docs/project_management/now/stage5_editor_parity_plan.md",
+        "docs/project_management/now/Fixing REPL Busy-Spin and Implementing Async Agent Output_ Plan & Steps.docx.md",
+        "third_party/reedline"
+      ],
+      "files": [
+        "docs/project_management/now/stage5_editor_parity_plan.md"
+      ],
+      "dependencies": [
+        "stage4-rollout"
+      ],
+      "acceptance": [
+        "Plan doc section 'Async Reedline Adapter' details struct/method outline and stdout locking strategy, with code references to crates/shell/src/lib.rs:1736-1928 and crates/shell/src/async_repl.rs:240-254.",
+        "#design-decision section records the chosen adapter, the rejected blocking-Reedline alternative, and fallback flag guidance.",
+        "Any new debug flag (e.g., --minimal-async-editor) is described in docs/USAGE.md and docs/CONFIGURATION.md."
+      ],
+      "tests": [
+        "Manual: review updated docs/project_management/now/stage5_editor_parity_plan.md against code references.",
+        "Manual: confirm docs/USAGE.md and docs/CONFIGURATION.md mention debug fallback flag if added."
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "stage5-shared-editor-core",
+      "title": "Extract shared Reedline editor core",
+      "description": "Factor prompt/completer/history setup into a reusable builder used by both sync and async REPL paths, keeping feature flags aligned.",
+      "references": [
+        "docs/project_management/now/stage5_editor_parity_plan.md",
+        "crates/shell/src/lib.rs",
+        "crates/shell/src/async_repl.rs"
+      ],
+      "files": [
+        "crates/shell/src/lib.rs",
+        "crates/shell/src/async_repl.rs",
+        "crates/shell/src/editor.rs"
+      ],
+      "dependencies": [
+        "stage5-design-async-reedline"
+      ],
+      "acceptance": [
+        "Shared builder in crates/shell/src/editor.rs (or equivalent module) constructs Reedline with prompts, keybindings, history, completer, and menus identical to legacy path.",
+        "Legacy sync REPL (`target/debug/substrate --legacy-repl --no-world`) still provides Tab completion, history recall, and prompt styling post-refactor.",
+        "Async path consumes the same builder without duplicating configuration."
+      ],
+      "tests": [
+        "/usr/bin/cargo test -p substrate-shell",
+        "/usr/bin/cargo fmt -- --check",
+        "Manual: target/debug/substrate --legacy-repl --no-world",
+        "Manual: target/debug/substrate --no-world --async-repl (default)"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "stage5-history-completions",
+      "title": "Enable history and completions in async mode",
+      "description": "Wire the async REPL to the shared history backend and completion menus, including persistent storage and :demo-agent compatibility.",
+      "references": [
+        "docs/project_management/now/stage5_editor_parity_plan.md",
+        "docs/USAGE.md"
+      ],
+      "files": [
+        "crates/shell/src/async_repl.rs",
+        "crates/shell/src/editor.rs",
+        "docs/USAGE.md"
+      ],
+      "dependencies": [
+        "stage5-shared-editor-core"
+      ],
+      "acceptance": [
+        "Async REPL loads and syncs ~/.substrate_history via FileBackedHistory, verified by running two sessions and seeing appended commands.",
+        "Tab-triggered completion menu (ColumnarMenu named 'completion_menu') renders in async mode alongside streaming agent output.",
+        "Completion/history interactions during agent events leave the prompt/input intact."
+      ],
+      "tests": [
+        "/usr/bin/cargo test -p substrate-shell",
+        "Manual: run async REPL twice, inspect ~/.substrate_history for new entries",
+        "Manual: python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage5_prompt_checks_transcript.txt (updated with Stage 5 scenario)"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "stage5-cursor-multiline",
+      "title": "Implement cursor-aware multiline editing",
+      "description": "Translate crossterm input events to Reedline events inside async loop to provide left/right movement, multi-line editing, and undo/redo while streaming.",
+      "references": [
+        "docs/project_management/now/stage5_editor_parity_plan.md",
+        "third_party/reedline/src/engine.rs"
+      ],
+      "files": [
+        "crates/shell/src/async_repl.rs",
+        "third_party/reedline/src/engine.rs"
+      ],
+      "dependencies": [
+        "stage5-history-completions"
+      ],
+      "acceptance": [
+        "Async REPL supports Left/Right/Home/End cursor movement and multi-line editing mapped through ReedlineEvent::Edit.",
+        "Agent event redraw restores caret position for multi-line buffers under load.",
+        "Undo/redo shortcuts (Ctrl+_ and Ctrl+Shift+- on Windows) operate in async mode, confirmed manually.",
+        "Stage 5 scenario added to scripts/dev/async_repl_prompt_checks.py captures multi-line editing with interleaved agent output."
+      ],
+      "tests": [
+        "Manual: python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage5_prompt_checks_transcript.txt",
+        "Manual: exercise undo/redo and cursor movement in async REPL under :demo-agent load"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "stage5-regression-validation",
+      "title": "Stage 5 validation and docs",
+      "description": "Extend automated tests, capture idle CPU metrics, and update docs/release notes to reflect async editor parity rollout.",
+      "references": [
+        "docs/project_management/now/stage5_editor_parity_plan.md",
+        "docs/USAGE.md",
+        "docs/CONFIGURATION.md"
+      ],
+      "files": [
+        "crates/shell/tests",
+        "docs/USAGE.md",
+        "docs/CONFIGURATION.md",
+        "docs/project_management/now/stage5_editor_parity_plan.md"
+      ],
+      "dependencies": [
+        "stage5-cursor-multiline"
+      ],
+      "acceptance": [
+        "New/updated integration tests under crates/shell/tests cover async Reedline history and cursor behavior.",
+        "Idle CPU measurements saved to docs/project_management/now/stage5_idle_metrics_<platform>.txt for each OS exercised.",
+        "Stage 5 prompt drill transcript stored at docs/project_management/now/stage5_prompt_checks_transcript.txt and linked in session_log.",
+        "Docs/USAGE.md, docs/CONFIGURATION.md, and CHANGELOG.md describe restored editor parity and any new flags."
+      ],
+      "tests": [
+        "/usr/bin/cargo test -p substrate-shell -- --nocapture",
+        "Manual: python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage5_prompt_checks_transcript.txt",
+        "Manual: python scripts/dev/async_repl_metrics.py --output docs/project_management/now/stage5_idle_metrics_<platform>.txt --samples 5 (per platform)"
+      ],
+      "status": "pending"
     }
   ]
 }
