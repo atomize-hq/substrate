@@ -10,7 +10,7 @@ use crossterm::event::{Event as CtEvent, EventStream, KeyEventKind};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use crossterm::ExecutableCommand;
 use futures::StreamExt;
-use reedline::{ExternalPrinter, Reedline, Signal, SuspendGuard};
+use reedline::{EditCommand, ExternalPrinter, Reedline, Signal, SuspendGuard};
 use tokio::runtime::Builder as TokioRuntimeBuilder;
 use tokio::task;
 use uuid::Uuid;
@@ -48,8 +48,8 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         let mut adapter = AsyncReedlineAdapter::new(&shared_config)
             .context("failed to initialize async Reedline adapter")?;
         adapter
-            .render_prompt()
-            .context("failed to render initial prompt")?;
+            .begin_session()
+            .context("failed to prepare async Reedline session")?;
 
         let mut agent_rx = init_event_channel();
         let agent_printer = adapter.printer_handle();
@@ -72,7 +72,7 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                             match adapter.handle_event(event)? {
                                 AdapterAction::Continue => {}
                                 AdapterAction::Submit(command) => {
-                                    let trimmed = command.trim();
+                                                                        let trimmed = command.trim();
 
                                     if trimmed.is_empty() {
                                         adapter.render_prompt().context("failed to redraw prompt")?;
@@ -106,6 +106,7 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
                                     let trimmed_owned = trimmed.to_string();
 
+                                    adapter.end_session();
                                     let reedline_guard = adapter.suspend_for_command();
                                     terminal_guard.pause()?;
 
@@ -124,12 +125,17 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
                                     terminal_guard.resume()?;
                                     drop(reedline_guard);
+                                    adapter
+                                        .begin_session()
+                                        .context("failed to resume async Reedline session")?;
+                                    adapter
+                                        .begin_session()
+                                        .context("failed to resume async Reedline session")?;
 
                                     publish_command_completion(&trimmed_owned, &status);
                                     telemetry.record_command();
                                     adapter.render_prompt().context("failed to redraw prompt after command")?;
                                     let _ = adapter.sync_history();
-                                    input_stream = EventStream::new().fuse();
                                 }
                                 AdapterAction::Interrupt => {
                                     println!("^C");
@@ -153,26 +159,15 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     }
                     telemetry.record_agent_event();
                     let _ = agent_printer.print(format_event_line(&event));
-                    if let Some(action) = adapter
+                    adapter
                         .flush_external_messages()
-                        .context("failed to flush agent output")?
-                    {
-                        match action {
-                            AdapterAction::Interrupt => {
-                                println!("^C");
-                                adapter.render_prompt().context("failed to redraw prompt after interrupt")?;
-                            }
-                            AdapterAction::Exit => {
-                                should_exit = true;
-                            }
-                            AdapterAction::Submit(_) | AdapterAction::Continue => {}
-                        }
-                    }
+                        .context("failed to flush agent output")?;
                 }
             }
         }
 
         let _ = adapter.sync_history();
+        adapter.end_session();
         clear_agent_event_sender();
         terminal_guard.pause()?;
 
@@ -209,10 +204,38 @@ impl AsyncReedlineAdapter {
         })
     }
 
+    fn begin_session(&mut self) -> Result<()> {
+        self.editor
+            .begin_nonblocking_session(&self.prompt)
+            .context("begin_nonblocking_session")?;
+        let _ = self.editor.flush_external_messages(&self.prompt)?;
+        Ok(())
+    }
+
+    fn end_session(&mut self) {
+        self.editor.end_nonblocking_session();
+    }
+
     fn handle_event(&mut self, event: CtEvent) -> Result<AdapterAction> {
         if let CtEvent::Key(ref key_event) = event {
             if !matches!(key_event.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
                 return Ok(AdapterAction::Continue);
+            }
+        }
+        if let CtEvent::Key(ref key_event) = event {
+            if matches!(key_event.code, crossterm::event::KeyCode::Enter)
+                && key_event.modifiers.is_empty()
+            {
+                if let Some(backspaces) =
+                    continuation_backspaces(self.editor.current_buffer_contents())
+                {
+                    for _ in 0..backspaces {
+                        self.editor.run_edit_commands(&[EditCommand::Backspace]);
+                    }
+                    self.editor.run_edit_commands(&[EditCommand::InsertNewline]);
+                    self.render_prompt()?;
+                    return Ok(AdapterAction::Continue);
+                }
             }
         }
 
@@ -223,20 +246,18 @@ impl AsyncReedlineAdapter {
         Ok(AdapterAction::Continue)
     }
 
-    fn flush_external_messages(&mut self) -> Result<Option<AdapterAction>> {
-        Ok(self
-            .editor
-            .process_events(&self.prompt, Vec::new())?
-            .map(Self::signal_to_action))
-    }
-
-    fn render_prompt(&mut self) -> Result<()> {
-        self.editor.force_repaint(&self.prompt)?;
+    fn flush_external_messages(&mut self) -> Result<()> {
+        let _ = self.editor.flush_external_messages(&self.prompt)?;
         Ok(())
     }
 
     fn suspend_for_command(&mut self) -> SuspendGuard<'_> {
         self.editor.suspend_guard()
+    }
+
+    fn render_prompt(&mut self) -> Result<()> {
+        self.editor.force_repaint(&self.prompt)?;
+        Ok(())
     }
 
     fn sync_history(&mut self) -> io::Result<()> {
@@ -334,4 +355,14 @@ fn parse_demo_burst(input: &str) -> Option<(usize, usize, u64)> {
         .unwrap_or(0);
 
     Some((agents, events, delay_ms))
+}
+
+fn continuation_backspaces(buffer: &str) -> Option<usize> {
+    let trimmed = buffer.trim_end_matches(|c: char| c == ' ' || c == '\t');
+    let trailing_ws = buffer.len() - trimmed.len();
+    if trimmed.ends_with('\\') {
+        Some(trailing_ws + 1)
+    } else {
+        None
+    }
 }

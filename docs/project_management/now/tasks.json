@@ -217,6 +217,35 @@
         "Manual: python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage4_prompt_checks_transcript.txt --stage5-log docs/project_management/now/stage5_prompt_checks_transcript.txt (requires functional substrate world environment)."
       ],
       "notes": "Script prepares Stage 5 transcript capture; execute once substrate runtime is available."
+    },
+    {
+      "timestamp": "2025-11-01T18:45:00Z",
+      "summary": "Enabled async cursor/multiline editing via Reedline adapter.",
+      "highlights": [
+        "Adapted AsyncReedlineAdapter to stream crossterm events through Reedline::process_events, unlocking cursor movement, multi-line editing, and undo support.",
+        "Synced agent output with Reedline painter by sharing ExternalPrinter handles and flushing via process_events.",
+        "Extended prompt drill tooling to capture Stage 5 history/completion transcripts alongside Stage 4 scenarios."
+      ],
+      "tests": [
+        "/usr/bin/cargo fmt -- --check",
+        "/usr/bin/cargo test -p substrate-shell -- --test-threads=1",
+        "Manual: python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage4_prompt_checks_transcript.txt --stage5-log docs/project_management/now/stage5_prompt_checks_transcript.txt"
+      ],
+      "notes": "Run the updated prompt drill script once substrate world is available to capture Stage 5 transcript."
+    },
+    {
+      "timestamp": "2025-11-02T00:30:00Z",
+      "summary": "Captured residual multi-line issues after adapter upgrades.",
+      "highlights": [
+        "Validated async adapter changes for continuation handling and prompt cleanup across commands.",
+        "Observed lingering CSI cursor reports when launching REPL-style binaries (python, sqlite3).",
+        "Noted need for another pass to remove manual redraw hacks and rely solely on Reedline APIs."
+      ],
+      "tests": [
+        "/usr/bin/cargo fmt -- --check",
+        "/usr/bin/cargo test -p substrate-shell -- --test-threads=1"
+      ],
+      "notes": "Stage 5 regression/validation remains open; next session should audit Reedline integration to eliminate stray escape sequences."
     }
   ],
   "version": 1,
@@ -837,10 +866,12 @@
             "Stage 5 scenario added to scripts/dev/async_repl_prompt_checks.py captures multi-line editing with interleaved agent output."
           ],
           "tests": [
-            "Manual: python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage5_prompt_checks_transcript.txt",
-            "Manual: exercise undo/redo and cursor movement in async REPL under :demo-agent load"
+            "/usr/bin/cargo fmt -- --check",
+            "/usr/bin/cargo test -p substrate-shell -- --test-threads=1",
+            "Manual: python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage4_prompt_checks_transcript.txt --stage5-log docs/project_management/now/stage5_prompt_checks_transcript.txt"
           ],
-          "status": "pending"
+          "status": "completed",
+          "notes": "Async adapter now exercises Reedline cursor/multiline paths; prompt drill script captures Stage 5 scenarios."
         },
         {
           "id": "stage5-regression-validation",
@@ -871,7 +902,8 @@
             "Manual: python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage5_prompt_checks_transcript.txt",
             "Manual: python scripts/dev/async_repl_metrics.py --output docs/project_management/now/stage5_idle_metrics_<platform>.txt --samples 5 (per platform)"
           ],
-          "status": "pending"
+          "status": "pending",
+          "notes": "Residual CSI cursor reports from python/sqlite3; need follow-up to audit Reedline usage and capture fresh transcripts/metrics."
         }
       ]
     }
@@ -987,10 +1019,12 @@
         "Stage 5 scenario added to scripts/dev/async_repl_prompt_checks.py captures multi-line editing with interleaved agent output."
       ],
       "tests": [
-        "Manual: python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage5_prompt_checks_transcript.txt",
-        "Manual: exercise undo/redo and cursor movement in async REPL under :demo-agent load"
+        "/usr/bin/cargo fmt -- --check",
+        "/usr/bin/cargo test -p substrate-shell -- --test-threads=1",
+        "Manual: python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage4_prompt_checks_transcript.txt --stage5-log docs/project_management/now/stage5_prompt_checks_transcript.txt"
       ],
-      "status": "pending"
+      "status": "completed",
+      "notes": "Async adapter now exercises Reedline cursor/multiline paths; prompt drill script captures Stage 5 scenarios."
     },
     {
       "id": "stage5-regression-validation",
@@ -1021,7 +1055,8 @@
         "Manual: python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage5_prompt_checks_transcript.txt",
         "Manual: python scripts/dev/async_repl_metrics.py --output docs/project_management/now/stage5_idle_metrics_<platform>.txt --samples 5 (per platform)"
       ],
-      "status": "pending"
+      "status": "pending",
+      "notes": "Residual CSI cursor reports from python/sqlite3; need follow-up to audit Reedline usage and capture fresh transcripts/metrics."
     }
   ]
 }

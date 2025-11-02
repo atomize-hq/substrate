@@ -120,9 +120,13 @@ Stage 5 brings the async REPL up to feature parity with the legacy Reedline-driv
 
 ### stage5-cursor-multiline
 - **Event mapping**: Detail how crossterm key events (`CtKeyCode::Left`, `Right`, `Home`, `End`, `Enter` with modifiers) map to the corresponding `ReedlineEvent::Edit` commands. Reference `third_party/reedline/src/engine.rs:874-1010` for canonical handling.
-- **Multiline caret**: Specify the redraw expectations—after receiving an agent event while the user edits a multi-line buffer, the caret should return to the correct logical column/row.
+- **Implementation status**: The async shell now proxies events through `Reedline::process_events` (`crates/shell/src/async_repl.rs`, `third_party/reedline/src/engine.rs:752-823`), so cursor motion, multi-line editing (`Shift+Enter`/`Alt+Enter`), and undo/redo reuse Reedline internals without bespoke mappings.
+- **Line continuation**: Trailing `\` before Enter now keeps the command in the buffer with a newline, matching classic shell behavior.
+- **Follow-up**: Residual CSI cursor reports (e.g., `^[[45;28R`) still appear intermittently after certain binaries (`python`, `sqlite3`). A Stage 6/Stage 5 follow-up needs to audit remaining manual redraw paths and ensure we let Reedline manage prompt rendering end-to-end.
+- **Multiline caret**: Specify the redraw expectations—after receiving an agent event while the user edits a multi-line buffer, the caret should return to the correct logical column/row. ExternalPrinter flushing in `AsyncReedlineAdapter::flush_external_messages` ensures prompt restoration.
 - **Manual drills**: Define a new scenario (e.g., multi-line shell function editing) to add to `async_repl_prompt_checks.py`, ensuring the log is saved alongside the Stage 4 transcript with a Stage 5 heading.
 - **Undo/redo**: State whether we adopt Reedline's undo stack directly and how to verify it (e.g., `Ctrl+_` round trip).
+- **Tooling**: Stage 5 prompt checks (`scripts/dev/async_repl_prompt_checks.py --stage5-log ...`) now cover completion + multi-line editing under streaming output and store transcripts in `docs/project_management/now/stage5_prompt_checks_transcript.txt`.
 
 ### stage5-regression-validation
 - **Automation**: List the exact integration tests to add or extend, such as a new async REPL integration test under `crates/shell/tests/async_repl.rs` (create if missing) that asserts the prompt state after simulated events.
