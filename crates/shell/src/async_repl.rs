@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::io::{self, Write};
 use std::process::ExitStatus;
 use std::sync::atomic::AtomicI32;
@@ -171,6 +172,7 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
         let _ = adapter.sync_history();
         adapter.end_session();
+        drain_cursor_position_reports();
         clear_agent_event_sender();
         terminal_guard.pause()?;
 
@@ -229,12 +231,23 @@ impl AsyncReedlineAdapter {
             if matches!(key_event.code, crossterm::event::KeyCode::Enter)
                 && key_event.modifiers.is_empty()
             {
-                if let Some(backspaces) =
-                    continuation_backspaces(self.editor.current_buffer_contents())
-                {
+                let buffer = self.editor.current_buffer_contents();
+                if let Some(backspaces) = continuation_backspaces(buffer) {
                     for _ in 0..backspaces {
                         self.editor.run_edit_commands(&[EditCommand::Backspace]);
                     }
+                    self.editor.run_edit_commands(&[EditCommand::InsertNewline]);
+                    self.render_prompt()?;
+                    return Ok(AdapterAction::Continue);
+                }
+
+                if heredoc_requires_continuation(buffer) {
+                    self.editor.run_edit_commands(&[EditCommand::InsertNewline]);
+                    self.render_prompt()?;
+                    return Ok(AdapterAction::Continue);
+                }
+
+                if command_requires_continuation(buffer) {
                     self.editor.run_edit_commands(&[EditCommand::InsertNewline]);
                     self.render_prompt()?;
                     return Ok(AdapterAction::Continue);
@@ -370,9 +383,365 @@ fn continuation_backspaces(buffer: &str) -> Option<usize> {
     }
 }
 
+#[derive(Debug, Clone)]
+struct HeredocSpec {
+    delimiter: String,
+    strip_tabs: bool,
+}
+
+fn heredoc_requires_continuation(buffer: &str) -> bool {
+    let mut pending: VecDeque<HeredocSpec> = VecDeque::new();
+
+    for line in buffer.lines() {
+        if pending.is_empty() {
+            detect_heredocs_in_line(line, &mut pending);
+        } else {
+            consume_heredoc_line(line, &mut pending);
+        }
+    }
+
+    !pending.is_empty()
+}
+
+fn detect_heredocs_in_line(line: &str, pending: &mut VecDeque<HeredocSpec>) {
+    let mut rest = line;
+
+    while let Some(idx) = rest.find("<<") {
+        let after = &rest[idx + 2..];
+
+        // Skip here-strings (<<<)
+        if after.starts_with('<') {
+            rest = &after[1..];
+            continue;
+        }
+
+        let (strip_tabs, remainder) = if after.starts_with('-') {
+            (true, &after[1..])
+        } else {
+            (false, after)
+        };
+
+        let remainder = remainder.trim_start();
+        if remainder.is_empty() {
+            break;
+        }
+
+        let (delimiter, consumed) = parse_heredoc_delimiter(remainder);
+        if let Some(delimiter) = delimiter {
+            pending.push_back(HeredocSpec {
+                delimiter,
+                strip_tabs,
+            });
+        }
+
+        rest = &remainder[consumed..];
+    }
+}
+
+fn consume_heredoc_line(line: &str, pending: &mut VecDeque<HeredocSpec>) {
+    if let Some(spec) = pending.front() {
+        let candidate = if spec.strip_tabs {
+            line.trim_start_matches('\t')
+        } else {
+            line
+        };
+
+        if candidate == spec.delimiter {
+            pending.pop_front();
+        }
+    }
+}
+
+fn parse_heredoc_delimiter(input: &str) -> (Option<String>, usize) {
+    let mut chars = input.char_indices();
+
+    match chars.next() {
+        Some((_, '\'')) => parse_quoted_delimiter(input, '\''),
+        Some((_, '"')) => parse_quoted_delimiter(input, '"'),
+        Some((start, _)) => {
+            let mut end = start;
+            for (idx, ch) in input.char_indices().skip(1) {
+                if ch.is_whitespace() || matches!(ch, ';' | '|' | '&' | '<' | '>' | '(' | ')') {
+                    break;
+                }
+                end = idx;
+            }
+
+            let end = if end < input.len() {
+                end + 1
+            } else {
+                input.len()
+            };
+            let delimiter = input[..end].trim_end();
+            (Some(delimiter.to_string()), end)
+        }
+        None => (None, input.len()),
+    }
+}
+
+fn parse_quoted_delimiter(input: &str, quote: char) -> (Option<String>, usize) {
+    let mut chars = input.char_indices();
+    let mut end = None;
+
+    // Skip opening quote
+    chars.next();
+
+    for (idx, ch) in chars {
+        if ch == quote {
+            end = Some(idx);
+            break;
+        }
+    }
+
+    match end {
+        Some(end_idx) => {
+            let delimiter = input[1..end_idx].to_string();
+            (Some(delimiter), end_idx + 1)
+        }
+        None => (None, input.len()),
+    }
+}
+
+fn command_requires_continuation(buffer: &str) -> bool {
+    let mut tokens = Vec::new();
+    let mut token = String::new();
+    let mut single_quote = false;
+    let mut double_quote = false;
+    let mut escaped = false;
+    let mut comment = false;
+    let mut paren_depth = 0i32;
+    let mut brace_depth = 0i32;
+    let mut square_depth = 0i32;
+    let mut prev_char: Option<char> = None;
+
+    let mut chars = buffer.char_indices().peekable();
+
+    let finalize_token = |tok: &mut String, tokens: &mut Vec<String>| {
+        if !tok.is_empty() {
+            tokens.push(tok.clone());
+            tok.clear();
+        }
+    };
+
+    while let Some((_, ch)) = chars.next() {
+        let next_char = chars.peek().map(|&(_, c)| c);
+
+        if comment {
+            if ch == '\n' {
+                comment = false;
+                finalize_token(&mut token, &mut tokens);
+            }
+            prev_char = Some(ch);
+            continue;
+        }
+
+        if escaped {
+            token.push(ch);
+            escaped = false;
+            prev_char = Some(ch);
+            continue;
+        }
+
+        if single_quote {
+            if ch == '\'' {
+                single_quote = false;
+                finalize_token(&mut token, &mut tokens);
+            } else {
+                token.push(ch);
+            }
+            prev_char = Some(ch);
+            continue;
+        }
+
+        if double_quote {
+            match ch {
+                '"' => {
+                    double_quote = false;
+                    finalize_token(&mut token, &mut tokens);
+                }
+                '\\' => {
+                    escaped = true;
+                }
+                _ => token.push(ch),
+            }
+            prev_char = Some(ch);
+            continue;
+        }
+
+        // Not inside quotes from here down
+        match ch {
+            '\\' => {
+                escaped = true;
+            }
+            '\'' => {
+                finalize_token(&mut token, &mut tokens);
+                single_quote = true;
+            }
+            '"' => {
+                finalize_token(&mut token, &mut tokens);
+                double_quote = true;
+            }
+            '#' => {
+                if token.is_empty() && prev_char.map_or(true, |c| c.is_whitespace()) {
+                    comment = true;
+                    finalize_token(&mut token, &mut tokens);
+                } else {
+                    token.push(ch);
+                }
+            }
+            '(' => {
+                paren_depth += 1;
+                finalize_token(&mut token, &mut tokens);
+                tokens.push("(".to_string());
+            }
+            ')' => {
+                if paren_depth > 0 {
+                    paren_depth -= 1;
+                }
+                finalize_token(&mut token, &mut tokens);
+                tokens.push(")".to_string());
+            }
+            '{' => {
+                brace_depth += 1;
+                finalize_token(&mut token, &mut tokens);
+                tokens.push("{".to_string());
+            }
+            '}' => {
+                if brace_depth > 0 {
+                    brace_depth -= 1;
+                }
+                finalize_token(&mut token, &mut tokens);
+                tokens.push("}".to_string());
+            }
+            '[' => {
+                square_depth += 1;
+                finalize_token(&mut token, &mut tokens);
+                tokens.push("[".to_string());
+            }
+            ']' => {
+                if square_depth > 0 {
+                    square_depth -= 1;
+                }
+                finalize_token(&mut token, &mut tokens);
+                tokens.push("]".to_string());
+            }
+            ';' => {
+                finalize_token(&mut token, &mut tokens);
+                if next_char == Some(';') {
+                    chars.next();
+                    tokens.push(";;".to_string());
+                } else {
+                    tokens.push(";".to_string());
+                }
+            }
+            '&' | '|' => {
+                finalize_token(&mut token, &mut tokens);
+                tokens.push(ch.to_string());
+            }
+            '<' => {
+                finalize_token(&mut token, &mut tokens);
+                if next_char == Some('<') {
+                    chars.next();
+                    if let Some('-') = chars.peek().map(|&(_, c)| c) {
+                        chars.next();
+                        tokens.push("<<-".to_string());
+                    } else {
+                        tokens.push("<<".to_string());
+                    }
+                } else {
+                    tokens.push("<".to_string());
+                }
+            }
+            '>' => {
+                finalize_token(&mut token, &mut tokens);
+                if next_char == Some('>') {
+                    chars.next();
+                    tokens.push(">>".to_string());
+                } else {
+                    tokens.push(">".to_string());
+                }
+            }
+            '\n' | '\r' | '\t' | ' ' => {
+                finalize_token(&mut token, &mut tokens);
+            }
+            _ => {
+                token.push(ch);
+            }
+        }
+
+        prev_char = Some(ch);
+    }
+
+    finalize_token(&mut token, &mut tokens);
+
+    if single_quote || double_quote || escaped {
+        return true;
+    }
+
+    if paren_depth > 0 || brace_depth > 0 || square_depth > 0 {
+        return true;
+    }
+
+    let mut if_stack = 0i32;
+    let mut loop_stack = 0i32;
+    let mut pending_do = 0i32;
+    let mut case_stack = 0i32;
+    let mut brace_stack = 0i32;
+
+    for token in tokens.iter().map(|s| s.as_str()) {
+        match token {
+            "if" => {
+                if_stack += 1;
+            }
+            "fi" => {
+                if if_stack > 0 {
+                    if_stack -= 1;
+                }
+            }
+            "while" | "until" | "select" | "for" => {
+                pending_do += 1;
+            }
+            "do" => {
+                if pending_do > 0 {
+                    pending_do -= 1;
+                }
+                loop_stack += 1;
+            }
+            "done" => {
+                if loop_stack > 0 {
+                    loop_stack -= 1;
+                }
+            }
+            "case" => {
+                case_stack += 1;
+            }
+            "esac" => {
+                if case_stack > 0 {
+                    case_stack -= 1;
+                }
+            }
+            "{" => {
+                brace_stack += 1;
+            }
+            "}" => {
+                if brace_stack > 0 {
+                    brace_stack -= 1;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if if_stack > 0 || loop_stack > 0 || pending_do > 0 || case_stack > 0 || brace_stack > 0 {
+        return true;
+    }
+
+    false
+}
+
 #[cfg(unix)]
 fn drain_cursor_position_reports() {
-    use libc::{fcntl, poll, pollfd, read, F_GETFL, F_SETFL, O_NONBLOCK, POLLIN};
+    use libc::{fcntl, ioctl, read, FIONREAD, F_GETFL, F_SETFL, O_NONBLOCK};
     use std::io;
     use std::os::unix::io::AsRawFd;
 
@@ -388,36 +757,26 @@ fn drain_cursor_position_reports() {
         }
 
         let mut buf = [0u8; 256];
-        let mut pollfd = pollfd {
-            fd,
-            events: POLLIN,
-            revents: 0,
-        };
 
-        for _ in 0..4 {
-            let ready = poll(&mut pollfd, 1, 8);
-            if ready <= 0 {
+        loop {
+            let mut available: libc::c_int = 0;
+            if ioctl(fd, FIONREAD, &mut available) == -1 {
                 break;
             }
 
-            loop {
-                let read_bytes = read(fd, buf.as_mut_ptr() as *mut _, buf.len());
-                if read_bytes > 0 {
-                    continue;
-                }
-                if read_bytes == 0 {
-                    break;
-                }
+            if available <= 0 {
+                break;
+            }
+
+            let to_read = available.clamp(1, buf.len() as libc::c_int) as usize;
+            let read_bytes = read(fd, buf.as_mut_ptr() as *mut _, to_read);
+            if read_bytes <= 0 {
                 let err = io::Error::last_os_error();
                 if err.kind() == io::ErrorKind::WouldBlock
                     || err.kind() == io::ErrorKind::Interrupted
                 {
-                    break;
+                    continue;
                 }
-                break;
-            }
-
-            if pollfd.revents & POLLIN == 0 {
                 break;
             }
         }

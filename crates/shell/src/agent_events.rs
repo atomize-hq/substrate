@@ -70,20 +70,29 @@ pub(crate) fn publish_command_completion(command: &str, status: &ExitStatus) {
         }
     }
 
-    let event = if status.success() {
-        AgentEvent::message(
+    if status.success() {
+        let enabled = std::env::var("SUBSTRATE_COMMAND_SUCCESS_EVENTS")
+            .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+            .unwrap_or(false);
+        if !enabled {
+            return;
+        }
+
+        let event = AgentEvent::message(
             "shell",
             AgentEventKind::TaskEnd,
             format!("Command `{command}` completed successfully"),
-        )
-    } else {
-        let code = status.code().unwrap_or(-1);
-        AgentEvent::message(
-            "shell",
-            AgentEventKind::Alert,
-            format!("Command `{command}` exited with status {code}"),
-        )
-    };
+        );
+        let _ = publish_agent_event(event);
+        return;
+    }
+
+    let code = status.code().unwrap_or(-1);
+    let event = AgentEvent::message(
+        "shell",
+        AgentEventKind::Alert,
+        format!("Command `{command}` exited with status {code}"),
+    );
 
     let _ = publish_agent_event(event);
 }
