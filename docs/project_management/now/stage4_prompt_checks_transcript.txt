@@ -1,38 +1,222 @@
 # Stage 4 Prompt Integrity Drills
 
 ## Scenario 1: typing while events stream
-:demo-agent:demo-agent
-[Ksubstrate> echo typing while agents streamech[K[demo] Demo agent event #1
-[Ksubstrate> echo typing [K[demo] Demo agent event #2
-[Ksubstrate> echo typing while agents st[K[demo] Demo agent event #3
-[Ksubstrate> echo typing while agents stream
+:demo-agent[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:[0m78[?25hecho typing while agents stream[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:d[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:de[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:dem[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-a[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-ag[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-age[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-agen[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-agent[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-agent[0m78[?25h
+[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m7[37m[0m8[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37me[0m78[?25h[6n                                                                                [demo] Demo agent event #1
+[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37me[0m78[?25h[6n                                                                                [demo] Demo agent event #2
+[?25l[3;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[3;81H8[0m[0m[37me[0m78[?25h[6n                                                                                [demo] Demo agent event #3
+[?25l[4;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[4;81H8[0m[0m[37me[0m78[?25h[6n[1;1R[?25l
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mec[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mech[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho [0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho t[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho ty[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typ[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typi[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typin[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing [0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing w[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing wh[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing whi[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing whil[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while [0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while a[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while ag[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while age[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agen[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agent[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agents[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agents [0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agents s[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agents st[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agents str[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agents stre[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agents strea[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agents stream[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agents stream[0m78[?25h
 [?25htyping while agents stream
-[?25l[Ksubstrate> 
+[?25l[6n[1;1R[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m7[37m[0m8[?25h
 ## Scenario 2: long command under bursty output
-:demo-agent[K[shell] Command `echo typing while agents stream` completed successfully
-[Ksubstrate> :demo-agent:demo-agent
-[Ksubstrate> :demo-agent:demo-agent
-[Ksubstrate> echo XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX:demo-agent
-[Ksubstrate> ech[K[demo] Demo agent event #1
-[Ksubstrate> ech[K[demo] Demo agent event #1
-[Ksubstrate> echo[K[demo] Demo agent event #1
-[Ksubstrate> echo XXXXXXXXX[K[demo] Demo agent event #2
-[Ksubstrate> echo XXXXXXXXXX[K[demo] Demo agent event #2
-[Ksubstrate> echo XXXXXXXXXXX[K[demo] Demo agent event #2
-[Ksubstrate> echo XXXXXXXXXXXXXXXXXXXXXXXXXXXXX[K[demo] Demo agent event #3
-[Ksubstrate> echo XXXXXXXXXXXXXXXXXXXXXXXXXXXXX[K[demo] Demo agent event #3
-[Ksubstrate> echo XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[K[demo] Demo agent event #3
-[Ksubstrate> echo XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+:demo-agent[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m7[37m[0m8[?25h:demo-agent[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:[0m78[?25h:demo-agent[6n[1;1R                                                                                [shell] Command `echo typing while agents stream` completed successfully
+[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:[0m78[?25hecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:d[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:de[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:dem[0m78[?25h[6n[1;1R[1;1R[1;1R[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-a[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-ag[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-age[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-agen[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-agent[0m78[?25h[1;1R[1;1R[1;1R[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-agent[0m78[?25h
+[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m7[37m[0m8[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:[0m78[?25h[6n[1;1R[1;1R[1;1R[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:d[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:de[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:dem[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo[0m78[?25h[6n[1;1R[1;1R[1;1R[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-a[0m78[?25h[6n                                                                                [demo] Demo agent event #1
+[?25l
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-a[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-ag[0m78[?25h[6n[1;1R[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-age[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-agen[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-agent[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-agent[0m78[?25h
+[6n[1;1R[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m7[37m[0m8[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:d[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:de[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:dem[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo[0m78[?25h[6n                                                                                [demo] Demo agent event #1
+[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo[0m78[?25h[1;1R[1;1R[1;1R[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-a[0m78[?25h[6n[1;1R[1;1R[1;1R                                                                                [demo] Demo agent event #2
+[?25l
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-a[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-ag[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-age[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-agen[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-agent[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-agent[0m78[?25h
+[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m7[37m[0m8[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37me[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mec[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mech[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho [0m78[?25h[6n[1;1R[1;1R[1;1R                                                                                [demo] Demo agent event #1
+[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho [0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho X[0m78[?25h[6n                                                                                [demo] Demo agent event #2
+[?25l
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho X[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XX[0m78[?25h[6n[1;1R[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXX[0m78[?25h[6n                                                                                [demo] Demo agent event #3
+[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho XXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho XXXXXXXXXXXXXX[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho XXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R                                                                                [demo] Demo agent event #2
+[?25l
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n                                                                                [demo] Demo agent event #3
+[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n                                                                                [demo] Demo agent event #3
+[?25l
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m[0m[0m[37mecho XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX[0m78[?25h
 [?25hXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-[?25l[Ksubstrate> [K[shell] Command `echo XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX` completed successfully
-[Ksubstrate> 
+[?25l[6n[1;1R[1;1R[1;1R[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m7[37m[0m8[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m7[37m[0m8[?25h[6n[1;1R
 ## Scenario 3: backspace edits during events
-:demo-agentecho control-casecheck:demo-agent
-[Ksubstrate> echo[K[demo] Demo agent event #1
-[Ksubstrate> echo control-c[K[demo] Demo agent event #2
-[Ksubstrate> echo control-case[K[K[K[K[Kcheck[K[demo] Demo agent event #3
-[Ksubstrate> echo controlcheck
+:demo-agent[1;1Recho control-casecheck[1;1R                                                                                [shell] Command `echo XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX` completed successfully
+[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m7[37m[0m8[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:d[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:de[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:dem[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-a[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-ag[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-age[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-agen[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-agent[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-agent[0m78[?25h
+[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m7[37m[0m8[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37me[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mec[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mech[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho [0m78[?25h[6n                                                                                [demo] Demo agent event #1
+[?25l
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho [0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho c[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho co[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho con[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho cont[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho contr[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho contro[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho control[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho control-[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho control-c[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho control-ca[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho control-cas[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho control-case[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho control-cas[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho control-ca[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho control-c[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho control-[0m78[?25h[6n[1;1R[1;1R[1;1R                                                                                [demo] Demo agent event #2
+[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho control-[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho control[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho controlc[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho controlch[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho controlche[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho controlchec[0m78[?25h[6n[1;1R[1;1R[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho controlcheck[0m78[?25h[6n[1;1R                                                                                [demo] Demo agent event #3
+[?25l[3;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[3;81H8[0m[0m[37mecho controlcheck[0m78[?25h[6n[?25l
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho controlcheck[0m78[?25h
 [?25hcontrolcheck
-[?25l[Ksubstrate> [K[shell] Command `echo controlcheck` completed successfully
-[Ksubstrate> exitexit
+[?25l[6n[1;1R[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m7[37m[0m8[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m7[37m[0m8[?25h[6n[1;1Rexit                                                                                [shell] Command `echo controlcheck` completed successfully
+[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m7[37m[0m8[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37me[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mex[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mexi[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mexit[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mexit[0m78[?25h
 [?25h

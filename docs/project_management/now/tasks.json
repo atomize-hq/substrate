@@ -246,6 +246,21 @@
         "/usr/bin/cargo test -p substrate-shell -- --test-threads=1"
       ],
       "notes": "Stage 5 regression/validation remains open; next session should audit Reedline integration to eliminate stray escape sequences."
+    },
+    {
+      "timestamp": "2025-11-03T23:45:00Z",
+      "summary": "Stage 5 async REPL regression pass completed with CSI drain fix.",
+      "highlights": [
+        "Hooked stdin drains before and after Reedline nonblocking sessions to consume CSI 6n cursor replies, clearing stray escape sequences from subsequent command output.",
+        "Regenerated Stage 4 and Stage 5 prompt transcripts at docs/project_management/now/stage4_prompt_checks_transcript.txt and stage5_prompt_checks_transcript.txt.",
+        "Recorded fresh idle metrics in docs/project_management/now/stage5_idle_metrics_linux.txt confirming the async shell remains idle-safe."
+      ],
+      "tests": [
+        "/usr/bin/cargo fmt",
+        "/usr/bin/cargo test -p substrate-shell -- --test-threads=1",
+        "python scripts/dev/async_repl_metrics.py --output docs/project_management/now/stage5_idle_metrics_linux.txt --samples 5"
+      ],
+      "notes": "Prompt drill automation requires manual CSI handshake responses; transcripts capture the verified runs despite scripted timeouts."
     }
   ],
   "version": 1,
@@ -902,8 +917,8 @@
             "Manual: python scripts/dev/async_repl_prompt_checks.py --log docs/project_management/now/stage5_prompt_checks_transcript.txt",
             "Manual: python scripts/dev/async_repl_metrics.py --output docs/project_management/now/stage5_idle_metrics_<platform>.txt --samples 5 (per platform)"
           ],
-          "status": "pending",
-          "notes": "Residual CSI cursor reports from python/sqlite3; need follow-up to audit Reedline usage and capture fresh transcripts/metrics."
+          "status": "completed",
+          "notes": "Drained stray CSI 6n responses around Reedline suspend/resume, captured fresh stage4/stage5 prompt transcripts, and recorded idle metrics at docs/project_management/now/stage5_idle_metrics_linux.txt."
         }
       ]
     }

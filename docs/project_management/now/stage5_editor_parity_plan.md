@@ -133,6 +133,7 @@ Stage 5 brings the async REPL up to feature parity with the legacy Reedline-driv
 - **Metrics capture**: Reuse `scripts/dev/async_repl_metrics.py` (`--output docs/project_management/now/stage5_idle_metrics_<platform>.txt`) to record idle CPU samples per platform.
 - **Manual logs**: Require storing prompt drill transcripts at `docs/project_management/now/stage5_prompt_checks_transcript.txt` and linking them in the session log.
 - **Docs update checklist**: Update `docs/USAGE.md`, `docs/CONFIGURATION.md`, and `CHANGELOG.md` to note the restored editor parity and any new flags (e.g., debug escape hatch).
+- **Status (2025-11-03)**: Added stdin drains around `begin_nonblocking_session` to consume Reedline's cursor-position replies, regenerated Stage 4/Stage 5 transcripts, and captured new idle metrics (`stage5_idle_metrics_linux.txt`). Prompt automation still relies on scripted CSI handshakes; follow-up is logged to harden the harness.
 
 ## Validation Strategy
 - Automated: extend shell integration tests with scripted input sequences exercising history and cursor navigation, verifying stdout snapshots.

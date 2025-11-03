@@ -372,7 +372,7 @@ fn continuation_backspaces(buffer: &str) -> Option<usize> {
 
 #[cfg(unix)]
 fn drain_cursor_position_reports() {
-    use libc::{fcntl, read, F_GETFL, F_SETFL, O_NONBLOCK};
+    use libc::{fcntl, poll, pollfd, read, F_GETFL, F_SETFL, O_NONBLOCK, POLLIN};
     use std::io;
     use std::os::unix::io::AsRawFd;
 
@@ -387,20 +387,39 @@ fn drain_cursor_position_reports() {
             return;
         }
 
-        let mut buf = [0u8; 64];
-        loop {
-            let read_bytes = read(fd, buf.as_mut_ptr() as *mut _, buf.len());
-            if read_bytes > 0 {
-                continue;
-            }
-            if read_bytes == 0 {
+        let mut buf = [0u8; 256];
+        let mut pollfd = pollfd {
+            fd,
+            events: POLLIN,
+            revents: 0,
+        };
+
+        for _ in 0..4 {
+            let ready = poll(&mut pollfd, 1, 8);
+            if ready <= 0 {
                 break;
             }
-            let err = io::Error::last_os_error();
-            if err.kind() == io::ErrorKind::WouldBlock || err.kind() == io::ErrorKind::Interrupted {
+
+            loop {
+                let read_bytes = read(fd, buf.as_mut_ptr() as *mut _, buf.len());
+                if read_bytes > 0 {
+                    continue;
+                }
+                if read_bytes == 0 {
+                    break;
+                }
+                let err = io::Error::last_os_error();
+                if err.kind() == io::ErrorKind::WouldBlock
+                    || err.kind() == io::ErrorKind::Interrupted
+                {
+                    break;
+                }
                 break;
             }
-            break;
+
+            if pollfd.revents & POLLIN == 0 {
+                break;
+            }
         }
 
         let _ = fcntl(fd, F_SETFL, original);

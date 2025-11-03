@@ -108,7 +108,7 @@ def scenario_long_line_burst(child: "pexpect.spawn") -> None:
         expect_with_handshake(child, "Demo agent event #", timeout=10)
 
     child.send("\r")
-    child.expect(f"{payload}\r\n")
+    expect_with_handshake(child, f"{payload}\r\n")
     expect_prompt(child)
 
 

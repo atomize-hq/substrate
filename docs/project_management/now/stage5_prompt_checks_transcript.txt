@@ -1,0 +1,166 @@
+# Stage 5 History & Completion Drills
+
+## Session 1: populate history and test completion with streaming output
+echo stage5-history[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37me[0m78[?25h:demo-agent[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mec[0m78[?25hec	ho stage5-completion[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mech[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho [0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho s[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho st[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho sta[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho stag[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho stage[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho stage5[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho stage5-[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho stage5-h[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho stage5-hi[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho stage5-his[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho stage5-hist[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho stage5-histo[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho stage5-histor[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho stage5-history[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho stage5-history[0m78[?25h
+[?25hstage5-history
+[?25l[6n[1;1R[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m7[37m[0m8[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m7[37m[0m8[?25h[6n[1;1R                                                                                [shell] Command `echo stage5-history` completed successfully
+[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m7[37m[0m8[?25h[6n[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:[0m78[?25h[6n[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:d[0m78[?25h[6n[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:de[0m78[?25h[6n[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:dem[0m78[?25h[6n[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo[0m78[?25h[6n[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-[0m78[?25h[6n[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-a[0m78[?25h[6n[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-ag[0m78[?25h[6n[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-age[0m78[?25h[6n[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-agen[0m78[?25h[6n[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-agent[0m78[?25h[6n[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37m:demo-agent[0m78[?25h
+[6n[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m7[37m[0m8[?25h[6n[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37me[0m78[?25h[6n[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mec[0m78[?25h[6n[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m| [38;5;5m7[2;81H8[0m[0m[37mec[0m7[3;1H[J[90m[1;7;32m[0m[90m[1;4;7;32mec[0m[90m[1;7;32mho[0m                                             
+[90m[0m[90m[4mec[0m[90mryptfs-add-passphrase[0m[33m                          [0m
+[90m[0m[90m[4mec[0m[90mryptfs-find[0m[33m                                    [0m
+[90m[0m[90m[4mec[0m[90mryptfs-insert-wrapped-passphrase-into-keyring[0m[33m  [0m
+[90m[0m[90m[4mec[0m[90mryptfs-manager[0m[33m                                 [0m
+[90m[0m[90m[4mec[0m[90mryptfs-migrate-home[0m[33m                            [0m
+[90m[0m[90m[4mec[0m[90mryptfs-mount-private[0m[33m                           [0m
+[90m[0m[90m[4mec[0m[90mryptfs-recover-private[0m[33m                         [0m
+[90m[0m[90m[4mec[0m[90mryptfs-rewrap-passphrase[0m[33m                       [0m
+[90m[0m[90m[4mec[0m[90mryptfs-rewrite-file[0m[33m                            [0m
+[90m[0m[90m[4mec[0m[90mryptfs-setup-private[0m[33m                           [0m
+[90m[0m[90m[4mec[0m[90mryptfs-setup-swap[0m[33m                              [0m
+[90m[0m[90m[4mec[0m[90mryptfs-stat[0m[33m                                    [0m
+[90m[0m[90m[4mec[0m[90mryptfs-umount-private[0m[33m                          [0m
+[90m[0m[90m[4mec[0m[90mryptfs-unwrap-passphrase[0m[33m                       [0m
+[90m[0m[90m[4mec[0m[90mryptfs-verify[0m[33m                                  [0m
+[90m[0m[90m[4mec[0m[90mryptfs-wrap-passphrase[0m[33m                         [0m
+[90m[0m[90m[4mec[0m[90mryptfsd[0m[33m                                        [0m8[?25h[6n[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m| [38;5;5m7[2;81H8[0m[0m[37mech[0m7[3;1H[J[90m[1;7;32m[0m[90m[1;4;7;32mech[0m[90m[1;7;32mo[0m                8[?25h[6n[1;1R[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m| [38;5;5m7[2;81H8[0m[0m[37mecho[0m7[3;1H[J[90m[1;7;32m[0m[90m[1;4;7;32mecho[0m[90m[1;7;32m[0m                8[?25h[?25l
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[1;1H[J[38;5;10msubstrate> [38;5;5m7[1;81H8[38;5;14m| [0m[37mecho [0m7[2;1H[J[90m[1;7;32m[0m[90m[1;4;7;32m[0m[90m[1;7;32m2to3[0m                [90m[0m[90m[4m[0m[90m2to3-3.10[0m[33m           [0m[90m[0m[90m[4m[0m[90m2to3-3.11[0m[33m           [0m[90m[0m[90m[4m[0m[90m2to3-3.12[0m[33m           [0m
+[90m[0m[90m[4m[0m[90m4channels[0m[33m           [0m[90m[0m[90m[4m[0m[90m7z[0m[33m                  [0m[90m[0m[90m[4m[0m[90m7za[0m[33m                 [0m[90m[0m[90m[4m[0m[90m7zr[0m[33m                 [0m
+[90m[0m[90m[4m[0m[90mMagick++-config[0m[33m     [0m[90m[0m[90m[4m[0m[90mMagickCore-config[0m[33m   [0m[90m[0m[90m[4m[0m[90mMagickWand-config[0m[33m   [0m[90m[0m[90m[4m[0m[90mModemManager[0m[33m        [0m
+[90m[0m[90m[4m[0m[90mNetworkManager[0m[33m      [0m[90m[0m[90m[4m[0m[90mSvtAv1EncApp[0m[33m        [0m[90m[0m[90m[4m[0m[90mSvtHevcEncApp[0m[33m       [0m[90m[0m[90m[4m[0m[90mVBox[0m[33m                [0m
+[90m[0m[90m[4m[0m[90mXorg[0m[33m                [0m[90m[0m[90m[4m[0m[90mXvfb[0m[33m                [0m[90m[0m[90m[4m[0m[90mZXingReader[0m[33m         [0m[90m[0m[90m[4m[0m[90mZXingWriter[0m[33m         [0m
+[90m[0m[90m[4m[0m[90m[[0m[33m                   [0m[90m[0m[90m[4m[0m[90ma52dec[0m[33m              [0m[90m[0m[90m[4m[0m[90maa-audit[0m[33m            [0m[90m[0m[90m[4m[0m[90maa-autodep[0m[33m          [0m
+[90m[0m[90m[4m[0m[90maa-cleanprof[0m[33m        [0m[90m[0m[90m[4m[0m[90maa-complain[0m[33m         [0m[90m[0m[90m[4m[0m[90maa-decode[0m[33m           [0m[90m[0m[90m[4m[0m[90maa-disable[0m[33m          [0m
+[90m[0m[90m[4m[0m[90maa-easyprof[0m[33m         [0m[90m[0m[90m[4m[0m[90maa-enabled[0m[33m          [0m[90m[0m[90m[4m[0m[90maa-enforce[0m[33m          [0m[90m[0m[90m[4m[0m[90maa-exec[0m[33m             [0m
+[90m[0m[90m[4m[0m[90maa-features-abi[0m[33m     [0m[90m[0m[90m[4m[0m[90maa-genprof[0m[33m          [0m[90m[0m[90m[4m[0m[90maa-load[0m[33m             [0m[90m[0m[90m[4m[0m[90maa-logprof[0m[33m          [0m
+[90m[0m[90m[4m[0m[90maa-mergeprof[0m[33m        [0m[90m[0m[90m[4m[0m[90maa-notify[0m[33m           [0m[90m[0m[90m[4m[0m[90maa-remove-unknown[0m[33m   [0m[90m[0m[90m[4m[0m[90maa-status[0m[33m           [0m
+[90m[0m[90m[4m[0m[90maa-teardown[0m[33m         [0m[90m[0m[90m[4m[0m[90maa-unconfined[0m[33m       [0m[90m[0m[90m[4m[0m[90maafire[0m[33m              [0m[90m[0m[90m[4m[0m[90maainfo[0m[33m              [0m
+[90m[0m[90m[4m[0m[90maalib-config[0m[33m        [0m[90m[0m[90m[4m[0m[90maasavefont[0m[33m          [0m[90m[0m[90m[4m[0m[90maatest[0m[33m              [0m[90m[0m[90m[4m[0m[90maccessdb[0m[33m            [0m
+[90m[0m[90m[4m[0m[90maclocal[0m[33m             [0m[90m[0m[90m[4m[0m[90maclocal-1.18[0m[33m        [0m[90m[0m[90m[4m[0m[90maconnect[0m[33m            [0m[90m[0m[90m[4m[0m[90macpi[0m[33m                [0m
+[90m[0m[90m[4m[0m[90macpi_listen[0m[33m         [0m[90m[0m[90m[4m[0m[90macpid[0m[33m               [0m[90m[0m[90m[4m[0m[90madb[0m[33m                 [0m[90m[0m[90m[4m[0m[90maddftinfo[0m[33m           [0m
+[90m[0m[90m[4m[0m[90maddgnupghome[0m[33m        [0m[90m[0m[90m[4m[0m[90maddpart[0m[33m             [0m[90m[0m[90m[4m[0m[90maddr2line[0m[33m           [0m[90m[0m[90m[4m[0m[90madig[0m[33m                [0m
+[90m[0m[90m[4m[0m[90maffixcompress[0m[33m       [0m[90m[0m[90m[4m[0m[90mafmtodit[0m[33m            [0m[90m[0m[90m[4m[0m[90magetty[0m[33m              [0m[90m[0m[90m[4m[0m[90mahost[0m[33m               [0m
+[90m[0m[90m[4m[0m[90malsa-info.sh[0m[33m        [0m[90m[0m[90m[4m[0m[90malsabat[0m[33m             [0m[90m[0m[90m[4m[0m[90malsabat-test.sh[0m[33m     [0m[90m[0m[90m[4m[0m[90malsactl[0m[33m             [0m
+[90m[0m[90m[4m[0m[90malsaloop[0m[33m            [0m[90m[0m[90m[4m[0m[90malsamixer[0m[33m           [0m[90m[0m[90m[4m[0m[90malsatplg[0m[33m            [0m[90m[0m[90m[4m[0m[90malsaucm[0m[33m             [0m
+[90m[0m[90m[4m[0m[90malsoft-config[0m[33m       [0m[90m[0m[90m[4m[0m[90mamdgpu-arch[0m[33m         [0m[90m[0m[90m[4m[0m[90mamdgpu_stress[0m[33m       [0m[90m[0m[90m[4m[0m[90mamidi[0m[33m               [0m
+[90m[0m[90m[4m[0m[90mamixer[0m[33m              [0m[90m[0m[90m[4m[0m[90mamrnb-dec[0m[33m           [0m[90m[0m[90m[4m[0m[90mamrnb-enc[0m[33m           [0m[90m[0m[90m[4m[0m[90mamrwb-dec[0m[33m           [0m
+[90m[0m[90m[4m[0m[90manacron[0m[33m             [0m[90m[0m[90m[4m[0m[90manalyze[0m[33m             [0m[90m[0m[90m[4m[0m[90manalyze-build[0m[33m       [0m[90m[0m[90m[4m[0m[90mannotate[0m[33m            [0m
+[90m[0m[90m[4m[0m[90many2djvu[0m[33m            [0m[90m[0m[90m[4m[0m[90manydesk[0m[33m             [0m[90m[0m[90m[4m[0m[90manytovcd.sh[0m[33m         [0m[90m[0m[90m[4m[0m[90maomdec[0m[33m              [0m
+[90m[0m[90m[4m[0m[90maomenc[0m[33m              [0m[90m[0m[90m[4m[0m[90maoss[0m[33m                [0m[90m[0m[90m[4m[0m[90maplay[0m[33m               [0m[90m[0m[90m[4m[0m[90maplaymidi[0m[33m           [0m8[?25h[?25l
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[1;1H[J[38;5;10msubstrate> [38;5;5m7[1;81H8[38;5;14m| [0m[37mecho s[0m7[2;1H[J[90m[1;7;32m[0m[90m[1;4;7;32ms[0m[90m[1;7;32mamba[0m                 [90m[0m[90m[4ms[0m[90mamba-gpupdate[0m[33m        [0m[90m[0m[90m[4ms[0m[90mamba-log-parser[0m[33m      [0m
+[90m[0m[90m[4ms[0m[90mamba-regedit[0m[33m         [0m[90m[0m[90m[4ms[0m[90mamba-tool[0m[33m            [0m[90m[0m[90m[4ms[0m[90mamba_dnsupdate[0m[33m       [0m
+[90m[0m[90m[4ms[0m[90mamba_downgrade_db[0m[33m    [0m[90m[0m[90m[4ms[0m[90mamba_kcc[0m[33m             [0m[90m[0m[90m[4ms[0m[90mamba_spnupdate[0m[33m       [0m
+[90m[0m[90m[4ms[0m[90mamba_upgradedns[0m[33m      [0m[90m[0m[90m[4ms[0m[90maquery[0m[33m               [0m[90m[0m[90m[4ms[0m[90masldblistusers2[0m[33m      [0m
+[90m[0m[90m[4ms[0m[90maslpasswd2[0m[33m           [0m[90m[0m[90m[4ms[0m[90mbcdec[0m[33m                [0m[90m[0m[90m[4ms[0m[90mbcenc[0m[33m                [0m
+[90m[0m[90m[4ms[0m[90mbcinfo[0m[33m               [0m[90m[0m[90m[4ms[0m[90mcalar[0m[33m                [0m[90m[0m[90m[4ms[0m[90mcan-build[0m[33m            [0m
+[90m[0m[90m[4ms[0m[90mcan-build-py[0m[33m         [0m[90m[0m[90m[4ms[0m[90mcan-view[0m[33m             [0m[90m[0m[90m[4ms[0m[90mclient[0m[33m               [0m
+[90m[0m[90m[4ms[0m[90mcmp_sys_resolver[0m[33m     [0m[90m[0m[90m[4ms[0m[90mcncopy[0m[33m               [0m[90m[0m[90m[4ms[0m[90mcp[0m[33m                   [0m
+[90m[0m[90m[4ms[0m[90mcreendump[0m[33m            [0m[90m[0m[90m[4ms[0m[90mcreenfetch[0m[33m           [0m[90m[0m[90m[4ms[0m[90mcript[0m[33m                [0m
+[90m[0m[90m[4ms[0m[90mcriptlive[0m[33m            [0m[90m[0m[90m[4ms[0m[90mcriptreplay[0m[33m          [0m[90m[0m[90m[4ms[0m[90mdiff[0m[33m                 [0m
+[90m[0m[90m[4ms[0m[90mdl-config[0m[33m            [0m[90m[0m[90m[4ms[0m[90mdl2-config[0m[33m           [0m[90m[0m[90m[4ms[0m[90meatd[0m[33m                 [0m
+[90m[0m[90m[4ms[0m[90meatd-launch[0m[33m          [0m[90m[0m[90m[4ms[0m[90mecret-tool[0m[33m           [0m[90m[0m[90m[4ms[0m[90med[0m[33m                   [0m
+[90m[0m[90m[4ms[0m[90mendiso[0m[33m               [0m[90m[0m[90m[4ms[0m[90mensord[0m[33m               [0m[90m[0m[90m[4ms[0m[90mensors[0m[33m               [0m
+[90m[0m[90m[4ms[0m[90mensors-conf-convert[0m[33m  [0m[90m[0m[90m[4ms[0m[90mensors-detect[0m[33m        [0m[90m[0m[90m[4ms[0m[90mepdebugcrcfix[0m[33m        [0m
+[90m[0m[90m[4ms[0m[90meq[0m[33m                   [0m[90m[0m[90m[4ms[0m[90merdi[0m[33m                 [0m[90m[0m[90m[4ms[0m[90merialver[0m[33m             [0m
+[90m[0m[90m[4ms[0m[90met-wireless-regdom[0m[33m   [0m[90m[0m[90m[4ms[0m[90metarch[0m[33m               [0m[90m[0m[90m[4ms[0m[90metcap[0m[33m                [0m
+[90m[0m[90m[4ms[0m[90metcifsacl[0m[33m            [0m[90m[0m[90m[4ms[0m[90metfacl[0m[33m               [0m[90m[0m[90m[4ms[0m[90metfattr[0m[33m              [0m
+[90m[0m[90m[4ms[0m[90metfont[0m[33m               [0m[90m[0m[90m[4ms[0m[90metkeycodes[0m[33m           [0m[90m[0m[90m[4ms[0m[90metleds[0m[33m               [0m
+[90m[0m[90m[4ms[0m[90metlogcons[0m[33m            [0m[90m[0m[90m[4ms[0m[90metmetamode[0m[33m           [0m[90m[0m[90m[4ms[0m[90metpalette[0m[33m            [0m
+[90m[0m[90m[4ms[0m[90metpci[0m[33m                [0m[90m[0m[90m[4ms[0m[90metpgid[0m[33m               [0m[90m[0m[90m[4ms[0m[90metpriv[0m[33m               [0m
+[90m[0m[90m[4ms[0m[90metsid[0m[33m                [0m[90m[0m[90m[4ms[0m[90metterm[0m[33m               [0m[90m[0m[90m[4ms[0m[90metvesablank[0m[33m          [0m
+[90m[0m[90m[4ms[0m[90metvtrgb[0m[33m              [0m[90m[0m[90m[4ms[0m[90metxkbmap[0m[33m             [0m[90m[0m[90m[4ms[0m[90mexp-conv[0m[33m             [0m
+[90m[0m[90m[4ms[0m[90mfdisk[0m[33m                [0m[90m[0m[90m[4ms[0m[90mftp[0m[33m                  [0m[90m[0m[90m[4ms[0m[90mg[0m[33m                    [0m8[?25h                                                                                [demo] Demo agent event #1
+[?25l
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[1;1H[J[38;5;10msubstrate> [38;5;5m7[1;81H8[38;5;14m| [0m[37mecho s[0m7[2;1H[J[90m[1;7;32m[0m[90m[1;4;7;32ms[0m[90m[1;7;32mamba[0m                 [90m[0m[90m[4ms[0m[90mamba-gpupdate[0m[33m        [0m[90m[0m[90m[4ms[0m[90mamba-log-parser[0m[33m      [0m
+[90m[0m[90m[4ms[0m[90mamba-regedit[0m[33m         [0m[90m[0m[90m[4ms[0m[90mamba-tool[0m[33m            [0m[90m[0m[90m[4ms[0m[90mamba_dnsupdate[0m[33m       [0m
+[90m[0m[90m[4ms[0m[90mamba_downgrade_db[0m[33m    [0m[90m[0m[90m[4ms[0m[90mamba_kcc[0m[33m             [0m[90m[0m[90m[4ms[0m[90mamba_spnupdate[0m[33m       [0m
+[90m[0m[90m[4ms[0m[90mamba_upgradedns[0m[33m      [0m[90m[0m[90m[4ms[0m[90maquery[0m[33m               [0m[90m[0m[90m[4ms[0m[90masldblistusers2[0m[33m      [0m
+[90m[0m[90m[4ms[0m[90maslpasswd2[0m[33m           [0m[90m[0m[90m[4ms[0m[90mbcdec[0m[33m                [0m[90m[0m[90m[4ms[0m[90mbcenc[0m[33m                [0m
+[90m[0m[90m[4ms[0m[90mbcinfo[0m[33m               [0m[90m[0m[90m[4ms[0m[90mcalar[0m[33m                [0m[90m[0m[90m[4ms[0m[90mcan-build[0m[33m            [0m
+[90m[0m[90m[4ms[0m[90mcan-build-py[0m[33m         [0m[90m[0m[90m[4ms[0m[90mcan-view[0m[33m             [0m[90m[0m[90m[4ms[0m[90mclient[0m[33m               [0m
+[90m[0m[90m[4ms[0m[90mcmp_sys_resolver[0m[33m     [0m[90m[0m[90m[4ms[0m[90mcncopy[0m[33m               [0m[90m[0m[90m[4ms[0m[90mcp[0m[33m                   [0m
+[90m[0m[90m[4ms[0m[90mcreendump[0m[33m            [0m[90m[0m[90m[4ms[0m[90mcreenfetch[0m[33m           [0m[90m[0m[90m[4ms[0m[90mcript[0m[33m                [0m
+[90m[0m[90m[4ms[0m[90mcriptlive[0m[33m            [0m[90m[0m[90m[4ms[0m[90mcriptreplay[0m[33m          [0m[90m[0m[90m[4ms[0m[90mdiff[0m[33m                 [0m
+[90m[0m[90m[4ms[0m[90mdl-config[0m[33m            [0m[90m[0m[90m[4ms[0m[90mdl2-config[0m[33m           [0m[90m[0m[90m[4ms[0m[90meatd[0m[33m                 [0m
+[90m[0m[90m[4ms[0m[90meatd-launch[0m[33m          [0m[90m[0m[90m[4ms[0m[90mecret-tool[0m[33m           [0m[90m[0m[90m[4ms[0m[90med[0m[33m                   [0m
+[90m[0m[90m[4ms[0m[90mendiso[0m[33m               [0m[90m[0m[90m[4ms[0m[90mensord[0m[33m               [0m[90m[0m[90m[4ms[0m[90mensors[0m[33m               [0m
+[90m[0m[90m[4ms[0m[90mensors-conf-convert[0m[33m  [0m[90m[0m[90m[4ms[0m[90mensors-detect[0m[33m        [0m[90m[0m[90m[4ms[0m[90mepdebugcrcfix[0m[33m        [0m
+[90m[0m[90m[4ms[0m[90meq[0m[33m                   [0m[90m[0m[90m[4ms[0m[90merdi[0m[33m                 [0m[90m[0m[90m[4ms[0m[90merialver[0m[33m             [0m
+[90m[0m[90m[4ms[0m[90met-wireless-regdom[0m[33m   [0m[90m[0m[90m[4ms[0m[90metarch[0m[33m               [0m[90m[0m[90m[4ms[0m[90metcap[0m[33m                [0m
+[90m[0m[90m[4ms[0m[90metcifsacl[0m[33m            [0m[90m[0m[90m[4ms[0m[90metfacl[0m[33m               [0m[90m[0m[90m[4ms[0m[90metfattr[0m[33m              [0m
+[90m[0m[90m[4ms[0m[90metfont[0m[33m               [0m[90m[0m[90m[4ms[0m[90metkeycodes[0m[33m           [0m[90m[0m[90m[4ms[0m[90metleds[0m[33m               [0m
+[90m[0m[90m[4ms[0m[90metlogcons[0m[33m            [0m[90m[0m[90m[4ms[0m[90metmetamode[0m[33m           [0m[90m[0m[90m[4ms[0m[90metpalette[0m[33m            [0m
+[90m[0m[90m[4ms[0m[90metpci[0m[33m                [0m[90m[0m[90m[4ms[0m[90metpgid[0m[33m               [0m[90m[0m[90m[4ms[0m[90metpriv[0m[33m               [0m
+[90m[0m[90m[4ms[0m[90metsid[0m[33m                [0m[90m[0m[90m[4ms[0m[90metterm[0m[33m               [0m[90m[0m[90m[4ms[0m[90metvesablank[0m[33m          [0m
+[90m[0m[90m[4ms[0m[90metvtrgb[0m[33m              [0m[90m[0m[90m[4ms[0m[90metxkbmap[0m[33m             [0m[90m[0m[90m[4ms[0m[90mexp-conv[0m[33m             [0m
+[90m[0m[90m[4ms[0m[90mfdisk[0m[33m                [0m[90m[0m[90m[4ms[0m[90mftp[0m[33m                  [0m[90m[0m[90m[4ms[0m[90mg[0m[33m                    [0m8[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m| [38;5;5m7[1;81H8[0m[0m[37mecho st[0m7[2;1H[J[90m[1;7;32m[0m[90m[1;4;7;32mst[0m[90m[1;7;32mart-statd[0m         [90m[0m[90m[4mst[0m[90martx[0m[33m              [0m[90m[0m[90m[4mst[0m[90martxfce4[0m[33m          [0m[90m[0m[90m[4mst[0m[90mat[0m[33m                [0m
+[90m[0m[90m[4mst[0m[90mdbuf[0m[33m              [0m[90m[0m[90m[4mst[0m[90moken[0m[33m              [0m[90m[0m[90m[4mst[0m[90moken-gui[0m[33m          [0m[90m[0m[90m[4mst[0m[90mreamzip[0m[33m           [0m
+[90m[0m[90m[4mst[0m[90mrings[0m[33m             [0m[90m[0m[90m[4mst[0m[90mrip[0m[33m               [0m[90m[0m[90m[4mst[0m[90mrip-ansi-escapes[0m[33m  [0m[90m[0m[90m[4mst[0m[90mripe[0m[33m              [0m
+[90m[0m[90m[4mst[0m[90mty[0m[33m                [0m[90m[0m[90m[4mst[0m[90munbdc[0m[33m             [0m[90m[0m[90m[4mst[0m[90mund[0m[33m               [0m8[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m| [38;5;5m7[1;81H8[0m[0m[37mecho sta[0m7[2;1H[J[90m[1;7;32m[0m[90m[1;4;7;32msta[0m[90m[1;7;32mrt-statd[0m         [90m[0m[90m[4msta[0m[90mrtx[0m[33m              [0m[90m[0m[90m[4msta[0m[90mrtxfce4[0m[33m          [0m[90m[0m[90m[4msta[0m[90mt[0m[33m                [0m8[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m| [38;5;5m7[1;81H8[0m[0m[37mecho stag[0m7[2;1H[J[1;7;32mNO RECORDS FOUND[0m8[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m| [38;5;5m7[1;81H8[0m[0m[37mecho stage[0m7[2;1H[J[1;7;32mNO RECORDS FOUND[0m8[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m| [38;5;5m7[1;81H8[0m[0m[37mecho stage5[0m7[2;1H[J[1;7;32mNO RECORDS FOUND[0m8[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m| [38;5;5m7[1;81H8[0m[0m[37mecho stage5-[0m7[2;1H[J[1;7;32mNO RECORDS FOUND[0m8[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m| [38;5;5m7[1;81H8[0m[0m[37mecho stage5-c[0m7[2;1H[J[1;7;32mNO RECORDS FOUND[0m8[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m| [38;5;5m7[1;81H8[0m[0m[37mecho stage5-co[0m7[2;1H[J[1;7;32mNO RECORDS FOUND[0m8[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m| [38;5;5m7[1;81H8[0m[0m[37mecho stage5-com[0m7[2;1H[J[1;7;32mNO RECORDS FOUND[0m8[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m| [38;5;5m7[1;81H8[0m[0m[37mecho stage5-comp[0m7[2;1H[J[1;7;32mNO RECORDS FOUND[0m8[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m| [38;5;5m7[1;81H8[0m[0m[37mecho stage5-compl[0m7[2;1H[J[1;7;32mNO RECORDS FOUND[0m8[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m| [38;5;5m7[1;81H8[0m[0m[37mecho stage5-comple[0m7[2;1H[J[1;7;32mNO RECORDS FOUND[0m8[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m| [38;5;5m7[1;81H8[0m[0m[37mecho stage5-complet[0m7[2;1H[J[1;7;32mNO RECORDS FOUND[0m8[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m| [38;5;5m7[1;81H8[0m[0m[37mecho stage5-completi[0m7[2;1H[J[1;7;32mNO RECORDS FOUND[0m8[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m| [38;5;5m7[1;81H8[0m[0m[37mecho stage5-completio[0m7[2;1H[J[1;7;32mNO RECORDS FOUND[0m8[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m| [38;5;5m7[1;81H8[0m[0m[37mecho stage5-completion[0m7[2;1H[J[1;7;32mNO RECORDS FOUND[0m8[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho stage5-completion[0m78[?25h[6n[1;1R                                                                                [demo] Demo agent event #2
+[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mecho stage5-completion[0m78[?25h[6n[1;1R                                                                                [demo] Demo agent event #3
+[?25l[3;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[3;81H8[0m[0m[37mecho stage5-completion[0m78[?25h
