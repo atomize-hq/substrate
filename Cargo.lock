@@ -2555,6 +2555,7 @@ dependencies = [
  "crossterm",
  "fd-lock",
  "itertools 0.13.0",
+ "libc",
  "nu-ansi-term",
  "serde",
  "strip-ansi-escapes",
