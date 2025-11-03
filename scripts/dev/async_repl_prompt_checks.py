@@ -45,6 +45,18 @@ def expect_prompt(child: "pexpect.spawn", *, timeout: int = 30) -> None:
         raise RuntimeError("Timed out waiting for substrate prompt")
 
 
+def expect_with_handshake(
+    child: "pexpect.spawn", pattern: str, *, timeout: int = 30
+) -> None:
+    """Expect a pattern while answering cursor-position probes."""
+
+    while True:
+        idx = child.expect([pattern, "\x1b\[6n"], timeout=timeout)
+        if idx == 0:
+            return
+        child.send("\x1b[1;1R")
+
+
 def spawn_async_shell() -> "pexpect.spawn":
     cmd = (
         "if [ -f ~/.substrate/dev-shim-env.sh ]; then "
@@ -75,7 +87,7 @@ def scenario_typing_mid_stream(child: "pexpect.spawn") -> None:
         child.expect(marker)
 
     child.send("\r")
-    child.expect("typing while agents stream\r\n")
+    expect_with_handshake(child, "typing while agents stream\r\n")
     expect_prompt(child)
 
 
@@ -93,7 +105,7 @@ def scenario_long_line_burst(child: "pexpect.spawn") -> None:
 
     # Expect nine progress events (three agents * three events each).
     for _ in range(9):
-        child.expect("Demo agent event #", timeout=5)
+        expect_with_handshake(child, "Demo agent event #", timeout=10)
 
     child.send("\r")
     child.expect(f"{payload}\r\n")
@@ -113,7 +125,7 @@ def scenario_control_chars(child: "pexpect.spawn") -> None:
     child.send("check")
 
     for marker in ["Demo agent event #1", "Demo agent event #2", "Demo agent event #3"]:
-        child.expect(marker)
+        expect_with_handshake(child, marker)
 
     child.send("\r")
     child.expect("controlcheck\r\n")
@@ -126,25 +138,25 @@ def run_drills(log_path: Path) -> None:
         log_file.write("# Stage 4 Prompt Integrity Drills\n")
         log_file.flush()
 
-    child = spawn_async_shell()
-    child.logfile = log_file
-    try:
-        log_file.write("\n## Scenario 1: typing while events stream\n")
-        log_file.flush()
-        scenario_typing_mid_stream(child)
+        child = spawn_async_shell()
+        child.logfile = log_file
+        try:
+            log_file.write("\n## Scenario 1: typing while events stream\n")
+            log_file.flush()
+            scenario_typing_mid_stream(child)
 
-        log_file.write("\n## Scenario 2: long command under bursty output\n")
-        log_file.flush()
-        scenario_long_line_burst(child)
+            log_file.write("\n## Scenario 2: long command under bursty output\n")
+            log_file.flush()
+            scenario_long_line_burst(child)
 
-        log_file.write("\n## Scenario 3: backspace edits during events\n")
-        log_file.flush()
-        scenario_control_chars(child)
+            log_file.write("\n## Scenario 3: backspace edits during events\n")
+            log_file.flush()
+            scenario_control_chars(child)
 
-        _send_command(child, "exit")
-        child.expect(pexpect.EOF)
-    finally:
-        child.close()
+            _send_command(child, "exit")
+            child.expect(pexpect.EOF)
+        finally:
+            child.close()
 
 
 def run_stage5_checks(log_path: Path) -> None:
@@ -173,7 +185,7 @@ def run_stage5_checks(log_path: Path) -> None:
             time.sleep(0.05)
             child.send("ho stage5-completion")
             child.send("\r")
-            child.expect("stage5-completion\r\n")
+            expect_with_handshake(child, "stage5-completion\r\n")
             expect_prompt(child)
 
             _send_command(child, ":demo-agent")
@@ -192,9 +204,9 @@ def run_stage5_checks(log_path: Path) -> None:
             log_file.flush()
 
             child.send("\x1b[A")  # Up arrow
-            child.expect("echo stage5-completion")
+            expect_with_handshake(child, "echo stage5-completion")
             child.send("\r")
-            child.expect("stage5-completion\r\n")
+            expect_with_handshake(child, "stage5-completion\r\n")
             expect_prompt(child)
 
             _send_command(child, "exit")

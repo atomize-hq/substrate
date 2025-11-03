@@ -50,6 +50,7 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         adapter
             .begin_session()
             .context("failed to prepare async Reedline session")?;
+        drain_cursor_position_reports();
 
         let mut agent_rx = init_event_channel();
         let agent_printer = adapter.printer_handle();
@@ -107,6 +108,7 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                     let trimmed_owned = trimmed.to_string();
 
                                     adapter.end_session();
+                                    drain_cursor_position_reports();
                                     let reedline_guard = adapter.suspend_for_command();
                                     terminal_guard.pause()?;
 
@@ -124,17 +126,18 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                     report_nonzero_status(&status);
 
                                     terminal_guard.resume()?;
+                                    drain_cursor_position_reports();
                                     drop(reedline_guard);
                                     adapter
                                         .begin_session()
                                         .context("failed to resume async Reedline session")?;
-                                    adapter
-                                        .begin_session()
-                                        .context("failed to resume async Reedline session")?;
+                                    drain_cursor_position_reports();
 
                                     publish_command_completion(&trimmed_owned, &status);
                                     telemetry.record_command();
-                                    adapter.render_prompt().context("failed to redraw prompt after command")?;
+                                    adapter
+                                        .render_prompt()
+                                        .context("failed to redraw prompt after command")?;
                                     let _ = adapter.sync_history();
                                 }
                                 AdapterAction::Interrupt => {
@@ -366,3 +369,43 @@ fn continuation_backspaces(buffer: &str) -> Option<usize> {
         None
     }
 }
+
+#[cfg(unix)]
+fn drain_cursor_position_reports() {
+    use libc::{fcntl, read, F_GETFL, F_SETFL, O_NONBLOCK};
+    use std::io;
+    use std::os::unix::io::AsRawFd;
+
+    let stdin = io::stdin();
+    let fd = stdin.as_raw_fd();
+    unsafe {
+        let original = fcntl(fd, F_GETFL);
+        if original == -1 {
+            return;
+        }
+        if fcntl(fd, F_SETFL, original | O_NONBLOCK) == -1 {
+            return;
+        }
+
+        let mut buf = [0u8; 64];
+        loop {
+            let read_bytes = read(fd, buf.as_mut_ptr() as *mut _, buf.len());
+            if read_bytes > 0 {
+                continue;
+            }
+            if read_bytes == 0 {
+                break;
+            }
+            let err = io::Error::last_os_error();
+            if err.kind() == io::ErrorKind::WouldBlock || err.kind() == io::ErrorKind::Interrupted {
+                break;
+            }
+            break;
+        }
+
+        let _ = fcntl(fd, F_SETFL, original);
+    }
+}
+
+#[cfg(not(unix))]
+fn drain_cursor_position_reports() {}
