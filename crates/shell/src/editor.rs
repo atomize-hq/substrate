@@ -135,6 +135,7 @@ impl Completer for SubstrateCompleter {
                 span: reedline::Span::new(pos - word.len(), pos),
                 append_whitespace: true,
                 style: None,
+                match_indices: None,
             })
             .collect()
     }
