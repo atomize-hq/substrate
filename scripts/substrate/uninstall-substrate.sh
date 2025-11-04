@@ -115,8 +115,18 @@ if command -v limactl >/dev/null 2>&1; then
 fi
 
 log "Checking for host symlinks..."
-ls -l /usr/local/bin 2>/dev/null | grep substrate || true
-ls -l "$HOME/bin" 2>/dev/null | grep substrate || true
+for target in /usr/local/bin/substrate*; do
+  if [[ -e "${target}" ]]; then
+    ls -l "${target}"
+  fi
+done
+if [[ -d "${HOME}/bin" ]]; then
+  for target in "${HOME}"/bin/substrate*; do
+    if [[ -e "${target}" ]]; then
+      ls -l "${target}"
+    fi
+  done
+fi
 
 log "Clearing shell command cache..."
 hash -r || true

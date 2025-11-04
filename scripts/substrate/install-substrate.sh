@@ -2,6 +2,7 @@
 set -euo pipefail
 
 readonly INSTALLER_NAME="substrate-install"
+# shellcheck disable=SC2034 # used for release metadata
 readonly INSTALLER_VERSION="0.1.0-dev"
 readonly DEFAULT_VERSION="0.2.0-beta"
 readonly DEFAULT_PREFIX="${HOME}/.substrate"
@@ -321,7 +322,10 @@ sanitize_env_path() {
   else
     local shim_dir="${HOME}/.substrate/shims"
     local IFS=':'
-    local parts=($PATH)
+    local parts=()
+    if [[ -n "${PATH}" ]]; then
+      IFS=':' read -r -a parts <<< "${PATH}"
+    fi
     local filtered=()
     for entry in "${parts[@]}"; do
       if [[ "${entry}" == "${shim_dir}" ]]; then
@@ -948,7 +952,6 @@ install_macos() {
   deploy_shims "${substrate_bin}"
   harden_shim_symlinks "${shim_dir}"
   provision_macos_world "${version_dir}"
-  local doctor_path
   local doctor_original_path
   doctor_original_path="${bin_dir}:${ORIGINAL_PATH}"
   log "Doctor PATH: ${doctor_original_path}"
@@ -1022,7 +1025,6 @@ install_linux() {
   deploy_shims "${substrate_bin}"
   harden_shim_symlinks "${shim_dir}"
   provision_linux_world "${version_dir}"
-  local doctor_path
   local doctor_original_path
   doctor_original_path="${bin_dir}:${ORIGINAL_PATH}"
   log "Doctor PATH: ${doctor_original_path}"
