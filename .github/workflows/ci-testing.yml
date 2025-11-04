@@ -63,7 +63,7 @@ jobs:
         run: cargo build --workspace
 
       - name: cargo test
-        run: cargo test --workspace --all-targets
+        run: cargo test --workspace --all-targets -- --test-threads=1
 
       - name: Shell lint (Linux)
         if: runner.os == 'Linux'
