@@ -156,9 +156,4 @@ jobs:
         run: cargo install cargo-dist --locked
 
       - name: cargo dist check
-        run: cargo dist check
-
-      - name: Shell lint
-        run: |
-          git ls-files '*.sh' | xargs -r shellcheck
-          git ls-files '*.sh' | xargs -r shfmt -d
+        run: dist check
