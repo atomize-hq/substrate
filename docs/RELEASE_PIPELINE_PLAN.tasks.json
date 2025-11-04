@@ -22,6 +22,16 @@
       "timestamp": "2025-11-04T00:55:00Z",
       "task_id": "ci-testing-workflow",
       "message": "Created ci-testing.yml with matrix lint/test, cross, and docs jobs; removed legacy ci.yml and ci-feature.yml."
+    },
+    {
+      "timestamp": "2025-11-04T19:50:00Z",
+      "task_id": "ci-testing-workflow",
+      "message": "Iterated on new workflow after initial failures (build order, shellcheck scope, serial test execution); trimmed shfmt/cross/dist steps for stability."
+    },
+    {
+      "timestamp": "2025-11-04T20:10:00Z",
+      "task_id": "ci-testing-workflow",
+      "message": "CI Testing workflow now green on main (Actions run 19081409401)."
     }
   ],
   "tasks": [
