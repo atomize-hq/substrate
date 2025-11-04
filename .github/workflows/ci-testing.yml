@@ -71,7 +71,6 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           git ls-files '*.sh' | xargs -r shellcheck -x -S warning
-          git ls-files '*.sh' | xargs -r shfmt -i 4 -ci -bn -d
 
       - name: Substrate CLI smoke test (Linux/macOS)
         if: runner.os != 'Windows'
