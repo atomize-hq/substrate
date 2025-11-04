@@ -59,11 +59,11 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: cargo test
-        run: cargo test --workspace --all-targets
-
       - name: Cargo build (debug)
         run: cargo build --workspace
+
+      - name: cargo test
+        run: cargo test --workspace --all-targets
 
       - name: Shell lint (Linux)
         if: runner.os == 'Linux'
