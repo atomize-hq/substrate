@@ -32,6 +32,16 @@
       "timestamp": "2025-11-04T20:10:00Z",
       "task_id": "ci-testing-workflow",
       "message": "CI Testing workflow now green on main (Actions run 19081409401)."
+    },
+    {
+      "timestamp": "2025-11-04T20:20:00Z",
+      "task_id": "ci-testing-workflow",
+      "message": "Re-enabled cross builds after gating telemetry cdylib on musl; wiring dist profile." 
+    },
+    {
+      "timestamp": "2025-11-04T20:25:00Z",
+      "task_id": "ci-testing-workflow",
+      "message": "Adopted dist v0.30 plan/build pipeline via dist init; release workflow regenerated." 
     }
   ],
   "tasks": [

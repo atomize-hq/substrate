@@ -6,7 +6,6 @@ authors = ["Substrate Team"]
 
 [lib]
 name = "substrate_telemetry"
-crate-type = ["cdylib"]  # Create a dynamic library for LD_PRELOAD
 
 [dependencies]
 libc = "0.2"

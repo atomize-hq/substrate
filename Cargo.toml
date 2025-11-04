@@ -64,3 +64,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [patch.crates-io]
 reedline = { path = "third_party/reedline" }
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

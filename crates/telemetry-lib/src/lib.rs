@@ -1,3 +1,5 @@
+#![crate_type = "rlib"]
+#![cfg_attr(not(target_env = "musl"), crate_type = "cdylib")]
 #![allow(non_camel_case_types)]
 
 use chrono::Utc;
