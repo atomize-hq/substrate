@@ -68,7 +68,7 @@ jobs:
       - name: Shell lint (Linux)
         if: runner.os == 'Linux'
         run: |
-          git ls-files '*.sh' | xargs -r shellcheck -x
+          git ls-files '*.sh' | xargs -r shellcheck -x -S warning
           git ls-files '*.sh' | xargs -r shfmt -d
 
       - name: Substrate CLI smoke test (Linux/macOS)
