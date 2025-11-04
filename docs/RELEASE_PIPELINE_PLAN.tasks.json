@@ -7,6 +7,23 @@
     "docs/CONFIGURATION.md",
     "docs/INSTALLATION.md"
   ],
+  "logs": [
+    {
+      "timestamp": "2025-11-04T00:35:00Z",
+      "task_id": "installer-hardening",
+      "message": "Windows path quoting fixed, Linux installer now uses SUDO_CMD, docs updated with envsubst guidance; shell lint deferred until shellcheck/shfmt available."
+    },
+    {
+      "timestamp": "2025-11-04T00:40:00Z",
+      "task_id": "ci-testing-workflow",
+      "message": "Initiating consolidated CI workflow redesign for testing/main branches."
+    },
+    {
+      "timestamp": "2025-11-04T00:55:00Z",
+      "task_id": "ci-testing-workflow",
+      "message": "Created ci-testing.yml with matrix lint/test, cross, and docs jobs; removed legacy ci.yml and ci-feature.yml."
+    }
+  ],
   "tasks": [
     {
       "id": "installer-hardening",

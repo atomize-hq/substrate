@@ -89,6 +89,10 @@ Keep concise, actionable, and security-focused.
   - Publish prebuilt `substrate` and `substrate-world-agent` artifacts (e.g., GitHub releases or Homebrew formula) so operators do not need a Rust toolchain to onboard.
   - Acceptance: Installer/bootstrap script can download versioned binaries; manual instructions reference the published artifacts instead of local builds.
 
+- Low Priority – macOS installer dependency automation
+  - Enhance `scripts/substrate/install-substrate.sh` to auto-install required macOS tools (e.g., `envsubst` via Homebrew `gettext`) when missing, falling back to clear guidance if no supported package manager is detected.
+  - Acceptance: Fresh macOS host without gettext can run the installer end-to-end without manual prerequisite setup.
+
 ## Hardening / Quality
 
 - Differentiate shell vs replay world warnings

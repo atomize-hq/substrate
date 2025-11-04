@@ -1,0 +1,163 @@
+name: CI Testing
+
+on:
+  push:
+    branches:
+      - testing
+      - main
+  pull_request:
+    branches:
+      - testing
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_TOOLCHAIN: 1.89.0
+
+jobs:
+  lint-and-test:
+    name: Lint & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-14
+          - windows-2022
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libseccomp-dev shellcheck shfmt
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      - name: Cache cargo artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-
+
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test --workspace --all-targets
+
+      - name: Cargo build (debug)
+        run: cargo build --workspace
+
+      - name: Shell lint (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          git ls-files '*.sh' | xargs -r shellcheck
+          git ls-files '*.sh' | xargs -r shfmt -d
+
+      - name: Substrate CLI smoke test (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: cargo run --bin substrate -- --version
+
+      - name: Substrate CLI smoke test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: cargo run --bin substrate -- --version
+
+  cross-build:
+    name: Cross Build (${{ matrix.target }})
+    needs: lint-and-test
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - aarch64-unknown-linux-gnu
+          - x86_64-unknown-linux-musl
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross --locked
+
+      - name: Cache cargo artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cross-${{ matrix.target }}-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cross-${{ matrix.target }}-${{ env.RUST_TOOLCHAIN }}-
+
+      - name: Build ${{ matrix.target }}
+        run: cross build --workspace --target ${{ matrix.target }}
+
+  docs-and-packaging:
+    name: Docs & Packaging Checks
+    needs: lint-and-test
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libseccomp-dev shellcheck shfmt
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt
+
+      - name: Cache cargo artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: docs-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            docs-${{ env.RUST_TOOLCHAIN }}-
+
+      - name: Generate documentation
+        run: cargo doc --workspace --no-deps
+
+      - name: Install cargo-dist
+        run: cargo install cargo-dist --locked
+
+      - name: cargo dist check
+        run: cargo dist check
+
+      - name: Shell lint
+        run: |
+          git ls-files '*.sh' | xargs -r shellcheck
+          git ls-files '*.sh' | xargs -r shfmt -d

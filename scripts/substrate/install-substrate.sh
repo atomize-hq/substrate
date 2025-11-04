@@ -555,7 +555,9 @@ ensure_macos_prereqs() {
   require_cmd shasum     # Checksum verification
   require_cmd jq         # JSON parsing for doctor output
   require_cmd limactl    # Lima VM manager (critical for world backend)
-  require_cmd envsubst   # Environment variable substitution
+  if ! command_exists envsubst; then
+    fatal "Required command 'envsubst' not found. Install it with 'brew install gettext' (provides envsubst) and re-run the installer."
+  fi
 
   # Check if Virtualization Framework is available
   local hv_support
