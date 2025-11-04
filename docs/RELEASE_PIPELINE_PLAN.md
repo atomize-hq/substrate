@@ -1,170 +1,186 @@
-# Release Pipeline Implementation Plan
+# Release Pipeline Implementation Plan (Updated 2025-11-04)
 
-This plan defines how we evolve Substrate's build and distribution workflow so
-that cutting a beta or stable release automatically produces polished GitHub
-release pages with per-platform artifacts, checksums, and changelog summaries.
+Substrate’s release process is moving from manual artifact builds toward a fully
+automated GitHub Actions pipeline. This document describes the target branch
+model, workflow inventory, tooling, and rollout steps required to deliver
+repeatable builds, comprehensive validation, and painless promotions.
 
-## Objectives
+## 1. Goals and Non-Goals
 
-- Produce reproducible binaries for Linux, macOS, and Windows from a single tag.
-- Package artifacts in OS-friendly formats (tarballs, zips, AppImage/deb/rpm).
-- Generate checksums and publish them alongside binaries.
-- Draft GitHub release notes referencing the changelog and quickstart docs.
-- Support nightly/pre-release channels while keeping stable releases simple.
-- Minimise operator intervention: tagging (or scheduled nightly) should be the
-  only manual step.
+### Goals
+- Keep `main` continuously releasable while allowing rapid iteration on feature
+  branches.
+- Automate all validation (linting, testing, integration smoke tests) for the
+  `testing` and `main` branches.
+- Produce cross-platform release artifacts (Linux, macOS, Windows) directly
+  from Git tags with checksums and release notes.
+- Provide nightly soak coverage that only runs when new code has landed.
+- Document a procedure that any maintainer (or agent) can follow end-to-end.
 
-## Tooling Choices
+### Non-Goals (for now)
+- Publishing to external package managers (brew tap, winget, snap, etc.).
+- Code signing or notarization.
+- Replacing GitHub Releases as the distribution channel.
 
-1. **cargo-dist**
-   - Purpose-built for Rust projects; handles matrix builds, packaging, release
-     note templating, and asset uploads.
-   - Supports AppImage, deb, rpm, msi/exe, dmg/zip, and tar bundles.
-   - Generates GitHub Actions workflows automatically (`cargo dist init`).
-2. **GitHub Actions**
-   - Host the release workflow; leverage matrix runners for Linux/macOS/Windows.
-   - Secure secrets (code signing, if added later) via Actions secrets.
-3. **gh CLI (optional)**
-   - For local dry runs or manual hotfix uploads.
-4. **Artifacts bucket (future)**
-   - Optional CDN or object storage if we want mirrors beyond GitHub.
+## 2. Branch and Environment Model
 
-## High-Level Flow
+| Branch      | Purpose                               | Allowed Sources                           |
+|-------------|----------------------------------------|-------------------------------------------|
+| `feature/*` | Personal or team feature work          | Developers push directly                  |
+| `testing`   | Integration & soak testing             | PRs from feature branches only            |
+| `main`      | Production-ready / release branch      | Fast-forward from `testing` via protected PR |
 
-1. Developer updates `CHANGELOG.md` and bumps versions.
-2. Developer runs `cargo dist check` locally to validate manifest configuration.
-3. Tag is created (`v0.2.0-beta.2`, `v0.2.0`, etc.).
-4. GitHub Actions workflow (`Release`) triggers on the tag push.
-5. Workflow executes `cargo dist build` with matrix targets to produce binaries.
-6. `cargo dist upload` attaches resulting assets and checksums to the release.
-7. Release notes template pulls from changelog and quickstart doc links.
-8. Nightly workflow reuses the same steps on a schedule, tagging pre-release
-   builds (`nightly-YYYYMMDD`), and marks them as pre-release.
+- Protect `testing` and `main`:
+  - Require status checks from the CI workflow described in §3.
+  - Require at least one approving review.
+  - Disallow force pushes.
+- Lock the GitHub Actions “production” environment so only the release workflow
+  (running on tags from `main`) can deploy. This prevents accidental release
+  from feature or testing branches.
+- Document the merge discipline: no direct commits to `main`; the promotion
+  workflow (see §3.4) is the only mechanism to move code from `testing`.
 
-## Detailed Tasks
+## 3. Workflow Inventory
 
-### 1. Project Preparation
+### 3.1 Continuous Integration (`ci-testing.yml`)
+- **Triggers**: `pull_request` targeting `testing` or `main`, `push` to those
+  branches.
+- **Jobs**:
+  1. **Lint & Unit (matrix)**: Runs on `ubuntu-24.04`, `windows-2022`,
+     `macos-14`. Steps include `cargo fmt`, `cargo clippy`, `cargo test
+     --workspace`, and platform-specific smoke commands:
+     - Linux: `substrate --shim-deploy --dry-run`
+     - macOS: ensure Lima scripts pass `shellcheck`
+     - Windows: run PowerShell installers with `-WhatIf`
+  2. **Cross Targets**: Uses `houseabsolute/actions-rust-cross` to compile
+     `aarch64-unknown-linux-gnu` and `x86_64-unknown-linux-musl` binaries.
+     Outputs stored as build artifacts for debugging.
+  3. **Documentation & Packaging**: Runs `cargo doc --no-deps`, `cargo dist
+     check`, `shfmt -d scripts/**/*`, and ensures `README` quickstarts render
+     (e.g., `mdbook test` if applicable).
+- **Caching**: Use `actions/cache` with a key combining runner OS and the
+  `hashFiles` of `Cargo.lock` to speed up builds. `target/` should be restored
+  per toolchain triple to support reuse across jobs.
 
-- [ ] Add `cargo-dist` as a dev dependency (no build impact):
-  ```bash
-  cargo install cargo-dist
-  cargo dist init
-  ```
-- [ ] Review the generated `dist/` directory and customise:
-  - `dist/cargo-dist.toml`: configure desired installers (tar.gz, AppImage, rpm,
-    deb, zip/exe/dmg), rename packages (`substrate`, `substrate-shim`, etc.).
-  - Define matrix triples explicitly (linux-x86_64, linux-aarch64, macos-arm64,
-    macos-x86_64, windows-x86_64).
-  - Specify artifact paths for quickstart/docs to include in archives.
-- [ ] Commit the `dist/` configuration and update `.gitignore` to keep only
-  tracked templates (omit generated artifacts).
+### 3.2 Nightly Validation (`nightly.yml`)
+- **Trigger**: `schedule` (e.g., `0 2 * * *`) and manual `workflow_dispatch`.
+- **Scope**: Runs the same jobs as the CI workflow plus extended integration
+  suites (world agent integration tests, replay fixtures).
+- **Change Detection**: The workflow should skip all heavy jobs if nothing has
+  changed since the last successful nightly:
+  1. Fetch the latest commit on `testing`.
+  2. Download the previous nightly state artifact (`nightly-state.json`)
+     containing the last processed commit SHA.
+  3. If `HEAD` matches the stored SHA, exit early with a log message.
+  4. After successful completion, upload a new `nightly-state.json` with the
+     current SHA.
+- **Reporting**: Failures open an actionable issue (via `peter-evans/create-issue-from-file`)
+  summarising failing jobs and linking to logs.
 
-### 2. Release Workflow Design
+### 3.3 Release Automation (`release.yml`)
+- **Triggers**: `push` tags matching `v*.*.*` (including betas), manual
+  `workflow_dispatch` for dry runs or hotfixes.
+- **Jobs** (mirrors `cargo-dist`’s recommended plan/build/upload flow):
+  1. **Plan** (Ubuntu):
+     - Runs `cargo dist plan --tag ${{ github.ref_name }} --output
+       dist-manifest.json`.
+     - Uploads the manifest and release notes template as artifacts.
+  2. **Build Matrix**:
+     - Targets: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`,
+       `x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-pc-windows-msvc`.
+     - Each job installs the MSRV toolchain, restores caches, runs `cargo dist
+       build --plan dist-manifest.json`, performs platform smoke checks, and
+       uploads the produced bundles and `SHA256SUMS`.
+  3. **Publish** (Ubuntu):
+     - Downloads plan + artifacts.
+     - Executes `cargo dist upload --plan dist-manifest.json` to draft/update
+       the GitHub Release, attach assets, and render release notes from
+       `CHANGELOG.md`.
+     - Marks releases containing `-beta`, `-rc`, or `nightly-` as prereleases.
+  4. **Crate Publishing** (optional, gated by manual approval):
+     - Sequentially `cargo publish` crates in the required dependency order,
+       respecting crates.io propagation delays with `sleep`.
+- **Artifacts**: Ensure `dist/cargo-dist.toml` includes additional files
+  (quickstarts, installer scripts, docs) under `additional-artifacts`.
 
-Create `.github/workflows/release.yml` with triggers:
-```yaml
-on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
-```
-Key jobs:
+### 3.4 Promotion Workflow (`promote.yml`)
+- **Trigger**: `workflow_dispatch` from maintainers.
+- **Steps**:
+  1. Checkout `testing` and `main`.
+  2. Verify CI status for the latest `testing` commit is green.
+  3. Fast-forward `main` to match `testing`.
+  4. Optionally create a Git tag (`vMAJOR.MINOR.PATCH[-betaN]`).
+  5. Emit a summary for release notes preparation.
 
-1. **Plan Job (linux)**
-   - Uses `cargo dist plan` to create a build matrix and release metadata.
-   - Uploads the plan as an artifact consumed by platform jobs.
+## 4. Tooling and Key Actions
 
-2. **Build Jobs (matrix)**
-   - Runners:
-     - `ubuntu-22.04` (x86_64)
-     - `ubuntu-22.04` with cross for `aarch64-unknown-linux-gnu` (or use
-       `cross` containers).
-     - `macos-14` (arm64)
-     - `macos-13` (x86_64)
-     - `windows-2022`
-   - Steps:
-     1. Checkout with submodules disabled.
-     2. Install Rust toolchain pinned to MSRV/ stable.
-     3. Restore caches (`~/.cargo/registry`, `target` keyed by `dist-plan`).
-     4. Run `cargo dist build --plan ${{ steps.plan.outputs.path }}` (per docs).
-     5. Upload build artifacts (binaries + packaging outputs) for aggregation.
+- **`cargo-dist`** (installed as `cargo dist`): orchestrates plan/build/upload,
+  and supports custom templates. Reference: <https://axodotdev.github.io/cargo-dist/>.
+- **`houseabsolute/actions-rust-cross`**: builds non-native Linux targets using
+  preconfigured cross toolchains.
+- **`actions/github-script`**: used for nightly change detection and branch
+  promotion guard rails.
+- **`peter-evans/create-issue-from-file`**: opens issues when nightly runs fail.
+- **`softprops/action-gh-release`** (optional): only needed if we bypass
+  `cargo dist upload`.
+- **Shell quality gates**: `shellcheck`, `shfmt` via `ludeeus/action-shellcheck`
+  and `shfmt` Docker image.
 
-3. **Publish Job (linux)**
-   - Needs `WRITE` permissions to Releases.
-   - Downloads plan and artifacts.
-   - Runs `cargo dist upload` to:
-     - Create (or update) the GitHub Release for the tag.
-     - Attach all assets and generated `SHA256SUMS`.
-     - Apply release notes via template (pulling from `CHANGELOG.md`).
-   - Mark release as pre-release if tag contains `beta`, `rc`, or `nightly`.
+## 5. Implementation Roadmap
 
-### 3. Nightly Workflow
+1. **Installer Fixes** (current branch):
+   - Address path quoting in Windows scripts.
+   - Replace hard-coded `sudo` invocations with the existing `SUDO_CMD` logic.
+   - Refresh documentation prerequisites.
+2. **Retire Legacy CI**:
+   - Remove `.github/workflows/ci-feature.yml`.
+   - Add `ci-testing.yml` with matrix jobs and updated cache strategy.
+3. **Nightly Workflow**:
+   - Create `nightly-state` artifact management.
+   - Integrate extended test suites and failure issue reporting.
+4. **Adopt `cargo-dist`**:
+   - Run `cargo dist init`.
+   - Customise `dist/cargo-dist.toml`, release template, and artifact mapping.
+   - Commit the generated configuration and lock `dist/` files.
+5. **Release Workflow Overhaul**:
+   - Regenerate `.github/workflows/release.yml` to the plan/build/upload model.
+   - Ensure crate publishing is optional and requires manual approval.
+6. **Promotion Automation**:
+   - Introduce `promote.yml` workflow that fast-forwards `main`.
+   - Document how maintainers trigger promotions and tagging.
+7. **Branch Protections & Docs**:
+   - Configure GitHub rulesets/environments to enforce the branch model.
+   - Update `docs/DEVELOPMENT.md`, `docs/CONFIGURATION.md`, and this plan with
+     the final workflow names and commands.
+8. **Dry Run & Verification**:
+   - Tag a non-production release (e.g., `v0.0.0-ci-smoke`) to test the pipeline.
+   - Verify GitHub Release assets, checksums, and notes.
+   - Review nightly skip logic by running the workflow twice without code
+     changes and ensuring the second run exits early.
 
-- `.github/workflows/nightly.yml` with `schedule` trigger (e.g., 02:00 UTC).
-- Steps mirror `release.yml` but:
-  - Tag format `nightly-${{ github.run_id }}` or `nightly-$(date)`.
-  - Mark release as pre-release and optionally delete old nightlies beyond N
-    days.
-  - Optionally push an update to a `nightly` branch for tracking.
+## 6. Maintenance & Future Enhancements
 
-### 4. Documentation & Quickstart Bundles
+- Regularly upgrade the Rust toolchain in workflows (aligned with MSRV policy).
+- Monitor `cargo-dist` updates; regenerate config when new installer options or
+  bug fixes land.
+- Consider integrating code signing once certificates are available.
+- Future distribution targets:
+  - Homebrew tap automation (inspired by WezTerm’s workflow generator).
+  - Winget/Flathub manifest PRs.
+  - Container images (e.g., GitHub Container Registry).
+- Build a release dashboard (GitHub Pages or docs) summarising latest nightly,
+  testing state, and production release for quick at-a-glance health checks.
 
-- Update `dist/cargo-dist.toml` `artifact` sections to include additional files:
-  - `release/common/docs/QUICKSTART.md`
-  - `release/common/docs/README.md`
-  - Platform-specific scripts (macOS Lima, Windows WSL, Linux world provisioning).
-- `cargo dist` supports `additional-artifacts` to copy these into packages.
-- Maintain quickstart docs under `docs/releases/` and reference them in release
-  notes and README.
+## 7. References
 
-### 5. Release Notes Template
+- `cargo-dist` documentation: <https://axodotdev.github.io/cargo-dist/>
+- WezTerm CI/CD strategy (inspiration for multi-platform releases):
+  DeepWiki summary – <https://deepwiki.com/search/how-does-the-repository-automa_9e7f6238-7e17-40b1-accb-4a32820dfe5e>
+- Existing workflows in this repository:
+  - `.github/workflows/ci.yml`
+  - `.github/workflows/release.yml`
+  - `docs/INSTALLATION.md` / `docs/WORLD.md` (for provisioning scripts)
 
-- `cargo-dist` allows a `release-template.md`. Create one under `dist/` that
-  includes:
-  ```markdown
-  {{ changelog }}
-  ## Downloads
-  - [Linux x86_64](#) … (links auto-filled by cargo-dist)
-  ```
-- Ensure `CHANGELOG.md` uses the `[version] - YYYY-MM-DD` sections expected.
-- For betas, mention soak-testing expectations and link to evidence logs.
-
-### 6. Verification Steps
-
-- Dry run locally:
-  ```bash
-  cargo dist build
-  cargo dist manifest --tag v0.2.0-beta.1
-  ```
-- Trigger workflow on a throwaway tag in a fork to confirm actions succeed.
-- Validate archive contents (scripts, docs, binaries, checksums).
-- Confirm GitHub release page layout matches expectations.
-
-### 7. Rollout Checklist
-
-1. Merge `dist/` configs and workflows into `main`.
-2. Tag `v0.2.0-beta.2` (or next beta) and observe automated release.
-3. Publish communication documenting nightly and beta release process.
-4. Clean up previous manual release instructions to avoid confusion.
-
-### 8. Future Enhancements
-
-- **Code Signing**: integrate macOS notarization and Windows signing if we
-  acquire certificates (store keys in GitHub Secrets).
-- **Package Repos**: push `.deb`/`.rpm` to apt/yum repositories using
-  `cloudsmith` or `packagecloud` actions.
-- **Telemetry**: instrument installer success via optional opt-in analytics.
-- **Release Dashboard**: create a docs page or script summarising latest beta
-  and nightly builds with direct links.
-
-## Ownership
-
-- Release engineering: @spenser (initial setup), rotate to DevOps once stable.
-- Documentation: keep `docs/releases/*` current with each version.
-- CI maintenance: ensure runner updates or toolchain changes are addressed.
-
----
-With this plan in place, tagging a release will mirror the polished asset table
-and download experience from projects like WezTerm while retaining our beta
-soak-testing workflow.
+With this plan implemented, every change will be validated automatically, every
+nightly run will execute only when required, and every Git tag will produce a
+fully packaged, multi-platform release without manual intervention.

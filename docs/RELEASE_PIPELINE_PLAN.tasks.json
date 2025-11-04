@@ -1,0 +1,189 @@
+{
+  "generated_at": "2025-11-04T00:00:00Z",
+  "scope": "Substrate release and CI/CD modernization",
+  "reference_documents": [
+    "docs/RELEASE_PIPELINE_PLAN.md",
+    "docs/DEVELOPMENT.md",
+    "docs/CONFIGURATION.md",
+    "docs/INSTALLATION.md"
+  ],
+  "tasks": [
+    {
+      "id": "installer-hardening",
+      "title": "Harden installer scripts before CI overhaul",
+      "description": "Fix Windows path quoting, remove hard-coded sudo usage in Linux installer, and sync INSTALLATION.md prerequisites so the automated workflows inherit reliable installers.",
+      "context": [
+        "scripts/windows/wsl-warm.ps1",
+        "scripts/substrate/install-substrate.sh",
+        "docs/INSTALLATION.md"
+      ],
+      "steps": [
+        "Quote Windows path fragments in scripts/windows/wsl-warm.ps1 so $projectPath values with spaces survive (see lines 130-160).",
+        "Replace direct 'sudo' invocations in scripts/substrate/install-substrate.sh with the SUDO_CMD helper and rerun shellcheck.",
+        "Update docs/INSTALLATION.md with correct download host (GitHub releases) and macOS prerequisite envsubst.",
+        "Run shellcheck/shfmt across scripts/ to confirm no regressions."
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "ci-testing-workflow",
+      "title": "Create consolidated CI workflow for testing/main branches",
+      "description": "Replace legacy workflows with a single matrix-based pipeline that runs linting, unit tests, cross builds, and script checks on testing/main.",
+      "context": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/ci-feature.yml",
+        "docs/RELEASE_PIPELINE_PLAN.md#31-continuous-integration-ci-testingyml"
+      ],
+      "steps": [
+        "Delete .github/workflows/ci-feature.yml.",
+        "Author .github/workflows/ci-testing.yml with triggers on push/pull_request targeting testing and main.",
+        "Define matrix job over ubuntu-24.04, macos-14, windows-2022 running fmt, clippy, cargo test, and per-platform smoke commands.",
+        "Add secondary job using houseabsolute/actions-rust-cross to build linux cross targets.",
+        "Add documentation-packaging job (cargo doc, cargo dist check, shellcheck/shfmt).",
+        "Ensure all jobs share caches keyed by OS and Cargo.lock hash."
+      ],
+      "dependencies": [
+        "installer-hardening"
+      ]
+    },
+    {
+      "id": "nightly-workflow",
+      "title": "Introduce skip-aware nightly validation workflow",
+      "description": "Create nightly.yml that runs extended integration tests only when new commits exist on testing since the last successful nightly.",
+      "context": [
+        ".github/workflows/nightly.yml (new)",
+        "docs/RELEASE_PIPELINE_PLAN.md#32-nightly-validation-nightlyyml"
+      ],
+      "steps": [
+        "Author nightly.yml with schedule trigger (e.g., 0 2 * * *).",
+        "Add initial job to fetch testing branch and download previous nightly-state artifact (actions/download-artifact).",
+        "Use actions/github-script to compare current HEAD SHA against stored SHA; set job output changed=true/false.",
+        "Wrap the heavy matrix jobs with if: steps.changed == 'true' to skip when no changes occurred.",
+        "After a successful run, upload nightly-state.json containing the processed commit SHA.",
+        "Add failure handler using peter-evans/create-issue-from-file to open actionable issues."
+      ],
+      "dependencies": [
+        "ci-testing-workflow"
+      ]
+    },
+    {
+      "id": "cargo-dist-integration",
+      "title": "Adopt cargo-dist for release planning and packaging",
+      "description": "Initialise cargo-dist, customise packaging configuration, and commit reproducible templates for multi-platform builds.",
+      "context": [
+        "dist/cargo-dist.toml (new)",
+        "dist/release-template.md (new)",
+        "docs/RELEASE_PIPELINE_PLAN.md#33-release-automation-releaseyml"
+      ],
+      "steps": [
+        "Install cargo-dist locally and run cargo dist init at repository root.",
+        "Edit dist/cargo-dist.toml to list targets (linux x86_64/aarch64, macOS arm64/x86_64, Windows x86_64).",
+        "Configure additional-artifacts for installer scripts and docs.",
+        "Author a release template referencing CHANGELOG sections and quickstart docs.",
+        "Commit the dist/ directory (excluding generated artifacts via .gitignore).",
+        "Run cargo dist check locally to validate configuration."
+      ],
+      "dependencies": [
+        "ci-testing-workflow"
+      ]
+    },
+    {
+      "id": "release-workflow-overhaul",
+      "title": "Regenerate release workflow to plan/build/upload artifacts",
+      "description": "Replace the manual release.yml with cargo-dist plan/build/upload jobs and optional crates.io publishing.",
+      "context": [
+        ".github/workflows/release.yml",
+        "docs/RELEASE_PIPELINE_PLAN.md#33-release-automation-releaseyml"
+      ],
+      "steps": [
+        "Overwrite release.yml with cargo-dist generated workflow, ensuring triggers include push tags v* and workflow_dispatch.",
+        "Add plan job (Ubuntu) that emits dist-manifest.json artifact.",
+        "Create build matrix job using cargo dist build for each target and attach smoke validations.",
+        "Add publish job that runs cargo dist upload with RELEASE permissions.",
+        "Gate crates.io publishing behind manual approval using environment protection if kept.",
+        "Remove redundant archive-upload steps from the legacy workflow."
+      ],
+      "dependencies": [
+        "cargo-dist-integration"
+      ]
+    },
+    {
+      "id": "promotion-workflow",
+      "title": "Automate testing→main promotions",
+      "description": "Provide a reusable workflow that fast-forwards main from testing once CI is green and optionally tags a release.",
+      "context": [
+        ".github/workflows/promote.yml (new)",
+        "docs/RELEASE_PIPELINE_PLAN.md#34-promotion-workflow-promoteyml"
+      ],
+      "steps": [
+        "Create promote.yml with workflow_dispatch inputs (tag name, dry-run).",
+        "Checkout testing and main with fetch-depth: 0.",
+        "Verify latest testing commit has passing CI using actions/github-script.",
+        "Fast-forward main to testing (git merge --ff-only).",
+        "Optionally create annotated tag when requested and push.",
+        "Emit summary instructions for initiating release workflow."
+      ],
+      "dependencies": [
+        "ci-testing-workflow"
+      ]
+    },
+    {
+      "id": "branch-protection-config",
+      "title": "Apply GitHub branch protections and environment rules",
+      "description": "Enforce the documented branch model so only testing promotions can update main and only release workflow can publish artifacts.",
+      "context": [
+        "GitHub repository settings (manual action)",
+        "docs/RELEASE_PIPELINE_PLAN.md#2-branch-and-environment-model"
+      ],
+      "steps": [
+        "Enable protections on testing and main requiring status checks from ci-testing.yml and approvals.",
+        "Disable force push and direct pushes to main; allow admins to push in emergencies only if desired.",
+        "Create production environment in Actions with required reviewers and restrict deployment branches to main.",
+        "Document the settings in docs/CONFIGURATION.md for future reference."
+      ],
+      "dependencies": [
+        "promotion-workflow"
+      ]
+    },
+    {
+      "id": "documentation-updates",
+      "title": "Update developer documentation for the new pipeline",
+      "description": "Ensure all contributor guides reference the updated workflows and promotion process.",
+      "context": [
+        "docs/DEVELOPMENT.md",
+        "docs/CONFIGURATION.md",
+        "docs/RELEASE_PIPELINE_PLAN.md"
+      ],
+      "steps": [
+        "Describe the feature → testing → main promotion path in docs/DEVELOPMENT.md.",
+        "Record workflow names, triggers, and required CLI commands in docs/CONFIGURATION.md.",
+        "Add quickstart instructions for running cargo dist check locally prior to tagging.",
+        "Link to the nightly skip logic documentation for troubleshooting."
+      ],
+      "dependencies": [
+        "release-workflow-overhaul",
+        "promotion-workflow"
+      ]
+    },
+    {
+      "id": "pipeline-dry-run",
+      "title": "Execute end-to-end dry run and validate outputs",
+      "description": "Run the complete pipeline using a non-production tag to confirm artifact publishing, nightly skip logic, and promotion workflow behaviour.",
+      "context": [
+        "Git tags (temporary)",
+        "GitHub Actions workflow runs"
+      ],
+      "steps": [
+        "Create temporary tag v0.0.0-ci-smoke from testing and push.",
+        "Observe release.yml execution, confirm artifacts and release notes.",
+        "Trigger nightly workflow twice: once after a code change (should run), once without changes (should skip heavy jobs).",
+        "Invoke promote.yml in dry-run mode to confirm guardrails.",
+        "Document results and open issues for any deviations."
+      ],
+      "dependencies": [
+        "branch-protection-config",
+        "documentation-updates"
+      ]
+    }
+  ]
+}
