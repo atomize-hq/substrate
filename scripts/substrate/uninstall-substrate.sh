@@ -3,16 +3,6 @@ set -euo pipefail
 
 log() { printf '[substrate-uninstall] %s\n' "$1"; }
 
-# Determine the target user's home directory (supports sudo execution)
-USER_HOME="${HOME}"
-if [[ ${EUID} -eq 0 && -n "${SUDO_USER:-}" ]]; then
-  USER_HOME="$(eval echo "~${SUDO_USER}" 2>/dev/null || echo "${HOME}")"
-fi
-
-if [[ -z "${USER_HOME}" || ! -d "${USER_HOME}" ]]; then
-  USER_HOME="${HOME}"
-fi
-
 maybe_sudo() {
   if [[ ${EUID} -eq 0 ]]; then
     "$@"
@@ -40,7 +30,7 @@ maybe_sudo() {
 run_python() {
   local clean_path
   clean_path="${SHIM_ORIGINAL_PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
-  env -i PATH="${clean_path}" HOME="${USER_HOME}" python3 "$@"
+  env -i PATH="${clean_path}" HOME="${HOME}" python3 "$@"
 }
 
 log "Stopping substrate processes (if any)..."
@@ -125,8 +115,18 @@ if command -v limactl >/dev/null 2>&1; then
 fi
 
 log "Checking for host symlinks..."
-ls -l /usr/local/bin 2>/dev/null | grep substrate || true
-ls -l "${USER_HOME}/bin" 2>/dev/null | grep substrate || true
+for target in /usr/local/bin/substrate*; do
+  if [[ -e "${target}" ]]; then
+    ls -l "${target}"
+  fi
+done
+if [[ -d "${HOME}/bin" ]]; then
+  for target in "${HOME}"/bin/substrate*; do
+    if [[ -e "${target}" ]]; then
+      ls -l "${target}"
+    fi
+  done
+fi
 
 log "Clearing shell command cache..."
 hash -r || true

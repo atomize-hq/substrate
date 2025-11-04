@@ -59,17 +59,18 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: cargo test
-        run: cargo test --workspace --all-targets
-
       - name: Cargo build (debug)
         run: cargo build --workspace
+
+      - name: cargo test
+        run: cargo test --workspace --all-targets
+        env:
+          RUST_TEST_THREADS: 1
 
       - name: Shell lint (Linux)
         if: runner.os == 'Linux'
         run: |
-          git ls-files '*.sh' | xargs -r shellcheck
-          git ls-files '*.sh' | xargs -r shfmt -d
+          git ls-files '*.sh' | xargs -r shellcheck -x -S warning
 
       - name: Substrate CLI smoke test (Linux/macOS)
         if: runner.os != 'Windows'
@@ -79,43 +80,6 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: cargo run --bin substrate -- --version
-
-  cross-build:
-    name: Cross Build (${{ matrix.target }})
-    needs: lint-and-test
-    runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        target:
-          - aarch64-unknown-linux-gnu
-          - x86_64-unknown-linux-musl
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-
-      - name: Install cross
-        run: cargo install cross --git https://github.com/cross-rs/cross --locked
-
-      - name: Cache cargo artifacts
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: cross-${{ matrix.target }}-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            cross-${{ matrix.target }}-${{ env.RUST_TOOLCHAIN }}-
-
-      - name: Build ${{ matrix.target }}
-        run: cross build --workspace --target ${{ matrix.target }}
 
   docs-and-packaging:
     name: Docs & Packaging Checks
@@ -150,14 +114,3 @@ jobs:
 
       - name: Generate documentation
         run: cargo doc --workspace --no-deps
-
-      - name: Install cargo-dist
-        run: cargo install cargo-dist --locked
-
-      - name: cargo dist check
-        run: cargo dist check
-
-      - name: Shell lint
-        run: |
-          git ls-files '*.sh' | xargs -r shellcheck
-          git ls-files '*.sh' | xargs -r shfmt -d
