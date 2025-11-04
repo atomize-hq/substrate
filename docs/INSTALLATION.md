@@ -2,8 +2,8 @@
 
 Substrate ships release bundles with a cross-platform installer that deploys the
 CLI, shim launcher, and world backend in one step. The same script is used by
-our `curl | bash` flow and the offline bundles published under
-`https://releases.atomizehq.com/substrate/`.
+our `curl | bash` flow and the offline bundles published via
+GitHub Releases (`https://github.com/atomize-hq/substrate/releases`).
 
 ## Supported Platforms
 
@@ -71,6 +71,7 @@ The macOS flow mirrors the Linux installer but additionally:
 
 - Verifies Apple Virtualization Framework support (`kern.hv_support == 1`)
 - Requires the Lima CLI (`limactl`) to be installed beforehand
+- Requires `envsubst` (install via `brew install gettext` to provide it)
 - Provisions the Lima VM (`scripts/mac/lima-warm.sh`) and copies the Linux
   `world-agent` into the guest
 

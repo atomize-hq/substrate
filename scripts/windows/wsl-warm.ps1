@@ -19,6 +19,11 @@ function Convert-ToWslPathFragment {
     ($withoutDrive -replace '\\', '/').TrimStart('/')
 }
 
+function Quote-ForBash {
+    param([string]$Value)
+    if ($null -eq $Value) { return "''" }
+    return "'" + ($Value -replace "'", "'\"'\"'") + "'"
+}
 
 Write-Info "Starting wsl-warm for distro '$DistroName'"
 
@@ -129,7 +134,9 @@ try {
 if (-not $isHealthy) {
     Write-Info "Updating package cache and running provision script"
     $projectPathFragment = Convert-ToWslPathFragment $projectPath
-    & wsl -d $DistroName -- bash -lc "set -euo pipefail; cp /mnt/c/$projectPathFragment/scripts/wsl/provision.sh /tmp/provision.sh && sed -i 's/\r$//' /tmp/provision.sh && chmod +x /tmp/provision.sh && sudo /tmp/provision.sh"
+    $projectPathWsl = "/mnt/c/$projectPathFragment"
+    $provisionScript = Quote-ForBash "$projectPathWsl/scripts/wsl/provision.sh"
+    & wsl -d $DistroName -- bash -lc "set -euo pipefail; cp ${provisionScript} /tmp/provision.sh && sed -i 's/\r$//' /tmp/provision.sh && chmod +x /tmp/provision.sh && sudo /tmp/provision.sh"
     if ($LASTEXITCODE -ne 0) {
         Write-ErrorAndExit "Provision script failed"
     }
@@ -137,12 +144,13 @@ if (-not $isHealthy) {
     if ($projectHasCargo) {
         # Build and install world-agent inside WSL
         Write-Info "Building world-agent (release) inside WSL"
+        $projectPathQuoted = Quote-ForBash $projectPathWsl
         $buildScript = @"
 set -euo pipefail
 if [ -f ~/.cargo/env ]; then
   . ~/.cargo/env
 fi
-cd /mnt/c/$projectPathFragment
+cd $projectPathQuoted
 cargo build -p world-agent --release
 sudo install -m755 target/release/world-agent /usr/local/bin/substrate-world-agent
 "@
@@ -154,7 +162,8 @@ sudo install -m755 target/release/world-agent /usr/local/bin/substrate-world-age
     } else {
         Write-Info "Installing packaged world-agent into WSL"
         $agentFragment = Convert-ToWslPathFragment (Join-Path $projectPath 'bin\\linux\\world-agent')
-        & wsl -d $DistroName -- bash -lc "set -euo pipefail; sudo install -m755 /mnt/c/$agentFragment /usr/local/bin/substrate-world-agent"
+        $agentPath = Quote-ForBash "/mnt/c/$agentFragment"
+        & wsl -d $DistroName -- bash -lc "set -euo pipefail; sudo install -m755 ${agentPath} /usr/local/bin/substrate-world-agent"
         if ($LASTEXITCODE -ne 0) {
             Write-ErrorAndExit "Failed to install packaged world-agent"
         }

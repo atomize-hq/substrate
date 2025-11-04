@@ -1008,6 +1008,8 @@ provision_macos_world() {
     return
   fi
 
+  initialize_sudo
+
   log "Provisioning macOS Lima world backend..."
 
   # Run Lima warm-up script to create and configure VM
@@ -1085,19 +1087,27 @@ provision_linux_world() {
   log "Installing Linux world agent systemd service..."
 
   local service_path="/etc/systemd/system/substrate-world-agent.service"
+  local sudo_prefix="${SUDO_CMD[*]}"
 
   if [[ "${DRY_RUN}" -eq 1 ]]; then
-    printf '[%s][dry-run] sudo install -Dm0755 %s /usr/local/bin/substrate-world-agent\n' "${INSTALLER_NAME}" "${world_agent}" >&2
-    printf '[%s][dry-run] sudo install -d -m0750 /run/substrate /var/lib/substrate\n' "${INSTALLER_NAME}" >&2
-    printf '[%s][dry-run] Write systemd unit to %s\n' "${INSTALLER_NAME}" "${service_path}" >&2
-    printf '[%s][dry-run] sudo systemctl daemon-reload && sudo systemctl enable --now substrate-world-agent\n' "${INSTALLER_NAME}" >&2
+    if [[ -n "${sudo_prefix}" ]]; then
+      printf '[%s][dry-run] %s install -Dm0755 %s /usr/local/bin/substrate-world-agent\n' "${INSTALLER_NAME}" "${sudo_prefix}" "${world_agent}" >&2
+      printf '[%s][dry-run] %s install -d -m0750 /run/substrate /var/lib/substrate\n' "${INSTALLER_NAME}" "${sudo_prefix}" >&2
+      printf '[%s][dry-run] Write systemd unit to %s\n' "${INSTALLER_NAME}" "${service_path}" >&2
+      printf '[%s][dry-run] %s systemctl daemon-reload && %s systemctl enable --now substrate-world-agent\n' "${INSTALLER_NAME}" "${sudo_prefix}" "${sudo_prefix}" >&2
+    else
+      printf '[%s][dry-run] install -Dm0755 %s /usr/local/bin/substrate-world-agent\n' "${INSTALLER_NAME}" "${world_agent}" >&2
+      printf '[%s][dry-run] install -d -m0750 /run/substrate /var/lib/substrate\n' "${INSTALLER_NAME}" >&2
+      printf '[%s][dry-run] Write systemd unit to %s\n' "${INSTALLER_NAME}" "${service_path}" >&2
+      printf '[%s][dry-run] systemctl daemon-reload && systemctl enable --now substrate-world-agent\n' "${INSTALLER_NAME}" >&2
+    fi
     return
   fi
 
   # Install binary and create required directories
-  run_cmd sudo install -Dm0755 "${world_agent}" /usr/local/bin/substrate-world-agent
-  run_cmd sudo install -d -m0750 /run/substrate      # Runtime state
-  run_cmd sudo install -d -m0750 /var/lib/substrate  # Persistent state
+  run_cmd "${SUDO_CMD[@]}" install -Dm0755 "${world_agent}" /usr/local/bin/substrate-world-agent
+  run_cmd "${SUDO_CMD[@]}" install -d -m0750 /run/substrate      # Runtime state
+  run_cmd "${SUDO_CMD[@]}" install -d -m0750 /var/lib/substrate  # Persistent state
 
   # Determine user's home directory for ReadWritePaths
   local home_path
@@ -1143,11 +1153,11 @@ WantedBy=multi-user.target
 UNIT
 
   # Install and start service
-  run_cmd sudo install -Dm0644 "${unit_file}" "${service_path}"
-  run_cmd sudo systemctl daemon-reload
-  run_cmd sudo systemctl enable --now substrate-world-agent
-  run_cmd sudo systemctl restart substrate-world-agent
-  run_cmd sudo systemctl status substrate-world-agent --no-pager --lines=10 || true
+  run_cmd "${SUDO_CMD[@]}" install -Dm0644 "${unit_file}" "${service_path}"
+  run_cmd "${SUDO_CMD[@]}" systemctl daemon-reload
+  run_cmd "${SUDO_CMD[@]}" systemctl enable --now substrate-world-agent
+  run_cmd "${SUDO_CMD[@]}" systemctl restart substrate-world-agent
+  run_cmd "${SUDO_CMD[@]}" systemctl status substrate-world-agent --no-pager --lines=10 || true
 }
 
 # ============================================================================
