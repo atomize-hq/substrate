@@ -77,6 +77,11 @@
       "timestamp": "2025-11-05T14:25:00Z",
       "task_id": "nightly-workflow",
       "message": "Nightly extended tests now run dist plan --ci github --output-format=json to validate packaging manifests while release artifacts remain exclusive to release.yml." 
+    },
+    {
+      "timestamp": "2025-11-05T14:45:00Z",
+      "task_id": "cargo-dist-integration",
+      "message": "Initialized dist/ configuration, staged installer/document extras via collect-supporting-artifacts.sh, and added release-template.md for curated notes." 
     }
   ],
   "tasks": [

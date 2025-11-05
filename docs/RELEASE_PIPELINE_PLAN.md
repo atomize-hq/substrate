@@ -107,6 +107,10 @@ repeatable builds, comprehensive validation, and painless promotions.
        remains a separate manual/optional step.)
 - **Artifacts**: Additional files (quickstarts, installers, docs) will be
   tracked in `dist-workspace.toml` as packaging requirements expand.
+  Supporting materials (installation docs and helper scripts) are staged via
+  `dist/scripts/collect-supporting-artifacts.sh` and attached through
+  `dist/artifacts.extra`; release authors start from `dist/release-template.md`
+  to keep notes consistent.
 
 ### 3.4 Promotion Workflow (`promote.yml`)
 - **Trigger**: `workflow_dispatch` from maintainers.
