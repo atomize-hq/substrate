@@ -3,7 +3,7 @@ name: Nightly Validation
 on:
   schedule:
     - cron: '0 2 * * *'
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 env:
   CARGO_TERM_COLOR: always
