@@ -15,7 +15,7 @@ PREFIX="$DEFAULT_PREFIX"
 NO_WORLD=0
 NO_SHIMS=0
 DRY_RUN=0
-ARCHIVE_OVERRIDE="${SUBSTRATE_INSTALL_ARCHIVE:-}"
+ARTIFACT_DIR="${SUBSTRATE_INSTALL_ARTIFACT_DIR:-${SUBSTRATE_INSTALL_ARCHIVE:-}}"
 BASE_URL="${SUBSTRATE_INSTALL_BASE_URL:-$DEFAULT_BASE_URL}"
 TMPDIR=""
 PLATFORM=""
@@ -25,6 +25,8 @@ ORIGINAL_PATH="${PATH}"
 PKG_MANAGER=""
 APT_UPDATED=0
 SUDO_CMD=()
+SUPPORTED_PACKAGES=("substrate" "world-agent" "substrate-forwarder" "host-proxy")
+SUPPORT_TAR_NAME="substrate-support.tar.gz"
 
 log() {
   printf '[%s] %s\n' "${INSTALLER_NAME}" "$*" >&2
@@ -52,7 +54,8 @@ Options:
   --no-world           Skip world backend provisioning
   --no-shims           Skip shim deployment
   --dry-run            Print actions without executing
-  --archive <path>     Use a local archive instead of downloading (dev/test)
+  --artifact-dir <dir> Use pre-downloaded artifacts (per-app archives + support bundle)
+  --archive <dir>      Alias for --artifact-dir (deprecated)
   -h, --help           Show this message
 EOF
 }
@@ -388,9 +391,9 @@ parse_args() {
         DRY_RUN=1
         shift
         ;;
-      --archive)
-        [[ $# -lt 2 ]] && fatal "Missing value for --archive"
-        ARCHIVE_OVERRIDE="$2"
+      --artifact-dir|--archive)
+        [[ $# -lt 2 ]] && fatal "Missing value for $1"
+        ARTIFACT_DIR="$2"
         shift 2
         ;;
       -h|--help)
@@ -502,12 +505,13 @@ download_artifact() {
   local artifact_name="$1"
   local dest_path="$2"
 
-  if [[ -n "${ARCHIVE_OVERRIDE}" ]]; then
-    if [[ ! -f "${ARCHIVE_OVERRIDE}" ]]; then
-      fatal "Override archive not found at ${ARCHIVE_OVERRIDE}"
+  if [[ -n "${ARTIFACT_DIR}" ]]; then
+    local local_path="${ARTIFACT_DIR}/${artifact_name}"
+    if [[ ! -f "${local_path}" ]]; then
+      fatal "Expected artifact '${artifact_name}' not found in ${ARTIFACT_DIR}."
     fi
-    log "Using local archive override: ${ARCHIVE_OVERRIDE}"
-    download_file "${ARCHIVE_OVERRIDE}" "${dest_path}"
+    log "Using local artifact: ${local_path}"
+    download_file "${local_path}" "${dest_path}"
     return
   fi
 
@@ -519,8 +523,13 @@ download_artifact() {
 download_checksums() {
   local dest_path="$1"
 
-  if [[ -n "${ARCHIVE_OVERRIDE}" ]]; then
-    warn "Skipping checksum verification for local override archive."
+  if [[ -n "${ARTIFACT_DIR}" ]]; then
+    local checksum_path="${ARTIFACT_DIR}/SHA256SUMS"
+    if [[ -f "${checksum_path}" ]]; then
+      download_file "${checksum_path}" "${dest_path}"
+      return 0
+    fi
+    warn "SHA256SUMS not found in ${ARTIFACT_DIR}; skipping checksum verification."
     return 1
   fi
 
@@ -559,17 +568,129 @@ verify_checksum() {
   log "Checksum verified for ${artifact_name}"
 }
 
+target_triple_linux() {
+  case "${ARCH}" in
+    x86_64|amd64)
+      printf 'x86_64-unknown-linux-gnu'
+      ;;
+    aarch64|arm64)
+      printf 'aarch64-unknown-linux-gnu'
+      ;;
+    *)
+      fatal "Unsupported Linux architecture: ${ARCH}"
+      ;;
+  esac
+}
+
+target_triple_macos() {
+  case "${ARCH}" in
+    arm64)
+      printf 'aarch64-apple-darwin'
+      ;;
+    x86_64|amd64)
+      fatal "macOS Intel installs are not supported; use an Apple Silicon host."
+      ;;
+    *)
+      fatal "Unsupported macOS architecture: ${ARCH}"
+      ;;
+  esac
+}
+
+copy_package_binaries() {
+  local package_root="$1"
+  local dest_dir="$2"
+  local source_dir="$package_root"
+
+  if [[ -d "${package_root}/bin" ]]; then
+    source_dir="${package_root}/bin"
+  fi
+
+  mkdir -p "${dest_dir}"
+  shopt -s nullglob
+  for file in "${source_dir}"/*; do
+    if [[ -f "${file}" ]]; then
+      local name
+      name="$(basename "${file}")"
+      case "${name}" in
+        README*|LICENSE*|CHANGELOG*|*.md)
+          continue
+          ;;
+      esac
+      cp "${file}" "${dest_dir}/${name}"
+      chmod +x "${dest_dir}/${name}" 2>/dev/null || true
+    fi
+  done
+  shopt -u nullglob
+}
+
+prepare_unix_release_root() {
+  local target_triple="$1"
+  local release_root="$2"
+  local checksums_path="$3"
+  local archive_ext=".tar.gz"
+
+  rm -rf "${release_root}"
+  mkdir -p "${release_root}/bin" "${release_root}/docs" "${release_root}/scripts"
+
+  for crate in "${SUPPORTED_PACKAGES[@]}"; do
+    local artifact="${crate}-${target_triple}${archive_ext}"
+    local archive_path="${TMPDIR}/${artifact}"
+    local extract_dir="${TMPDIR}/extract-${crate}"
+
+    download_artifact "${artifact}" "${archive_path}"
+    if [[ -n "${checksums_path}" ]]; then
+      verify_checksum "${archive_path}" "${checksums_path}" "${artifact}"
+    fi
+
+    rm -rf "${extract_dir}"
+    extract_archive "${archive_path}" "${extract_dir}"
+    local package_root
+    package_root="$(find_extracted_root "${extract_dir}")"
+    copy_package_binaries "${package_root}" "${release_root}/bin"
+  done
+
+  local support_archive="${TMPDIR}/${SUPPORT_TAR_NAME}"
+  download_artifact "${SUPPORT_TAR_NAME}" "${support_archive}"
+  if [[ -n "${checksums_path}" ]]; then
+    verify_checksum "${support_archive}" "${checksums_path}" "${SUPPORT_TAR_NAME}"
+  fi
+
+  local support_extract="${TMPDIR}/support-artifacts"
+  rm -rf "${support_extract}"
+  extract_archive "${support_archive}" "${support_extract}"
+
+  if [[ -d "${support_extract}/docs" ]]; then
+    cp -R "${support_extract}/docs/." "${release_root}/docs/"
+  fi
+  if [[ -d "${support_extract}/scripts" ]]; then
+    cp -R "${support_extract}/scripts/." "${release_root}/scripts/"
+  fi
+}
+
 extract_archive() {
   local archive_path="$1"
   local dest_dir="$2"
 
   mkdir -p "${dest_dir}"
   if [[ "${DRY_RUN}" -eq 1 ]]; then
-    printf '[%s][dry-run] tar -xzf %s -C %s\n' "${INSTALLER_NAME}" "${archive_path}" "${dest_dir}" >&2
+    printf '[%s][dry-run] extract %s -> %s\n' "${INSTALLER_NAME}" "${archive_path}" "${dest_dir}" >&2
     return 0
   fi
 
-  tar -xzf "${archive_path}" -C "${dest_dir}"
+  case "${archive_path}" in
+    *.tar.gz|*.tgz)
+      tar -xzf "${archive_path}" -C "${dest_dir}"
+      ;;
+    *.tar.xz|*.txz)
+      tar -xJf "${archive_path}" -C "${dest_dir}"
+      ;;
+    *.zip)
+      unzip -q "${archive_path}" -d "${dest_dir}"
+      ;;
+    *)
+      fatal "Unsupported archive format: ${archive_path}"
+      ;;
+  esac
 }
 
 find_extracted_root() {
@@ -914,19 +1035,16 @@ run_world_checks() {
 install_macos() {
   ensure_macos_prereqs
 
-  local artifact="substrate-v${VERSION}-macos_arm64.tar.gz"
-  local archive_path="${TMPDIR}/${artifact}"
-  download_artifact "${artifact}" "${archive_path}"
+  local target_triple
+  target_triple="$(target_triple_macos)"
 
+  local release_root="${TMPDIR}/payload"
   local checksums_path="${TMPDIR}/SHA256SUMS"
-  if download_checksums "${checksums_path}"; then
-    verify_checksum "${archive_path}" "${checksums_path}" "${artifact}"
+  if ! download_checksums "${checksums_path}"; then
+    checksums_path=""
   fi
 
-  local extract_dir="${TMPDIR}/extract"
-  extract_archive "${archive_path}" "${extract_dir}"
-  local release_root
-  release_root="$(find_extracted_root "${extract_dir}")"
+  prepare_unix_release_root "${target_triple}" "${release_root}" "${checksums_path}"
 
   local versions_dir="${PREFIX}/versions"
   local version_dir="${versions_dir}/${VERSION}"
@@ -969,37 +1087,19 @@ install_macos() {
   fi
 }
 
-linux_artifact_name() {
-  case "${ARCH}" in
-    x86_64|amd64)
-      printf 'substrate-v%s-linux_x86_64.tar.gz' "${VERSION}"
-      ;;
-    aarch64|arm64)
-      printf 'substrate-v%s-linux_aarch64.tar.gz' "${VERSION}"
-      ;;
-    *)
-      fatal "Unsupported Linux architecture: ${ARCH}"
-      ;;
-  esac
-}
-
 install_linux() {
   ensure_linux_prereqs
 
-  local artifact
-  artifact="$(linux_artifact_name)"
-  local archive_path="${TMPDIR}/${artifact}"
-  download_artifact "${artifact}" "${archive_path}"
+  local target_triple
+  target_triple="$(target_triple_linux)"
 
+  local release_root="${TMPDIR}/payload"
   local checksums_path="${TMPDIR}/SHA256SUMS"
-  if download_checksums "${checksums_path}"; then
-    verify_checksum "${archive_path}" "${checksums_path}" "${artifact}"
+  if ! download_checksums "${checksums_path}"; then
+    checksums_path=""
   fi
 
-  local extract_dir="${TMPDIR}/extract"
-  extract_archive "${archive_path}" "${extract_dir}"
-  local release_root
-  release_root="$(find_extracted_root "${extract_dir}")"
+  prepare_unix_release_root "${target_triple}" "${release_root}" "${checksums_path}"
 
   local versions_dir="${PREFIX}/versions"
   local version_dir="${versions_dir}/${VERSION}"

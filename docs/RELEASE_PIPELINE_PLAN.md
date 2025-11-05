@@ -58,7 +58,10 @@ repeatable builds, comprehensive validation, and painless promotions.
  2. **Documentation & Packaging**: Runs `cargo doc --no-deps` and basic shell
      linting. Comprehensive `dist` packaging validation is exercised in the
      nightly workflow (see §3.2) so PR builds stay fast while keeping the plan
-     up to date.
+     up to date. Installer scripts are being rewritten to fetch the per-app
+     archives that `cargo-dist` produces and then assemble the familiar
+     `bin/`+`scripts/` layout at install time (replacing the legacy "fat"
+     bundles).
  3. **Cross Builds**: Uses `cross` to compile `aarch64-unknown-linux-gnu` and
     `x86_64-unknown-linux-musl` artifacts with the `dist` profile. The job
     installs target-specific prerequisites (e.g., `libseccomp-dev` and
@@ -109,7 +112,9 @@ repeatable builds, comprehensive validation, and painless promotions.
   Supporting materials (installation docs and helper scripts) are staged via
   `dist/scripts/collect-supporting-artifacts.sh` and attached through
   `dist/artifacts.extra`; release authors start from `dist/release-template.md`
-  to keep notes consistent.
+  to keep notes consistent. The new installers will download the canonical
+  `cargo-dist` archives per platform and reconstruct the release layout on the
+  target machine instead of relying on preassembled bundles.
 
 -### 3.4 Promotion Workflow (`promote.yml`)
 - **Trigger**: `workflow_dispatch` from maintainers.
