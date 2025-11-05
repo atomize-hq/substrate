@@ -10,6 +10,10 @@ on:
       - testing
       - main
   workflow_call:
+    inputs:
+      checkout_ref:
+        required: false
+        type: string
   workflow_dispatch:
 
 env:
@@ -29,7 +33,15 @@ jobs:
           - windows-2022
 
     steps:
+      - name: Checkout repository (override ref)
+        if: inputs.checkout_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          submodules: recursive
+
       - name: Checkout repository
+        if: inputs.checkout_ref == ''
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -100,7 +112,15 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
+      - name: Checkout repository (override ref)
+        if: inputs.checkout_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          submodules: recursive
+
       - name: Checkout repository
+        if: inputs.checkout_ref == ''
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -144,7 +164,15 @@ jobs:
             build_cdylib: false
 
     steps:
+      - name: Checkout repository (override ref)
+        if: inputs.checkout_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          submodules: recursive
+
       - name: Checkout repository
+        if: inputs.checkout_ref == ''
         uses: actions/checkout@v4
         with:
           submodules: recursive

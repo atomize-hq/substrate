@@ -125,6 +125,8 @@ jobs:
     needs: preflight
     if: needs.preflight.outputs.changed == 'true'
     uses: ./.github/workflows/ci-testing.yml
+    with:
+      checkout_ref: testing
     secrets: inherit
 
   extended_tests:
