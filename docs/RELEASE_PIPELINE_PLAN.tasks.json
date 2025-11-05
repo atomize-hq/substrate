@@ -72,6 +72,11 @@
       "timestamp": "2025-11-05T01:05:00Z",
       "task_id": "world-hardening",
       "message": "Gated seccomp baseline to non-musl targets and added runtime warning for musl builds to keep cross jobs green." 
+    },
+    {
+      "timestamp": "2025-11-05T14:25:00Z",
+      "task_id": "nightly-workflow",
+      "message": "Nightly extended tests now run dist plan --ci github --output-format=json, restoring full packaging validation coverage." 
     }
     ,
     {
