@@ -5,8 +5,6 @@ on:
   repository_dispatch:
     types:
       - nightly-test
-  schedule:
-    - cron: '0 2 * * *'
 
 env:
   CARGO_TERM_COLOR: always
@@ -25,7 +23,7 @@ jobs:
       - name: Checkout testing branch
         uses: actions/checkout@v4
         with:
-          ref: testing
+          ref: ${{ github.event.client_payload.ref || 'refs/heads/testing' }}
           fetch-depth: 1
 
       - name: Capture latest testing commit
@@ -126,7 +124,7 @@ jobs:
     if: needs.preflight.outputs.changed == 'true'
     uses: ./.github/workflows/ci-testing.yml
     with:
-      checkout_ref: testing
+      checkout_ref: ${{ github.event.client_payload.ref || 'refs/heads/testing' }}
     secrets: inherit
 
   extended_tests:
@@ -176,14 +174,13 @@ jobs:
       - name: Targeted world-agent tests
         run: cargo test -p world-agent -- --nocapture
 
-      - name: Install cargo-dist
-        run: cargo install cargo-dist --locked --version 0.30.2
+      - name: Install dist CLI
+        run: |
+          cargo install cargo-dist --locked --version 0.30.2
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
-      - name: Ensure cargo bin in PATH
-        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-
-      - name: cargo dist check
-        run: cargo dist check
+      - name: dist plan
+        run: dist plan --ci github --output-format=json
 
   persist_state:
     name: Persist Nightly State
@@ -211,34 +208,3 @@ jobs:
           name: nightly-state
           path: nightly-state.json
           retention-days: 90
-
-  report_failure:
-    name: Nightly Failure Issue
-    needs:
-      - preflight
-      - ci_suite
-      - extended_tests
-    if: needs.preflight.outputs.changed == 'true' && (needs.ci_suite.result == 'failure' || needs.extended_tests.result == 'failure')
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Prepare issue body
-        run: |
-          cat <<EOF > nightly-failure.md
-          Nightly validation detected a failure.
-
-          - Workflow run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          - Latest testing commit: `${{ needs.preflight.outputs.head_sha }}`
-          - Previous nightly commit: `${{ needs.preflight.outputs.previous_sha }}`
-          - Change detection reason: `${{ needs.preflight.outputs.reason }}`
-          - CI matrix result: `${{ needs.ci_suite.result }}`
-          - Extended tests result: `${{ needs.extended_tests.result }}`
-
-          Please review the failing jobs and take corrective action.
-          EOF
-
-      - name: Create tracking issue
-        uses: peter-evans/create-issue-from-file@v5
-        with:
-          title: "Nightly failure for ${{ needs.preflight.outputs.head_sha }}"
-          content-filepath: nightly-failure.md
-          labels: nightly,ci-failure
