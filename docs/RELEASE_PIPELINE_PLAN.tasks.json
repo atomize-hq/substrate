@@ -76,7 +76,7 @@
     {
       "timestamp": "2025-11-05T14:25:00Z",
       "task_id": "nightly-workflow",
-      "message": "Nightly extended tests now run dist plan --ci github --output-format=json, restoring full packaging validation coverage." 
+      "message": "Nightly extended tests now run dist plan --ci github --output-format=json to validate packaging manifests while release artifacts remain exclusive to release.yml." 
     }
   ],
   "tasks": [
