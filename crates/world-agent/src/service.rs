@@ -2,6 +2,7 @@
 
 use agent_api_types::{Budget, ExecuteRequest, ExecuteResponse, ExecuteStreamFrame};
 use anyhow::{Context, Result};
+#[cfg(target_os = "linux")]
 use axum::{
     body::{boxed, Bytes, StreamBody},
     http::StatusCode,
@@ -12,6 +13,7 @@ use base64::Engine;
 #[cfg(target_os = "linux")]
 use futures_util::StreamExt;
 use std::collections::HashMap;
+#[cfg(target_os = "linux")]
 use std::convert::Infallible;
 use std::sync::{Arc, RwLock};
 #[cfg(target_os = "linux")]
