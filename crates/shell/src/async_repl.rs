@@ -374,7 +374,7 @@ fn parse_demo_burst(input: &str) -> Option<(usize, usize, u64)> {
 }
 
 fn continuation_backspaces(buffer: &str) -> Option<usize> {
-    let trimmed = buffer.trim_end_matches(|c: char| c == ' ' || c == '\t');
+    let trimmed = buffer.trim_end_matches([' ', '\t']);
     let trailing_ws = buffer.len() - trimmed.len();
     if trimmed.ends_with('\\') {
         Some(trailing_ws + 1)
@@ -410,13 +410,13 @@ fn detect_heredocs_in_line(line: &str, pending: &mut VecDeque<HeredocSpec>) {
         let after = &rest[idx + 2..];
 
         // Skip here-strings (<<<)
-        if after.starts_with('<') {
-            rest = &after[1..];
+        if let Some(after) = after.strip_prefix('<') {
+            rest = after;
             continue;
         }
 
-        let (strip_tabs, remainder) = if after.starts_with('-') {
-            (true, &after[1..])
+        let (strip_tabs, remainder) = if let Some(remainder) = after.strip_prefix('-') {
+            (true, remainder)
         } else {
             (false, after)
         };
@@ -582,7 +582,7 @@ fn command_requires_continuation(buffer: &str) -> bool {
                 double_quote = true;
             }
             '#' => {
-                if token.is_empty() && prev_char.map_or(true, |c| c.is_whitespace()) {
+                if token.is_empty() && prev_char.is_none_or(|c| c.is_whitespace()) {
                     comment = true;
                     finalize_token(&mut token, &mut tokens);
                 } else {

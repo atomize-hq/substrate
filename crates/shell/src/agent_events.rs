@@ -165,8 +165,8 @@ pub(crate) fn schedule_demo_burst(agent_count: usize, events_per_agent: usize, d
         return;
     }
 
-    let agent_count = agent_count.max(1).min(16);
-    let events_per_agent = events_per_agent.max(1).min(10_000);
+    let agent_count = agent_count.clamp(1, 16);
+    let events_per_agent = events_per_agent.clamp(1, 10_000);
 
     for agent_idx in 0..agent_count {
         let agent = format!("burst-{agent_idx:02}");
