@@ -6,11 +6,11 @@ use agent_api_types::{Budget, ExecuteRequest, ExecuteResponse};
 #[cfg(target_os = "linux")]
 use anyhow::Context;
 use anyhow::Result;
+use axum::response::Response;
 #[cfg(target_os = "linux")]
 use axum::{
     body::{boxed, Bytes, StreamBody},
     http::StatusCode,
-    response::Response,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
