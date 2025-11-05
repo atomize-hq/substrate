@@ -2,6 +2,9 @@ name: Nightly Validation
 
 on:
   workflow_dispatch: {}
+  push:
+    branches:
+      - testing
   schedule:
     - cron: '0 2 * * *'
 
