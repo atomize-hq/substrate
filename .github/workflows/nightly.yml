@@ -82,18 +82,18 @@ jobs:
         shell: bash
         run: |
           python - <<'PY' >> "$GITHUB_OUTPUT"
-import json
-from pathlib import Path
+          import json
+          from pathlib import Path
 
-path = Path('previous-nightly/nightly-state.json')
-commit = ''
-if path.exists():
-    try:
-        commit = json.loads(path.read_text()).get('commit', '')
-    except json.JSONDecodeError:
-        pass
-print(f"previous_sha={commit}")
-PY
+          path = Path('previous-nightly/nightly-state.json')
+          commit = ''
+          if path.exists():
+              try:
+                  commit = json.loads(path.read_text()).get('commit', '')
+              except json.JSONDecodeError:
+                  pass
+          print(f"previous_sha={commit}")
+          PY
 
       - name: Evaluate change detection
         id: evaluate
