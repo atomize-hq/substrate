@@ -166,14 +166,13 @@ jobs:
       - name: Targeted world-agent tests
         run: cargo test -p world-agent -- --nocapture
 
-      - name: Install cargo-dist
-        run: cargo install cargo-dist --locked --version 0.30.2
+      - name: Install dist CLI
+        run: |
+          cargo install cargo-dist --locked --version 0.30.2
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
-      - name: Ensure cargo bin in PATH
-        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-
-      - name: cargo dist check
-        run: cargo dist check
+      - name: dist check
+        run: dist check
 
   persist_state:
     name: Persist Nightly State
