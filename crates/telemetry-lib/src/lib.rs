@@ -9,7 +9,6 @@ use std::io::Write;
 use std::os::raw::c_char;
 use std::sync::Mutex;
 use std::time::Instant;
-// TraceEvent will be imported when needed
 
 mod correlation;
 #[cfg(unix)]
