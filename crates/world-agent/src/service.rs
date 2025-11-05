@@ -9,11 +9,14 @@ use axum::{
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
+#[cfg(target_os = "linux")]
 use futures_util::StreamExt;
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::sync::{Arc, RwLock};
+#[cfg(target_os = "linux")]
 use tokio::task;
+#[cfg(target_os = "linux")]
 use tokio_stream::wrappers::UnboundedReceiverStream;
 #[cfg(target_os = "linux")]
 use world::stream::{install_stream_sink, StreamKind, StreamSink};
