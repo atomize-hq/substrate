@@ -14,16 +14,14 @@ installers = []
 # Keep the automatically generated source tarball and checksums.
 source-tarball = true
 recursive-tarball = false
+unix-archive = "tar.gz"
+windows-archive = "zip"
 
 [[dist.artifacts.extra]]
 # Collect human-friendly docs and platform installer helpers produced elsewhere
 # in the repo so they are attached to every release alongside binary bundles.
 build = ["bash", "dist/scripts/collect-supporting-artifacts.sh"]
 artifacts = [
-  "dist/supporting-artifacts/docs/INSTALLATION.md",
-  "dist/supporting-artifacts/docs/CONFIGURATION.md",
-  "dist/supporting-artifacts/docs/WORLD.md",
-  "dist/supporting-artifacts/installers/install-substrate.sh",
-  "dist/supporting-artifacts/installers/lima-warm.sh",
-  "dist/supporting-artifacts/installers/wsl-warm.ps1",
+  "dist/supporting-artifacts/substrate-support.tar.gz",
+  "dist/supporting-artifacts/substrate-support.zip",
 ]

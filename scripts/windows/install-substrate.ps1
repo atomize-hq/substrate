@@ -10,8 +10,8 @@
     Release version to install (defaults to 0.2.0-beta).
 .PARAMETER Prefix
     Installation prefix (defaults to %LOCALAPPDATA%\Substrate).
-.PARAMETER Archive
-    Optional path to a pre-downloaded release archive (.zip) for offline installs.
+.PARAMETER ArtifactDir
+    Optional directory containing pre-downloaded release artifacts (per-app zips and support bundle).
 .PARAMETER BaseUrl
     Base URL for hosted releases (defaults to GitHub releases).
 .PARAMETER NoWorld
@@ -25,14 +25,14 @@
 .EXAMPLE
     pwsh -File install-substrate.ps1
 .EXAMPLE
-    pwsh -File install-substrate.ps1 -Version 0.2.0-beta -Archive C:\Downloads\substrate.zip
+    pwsh -File install-substrate.ps1 -Version 0.2.0-beta -ArtifactDir C:\Downloads\substrate-artifacts
 #>
 
 [CmdletBinding()]
 param(
     [string]$Version = '0.2.0-beta',
     [string]$Prefix = (Join-Path $env:LOCALAPPDATA 'Substrate'),
-    [string]$Archive,
+    [Alias('Archive')] [string]$ArtifactDir,
     [string]$BaseUrl = 'https://github.com/atomize-hq/substrate/releases/download',
     [switch]$NoWorld,
     [switch]$NoShims,
@@ -62,7 +62,10 @@ if ([string]::IsNullOrWhiteSpace($versionNormalized)) {
     Write-ErrorAndExit "Version parameter cannot be empty"
 }
 $versionTag = if ($Version.StartsWith('v')) { $Version } else { "v$versionNormalized" }
-$artifactName = "substrate-v$versionNormalized-windows_x86_64.zip"
+$packages = @('substrate', 'world-agent', 'substrate-forwarder', 'host-proxy')
+$targetTriple = 'x86_64-pc-windows-msvc'
+$artifactExtension = '.zip'
+$supportArtifact = 'substrate-support.zip'
 $checksumName = 'SHA256SUMS'
 $dry = $DryRun.IsPresent
 
@@ -70,65 +73,140 @@ $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("substrate-install-" + 
 if (-not $dry) {
     New-Item -ItemType Directory -Path $tempRoot | Out-Null
 }
-$archivePath = if ($Archive) { (Resolve-Path $Archive).Path } else { Join-Path $tempRoot $artifactName }
+$payloadRoot = Join-Path $tempRoot 'payload'
+$binStaging = Join-Path $payloadRoot 'bin'
+if (-not $dry) {
+    New-Item -ItemType Directory -Force -Path $binStaging | Out-Null
+}
+
+$artifactDirectory = if ($PSBoundParameters.ContainsKey('ArtifactDir')) {
+    (Resolve-Path $ArtifactDir).Path
+} else {
+    $null
+}
+
 $checksumPath = Join-Path $tempRoot $checksumName
-$extractRoot = Join-Path $tempRoot 'extract'
+if ($artifactDirectory) {
+    Write-Log "Using local artifact directory: $artifactDirectory"
+    if (-not $dry) {
+        $localChecksum = Join-Path $artifactDirectory $checksumName
+        if (Test-Path $localChecksum) {
+            Copy-Item -Path $localChecksum -Destination $checksumPath -Force
+        }
+    }
+} else {
+    $checksumUrl = "$BaseUrl/$versionTag/$checksumName"
+    try {
+        if ($dry) {
+            Write-Log "[dry-run] Invoke-WebRequest -Uri $checksumUrl -OutFile $checksumPath"
+        } else {
+            Invoke-WebRequest -Uri $checksumUrl -OutFile $checksumPath
+        }
+    } catch {
+        Write-Warn "Failed to download checksum file ($checksumUrl); skipping verification"
+    }
+}
+
+$checksumsAvailable = (-not $dry) -and (Test-Path $checksumPath)
+
+function Resolve-LocalArtifact {
+    param([string]$ArtifactName)
+    if (-not $artifactDirectory) { return $null }
+    $candidate = Join-Path $artifactDirectory $ArtifactName
+    if (-not (Test-Path $candidate)) {
+        Write-ErrorAndExit "Artifact '$ArtifactName' not found in $artifactDirectory"
+    }
+    return $candidate
+}
+
+function Verify-Checksum {
+    param(
+        [string]$ChecksumsFile,
+        [string]$ArtifactName,
+        [string]$LocalPath
+    )
+    if (-not (Test-Path $ChecksumsFile)) { return }
+    $expectedLine = Get-Content $ChecksumsFile | Where-Object { $_ -match "  $ArtifactName$" }
+    if (-not $expectedLine) {
+        Write-Warn "Checksum entry for $ArtifactName not found; skipping verification"
+        return
+    }
+    $expectedHash = ($expectedLine -split ' ')[0].Trim().ToLowerInvariant()
+    $actualHash = (Get-FileHash -Algorithm SHA256 -Path $LocalPath).Hash.ToLowerInvariant()
+    if ($expectedHash -ne $actualHash) {
+        Write-ErrorAndExit "Checksum mismatch for $ArtifactName (expected $expectedHash, got $actualHash)"
+    }
+    Write-Log "Checksum verified for $ArtifactName"
+}
 
 try {
-    if (-not $Archive) {
-        $downloadUrl = "$BaseUrl/$versionTag/$artifactName"
-        Write-Log "Downloading $artifactName from $downloadUrl"
-        if ($dry) {
-            Write-Log "[dry-run] Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath"
-        } else {
-            Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath
-        }
+    foreach ($pkg in $packages) {
+        $artifactName = "$pkg-$targetTriple$artifactExtension"
+        $artifactDest = Join-Path $tempRoot $artifactName
+        $localSource = Resolve-LocalArtifact $artifactName
 
-        $checksumUrl = "$BaseUrl/$versionTag/$checksumName"
-        try {
+        if ($localSource) {
             if ($dry) {
-                Write-Log "[dry-run] Invoke-WebRequest -Uri $checksumUrl -OutFile $checksumPath"
+                Write-Log "[dry-run] Copy-Item -Path $localSource -Destination $artifactDest"
             } else {
-                Invoke-WebRequest -Uri $checksumUrl -OutFile $checksumPath
+                Copy-Item -Path $localSource -Destination $artifactDest -Force
             }
-        } catch {
-            Write-Warn "Failed to download checksum file ($checksumUrl); skipping verification"
+        } else {
+            $downloadUrl = "$BaseUrl/$versionTag/$artifactName"
+            Write-Log "Downloading $artifactName from $downloadUrl"
+            if ($dry) {
+                Write-Log "[dry-run] Invoke-WebRequest -Uri $downloadUrl -OutFile $artifactDest"
+            } else {
+                Invoke-WebRequest -Uri $downloadUrl -OutFile $artifactDest
+            }
+        }
+
+        if ($checksumsAvailable -and -not $dry) {
+            Verify-Checksum $checksumPath $artifactName $artifactDest
+        }
+
+        $extractDir = Join-Path $tempRoot "extract-$pkg"
+        if ($dry) {
+            Write-Log "[dry-run] Expand-Archive -Path $artifactDest -DestinationPath $extractDir -Force"
+            continue
+        }
+
+        Expand-Archive -Path $artifactDest -DestinationPath $extractDir -Force
+        $sourceDir = Join-Path $extractDir 'bin'
+        if (-not (Test-Path $sourceDir)) { $sourceDir = $extractDir }
+        Get-ChildItem -Path $sourceDir -File | Where-Object { $_.Name -notmatch 'README|LICENSE|CHANGELOG|\.md$' } |
+            ForEach-Object {
+                Copy-Item -Path $_.FullName -Destination (Join-Path $binStaging $_.Name) -Force
+            }
+    }
+
+    $supportDest = Join-Path $tempRoot $supportArtifact
+    $supportSource = Resolve-LocalArtifact $supportArtifact
+    if ($supportSource) {
+        if ($dry) {
+            Write-Log "[dry-run] Copy-Item -Path $supportSource -Destination $supportDest"
+        } else {
+            Copy-Item -Path $supportSource -Destination $supportDest -Force
         }
     } else {
-        Write-Log "Using local archive: $archivePath"
-    }
-
-    if (-not $dry -and (Test-Path $checksumPath)) {
-        $expectedLine = Get-Content $checksumPath | Where-Object { $_ -match "  $artifactName$" }
-        if (-not $expectedLine) {
-            Write-Warn "Checksum entry for $artifactName not found; skipping verification"
+        $supportUrl = "$BaseUrl/$versionTag/$supportArtifact"
+        Write-Log "Downloading $supportArtifact from $supportUrl"
+        if ($dry) {
+            Write-Log "[dry-run] Invoke-WebRequest -Uri $supportUrl -OutFile $supportDest"
         } else {
-            $expectedHash = ($expectedLine -split ' ')[0].Trim()
-            $actualHash = (Get-FileHash -Algorithm SHA256 -Path $archivePath).Hash.ToLowerInvariant()
-            if ($expectedHash.ToLowerInvariant() -ne $actualHash) {
-                Write-ErrorAndExit "Checksum mismatch for $artifactName (expected $expectedHash, got $actualHash)"
-            }
-            Write-Log "Checksum verified for $artifactName"
+            Invoke-WebRequest -Uri $supportUrl -OutFile $supportDest
         }
     }
-
-    Write-Log "Extracting archive"
+    if ($checksumsAvailable -and -not $dry -and (Test-Path $supportDest)) {
+        Verify-Checksum $checksumPath $supportArtifact $supportDest
+    }
     if ($dry) {
-        Write-Log "[dry-run] Expand-Archive -Path $archivePath -DestinationPath $extractRoot -Force"
+        Write-Log "[dry-run] Expand-Archive -Path $supportDest -DestinationPath $payloadRoot -Force"
     } else {
-        Expand-Archive -Path $archivePath -DestinationPath $extractRoot -Force
+        Expand-Archive -Path $supportDest -DestinationPath $payloadRoot -Force
     }
 
-    $releaseRoot = if ($dry) {
-        Join-Path $extractRoot 'SIMULATED_ROOT'
-    } else {
-        $entries = @(Get-ChildItem -Path $extractRoot)
-        if ($entries.Count -eq 1 -and $entries[0].PSIsContainer) {
-            $entries[0].FullName
-        } else {
-            $extractRoot
-        }
-    }
+    $releaseRoot = $payloadRoot
 
     $versionsDir = Join-Path $Prefix 'versions'
     $versionDir = Join-Path $versionsDir $versionNormalized
