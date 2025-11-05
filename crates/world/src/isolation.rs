@@ -280,6 +280,7 @@ impl LinuxIsolation {
         }
     }
 
+    #[cfg(all(target_os = "linux", not(target_env = "musl")))]
     fn apply_seccomp_baseline(&self) -> Result<()> {
         // Baseline seccomp using libseccomp: default allow; log risky syscalls
         use libseccomp::{ScmpAction, ScmpFilterContext, ScmpSyscall};
@@ -306,6 +307,12 @@ impl LinuxIsolation {
 
         ctx.load()
             .map_err(|e| anyhow::anyhow!("seccomp load failed: {}", e))?;
+        Ok(())
+    }
+
+    #[cfg(all(target_os = "linux", target_env = "musl"))]
+    fn apply_seccomp_baseline(&self) -> Result<()> {
+        tracing::warn!("seccomp baseline skipped: libseccomp not available on musl targets");
         Ok(())
     }
 }
