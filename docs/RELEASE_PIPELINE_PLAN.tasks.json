@@ -42,6 +42,36 @@
       "timestamp": "2025-11-04T20:25:00Z",
       "task_id": "ci-testing-workflow",
       "message": "Adopted dist v0.30 plan/build pipeline via dist init; release workflow regenerated." 
+    },
+    {
+      "timestamp": "2025-11-04T21:15:00Z",
+      "task_id": "ci-testing-workflow",
+      "message": "Enabled workflow_call on ci-testing.yml so nightly can reuse the consolidated matrix jobs." 
+    },
+    {
+      "timestamp": "2025-11-04T21:20:00Z",
+      "task_id": "nightly-workflow",
+      "message": "Created nightly.yml with skip-aware preflight, cargo dist check, targeted replay/world-agent suites, and automated failure issue reporting." 
+    },
+    {
+      "timestamp": "2025-11-04T21:45:00Z",
+      "task_id": "ci-testing-workflow",
+      "message": "Locally exercised ci-testing steps (fmt, clippy, build, test, doc); noted shellcheck/musl toolchain gaps on developer host and confirmed dist plan runs." 
+    },
+    {
+      "timestamp": "2025-11-04T21:55:00Z",
+      "task_id": "ci-testing-workflow",
+      "message": "Added cargo rustc cdylib builds for telemetry on non-musl targets and restored cross job coverage for aarch64-unknown-linux-gnu with cdylib skip on musl." 
+    },
+    {
+      "timestamp": "2025-11-05T00:55:00Z",
+      "task_id": "ci-testing-workflow",
+      "message": "Configured cross pre-build steps to install libseccomp for musl and GNU containers so telemetry and world crates link cleanly." 
+    },
+    {
+      "timestamp": "2025-11-05T01:05:00Z",
+      "task_id": "world-hardening",
+      "message": "Gated seccomp baseline to non-musl targets and added runtime warning for musl builds to keep cross jobs green." 
     }
   ],
   "tasks": [
@@ -98,6 +128,24 @@
         "Wrap the heavy matrix jobs with if: steps.changed == 'true' to skip when no changes occurred.",
         "After a successful run, upload nightly-state.json containing the processed commit SHA.",
         "Add failure handler using peter-evans/create-issue-from-file to open actionable issues."
+      ],
+      "dependencies": [
+        "ci-testing-workflow"
+      ]
+    },
+    {
+      "id": "world-hardening",
+      "title": "Relax seccomp on musl while retaining Linux isolation",
+      "description": "Update the world crate so musl targets skip the libseccomp baseline yet emit a warning, keeping cross builds and releases green without sacrificing glibc coverage.",
+      "context": [
+        "crates/world/Cargo.toml",
+        "crates/world/src/isolation.rs"
+      ],
+      "steps": [
+        "Gate libseccomp dependency to non-musl Linux targets in Cargo.toml.",
+        "Wrap seccomp baseline logic in cfg guards and add a musl-friendly noop implementation that logs a warning.",
+        "Verify cross builds for x86_64-unknown-linux-musl succeed locally or via CI.",
+        "Document the constraint in RELEASE_PIPELINE_PLAN.md and update task logs."
       ],
       "dependencies": [
         "ci-testing-workflow"
