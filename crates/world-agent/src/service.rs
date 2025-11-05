@@ -1,7 +1,11 @@
 //! Core service implementation for world agent.
 
-use agent_api_types::{Budget, ExecuteRequest, ExecuteResponse, ExecuteStreamFrame};
-use anyhow::{Context, Result};
+use agent_api_types::{Budget, ExecuteRequest, ExecuteResponse};
+#[cfg(target_os = "linux")]
+use agent_api_types::ExecuteStreamFrame;
+use anyhow::Result;
+#[cfg(target_os = "linux")]
+use anyhow::Context;
 #[cfg(target_os = "linux")]
 use axum::{
     body::{boxed, Bytes, StreamBody},
