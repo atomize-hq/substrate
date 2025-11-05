@@ -1,7 +1,7 @@
 name: Nightly Validation
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
   repository_dispatch:
     types:
       - nightly-test
