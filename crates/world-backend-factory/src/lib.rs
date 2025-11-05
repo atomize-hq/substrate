@@ -31,16 +31,13 @@ pub fn factory() -> Result<Arc<dyn WorldBackend>> {
 mod tests {
     use super::*;
 
-    #[cfg_attr(not(target_os = "windows"), ignore)]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     #[test]
     fn factory_returns_backend() {
         assert!(factory().is_ok());
     }
 
-    #[cfg_attr(
-        any(target_os = "linux", target_os = "macos", target_os = "windows"),
-        ignore
-    )]
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     #[test]
     fn factory_errs_on_unsupported() {
         assert!(factory().is_err());
