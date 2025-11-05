@@ -4728,7 +4728,6 @@ fn build_agent_client_and_request_impl(
     agent_api_types::ExecuteRequest,
     String,
 )> {
-    use agent_api_client::AgentClient;
     use agent_api_types::ExecuteRequest;
     use platform_world::windows;
 
