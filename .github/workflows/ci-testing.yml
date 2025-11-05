@@ -4,11 +4,9 @@ on:
   push:
     branches:
       - testing
-      - main
   pull_request:
     branches:
       - testing
-      - main
   workflow_call:
     inputs:
       checkout_ref:

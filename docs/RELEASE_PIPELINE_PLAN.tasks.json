@@ -43,6 +43,37 @@
       "task_id": "ci-testing-workflow",
       "message": "Adopted dist v0.30 plan/build pipeline via dist init; release workflow regenerated." 
     }
+    ,
+    {
+      "timestamp": "2025-11-05T14:55:00Z",
+      "task_id": "cargo-dist-integration",
+      "message": "Plan confirmed: rewrite shell/PowerShell installers to download per-app cargo-dist archives and reconstruct the platform bundle locally, removing reliance on legacy fat tarballs." 
+    },
+    {
+      "timestamp": "2025-11-05T15:20:00Z",
+      "task_id": "release-workflow-overhaul",
+      "message": "Updated release.yml to trigger on v* tags, gate publishing on tag refs, and keep cargo-dist plan/build/host stages aligned with the support bundle extras." 
+    },
+    {
+      "timestamp": "2025-11-05T15:28:00Z",
+      "task_id": "release-workflow-overhaul",
+      "message": "Recorded pr-run-mode=skip in dist-workspace.toml so release CI stays off PRs while preserving the default cargo-dist regeneration flow." 
+    },
+    {
+      "timestamp": "2025-11-05T15:40:00Z",
+      "task_id": "release-workflow-overhaul",
+      "message": "Evaluated adding a release dry-run helper but decided to keep the workflow tag-only to reduce noise in the Actions list." 
+    },
+    {
+      "timestamp": "2025-11-05T21:45:00Z",
+      "task_id": "ci-testing-workflow",
+      "message": "Scoped ci-testing.yml triggers to testing-only pushes/PRs so main builds rely on promotion + release workflows." 
+    },
+    {
+      "timestamp": "2025-11-05T21:55:00Z",
+      "task_id": "promotion-workflow",
+      "message": "Added promote.yml with dry-run support, CI guard checks, and optional tagging to fast-forward main from testing." 
+    }
   ],
   "tasks": [
     {
@@ -73,10 +104,10 @@
       ],
       "steps": [
         "Delete .github/workflows/ci-feature.yml.",
-        "Author .github/workflows/ci-testing.yml with triggers on push/pull_request targeting testing and main.",
+        "Author .github/workflows/ci-testing.yml with triggers on push/pull_request targeting testing.",
         "Define matrix job over ubuntu-24.04, macos-14, windows-2022 running fmt, clippy, cargo test, and per-platform smoke commands.",
         "Add secondary job using houseabsolute/actions-rust-cross to build linux cross targets.",
-        "Add documentation-packaging job (cargo doc, cargo dist check, shellcheck/shfmt).",
+        "Add documentation-packaging job (cargo doc, dist plan validation, shellcheck/shfmt).",
         "Ensure all jobs share caches keyed by OS and Cargo.lock hash."
       ],
       "dependencies": [

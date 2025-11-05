@@ -1,0 +1,120 @@
+name: Promote to Main
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Optional release tag to create after fast-forward (e.g. v1.2.3)
+        required: false
+        default: ""
+      dry_run:
+        description: Set true to preview without pushing changes
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-22.04
+    env:
+      TAG_NAME: ${{ inputs.tag_name }}
+      DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Configure Git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Ensure latest testing CI run succeeded
+        id: ci-status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const response = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              workflow_id: "ci-testing.yml",
+              branch: "testing",
+              status: "completed",
+              per_page: 1,
+            });
+
+            if (!response.data.workflow_runs.length) {
+              core.setFailed("No completed ci-testing.yml runs found on the testing branch.");
+              return;
+            }
+
+            const run = response.data.workflow_runs[0];
+            core.setOutput("ci_url", run.html_url);
+            core.setOutput("ci_conclusion", run.conclusion);
+
+            if (run.conclusion !== "success") {
+              core.setFailed(`Latest ci-testing.yml run on testing concluded with '${run.conclusion}'. See ${run.html_url}`);
+            }
+
+      - name: Fast-forward main to testing
+        id: fast-forward
+        run: |
+          set -euo pipefail
+          git fetch origin main testing
+          BEFORE_MAIN=$(git rev-parse origin/main)
+          SOURCE_SHA=$(git rev-parse origin/testing)
+          git checkout main
+          git merge --ff-only origin/testing
+
+          if [ "${DRY_RUN}" != "true" ]; then
+            git push origin main
+          else
+            echo "Dry run enabled; skipping push to origin/main."
+          fi
+
+          echo "before_main=${BEFORE_MAIN}" >> "$GITHUB_OUTPUT"
+          echo "source_sha=${SOURCE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "new_main=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Create release tag
+        if: ${{ inputs.tag_name != '' }}
+        run: |
+          set -euo pipefail
+          if [ "${DRY_RUN}" == "true" ]; then
+            echo "Dry run enabled; skipping tag creation for ${TAG_NAME}."
+            exit 0
+          fi
+
+          if git rev-parse -q --verify "refs/tags/${TAG_NAME}" >/dev/null; then
+            echo "Tag ${TAG_NAME} already exists. Aborting." >&2
+            exit 1
+          fi
+
+          git tag -a "${TAG_NAME}" -m "Promotion ${TAG_NAME}"
+          git push origin "${TAG_NAME}"
+
+      - name: Promotion summary
+        run: |
+          {
+            echo "## Promotion Summary"
+            echo ""
+            echo "- Dry run: \`${DRY_RUN}\`"
+            echo "- Triggered from ref: \`${GITHUB_REF}\`"
+            echo "- Source (testing) tip: \`${{ steps.fast-forward.outputs.source_sha }}\`"
+            echo "- Previous main: \`${{ steps.fast-forward.outputs.before_main }}\`"
+            echo "- New main head: \`${{ steps.fast-forward.outputs.new_main }}\`"
+            echo "- Latest testing CI: [link](${{ steps.ci-status.outputs.ci_url }})"
+            if [ -n "${TAG_NAME}" ]; then
+              echo "- Tag created: \`${TAG_NAME}\`"
+            fi
+            if [ "${DRY_RUN}" == "true" ]; then
+              echo ""
+              echo "> ⚠️ Dry run requested – no pushes or tags were published."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
