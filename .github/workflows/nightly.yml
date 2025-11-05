@@ -179,6 +179,9 @@ jobs:
       - name: Install cargo-dist
         run: cargo install cargo-dist --locked --version 0.30.2
 
+      - name: Ensure cargo bin in PATH
+        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
       - name: cargo dist check
         run: cargo dist check
 
