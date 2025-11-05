@@ -52,9 +52,18 @@ repeatable builds, comprehensive validation, and painless promotions.
      - Linux: `substrate --shim-deploy --dry-run`
      - macOS: ensure Lima scripts pass `shellcheck`
      - Windows: run PowerShell installers with `-WhatIf`
-  2. **Documentation & Packaging**: Runs `cargo doc --no-deps` and basic shell
+     - Non-musl targets also run `cargo rustc -p substrate-telemetry --profile
+       dist --crate-type=rlib,cdylib` so the cdylib is exercised without
+       breaking musl builds.
+ 2. **Documentation & Packaging**: Runs `cargo doc --no-deps` and basic shell
      linting. (`dist` packaging validation is temporarily deferred until the
-     new CLI workflow is fully wired into CI.)
+     new CLI workflow is fully wired into CI; the nightly workflow now runs
+     `cargo dist check` to preserve daily coverage.)
+ 3. **Cross Builds**: Uses `cross` to compile `aarch64-unknown-linux-gnu` and
+    `x86_64-unknown-linux-musl` artifacts with the `dist` profile. The job
+    installs target-specific prerequisites (e.g., `libseccomp-dev` and
+    `libseccomp-dev:arm64`) before invoking `cross build`/`cross rustc`, and
+    only the GNU target emits the telemetry cdylib.
 - **Caching**: Use `actions/cache` with a key combining runner OS and the
   `hashFiles` of `Cargo.lock` to speed up builds. `target/` should be restored
   per toolchain triple to support reuse across jobs.
@@ -62,17 +71,18 @@ repeatable builds, comprehensive validation, and painless promotions.
 ### 3.2 Nightly Validation (`nightly.yml`)
 - **Trigger**: `schedule` (e.g., `0 2 * * *`) and manual `workflow_dispatch`.
 - **Scope**: Runs the same jobs as the CI workflow plus extended integration
-  suites (world agent integration tests, replay fixtures).
-- **Change Detection**: The workflow should skip all heavy jobs if nothing has
-  changed since the last successful nightly:
-  1. Fetch the latest commit on `testing`.
-  2. Download the previous nightly state artifact (`nightly-state.json`)
-     containing the last processed commit SHA.
-  3. If `HEAD` matches the stored SHA, exit early with a log message.
-  4. After successful completion, upload a new `nightly-state.json` with the
-     current SHA.
-- **Reporting**: Failures open an actionable issue (via `peter-evans/create-issue-from-file`)
-  summarising failing jobs and linking to logs.
+  suites (world agent integration tests, replay fixtures). The workflow reuses
+  `ci-testing.yml` through `workflow_call`, then executes a Linux-only
+  "extended tests" job that runs nightly-only coverage: `cargo test --workspace
+  --all-targets -- --ignored`, targeted `replay`/`world-agent` suites, and
+  `cargo dist check`.
+- **Change Detection**: A `preflight` job skips heavy work when the latest
+  `testing` commit matches the SHA stored in the persisted `nightly-state.json`
+  artifact. Artifacts are retained for 90 days so the workflow avoids duplicate
+  executions.
+- **Reporting**: Failures continue to open actionable issues (via
+  `peter-evans/create-issue-from-file`) with `nightly`/`ci-failure` labels and
+  links back to the run.
 
 ### 3.3 Release Automation (`release.yml`)
 - **Triggers**: `push` tags matching `v*.*.*` (including betas).
@@ -111,6 +121,9 @@ repeatable builds, comprehensive validation, and painless promotions.
   templates. Reference: <https://axodotdev.github.io/cargo-dist/>.
 - **`houseabsolute/actions-rust-cross`**: builds non-native Linux targets using
   preconfigured cross toolchains.
+- **`Cross.toml` pre-build hooks**: install platform libraries (e.g.,
+  `libseccomp-dev` and multi-arch variants) in the cross containers so linker
+  dependencies resolve for GNU targets while musl remains self-contained.
 - **`actions/github-script`**: used for nightly change detection and branch
   promotion guard rails.
 - **`peter-evans/create-issue-from-file`**: opens issues when nightly runs fail.
@@ -131,6 +144,8 @@ repeatable builds, comprehensive validation, and painless promotions.
 3. **Nightly Workflow**:
    - Create `nightly-state` artifact management.
    - Integrate extended test suites and failure issue reporting.
+   - Ensure cross runners preinstall required system libraries and gate
+     seccomp enforcement on musl targets so nightly cross builds stay green.
 4. **Adopt `dist` CLI**:
    - Run `dist init --ci github -y`.
    - Customise `dist-workspace.toml`, release templates, and artifact mapping.
