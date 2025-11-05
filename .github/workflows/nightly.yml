@@ -117,7 +117,8 @@ jobs:
 
       - name: Emit skip notice
         if: steps.evaluate.outputs.changed == 'false'
-        run: echo "Nightly run skipped: no new commits on testing since previous nightly." >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo "Nightly run skipped: no new commits on testing since previous nightly." >> "$GITHUB_STEP_SUMMARY"
 
   ci_suite:
     name: CI Matrix (Reused)
