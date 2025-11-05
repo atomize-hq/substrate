@@ -58,7 +58,7 @@ repeatable builds, comprehensive validation, and painless promotions.
  2. **Documentation & Packaging**: Runs `cargo doc --no-deps` and basic shell
      linting. (`dist` packaging validation is temporarily deferred until the
      new CLI workflow is fully wired into CI; the nightly workflow now runs
-     `cargo dist check` to preserve daily coverage.)
+     `dist plan --ci github --output-format=json` to preserve daily coverage.)
  3. **Cross Builds**: Uses `cross` to compile `aarch64-unknown-linux-gnu` and
     `x86_64-unknown-linux-musl` artifacts with the `dist` profile. The job
     installs target-specific prerequisites (e.g., `libseccomp-dev` and
@@ -75,7 +75,7 @@ repeatable builds, comprehensive validation, and painless promotions.
   `ci-testing.yml` through `workflow_call`, then executes a Linux-only
   "extended tests" job that runs nightly-only coverage: `cargo test --workspace
   --all-targets -- --ignored`, targeted `replay`/`world-agent` suites, and
-  `cargo dist check`.
+  `dist plan --ci github --output-format=json`.
 - **Change Detection**: A `preflight` job skips heavy work when the latest
   `testing` commit matches the SHA stored in the persisted `nightly-state.json`
   artifact. Artifacts are retained for 90 days so the workflow avoids duplicate

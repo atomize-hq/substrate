@@ -5,6 +5,7 @@ edition = "2021"
 authors = ["Atomize"]
 description = "Agent service running inside worlds/VMs providing execution API"
 license = "MIT"
+repository = "https://github.com/atomize-hq/substrate"
 
 [[bin]]
 name = "world-agent"
@@ -48,4 +49,3 @@ world = { path = "../world" }
 
 [dev-dependencies]
 tempfile = "3"
-
