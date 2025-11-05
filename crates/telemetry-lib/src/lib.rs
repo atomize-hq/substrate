@@ -1,5 +1,3 @@
-#![crate_type = "rlib"]
-#![cfg_attr(not(target_env = "musl"), crate_type = "cdylib")]
 #![allow(non_camel_case_types)]
 
 use chrono::Utc;
@@ -11,7 +9,6 @@ use std::io::Write;
 use std::os::raw::c_char;
 use std::sync::Mutex;
 use std::time::Instant;
-// TraceEvent will be imported when needed
 
 mod correlation;
 #[cfg(unix)]
@@ -61,7 +58,6 @@ fn init_telemetry() {
     let session = get_session_info();
     let trace_path = session.trace_log.clone();
 
-    // Open trace file for appending
     if let Ok(file) = OpenOptions::new()
         .create(true)
         .append(true)
@@ -113,7 +109,6 @@ pub fn log_syscall(
     }
 }
 
-// Helper to convert C strings
 /// Convert a C string pointer to a Rust `String`.
 ///
 /// # Safety
@@ -126,7 +121,6 @@ pub unsafe fn c_str_to_string(ptr: *const c_char) -> String {
     }
 }
 
-// Helper to convert C string arrays (like argv)
 /// Convert a null-terminated array of C string pointers to a `Vec<String>`.
 ///
 /// # Safety
@@ -147,8 +141,6 @@ pub unsafe fn c_str_array_to_vec(ptr: *const *const c_char) -> Vec<String> {
     vec
 }
 
-// Constructor function - called when library is loaded
-// On Linux, use .init_array section
 #[cfg(target_os = "linux")]
 #[no_mangle]
 #[link_section = ".init_array"]
@@ -160,7 +152,6 @@ static INIT_ARRAY: extern "C" fn() = {
     init_constructor
 };
 
-// On macOS, use __mod_init_func in __DATA segment
 #[cfg(target_os = "macos")]
 #[no_mangle]
 #[link_section = "__DATA,__mod_init_func"]

@@ -787,13 +787,7 @@ impl ShellConfig {
             ShellMode::Interactive { use_pty }
         };
 
-        let async_repl_enabled = if cli.legacy_repl {
-            false
-        } else if cli.async_repl {
-            true
-        } else {
-            true
-        };
+        let async_repl_enabled = !cli.legacy_repl;
 
         Ok(ShellConfig {
             mode,
