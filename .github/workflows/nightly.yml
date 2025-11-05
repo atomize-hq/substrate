@@ -171,8 +171,8 @@ jobs:
           cargo install cargo-dist --locked --version 0.30.2
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
-      - name: dist check
-        run: dist check
+      - name: dist plan
+        run: dist plan --ci github --output-format=json
 
   persist_state:
     name: Persist Nightly State

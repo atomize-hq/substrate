@@ -51,7 +51,7 @@
     {
       "timestamp": "2025-11-04T21:20:00Z",
       "task_id": "nightly-workflow",
-      "message": "Created nightly.yml with skip-aware preflight, cargo dist check, targeted replay/world-agent suites, and automated failure issue reporting." 
+      "message": "Created nightly.yml with skip-aware preflight, dist plan validation, targeted replay/world-agent suites, and automated failure issue reporting." 
     },
     {
       "timestamp": "2025-11-04T21:45:00Z",
@@ -106,7 +106,7 @@
         "Author .github/workflows/ci-testing.yml with triggers on push/pull_request targeting testing and main.",
         "Define matrix job over ubuntu-24.04, macos-14, windows-2022 running fmt, clippy, cargo test, and per-platform smoke commands.",
         "Add secondary job using houseabsolute/actions-rust-cross to build linux cross targets.",
-        "Add documentation-packaging job (cargo doc, cargo dist check, shellcheck/shfmt).",
+        "Add documentation-packaging job (cargo doc, dist plan validation, shellcheck/shfmt).",
         "Ensure all jobs share caches keyed by OS and Cargo.lock hash."
       ],
       "dependencies": [
@@ -166,7 +166,7 @@
         "Configure additional-artifacts for installer scripts and docs.",
         "Author a release template referencing CHANGELOG sections and quickstart docs.",
         "Commit the dist/ directory (excluding generated artifacts via .gitignore).",
-        "Run cargo dist check locally to validate configuration."
+        "Run dist plan --ci github --output-format=json locally to validate configuration."
       ],
       "dependencies": [
         "ci-testing-workflow"
@@ -242,7 +242,7 @@
       "steps": [
         "Describe the feature → testing → main promotion path in docs/DEVELOPMENT.md.",
         "Record workflow names, triggers, and required CLI commands in docs/CONFIGURATION.md.",
-        "Add quickstart instructions for running cargo dist check locally prior to tagging.",
+        "Add quickstart instructions for running dist plan locally prior to tagging.",
         "Link to the nightly skip logic documentation for troubleshooting."
       ],
       "dependencies": [
