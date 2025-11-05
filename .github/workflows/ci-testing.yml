@@ -9,6 +9,8 @@ on:
     branches:
       - testing
       - main
+  workflow_call:
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -61,6 +63,15 @@ jobs:
 
       - name: Cargo build (debug)
         run: cargo build --workspace
+
+      - name: Build telemetry cdylib (Unix)
+        if: runner.os != 'Windows'
+        run: cargo rustc -p substrate-telemetry --profile dist --crate-type=rlib,cdylib
+
+      - name: Build telemetry cdylib (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: cargo rustc -p substrate-telemetry --profile dist --crate-type=rlib,cdylib
 
       - name: cargo test
         run: cargo test --workspace --all-targets
@@ -122,9 +133,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - aarch64-unknown-linux-gnu
-          - x86_64-unknown-linux-musl
+        include:
+          - target: aarch64-unknown-linux-gnu
+            build_cdylib: true
+          - target: x86_64-unknown-linux-musl
+            build_cdylib: false
 
     steps:
       - name: Checkout repository
@@ -151,3 +164,7 @@ jobs:
 
       - name: Build ${{ matrix.target }}
         run: cross build --workspace --target ${{ matrix.target }} --profile dist
+
+      - name: Build telemetry cdylib (${{ matrix.target }})
+        if: matrix.build_cdylib
+        run: cross rustc -p substrate-telemetry --target ${{ matrix.target }} --profile dist --crate-type=rlib,cdylib
