@@ -37,6 +37,9 @@ use substrate_trace::{
 use tracing::{info, warn};
 use uuid::Uuid;
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use agent_api_client::AgentClient;
+
 use crate::agent_events::{
     clear_agent_event_sender, format_event_line, init_event_channel, publish_agent_event,
     publish_command_completion, schedule_demo_burst, schedule_demo_events,
@@ -4618,7 +4621,6 @@ fn build_agent_client_and_request_impl(
     agent_api_types::ExecuteRequest,
     String,
 )> {
-    use agent_api_client::AgentClient;
     use agent_api_types::ExecuteRequest;
 
     ensure_world_agent_ready()?;
@@ -4689,7 +4691,6 @@ fn build_agent_client_and_request_impl(
     agent_api_types::ExecuteRequest,
     String,
 )> {
-    use agent_api_client::AgentClient;
     use agent_api_types::ExecuteRequest;
 
     let ctx = pw::get_context().ok_or_else(|| anyhow::anyhow!("no platform world context"))?;

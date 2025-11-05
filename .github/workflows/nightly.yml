@@ -80,20 +80,10 @@ jobs:
         id: previous
         if: steps.last_success.outputs.run_id != ''
         shell: bash
-        run: |
-          python - <<'PY' >> "$GITHUB_OUTPUT"
-          import json
-          from pathlib import Path
-
-          path = Path('previous-nightly/nightly-state.json')
-          commit = ''
-          if path.exists():
-              try:
-                  commit = json.loads(path.read_text()).get('commit', '')
-              except json.JSONDecodeError:
-                  pass
-          print(f"previous_sha={commit}")
-          PY
+        run: >
+          python -c "import json, pathlib; path = pathlib.Path('previous-nightly/nightly-state.json');
+          commit = json.loads(path.read_text()).get('commit', '') if path.exists() else '';
+          print(f'previous_sha={commit}')" >> "$GITHUB_OUTPUT"
 
       - name: Evaluate change detection
         id: evaluate
