@@ -252,6 +252,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        target_os = "macos",
+        ignore = "macOS (BSD flock) allows the same process to reacquire an exclusive lock without blocking"
+    )]
     fn test_concurrent_lock_attempts() {
         use std::sync::{Arc, Barrier};
 
