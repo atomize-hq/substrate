@@ -1,0 +1,234 @@
+name: Nightly Validation
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch: {}
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_TOOLCHAIN: 1.89.0
+
+jobs:
+  preflight:
+    name: Detect Changes
+    runs-on: ubuntu-24.04
+    outputs:
+      changed: ${{ steps.evaluate.outputs.changed }}
+      head_sha: ${{ steps.evaluate.outputs.head_sha }}
+      previous_sha: ${{ steps.evaluate.outputs.previous_sha }}
+      reason: ${{ steps.evaluate.outputs.reason }}
+    steps:
+      - name: Checkout testing branch
+        uses: actions/checkout@v4
+        with:
+          ref: testing
+          fetch-depth: 1
+
+      - name: Capture latest testing commit
+        id: latest
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Locate previous successful nightly run
+        id: last_success
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const workflowId = 'nightly.yml';
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              workflow_id: workflowId,
+              status: 'success',
+              per_page: 1,
+              exclude_pull_requests: true,
+            });
+            if (!runs.data.workflow_runs.length) {
+              core.info('No previous successful nightly run found.');
+              return;
+            }
+
+            const run = runs.data.workflow_runs[0];
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner,
+              repo,
+              run_id: run.id,
+            });
+            const stateArtifact = artifacts.data.artifacts.find((artifact) => artifact.name === 'nightly-state');
+            if (!stateArtifact) {
+              core.info('Previous nightly run did not upload a nightly-state artifact.');
+              return;
+            }
+
+            core.setOutput('run_id', run.id.toString());
+
+      - name: Download previous nightly state
+        if: steps.last_success.outputs.run_id != ''
+        id: download_state
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: nightly-state
+          path: previous-nightly
+          run-id: ${{ steps.last_success.outputs.run_id }}
+
+      - name: Read previous commit SHA
+        id: previous
+        if: steps.last_success.outputs.run_id != ''
+        shell: bash
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+import json
+from pathlib import Path
+
+path = Path('previous-nightly/nightly-state.json')
+commit = ''
+if path.exists():
+    try:
+        commit = json.loads(path.read_text()).get('commit', '')
+    except json.JSONDecodeError:
+        pass
+print(f"previous_sha={commit}")
+PY
+
+      - name: Evaluate change detection
+        id: evaluate
+        run: |
+          HEAD_SHA="${{ steps.latest.outputs.sha }}"
+          PREVIOUS_SHA="${{ steps.previous.outputs.previous_sha }}"
+
+          if [ -z "$PREVIOUS_SHA" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "reason=bootstrap" >> "$GITHUB_OUTPUT"
+          elif [ "$HEAD_SHA" = "$PREVIOUS_SHA" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "reason=no-change" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "reason=new-commits" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "previous_sha=$PREVIOUS_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Emit skip notice
+        if: steps.evaluate.outputs.changed == 'false'
+        run: echo "Nightly run skipped: no new commits on testing since previous nightly." >> "$GITHUB_STEP_SUMMARY"
+
+  ci_suite:
+    name: CI Matrix (Reused)
+    needs: preflight
+    if: needs.preflight.outputs.changed == 'true'
+    uses: ./.github/workflows/ci-testing.yml
+    secrets: inherit
+
+  extended_tests:
+    name: Extended Nightly Tests
+    needs:
+      - preflight
+      - ci_suite
+    if: needs.preflight.outputs.changed == 'true' && needs.ci_suite.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libseccomp-dev shellcheck shfmt
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      - name: Cache cargo artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: nightly-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            nightly-${{ env.RUST_TOOLCHAIN }}-
+
+      - name: Run ignored test suites
+        run: cargo test --workspace --all-targets -- --ignored --nocapture
+        env:
+          RUST_TEST_THREADS: 1
+
+      - name: Targeted replay tests
+        run: cargo test -p replay -- --nocapture
+
+      - name: Targeted world-agent tests
+        run: cargo test -p world-agent -- --nocapture
+
+      - name: Install cargo-dist
+        run: cargo install cargo-dist --locked --version 0.30.2
+
+      - name: cargo dist check
+        run: cargo dist check
+
+  persist_state:
+    name: Persist Nightly State
+    needs:
+      - preflight
+      - ci_suite
+      - extended_tests
+    if: needs.preflight.outputs.changed == 'true' && needs.ci_suite.result == 'success' && needs.extended_tests.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Write nightly-state.json
+        run: |
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          cat <<EOF > nightly-state.json
+          {
+            "commit": "${{ needs.preflight.outputs.head_sha }}",
+            "generated_at": "$TIMESTAMP",
+            "workflow_run": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          EOF
+
+      - name: Upload nightly state artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-state
+          path: nightly-state.json
+          retention-days: 90
+
+  report_failure:
+    name: Nightly Failure Issue
+    needs:
+      - preflight
+      - ci_suite
+      - extended_tests
+    if: needs.preflight.outputs.changed == 'true' && (needs.ci_suite.result == 'failure' || needs.extended_tests.result == 'failure')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Prepare issue body
+        run: |
+          cat <<EOF > nightly-failure.md
+          Nightly validation detected a failure.
+
+          - Workflow run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          - Latest testing commit: `${{ needs.preflight.outputs.head_sha }}`
+          - Previous nightly commit: `${{ needs.preflight.outputs.previous_sha }}`
+          - Change detection reason: `${{ needs.preflight.outputs.reason }}`
+          - CI matrix result: `${{ needs.ci_suite.result }}`
+          - Extended tests result: `${{ needs.extended_tests.result }}`
+
+          Please review the failing jobs and take corrective action.
+          EOF
+
+      - name: Create tracking issue
+        uses: peter-evans/create-issue-from-file@v5
+        with:
+          title: "Nightly failure for ${{ needs.preflight.outputs.head_sha }}"
+          content-filepath: nightly-failure.md
+          labels: nightly,ci-failure
