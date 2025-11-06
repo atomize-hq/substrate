@@ -46,6 +46,7 @@ members = [
     # "crates/trace",   # TODO: Implement after broker
     "crates/telemetry-lib",
     "crates/replay", "crates/substrate-graph", "crates/forwarder", "crates/world-windows-wsl",
+    "tools/version-bump",
 ]
 
 [workspace.dependencies]

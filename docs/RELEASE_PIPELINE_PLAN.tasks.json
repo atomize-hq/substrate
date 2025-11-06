@@ -79,17 +79,6 @@
       "message": "Nightly extended tests now run dist plan --ci github --output-format=json to validate packaging manifests while release artifacts remain exclusive to release.yml." 
     },
     {
-      "timestamp": "2025-11-05T14:45:00Z",
-      "task_id": "cargo-dist-integration",
-      "message": "Initialized dist/ configuration, staged installer/document extras via collect-supporting-artifacts.sh, and added release-template.md for curated notes." 
-    },
-    {
-      "timestamp": "2025-11-05T14:55:00Z",
-      "task_id": "cargo-dist-integration",
-      "message": "Plan confirmed: rewrite shell/PowerShell installers to download per-app cargo-dist archives and reconstruct the platform bundle locally, removing reliance on legacy fat tarballs." 
-    }
-    ,
-    {
       "timestamp": "2025-11-05T14:55:00Z",
       "task_id": "cargo-dist-integration",
       "message": "Plan confirmed: rewrite shell/PowerShell installers to download per-app cargo-dist archives and reconstruct the platform bundle locally, removing reliance on legacy fat tarballs." 
@@ -117,7 +106,17 @@
     {
       "timestamp": "2025-11-05T21:55:00Z",
       "task_id": "promotion-workflow",
-      "message": "Added promote.yml with dry-run support, CI guard checks, and optional tagging to fast-forward main from testing." 
+      "message": "Added promote.yml with dry-run support, automated version bumping, CI guard checks, and optional tagging to fast-forward main from testing." 
+    },
+    {
+      "timestamp": "2025-11-05T22:10:00Z",
+      "task_id": "branch-protection-config",
+      "message": "Enforced testing/main rulesets (status checks, approvals, no force pushes) and locked the production environment to release tags on main." 
+    },
+    {
+      "timestamp": "2025-11-05T22:30:00Z",
+      "task_id": "nightly-workflow",
+      "message": "Split nightly scheduling into nightly-scheduler.yml so repository_dispatch events target testing while validation reuses ci-testing." 
     }
   ],
   "tasks": [

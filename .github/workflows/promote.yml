@@ -7,6 +7,9 @@ on:
         description: Optional release tag to create after fast-forward (e.g. v1.2.3)
         required: false
         default: ""
+      next_version:
+        description: Next release version to write into workspace manifests (e.g. 0.2.1)
+        required: true
       dry_run:
         description: Set true to preview without pushing changes
         required: false
@@ -21,6 +24,7 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       TAG_NAME: ${{ inputs.tag_name }}
+      NEXT_VERSION: ${{ inputs.next_version }}
       DRY_RUN: ${{ inputs.dry_run }}
     steps:
       - name: Checkout repository
@@ -34,32 +38,129 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: Bump versions on testing
+        id: bump
+        env:
+          NEXT_VERSION: ${{ env.NEXT_VERSION }}
+          DRY_RUN: ${{ env.DRY_RUN }}
+        run: |
+          set -euo pipefail
+          git fetch origin testing
+          git checkout testing
+          git reset --hard origin/testing
+
+          CURRENT_VERSION=$(cargo metadata --no-deps --format-version 1 | python3 - <<'PY'
+import json, sys
+data = json.load(sys.stdin)
+for pkg in data["packages"]:
+    if pkg["name"] == "substrate":
+        print(pkg["version"])
+        break
+else:
+    raise SystemExit("substrate package not found")
+PY
+)
+
+          echo "current_version=${CURRENT_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "next_version=${NEXT_VERSION}" >> "$GITHUB_OUTPUT"
+
+          ORIGINAL_SHA=$(git rev-parse HEAD)
+
+          if [ "${NEXT_VERSION}" = "${CURRENT_VERSION}" ]; then
+            echo "Next version matches current version; skipping version bump."
+            echo "testing_sha=${ORIGINAL_SHA}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${DRY_RUN}" = "true" ]; then
+            cargo run -p version-bump -- --current-version "${CURRENT_VERSION}" --next-version "${NEXT_VERSION}" --dry-run
+            echo "testing_sha=${ORIGINAL_SHA}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          cargo run -p version-bump -- --current-version "${CURRENT_VERSION}" --next-version "${NEXT_VERSION}"
+          cargo generate-lockfile
+
+          if git diff --quiet; then
+            echo "No changes detected after version bump."
+            echo "testing_sha=${ORIGINAL_SHA}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git status --short
+          git add --all
+
+          if git diff --cached --quiet; then
+            echo "No staged changes detected; skipping commit."
+            echo "testing_sha=${ORIGINAL_SHA}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git commit -m "chore: release ${NEXT_VERSION}"
+          git push origin HEAD:testing
+
+          NEW_SHA=$(git rev-parse HEAD)
+          echo "testing_sha=${NEW_SHA}" >> "$GITHUB_OUTPUT"
+          echo "version_commit=${NEW_SHA}" >> "$GITHUB_OUTPUT"
+
       - name: Ensure latest testing CI run succeeded
         id: ci-status
         uses: actions/github-script@v7
+        env:
+          TARGET_SHA: ${{ steps.bump.outputs.testing_sha }}
+          DRY_RUN: ${{ env.DRY_RUN }}
         with:
           script: |
             const {owner, repo} = context.repo;
-            const response = await github.rest.actions.listWorkflowRuns({
-              owner,
-              repo,
-              workflow_id: "ci-testing.yml",
-              branch: "testing",
-              status: "completed",
-              per_page: 1,
-            });
-
-            if (!response.data.workflow_runs.length) {
-              core.setFailed("No completed ci-testing.yml runs found on the testing branch.");
+            const targetSha = process.env.TARGET_SHA;
+            if (!targetSha) {
+              core.setFailed("testing_sha output missing; unable to validate CI run.");
               return;
             }
 
-            const run = response.data.workflow_runs[0];
-            core.setOutput("ci_url", run.html_url);
-            core.setOutput("ci_conclusion", run.conclusion);
+            const maxAttempts = 60;
+            const delayMs = 30000;
 
-            if (run.conclusion !== "success") {
-              core.setFailed(`Latest ci-testing.yml run on testing concluded with '${run.conclusion}'. See ${run.html_url}`);
+            const sleep = async (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+            let matchedRun = null;
+
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+              const response = await github.rest.actions.listWorkflowRuns({
+                owner,
+                repo,
+                workflow_id: "ci-testing.yml",
+                branch: "testing",
+                per_page: 20,
+              });
+
+              matchedRun = response.data.workflow_runs.find(run => run.head_sha === targetSha);
+
+              if (!matchedRun) {
+                core.info(`Attempt ${attempt}/${maxAttempts}: CI run for ${targetSha} not found yet. Waiting...`);
+                await sleep(delayMs);
+                continue;
+              }
+
+              if (matchedRun.status !== "completed") {
+                core.info(`Attempt ${attempt}/${maxAttempts}: CI run ${matchedRun.id} still in progress (${matchedRun.status}). Waiting...`);
+                await sleep(delayMs);
+                continue;
+              }
+
+              break;
+            }
+
+            if (!matchedRun) {
+              core.setFailed(`Timed out waiting for ci-testing.yml run on commit ${targetSha}.`);
+              return;
+            }
+
+            core.setOutput("ci_url", matchedRun.html_url);
+            core.setOutput("ci_conclusion", matchedRun.conclusion);
+
+            if (matchedRun.conclusion !== "success") {
+              core.setFailed(`ci-testing.yml run for commit ${targetSha} concluded with '${matchedRun.conclusion}'. See ${matchedRun.html_url}`);
             }
 
       - name: Fast-forward main to testing
@@ -100,16 +201,39 @@ jobs:
           git push origin "${TAG_NAME}"
 
       - name: Promotion summary
+        env:
+          DRY_RUN: ${{ env.DRY_RUN }}
+          TAG_NAME: ${{ env.TAG_NAME }}
+          CURRENT_VERSION: ${{ steps.bump.outputs.current_version }}
+          NEXT_VERSION: ${{ steps.bump.outputs.next_version }}
+          VERSION_COMMIT: ${{ steps.bump.outputs.version_commit }}
+          TESTING_SHA: ${{ steps.fast-forward.outputs.source_sha }}
+          BEFORE_MAIN: ${{ steps.fast-forward.outputs.before_main }}
+          NEW_MAIN: ${{ steps.fast-forward.outputs.new_main }}
+          CI_URL: ${{ steps.ci-status.outputs.ci_url }}
         run: |
           {
             echo "## Promotion Summary"
             echo ""
             echo "- Dry run: \`${DRY_RUN}\`"
             echo "- Triggered from ref: \`${GITHUB_REF}\`"
-            echo "- Source (testing) tip: \`${{ steps.fast-forward.outputs.source_sha }}\`"
-            echo "- Previous main: \`${{ steps.fast-forward.outputs.before_main }}\`"
-            echo "- New main head: \`${{ steps.fast-forward.outputs.new_main }}\`"
-            echo "- Latest testing CI: [link](${{ steps.ci-status.outputs.ci_url }})"
+            echo "- Source (testing) tip: \`${TESTING_SHA}\`"
+            echo "- Previous main: \`${BEFORE_MAIN}\`"
+            echo "- New main head: \`${NEW_MAIN}\`"
+            if [ -n "${CI_URL}" ]; then
+              echo "- Latest testing CI: [link](${CI_URL})"
+            else
+              echo "- Latest testing CI: (not available)"
+            fi
+            if [ -n "${CURRENT_VERSION}" ] && [ -n "${NEXT_VERSION}" ] && [ "${NEXT_VERSION}" != "${CURRENT_VERSION}" ]; then
+              if [ -n "${VERSION_COMMIT}" ]; then
+                echo "- Version bump: ${CURRENT_VERSION} → ${NEXT_VERSION} (commit \`${VERSION_COMMIT}\`)"
+              else
+                echo "- Version bump: ${CURRENT_VERSION} → ${NEXT_VERSION} (dry run)"
+              fi
+            else
+              echo "- Version bump: not performed"
+            fi
             if [ -n "${TAG_NAME}" ]; then
               echo "- Tag created: \`${TAG_NAME}\`"
             fi

@@ -31,7 +31,7 @@ repeatable builds, comprehensive validation, and painless promotions.
 | `main`      | Production-ready / release branch      | Fast-forward from `testing` via protected PR |
 
 - Protect `testing` and `main`:
-  - Require status checks from the CI workflow described in §3.
+  - Require status checks from the CI workflow described in §3 (ruleset enforced).
   - Require at least one approving review.
   - Disallow force pushes.
 - Lock the GitHub Actions “production” environment so only the release workflow
@@ -72,7 +72,7 @@ repeatable builds, comprehensive validation, and painless promotions.
   per toolchain triple to support reuse across jobs.
 
 ### 3.2 Nightly Validation (`nightly.yml`)
-- **Trigger**: `schedule` (e.g., `0 2 * * *`) and manual `workflow_dispatch`.
+- **Trigger**: `workflow_dispatch` and `repository_dispatch` events. Scheduled execution is delegated to `.github/workflows/nightly-scheduler.yml`, which runs on the default branch and emits a dispatch targeting `refs/heads/testing`.
 - **Scope**: Runs the same jobs as the CI workflow plus extended integration
   suites (world agent integration tests, replay fixtures). The workflow reuses
   `ci-testing.yml` through `workflow_call`, then executes a Linux-only
@@ -115,6 +115,7 @@ repeatable builds, comprehensive validation, and painless promotions.
   to keep notes consistent. The new installers will download the canonical
   `cargo-dist` archives per platform and reconstruct the release layout on the
   target machine instead of relying on preassembled bundles.
+<<<<<<< HEAD
 
 -### 3.4 Promotion Workflow (`promote.yml`)
 - **Trigger**: `workflow_dispatch` from maintainers.
@@ -125,6 +126,30 @@ repeatable builds, comprehensive validation, and painless promotions.
   4. Optionally create a Git tag (`vMAJOR.MINOR.PATCH[-betaN]`).
   5. Emit a summary for release notes preparation.
 - **Inputs**: `tag_name` (optional release tag) and `dry_run` (skip pushes/tags for preview). The workflow writes a summary with the CI run link and resulting commits.
+=======
+### 3.4 Promotion Workflow (`promote.yml`)
+- **Trigger**: `workflow_dispatch` from maintainers.
+- **Steps**:
+  1. Checkout `testing` and `main`.
+  2. Update workspace manifests to the requested `next_version` and push the bump to `testing` (skipped on dry runs).
+  3. Wait for `ci-testing.yml` to finish on the freshly bumped commit.
+  4. Fast-forward `main` to match `testing`.
+  5. Optionally create a Git tag (`vMAJOR.MINOR.PATCH[-betaN]`).
+  6. Emit a summary for release notes preparation.
+- **Inputs**:
+  - `next_version` (required): new semver string applied to all workspace crates matching the previous release.
+  - `tag_name` (optional): release tag to create after promotion.
+  - `dry_run` (optional): preview the version bump without pushing branches or tags.
+- **Tooling**: the workflow runs `tools/version-bump`, a small helper that edits `Cargo.toml` manifests and dependency pins, followed by `cargo generate-lockfile`.
+- **Output**: The job summary records the version bump commit, CI link, and any created tag. Dry runs leave both branches untouched but still validate the proposed changes.
+
+### 3.5 Linux World Hardening
+- **Status**: Completed (gated in `crates/world`).
+- **Behavior**:
+  - On glibc targets, `libseccomp` is linked and the baseline filter is applied.
+  - On musl targets, the `world` crate skips the seccomp baseline (with a warning), keeping cross builds green while acknowledging reduced isolation.
+- **Next steps**: Keep the warning in place until a musl-compatible seccomp path is available; document the reduced guarantees in platform guides.
+>>>>>>> 22b6c51 (chore: automate promotion versioning)
 
 ## 4. Tooling and Key Actions
 
