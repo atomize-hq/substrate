@@ -73,6 +73,7 @@ repeatable builds, comprehensive validation, and painless promotions.
 
 ### 3.2 Nightly Validation (`nightly.yml`)
 - **Trigger**: `schedule` (e.g., `0 2 * * *`) and manual `workflow_dispatch`.
+- **Scheduling**: `.github/workflows/nightly-scheduler.yml` runs on the default branch and emits a `repository_dispatch` event so the actual validation workflow executes against the `testing` branch.
 - **Scope**: Runs the same jobs as the CI workflow plus extended integration
   suites (world agent integration tests, replay fixtures). The workflow reuses
   `ci-testing.yml` through `workflow_call`, then executes a Linux-only

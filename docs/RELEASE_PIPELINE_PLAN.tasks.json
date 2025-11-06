@@ -79,6 +79,11 @@
       "message": "Nightly extended tests now run dist plan --ci github --output-format=json to validate packaging manifests while release artifacts remain exclusive to release.yml." 
     },
     {
+      "timestamp": "2025-11-05T22:30:00Z",
+      "task_id": "nightly-workflow",
+      "message": "Split scheduling into nightly-scheduler.yml so repository_dispatch runs target the testing branch while the validation workflow reuses ci-testing via workflow_call." 
+    },
+    {
       "timestamp": "2025-11-05T14:55:00Z",
       "task_id": "cargo-dist-integration",
       "message": "Plan confirmed: rewrite shell/PowerShell installers to download per-app cargo-dist archives and reconstruct the platform bundle locally, removing reliance on legacy fat tarballs." 
