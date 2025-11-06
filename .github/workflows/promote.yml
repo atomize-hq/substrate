@@ -49,18 +49,14 @@ jobs:
           git checkout testing
           git reset --hard origin/testing
           
-          CURRENT_VERSION=$(cargo metadata --no-deps --format-version 1 | python3 - <<'PY'
-          import json, sys
-          
-          data = json.load(sys.stdin)
-          for pkg in data["packages"]:
-              if pkg["name"] == "substrate":
-                  print(pkg["version"])
-                  break
-          else:
-              raise SystemExit("substrate package not found")
-          PY
-          )
+          CURRENT_VERSION=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "substrate") | .version' \
+            | head -n1)
+
+          if [ -z "${CURRENT_VERSION}" ]; then
+            echo "Unable to resolve current substrate version from cargo metadata." >&2
+            exit 1
+          fi
 
           echo "current_version=${CURRENT_VERSION}" >> "$GITHUB_OUTPUT"
           echo "next_version=${NEXT_VERSION}" >> "$GITHUB_OUTPUT"
