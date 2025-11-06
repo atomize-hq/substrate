@@ -63,9 +63,6 @@ sha2 = "0.10"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
-[workspace.metadata.dist]
-allow-dirty = ["ci"]
-
 [patch.crates-io]
 reedline = { path = "third_party/reedline" }
 
