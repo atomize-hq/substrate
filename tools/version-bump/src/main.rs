@@ -126,11 +126,9 @@ fn update_tables(table: &mut toml_edit::Table, current: &str, next: &str) -> boo
     let mut modified = false;
 
     for key in ["dependencies", "dev-dependencies", "build-dependencies"] {
-        if let Some(item) = table.get_mut(key) {
-            if let Item::Table(dep_table) = item {
-                if update_dependency_table(dep_table, current, next) {
-                    modified = true;
-                }
+        if let Some(Item::Table(dep_table)) = table.get_mut(key) {
+            if update_dependency_table(dep_table, current, next) {
+                modified = true;
             }
         }
     }
@@ -138,11 +136,9 @@ fn update_tables(table: &mut toml_edit::Table, current: &str, next: &str) -> boo
     // Recurse into nested tables (e.g. target.'cfg(...)'.dependencies)
     let keys: Vec<String> = table.iter().map(|(k, _)| k.to_string()).collect();
     for key in keys {
-        if let Some(item) = table.get_mut(&key) {
-            if let Item::Table(sub_table) = item {
-                if update_tables(sub_table, current, next) {
-                    modified = true;
-                }
+        if let Some(Item::Table(sub_table)) = table.get_mut(&key) {
+            if update_tables(sub_table, current, next) {
+                modified = true;
             }
         }
     }
