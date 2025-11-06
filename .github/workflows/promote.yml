@@ -38,6 +38,18 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: Prepare push credentials
+        if: ${{ env.DRY_RUN != 'true' }}
+        env:
+          PROMOTE_PUSH_TOKEN: ${{ secrets.PROMOTE_PUSH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PROMOTE_PUSH_TOKEN:-}" ]; then
+            echo "PROMOTE_PUSH_TOKEN secret is required for promotion pushes." >&2
+            exit 1
+          fi
+          git remote set-url origin "https://x-access-token:${PROMOTE_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
       - name: Bump versions on testing
         id: bump
         env:
