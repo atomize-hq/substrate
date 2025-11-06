@@ -48,18 +48,18 @@ jobs:
           git fetch origin testing
           git checkout testing
           git reset --hard origin/testing
-
+          
           CURRENT_VERSION=$(cargo metadata --no-deps --format-version 1 | python3 - <<'PY'
-import json, sys
-
-data = json.load(sys.stdin)
-for pkg in data["packages"]:
-    if pkg["name"] == "substrate":
-        print(pkg["version"])
-        break
-else:
-    raise SystemExit("substrate package not found")
-PY
+          import json, sys
+          
+          data = json.load(sys.stdin)
+          for pkg in data["packages"]:
+              if pkg["name"] == "substrate":
+                  print(pkg["version"])
+                  break
+          else:
+              raise SystemExit("substrate package not found")
+          PY
           )
 
           echo "current_version=${CURRENT_VERSION}" >> "$GITHUB_OUTPUT"
