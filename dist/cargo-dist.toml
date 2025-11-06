@@ -9,6 +9,8 @@ targets = [
 ]
 # We ship our own curated install scripts, so skip generating templated installers.
 installers = []
+# Keep release CI focused on tag pushes; workflow_dispatch runs are handled via promotion.
+pr-run-mode = "skip"
 
 [dist.artifacts]
 # Keep the automatically generated source tarball and checksums.
