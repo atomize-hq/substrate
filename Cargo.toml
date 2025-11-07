@@ -25,6 +25,10 @@ env_logger = "0.11"
 substrate-shell = { version = "0.2.0", path = "crates/shell" }
 substrate-shim = { version = "0.2.0", path = "crates/shim" }
 
+[package.metadata.dist]
+dist = true
+binaries = ["substrate", "substrate-shim"]
+
 [workspace]
 resolver = "2"
 members = [

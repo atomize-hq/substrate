@@ -11,7 +11,7 @@
 .PARAMETER Prefix
     Installation prefix (defaults to %LOCALAPPDATA%\Substrate).
 .PARAMETER ArtifactDir
-    Optional directory containing pre-downloaded release artifacts (per-app zips and support bundle).
+    Optional directory containing pre-downloaded host bundle(s) and SHA256SUMS.
 .PARAMETER BaseUrl
     Base URL for hosted releases (defaults to GitHub releases).
 .PARAMETER NoWorld
@@ -62,10 +62,7 @@ if ([string]::IsNullOrWhiteSpace($versionNormalized)) {
     Write-ErrorAndExit "Version parameter cannot be empty"
 }
 $versionTag = if ($Version.StartsWith('v')) { $Version } else { "v$versionNormalized" }
-$packages = @('substrate', 'world-agent', 'substrate-forwarder', 'host-proxy')
-$targetTriple = 'x86_64-pc-windows-msvc'
-$artifactExtension = '.zip'
-$supportArtifact = 'substrate-support.zip'
+$bundleName = "substrate-v$versionNormalized-windows_x86_64.zip"
 $checksumName = 'SHA256SUMS'
 $dry = $DryRun.IsPresent
 
@@ -74,9 +71,8 @@ if (-not $dry) {
     New-Item -ItemType Directory -Path $tempRoot | Out-Null
 }
 $payloadRoot = Join-Path $tempRoot 'payload'
-$binStaging = Join-Path $payloadRoot 'bin'
 if (-not $dry) {
-    New-Item -ItemType Directory -Force -Path $binStaging | Out-Null
+    New-Item -ItemType Directory -Force -Path $payloadRoot | Out-Null
 }
 
 $artifactDirectory = if ($PSBoundParameters.ContainsKey('ArtifactDir')) {
@@ -140,73 +136,45 @@ function Verify-Checksum {
 }
 
 try {
-    foreach ($pkg in $packages) {
-        $artifactName = "$pkg-$targetTriple$artifactExtension"
-        $artifactDest = Join-Path $tempRoot $artifactName
-        $localSource = Resolve-LocalArtifact $artifactName
+    $bundleDest = Join-Path $tempRoot $bundleName
+    $localBundle = Resolve-LocalArtifact $bundleName
 
-        if ($localSource) {
-            if ($dry) {
-                Write-Log "[dry-run] Copy-Item -Path $localSource -Destination $artifactDest"
-            } else {
-                Copy-Item -Path $localSource -Destination $artifactDest -Force
-            }
-        } else {
-            $downloadUrl = "$BaseUrl/$versionTag/$artifactName"
-            Write-Log "Downloading $artifactName from $downloadUrl"
-            if ($dry) {
-                Write-Log "[dry-run] Invoke-WebRequest -Uri $downloadUrl -OutFile $artifactDest"
-            } else {
-                Invoke-WebRequest -Uri $downloadUrl -OutFile $artifactDest
-            }
-        }
-
-        if ($checksumsAvailable -and -not $dry) {
-            Verify-Checksum $checksumPath $artifactName $artifactDest
-        }
-
-        $extractDir = Join-Path $tempRoot "extract-$pkg"
+    if ($localBundle) {
         if ($dry) {
-            Write-Log "[dry-run] Expand-Archive -Path $artifactDest -DestinationPath $extractDir -Force"
-            continue
-        }
-
-        Expand-Archive -Path $artifactDest -DestinationPath $extractDir -Force
-        $sourceDir = Join-Path $extractDir 'bin'
-        if (-not (Test-Path $sourceDir)) { $sourceDir = $extractDir }
-        Get-ChildItem -Path $sourceDir -File | Where-Object { $_.Name -notmatch 'README|LICENSE|CHANGELOG|\.md$' } |
-            ForEach-Object {
-                Copy-Item -Path $_.FullName -Destination (Join-Path $binStaging $_.Name) -Force
-            }
-    }
-
-    $supportDest = Join-Path $tempRoot $supportArtifact
-    $supportSource = Resolve-LocalArtifact $supportArtifact
-    if ($supportSource) {
-        if ($dry) {
-            Write-Log "[dry-run] Copy-Item -Path $supportSource -Destination $supportDest"
+            Write-Log "[dry-run] Copy-Item -Path $localBundle -Destination $bundleDest"
         } else {
-            Copy-Item -Path $supportSource -Destination $supportDest -Force
+            Copy-Item -Path $localBundle -Destination $bundleDest -Force
         }
     } else {
-        $supportUrl = "$BaseUrl/$versionTag/$supportArtifact"
-        Write-Log "Downloading $supportArtifact from $supportUrl"
+        $bundleUrl = "$BaseUrl/$versionTag/$bundleName"
+        Write-Log "Downloading $bundleName from $bundleUrl"
         if ($dry) {
-            Write-Log "[dry-run] Invoke-WebRequest -Uri $supportUrl -OutFile $supportDest"
+            Write-Log "[dry-run] Invoke-WebRequest -Uri $bundleUrl -OutFile $bundleDest"
         } else {
-            Invoke-WebRequest -Uri $supportUrl -OutFile $supportDest
+            Invoke-WebRequest -Uri $bundleUrl -OutFile $bundleDest
         }
     }
-    if ($checksumsAvailable -and -not $dry -and (Test-Path $supportDest)) {
-        Verify-Checksum $checksumPath $supportArtifact $supportDest
+
+    if ($checksumsAvailable -and -not $dry) {
+        Verify-Checksum $checksumPath $bundleName $bundleDest
     }
+
     if ($dry) {
-        Write-Log "[dry-run] Expand-Archive -Path $supportDest -DestinationPath $payloadRoot -Force"
+        Write-Log "[dry-run] Expand-Archive -Path $bundleDest -DestinationPath $payloadRoot -Force"
     } else {
-        Expand-Archive -Path $supportDest -DestinationPath $payloadRoot -Force
+        Expand-Archive -Path $bundleDest -DestinationPath $payloadRoot -Force
     }
 
-    $releaseRoot = $payloadRoot
+    if ($dry) {
+        $releaseRoot = Join-Path $payloadRoot 'SIMULATED_ROOT'
+    } else {
+        $entries = @(Get-ChildItem -Path $payloadRoot)
+        if ($entries.Count -eq 1 -and $entries[0].PSIsContainer) {
+            $releaseRoot = $entries[0].FullName
+        } else {
+            $releaseRoot = $payloadRoot
+        }
+    }
 
     $versionsDir = Join-Path $Prefix 'versions'
     $versionDir = Join-Path $versionsDir $versionNormalized

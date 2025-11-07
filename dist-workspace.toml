@@ -11,6 +11,8 @@ ci = "github"
 installers = []
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+# Limit releases to the binaries the installers require.
+packages = ["host-proxy", "substrate", "substrate-forwarder", "world-agent"]
 # Release CI should only run on tag pushes; use promotion workflow + release tags for verification.
 pr-run-mode = "skip"
 allow-dirty = ["ci"]

@@ -1,6 +1,6 @@
 [package]
 name = "host-proxy"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Atomize"]
 description = "Host-side API gateway for Agent API with auth, rate limiting, and request forwarding"
@@ -41,3 +41,6 @@ tempfile = "3"
 
 [target.'cfg(unix)'.dependencies]
 hyperlocal = "0.9"
+
+[package.metadata.dist]
+dist = true

@@ -166,6 +166,78 @@ Key functional requirements captured by those scripts:
 Until release automation produces the same payload, the new installers will
 continue to fail when they cannot find those files in the GitHub release.
 
+#### 3.5.1 Artifact & Dependency Matrix
+
+The last manual cut (`release/0.2.0-beta/` in commit
+[`e350bdb`](https://github.com/atomize-hq/substrate/tree/e350bdb1355fc5a7daa742b9a0524457a53b1025))
+packaged a complete `bin/ + docs/ + scripts/` tree per host platform. Reinstating
+the one-command installers requires every artifact in the table below:
+
+| Artifact | Produced from | Targets / format | Consumed by | Notes |
+| --- | --- | --- | --- | --- |
+| `substrate` (host CLI) | `cargo build -p substrate` | `aarch64/x86_64` for Linux & macOS (`.tar.gz`), `x86_64-pc-windows-msvc` (`.zip`) | All hosts | Provides the CLI, shim deployer, and `world doctor`; copied to `~/.substrate/bin` and used by every verification command. |
+| `substrate-shim` (PATH interceptor) | `cargo build -p substrate` (binary target `substrate-shim`) | Same as host CLI targets | All hosts | The shim is required for PATH interception and fast policy lookups; it must ship next to `substrate` so `install-substrate.{sh,ps1}` can deploy/update shims without rebuilding. |
+| `world-agent` (guest daemon) | `cargo build -p world-agent` | Linux glibc: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` (`.tar.gz`) | Linux systemd service, macOS Lima VM, Windows WSL | Linux hosts install it directly; macOS/Windows copy the same binary into their guest (`bin/linux/world-agent`) before enabling `substrate-world-agent.service`. |
+| `substrate-forwarder` (named-pipe bridge) | `cargo build -p substrate-forwarder` | `x86_64-pc-windows-msvc` (`.zip`) | Windows host | Launched by `scripts/windows/wsl-warm.ps1` / `start-forwarder.ps1` to proxy requests from the host CLI into WSL via named pipe or optional TCP bridge. |
+| `host-proxy` | `cargo build -p host-proxy` | All host triples (`.tar.gz` / `.zip`) | Linux/macOS/Windows hosts | Runs alongside `substrate` when agent APIs need an HTTP(S) proxy; PowerShell uninstall explicitly removes it, so releases must continue to ship the binary. |
+| `substrate-support.tar.gz` / `.zip` | `dist/scripts/collect-supporting-artifacts.sh` | Platform-agnostic | All installers | Bundles `docs/{INSTALLATION,CONFIGURATION,WORLD}.md` plus `scripts/linux`, `scripts/mac`, `scripts/windows`, `scripts/wsl`, and `scripts/substrate` so every host has the Lima/WSL helpers, systemd units, doctor/smoke tests, and uninstallers. |
+
+`release.yml` will continue to build every row above at tag time, but the
+release page will stay clean: a follow-on “bundle” job will combine the
+per-crate outputs into **one archive per host target** (matching the legacy
+`release/<target>` layout) and upload only those bundles plus the support
+tarball/zip. All other tarballs remain as workflow artifacts for debugging, so
+users see exactly five public downloads instead of dozens.
+
+#### 3.5.2 Guest World Provisioning Flow (Legacy Reference)
+
+- **macOS (Lima)** – `install-substrate.sh` shells into `scripts/mac/lima-warm.sh`
+  (which templatises `scripts/mac/lima/substrate.yaml` via `envsubst`) to boot a
+  `substrate` Lima VM with Ubuntu 24.04, nftables, dnsmasq, and systemd enabled.
+  After the VM is running, the installer copies the Linux `world-agent` binary
+  into `/usr/local/bin/substrate-world-agent`, installs the unit from
+  `scripts/mac/substrate-world-agent.service`, and starts it via `limactl shell
+  substrate sudo systemctl enable --now substrate-world-agent`. Health is
+  verified with `scripts/mac/lima-doctor.sh` plus `scripts/mac/smoke.sh`.
+- **Windows (WSL)** – `scripts/windows/install-substrate.ps1` unwraps the support
+  bundle so it can run `scripts/windows/wsl-warm.ps1`. That helper downloads a
+  Ubuntu Noble WSL image when necessary, runs `scripts/wsl/provision.sh` inside
+  the distribution to install nftables/seccomp/systemd units, places the Linux
+  `world-agent` under `/usr/local/bin/substrate-world-agent`, and restarts the
+  service. It then ensures `substrate-forwarder.exe` is available, launches it
+  with `--pipe \\.\pipe\substrate-agent`, and validates connectivity using
+  `scripts/windows/pipe-status.ps1`, `wsl-doctor.ps1`, and `wsl-smoke.ps1`.
+- **Linux hosts** – `install-substrate.sh` installs `world-agent` directly under
+  `/usr/local/bin`, writes `/etc/systemd/system/substrate-world-agent.service`
+  (with hardened `ReadWritePaths`, seccomp prerequisites, and
+  `SUBSTRATE_AGENT_TCP_PORT=61337`), and reloads/enables the unit before running
+  `substrate world doctor --json`.
+- **Support bundle checks** – Regardless of platform, installers rely on the
+  support archive for uninstallers, `lima-stop.sh`, `windows/start-forwarder.ps1`,
+  and smoke suites, so missing scripts break the acceptance checks even if the
+  binaries exist.
+
+#### 3.5.3 Automated Release Acceptance Criteria
+
+1. GitHub Releases must attach **only** the per-target aggregate bundles
+   (`substrate-v<ver>-<target>.{tar.gz,zip}`) plus `substrate-support.{tar.gz,zip}`
+   and matching checksum files, keeping the release UI uncluttered.
+2. Each bundle has to unpack into the legacy layout (`bin/`, `bin/linux/`,
+   `docs/`, `scripts/`) that already contains every artifact from §3.5.1 so the
+   installers perform zero additional downloads.
+3. `substrate-support.tar.gz` and `substrate-support.zip` must be published for
+   every tag, contain the full `docs/` set plus `scripts/{linux,mac,windows,wsl,substrate}`,
+   and remain byte-for-byte reproducible so checksum verification works.
+4. `SHA256SUMS` must include entries for both the aggregate bundles and the
+   support bundle; installers will refuse to run if verification fails.
+5. `dist-manifest.json` needs to list the per-crate outputs and the aggregate
+   bundles so the release job fails early if `cargo-dist` (or the bundler) skips
+   a component.
+6. A release is considered complete only if `install-substrate.sh` (Linux/macOS)
+   and `install-substrate.ps1` (Windows) can consume the aggregated bundles,
+   deploy shims, provision Lima/WSL, and run the bundled doctor/smoke scripts
+   without manual intervention.
+
 ### 3.6 Linux World Hardening
 - **Status**: Completed (gated in `crates/world`).
 - **Behavior**:
@@ -218,6 +290,52 @@ continue to fail when they cannot find those files in the GitHub release.
      the one-command experience.
    - Document the flow in `docs/DEVELOPMENT.md` / `docs/CONFIGURATION.md` and
      capture verification steps in `docs/RELEASE_PIPELINE_PLAN.tasks.json`.
+
+### 5.1 Multi-artifact Release Blueprint
+
+- **Model the binaries as first-class dist apps** – Add
+  `[package.metadata.dist]` blocks for `substrate`, `world-agent`,
+  `substrate-forwarder`, and `host-proxy`, enabling them inside
+  `dist-workspace.toml`. World agent only needs glibc Linux targets (x86_64 and
+  aarch64); `substrate-forwarder` is Windows-only; `host-proxy` should match the
+  host target matrix so uninstall scripts stay accurate.
+- **Add a bundler job per tag** – After `cargo dist build` finishes, a new
+  workflow step downloads the per-crate archives plus `substrate-support.*`,
+  recreates the legacy layout for each host triple, repackages it as
+  `substrate-v<ver>-<target>.{tar.gz,zip}`, and generates checksums. Only these
+  bundles (and the support archive) are uploaded to the GitHub Release, while the
+  raw per-crate artifacts stay in the workflow for debugging.
+- **Keep installers custom, but point them at the bundles** – Leave `installers
+  = []` in the dist config so we continue shipping the hand-written shell/PowerShell
+  flows. `install-substrate.{sh,ps1}` just download the single bundle for their
+  host target, unfold it, then proceed with Lima/WSL provisioning.
+- **Retain and harden the support bundle step** – The existing
+  `dist.artifacts.extra` entry that runs
+  `dist/scripts/collect-supporting-artifacts.sh` remains the canonical way to
+  produce `substrate-support.{tar.gz,zip}`; the bundler job consumes those files
+  when building each host archive.
+- **Pre-publish verification** – Developers and CI should run
+  `cargo dist plan --ci github --output-format=json` (and ideally
+  `cargo dist build --artifacts=local`) before tagging to confirm every crate and
+  bundle is scheduled. Publish should be blocked if `SHA256SUMS` lacks a row for
+  any required bundle/support artifact.
+
+### 5.2 Installer Re-alignment Outline
+
+- **Linux/macOS shell** – Keep `install-substrate.sh` as the single entry point,
+  but simplify it to download exactly one bundle (based on host triple), verify
+  its checksum, and then proceed with the existing steps (link `bin/`, stage
+  `bin/linux/world-agent`, unpack `scripts/`, run Lima provisioning + doctor +
+  smoke). No additional per-crate downloads are needed post-bundle.
+- **Windows PowerShell** – Update `install-substrate.ps1` to download the
+  Windows bundle, verify its checksum (local or remote), stage `bin/` +
+  `bin\linux/`, then run `wsl-warm.ps1`, `wsl-doctor.ps1`, `pipe-status.ps1`,
+  and `wsl-smoke.ps1` so the one-command UX fails fast when WSL services or the
+  forwarder misbehave.
+- **Verification & docs** – Add a release checklist that records the doctor and
+  smoke outputs per platform, document the new artifact names/URLs in
+  `docs/INSTALLATION.md` and `docs/CONFIGURATION.md`, and keep
+  `docs/RELEASE_PIPELINE_PLAN.tasks.json` updated with the validation evidence.
 
 ## 6. Maintenance & Future Enhancements
 

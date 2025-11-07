@@ -142,6 +142,36 @@
       "timestamp": "2025-11-07T00:50:00Z",
       "task_id": "release-workflow-overhaul",
       "message": "Adjusted release.yml to match v*-style tags, allow customized CI via allow-dirty, and install libseccomp dependencies for Linux dist builds; release run 19153854458 on tag v0.2.0 completed successfully."
+    },
+    {
+      "timestamp": "2025-11-07T18:05:00Z",
+      "task_id": "installer-packaging-audit",
+      "message": "Captured the artifact/dependency matrix and Lima/WSL provisioning flow in RELEASE_PIPELINE_PLAN.md §3.5.1–3.5.3 so the installer acceptance criteria are explicit."
+    },
+    {
+      "timestamp": "2025-11-07T18:07:00Z",
+      "task_id": "multi-artifact-release",
+      "message": "Outlined the cargo-dist multi-app blueprint (world-agent, forwarder, host-proxy, support bundle guardrails) in §5.1 to unblock release.yml changes."
+    },
+    {
+      "timestamp": "2025-11-07T18:09:00Z",
+      "task_id": "installer-realignment",
+      "message": "Documented the installer download/verification plan plus doctor/smoke gating in §5.2 to prepare for the one-command UX rework."
+    },
+    {
+      "timestamp": "2025-11-07T18:35:00Z",
+      "task_id": "multi-artifact-release",
+      "message": "Clarified that tag builds keep per-crate artifacts internal and publish only the aggregated per-target bundles + support archives, aligning §3.5.3 and §5.1 with the desired release UX."
+    },
+    {
+      "timestamp": "2025-11-07T19:30:00Z",
+      "task_id": "multi-artifact-release",
+      "message": "Implemented assemble-release-bundles.sh, updated release.yml to run the bundler before publishing, and rewired installers to consume the new host bundles."
+    },
+    {
+      "timestamp": "2025-11-07T19:40:00Z",
+      "task_id": "multi-artifact-release",
+      "message": "Ensured cargo-dist publishes substrate-shim alongside substrate (metadata + docs) so bundles include the PATH interceptor by default."
     }
   ],
   "tasks": [
@@ -370,9 +400,9 @@
         "docs/RELEASE_PIPELINE_PLAN.md#33-release-automation-releaseyml"
       ],
       "steps": [
-        "Model world-agent and substrate-forwarder as additional dist apps or add a post-build packaging step.",
-        "Package support scripts (docs, Lima/WSL helpers, PowerShell modules) into a tarball/zip with checksums.",
-        "Attach all artifacts + sha files to the GitHub release; update docs with download locations."
+        "Model world-agent, substrate-forwarder, and host-proxy as dist apps so tag builds emit per-crate archives for every required target.",
+        "Add a bundler job in release.yml that stitches those outputs (plus substrate-support.{tar.gz,zip}) into a single archive per host target and generates SHA rows.",
+        "Upload only the per-target bundles + support archives to the GitHub Release while retaining per-crate outputs as workflow artifacts; document the download locations."
       ],
       "dependencies": [
         "installer-packaging-audit"
@@ -389,7 +419,7 @@
         "docs/DEVELOPMENT.md"
       ],
       "steps": [
-        "Wire the installers to fetch the new world-agent/forwarder/support assets.",
+        "Wire the installers to fetch the single host bundle + support archive for their platform and verify checksums before unpacking.",
         "Re-enable Lima/WSL provisioning logic and ensure systemd services are registered.",
         "Document verification commands (doctor/smoke) and update tasks JSON with the run results."
       ],

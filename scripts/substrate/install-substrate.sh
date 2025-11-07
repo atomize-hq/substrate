@@ -25,8 +25,6 @@ ORIGINAL_PATH="${PATH}"
 PKG_MANAGER=""
 APT_UPDATED=0
 SUDO_CMD=()
-SUPPORTED_PACKAGES=("substrate" "world-agent" "substrate-forwarder" "host-proxy")
-SUPPORT_TAR_NAME="substrate-support.tar.gz"
 
 log() {
   printf '[%s] %s\n' "${INSTALLER_NAME}" "$*" >&2
@@ -54,7 +52,7 @@ Options:
   --no-world           Skip world backend provisioning
   --no-shims           Skip shim deployment
   --dry-run            Print actions without executing
-  --artifact-dir <dir> Use pre-downloaded artifacts (per-app archives + support bundle)
+  --artifact-dir <dir> Use pre-downloaded host bundle + SHA256SUMS
   --archive <dir>      Alias for --artifact-dir (deprecated)
   -h, --help           Show this message
 EOF
@@ -596,75 +594,80 @@ target_triple_macos() {
   esac
 }
 
-copy_package_binaries() {
-  local package_root="$1"
-  local dest_dir="$2"
-  local source_dir="$package_root"
-
-  if [[ -d "${package_root}/bin" ]]; then
-    source_dir="${package_root}/bin"
-  fi
-
-  mkdir -p "${dest_dir}"
-  shopt -s nullglob
-  for file in "${source_dir}"/*; do
-    if [[ -f "${file}" ]]; then
-      local name
-      name="$(basename "${file}")"
-      case "${name}" in
-        README*|LICENSE*|CHANGELOG*|*.md)
-          continue
-          ;;
-      esac
-      cp "${file}" "${dest_dir}/${name}"
-      chmod +x "${dest_dir}/${name}" 2>/dev/null || true
-    fi
-  done
-  shopt -u nullglob
+bundle_label_for_target() {
+  local target="$1"
+  case "${target}" in
+    x86_64-unknown-linux-gnu)
+      printf 'linux_x86_64'
+      ;;
+    aarch64-unknown-linux-gnu)
+      printf 'linux_aarch64'
+      ;;
+    x86_64-apple-darwin)
+      printf 'macos_x86_64'
+      ;;
+    aarch64-apple-darwin)
+      printf 'macos_arm64'
+      ;;
+    *)
+      fatal "Unsupported release target: ${target}"
+      ;;
+  esac
 }
 
-prepare_unix_release_root() {
+bundle_archive_name() {
+  local label="$1"
+  printf 'substrate-v%s-%s.tar.gz' "${VERSION}" "${label}"
+}
+
+fetch_bundle_archive() {
+  local archive_name="$1"
+  local dest_path="$2"
+
+  if [[ -n "${ARTIFACT_DIR}" ]]; then
+    if [[ -d "${ARTIFACT_DIR}" && -f "${ARTIFACT_DIR}/${archive_name}" ]]; then
+      cp "${ARTIFACT_DIR}/${archive_name}" "${dest_path}"
+      return
+    fi
+    if [[ -f "${ARTIFACT_DIR}" && "$(basename "${ARTIFACT_DIR}")" == "${archive_name}" ]]; then
+      cp "${ARTIFACT_DIR}" "${dest_path}"
+      return
+    fi
+    fatal "Expected bundle '${archive_name}' not found in ${ARTIFACT_DIR}."
+  fi
+
+  download_artifact "${archive_name}" "${dest_path}"
+}
+
+prepare_bundle_payload() {
   local target_triple="$1"
   local release_root="$2"
   local checksums_path="$3"
-  local archive_ext=".tar.gz"
+
+  local label
+  label="$(bundle_label_for_target "${target_triple}")"
+  local archive_name
+  archive_name="$(bundle_archive_name "${label}")"
+  local archive_path="${TMPDIR}/${archive_name}"
+
+  fetch_bundle_archive "${archive_name}" "${archive_path}"
+  if [[ -n "${checksums_path}" ]]; then
+    verify_checksum "${archive_path}" "${checksums_path}" "${archive_name}"
+  fi
+
+  local extract_dir="${TMPDIR}/bundle-${label}"
+  rm -rf "${extract_dir}"
+  extract_archive "${archive_path}" "${extract_dir}"
+  local bundle_root
+  bundle_root="$(find_extracted_root "${extract_dir}")"
 
   rm -rf "${release_root}"
-  mkdir -p "${release_root}/bin" "${release_root}/docs" "${release_root}/scripts"
-
-  for crate in "${SUPPORTED_PACKAGES[@]}"; do
-    local artifact="${crate}-${target_triple}${archive_ext}"
-    local archive_path="${TMPDIR}/${artifact}"
-    local extract_dir="${TMPDIR}/extract-${crate}"
-
-    download_artifact "${artifact}" "${archive_path}"
-    if [[ -n "${checksums_path}" ]]; then
-      verify_checksum "${archive_path}" "${checksums_path}" "${artifact}"
-    fi
-
-    rm -rf "${extract_dir}"
-    extract_archive "${archive_path}" "${extract_dir}"
-    local package_root
-    package_root="$(find_extracted_root "${extract_dir}")"
-    copy_package_binaries "${package_root}" "${release_root}/bin"
-  done
-
-  local support_archive="${TMPDIR}/${SUPPORT_TAR_NAME}"
-  download_artifact "${SUPPORT_TAR_NAME}" "${support_archive}"
-  if [[ -n "${checksums_path}" ]]; then
-    verify_checksum "${support_archive}" "${checksums_path}" "${SUPPORT_TAR_NAME}"
+  mkdir -p "${release_root}"
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    printf '[%s][dry-run] stage bundle contents from %s into %s\n' "${INSTALLER_NAME}" "${bundle_root}" "${release_root}" >&2
+    return
   fi
-
-  local support_extract="${TMPDIR}/support-artifacts"
-  rm -rf "${support_extract}"
-  extract_archive "${support_archive}" "${support_extract}"
-
-  if [[ -d "${support_extract}/docs" ]]; then
-    cp -R "${support_extract}/docs/." "${release_root}/docs/"
-  fi
-  if [[ -d "${support_extract}/scripts" ]]; then
-    cp -R "${support_extract}/scripts/." "${release_root}/scripts/"
-  fi
+  cp -R "${bundle_root}/." "${release_root}/"
 }
 
 extract_archive() {
@@ -1044,7 +1047,7 @@ install_macos() {
     checksums_path=""
   fi
 
-  prepare_unix_release_root "${target_triple}" "${release_root}" "${checksums_path}"
+  prepare_bundle_payload "${target_triple}" "${release_root}" "${checksums_path}"
 
   local versions_dir="${PREFIX}/versions"
   local version_dir="${versions_dir}/${VERSION}"
@@ -1099,7 +1102,7 @@ install_linux() {
     checksums_path=""
   fi
 
-  prepare_unix_release_root "${target_triple}" "${release_root}" "${checksums_path}"
+  prepare_bundle_payload "${target_triple}" "${release_root}" "${checksums_path}"
 
   local versions_dir="${PREFIX}/versions"
   local version_dir="${versions_dir}/${VERSION}"
