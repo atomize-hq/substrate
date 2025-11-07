@@ -167,13 +167,30 @@ copy_bin_from_artifact() {
   local root
   root="$(find_extracted_root "$extract_dir")"
   local bin_dir="$root/bin"
-
-  if [[ -d "$bin_dir" ]]; then
-    mkdir -p "$dest"
-    cp -a "$bin_dir"/. "$dest/"
-  else
-    fatal "Archive ${artifact} does not contain a bin/ directory"
+  if [[ ! -d "$bin_dir" ]]; then
+    bin_dir="$root"
   fi
+
+  if [[ ! -d "$bin_dir" ]]; then
+    fatal "Archive ${artifact} does not contain expected binaries"
+  fi
+
+  mkdir -p "$dest"
+  shopt -s nullglob
+  for file in "$bin_dir"/*; do
+    if [[ -f "$file" ]]; then
+      local name
+      name="$(basename "$file")"
+      case "$name" in
+        README*|LICENSE*|CHANGELOG*|*.md)
+          continue
+          ;;
+      esac
+      cp "$file" "$dest/$name"
+      chmod +x "$dest/$name" 2>/dev/null || true
+    fi
+  done
+  shopt -u nullglob
 }
 
 stage_support_assets() {
