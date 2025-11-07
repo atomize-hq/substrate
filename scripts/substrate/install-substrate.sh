@@ -4,9 +4,10 @@ set -euo pipefail
 readonly INSTALLER_NAME="substrate-install"
 # shellcheck disable=SC2034 # used for release metadata
 readonly INSTALLER_VERSION="0.1.0-dev"
-readonly DEFAULT_VERSION="0.2.0-beta"
+readonly DEFAULT_VERSION="0.2.0"
 readonly DEFAULT_PREFIX="${HOME}/.substrate"
 readonly DEFAULT_BASE_URL="https://github.com/atomize-hq/substrate/releases/download"
+readonly DEFAULT_LATEST_RELEASE_API="https://api.github.com/repos/atomize-hq/substrate/releases/latest"
 
 VERSION_RAW=""
 VERSION=""
@@ -17,6 +18,7 @@ NO_SHIMS=0
 DRY_RUN=0
 ARTIFACT_DIR="${SUBSTRATE_INSTALL_ARTIFACT_DIR:-${SUBSTRATE_INSTALL_ARCHIVE:-}}"
 BASE_URL="${SUBSTRATE_INSTALL_BASE_URL:-$DEFAULT_BASE_URL}"
+LATEST_RELEASE_API="${SUBSTRATE_INSTALL_RELEASES_API:-$DEFAULT_LATEST_RELEASE_API}"
 TMPDIR=""
 PLATFORM=""
 ARCH=""
@@ -407,8 +409,12 @@ parse_args() {
   done
 
   if [[ -z "${VERSION_RAW}" ]]; then
-    VERSION_RAW="${DEFAULT_VERSION}"
-    warn "No --version provided; defaulting to ${VERSION_RAW}"
+    if ! VERSION_RAW="$(fetch_latest_version)"; then
+      VERSION_RAW="${DEFAULT_VERSION}"
+      warn "No --version provided; defaulting to ${VERSION_RAW}"
+    else
+      log "No --version provided; using latest release ${VERSION_RAW}"
+    fi
   fi
 
   VERSION="${VERSION_RAW#v}"
@@ -416,6 +422,25 @@ parse_args() {
     fatal "Unable to determine version from '${VERSION_RAW}'"
   fi
   VERSION_TAG="v${VERSION}"
+}
+
+fetch_latest_version() {
+  if [[ -z "${LATEST_RELEASE_API}" ]]; then
+    return 1
+  fi
+
+  local response
+  if ! response="$(curl -fsSL "${LATEST_RELEASE_API}" 2>/dev/null)"; then
+    return 1
+  fi
+
+  local tag
+  tag="$(printf '%s' "${response}" | jq -r '.tag_name // empty' 2>/dev/null || true)"
+  if [[ -z "${tag}" || "${tag}" == "null" ]]; then
+    return 1
+  fi
+
+  printf '%s\n' "${tag#v}"
 }
 
 prepare_tmpdir() {
@@ -523,23 +548,30 @@ download_artifact() {
 download_checksums() {
   local dest_path="$1"
 
+  local candidates=("SHA256SUMS" "sha256.sum")
+
   if [[ -n "${ARTIFACT_DIR}" ]]; then
-    local checksum_path="${ARTIFACT_DIR}/SHA256SUMS"
-    if [[ -f "${checksum_path}" ]]; then
-      download_file "${checksum_path}" "${dest_path}"
-      return 0
-    fi
-    warn "SHA256SUMS not found in ${ARTIFACT_DIR}; skipping checksum verification."
+    for candidate in "${candidates[@]}"; do
+      local checksum_path="${ARTIFACT_DIR}/${candidate}"
+      if [[ -f "${checksum_path}" ]]; then
+        download_file "${checksum_path}" "${dest_path}"
+        return 0
+      fi
+    done
+    warn "Checksum manifest not found in ${ARTIFACT_DIR}; skipping verification."
     return 1
   fi
 
-  local url="${BASE_URL}/${VERSION_TAG}/SHA256SUMS"
-  log "Downloading SHA256SUMS from ${url}"
-  if ! download_file "${url}" "${dest_path}"; then
-    warn "Failed to download SHA256SUMS; skipping checksum verification."
-    return 1
-  fi
-  return 0
+  for candidate in "${candidates[@]}"; do
+    local url="${BASE_URL}/${VERSION_TAG}/${candidate}"
+    log "Downloading ${candidate} from ${url}"
+    if download_file "${url}" "${dest_path}"; then
+      return 0
+    fi
+  done
+
+  warn "Failed to download checksum manifest; skipping verification."
+  return 1
 }
 
 verify_checksum() {
@@ -553,9 +585,9 @@ verify_checksum() {
   fi
 
   local expected
-  expected="$(grep "  ${artifact_name}$" "${checksums_path}" | awk '{print $1}' || true)"
+  expected="$(awk -v file="${artifact_name}" 'NF>=2 { name=$2; sub(/^\*/, "", name); if (name==file) { print $1; exit }}' "${checksums_path}" || true)"
   if [[ -z "${expected}" ]]; then
-    warn "Checksum entry for ${artifact_name} not found; skipping verification."
+    warn "Checksum entry for ${artifact_name} not found in $(basename "${checksums_path}")"
     return
   fi
 
@@ -627,7 +659,7 @@ prepare_unix_release_root() {
   local target_triple="$1"
   local release_root="$2"
   local checksums_path="$3"
-  local archive_ext=".tar.gz"
+  local archive_ext=".tar.xz"
 
   rm -rf "${release_root}"
   mkdir -p "${release_root}/bin" "${release_root}/docs" "${release_root}/scripts"
