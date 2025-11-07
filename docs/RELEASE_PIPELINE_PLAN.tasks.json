@@ -36,87 +36,102 @@
     {
       "timestamp": "2025-11-04T20:20:00Z",
       "task_id": "ci-testing-workflow",
-      "message": "Re-enabled cross builds after gating telemetry cdylib on musl; wiring dist profile." 
+      "message": "Re-enabled cross builds after gating telemetry cdylib on musl; wiring dist profile."
     },
     {
       "timestamp": "2025-11-04T20:25:00Z",
       "task_id": "ci-testing-workflow",
-      "message": "Adopted dist v0.30 plan/build pipeline via dist init; release workflow regenerated." 
+      "message": "Adopted dist v0.30 plan/build pipeline via dist init; release workflow regenerated."
     },
     {
       "timestamp": "2025-11-04T21:15:00Z",
       "task_id": "ci-testing-workflow",
-      "message": "Enabled workflow_call on ci-testing.yml so nightly can reuse the consolidated matrix jobs." 
+      "message": "Enabled workflow_call on ci-testing.yml so nightly can reuse the consolidated matrix jobs."
     },
     {
       "timestamp": "2025-11-04T21:20:00Z",
       "task_id": "nightly-workflow",
-      "message": "Created nightly.yml with skip-aware preflight, dist plan validation, targeted replay/world-agent suites, and automated failure issue reporting." 
+      "message": "Created nightly.yml with skip-aware preflight, dist plan validation, targeted replay/world-agent suites, and automated failure issue reporting."
     },
     {
       "timestamp": "2025-11-04T21:45:00Z",
       "task_id": "ci-testing-workflow",
-      "message": "Locally exercised ci-testing steps (fmt, clippy, build, test, doc); noted shellcheck/musl toolchain gaps on developer host and confirmed dist plan runs." 
+      "message": "Locally exercised ci-testing steps (fmt, clippy, build, test, doc); noted shellcheck/musl toolchain gaps on developer host and confirmed dist plan runs."
     },
     {
       "timestamp": "2025-11-04T21:55:00Z",
       "task_id": "ci-testing-workflow",
-      "message": "Added cargo rustc cdylib builds for telemetry on non-musl targets and restored cross job coverage for aarch64-unknown-linux-gnu with cdylib skip on musl." 
+      "message": "Added cargo rustc cdylib builds for telemetry on non-musl targets and restored cross job coverage for aarch64-unknown-linux-gnu with cdylib skip on musl."
     },
     {
       "timestamp": "2025-11-05T00:55:00Z",
       "task_id": "ci-testing-workflow",
-      "message": "Configured cross pre-build steps to install libseccomp for musl and GNU containers so telemetry and world crates link cleanly." 
+      "message": "Configured cross pre-build steps to install libseccomp for musl and GNU containers so telemetry and world crates link cleanly."
     },
     {
       "timestamp": "2025-11-05T01:05:00Z",
       "task_id": "world-hardening",
-      "message": "Gated seccomp baseline to non-musl targets and added runtime warning for musl builds to keep cross jobs green." 
+      "message": "Gated seccomp baseline to non-musl targets and added runtime warning for musl builds to keep cross jobs green."
     },
     {
       "timestamp": "2025-11-05T14:25:00Z",
       "task_id": "nightly-workflow",
-      "message": "Nightly extended tests now run dist plan --ci github --output-format=json to validate packaging manifests while release artifacts remain exclusive to release.yml." 
+      "message": "Nightly extended tests now run dist plan --ci github --output-format=json to validate packaging manifests while release artifacts remain exclusive to release.yml."
     },
     {
       "timestamp": "2025-11-05T14:55:00Z",
       "task_id": "cargo-dist-integration",
-      "message": "Plan confirmed: rewrite shell/PowerShell installers to download per-app cargo-dist archives and reconstruct the platform bundle locally, removing reliance on legacy fat tarballs." 
+      "message": "Plan confirmed: rewrite shell/PowerShell installers to download per-app cargo-dist archives and reconstruct the platform bundle locally, removing reliance on legacy fat tarballs."
     },
     {
       "timestamp": "2025-11-05T15:20:00Z",
       "task_id": "release-workflow-overhaul",
-      "message": "Updated release.yml to trigger on v* tags, gate publishing on tag refs, and keep cargo-dist plan/build/host stages aligned with the support bundle extras." 
+      "message": "Updated release.yml to trigger on v* tags, gate publishing on tag refs, and keep cargo-dist plan/build/host stages aligned with the support bundle extras."
     },
     {
       "timestamp": "2025-11-05T15:28:00Z",
       "task_id": "release-workflow-overhaul",
-      "message": "Recorded pr-run-mode=skip in dist-workspace.toml so release CI stays off PRs while preserving the default cargo-dist regeneration flow." 
+      "message": "Recorded pr-run-mode=skip in dist-workspace.toml so release CI stays off PRs while preserving the default cargo-dist regeneration flow."
     },
     {
       "timestamp": "2025-11-05T15:40:00Z",
       "task_id": "release-workflow-overhaul",
-      "message": "Evaluated adding a release dry-run helper but decided to keep the workflow tag-only to reduce noise in the Actions list." 
+      "message": "Evaluated adding a release dry-run helper but decided to keep the workflow tag-only to reduce noise in the Actions list."
     },
     {
       "timestamp": "2025-11-05T21:45:00Z",
       "task_id": "ci-testing-workflow",
-      "message": "Scoped ci-testing.yml triggers to testing-only pushes/PRs so main builds rely on promotion + release workflows." 
+      "message": "Scoped ci-testing.yml triggers to testing-only pushes/PRs so main builds rely on promotion + release workflows."
     },
     {
       "timestamp": "2025-11-05T21:55:00Z",
       "task_id": "promotion-workflow",
-      "message": "Added promote.yml with dry-run support, automated version bumping, CI guard checks, and optional tagging to fast-forward main from testing." 
+      "message": "Added promote.yml with dry-run support, automated version bumping, CI guard checks, and optional tagging to fast-forward main from testing."
     },
     {
       "timestamp": "2025-11-05T22:10:00Z",
       "task_id": "branch-protection-config",
-      "message": "Enforced testing/main rulesets (status checks, approvals, no force pushes) and locked the production environment to release tags on main." 
+      "message": "Enforced testing/main rulesets (status checks, approvals, no force pushes) and locked the production environment to release tags on main."
     },
     {
       "timestamp": "2025-11-05T22:30:00Z",
       "task_id": "nightly-workflow",
-      "message": "Split nightly scheduling into nightly-scheduler.yml so repository_dispatch events target testing while validation reuses ci-testing." 
+      "message": "Split nightly scheduling into nightly-scheduler.yml so repository_dispatch events target testing while validation reuses ci-testing."
+    },
+    {
+      "timestamp": "2025-11-07T00:15:00Z",
+      "task_id": "ci-testing-workflow",
+      "message": "Resolved the tools/version-bump clippy regression and confirmed CI Testing run 19145605184/19153633587 succeeded on testing before promotion."
+    },
+    {
+      "timestamp": "2025-11-07T00:25:00Z",
+      "task_id": "promotion-workflow",
+      "message": "Switched promote.yml to use the PROMOTE_PUSH_TOKEN, set explicit commit statuses, and reran the workflow (Actions run 19153833384) to fast-forward main without rewriting tags."
+    },
+    {
+      "timestamp": "2025-11-07T00:50:00Z",
+      "task_id": "release-workflow-overhaul",
+      "message": "Adjusted release.yml to match v*-style tags, allow customized CI via allow-dirty, and install libseccomp dependencies for Linux dist builds; release run 19153854458 on tag v0.2.0 completed successfully."
     }
   ],
   "tasks": [
@@ -240,7 +255,7 @@
     },
     {
       "id": "promotion-workflow",
-      "title": "Automate testing→main promotions",
+      "title": "Automate testing\u2192main promotions",
       "description": "Provide a reusable workflow that fast-forwards main from testing once CI is green and optionally tags a release.",
       "context": [
         ".github/workflows/promote.yml (new)",
@@ -286,7 +301,7 @@
         "docs/RELEASE_PIPELINE_PLAN.md"
       ],
       "steps": [
-        "Describe the feature → testing → main promotion path in docs/DEVELOPMENT.md.",
+        "Describe the feature \u2192 testing \u2192 main promotion path in docs/DEVELOPMENT.md.",
         "Record workflow names, triggers, and required CLI commands in docs/CONFIGURATION.md.",
         "Add quickstart instructions for running dist plan locally prior to tagging.",
         "Link to the nightly skip logic documentation for troubleshooting."
