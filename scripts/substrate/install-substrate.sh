@@ -27,13 +27,7 @@ ORIGINAL_PATH="${PATH}"
 PKG_MANAGER=""
 APT_UPDATED=0
 SUDO_CMD=()
-DEFAULT_SUPPORTED_PACKAGES=("substrate")
-if [[ -n "${SUBSTRATE_INSTALL_PACKAGES:-}" ]]; then
-  # shellcheck disable=SC2206 # intentional word splitting to allow space-separated overrides
-  SUPPORTED_PACKAGES=(${SUBSTRATE_INSTALL_PACKAGES})
-else
-  SUPPORTED_PACKAGES=("${DEFAULT_SUPPORTED_PACKAGES[@]}")
-fi
+SUPPORTED_PACKAGES=("substrate" "world-agent" "substrate-forwarder" "host-proxy")
 SUPPORT_TAR_NAME="substrate-support.tar.gz"
 
 log() {
