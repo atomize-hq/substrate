@@ -62,7 +62,7 @@ TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 mkdir -p "$OUTPUT_DIR"
-rm -rf "$OUTPUT_DIR"/*
+rm -rf "${OUTPUT_DIR:?}/"*
 
 WORK_DIR="$TMP_DIR/work"
 SUPPORT_DIR="$TMP_DIR/support"
