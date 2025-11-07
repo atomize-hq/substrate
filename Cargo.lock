@@ -10,7 +10,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agent-api-client"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "agent-api-types",
  "anyhow",
@@ -31,7 +31,7 @@ dependencies = [
 
 [[package]]
 name = "agent-api-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "agent-api-types",
  "async-trait",
@@ -45,7 +45,7 @@ dependencies = [
 
 [[package]]
 name = "agent-api-types"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -446,9 +446,9 @@ checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
 
 [[package]]
 name = "cc"
-version = "1.2.44"
+version = "1.2.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37521ac7aabe3d13122dc382493e20c9416f299d2ccd5b3a5340a2570cdeb0f3"
+checksum = "35900b6c8d709fb1d854671ae27aeaa9eec2f8b01b364e1619a40da3e6fe2afe"
 dependencies = [
  "find-msvc-tools",
  "shlex",
@@ -1384,7 +1384,7 @@ dependencies = [
 
 [[package]]
 name = "host-proxy"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "agent-api-client",
  "agent-api-core",
@@ -1815,22 +1815,22 @@ checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 
 [[package]]
 name = "jiff"
-version = "0.2.15"
+version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be1f93b8b1eb69c77f24bbb0afdf66f54b632ee39af40ca21c4365a1d7347e49"
+checksum = "49cce2b81f2098e7e3efc35bc2e0a6b7abec9d34128283d7a26fa8f32a6dbb35"
 dependencies = [
  "jiff-static",
  "log",
  "portable-atomic",
  "portable-atomic-util",
- "serde",
+ "serde_core",
 ]
 
 [[package]]
 name = "jiff-static"
-version = "0.2.15"
+version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03343451ff899767262ec32146f6d559dd759fdadf42ff0e227c7c48f72594b4"
+checksum = "980af8b43c3ad5d8d349ace167ec8170839f753a42d233ba19e08afe1850fa69"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3180,7 +3180,7 @@ dependencies = [
 
 [[package]]
 name = "substrate"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "env_logger",
@@ -3211,7 +3211,7 @@ dependencies = [
 
 [[package]]
 name = "substrate-common"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3223,7 +3223,7 @@ dependencies = [
 
 [[package]]
 name = "substrate-forwarder"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "atty",
@@ -3292,7 +3292,7 @@ dependencies = [
 
 [[package]]
 name = "substrate-shell"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "agent-api-client",
  "agent-api-types",
@@ -3350,7 +3350,7 @@ dependencies = [
 
 [[package]]
 name = "substrate-shim"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -3375,7 +3375,7 @@ dependencies = [
 
 [[package]]
 name = "substrate-telemetry"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "lazy_static",
@@ -3389,7 +3389,7 @@ dependencies = [
 
 [[package]]
 name = "substrate-trace"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4663,7 +4663,7 @@ dependencies = [
 
 [[package]]
 name = "world-agent"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "agent-api-core",
  "agent-api-types",
