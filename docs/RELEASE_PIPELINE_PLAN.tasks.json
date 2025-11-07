@@ -109,6 +109,16 @@
       "message": "Added promote.yml with dry-run support, automated version bumping, CI guard checks, and optional tagging to fast-forward main from testing."
     },
     {
+      "timestamp": "2025-11-07T00:20:00Z",
+      "task_id": "installer-packaging-audit",
+      "message": "Documented that the current cargo-dist release only publishes substrate binaries; world-agent/forwarder/support bundles are missing so the new installers cannot succeed."
+    },
+    {
+      "timestamp": "2025-11-07T00:25:00Z",
+      "task_id": "release-workflow-overhaul",
+      "message": "Updated RELEASE_PIPELINE_PLAN.md to reflect actual artifacts and copied canonical script references from commit e350bdb for the upcoming one-command installer redesign."
+    },
+    {
       "timestamp": "2025-11-05T22:10:00Z",
       "task_id": "branch-protection-config",
       "message": "Enforced testing/main rulesets (status checks, approvals, no force pushes) and locked the production environment to release tags on main."
@@ -255,7 +265,7 @@
     },
     {
       "id": "promotion-workflow",
-      "title": "Automate testing\u2192main promotions",
+      "title": "Automate testing→main promotions",
       "description": "Provide a reusable workflow that fast-forwards main from testing once CI is green and optionally tags a release.",
       "context": [
         ".github/workflows/promote.yml (new)",
@@ -301,7 +311,7 @@
         "docs/RELEASE_PIPELINE_PLAN.md"
       ],
       "steps": [
-        "Describe the feature \u2192 testing \u2192 main promotion path in docs/DEVELOPMENT.md.",
+        "Describe the feature → testing → main promotion path in docs/DEVELOPMENT.md.",
         "Record workflow names, triggers, and required CLI commands in docs/CONFIGURATION.md.",
         "Add quickstart instructions for running dist plan locally prior to tagging.",
         "Link to the nightly skip logic documentation for troubleshooting."
@@ -329,6 +339,62 @@
       "dependencies": [
         "branch-protection-config",
         "documentation-updates"
+      ]
+    },
+    {
+      "id": "installer-packaging-audit",
+      "title": "Audit legacy installers and define packaging requirements",
+      "description": "Study the scripts from commit e350bdb (Linux/macOS shell + Windows PowerShell) to enumerate every artifact, dependency, and service the one-command installer must provision.",
+      "context": [
+        "docs/RELEASE_PIPELINE_PLAN.md",
+        "scripts/substrate/install-substrate.sh",
+        "scripts/windows/install-substrate.ps1",
+        "scripts/mac/lima/*",
+        "scripts/wsl/provision.sh",
+        "GitHub release artifacts"
+      ],
+      "steps": [
+        "List all binaries/scripts consumed by the legacy install flow (substrate, world-agent, forwarder, support tarball).",
+        "Describe how macOS (Lima) and Windows (WSL) expect the guest agent to be installed and managed.",
+        "Capture gaps between the automated release and installer expectations; update RELEASE_PIPELINE_PLAN.md with acceptance criteria."
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "multi-artifact-release",
+      "title": "Publish world-agent, forwarder, and support assets via release.yml",
+      "description": "Extend dist/release configuration so every artifact the installer needs is attached to GitHub releases.",
+      "context": [
+        "dist-workspace.toml",
+        ".github/workflows/release.yml",
+        "docs/RELEASE_PIPELINE_PLAN.md#33-release-automation-releaseyml"
+      ],
+      "steps": [
+        "Model world-agent and substrate-forwarder as additional dist apps or add a post-build packaging step.",
+        "Package support scripts (docs, Lima/WSL helpers, PowerShell modules) into a tarball/zip with checksums.",
+        "Attach all artifacts + sha files to the GitHub release; update docs with download locations."
+      ],
+      "dependencies": [
+        "installer-packaging-audit"
+      ]
+    },
+    {
+      "id": "installer-realignment",
+      "title": "Update installers to consume automated release artifacts",
+      "description": "Refresh install-substrate.{sh,ps1} (and uninstall helpers) so they download artifacts from GitHub Releases instead of local release folders, then re-run smoke tests across Linux/macOS/Windows.",
+      "context": [
+        "scripts/substrate/install-substrate.sh",
+        "scripts/windows/install-substrate.ps1",
+        "docs/RELEASE_PIPELINE_PLAN.md",
+        "docs/DEVELOPMENT.md"
+      ],
+      "steps": [
+        "Wire the installers to fetch the new world-agent/forwarder/support assets.",
+        "Re-enable Lima/WSL provisioning logic and ensure systemd services are registered.",
+        "Document verification commands (doctor/smoke) and update tasks JSON with the run results."
+      ],
+      "dependencies": [
+        "multi-artifact-release"
       ]
     }
   ]
