@@ -132,9 +132,9 @@ jobs:
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
       - name: Install seccomp dependencies (Linux)
-        if: ${{ runner.os == 'Linux' && contains(matrix.triple, 'linux-gnu') }}
+        if: ${{ runner.os == 'Linux' && contains(matrix.dist_args, 'linux-gnu') }}
         env:
-          TARGET_TRIPLE: ${{ matrix.triple }}
+          TARGET_TRIPLE: ${{ matrix.targets[0] }}
         run: |
           set -euo pipefail
           if [[ "${TARGET_TRIPLE}" == aarch64-unknown-linux-gnu* ]]; then
