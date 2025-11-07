@@ -535,11 +535,15 @@ download_file() {
 download_artifact() {
   local artifact_name="$1"
   local dest_path="$2"
+  local required="${3:-1}"
 
   if [[ -n "${ARTIFACT_DIR}" ]]; then
     local local_path="${ARTIFACT_DIR}/${artifact_name}"
     if [[ ! -f "${local_path}" ]]; then
-      fatal "Expected artifact '${artifact_name}' not found in ${ARTIFACT_DIR}."
+      if [[ "${required}" -eq 1 ]]; then
+        fatal "Expected artifact '${artifact_name}' not found in ${ARTIFACT_DIR}."
+      fi
+      return 1
     fi
     log "Using local artifact: ${local_path}"
     download_file "${local_path}" "${dest_path}"
@@ -548,7 +552,13 @@ download_artifact() {
 
   local url="${BASE_URL}/${VERSION_TAG}/${artifact_name}"
   log "Downloading ${artifact_name} from ${url}"
-  download_file "${url}" "${dest_path}"
+  if ! download_file "${url}" "${dest_path}"; then
+    if [[ "${required}" -eq 1 ]]; then
+      fatal "Failed to download ${artifact_name} from ${url}"
+    fi
+    return 1
+  fi
+  return 0
 }
 
 download_checksums() {
@@ -688,20 +698,23 @@ prepare_unix_release_root() {
   done
 
   local support_archive="${TMPDIR}/${SUPPORT_TAR_NAME}"
-  download_artifact "${SUPPORT_TAR_NAME}" "${support_archive}"
-  if [[ -n "${checksums_path}" ]]; then
-    verify_checksum "${support_archive}" "${checksums_path}" "${SUPPORT_TAR_NAME}"
-  fi
+  if download_artifact "${SUPPORT_TAR_NAME}" "${support_archive}" 0; then
+    if [[ -n "${checksums_path}" ]]; then
+      verify_checksum "${support_archive}" "${checksums_path}" "${SUPPORT_TAR_NAME}"
+    fi
 
-  local support_extract="${TMPDIR}/support-artifacts"
-  rm -rf "${support_extract}"
-  extract_archive "${support_archive}" "${support_extract}"
+    local support_extract="${TMPDIR}/support-artifacts"
+    rm -rf "${support_extract}"
+    extract_archive "${support_archive}" "${support_extract}"
 
-  if [[ -d "${support_extract}/docs" ]]; then
-    cp -R "${support_extract}/docs/." "${release_root}/docs/"
-  fi
-  if [[ -d "${support_extract}/scripts" ]]; then
-    cp -R "${support_extract}/scripts/." "${release_root}/scripts/"
+    if [[ -d "${support_extract}/docs" ]]; then
+      cp -R "${support_extract}/docs/." "${release_root}/docs/"
+    fi
+    if [[ -d "${support_extract}/scripts" ]]; then
+      cp -R "${support_extract}/scripts/." "${release_root}/scripts/"
+    fi
+  else
+    warn "Support bundle ${SUPPORT_TAR_NAME} not found for ${VERSION_TAG}; skipping docs/scripts."
   fi
 }
 
