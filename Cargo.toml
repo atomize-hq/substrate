@@ -27,7 +27,9 @@ substrate-shim = { version = "0.2.0", path = "crates/shim" }
 
 [package.metadata.dist]
 dist = true
-binaries = ["substrate", "substrate-shim"]
+
+[package.metadata.dist.binaries]
+"*" = ["substrate", "substrate-shim"]
 
 [workspace]
 resolver = "2"
