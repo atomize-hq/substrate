@@ -197,6 +197,11 @@ jobs:
       - name: Prepare artifact cache
         run: |
           mkdir -p "$RUNNER_TEMP/dist-artifacts"
+      - name: Build support bundle
+        run: |
+          bash dist/scripts/collect-supporting-artifacts.sh
+          cp dist/supporting-artifacts/substrate-support.tar.gz "$RUNNER_TEMP/dist-artifacts/"
+          cp dist/supporting-artifacts/substrate-support.zip "$RUNNER_TEMP/dist-artifacts/"
       - name: Download dist artifacts
         uses: actions/download-artifact@v4
         with:
