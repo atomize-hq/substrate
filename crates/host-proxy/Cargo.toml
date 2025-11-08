@@ -44,3 +44,4 @@ hyperlocal = "0.9"
 
 [package.metadata.dist]
 dist = true
+display = false

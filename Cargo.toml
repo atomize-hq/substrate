@@ -27,6 +27,7 @@ substrate-shim = { version = "0.2.1", path = "crates/shim" }
 
 [package.metadata.dist]
 dist = true
+display = false
 
 [package.metadata.dist.binaries]
 "*" = ["substrate", "substrate-shim"]

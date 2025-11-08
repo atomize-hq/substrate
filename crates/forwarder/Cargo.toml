@@ -33,3 +33,4 @@ windows = { version = "0.58", features = [
 
 [package.metadata.dist]
 dist = true
+display = false
