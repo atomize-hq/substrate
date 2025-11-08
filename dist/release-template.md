@@ -5,9 +5,23 @@
 - Call out any required upgrade actions or platform notices.
 
 ## Quickstart
-- Linux/macOS: reference `scripts/substrate/install-substrate.sh` and [docs/INSTALLATION.md](../docs/INSTALLATION.md).
-- macOS Lima backend: point to [scripts/mac/lima-warm.sh](../scripts/mac/lima-warm.sh) and the Lima walkthrough.
-- Windows (WSL): link to `scripts/windows/wsl-warm.ps1` and [docs/WORLD.md](../docs/WORLD.md#windows-wsl-backend).
+- **Linux/macOS:** run the installer directly from GitHub (adds `substrate`, deploys shims, and provisions Lima/WSL helpers when needed):
+
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/substrate/install-substrate.sh | bash
+  ```
+
+  See [docs/INSTALLATION.md](../docs/INSTALLATION.md) for advanced options.
+
+- **Windows (PowerShell):** elevate PowerShell, then run:
+
+  ```powershell
+  iwr https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/windows/install-substrate.ps1 -UseBasicParsing | iex
+  ```
+
+  The script handles WSL provisioning and forwarder startup. Extra details live in [docs/WORLD.md](../docs/WORLD.md#windows-wsl-backend).
+
+- **macOS Lima helpers:** mention [scripts/mac/lima-warm.sh](../scripts/mac/lima-warm.sh), `lima-doctor.sh`, and the Lima walkthrough for troubleshooting.
 
 ## Downloads
 - Each release attaches one bundle per host platform. Look for assets named `substrate-v<version>-<target>.tar.gz` (Linux/macOS) or `substrate-v<version>-windows_x86_64.zip` alongside `substrate-support.{tar.gz,zip}`.
