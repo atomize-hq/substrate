@@ -5,7 +5,7 @@
 - Call out any required upgrade actions or platform notices.
 
 ## Quickstart
-- **Linux/macOS:** run the installer directly from GitHub (adds `substrate`, deploys shims, and provisions Lima/WSL helpers when needed):
+- **Linux/macOS:** run the installer directly from GitHub (adds `substrate`, deploys shims, and provisions Lima when needed):
 
   ```bash
   curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/substrate/install-substrate.sh | bash
@@ -20,6 +20,10 @@
   ```
 
   The script handles WSL provisioning and forwarder startup. Extra details live in [docs/WORLD.md](../docs/WORLD.md#windows-wsl-backend).
+
+- **Uninstall:** if you hit trouble and want to roll back quickly, use the matching uninstall scripts:
+  - Linux/macOS: `curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/substrate/uninstall-substrate.sh | bash`
+  - Windows: `iwr https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/windows/uninstall-substrate.ps1 -UseBasicParsing | iex`
 
 - **macOS Lima helpers:** mention [scripts/mac/lima-warm.sh](../scripts/mac/lima-warm.sh), `lima-doctor.sh`, and the Lima walkthrough for troubleshooting.
 
