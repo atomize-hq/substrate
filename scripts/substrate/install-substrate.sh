@@ -426,7 +426,7 @@ fetch_latest_release_tag() {
   fi
 
   local response
-  if ! response="$(${curl_cmd[@]} "${LATEST_RELEASE_API}")"; then
+  if ! response="$("${curl_cmd[@]}" "${LATEST_RELEASE_API}")"; then
     return 1
   fi
 
