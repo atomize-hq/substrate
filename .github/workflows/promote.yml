@@ -158,7 +158,7 @@ jobs:
         env:
           TARGET_SHA: ${{ steps.bump.outputs.testing_sha }}
           DRY_RUN: ${{ env.DRY_RUN }}
-          CI_WINDOW_MINUTES: "30"
+          CI_WINDOW_MINUTES: "45"
         with:
           script: |
             const {owner, repo} = context.repo;
@@ -183,7 +183,7 @@ jobs:
 
             const freshRun = response.data.workflow_runs.find(run => {
               if (run.status !== "completed" || run.conclusion !== "success") {
-                return false;
+                continue;
               }
               const updated = new Date(run.updated_at).getTime();
               if (now - updated > windowMinutes * 60 * 1000) {
