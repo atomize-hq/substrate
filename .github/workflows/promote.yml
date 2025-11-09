@@ -16,6 +16,7 @@ on:
 permissions:
   contents: write
   statuses: write
+  workflows: write
 
 jobs:
   promote:
@@ -322,3 +323,22 @@ jobs:
               echo "> ⚠️ Dry run requested – no pushes or tags were published."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Trigger release workflow
+        if: ${{ env.DRY_RUN != 'true' }}
+        uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: ${{ steps.determine_version.outputs.tag_name }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const releaseTag = process.env.RELEASE_TAG;
+            if (!releaseTag) {
+              core.setFailed("Missing release tag; cannot dispatch release workflow.");
+              return;
+            }
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: "release.yml",
+              ref: releaseTag,
+            });
