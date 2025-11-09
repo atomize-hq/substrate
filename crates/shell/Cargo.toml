@@ -1,6 +1,6 @@
 [package]
 name = "substrate-shell"
-version = "0.2.5"
+version = "0.2.6"
 edition = "2021"
 rust-version = "1.89"
 authors = ["Atomize"]
@@ -26,7 +26,7 @@ shell-words = "1.1"
 gethostname = "0.4"
 which = "6"
 ctrlc = "3.4"
-substrate-common = { version = "0.2.5", path = "../common" }
+substrate-common = { version = "0.2.6", path = "../common" }
 substrate-broker = { version = "0.1.0", path = "../broker" }
 world = { version = "0.1.1", path = "../world" }
 world-api = { version = "0.1.0", path = "../world-api" }
@@ -44,7 +44,7 @@ dirs = "5"
 fs2 = "0.4"        # For cross-platform file locking
 tempfile = "3.8"   # For atomic deployment
 serde = { version = "1.0", features = ["derive"] }
-substrate-trace = { version = "0.2.5", path = "../trace" }
+substrate-trace = { version = "0.2.6", path = "../trace" }
 substrate-replay = { version = "0.1.0", path = "../replay" }
 substrate-graph = { version = "0.1.0", path = "../substrate-graph" }
 tokio = { version = "1.32", features = ["rt", "signal", "sync", "time", "io-util", "io-std"] }
@@ -52,8 +52,8 @@ tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }
 futures = "0.3"
 base64 = "0.22"
 url = "2"
-agent-api-client = { version = "0.2.5", path = "../agent-api-client" }
-agent-api-types = { version = "0.2.5", path = "../agent-api-types" }
+agent-api-client = { version = "0.2.6", path = "../agent-api-client" }
+agent-api-types = { version = "0.2.6", path = "../agent-api-types" }
 http-body-util = "0.1"
 hyper = "1"
 
