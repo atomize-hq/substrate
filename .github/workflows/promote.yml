@@ -258,18 +258,25 @@ jobs:
 
       - name: Trigger release workflow
         if: ${{ env.DRY_RUN != 'true' }}
+        uses: actions/github-script@v7
         env:
           RELEASE_TAG: ${{ steps.determine_version.outputs.tag_name }}
-          PROMOTE_PUSH_TOKEN: ${{ secrets.PROMOTE_PUSH_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -z "${PROMOTE_PUSH_TOKEN}" ]; then
-            echo "PROMOTE_PUSH_TOKEN is required to dispatch release.yml" >&2
-            exit 1
-          fi
-          export GH_TOKEN="${PROMOTE_PUSH_TOKEN}"
-          gh workflow run release.yml --ref "refs/tags/${RELEASE_TAG}" >/tmp/dispatch-log.txt
-          cat /tmp/dispatch-log.txt
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const releaseTag = process.env.RELEASE_TAG;
+            if (!releaseTag) {
+              core.setFailed("Missing release tag; cannot dispatch release workflow.");
+              return;
+            }
+            const ref = `refs/tags/${releaseTag}`;
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: "release.yml",
+              ref,
+            });
+            core.summary.addRaw(`Triggered release.yml for ${releaseTag}`).write();
 
       - name: Promotion summary
         env:
