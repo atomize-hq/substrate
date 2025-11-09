@@ -16,7 +16,7 @@ on:
 permissions:
   contents: write
   statuses: write
-  workflows: write
+  actions: write
 
 jobs:
   promote:
