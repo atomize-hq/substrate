@@ -7,7 +7,7 @@
     installs binaries under the chosen prefix, configures PATH/profile updates,
     deploys shims, and optionally provisions the WSL world backend.
 .PARAMETER Version
-    Release version to install (defaults to 0.2.0-beta).
+    Release version to install (defaults to the latest GitHub release).
 .PARAMETER Prefix
     Installation prefix (defaults to %LOCALAPPDATA%\Substrate).
 .PARAMETER ArtifactDir
@@ -22,6 +22,8 @@
     Print steps without executing them.
 .PARAMETER DistroName
     Target WSL distribution name (defaults to substrate-wsl).
+.PARAMETER NoAutoSource
+    Do not dot-source the generated profile for the current PowerShell session.
 .EXAMPLE
     pwsh -File install-substrate.ps1
 .EXAMPLE
@@ -30,18 +32,23 @@
 
 [CmdletBinding()]
 param(
-    [string]$Version = '0.2.0-beta',
+    [string]$Version,
     [string]$Prefix = (Join-Path $env:LOCALAPPDATA 'Substrate'),
     [Alias('Archive')] [string]$ArtifactDir,
     [string]$BaseUrl = 'https://github.com/atomize-hq/substrate/releases/download',
     [switch]$NoWorld,
     [switch]$NoShims,
     [switch]$DryRun,
-    [string]$DistroName = 'substrate-wsl'
+    [string]$DistroName = 'substrate-wsl',
+    [switch]$NoAutoSource
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+$FallbackVersion = '0.2.2'
+$LatestReleaseApi = if ($env:SUBSTRATE_INSTALL_LATEST_API) { $env:SUBSTRATE_INSTALL_LATEST_API } else { 'https://api.github.com/repos/atomize-hq/substrate/releases/latest' }
+$GitHubToken = $env:SUBSTRATE_INSTALL_GITHUB_TOKEN
 
 function Write-Log {
     param([string]$Message)
@@ -57,11 +64,55 @@ function Write-ErrorAndExit {
     exit 1
 }
 
-$versionNormalized = $Version.TrimStart('v')
+function Get-LatestReleaseTag {
+    param(
+        [string]$ApiUrl,
+        [string]$Token
+    )
+
+    $headers = @{ 'Accept' = 'application/vnd.github+json' }
+    if ($Token) {
+        $headers['Authorization'] = "Bearer $Token"
+    }
+
+    try {
+        $response = Invoke-RestMethod -Uri $ApiUrl -Headers $headers -UseBasicParsing
+        return $response.tag_name
+    } catch {
+        return $null
+    }
+}
+
+function Resolve-VersionTag {
+    param(
+        [string]$RequestedVersion,
+        [string]$FallbackVersion,
+        [string]$ApiUrl,
+        [string]$Token
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($RequestedVersion)) {
+        Write-Log "Using requested version $RequestedVersion"
+        return $RequestedVersion
+    }
+
+    $latest = Get-LatestReleaseTag -ApiUrl $ApiUrl -Token $Token
+    if ($latest) {
+        Write-Log "No version specified; defaulting to latest release $latest"
+        return $latest
+    }
+
+    $fallbackTag = "v$FallbackVersion"
+    Write-Warn "Unable to resolve latest release tag; falling back to $fallbackTag"
+    return $fallbackTag
+}
+
+$resolvedVersion = Resolve-VersionTag -RequestedVersion $Version -FallbackVersion $FallbackVersion -ApiUrl $LatestReleaseApi -Token $GitHubToken
+$versionNormalized = $resolvedVersion.TrimStart('v')
 if ([string]::IsNullOrWhiteSpace($versionNormalized)) {
     Write-ErrorAndExit "Version parameter cannot be empty"
 }
-$versionTag = if ($Version.StartsWith('v')) { $Version } else { "v$versionNormalized" }
+$versionTag = if ($resolvedVersion.StartsWith('v')) { $resolvedVersion } else { "v$versionNormalized" }
 $bundleName = "substrate-v$versionNormalized-windows_x86_64.zip"
 $checksumName = 'SHA256SUMS'
 $dry = $DryRun.IsPresent
@@ -269,8 +320,13 @@ if (Test-Path '$profileScript') {
         }
     }
 
-    if (-not $dry -and (Test-Path $profileScript)) {
+    if ($dry) {
+        Write-Log "[dry-run] Would dot-source $profileScript for this session"
+    } elseif ($NoAutoSource.IsPresent) {
+        Write-Log "Skipping dot-sourcing of $profileScript (--NoAutoSource). Run '. $profileScript' manually to refresh PATH."
+    } elseif (Test-Path $profileScript) {
         . $profileScript
+        Write-Log "Sourced $profileScript; environment ready in this session."
     }
 
     $substrateExe = Join-Path $binDir 'substrate.exe'
@@ -319,7 +375,13 @@ if (Test-Path '$profileScript') {
         }
     }
 
-    Write-Log "Installation complete. Open a new PowerShell session or run '. $profileScript' to refresh PATH."
+    if ($dry) {
+        Write-Log "Installation complete (dry run). Open a new PowerShell session or run '. $profileScript' when performing a real install."
+    } elseif ($NoAutoSource.IsPresent) {
+        Write-Log "Installation complete. Run '. $profileScript' or open a new PowerShell session to use Substrate."
+    } else {
+        Write-Log "Installation complete. Substrate is ready to use in this PowerShell session and future sessions."
+    }
 }
 finally {
     if (-not $dry -and (Test-Path $tempRoot)) {
