@@ -3,13 +3,10 @@ name: Promote to Main
 on:
   workflow_dispatch:
     inputs:
-      tag_name:
-        description: Optional release tag to create after fast-forward (e.g. v1.2.3)
+      next_version:
+        description: Optional override for the next release version (defaults to auto bump)
         required: false
         default: ""
-      next_version:
-        description: Next release version to write into workspace manifests (e.g. 0.2.1)
-        required: true
       dry_run:
         description: Set true to preview without pushing changes
         required: false
@@ -24,8 +21,6 @@ jobs:
   promote:
     runs-on: ubuntu-22.04
     env:
-      TAG_NAME: ${{ inputs.tag_name }}
-      NEXT_VERSION: ${{ inputs.next_version }}
       DRY_RUN: ${{ inputs.dry_run }}
     steps:
       - name: Checkout repository
@@ -38,6 +33,50 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine next version/tag
+        id: determine_version
+        env:
+          REQUESTED_VERSION: ${{ inputs.next_version }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force origin
+
+          if [ -n "${REQUESTED_VERSION}" ]; then
+            NEXT_VERSION="${REQUESTED_VERSION}"
+            SOURCE="workflow_input"
+          else
+            LAST_TAG=$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' --abbrev=0 2>/dev/null || true)
+            if [ -z "${LAST_TAG}" ]; then
+              CURRENT=$(cargo metadata --no-deps --format-version 1 \
+                | jq -r '.packages[] | select(.name == "substrate") | .version' \
+                | head -n1)
+              if [ -z "${CURRENT}" ]; then
+                echo "Unable to determine existing version for auto bump" >&2
+                exit 1
+              fi
+              LAST_TAG="v${CURRENT}"
+            fi
+
+            VERSION_BODY="${LAST_TAG#v}"
+            IFS='.' read -r major minor patch <<<"${VERSION_BODY}"
+            if [ -z "${major}" ] || [ -z "${minor}" ] || [ -z "${patch}" ]; then
+              echo "Unable to parse version from ${LAST_TAG}" >&2
+              exit 1
+            fi
+            patch=$((patch + 1))
+            NEXT_VERSION="${major}.${minor}.${patch}"
+            SOURCE="auto_patch_increment"
+          fi
+
+          if ! [[ "${NEXT_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-.*)?$ ]]; then
+            echo "Next version '${NEXT_VERSION}' is not a valid SemVer string" >&2
+            exit 1
+          fi
+
+          echo "next_version=${NEXT_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag_name=v${NEXT_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "version_source=${SOURCE}" >> "$GITHUB_OUTPUT"
 
       - name: Prepare push credentials
         if: ${{ env.DRY_RUN != 'true' }}
@@ -54,7 +93,7 @@ jobs:
       - name: Bump versions on testing
         id: bump
         env:
-          NEXT_VERSION: ${{ env.NEXT_VERSION }}
+          NEXT_VERSION: ${{ steps.determine_version.outputs.next_version }}
           DRY_RUN: ${{ env.DRY_RUN }}
         run: |
           set -euo pipefail
@@ -119,59 +158,38 @@ jobs:
         env:
           TARGET_SHA: ${{ steps.bump.outputs.testing_sha }}
           DRY_RUN: ${{ env.DRY_RUN }}
+          CI_WINDOW_MINUTES: "30"
         with:
           script: |
             const {owner, repo} = context.repo;
-            const targetSha = process.env.TARGET_SHA;
-            if (!targetSha) {
-              core.setFailed("testing_sha output missing; unable to validate CI run.");
+            const windowMinutes = parseInt(process.env.CI_WINDOW_MINUTES || "30", 10);
+            const now = Date.now();
+            const response = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              workflow_id: "ci-testing.yml",
+              branch: "testing",
+              per_page: 20,
+            });
+
+            const freshRun = response.data.workflow_runs.find(run => {
+              if (run.status !== "completed" || run.conclusion !== "success") {
+                return false;
+              }
+              const updated = new Date(run.updated_at).getTime();
+              return now - updated <= windowMinutes * 60 * 1000;
+            });
+
+            if (!freshRun) {
+              core.setFailed(`No successful ci-testing.yml run found in the last ${windowMinutes} minutes. Re-run CI on 'testing' before promoting.`);
               return;
             }
 
-            const maxAttempts = 60;
-            const delayMs = 30000;
-
-            const sleep = async (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-            let matchedRun = null;
-
-            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-              const response = await github.rest.actions.listWorkflowRuns({
-                owner,
-                repo,
-                workflow_id: "ci-testing.yml",
-                branch: "testing",
-                per_page: 20,
-              });
-
-              matchedRun = response.data.workflow_runs.find(run => run.head_sha === targetSha);
-
-              if (!matchedRun) {
-                core.info(`Attempt ${attempt}/${maxAttempts}: CI run for ${targetSha} not found yet. Waiting...`);
-                await sleep(delayMs);
-                continue;
-              }
-
-              if (matchedRun.status !== "completed") {
-                core.info(`Attempt ${attempt}/${maxAttempts}: CI run ${matchedRun.id} still in progress (${matchedRun.status}). Waiting...`);
-                await sleep(delayMs);
-                continue;
-              }
-
-              break;
-            }
-
-            if (!matchedRun) {
-              core.setFailed(`Timed out waiting for ci-testing.yml run on commit ${targetSha}.`);
-              return;
-            }
-
-            core.setOutput("ci_url", matchedRun.html_url);
-            core.setOutput("ci_conclusion", matchedRun.conclusion);
-
-            if (matchedRun.conclusion !== "success") {
-              core.setFailed(`ci-testing.yml run for commit ${targetSha} concluded with '${matchedRun.conclusion}'. See ${matchedRun.html_url}`);
-            }
+            core.info(`Using ci-testing.yml run ${freshRun.id} (${freshRun.head_sha}) completed at ${freshRun.updated_at}.`);
+            core.setOutput("ci_url", freshRun.html_url);
+            core.setOutput("ci_conclusion", freshRun.conclusion);
+            core.setOutput("ci_run_id", freshRun.id.toString());
+            core.setOutput("ci_sha", freshRun.head_sha);
 
       - name: Mark promotion status
         if: ${{ env.DRY_RUN != 'true' }}
@@ -219,7 +237,10 @@ jobs:
           echo "new_main=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Create release tag
-        if: ${{ inputs.tag_name != '' }}
+        if: ${{ steps.determine_version.outputs.tag_name != '' }}
+        env:
+          TAG_NAME: ${{ steps.determine_version.outputs.tag_name }}
+          DRY_RUN: ${{ env.DRY_RUN }}
         run: |
           set -euo pipefail
           if [ "${DRY_RUN}" == "true" ]; then
@@ -235,10 +256,32 @@ jobs:
           git tag -a "${TAG_NAME}" -m "Promotion ${TAG_NAME}"
           git push origin "${TAG_NAME}"
 
+      - name: Trigger release workflow
+        if: ${{ env.DRY_RUN != 'true' }}
+        uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: ${{ steps.determine_version.outputs.tag_name }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const releaseTag = process.env.RELEASE_TAG;
+            if (!releaseTag) {
+              core.setFailed("Missing release tag; cannot dispatch release workflow.");
+              return;
+            }
+            const ref = `refs/tags/${releaseTag}`;
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: "release.yml",
+              ref,
+            });
+            core.summary.addRaw(`Triggered release.yml for ${releaseTag}`).write();
+
       - name: Promotion summary
         env:
           DRY_RUN: ${{ env.DRY_RUN }}
-          TAG_NAME: ${{ env.TAG_NAME }}
+          TAG_NAME: ${{ steps.determine_version.outputs.tag_name }}
           CURRENT_VERSION: ${{ steps.bump.outputs.current_version }}
           NEXT_VERSION: ${{ steps.bump.outputs.next_version }}
           VERSION_COMMIT: ${{ steps.bump.outputs.version_commit }}
