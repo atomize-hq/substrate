@@ -337,6 +337,10 @@ users see exactly five public downloads instead of dozens.
   `dist/scripts/collect-supporting-artifacts.sh` remains the canonical way to
   produce `substrate-support.{tar.gz,zip}`; the bundler job consumes those files
   when building each host archive.
+- **Release notes driven from template** – `release.yml` now feeds
+  `dist/release-template.md` through `envsubst` so GitHub releases always show
+  the curl|bash and PowerShell installers plus a table of OS/arch bundles and
+  checksum links (no more `null` body when cargo-dist omits announcement text).
 - **Pre-publish verification** – Developers and CI should run
   `cargo dist plan --ci github --output-format=json` (and ideally
   `cargo dist build --artifacts=local`) before tagging to confirm every crate and

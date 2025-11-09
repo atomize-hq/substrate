@@ -197,6 +197,11 @@
       "timestamp": "2025-11-09T18:05:00Z",
       "task_id": "release-workflow-overhaul",
       "message": "Enabled workflow_dispatch on release.yml so promotions can trigger packaging immediately after pushing the tag."
+    },
+    {
+      "timestamp": "2025-11-09T18:15:00Z",
+      "task_id": "release-communications",
+      "message": "Hooked dist/release-template.md into release.yml so GitHub releases show the curl|bash / PowerShell quickstart plus the OS/arch download table instead of 'null'."
     }
   ],
   "tasks": [
