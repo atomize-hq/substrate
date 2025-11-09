@@ -1641,28 +1641,46 @@ pub fn run_shell() -> Result<i32> {
     {
         use world::LinuxLocalBackend;
         use world_api::{ResourceLimits, WorldBackend, WorldSpec};
+
         let world_disabled = env::var("SUBSTRATE_WORLD")
             .map(|v| v == "disabled")
             .unwrap_or(false)
             || config.no_world;
+
         if !world_disabled {
-            let spec = WorldSpec {
-                reuse_session: true,
-                isolate_network: true,
-                limits: ResourceLimits::default(),
-                enable_preload: false,
-                allowed_domains: substrate_broker::allowed_domains(),
-                project_dir: env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
-                always_isolate: false, // Default: use heuristic-based isolation
-            };
-            let backend = LinuxLocalBackend::new();
-            match backend.ensure_session(&spec) {
-                Ok(handle) => {
+            match ensure_world_agent_ready() {
+                Ok(()) => {
+                    // Agent-managed world is available; mark world enabled and let the
+                    // agent own session/cgroup lifecycle. We intentionally leave
+                    // SUBSTRATE_WORLD_ID unset so telemetry falls back to agent-provided
+                    // fs_diff records instead of probing local backends.
                     env::set_var("SUBSTRATE_WORLD", "enabled");
-                    env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
+                    env::remove_var("SUBSTRATE_WORLD_ID");
                 }
-                Err(_e) => {
-                    // Degrade silently: world may be unavailable in this environment.
+                Err(agent_err) => {
+                    // Agent unavailable; fall back to the local backend as before.
+                    let spec = WorldSpec {
+                        reuse_session: true,
+                        isolate_network: true,
+                        limits: ResourceLimits::default(),
+                        enable_preload: false,
+                        allowed_domains: substrate_broker::allowed_domains(),
+                        project_dir: env::current_dir()
+                            .unwrap_or_else(|_| std::path::PathBuf::from(".")),
+                        always_isolate: false,
+                    };
+                    let backend = LinuxLocalBackend::new();
+                    match backend.ensure_session(&spec) {
+                        Ok(handle) => {
+                            env::set_var("SUBSTRATE_WORLD", "enabled");
+                            env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "substrate: linux world fallback failed (agent error: {agent_err:#}; local error: {e:#})"
+                            );
+                        }
+                    }
                 }
             }
         }
