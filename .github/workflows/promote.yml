@@ -158,7 +158,7 @@ jobs:
         env:
           TARGET_SHA: ${{ steps.bump.outputs.testing_sha }}
           DRY_RUN: ${{ env.DRY_RUN }}
-          CI_WINDOW_MINUTES: "30"
+          CI_WINDOW_MINUTES: "45"
         with:
           script: |
             const {owner, repo} = context.repo;
@@ -171,26 +171,38 @@ jobs:
               per_page: 30,
             });
 
-            const isTestingBase = (run) => {
+            const runs = response.data.workflow_runs || [];
+
+            const isTestingBase = async (run) => {
               if (run.head_branch === "testing") {
                 return true;
               }
-              if (run.event === "pull_request" && Array.isArray(run.pull_requests)) {
-                return run.pull_requests.some(pr => pr.base_ref === "testing");
+              if (run.event === "pull_request" && run.head_branch) {
+                const prs = await github.rest.pulls.list({
+                  owner,
+                  repo,
+                  state: "all",
+                  head: `${owner}:${run.head_branch}`,
+                });
+                return prs.data.some(pr => pr.base.ref === "testing");
               }
               return false;
             };
 
-            const freshRun = response.data.workflow_runs.find(run => {
+            let freshRun = null;
+            for (const run of runs) {
               if (run.status !== "completed" || run.conclusion !== "success") {
-                return false;
+                continue;
               }
               const updated = new Date(run.updated_at).getTime();
               if (now - updated > windowMinutes * 60 * 1000) {
-                return false;
+                continue;
               }
-              return isTestingBase(run);
-            });
+              if (await isTestingBase(run)) {
+                freshRun = run;
+                break;
+              }
+            }
 
             if (!freshRun) {
               core.setFailed(`No successful ci-testing.yml run found in the last ${windowMinutes} minutes. Re-run CI on 'testing' before promoting.`);
