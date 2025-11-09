@@ -280,20 +280,6 @@ jobs:
           git tag -a "${TAG_NAME}" -m "Promotion ${TAG_NAME}"
           git push origin "${TAG_NAME}"
 
-      - name: Trigger release workflow
-        if: ${{ env.DRY_RUN != 'true' }}
-        env:
-          RELEASE_TAG: ${{ steps.determine_version.outputs.tag_name }}
-          PROMOTE_PUSH_TOKEN: ${{ secrets.PROMOTE_PUSH_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -z "${PROMOTE_PUSH_TOKEN}" ]; then
-            echo "PROMOTE_PUSH_TOKEN is required to dispatch release.yml" >&2
-            exit 1
-          fi
-          export GH_TOKEN="${PROMOTE_PUSH_TOKEN}"
-          gh workflow run release.yml --ref "refs/tags/${RELEASE_TAG}"
-
       - name: Promotion summary
         env:
           DRY_RUN: ${{ env.DRY_RUN }}
