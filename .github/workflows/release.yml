@@ -245,32 +245,32 @@ jobs:
           path: release-bundles
       - name: Prepare release metadata
         id: release_meta
-    env:
-      MANIFEST_JSON: ${{ needs.plan.outputs.val }}
-      RELEASE_TAG: ${{ needs.plan.outputs.tag }}
-    run: |
-      set -euo pipefail
-      echo "$MANIFEST_JSON" > manifest.json
-      VERSION="${RELEASE_TAG#v}"
-      if [ -z "$VERSION" ]; then
-        VERSION="$RELEASE_TAG"
-      fi
-      export RELEASE_TAG VERSION
-      if ! command -v envsubst >/dev/null 2>&1; then
-        sudo apt-get update
-        sudo apt-get install -y gettext-base
-      fi
-      envsubst < dist/release-template.md > "$RUNNER_TEMP/notes.txt"
-      TITLE=$(jq -r '.announcement_title // empty' manifest.json)
-      if [ -z "$TITLE" ] || [ "$TITLE" = "null" ]; then
-        TITLE="Substrate ${VERSION}"
-      fi
-      PRERELEASE=$(jq -r '.announcement_is_prerelease // false' manifest.json)
-      if [ -z "$PRERELEASE" ] || [ "$PRERELEASE" = "null" ]; then
-        PRERELEASE="false"
-      fi
-      echo "title=$TITLE" >> "$GITHUB_OUTPUT"
-      echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+        env:
+          MANIFEST_JSON: ${{ needs.plan.outputs.val }}
+          RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          set -euo pipefail
+          echo "$MANIFEST_JSON" > manifest.json
+          VERSION="${RELEASE_TAG#v}"
+          if [ -z "$VERSION" ]; then
+            VERSION="$RELEASE_TAG"
+          fi
+          export RELEASE_TAG VERSION
+          if ! command -v envsubst >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y gettext-base
+          fi
+          envsubst < dist/release-template.md > "$RUNNER_TEMP/notes.txt"
+          TITLE=$(jq -r '.announcement_title // empty' manifest.json)
+          if [ -z "$TITLE" ] || [ "$TITLE" = "null" ]; then
+            TITLE="Substrate ${VERSION}"
+          fi
+          PRERELEASE=$(jq -r '.announcement_is_prerelease // false' manifest.json)
+          if [ -z "$PRERELEASE" ] || [ "$PRERELEASE" = "null" ]; then
+            PRERELEASE="false"
+          fi
+          echo "title=$TITLE" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
       - name: Publish GitHub release
         env:
           RELEASE_TAG: ${{ needs.plan.outputs.tag }}
