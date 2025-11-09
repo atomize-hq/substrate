@@ -168,16 +168,28 @@ jobs:
               owner,
               repo,
               workflow_id: "ci-testing.yml",
-              branch: "testing",
-              per_page: 20,
+              per_page: 30,
             });
+
+            const isTestingBase = (run) => {
+              if (run.head_branch === "testing") {
+                return true;
+              }
+              if (run.event === "pull_request" && Array.isArray(run.pull_requests)) {
+                return run.pull_requests.some(pr => pr.base_ref === "testing");
+              }
+              return false;
+            };
 
             const freshRun = response.data.workflow_runs.find(run => {
               if (run.status !== "completed" || run.conclusion !== "success") {
                 return false;
               }
               const updated = new Date(run.updated_at).getTime();
-              return now - updated <= windowMinutes * 60 * 1000;
+              if (now - updated > windowMinutes * 60 * 1000) {
+                return false;
+              }
+              return isTestingBase(run);
             });
 
             if (!freshRun) {
