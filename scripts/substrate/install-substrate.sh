@@ -4,7 +4,8 @@ set -euo pipefail
 readonly INSTALLER_NAME="substrate-install"
 # shellcheck disable=SC2034 # used for release metadata
 readonly INSTALLER_VERSION="0.1.0-dev"
-readonly DEFAULT_VERSION="0.2.0-beta"
+readonly DEFAULT_FALLBACK_VERSION="0.2.2"
+readonly LATEST_RELEASE_API="${SUBSTRATE_INSTALL_LATEST_API:-https://api.github.com/repos/atomize-hq/substrate/releases/latest}"
 readonly DEFAULT_PREFIX="${HOME}/.substrate"
 readonly DEFAULT_BASE_URL="https://github.com/atomize-hq/substrate/releases/download"
 
@@ -15,6 +16,7 @@ PREFIX="$DEFAULT_PREFIX"
 NO_WORLD=0
 NO_SHIMS=0
 DRY_RUN=0
+AUTO_SOURCE=1
 ARTIFACT_DIR="${SUBSTRATE_INSTALL_ARTIFACT_DIR:-${SUBSTRATE_INSTALL_ARCHIVE:-}}"
 BASE_URL="${SUBSTRATE_INSTALL_BASE_URL:-$DEFAULT_BASE_URL}"
 TMPDIR=""
@@ -47,10 +49,11 @@ Usage:
   # (Windows host) powershell -ExecutionPolicy Bypass -File install-substrate.ps1
 
 Options:
-  --version <semver>   Install a specific release (default: 0.2.0-beta)
+  --version <semver>   Install a specific release (default: latest GitHub release)
   --prefix <path>      Installation prefix (default: ~/.substrate)
   --no-world           Skip world backend provisioning
   --no-shims           Skip shim deployment
+  --no-auto-source     Do not source ~/.substrate_bashenv in the current shell after install
   --dry-run            Print actions without executing
   --artifact-dir <dir> Use pre-downloaded host bundle + SHA256SUMS
   --archive <dir>      Alias for --artifact-dir (deprecated)
@@ -389,6 +392,10 @@ parse_args() {
         DRY_RUN=1
         shift
         ;;
+      --no-auto-source)
+        AUTO_SOURCE=0
+        shift
+        ;;
       --artifact-dir|--archive)
         [[ $# -lt 2 ]] && fatal "Missing value for $1"
         ARTIFACT_DIR="$2"
@@ -403,10 +410,45 @@ parse_args() {
         ;;
     esac
   done
+}
+
+fetch_latest_release_tag() {
+  if ! command -v curl >/dev/null 2>&1; then
+    return 1
+  fi
+  if ! command -v jq >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local curl_cmd=(curl -fsSL -H "Accept: application/vnd.github+json")
+  if [[ -n "${SUBSTRATE_INSTALL_GITHUB_TOKEN:-}" ]]; then
+    curl_cmd+=(-H "Authorization: Bearer ${SUBSTRATE_INSTALL_GITHUB_TOKEN}")
+  fi
+
+  local response
+  if ! response="$("${curl_cmd[@]}" "${LATEST_RELEASE_API}")"; then
+    return 1
+  fi
+
+  jq -r '.tag_name // empty' <<<"${response}"
+}
+
+ensure_version_selected() {
+  if [[ -n "${VERSION_TAG}" ]]; then
+    return
+  fi
 
   if [[ -z "${VERSION_RAW}" ]]; then
-    VERSION_RAW="${DEFAULT_VERSION}"
-    warn "No --version provided; defaulting to ${VERSION_RAW}"
+    local resolved_tag=""
+    if resolved_tag="$(fetch_latest_release_tag 2>/dev/null)" && [[ -n "${resolved_tag}" ]]; then
+      VERSION_RAW="${resolved_tag}"
+      log "No --version provided; defaulting to latest release ${resolved_tag}."
+    else
+      VERSION_RAW="v${DEFAULT_FALLBACK_VERSION}"
+      warn "Unable to resolve latest release tag; falling back to ${VERSION_RAW}."
+    fi
+  else
+    log "Using requested version ${VERSION_RAW}."
   fi
 
   VERSION="${VERSION_RAW#v}"
@@ -823,12 +865,19 @@ EOF
   done
 
   if [[ "${DRY_RUN}" -eq 0 ]]; then
-    if [ -f "${bashenv}" ]; then
-      # shellcheck disable=SC1090
-      source "${bashenv}" 2>/dev/null || true
+    if [[ "${AUTO_SOURCE}" -eq 1 ]]; then
+      if [ -f "${bashenv}" ]; then
+        # shellcheck disable=SC1090
+        source "${bashenv}" 2>/dev/null || true
+      fi
+      export SUBSTRATE_ORIGINAL_BASH_ENV="${existing_be}"
+      export BASH_ENV="${target_bash_env}"
+      log "Sourced ~/.substrate_bashenv; PATH updated for this session."
+    else
+      log "Auto-source disabled (--no-auto-source); run 'source ~/.substrate_bashenv' to refresh this shell."
     fi
-    export SUBSTRATE_ORIGINAL_BASH_ENV="${existing_be}"
-    export BASH_ENV="${target_bash_env}"
+  elif [[ "${AUTO_SOURCE}" -eq 1 ]]; then
+    log "[dry-run] Would source ~/.substrate_bashenv for current shell."
   fi
 }
 
@@ -1037,6 +1086,7 @@ run_world_checks() {
 
 install_macos() {
   ensure_macos_prereqs
+  ensure_version_selected
 
   local target_triple
   target_triple="$(target_triple_macos)"
@@ -1078,20 +1128,18 @@ install_macos() {
   log "Doctor PATH: ${doctor_original_path}"
   PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" run_world_checks "${substrate_bin}"
 
-  if [[ "${DRY_RUN}" -eq 0 ]]; then
-    if [ -f "${HOME}/.substrate_bashenv" ]; then
-      # shellcheck disable=SC1090
-      source "${HOME}/.substrate_bashenv" 2>/dev/null || true
-    fi
-    log "Sourced ~/.substrate_bashenv; environment ready."
-    log "Installation complete. Start using Substrate in this shell or any new terminals."
-  else
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
     log "Installation complete (dry run). Open a new terminal or 'source ~/.substrate_bashenv' when running for real."
+  elif [[ "${AUTO_SOURCE}" -eq 1 ]]; then
+    log "Installation complete. Substrate is ready to use in this shell and future sessions."
+  else
+    log "Installation complete. Run 'source ~/.substrate_bashenv' or open a new terminal to begin using Substrate."
   fi
 }
 
 install_linux() {
   ensure_linux_prereqs
+  ensure_version_selected
 
   local target_triple
   target_triple="$(target_triple_linux)"
@@ -1137,7 +1185,13 @@ install_linux() {
     log "Detected WSL environment. Windows host components (forwarder, uninstall) must be managed via PowerShell scripts."
   fi
 
-  log "Installation complete. Open a new terminal or 'source ~/.substrate_bashenv' to refresh PATH."
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    log "Installation complete (dry run). Open a new terminal or 'source ~/.substrate_bashenv' when running for real."
+  elif [[ "${AUTO_SOURCE}" -eq 1 ]]; then
+    log "Installation complete. Substrate is ready to use in this shell and future sessions."
+  else
+    log "Installation complete. Run 'source ~/.substrate_bashenv' or open a new terminal to begin using Substrate."
+  fi
 }
 
 main() {
