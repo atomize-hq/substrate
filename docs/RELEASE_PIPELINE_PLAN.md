@@ -43,8 +43,10 @@ repeatable builds, comprehensive validation, and painless promotions.
 ## 3. Workflow Inventory
 
 ### 3.1 Continuous Integration (`ci-testing.yml`)
-- **Triggers**: `pull_request` targeting `testing`, `push` to `testing`. The
-  `main` branch is exercised via the promotion workflow and release tags.
+- **Triggers**: `pull_request` targeting `testing` (commits land via PRs), plus
+  `workflow_call`/`workflow_dispatch` so nightly/promote flows can reuse the
+  pipeline without double-running on direct pushes. The `main` branch inherits
+  coverage through promotion + release tags.
 - **Jobs**:
   1. **Lint & Unit (matrix)**: Runs on `ubuntu-24.04`, `windows-2022`,
      `macos-14`. Steps include `cargo fmt`, `cargo clippy`, `cargo test
