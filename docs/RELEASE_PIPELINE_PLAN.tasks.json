@@ -202,6 +202,11 @@
       "timestamp": "2025-11-09T18:15:00Z",
       "task_id": "release-communications",
       "message": "Hooked dist/release-template.md into release.yml so GitHub releases show the curl|bash / PowerShell quickstart plus the OS/arch download table instead of 'null'."
+    },
+    {
+      "timestamp": "2025-11-09T18:25:00Z",
+      "task_id": "ci-testing-workflow",
+      "message": "Scoped ci-testing.yml to pull_request events (testing branch) so commits no longer double-trigger CI; workflow_call/dispatch remain available for nightly and promotion reuse."
     }
   ],
   "tasks": [
