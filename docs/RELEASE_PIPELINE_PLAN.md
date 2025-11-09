@@ -119,19 +119,25 @@ repeatable builds, comprehensive validation, and painless promotions.
   `install-substrate.{sh,ps1}` cannot reproduce the one-command UX.
 
 ### 3.4 Promotion Workflow (`promote.yml`)
-- **Trigger**: `workflow_dispatch` from maintainers.
+- **Trigger**: `workflow_dispatch` from maintainers (testing branch is gated by
+  PRs; promotion is the only path into `main`).
 - **Steps**:
-  1. Checkout `testing` and `main` (full history, recursive submodules).
-  2. Run `tools/version-bump` to update workspace manifests to `next_version`
-     and push the bump back to `testing` (skipped when `dry_run=true`).
-  3. Wait for the latest `ci-testing.yml` run on the bumped commit and post a
-     commit status (`Promote to Main`).
-  4. Fast-forward `main` to match `testing`, then push (or dry-run skip).
-  5. Optionally tag `v<next_version>` after the fast-forward.
-  6. Emit a markdown summary (CI link, bump commit, fast-forward SHAs, tag).
-- **Branch protections**: now rely on the `Promote to Main` status rather than
-  direct PR checks, so we can temporarily drop rulesets while iterating on the
-  installer without rewriting the workflow.
+  1. Checkout `testing`/`main` (full history, recursive submodules) and determine
+     the next release version. If the operator provides `next_version`, use it;
+     otherwise parse the latest `v*` tag and auto-increment the patch component.
+  2. Run `tools/version-bump` with the computed version and push the commit back
+     to `testing` (skipped when `dry_run=true`).
+  3. Validate that at least one `ci-testing.yml` workflow finished successfully
+     in the last 30 minutes (any commit on `testing` counts); record its URL in
+     the summary. This avoids waiting for a brand-new run while still enforcing
+     “CI was green recently.”
+  4. Fast-forward `main` to match `testing`, then push (or skip when dry-running).
+  5. Always create/push tag `v<next_version>` and immediately dispatch
+     `release.yml` against that tag so publishing starts without manual pushes.
+  6. Emit a markdown summary (CI link, bump commit, fast-forward SHAs, tag, and
+     release trigger result) for audit trails.
+- **Branch protections**: rely on the `Promote to Main` commit status, allowing
+  us to toggle repo rulesets during installer work without rewriting pipelines.
 
 ### 3.5 Legacy Installer Expectations
 The previous manual release (commit
@@ -238,6 +244,23 @@ users see exactly five public downloads instead of dozens.
    deploy shims, provision Lima/WSL, and run the bundled doctor/smoke scripts
    without manual intervention.
 
+#### 3.5.4 Current Automation Status (2025-11-08)
+
+- **Bundle assembly live** – `release.yml` now copies every per-crate dist
+  artifact plus `substrate-support.{tar.gz,zip}` into a single archive per host
+  target. These bundles already include `substrate`, `substrate-shim`,
+  `host-proxy`, `world-agent`, and (on Windows) `substrate-forwarder`, so the
+  installers only need one download per platform plus the support archive.
+- **Installer UX surfaced in release notes** – the GitHub Release body links to
+  the shell/PowerShell one-liners and uninstall commands so operators can copy
+  them directly. The cargo-dist quickstart tables are suppressed to avoid
+  dangling links to non-existent artifacts.
+- **Known gap: source tarball** – `substrate-<tag>-source.tar.gz` is generated
+  from `git archive`, so nested git submodules (e.g., `third_party/reedline`)
+  are empty. Consumers who need full vendor sources must clone the repo with
+  `--recurse-submodules` until we either vendor those directories or teach the
+  release workflow to expand submodules before packaging.
+
 ### 3.6 Linux World Hardening
 - **Status**: Completed (gated in `crates/world`).
 - **Behavior**:
@@ -314,11 +337,32 @@ users see exactly five public downloads instead of dozens.
   `dist/scripts/collect-supporting-artifacts.sh` remains the canonical way to
   produce `substrate-support.{tar.gz,zip}`; the bundler job consumes those files
   when building each host archive.
+- **Release notes driven from template** – `release.yml` now feeds
+  `dist/release-template.md` through `envsubst` so GitHub releases always show
+  the curl|bash and PowerShell installers plus a table of OS/arch bundles and
+  checksum links (no more `null` body when cargo-dist omits announcement text).
 - **Pre-publish verification** – Developers and CI should run
   `cargo dist plan --ci github --output-format=json` (and ideally
   `cargo dist build --artifacts=local`) before tagging to confirm every crate and
   bundle is scheduled. Publish should be blocked if `SHA256SUMS` lacks a row for
-  any required bundle/support artifact.
+  any required bundle/support artifact. For now the `source.tar.gz` output does
+  not include git submodules, so operators should either clone with
+  `--recurse-submodules` or wait for the planned “vendored source tarball” work
+  described in §5.4.
+
+### 5.4 Source Tarball Completeness (new)
+
+- **Current behavior** – The auto-generated `source.tar.gz` is produced via
+  `git archive`, which omits submodule contents. Directories such as
+  `third_party/reedline` exist but are empty.
+- **Required change** – Capture submodule contents in the source artifact by
+  either vendoring them into the main tree prior to release, switching to
+  `git archive --add-file`/`git subtree`, or crafting a custom step in
+  `release.yml` that syncs submodules into a staging area before uploading.
+- **Acceptance** – The release should document whether the source tarball is
+  “complete” or instruct consumers to use `git clone --recurse-submodules`. Once
+  the tarball includes the vendor code, this section should be updated and the
+  associated task closed.
 
 ### 5.2 Installer Re-alignment Outline
 
