@@ -130,15 +130,12 @@ pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                     drain_cursor_position_reports();
                                     drop(reedline_guard);
                                     adapter
-                                        .begin_session()
+                                        .resume_after_command()
                                         .context("failed to resume async Reedline session")?;
                                     drain_cursor_position_reports();
 
                                     publish_command_completion(&trimmed_owned, &status);
                                     telemetry.record_command();
-                                    adapter
-                                        .render_prompt()
-                                        .context("failed to redraw prompt after command")?;
                                     let _ = adapter.sync_history();
                                 }
                                 AdapterAction::Interrupt => {
@@ -265,6 +262,13 @@ impl AsyncReedlineAdapter {
     fn flush_external_messages(&mut self) -> Result<()> {
         let _ = self.editor.flush_external_messages(&self.prompt)?;
         Ok(())
+    }
+
+    fn resume_after_command(&mut self) -> Result<()> {
+        self.begin_session()?;
+        let _ = self.editor.process_events(&self.prompt, Vec::new())?;
+        self.flush_external_messages()?;
+        self.render_prompt()
     }
 
     fn suspend_for_command(&mut self) -> SuspendGuard<'_> {
