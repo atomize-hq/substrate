@@ -46,11 +46,15 @@ Since these merges, the prompt now waits for the next input event after each PTY
 2. **Async REPL changes** (`crates/shell/src/async_repl.rs`):
    - Added `AsyncReedlineAdapter::resume_after_command()` (calls `begin_nonblocking_session`, `process_events`, `flush_external_messages`, `force_repaint`).
    - PTY completion flow now uses the helper immediately after each command.
-3. **Testing**:
+3. **Painter non-blocking cursor detection** (`third_party/reedline/src/painting/painter.rs`):
+   - `current_cursor_position()` now retries `fast_cursor_position` with bounded timeouts on Unix instead of falling back to the blocking `cursor::position()` call that required an extra keystroke to unblock the prompt.
+   - `repaint_buffer` and the resize handler reuse the new helper so repainting never waits indefinitely for a terminal-generated cursor report.
+4. **Testing**:
    - `cargo test -p substrate-shell linux_world_tests -- --nocapture`
    - Manual prompt drills (still reproduces hang).
 
 ## Remaining Issues / Unknowns
+- Need validation on a real terminal-backed session that the non-blocking cursor detection fully resolves the blank prompt without regressing prompt placement on resize.
 - Reedline still paints the prompt but blocks until another `Event` arrives. Even with `process_events(Vec::new())`, no repaint occurs until the next keypress.
 - Need to diff `origin/minimal-suspend-api` vs. `main` to see what changed around `begin_nonblocking_session`, `process_events`, and painter flushing.
 - Possibility: upstream adds buffering in `process_events` or `flush_external_messages` that we aren’t triggering. Minimal branch may have forced a repaint directly after `suspend_guard`.
@@ -65,4 +69,3 @@ Since these merges, the prompt now waits for the next input event after each PTY
 3. Instrument the async adapter to log Reedline signals after PTY commands. Confirm whether Reedline delivers any events on resume.
 4. Explore forcing a synthetic `Event::Resize` or `Event::FocusGained` immediately after we drop the guard, to unblock the painter.
 5. Re-run `scripts/dev/async_repl_prompt_checks.py` once a candidate fix is implemented.
-
