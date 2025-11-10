@@ -1639,33 +1639,12 @@ pub fn run_shell() -> Result<i32> {
     // Default-on world initialization (Linux only)
     #[cfg(target_os = "linux")]
     {
-        use world::LinuxLocalBackend;
-        use world_api::{ResourceLimits, WorldBackend, WorldSpec};
         let world_disabled = env::var("SUBSTRATE_WORLD")
             .map(|v| v == "disabled")
             .unwrap_or(false)
             || config.no_world;
-        if !world_disabled {
-            let spec = WorldSpec {
-                reuse_session: true,
-                isolate_network: true,
-                limits: ResourceLimits::default(),
-                enable_preload: false,
-                allowed_domains: substrate_broker::allowed_domains(),
-                project_dir: env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
-                always_isolate: false, // Default: use heuristic-based isolation
-            };
-            let backend = LinuxLocalBackend::new();
-            match backend.ensure_session(&spec) {
-                Ok(handle) => {
-                    env::set_var("SUBSTRATE_WORLD", "enabled");
-                    env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
-                }
-                Err(_e) => {
-                    // Degrade silently: world may be unavailable in this environment.
-                }
-            }
-        }
+
+        let _ = init_linux_world(world_disabled);
     }
 
     // Deploy shims if needed (non-blocking, continues on error)
@@ -4083,6 +4062,117 @@ fn ensure_world_agent_ready() -> anyhow::Result<()> {
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
     anyhow::bail!("world-agent readiness probe failed")
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug, PartialEq, Eq)]
+enum LinuxWorldInit {
+    Disabled,
+    Agent,
+    LocalBackend,
+    LocalBackendFailed,
+}
+
+#[cfg(target_os = "linux")]
+fn init_linux_world(world_disabled: bool) -> LinuxWorldInit {
+    init_linux_world_with_probe(world_disabled, ensure_world_agent_ready)
+}
+
+#[cfg(target_os = "linux")]
+fn init_linux_world_with_probe<F>(world_disabled: bool, agent_probe: F) -> LinuxWorldInit
+where
+    F: Fn() -> anyhow::Result<()>,
+{
+    use world::LinuxLocalBackend;
+    use world_api::{ResourceLimits, WorldBackend, WorldSpec};
+
+    if world_disabled {
+        return LinuxWorldInit::Disabled;
+    }
+
+    match agent_probe() {
+        Ok(()) => {
+            env::set_var("SUBSTRATE_WORLD", "enabled");
+            env::remove_var("SUBSTRATE_WORLD_ID");
+            LinuxWorldInit::Agent
+        }
+        Err(agent_err) => {
+            #[cfg(test)]
+            if let Ok(mock_id) = env::var("SUBSTRATE_TEST_LOCAL_WORLD_ID") {
+                env::set_var("SUBSTRATE_WORLD", "enabled");
+                env::set_var("SUBSTRATE_WORLD_ID", mock_id);
+                return LinuxWorldInit::LocalBackend;
+            }
+
+            let spec = WorldSpec {
+                reuse_session: true,
+                isolate_network: true,
+                limits: ResourceLimits::default(),
+                enable_preload: false,
+                allowed_domains: substrate_broker::allowed_domains(),
+                project_dir: env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+                always_isolate: false,
+            };
+            let backend = LinuxLocalBackend::new();
+            match backend.ensure_session(&spec) {
+                Ok(handle) => {
+                    env::set_var("SUBSTRATE_WORLD", "enabled");
+                    env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
+                    LinuxWorldInit::LocalBackend
+                }
+                Err(local_err) => {
+                    eprintln!(
+                        "substrate: linux world fallback failed (agent error: {agent_err:#}; local error: {local_err:#})"
+                    );
+                    LinuxWorldInit::LocalBackendFailed
+                }
+            }
+        }
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod linux_world_tests {
+    use super::*;
+    use anyhow::anyhow;
+    use serial_test::serial;
+
+    fn clear_env() {
+        env::remove_var("SUBSTRATE_WORLD");
+        env::remove_var("SUBSTRATE_WORLD_ID");
+        env::remove_var("SUBSTRATE_TEST_LOCAL_WORLD_ID");
+    }
+
+    #[test]
+    #[serial]
+    fn agent_probe_enables_world() {
+        clear_env();
+        let outcome = init_linux_world_with_probe(false, || Ok(()));
+        assert_eq!(outcome, LinuxWorldInit::Agent);
+        assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
+        assert!(env::var("SUBSTRATE_WORLD_ID").is_err());
+    }
+
+    #[test]
+    #[serial]
+    fn fallback_uses_local_backend_stub() {
+        clear_env();
+        env::set_var("SUBSTRATE_TEST_LOCAL_WORLD_ID", "wld_test_stub");
+        let outcome = init_linux_world_with_probe(false, || Err(anyhow!("no agent")));
+        assert_eq!(outcome, LinuxWorldInit::LocalBackend);
+        assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
+        assert_eq!(env::var("SUBSTRATE_WORLD_ID").unwrap(), "wld_test_stub");
+    }
+
+    #[test]
+    #[serial]
+    fn disabled_skips_initialization() {
+        clear_env();
+        let outcome = init_linux_world_with_probe(true, || Ok(()));
+        assert_eq!(outcome, LinuxWorldInit::Disabled);
+        assert!(env::var("SUBSTRATE_WORLD").is_err());
+        assert!(env::var("SUBSTRATE_WORLD_ID").is_err());
+    }
 }
 
 #[cfg(target_os = "macos")]
