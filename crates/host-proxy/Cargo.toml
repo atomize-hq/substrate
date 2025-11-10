@@ -1,6 +1,6 @@
 [package]
 name = "host-proxy"
-version = "0.2.10"
+version = "0.2.11"
 edition = "2021"
 authors = ["Atomize"]
 description = "Host-side API gateway for Agent API with auth, rate limiting, and request forwarding"
