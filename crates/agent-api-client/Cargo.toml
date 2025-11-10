@@ -1,6 +1,6 @@
 [package]
 name = "agent-api-client"
-version = "0.2.8"
+version = "0.2.9"
 edition = "2021"
 authors = ["Atomize"]
 description = "Client for forwarding Agent API requests to world-agent"
@@ -17,7 +17,7 @@ http-body-util = "0.1"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 dirs = "5"
-agent-api-types = { version = "0.2.8", path = "../agent-api-types" }
+agent-api-types = { version = "0.2.9", path = "../agent-api-types" }
 async-trait = "0.1"
 tower-service = "0.3"
 
