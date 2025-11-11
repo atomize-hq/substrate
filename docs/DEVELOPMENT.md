@@ -17,7 +17,6 @@ substrate/
 │   ├── common/               # Shared utilities and log schema
 │   ├── shell/                # Custom shell implementation
 │   ├── shim/                 # Binary shimming implementation
-├── third_party/reedline/     # Custom Reedline fork
 ├── scripts/                  # Deployment and management scripts
 └── docs/                     # Documentation
 ```
@@ -165,24 +164,7 @@ substrate-common (base utilities)
 
 ## Reedline Integration
 
-Substrate uses a custom fork of Reedline:
-
-### Working with the Fork
-
-```bash
-# Update reedline fork
-cd third_party/reedline
-git pull upstream main
-cd ../..
-cargo build --release
-```
-
-### Patch Configuration
-
-```toml
-[patch.crates-io]
-reedline = { path = "third_party/reedline" }
-```
+The async and sync shells reuse the upstream `reedline` crate directly from crates.io. A dedicated prompt worker thread owns the `Reedline` instance and communicates with the rest of the shell over channels, so we no longer need a vendored fork or `[patch.crates-io]` overrides. If you need to modify Reedline itself, contribute upstream (https://github.com/nushell/reedline) and bump the dependency version here once the change is released.
 
 ## Adding Features
 

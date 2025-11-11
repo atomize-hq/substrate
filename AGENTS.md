@@ -14,7 +14,7 @@ Substrate is the secure execution layer that sits between AI agents and a develo
 - `crates/broker`, `forwarder`, `host-proxy`, `telemetry-lib`, `replay`, `substrate-graph`: policy decisions, transport glue, telemetry pipelines, replay tooling, and optional graph analytics.
 - `docs/`: deep dives (`WORLD.md`, `TRACE.md`, `REPLAY.md`, `TELEMETRY.md`, `CONFIGURATION.md`, `cross-platform/…`).
 - `scripts/`: provisioning, doctoring, smoke tests (`linux/world-provision.sh`, `mac/lima-warm.sh`, `mac/smoke.sh`, `windows/wsl-warm.ps1`, `windows/wsl-smoke.ps1`).
-- `third_party/reedline`: custom fork providing the REPL; patched via `[patch.crates-io]` in `Cargo.toml`.
+- `reedline` (crates.io dependency): upstream line editor used by the async/sync REPL workers.
 
 ## Execution Architecture
 1. Shell loads policy via the broker (`substrate_broker::evaluate`), ensures shims are deployed (`ShimDeployer`), and initializes tracing (`substrate_trace::init_trace`).

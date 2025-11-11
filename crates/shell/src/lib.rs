@@ -1767,67 +1767,31 @@ fn run_interactive_shell(config: &ShellConfig) -> Result<i32> {
                     continue;
                 }
 
-                // Determine if this needs PTY
-                let disabled = is_pty_disabled();
-                let forced = is_force_pty_command(&line);
-                let needs_pty_exec = forced || (!disabled && needs_pty(&line));
-
                 let cmd_id = Uuid::now_v7().to_string();
 
-                // Use suspend guard for PTY commands and route via execute_command (WS PTY when enabled)
-                if needs_pty_exec {
-                    // Suspend Reedline while PTY command runs
-                    let _guard = line_editor.suspend_guard();
-                    match execute_command(config, &line, &cmd_id, running_child_pid.clone()) {
-                        Ok(status) => {
-                            if !status.success() {
-                                #[cfg(unix)]
-                                if let Some(sig) = status.signal() {
-                                    eprintln!("Command terminated by signal {sig}");
-                                } else {
-                                    eprintln!(
-                                        "Command failed with status: {}",
-                                        status.code().unwrap_or(-1)
-                                    );
-                                }
-                                #[cfg(not(unix))]
+                match execute_command(config, &line, &cmd_id, running_child_pid.clone()) {
+                    Ok(status) => {
+                        if !status.success() {
+                            #[cfg(unix)]
+                            if let Some(sig) = status.signal() {
+                                eprintln!("Command terminated by signal {sig}");
+                            } else {
                                 eprintln!(
                                     "Command failed with status: {}",
                                     status.code().unwrap_or(-1)
                                 );
                             }
-
-                            publish_command_completion(trimmed, &status);
-                            telemetry.record_command();
+                            #[cfg(not(unix))]
+                            eprintln!(
+                                "Command failed with status: {}",
+                                status.code().unwrap_or(-1)
+                            );
                         }
-                        Err(e) => eprintln!("Error: {e}"),
-                    }
-                    // Guard automatically drops and resumes here
-                } else {
-                    match execute_command(config, &line, &cmd_id, running_child_pid.clone()) {
-                        Ok(status) => {
-                            if !status.success() {
-                                #[cfg(unix)]
-                                if let Some(sig) = status.signal() {
-                                    eprintln!("Command terminated by signal {sig}");
-                                } else {
-                                    eprintln!(
-                                        "Command failed with status: {}",
-                                        status.code().unwrap_or(-1)
-                                    );
-                                }
-                                #[cfg(not(unix))]
-                                eprintln!(
-                                    "Command failed with status: {}",
-                                    status.code().unwrap_or(-1)
-                                );
-                            }
 
-                            publish_command_completion(trimmed, &status);
-                            telemetry.record_command();
-                        }
-                        Err(e) => eprintln!("Error: {e}"),
+                        publish_command_completion(trimmed, &status);
+                        telemetry.record_command();
                     }
+                    Err(e) => eprintln!("Error: {e}"),
                 }
             }
             Ok(Signal::CtrlC) => {

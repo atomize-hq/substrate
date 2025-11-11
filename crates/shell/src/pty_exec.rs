@@ -830,7 +830,16 @@ impl Drop for MinimalTerminalGuard {
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicBool, AtomicI32};
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex, OnceLock};
+
+    static PTY_ENV_TEST_GUARD: OnceLock<Mutex<()>> = OnceLock::new();
+
+    fn acquire_pty_env_guard() -> std::sync::MutexGuard<'static, ()> {
+        PTY_ENV_TEST_GUARD
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("pty env guard poisoned")
+    }
 
     // Mock implementations for testing PTY operations without actual PTY allocation
 
@@ -1213,6 +1222,7 @@ mod tests {
 
     #[test]
     fn test_pty_debug_environment() {
+        let _guard = acquire_pty_env_guard();
         // Test PTY debug environment detection
         let original_debug = std::env::var("SUBSTRATE_PTY_DEBUG").ok();
 
