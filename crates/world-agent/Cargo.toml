@@ -1,6 +1,6 @@
 [package]
 name = "world-agent"
-version = "0.2.12"
+version = "0.2.13"
 edition = "2021"
 authors = ["Atomize"]
 description = "Agent service running inside worlds/VMs providing execution API"
