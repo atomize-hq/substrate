@@ -125,9 +125,9 @@ substrate/
 - Global SIGWINCH handler using `signal-hook`
 
 **Reedline Integration**:
-- Uses patched version from `third_party/reedline/`
-- Configured via `[patch.crates-io]` in root `Cargo.toml`
-- Provides REPL functionality with history, completion, and editing
+- Uses the upstream `reedline` crate from crates.io.
+- A dedicated prompt worker thread owns the `Reedline` instance and exchanges commands/results with the async shell over channels.
+- ExternalPrinter handles surface agent output while Reedline blocks inside `read_line`.
 
 ### 3. Common (`crates/common/`)
 
@@ -158,24 +158,19 @@ pub mod log_schema {
 
 ## Third-Party Dependencies
 
-### Reedline Fork
+### Reedline
 
-**Location**: `third_party/reedline/`
+**Source**: crates.io (`reedline = "0.43"` as of v0.2.12)
 
-**Integration**: Configured via `[patch.crates-io]` in root `Cargo.toml`:
-```toml
-[patch.crates-io]
-reedline = { path = "third_party/reedline" }
-```
+**Purpose**: Powers the interactive REPL experience:
+- Command history and persistence (`FileBackedHistory`)
+- Tab completion with menus
+- Emacs/Vi editing modes and syntax highlighting
+- External printer used to surface agent output asynchronously
 
-**Purpose**: Provides interactive shell REPL functionality with:
-- Command history and persistence
-- Tab completion support
-- Line editing with Emacs/Vi modes
-- Syntax highlighting capabilities
-- Custom prompt support
-
-**Why Forked**: The fork contains minimal modifications needed for substrate-specific integration and behavior.
+**Integration Notes**:
+- Prompt handling lives in `crates/shell/src/async_repl.rs` and `crates/shell/src/lib.rs`.
+- No vendored fork or `[patch.crates-io]` override is required; contribute upstream for editor changes.
 
 ## Logging Architecture
 

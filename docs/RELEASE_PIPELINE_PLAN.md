@@ -257,11 +257,11 @@ users see exactly five public downloads instead of dozens.
   the shell/PowerShell one-liners and uninstall commands so operators can copy
   them directly. The cargo-dist quickstart tables are suppressed to avoid
   dangling links to non-existent artifacts.
-- **Known gap: source tarball** – `substrate-<tag>-source.tar.gz` is generated
-  from `git archive`, so nested git submodules (e.g., `third_party/reedline`)
-  are empty. Consumers who need full vendor sources must clone the repo with
-  `--recurse-submodules` until we either vendor those directories or teach the
-  release workflow to expand submodules before packaging.
+- **Known gap: source tarball** – Previously `git archive` omitted nested
+  submodules (e.g., `third_party/reedline`), so the source tarball lacked our
+  REPL fork. As of v0.2.12 we consume Reedline directly from crates.io, so the
+  source tarball now contains all required Rust sources without additional
+  steps.
 
 ### 3.6 Linux World Hardening
 - **Status**: Completed (gated in `crates/world`).
@@ -348,23 +348,19 @@ users see exactly five public downloads instead of dozens.
   `cargo dist build --artifacts=local`) before tagging to confirm every crate and
   bundle is scheduled. Publish should be blocked if `SHA256SUMS` lacks a row for
   any required bundle/support artifact. For now the `source.tar.gz` output does
-  not include git submodules, so operators should either clone with
-  `--recurse-submodules` or wait for the planned “vendored source tarball” work
-  described in §5.4.
+  not include git submodules (legacy note from when `third_party/reedline` was a
+  submodule); this gap was removed in v0.2.12 when we switched to the upstream
+  Reedline crate.
 
 ### 5.4 Source Tarball Completeness (new)
 
-- **Current behavior** – The auto-generated `source.tar.gz` is produced via
-  `git archive`, which omits submodule contents. Directories such as
-  `third_party/reedline` exist but are empty.
-- **Required change** – Capture submodule contents in the source artifact by
-  either vendoring them into the main tree prior to release, switching to
-  `git archive --add-file`/`git subtree`, or crafting a custom step in
-  `release.yml` that syncs submodules into a staging area before uploading.
-- **Acceptance** – The release should document whether the source tarball is
-  “complete” or instruct consumers to use `git clone --recurse-submodules`. Once
-  the tarball includes the vendor code, this section should be updated and the
-  associated task closed.
+- **Current behavior** – `git archive` now captures all Rust sources because we
+  no longer rely on submodules for Reedline.
+- **Required change** – None. Leave this section for historical context; if new
+  submodules are added in the future, re-open the investigation to ensure the
+  source tarball stays complete.
+- **Acceptance** – Document in release notes that the source tarball is
+  self-contained for v0.2.12+.
 
 ### 5.2 Installer Re-alignment Outline
 
