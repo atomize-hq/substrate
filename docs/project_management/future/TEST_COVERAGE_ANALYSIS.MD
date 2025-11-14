@@ -8,14 +8,14 @@
 
 ## Current Coverage Status
 
-As of August 28, 2025 `cargo tarpaulin` analysis (excluding third_party/reedline):
+As of August 28, 2025 `cargo tarpaulin` analysis (excluding the legacy `third_party/reedline` fork that has since been removed):
 
 ### Overall Statistics
 
 - **Total Coverage**: ✅ **30.17%** (484/1604 lines covered) - **+4.24% improvement**
 - **Critical Gaps**: ✅ **RESOLVED** - No modules with 0% coverage
 - **Achievement**: **All originally critical modules now have substantial coverage**
-- **Total Codebase**: 1,604 lines (excluding third_party - accurate count)
+- **Total Codebase**: 1,604 lines (excluding the legacy vendor directory - accurate count)
 
 ### ✅ COMPLETED: Coverage by Crate
 

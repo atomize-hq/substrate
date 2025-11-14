@@ -8,6 +8,8 @@ Stage 5 brings the async REPL up to feature parity with the legacy Reedline-driv
 - Multiline input editing with proper caret rendering
 - Compatibility with streaming agent output via the shared `AgentEvent` channel
 
+> **Note (2025-11)**: References to the `third_party/reedline` fork below describe the historical implementation. As of v0.2.12 we depend on the upstream `reedline` crate, but the architectural requirements and lessons learned in this document still apply.
+
 ## Current State
 - `run_async_repl` (see `crates/shell/src/async_repl.rs`) owns a bespoke crossterm loop that only supports append, backspace, tab literal, and submit.
 - Reedline features (history, completions, transient prompt, undo stack) remain exclusive to the sync REPL (`crates/shell/src/lib.rs`).
@@ -40,7 +42,7 @@ Stage 5 brings the async REPL up to feature parity with the legacy Reedline-driv
 - **Status:** Accepted. Implementation will begin with `stage5-shared-editor-core`.
 - **Alternatives considered:**
   - *Run the full Reedline event loop on a blocking thread and proxy input/output over channels.* Rejected because it re-introduces a busy wait on macOS (Reedline polls within its loop) and complicates shutdown/TTY handoff across platforms.
-  - *Rewrite the async editor without Reedline.* Rejected due to the high cost of re-creating history, completion, and undo stacks, and because it would diverge from our vendored Reedline fork (`third_party/reedline`).
+  - *Rewrite the async editor without Reedline.* Rejected due to the high cost of re-creating history, completion, and undo stacks, and because it would diverge from our then-vendored Reedline fork (`third_party/reedline`, legacy).
 - **Consequences:**
   - Requires extracting Reedline configuration into a shared builder so the adapter can borrow the same keymaps/history/completion pipeline (`crates/shell/src/lib.rs:1736-1928`).
   - Demands explicit stdout coordination with existing helpers (see `render_agent_event` in `crates/shell/src/async_repl.rs:240-254`) to avoid prompt corruption.
@@ -85,7 +87,7 @@ Stage 5 brings the async REPL up to feature parity with the legacy Reedline-driv
   ```
   `AdapterAction` enumerates responses for the outer loop: `Continue`, `Submit(String)`, `Exit`, `Redraw`.
 - **Event Flow**:
-  1. Tokio reads `KeyEvent` from crossterm and calls `handle_key_event`. The adapter translates to `ReedlineEvent` via the same parsing logic used in `third_party/reedline/src/engine.rs:874-1010`, but without blocking.
+  1. Tokio reads `KeyEvent` from crossterm and calls `handle_key_event`. The adapter translates to `ReedlineEvent` via the same parsing logic used in `third_party/reedline/src/engine.rs:874-1010` (legacy fork), but without blocking.
   2. `handle_key_event` mutates the Reedline editor and uses `painter` to repaint if necessary. Stdout writes occur within a `stdout_lock` guard so that concurrent agent output (see `render_agent_event` helper) cannot interleave mid-draw.
   3. When `AdapterAction::Submit(cmd)` is returned, the outer loop pauses raw mode (via `RawTerminalGuard`) exactly as today, executes the command (spawn_blocking), and resumes through `suspend_for_command`.
   4. Agent events arrive via `agent_rx`; `handle_agent_event` formats lines with existing `format_event_line` but uses the adapter's painter to temporarily hide the prompt, print the event, and restore the buffer.
@@ -113,14 +115,14 @@ Stage 5 brings the async REPL up to feature parity with the legacy Reedline-driv
   1. Async mode must load and sync the same `FileBackedHistory` instance used by the sync REPL, writing back on exit.
   2. Completion menu (`ColumnarMenu` registered as `completion_menu`) should display when the user presses Tab, just as in the legacy loop.
   3. Confirm history persistence by running the async REPL twice and inspecting `~/.substrate_history` for the new entries.
-- **Implementation status**: `AsyncReedlineAdapter` now drives Reedline via `process_events` (see `crates/shell/src/async_repl.rs` and `third_party/reedline/src/engine.rs:752-805`), so history/completion behavior matches the sync REPL while keeping the async event loop.
+- **Implementation status**: `AsyncReedlineAdapter` now drives Reedline via `process_events` (see `crates/shell/src/async_repl.rs` and `third_party/reedline/src/engine.rs:752-805` from the legacy fork), so history/completion behavior matches the sync REPL while keeping the async event loop.
 - **Agent-output compatibility**: Document how the completion popup coexists with streaming agent events (e.g., the adapter defers redraw while menus are visible).
 - **Testing guidance**: Encourage extending `scripts/dev/async_repl_prompt_checks.py` with a Stage 5 scenario that triggers history recall mid-stream and capture the transcript to `docs/project_management/now/stage5_prompt_checks_transcript.txt`.
 - **Tooling**: `scripts/dev/async_repl_prompt_checks.py` now emits both Stage 4 and Stage 5 transcripts (use `--stage5-log` to capture history/completion runs).
 
 ### stage5-cursor-multiline
-- **Event mapping**: Detail how crossterm key events (`CtKeyCode::Left`, `Right`, `Home`, `End`, `Enter` with modifiers) map to the corresponding `ReedlineEvent::Edit` commands. Reference `third_party/reedline/src/engine.rs:874-1010` for canonical handling.
-- **Implementation status**: The async shell now proxies events through `Reedline::process_events` (`crates/shell/src/async_repl.rs`, `third_party/reedline/src/engine.rs:752-823`), so cursor motion, multi-line editing (`Shift+Enter`/`Alt+Enter`), and undo/redo reuse Reedline internals without bespoke mappings.
+- **Event mapping**: Detail how crossterm key events (`CtKeyCode::Left`, `Right`, `Home`, `End`, `Enter` with modifiers) map to the corresponding `ReedlineEvent::Edit` commands. Reference `third_party/reedline/src/engine.rs:874-1010` (legacy fork) for canonical handling.
+- **Implementation status**: The async shell now proxies events through `Reedline::process_events` (`crates/shell/src/async_repl.rs`, `third_party/reedline/src/engine.rs:752-823` from the legacy fork), so cursor motion, multi-line editing (`Shift+Enter`/`Alt+Enter`), and undo/redo reuse Reedline internals without bespoke mappings.
 - **Line continuation**: Trailing `\` before Enter now keeps the command in the buffer with a newline, matching classic shell behavior.
 - **Follow-up**: Residual CSI cursor reports (e.g., `^[[45;28R`) still appear intermittently after certain binaries (`python`, `sqlite3`). A Stage 6/Stage 5 follow-up needs to audit remaining manual redraw paths and ensure we let Reedline manage prompt rendering end-to-end.
 - **Multiline caret**: Specify the redraw expectations—after receiving an agent event while the user edits a multi-line buffer, the caret should return to the correct logical column/row. ExternalPrinter flushing in `AsyncReedlineAdapter::flush_external_messages` ensures prompt restoration.

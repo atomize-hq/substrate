@@ -258,7 +258,7 @@ users see exactly five public downloads instead of dozens.
   them directly. The cargo-dist quickstart tables are suppressed to avoid
   dangling links to non-existent artifacts.
 - **Known gap: source tarball** – Previously `git archive` omitted nested
-  submodules (e.g., `third_party/reedline`), so the source tarball lacked our
+  submodules (e.g., the legacy `third_party/reedline` fork), so the source tarball lacked our
   REPL fork. As of v0.2.12 we consume Reedline directly from crates.io, so the
   source tarball now contains all required Rust sources without additional
   steps.
@@ -355,7 +355,8 @@ users see exactly five public downloads instead of dozens.
 ### 5.4 Source Tarball Completeness (new)
 
 - **Current behavior** – `git archive` now captures all Rust sources because we
-  no longer rely on submodules for Reedline.
+  no longer rely on submodules for Reedline (the old `third_party/reedline` fork
+  was removed in v0.2.12).
 - **Required change** – None. Leave this section for historical context; if new
   submodules are added in the future, re-open the investigation to ensure the
   source tarball stays complete.

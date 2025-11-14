@@ -1,3 +1,5 @@
+> **Historical Note**: This plan reflects the 2025 experiment when we maintained a fork under `third_party/reedline`. The fork has since been removed in favor of the upstream crate, but the details remain here for reference.
+
 Here’s a drop-in implementation spec you can hand to Claude. It includes the exact changes for a **minimal Reedline fork**, the **host commit-time hook**, and the **Substrate integration** with PTY + full tracing. It’s written so an engineer can implement without hunting context.
 
 ---

@@ -1,6 +1,11 @@
 {
   "session_log": [
     {
+      "timestamp": "2025-11-22T10:00:00Z",
+      "summary": "Removed the legacy `third_party/reedline` fork and switched to the upstream crates.io release. Any older log entries mentioning `third_party/reedline` describe the historical state before v0.2.12.",
+      "notes": "Prompt worker abstraction replaced the fork-specific adapter; documentation has been updated accordingly."
+    },
+    {
       "timestamp": "2025-10-24T14:20:00Z",
       "summary": "Stage 1 gating/backoff complete; updated shell to use std IsTerminal and added dev shim helper.",
       "highlights": [

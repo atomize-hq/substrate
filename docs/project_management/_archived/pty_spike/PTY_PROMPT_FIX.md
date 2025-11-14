@@ -1,5 +1,7 @@
 # PTY Prompt Fix Implementation
 
+> **Historical Note**: This document describes the custom fork housed under `third_party/reedline` during the PTY spike. The fork has been retired in favor of the upstream crate; the content below is preserved for future reference.
+
 ## Problem Statement
 
 After exiting PTY commands (vim, python REPL, claude, etc.) in the Substrate shell, users had to press an additional key to see the prompt again. This was a persistent issue that resisted multiple solution attempts.

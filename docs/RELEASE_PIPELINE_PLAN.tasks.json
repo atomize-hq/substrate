@@ -186,7 +186,7 @@
     {
       "timestamp": "2025-11-08T17:40:00Z",
       "task_id": "source-tarball-completeness",
-      "message": "Recorded that git archive omits submodule contents (e.g., third_party/reedline) and flagged the need to vendor or pre-expand submodules before producing source tarballs."
+      "message": "Recorded that git archive omits historical submodule contents (e.g., the legacy third_party/reedline fork) and flagged the need to vendor or pre-expand submodules before producing source tarballs."
     },
     {
       "timestamp": "2025-11-09T18:00:00Z",
@@ -483,9 +483,9 @@
     {
       "id": "source-tarball-completeness",
       "title": "Include submodule contents in source tarballs",
-      "description": "Decide how to vendor or stage git submodules (e.g., third_party/reedline) so the auto-generated source archive contains the patched dependencies our installers rely on.",
+      "description": "Decide how to vendor or stage git submodules (e.g., the legacy third_party/reedline fork) so the auto-generated source archive contains the patched dependencies our installers rely on.",
       "context": [
-        "third_party/reedline",
+        "legacy third_party/reedline fork",
         ".github/workflows/release.yml",
         "docs/RELEASE_PIPELINE_PLAN.md#54-source-tarball-completeness-new"
       ],

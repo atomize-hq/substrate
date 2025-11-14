@@ -1,5 +1,7 @@
 # Phase 3.75 Reedline Migration - Completion Status
 
+> **Historical Note**: This document captures the 2025 migration that relied on a fork stored under `third_party/reedline`. As of v0.2.12 we use the upstream Reedline crate; references to the fork remain here for archival purposes only.
+
 ## Summary
 
 The Reedline migration has been **successfully completed** with a different approach than originally planned in `REEDLINE_MIGRATION_PLAN.md`. Instead of using the `NEEDS_REPAINT` atomic flag approach, we implemented a more sophisticated solution using a forked Reedline with custom hooks.
@@ -9,7 +11,7 @@ The Reedline migration has been **successfully completed** with a different appr
 ### ✅ Core Migration Completed
 
 1. **Reedline Fork with Custom Features**
-   - Forked Reedline to `third_party/reedline/`
+   - Forked Reedline to `third_party/reedline/` (legacy path retained here for history)
    - Added `substrate_api` feature for suspend/repaint APIs
    - Added `substrate_host_hook` feature for ExecuteHostCommand signal
    - Created host decision hook system for PTY command detection
@@ -200,7 +202,7 @@ As planned, these are deferred:
    - [ ] Remove rustyline comment from `crates/shell/src/lib.rs:397`
 
 2. **Fix Workspace Configuration**
-   - [ ] Add `workspace.exclude = ["third_party/reedline"]` to root `Cargo.toml`
+   - [ ] Add `workspace.exclude = ["third_party/reedline"]` to root `Cargo.toml` (historical artifact; no longer required)
    - [ ] This fixes the workspace error when running `cargo clippy`
 
 3. **Clean Up Temporary Test Files**
