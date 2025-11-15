@@ -5,7 +5,7 @@
       "name": "Implement manager manifest parser",
       "phase": "Phase A",
       "type": "code",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add the shared manifest loader in crates/common so other crates can detect managers, init snippets, and guest recipes.",
       "references": [
         "docs/project_management/next/substrate_isolated_shell_plan.md",
