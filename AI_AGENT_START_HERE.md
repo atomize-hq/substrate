@@ -84,7 +84,9 @@ At the **end**:
 2. Read session log plus the Integration Kickoff Prompt provided by the test task.
 3. Merge/resolve changes inside the integration worktree (or designated merge tree). Avoid editing coordination artifacts there.
 4. Run the verification commands.
-5. Return to `feat/isolated-shell-plan`, append END entry with results, update task status (`completed` or `blocked`).
+5. When integration worktree is clean and tests pass:
+   - Merge its results back into the main coordination worktree/branch `feat/isolated-shell-plan`.
+   - While on `feat/isolated-shell-plan`, append the END entry with results, update task status (`completed` or `blocked`), and commit any remaining coordination files (session log, tasks.json, kickoff prompts).
 
 ---
 
