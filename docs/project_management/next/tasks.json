@@ -45,9 +45,7 @@
         "All tests run via `cargo test -p substrate-common manager_manifest`.",
         "No production code duplication\u2014tests live alongside the module or in dedicated file."
       ],
-      "depends_on": [
-        "A1-code"
-      ],
+      "depends_on": [],
       "concurrent_with": [],
       "worktree": "wt/a1-manifest-test",
       "integration_task": "A1-integ",
@@ -122,8 +120,7 @@
         "Tests mock filesystem/manifest paths without touching real home."
       ],
       "depends_on": [
-        "A1-integ",
-        "A2-code"
+        "A1-integ"
       ],
       "concurrent_with": [],
       "worktree": "wt/a2-manager-init-test",
@@ -199,7 +196,7 @@
         "Target command (documented) passes locally."
       ],
       "depends_on": [
-        "A3-code"
+        "A2-integ"
       ],
       "concurrent_with": [],
       "worktree": "wt/a3-shell-env-test",
@@ -273,7 +270,7 @@
         "`cargo test -p substrate-shim` passes."
       ],
       "depends_on": [
-        "B1-code"
+        "A3-integ"
       ],
       "concurrent_with": [],
       "worktree": "wt/b1-shim-test",
@@ -346,7 +343,7 @@
         "`cargo test -p substrate-shell shim_doctor` passes."
       ],
       "depends_on": [
-        "B2-code"
+        "B1-integ"
       ],
       "concurrent_with": [],
       "worktree": "wt/b2-doctor-test",
@@ -461,7 +458,7 @@
         "`cargo test -p substrate-shell world_enable` passes."
       ],
       "depends_on": [
-        "C1-code"
+        "A3-integ"
       ],
       "concurrent_with": [],
       "worktree": "wt/c1-world-enable-test",
@@ -534,7 +531,8 @@
         "`cargo test -p substrate-shell world_deps` passes."
       ],
       "depends_on": [
-        "C2-code"
+        "C1-integ",
+        "A1-integ"
       ],
       "concurrent_with": [],
       "worktree": "wt/c2-world-deps-test",
@@ -605,7 +603,8 @@
         "Results documented."
       ],
       "depends_on": [
-        "C3-code"
+        "C1-integ",
+        "A3-integ"
       ],
       "concurrent_with": [],
       "worktree": "wt/c3-installer-test",
@@ -673,7 +672,7 @@
         "`cargo test` for affected crates passes."
       ],
       "depends_on": [
-        "D1-code"
+        "B2-integ"
       ],
       "worktree": "wt/d1-managers-test",
       "integration_task": "D1-integ",
@@ -734,7 +733,8 @@
         "`cargo test -p substrate-shell health` passes."
       ],
       "depends_on": [
-        "D2-code"
+        "C2-integ",
+        "D1-integ"
       ],
       "worktree": "wt/d2-health-test",
       "integration_task": "D2-integ",
