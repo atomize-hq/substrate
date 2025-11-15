@@ -87,6 +87,7 @@ At the **end**:
 5. When integration worktree is clean and tests pass:
    - Merge its results back into the main coordination worktree/branch `feat/isolated-shell-plan`.
    - While on `feat/isolated-shell-plan`, append the END entry with results, update task status (`completed` or `blocked`), and commit any remaining coordination files (session log, tasks.json, kickoff prompts).
+   - If the execution plan specifies a literal “next” task (e.g., the subsequent phase’s first code task), create/update the kickoff prompt for that task so the next agent can start immediately. Record that prompt location in the session log.
 
 ---
 
