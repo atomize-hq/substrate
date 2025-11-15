@@ -106,7 +106,7 @@
       "worktree": "wt/a2-manager-init-code",
       "integration_task": "A2-integ",
       "kickoff_prompt": "Task A2-code (Implement manager init module) \u2013 CODE. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Before editing code, gather requirements and prepare the Test Agent Kickoff Prompt for the paired test task (see `concurrent_with` or session log). Provide that prompt to the user per AI instructions. \n4. Use git worktree `wt/a2-manager-init-code` from /home/spenser/__Active_code/substrate. Follow the scope details below: \nAdd manager init support to crates/shell per the plan. Create `src/manager_init.rs`, load the manifest, generate snippets, honor skip env vars, and expose telemetry data. Reference plan/data map. After coding, run `cargo check -p substrate-shell`. \n5. Run the commands/tests noted above. After finishing, append an END entry to the session log, update this task\u2019s status to \"completed\", and ensure the Test Agent Kickoff Prompt reference is captured there.",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "A2-test",
@@ -133,7 +133,7 @@
       "worktree": "wt/a2-manager-init-test",
       "integration_task": "A2-integ",
       "kickoff_prompt": "Task A2-test (Test manager init module) \u2013 TEST. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Consume the Test Agent Kickoff Prompt left by the corresponding code task (session log) to understand context and expectations. \n4. Work inside git worktree `wt/a2-manager-init-test` and follow the scope details below: \n5. Before finishing, craft the Integration Agent Kickoff Prompt for the integration task and record it in the session log. \nCreate unit tests for crates/shell/src/manager_init.rs. Mock manifest data and ensure skip flags and snippet content behave per the plan. Execute `cargo test -p substrate-shell manager_init`. \n6. Execute the required tests/commands, append an END entry, update status to \"completed\", and ensure the Integration prompt location is documented.",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "A2-integ",
@@ -155,7 +155,7 @@
       "concurrent_with": [],
       "worktree": "wt/a2-manager-init-integ",
       "kickoff_prompt": "Task A2-integ (Integrate manager init worktrees) \u2013 INTEGRATION. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Read the Integration Kickoff Prompt left by the test task and inspect both code/test worktrees referenced. \n4. Use git worktree `wt/a2-manager-init-integ` (or merge branches into it) and follow the scope details below: \nMerge wt/a2-manager-init-code and wt/a2-manager-init-test. Resolve conflicts then run `cargo test -p substrate-shell manager_init`. Report outcomes. \n5. Run the integration commands, resolve conflicts, append an END entry, and mark the task \"completed\" when done (or \"blocked\" with explanation).",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "A3-code",
