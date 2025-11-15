@@ -122,6 +122,36 @@ export SHIM_ORIGINAL_PATH="$PATH"
 hash -r
 ```
 
+### Runtime Version Managers
+
+Substrate now snapshots the live `PATH` every time a shim runs and merges it
+with the baseline stored in `SHIM_ORIGINAL_PATH`. This keeps popular runtime
+managers functioning without manual tweaks:
+- `pyenv`, `rbenv`, `asdf`, `mise` and `conda` continue to inject their shims
+  before Substrate while still resolving to the correct toolchain.
+- `nvm`, `volta`, `fnm`, `bun`, and other Node managers that rewrite `PATH`
+  per-shell are respected even for nested invocations (e.g., `npm ➜ node`).
+- Future additions we are tracking: `direnv`, `goenv`, `jenv`, `poetry`,
+  `pipenv`, `rustup toolchains`, custom `$HOME/.local/bin`, and enterprise
+  wrappers that rely on late PATH mutations.
+
+#### Shim repair roadmap
+
+We are scoping an automated `substrate shim doctor` / `substrate shim repair`
+flow that will:
+1. Detect conflicting shims (`pyenv`, `asdf`, system package managers) and show
+   the exact PATH ordering Substrate observes.
+2. Offer one-click redeployment (`--repair`) when binaries drift or permissions
+   change.
+3. Capture health snapshots so support teams can identify missing managers or
+   PATH mutations that would otherwise break installations.
+4. Ship guardrails that warn when `PATH` lacks critical entries (e.g., `/usr/bin`)
+   or when multiple version managers compete for the same binary.
+
+Until the doctor lands, re-run `substrate --shim-deploy` or delete
+`~/.substrate/shims` if you need a manual reset; the new PATH merging logic will
+keep dynamic managers working in the meantime.
+
 ### Claude Code Integration
 
 Proven integration pattern for AI assistants:

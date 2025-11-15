@@ -1,32 +1,0 @@
-# Stage 4 Prompt Integrity Drills
-
-## Scenario 1: typing while events stream
-:demo-agent[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:[0m78[?25hecho typing while agents stream[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:d[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:de[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:dem[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-a[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-ag[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-age[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-agen[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-agent[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37m:demo-agent[0m78[?25h
-[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m7[37m[0m8[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37me[0m78[?25h[6n[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mec[0m78[?25h[6n                                                                                [demo] Demo agent event #1
-[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mec[0m78[?25h[6n[?25l[2;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[2;81H8[0m[0m[37mech[0m78[?25h[6n                                                                                [demo] Demo agent event #2
-[?25l[3;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[3;81H8[0m[0m[37mech[0m78[?25h[6n                                                                                [demo] Demo agent event #3
-[?25l[4;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[4;81H8[0m[0m[37mech[0m78[?25h[6n[1;1R[?25l
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho [0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho t[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho ty[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typ[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typi[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typin[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing [0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing w[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing wh[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing whi[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing whil[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while [0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while a[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while ag[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while age[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agen[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agent[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agents[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agents [0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agents s[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agents st[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agents str[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agents stre[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agents strea[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agents stream[0m78[?25h[6n[1;1R[?25l[1;1H[J[38;5;10msubstrate> [38;5;14m[38;5;5m7[1;81H8[0m[0m[37mecho typing while agents stream[0m[94m
-::: [0m[37m[0m78[?25h

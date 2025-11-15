@@ -15,8 +15,8 @@ use world_api::FsDiff;
 use std::os::unix::process::CommandExt;
 
 use crate::context::{
-    build_clean_search_path, ShimContext, ORIGINAL_PATH_VAR, SHIM_CALLER_VAR, SHIM_CALL_STACK_VAR,
-    SHIM_DEPTH_VAR, SHIM_PARENT_CMD_VAR,
+    build_clean_search_path, merge_path_sources, ShimContext, ORIGINAL_PATH_VAR, SHIM_CALLER_VAR,
+    SHIM_CALL_STACK_VAR, SHIM_DEPTH_VAR, SHIM_PARENT_CMD_VAR,
 };
 use crate::logger::{log_execution, write_log_entry};
 use crate::resolver::resolve_real_binary;
@@ -290,12 +290,11 @@ fn handle_bypass_mode() -> Result<i32> {
 /// Execute real binary when in bypass mode (nested shim call)
 fn execute_real_binary_bypass(ctx: &ShimContext) -> Result<i32> {
     // Get clean PATH without shim directory
-    let original_path = env::var(ORIGINAL_PATH_VAR)
-        .or_else(|_| env::var("PATH"))
-        .unwrap_or_default();
+    let merged_path = merge_path_sources(env::var(ORIGINAL_PATH_VAR).ok())
+        .ok_or_else(|| anyhow!("No PATH available for bypass resolution"))?;
 
     // Build clean search paths
-    let search_paths = build_clean_search_path(&ctx.shim_dir, Some(original_path))?;
+    let search_paths = build_clean_search_path(&ctx.shim_dir, Some(merged_path))?;
 
     // Resolve the real binary
     let real_binary = resolve_real_binary(&ctx.command_name, &search_paths)

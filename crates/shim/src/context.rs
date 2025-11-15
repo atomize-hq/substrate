@@ -76,7 +76,8 @@ impl ShimContext {
         }
 
         let original_path = env::var(ORIGINAL_PATH_VAR).ok();
-        let search_paths = build_clean_search_path(&shim_dir, original_path)?;
+        let merged_path = merge_path_sources(original_path);
+        let search_paths = build_clean_search_path(&shim_dir, merged_path)?;
 
         let log_file = env::var(TRACE_LOG_VAR).ok().map(PathBuf::from);
 
@@ -274,6 +275,34 @@ pub fn build_clean_search_path(
     }
 
     Ok(paths)
+}
+
+/// Merge the live PATH with the stored SHIM_ORIGINAL_PATH so that runtime
+/// managers (pyenv, nvm, etc.) that rewrite PATH remain visible to shims.
+pub fn merge_path_sources(original_path: Option<String>) -> Option<String> {
+    let mut sources = Vec::new();
+
+    if let Ok(current) = env::var("PATH") {
+        if !current.is_empty() {
+            sources.push(current);
+        }
+    }
+
+    if let Some(original) = original_path {
+        if !original.is_empty() {
+            sources.push(original);
+        }
+    }
+
+    match sources.len() {
+        0 => None,
+        1 => sources.into_iter().next(),
+        _ => {
+            let separator = if cfg!(windows) { ';' } else { ':' };
+            let sep = separator.to_string();
+            Some(sources.join(&sep))
+        }
+    }
 }
 
 #[cfg(test)]
