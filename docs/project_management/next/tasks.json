@@ -5,7 +5,7 @@
       "name": "Implement manager manifest parser",
       "phase": "Phase A",
       "type": "code",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add the shared manifest loader in crates/common so other crates can detect managers, init snippets, and guest recipes.",
       "references": [
         "docs/project_management/next/substrate_isolated_shell_plan.md",
@@ -33,7 +33,7 @@
       "name": "Test manager manifest parser",
       "phase": "Phase A",
       "type": "test",
-      "status": "pending",
+      "status": "completed",
       "description": "Author unit tests covering manifest parsing, overlay merging, and validation failures.",
       "references": [
         "docs/project_management/next/substrate_isolated_shell_plan.md",
@@ -60,7 +60,7 @@
       "name": "Integrate manifest parser worktrees",
       "phase": "Phase A",
       "type": "integration",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge the code and test worktrees for A1, resolve conflicts, and validate the parser end-to-end.",
       "references": [
         "docs/project_management/next/substrate_isolated_shell_execution_plan.md"
