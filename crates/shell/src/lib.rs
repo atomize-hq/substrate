@@ -17,6 +17,7 @@ use lazy_static::lazy_static;
 use serde_json::json;
 use std::collections::HashMap;
 use std::env;
+use std::fs;
 use std::io::{self, BufRead, IsTerminal};
 // (avoid unused: import Read/Write locally where needed)
 use agent_api_types::ExecuteStreamFrame;
@@ -191,9 +192,16 @@ pub(crate) fn initialize_global_sigwinch_handler() {
 }
 
 const BASH_PREEXEC_SCRIPT: &str = r#"# Substrate PTY command logging
+substrate_manager_env="${SUBSTRATE_MANAGER_ENV:-$HOME/.substrate/manager_env.sh}"
+if [[ -n "$substrate_manager_env" && -f "$substrate_manager_env" ]]; then
+    # shellcheck disable=SC1090
+    source "$substrate_manager_env"
+fi
+
 # Source user's bashrc ONLY in interactive shells
 [[ $- == *i* ]] && [[ -f ~/.bashrc ]] && source ~/.bashrc
 
+if [[ "${SUBSTRATE_ENABLE_PREEXEC:-0}" == "1" ]]; then
 __substrate_preexec() {
     [[ -z "$SHIM_TRACE_LOG" ]] && return 0
     [[ "$BASH_COMMAND" == __substrate_preexec* ]] && return 0
@@ -204,6 +212,7 @@ __substrate_preexec() {
         "${SHIM_SESSION_ID:-unknown}" >> "$SHIM_TRACE_LOG" 2>/dev/null || true
 }
 trap '__substrate_preexec' DEBUG
+fi
 "#;
 
 const SHELL_AGENT_ID: &str = "shell";
@@ -368,6 +377,10 @@ pub struct ShellConfig {
     pub env_vars: HashMap<String, String>,
     pub manager_init_path: PathBuf,
     pub manager_env_path: PathBuf,
+    pub shimmed_path: Option<String>,
+    pub host_bash_env: Option<String>,
+    pub bash_preexec_path: PathBuf,
+    pub preexec_available: bool,
 }
 
 impl ShellConfig {
@@ -754,6 +767,17 @@ impl ShellConfig {
         let substrate_home = substrate_paths::substrate_home()?;
         let manager_init_path = substrate_home.join("manager_init.sh");
         let manager_env_path = substrate_home.join("manager_env.sh");
+        let bash_preexec_path = PathBuf::from(&home).join(".substrate_preexec");
+        let host_bash_env = env::var("BASH_ENV").ok();
+
+        let skip_shims_flag = cli.shim_skip || env::var("SUBSTRATE_NO_SHIMS").is_ok();
+        let shimmed_path = if skip_shims_flag || cli.no_world {
+            None
+        } else {
+            let sep = if cfg!(windows) { ';' } else { ':' };
+            let path_with_shims = format!("{}{}{}", shim_dir.display(), sep, &original_path);
+            Some(dedupe_path(&path_with_shims))
+        };
 
         // Determine shell to use
         #[cfg(target_os = "windows")]
@@ -807,12 +831,16 @@ impl ShellConfig {
             shell_path,
             ci_mode: cli.ci_mode,
             no_exit_on_error: cli.no_exit_on_error,
-            skip_shims: cli.shim_skip,
+            skip_shims: skip_shims_flag,
             no_world: cli.no_world,
             async_repl: async_repl_enabled,
             env_vars: HashMap::new(),
             manager_init_path,
             manager_env_path,
+            shimmed_path,
+            host_bash_env,
+            bash_preexec_path,
+            preexec_available: false,
         })
     }
 }
@@ -1555,7 +1583,7 @@ mod world_doctor_macos {
 }
 
 pub fn run_shell() -> Result<i32> {
-    let config = ShellConfig::from_args()?;
+    let mut config = ShellConfig::from_args()?;
 
     if matches!(config.mode, ShellMode::Interactive { .. }) {
         let stdin_is_tty = io::stdin().is_terminal();
@@ -1587,6 +1615,31 @@ pub fn run_shell() -> Result<i32> {
                 "failed to record manager init telemetry"
             );
         }
+    }
+
+    if config.no_world {
+        env::remove_var("SUBSTRATE_MANAGER_INIT");
+        env::remove_var("SUBSTRATE_MANAGER_ENV");
+    } else {
+        if let Err(err) = write_manager_env_script(&config) {
+            warn!(
+                target = "substrate::shell",
+                error = %err,
+                "failed to write manager_env.sh"
+            );
+        }
+        match write_bash_preexec_script(&config.bash_preexec_path) {
+            Ok(()) => config.preexec_available = true,
+            Err(err) => {
+                config.preexec_available = false;
+                warn!(
+                    target = "substrate::shell",
+                    error = %err,
+                    "failed to write BASH preexec script"
+                );
+            }
+        }
+        env::set_var("SUBSTRATE_MANAGER_ENV", &config.manager_env_path);
     }
 
     // Default-on world initialization (Linux only)
@@ -1673,7 +1726,7 @@ pub fn run_shell() -> Result<i32> {
 
     // Deploy shims if needed (non-blocking, continues on error)
     // Skip if either the CLI flag is set or the environment variable is set
-    let skip_shims = config.skip_shims || env::var("SUBSTRATE_NO_SHIMS").is_ok();
+    let skip_shims = config.skip_shims;
     match ShimDeployer::with_skip(skip_shims)?.ensure_deployed() {
         Ok(DeploymentStatus::Deployed) => {
             // Shims were deployed, no additional action needed
@@ -1699,16 +1752,6 @@ pub fn run_shell() -> Result<i32> {
     // Clear SHIM_ACTIVE to allow shims to work properly
     // The substrate shell itself should not be considered "active" shimming
     env::remove_var("SHIM_ACTIVE");
-
-    // Ensure shim directory is in PATH with deduplication (use OS-specific separator)
-    let sep = if cfg!(windows) { ';' } else { ':' };
-    let path_with_shims = format!(
-        "{}{}{}",
-        config.shim_dir.display(),
-        sep,
-        config.original_path
-    );
-    env::set_var("PATH", dedupe_path(&path_with_shims));
 
     match &config.mode {
         ShellMode::Interactive { use_pty: _ } => {
@@ -1923,12 +1966,12 @@ fn run_script_mode(config: &ShellConfig, script_path: &Path) -> Result<i32> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
 
-    // Set BASH_ENV for builtin command tracking when using bash
-    // Only in script mode where we need to track script internals
-    // Skip for simple -c commands to avoid duplicate logging
-    if is_bash && matches!(config.mode, ShellMode::Script(_)) {
-        set_bashenv_trampoline(&mut cmd);
-    }
+    configure_child_shell_env(
+        &mut cmd,
+        config,
+        is_bash,
+        matches!(config.mode, ShellMode::Script(_)),
+    );
 
     // Make child process a group leader on Unix
     #[cfg(unix)]
@@ -2490,33 +2533,6 @@ mod fs_diff_parse_tests {
         assert!(diff.mods.is_empty());
         assert!(diff.deletes.is_empty());
         assert!(!diff.truncated);
-    }
-}
-
-fn set_bashenv_trampoline(cmd: &mut Command) {
-    if let Ok(home) = std::env::var("HOME") {
-        let preexec_path = format!("{home}/.substrate_preexec");
-        // Base trap file we already write:
-        let _ = std::fs::write(&preexec_path, BASH_PREEXEC_SCRIPT);
-
-        // If user had BASH_ENV, create a trampoline that sources it first.
-        if let Ok(user_be) = std::env::var("BASH_ENV") {
-            let tramp = format!("{home}/.substrate_bashenv_trampoline");
-            let content = format!(
-                r#"#!/usr/bin/env bash
-# chain user's BASH_ENV then our trap
-[[ -f "{}" ]] && source "{}"
-source "{}"
-"#,
-                shellexpand::tilde(&user_be).as_ref().replace('"', r#"\""#),
-                shellexpand::tilde(&user_be).as_ref().replace('"', r#"\""#),
-                preexec_path.replace('"', r#"\""#)
-            );
-            let _ = std::fs::write(&tramp, content);
-            cmd.env("BASH_ENV", &tramp);
-        } else {
-            cmd.env("BASH_ENV", &preexec_path);
-        }
     }
 }
 
@@ -4893,12 +4909,12 @@ fn execute_external(
     cmd.env_remove("SHIM_CALL_STACK"); // Clear call stack for fresh command
                                        // Keep PATH as-is with shims - the env_remove("SHIM_ACTIVE") should be sufficient
 
-    // Set BASH_ENV for builtin command tracking when using bash
-    // Only in script mode where we need to track script internals
-    // Skip for simple -c commands to avoid duplicate logging
-    if is_bash && matches!(config.mode, ShellMode::Script(_)) {
-        set_bashenv_trampoline(&mut cmd);
-    }
+    configure_child_shell_env(
+        &mut cmd,
+        config,
+        is_bash,
+        matches!(config.mode, ShellMode::Script(_)),
+    );
 
     // Handle I/O based on mode - always inherit stdin for better compatibility and stream output ourselves
     cmd.stdin(Stdio::inherit());
@@ -5280,6 +5296,110 @@ fn log_manager_init_error(config: &ShellConfig, error: &str) -> Result<()> {
     Ok(())
 }
 
+fn write_manager_env_script(config: &ShellConfig) -> Result<()> {
+    static SCRIPT: &str = r#"#!/usr/bin/env bash
+# Generated by Substrate – do not edit
+substrate_manager_init="${SUBSTRATE_MANAGER_INIT:-}"
+if [[ -n "$substrate_manager_init" && -f "$substrate_manager_init" ]]; then
+    # shellcheck disable=SC1090
+    source "$substrate_manager_init"
+fi
+
+substrate_original="${SUBSTRATE_ORIGINAL_BASH_ENV:-}"
+if [[ -n "$substrate_original" && -f "$substrate_original" ]]; then
+    # shellcheck disable=SC1090
+    source "$substrate_original"
+fi
+
+legacy_bashenv="${HOME}/.substrate_bashenv"
+if [[ -f "$legacy_bashenv" ]]; then
+    # shellcheck disable=SC1090
+    source "$legacy_bashenv"
+fi
+"#;
+
+    manager_init::write_snippet(&config.manager_env_path, SCRIPT)
+}
+
+fn write_bash_preexec_script(path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).ok();
+    }
+    fs::write(path, BASH_PREEXEC_SCRIPT)
+        .with_context(|| format!("failed to write bash preexec script at {}", path.display()))?;
+    Ok(())
+}
+
+trait CommandEnvAdapter {
+    fn set_env_var(&mut self, key: &str, value: &str);
+    fn remove_env_var(&mut self, key: &str);
+}
+
+impl CommandEnvAdapter for Command {
+    fn set_env_var(&mut self, key: &str, value: &str) {
+        self.env(key, value);
+    }
+
+    fn remove_env_var(&mut self, key: &str) {
+        self.env_remove(key);
+    }
+}
+
+impl CommandEnvAdapter for portable_pty::CommandBuilder {
+    fn set_env_var(&mut self, key: &str, value: &str) {
+        self.env(key, value);
+    }
+
+    fn remove_env_var(&mut self, key: &str) {
+        self.env_remove(key);
+    }
+}
+
+pub(crate) fn configure_child_shell_env<E: CommandEnvAdapter>(
+    cmd: &mut E,
+    config: &ShellConfig,
+    is_bash: bool,
+    enable_preexec: bool,
+) {
+    if config.no_world {
+        return;
+    }
+
+    if let Some(path) = config.shimmed_path.as_deref() {
+        cmd.set_env_var("PATH", path);
+    }
+
+    if let Some(original) = &config.host_bash_env {
+        cmd.set_env_var("SUBSTRATE_ORIGINAL_BASH_ENV", original);
+    } else {
+        cmd.remove_env_var("SUBSTRATE_ORIGINAL_BASH_ENV");
+    }
+
+    if !is_bash {
+        cmd.remove_env_var("SUBSTRATE_ENABLE_PREEXEC");
+        return;
+    }
+
+    let bash_env_path = if config.preexec_available {
+        Some(config.bash_preexec_path.as_path())
+    } else {
+        Some(config.manager_env_path.as_path())
+    };
+
+    if let Some(path) = bash_env_path {
+        let path_str = path.display().to_string();
+        cmd.set_env_var("BASH_ENV", &path_str);
+        if config.preexec_available && enable_preexec {
+            cmd.set_env_var("SUBSTRATE_ENABLE_PREEXEC", "1");
+        } else {
+            cmd.remove_env_var("SUBSTRATE_ENABLE_PREEXEC");
+        }
+    } else {
+        cmd.remove_env_var("BASH_ENV");
+        cmd.remove_env_var("SUBSTRATE_ENABLE_PREEXEC");
+    }
+}
+
 #[cfg(test)]
 mod manager_init_wiring_tests {
     use super::*;
@@ -5307,6 +5427,10 @@ mod manager_init_wiring_tests {
             env_vars: HashMap::new(),
             manager_init_path: temp.path().join("manager_init.sh"),
             manager_env_path: temp.path().join("manager_env.sh"),
+            shimmed_path: Some(temp.path().join("shims").display().to_string()),
+            host_bash_env: None,
+            bash_preexec_path: temp.path().join(".substrate_preexec"),
+            preexec_available: true,
         }
     }
 
@@ -5398,6 +5522,18 @@ managers:
 
         restore_env("SUBSTRATE_MANAGER_MANIFEST", previous_manifest);
         restore_env("SUBSTRATE_MANAGER_INIT", previous_init);
+    }
+
+    #[test]
+    #[serial]
+    fn manager_env_script_sources_manager_and_legacy_snippets() {
+        let temp = tempdir().unwrap();
+        let config = test_shell_config(&temp);
+        write_manager_env_script(&config).expect("write manager env");
+        let script = fs::read_to_string(&config.manager_env_path).unwrap();
+        assert!(script.contains("SUBSTRATE_MANAGER_INIT"));
+        assert!(script.contains("SUBSTRATE_ORIGINAL_BASH_ENV"));
+        assert!(script.contains(".substrate_bashenv"));
     }
 
     #[test]

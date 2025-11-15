@@ -2,11 +2,14 @@ use anyhow::{Context, Result};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde_json::json;
 use std::io::{self, Read, Write};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use crate::{log_command_event, ShellConfig, CURRENT_PTY, PTY_ACTIVE};
+use crate::{
+    configure_child_shell_env, log_command_event, ShellConfig, ShellMode, CURRENT_PTY, PTY_ACTIVE,
+};
 
 #[cfg(unix)]
 pub(crate) fn initialize_global_sigwinch_handler_impl() {
@@ -165,6 +168,12 @@ pub fn execute_with_pty(
     };
 
     let mut cmd = CommandBuilder::new(&config.shell_path);
+    let shell_name = Path::new(&config.shell_path)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let is_bash = shell_name == "bash" || shell_name == "bash.exe";
     cmd.arg("-c");
     cmd.arg(actual_command);
     cmd.cwd(std::env::current_dir()?);
@@ -178,6 +187,13 @@ pub fn execute_with_pty(
     cmd.env_remove("SHIM_ACTIVE");
     cmd.env_remove("SHIM_CALLER");
     cmd.env_remove("SHIM_CALL_STACK");
+
+    configure_child_shell_env(
+        &mut cmd,
+        config,
+        is_bash,
+        matches!(config.mode, ShellMode::Script(_)),
+    );
 
     // Preserve existing TERM or set a default
     // Many TUIs like claude need the correct TERM to function properly

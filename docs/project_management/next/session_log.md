@@ -51,3 +51,27 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Copied manager init sources from wt/a2-manager-init-code/test into wt/a2-manager-init-integ, verified skip/env/detect helpers + shell wiring, and synced the merged files back onto `feat/isolated-shell-plan`
 - Commands: `cargo fmt --all`, `cargo clippy -p substrate-shell -- -D warnings`, `cargo test -p substrate-shell manager_init`
 - Next steps: Phase A3 can start; kickoff prompt for `A3-code` recorded at docs/project_management/next/kickoff_prompts/A3-code.md
+## [2025-11-15 15:14 UTC] Codex – A3-code – START
+- Beginning per-session shell env injection work; reviewing isolated shell plan/file audit/data map plus previous manager init code to scope changes
+- Next: create/use worktree wt/a3-shell-env-code, craft A3-test kickoff prompt, then update shell runtime/PTY handling plus --no-world behavior before running fmt/check/test commands
+- Blockers: none, pending deeper review of PTY bootstrap + manager_env expectations
+## [2025-11-15 15:39 UTC] Codex – A3-code – END
+- Implemented per-session PATH + manager env injection, PTY bootstrap sourcing order, and --no-world bypass in `substrate-shell`; added manager_env/preexec helpers and regression tests
+- Commands: `cargo fmt --all`, `cargo check -p substrate-shell`, `cargo test -p substrate-shell manager_init`
+- Test Agent Kickoff Prompt recorded at docs/project_management/next/kickoff_prompts/A3-test.md; ready for A3-test to validate env injection and pass-through behavior
+## [2025-11-15 16:10 UTC] Codex – A3-test – START
+- Reviewing kickoff prompt at docs/project_management/next/kickoff_prompts/A3-test.md plus plan/data map docs to scope env injection + --no-world tests
+- Next: create/use worktree `wt/a3-shell-env-test`, add integration tests covering manager_env sourcing, PATH isolation, and --no-world pass-through, then run `cargo fmt --all` and `cargo test -p substrate-shell shell_env`
+- Blockers: none; will document any temporary HOME fixtures and Integration kickoff prompt before completion
+## [2025-11-15 16:45 UTC] Codex – A3-test – END
+- Added `ShellEnvFixture` helpers and three `shell_env_*` integration tests that stand up temp HOMEs under `target/tests-tmp`, drop custom `manager_hooks.yaml`/`.substrate_bashenv`/`host_bash_env.sh`, and assert shims + manager snippets only apply inside Substrate while `--no-world` bypasses everything and overlays still win
+- Commands: `cargo fmt --all` (wt/a3-shell-env-test), `cargo test -p substrate-shell shell_env` (executed from wt/a3-shell-env-code to include the A3-code changes)
+- Integration Agent Kickoff Prompt recorded at docs/project_management/next/kickoff_prompts/A3-integ.md; next step is for wt/a3-shell-env-integ to merge code+tests and re-run the suite
+## [2025-11-15 17:05 UTC] Codex – A3-integ – START
+- Reviewing kickoff prompt at docs/project_management/next/kickoff_prompts/A3-integ.md, plan/docs, and prior worktrees before merging A3 code/tests
+- Next: use `wt/a3-shell-env-integ` to combine wt/a3-shell-env-code + wt/a3-shell-env-test, run `cargo fmt --all` and `cargo test -p substrate-shell shell_env`, and verify host PATH behavior
+- Blockers: none; will document verification steps in END entry
+## [2025-11-15 17:32 UTC] Codex – A3-integ – END
+- Copied env injection sources from wt/a3-shell-env-code + regression tests from wt/a3-shell-env-test into wt/a3-shell-env-integ, resolved resulting differences, and synced them back onto feat/isolated-shell-plan
+- Commands: `cargo fmt --all`, `cargo test -p substrate-shell shell_env`, `HOME=target/tests-tmp/manual-path-check/home USERPROFILE=target/tests-tmp/manual-path-check/home SUBSTRATE_WORLD=disabled SUBSTRATE_MANAGER_MANIFEST=target/tests-tmp/manual-path-check/home/manager_hooks.yaml target/debug/substrate -c 'printf "__HOST_PATH_CHECK__\n%s\n" "$PATH"'`
+- Next: Phase B tasks (B1-code/B1-test/B1-integ) can start now that the per-session env injection code/tests are merged
