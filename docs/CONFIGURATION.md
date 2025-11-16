@@ -31,7 +31,27 @@ Environment variables and advanced configuration options for Substrate.
 | `SUBSTRATE_DISABLE_PTY` | Disable PTY globally | *none* | `1` |
 | `SUBSTRATE_PTY_DEBUG` | Enable PTY debug logging | *none* | `1` |
 | `SUBSTRATE_PTY_PIPELINE_LAST` | PTY for last pipeline segment | *none* | `1` |
-| `SUBSTRATE_MANAGER_INIT_SHELL` | Override shell used for detect scripts | Host `SHELL` or `/bin/sh` | `/usr/local/bin/bash` |
+
+## Manager Manifest & Init
+
+| Variable | Purpose | Default | Example |
+|----------|---------|---------|---------|
+| `SUBSTRATE_MANAGER_MANIFEST` | Override manifest path (base + overlay) | `config/manager_hooks.yaml` | `/tmp/manager_hooks.yaml` |
+| `SUBSTRATE_MANAGER_INIT` | Generated manager snippet path | `~/.substrate/manager_init.sh` | `/custom/init.sh` |
+| `SUBSTRATE_MANAGER_ENV` | Tiny script sourced via `BASH_ENV` | `~/.substrate/manager_env.sh` | `/tmp/manager_env.sh` |
+| `SUBSTRATE_MANAGER_INIT_SHELL` | Force a specific shell for detect scripts | host `SHELL` or `/bin/sh` | `/usr/local/bin/bash` |
+| `SUBSTRATE_SKIP_MANAGER_INIT` | Skip manager init entirely | `0` | `1` |
+| `SUBSTRATE_SKIP_MANAGER_INIT_LIST` | Comma-separated managers to skip | *none* | `nvm,pyenv` |
+| `SUBSTRATE_MANAGER_INIT_DEBUG` | Verbose detection logging | `0` | `1` |
+| `SUBSTRATE_SHIM_HINTS` | Disable/enable shim hint emission | `1` | `0` |
+
+## World Configuration
+
+| Variable | Purpose | Default | Example |
+|----------|---------|---------|---------|
+| `SUBSTRATE_WORLD` | Force pass-through execution (`disabled`) | `enabled` | `disabled` |
+| `SUBSTRATE_WORLD_ENABLED` | Cached world enablement flag (installer) | `1` | `0` |
+| `SUBSTRATE_WORLD_DEPS_MANIFEST` | Override manifest for `world deps` | bundled manifest | `/tmp/world_deps.yaml` |
 
 ## CLI Flags
 
@@ -140,12 +160,14 @@ export SHIM_LOG_OPTS=resolve
 ### Credential Protection
 
 Default behavior redacts sensitive patterns:
+
 - Authorization headers
 - API keys and tokens
 - Password flags
 - Cookie values
 
 Disable for debugging:
+
 ```bash
 export SHIM_LOG_OPTS=raw
 ```
@@ -153,6 +175,7 @@ export SHIM_LOG_OPTS=raw
 ### File Permissions
 
 Log files automatically created with restricted permissions:
+
 ```bash
 ls -la ~/.substrate/trace.jsonl
 # -rw------- (user-only access)
@@ -174,6 +197,7 @@ jq '.duration_ms' ~/.substrate/trace.jsonl | tail -20  # Warm cache
 ### Resource Limits
 
 Future configuration for Phase 4:
+
 ```bash
 # CPU limits (planned)
 export SUBSTRATE_CPU_LIMIT="2.0"
@@ -190,27 +214,36 @@ export SUBSTRATE_NET_BUDGET="1GB"
 ### CI/CD Environments
 
 ```bash
-# Non-interactive mode
-export BASH_ENV="$HOME/.substrate_bashenv"
+# Non-interactive mode referencing the manifest + temp HOME
+HOME=$PWD/target/tests-tmp/ci \
+  SUBSTRATE_MANAGER_MANIFEST=$PWD/ci/manager_hooks.yaml \
+  SHIM_TRACE_LOG=$PWD/target/tests-tmp/ci/trace.jsonl \
+  substrate --ci -c "npm test"
 
-# Strict error handling
-substrate --ci -c "npm test"
-
-# Continue on error
-substrate --ci --no-exit-on-error -f test-suite.sh
+# Capture a health snapshot for evidence logs
+substrate shim doctor --json > artifacts/shim_doctor.json
+substrate world doctor --json > artifacts/world_doctor.json
 ```
+
+Need a legacy pipeline to inject snippets automatically? Run `substrate shim repair`
+first, then export `BASH_ENV="$HOME/.substrate_bashenv"` explicitly for that job.
 
 ### Development Tools
 
 ```bash
-# Hash pinning for reliability
-hash -p "$HOME/.substrate/shims/git" git
-hash -p "$HOME/.substrate/shims/npm" npm
-hash -p "$HOME/.substrate/shims/docker" docker
+# Inspect the runtime PATH Substrate will build
+substrate -c 'printf "PATH -> %s\n" "$PATH"'
 
-# Verify pinning
-type git npm docker
+# Pin a shim manually (optional)
+hash -p "$HOME/.substrate/shims/git" git
+
+# Run doctor output during local debugging
+substrate shim doctor
 ```
+
+Use `SUBSTRATE_MANAGER_INIT_DEBUG=1` when iterating on manifest detection and
+`SUBSTRATE_WORLD=disabled` if you need to run entirely on the host for a short
+period.
 
 For installation instructions, see [INSTALLATION.md](INSTALLATION.md).
 For development configuration, see [DEVELOPMENT.md](DEVELOPMENT.md).
