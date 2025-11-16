@@ -84,3 +84,10 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Added two new shim integration tests that spin up temporary manifests/binaries to (a) assert `manager_hint` records appear when stderr matches manifest patterns and (b) ensure hints are suppressed when `SUBSTRATE_WORLD_ENABLED=false`
 - Commands: `cargo fmt --all`, `cargo test -p substrate-shim` (fails at `manager_hint_logging_records_entry` because B1-code has not yet wired manifest hint logging)
 - Integration Agent Kickoff Prompt recorded at docs/project_management/next/kickoff_prompts/B1-integ.md; unblock once B1-code lands the manifest-driven hint + no-world bypass plumbing
+## [2025-11-16 03:21 UTC] Codex – B1-code – START
+- Reviewing B1 scope plus plan/data map + session log, then switching to `wt/b1-shim-code` to implement manifest-driven shim hinting and no-world bypass
+- Next: craft B1-test kickoff prompt reference, implement shim changes, and run `cargo fmt --all` + `cargo check -p substrate-shim` per task
+## [2025-11-16 03:41 UTC] Codex – B1-code – END
+- Added manifest-backed hint detection + dedup in `substrate-shim`, propagated `SUBSTRATE_WORLD_ENABLED` handling via `ShimContext`, plumbed captured stderr + logger fields, and wired the new Test Agent Kickoff Prompt at docs/project_management/next/kickoff_prompts/B1-test.md
+- Commands: `cargo fmt --all`, `cargo check -p substrate-shim`
+- Notes: Hints only fire when `SUBSTRATE_WORLD` stays enabled; no pending tests beyond the dedicated B1-test worktree
