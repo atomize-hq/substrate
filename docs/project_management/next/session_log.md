@@ -101,3 +101,15 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Sample manager_hint trace: `{"argv":["nvm"],"call_stack":"nvm","caller":"nvm","command":"nvm","component":"shim","cwd":"/home/spenser/__Active_code/wt/b1-shim-integ","depth":0,"duration_ms":1,"exit_code":127,"hostname":"spenser-linux","isatty_stderr":false,"isatty_stdin":false,"isatty_stdout":false,"manager_hint":{"hint":"initialize nvm inside Substrate","name":"nvm","pattern":"nvm: command not found","ts":"2025-11-16T13:24:44.664Z"},"parent_cmd_id":null,"pid":1436142,"platform":"linux","ppid":1436125,"resolved_path":"/tmp/tmp.3CHkUJDxlB/bin/nvm","session_id":"019a8cd6-e3f5-7d82-a68e-0e41842a3868","shim_fingerprint":"sha256:36c8d3fa3ca52d73e47ad83453adf55f1766ca96b5c880603fefcf7a46e4ccb9","ts":"2025-11-16T13:24:44.662Z","user":"spenser"}`
 - Next B2 prompts recorded at docs/project_management/next/kickoff_prompts/B2-code.md and docs/project_management/next/kickoff_prompts/B2-test.md
 - Next steps: Phase B2 tasks can branch from this state using the recorded prompts
+## [2025-11-16 14:18 UTC] Codex – B2-code – START
+- Reviewing B2 doctor/repair CLI scope, kickoff prompt, and planning docs plus manager manifest/init helpers before coding
+- Next: switch to worktree `wt/b2-doctor-code`, prep the Test Agent Kickoff Prompt, implement CLI + repair plumbing, then run `cargo fmt --all` and `cargo check -p substrate-shell`
+- Blockers: none; will document command results + prompt location in END entry
+## [2025-11-16 14:20 UTC] Codex – B2-test – START
+- Read AI entry doc, plan/execution/data-map references, and kickoff prompt at docs/project_management/next/kickoff_prompts/B2-test.md to scope doctor/repair coverage expectations
+- Next: switch to worktree `wt/b2-doctor-test`, add shim doctor + repair integration tests under `crates/shell/tests`, and run `cargo fmt --all` plus `cargo test -p substrate-shell shim_doctor`
+- Preparing to capture current test failures while keeping production code untouched; no blockers yet
+## [2025-11-16 14:33 UTC] Codex – B2-test – END
+- Implemented `crates/shell/tests/shim_doctor.rs` (temp HOME fixture, doctor human/JSON assertions, repair snippet/backup coverage) on `wt/b2-doctor-test` and committed as `test: add shim doctor integration coverage`
+- Commands: `cargo fmt --all`, `cargo test -p substrate-shell shim_doctor`, `cargo test -p substrate-shell --test shim_doctor` (both test invocations fail because the current `substrate` binary does not recognize the `shim` subcommand: `error: unrecognized subcommand 'shim'`)
+- Integration Agent Kickoff Prompt recorded at docs/project_management/next/kickoff_prompts/B2-integ.md; waiting on wt/b2-doctor-code to land the CLI so these tests can pass
