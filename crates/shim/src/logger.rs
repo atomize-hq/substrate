@@ -23,6 +23,7 @@ pub fn log_execution(
     duration: Duration,
     timestamp: SystemTime,
     resolved_path: &Path,
+    manager_hint: Option<&Value>,
 ) -> Result<()> {
     let cwd = env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/unknown"));
 
@@ -89,6 +90,10 @@ pub fn log_execution(
     // Add signal information if process was terminated by signal
     if let Some(signal) = term_signal {
         log_entry["term_signal"] = json!(signal);
+    }
+
+    if let Some(hint) = manager_hint {
+        log_entry["manager_hint"] = hint.clone();
     }
 
     write_log_entry(log_path, &log_entry)

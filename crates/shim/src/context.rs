@@ -18,6 +18,8 @@ pub const CACHE_BUST_VAR: &str = "SHIM_CACHE_BUST"; // Forces cache invalidation
 pub const SHIM_CALLER_VAR: &str = "SHIM_CALLER"; // First shim in the call chain
 pub const SHIM_CALL_STACK_VAR: &str = "SHIM_CALL_STACK"; // Comma-separated chain (capped at 8)
 pub const SHIM_PARENT_CMD_VAR: &str = "SHIM_PARENT_CMD_ID"; // Links to substrate shell cmd_id
+pub const SUBSTRATE_WORLD_VAR: &str = "SUBSTRATE_WORLD";
+pub const SUBSTRATE_WORLD_ENABLED_VAR: &str = "SUBSTRATE_WORLD_ENABLED";
 
 /// Execution context for a shim invocation
 #[derive(Debug)]
@@ -303,6 +305,31 @@ pub fn merge_path_sources(original_path: Option<String>) -> Option<String> {
             Some(sources.join(&sep))
         }
     }
+}
+
+fn is_disabled_flag(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "0" | "false" | "off" | "disabled"
+    )
+}
+
+/// True when pass-through mode was requested via SUBSTRATE world flags.
+pub fn world_disabled() -> bool {
+    matches!(env::var(SUBSTRATE_WORLD_VAR).as_deref(), Ok("disabled"))
+        || env::var(SUBSTRATE_WORLD_ENABLED_VAR)
+            .map(|value| is_disabled_flag(&value))
+            .unwrap_or(false)
+}
+
+/// True when shim should enable world-aware policy + telemetry features.
+pub fn world_features_enabled() -> bool {
+    if world_disabled() {
+        return false;
+    }
+    env::var(SUBSTRATE_WORLD_VAR)
+        .map(|value| value == "enabled")
+        .unwrap_or(false)
 }
 
 #[cfg(test)]

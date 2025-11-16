@@ -297,7 +297,7 @@
       ],
       "worktree": "wt/b1-shim-integ",
       "kickoff_prompt": "Task B1-integ (Integrate shim hinting) \u2013 INTEGRATION. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Read the Integration Kickoff Prompt left by the test task and inspect both code/test worktrees referenced. \n4. Use git worktree `wt/b1-shim-integ` (or merge branches into it) and follow the scope details below: \nMerge wt/b1-shim-code and wt/b1-shim-test, resolve conflicts, then run `cargo test -p substrate-shim`. Capture a sample hint log for records. \n5. Run the integration commands, resolve conflicts, append an END entry, and mark the task \"completed\" when done (or \"blocked\" with explanation).",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "B2-code",

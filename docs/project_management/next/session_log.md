@@ -91,3 +91,13 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Added manifest-backed hint detection + dedup in `substrate-shim`, propagated `SUBSTRATE_WORLD_ENABLED` handling via `ShimContext`, plumbed captured stderr + logger fields, and wired the new Test Agent Kickoff Prompt at docs/project_management/next/kickoff_prompts/B1-test.md
 - Commands: `cargo fmt --all`, `cargo check -p substrate-shim`
 - Notes: Hints only fire when `SUBSTRATE_WORLD` stays enabled; no pending tests beyond the dedicated B1-test worktree
+## [2025-11-16 13:09 UTC] Codex – B1-integ – START
+- Reviewing kickoff prompt at docs/project_management/next/kickoff_prompts/B1-integ.md plus B1 code/test worktrees before merging into `wt/b1-shim-integ`
+- Plan: combine wt/b1-shim-code + wt/b1-shim-test, resolve conflicts, run `cargo fmt --all` + `cargo test -p substrate-shim`, and capture a sample `manager_hint` trace line
+- Blockers: none; will document commands + results in END entry
+## [2025-11-16 13:25 UTC] Codex – B1-integ – END
+- Pulled shim runtime + manifest plumbing from wt/b1-shim-code and the new integration coverage from wt/b1-shim-test into wt/b1-shim-integ, fixed `CommandOutcome` Debug derivation, updated the manager hint tests to append host PATH fallbacks, and synced results back onto `feat/isolated-shell-plan`
+- Commands: `cargo fmt --all`, `cargo test -p substrate-shim`
+- Sample manager_hint trace: `{"argv":["nvm"],"call_stack":"nvm","caller":"nvm","command":"nvm","component":"shim","cwd":"/home/spenser/__Active_code/wt/b1-shim-integ","depth":0,"duration_ms":1,"exit_code":127,"hostname":"spenser-linux","isatty_stderr":false,"isatty_stdin":false,"isatty_stdout":false,"manager_hint":{"hint":"initialize nvm inside Substrate","name":"nvm","pattern":"nvm: command not found","ts":"2025-11-16T13:24:44.664Z"},"parent_cmd_id":null,"pid":1436142,"platform":"linux","ppid":1436125,"resolved_path":"/tmp/tmp.3CHkUJDxlB/bin/nvm","session_id":"019a8cd6-e3f5-7d82-a68e-0e41842a3868","shim_fingerprint":"sha256:36c8d3fa3ca52d73e47ad83453adf55f1766ca96b5c880603fefcf7a46e4ccb9","ts":"2025-11-16T13:24:44.662Z","user":"spenser"}`
+- Next B2 prompts recorded at docs/project_management/next/kickoff_prompts/B2-code.md and docs/project_management/next/kickoff_prompts/B2-test.md
+- Next steps: Phase B2 tasks can branch from this state using the recorded prompts

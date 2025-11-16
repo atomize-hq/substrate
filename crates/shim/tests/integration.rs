@@ -5,6 +5,7 @@
 //! scenarios that were proven to work with Claude Code through manual testing.
 
 use anyhow::Result;
+use serde_json::Value;
 use std::fs;
 use tempfile::TempDir;
 
@@ -555,6 +556,189 @@ fn test_runtime_path_overrides_original_var() -> Result<()> {
         "log should record resolved override path: {log_content}"
     );
 
+    Ok(())
+}
+
+#[test]
+fn manager_hint_logging_records_entry() -> Result<()> {
+    let temp = TempDir::new()?;
+    let shim_dir = temp.path().join("shims");
+    let bin_dir = temp.path().join("bin");
+    let log_file = temp.path().join("hint_log.jsonl");
+    let manifest_path = temp.path().join("manager_hooks.yaml");
+
+    fs::create_dir_all(&shim_dir)?;
+    fs::create_dir_all(&bin_dir)?;
+
+    fs::write(
+        &manifest_path,
+        r#"version: 1
+managers:
+  - name: nvm
+    priority: 10
+    detect: {}
+    init: {}
+    errors:
+      - "nvm: command not found"
+    repair_hint: "initialize nvm inside Substrate"
+"#,
+    )?;
+
+    let failing = bin_dir.join("nvm");
+    fs::write(
+        &failing,
+        "#!/usr/bin/env bash\necho 'shim-outer'\necho 'nvm: command not found' >&2\nexit 127\n",
+    )?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&failing)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&failing, perms)?;
+    }
+
+    let shim_binary_path = get_shim_binary_path();
+    let shim_copy = shim_dir.join("nvm");
+    fs::copy(shim_binary_path, &shim_copy)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&shim_copy)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&shim_copy, perms)?;
+    }
+
+    let host_path = std::env::var("PATH").unwrap_or_default();
+    let shimmed_path = if host_path.is_empty() {
+        format!("{}:{}:/usr/bin:/bin", shim_dir.display(), bin_dir.display())
+    } else {
+        format!(
+            "{}:{}:{}:/usr/bin:/bin",
+            shim_dir.display(),
+            bin_dir.display(),
+            host_path
+        )
+    };
+
+    let output = std::process::Command::new(&shim_copy)
+        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("PATH", &shimmed_path)
+        .env("SHIM_TRACE_LOG", &log_file)
+        .env(
+            "SUBSTRATE_MANAGER_MANIFEST",
+            manifest_path.to_string_lossy().as_ref(),
+        )
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_SHIM_HINTS", "1")
+        .output()?;
+
+    assert!(!output.status.success(), "shim should propagate failure");
+
+    let log_content = fs::read_to_string(&log_file)?;
+    let mut hint_found = false;
+    for line in log_content.lines() {
+        if let Ok(Value::Object(obj)) = serde_json::from_str::<Value>(line) {
+            if let Some(hint) = obj.get("manager_hint") {
+                hint_found = true;
+                assert_eq!(hint.get("name").and_then(|v| v.as_str()), Some("nvm"));
+                assert!(hint.get("hint").is_some());
+                break;
+            }
+        }
+    }
+
+    assert!(hint_found, "manager_hint entry missing in log");
+    Ok(())
+}
+
+#[test]
+fn manager_hint_skipped_when_world_disabled() -> Result<()> {
+    let temp = TempDir::new()?;
+    let shim_dir = temp.path().join("shims");
+    let bin_dir = temp.path().join("bin");
+    let log_file = temp.path().join("hint_disabled.jsonl");
+    let manifest_path = temp.path().join("manager_hooks.yaml");
+
+    fs::create_dir_all(&shim_dir)?;
+    fs::create_dir_all(&bin_dir)?;
+
+    fs::write(
+        &manifest_path,
+        r#"version: 1
+managers:
+  - name: direnv
+    priority: 5
+    detect: {}
+    init: {}
+    errors:
+      - "direnv: command not found"
+    repair_hint: "install direnv"
+"#,
+    )?;
+
+    let failing = bin_dir.join("direnv");
+    fs::write(
+        &failing,
+        "#!/usr/bin/env bash\necho 'direnv: command not found' >&2\nexit 127\n",
+    )?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&failing)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&failing, perms)?;
+    }
+
+    let shim_binary_path = get_shim_binary_path();
+    let shim_copy = shim_dir.join("direnv");
+    fs::copy(shim_binary_path, &shim_copy)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&shim_copy)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&shim_copy, perms)?;
+    }
+
+    let host_path = std::env::var("PATH").unwrap_or_default();
+    let shimmed_path = if host_path.is_empty() {
+        format!("{}:{}:/usr/bin:/bin", shim_dir.display(), bin_dir.display())
+    } else {
+        format!(
+            "{}:{}:{}:/usr/bin:/bin",
+            shim_dir.display(),
+            bin_dir.display(),
+            host_path
+        )
+    };
+
+    let output = std::process::Command::new(&shim_copy)
+        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("PATH", &shimmed_path)
+        .env("SHIM_TRACE_LOG", &log_file)
+        .env(
+            "SUBSTRATE_MANAGER_MANIFEST",
+            manifest_path.to_string_lossy().as_ref(),
+        )
+        .env("SUBSTRATE_WORLD_ENABLED", "false")
+        .env("SUBSTRATE_WORLD", "disabled")
+        .output()?;
+
+    assert!(!output.status.success());
+
+    let hint_entry = fs::read_to_string(&log_file)?
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .find(|value| value.get("manager_hint").is_some());
+
+    assert!(
+        hint_entry.is_none(),
+        "hint should be skipped when world disabled"
+    );
     Ok(())
 }
 
