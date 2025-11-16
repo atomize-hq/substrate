@@ -353,6 +353,29 @@ pub enum WorldAction {
         #[arg(long)]
         json: bool,
     },
+    Enable(WorldEnableArgs),
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct WorldEnableArgs {
+    /// Installation prefix to upgrade (defaults to ~/.substrate or SUBSTRATE_HOME)
+    #[arg(long = "prefix", value_name = "PATH")]
+    pub prefix: Option<PathBuf>,
+    /// Provisioning profile label passed to the helper script
+    #[arg(long = "profile", value_name = "NAME", default_value = "release")]
+    pub profile: String,
+    /// Show provisioning actions without executing them
+    #[arg(long = "dry-run")]
+    pub dry_run: bool,
+    /// Stream helper output to stdout/stderr in addition to the log file
+    #[arg(long = "verbose")]
+    pub verbose: bool,
+    /// Re-run provisioning even if metadata reports the world is already enabled
+    #[arg(long = "force")]
+    pub force: bool,
+    /// Seconds to wait for the world socket/doctor health checks
+    #[arg(long = "timeout", value_name = "SECONDS", default_value_t = 120)]
+    pub timeout: u64,
 }
 
 #[derive(clap::Args, Debug)]
@@ -793,13 +816,18 @@ impl ShellConfig {
 
         let shim_dir = substrate_common::paths::shims_dir()?;
         let substrate_home = substrate_paths::substrate_home()?;
+        let install_config =
+            commands::world_enable::load_install_config(&substrate_paths::config_file()?)?;
+        let config_disables_world = !install_config.world_enabled;
+        let final_no_world = cli.no_world || config_disables_world;
+        update_world_env(final_no_world);
         let manager_init_path = substrate_home.join("manager_init.sh");
         let manager_env_path = substrate_home.join("manager_env.sh");
         let bash_preexec_path = PathBuf::from(&home).join(".substrate_preexec");
         let host_bash_env = env::var("BASH_ENV").ok();
 
         let skip_shims_flag = cli.shim_skip || env::var("SUBSTRATE_NO_SHIMS").is_ok();
-        let shimmed_path = if skip_shims_flag || cli.no_world {
+        let shimmed_path = if skip_shims_flag || final_no_world {
             None
         } else {
             let sep = if cfg!(windows) { ';' } else { ':' };
@@ -860,7 +888,7 @@ impl ShellConfig {
             ci_mode: cli.ci_mode,
             no_exit_on_error: cli.no_exit_on_error,
             skip_shims: skip_shims_flag,
-            no_world: cli.no_world,
+            no_world: final_no_world,
             async_repl: async_repl_enabled,
             env_vars: HashMap::new(),
             manager_init_path,
@@ -870,6 +898,18 @@ impl ShellConfig {
             bash_preexec_path,
             preexec_available: false,
         })
+    }
+}
+
+fn update_world_env(no_world: bool) {
+    if no_world {
+        env::set_var("SUBSTRATE_WORLD_ENABLED", "0");
+        env::set_var("SUBSTRATE_WORLD", "disabled");
+    } else {
+        env::set_var("SUBSTRATE_WORLD_ENABLED", "1");
+        if env::var("SUBSTRATE_WORLD").is_err() {
+            env::set_var("SUBSTRATE_WORLD", "enabled");
+        }
     }
 }
 
@@ -927,7 +967,11 @@ fn handle_world_command(cmd: &WorldCmd) -> Result<()> {
             let code = world_doctor_main(*json);
             std::process::exit(code);
         }
+        WorldAction::Enable(opts) => {
+            commands::world_enable::run_enable(opts)?;
+        }
     }
+    Ok(())
 }
 
 fn handle_shim_command(cmd: &ShimCmd) -> ! {
