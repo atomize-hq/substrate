@@ -209,3 +209,19 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Updated `docs/project_management/next/tasks.json` to reference the new prompt paths for D2-code/D2-test so future agents know where to look.
 ## [2025-11-17 01:55 UTC] Codex – D1 prompt refresh – NOTE
 - Revisited the older D1-code/D1-test kickoff prompts to align them with the current pass-through manager/doctor work, expanding the instructions in `docs/project_management/next/kickoff_prompts/D1-code.md` and `.../D1-test.md` so they reflect the latest schema expectations, command list, and coordination steps.
+## [2025-11-17 02:10 UTC] Codex – D1-code – START
+- Kicking off Tier-2 manager manifest work per docs/project_management/next/kickoff_prompts/D1-code.md; reviewed plan/data_map/file_audit + prior session log entries
+- Next: switch into worktree `wt/d1-managers-code`, extend config/manager_hooks.yaml with mise/rtx, rbenv, sdkman, bun, volta, goenv, asdf-node, etc., prep the D1-test kickoff prompt, and run fmt/test commands listed in the kickoff (cargo fmt, cargo test -p substrate-common manager_manifest, optional cargo test -p substrate-shell manager_init)
+- Blockers: none; will log manifest/schema questions plus command outputs in the END entry
+## [2025-11-17 02:25 UTC] Codex – D1-test – START
+- Reviewed docs/project_management/next/kickoff_prompts/D1-test.md plus plan/data-map docs to scope Tier-2 manager coverage requirements
+- Next: switch into worktree wt/d1-managers-test, pull the latest manifest from wt/d1-managers-code, and extend common/shim/shell tests plus capture the required failure snapshot
+- Blockers: D1-code still in progress so initial cargo test runs may fail until manifest lands
+## [2025-11-17 02:45 UTC] Codex – D1-code – END
+- Added the Tier-1 + Tier-2 manager manifest at `config/manager_hooks.yaml`, documented the new guest/install expectations in `docs/project_management/next/substrate_isolated_shell_data_map.md`, and refreshed the D1-test kickoff prompt (`docs/project_management/next/kickoff_prompts/D1-test.md`) to point at the updated manifest
+- Commands: `cargo fmt --all`, `cargo test -p substrate-common manager_manifest`, `cargo test -p substrate-shell manager_init`
+- Next steps: D1-test can consume `wt/d1-managers-code` + the updated prompt above to extend parser/shim tests for mise/rtx, rbenv, sdkman, bun, volta, goenv, and asdf-node
+## [2025-11-17 03:40 UTC] Codex – D1-test – END
+- Added Tier-2 coverage in crates/common/src/manager_manifest.rs plus new shell + shim integration tests (manager_init integration binary, shim doctor JSON, bun hint logging, and shell_env snippet assertions) to prove the new manifest entries are parsed, snippets written, and hints surfaced
+- Commands: `cargo fmt --all`, `cargo test -p substrate-common manager_manifest`, `cargo test -p substrate-shell manager_init`, `cargo test -p substrate-shell --test manager_init`, `cargo test -p substrate-shim`
+- Integration Agent Kickoff Prompt recorded at docs/project_management/next/kickoff_prompts/D1-integ.md; wt/d1-managers-test pushed to origin/wt/d1-managers-test
