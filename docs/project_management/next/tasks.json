@@ -396,7 +396,7 @@
       "worktree": "wt/b3-docs",
       "integration_task": "B3-integ",
       "kickoff_prompt": "Task B3-docs (Update documentation and configuration references) \u2013 CODE. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Before editing code, gather requirements and prepare the Test Agent Kickoff Prompt for the paired test task (see `concurrent_with` or session log). Provide that prompt to the user per AI instructions. \n4. Use git worktree `wt/b3-docs` from /home/spenser/__Active_code/substrate. Follow the scope details below: \nRevise README/INSTALLATION/USAGE/CONFIGURATION referencing the new behavior. Follow file audit guidance. Run markdown lint/spellcheck if available. \n5. Run the commands/tests noted above. After finishing, append an END entry to the session log, update this task\u2019s status to \"completed\", and ensure the Test Agent Kickoff Prompt reference is captured there.",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "B3-integ",
@@ -414,7 +414,7 @@
       ],
       "worktree": "wt/b3-docs-integ",
       "kickoff_prompt": "Task B3-integ (Review documentation updates) \u2013 INTEGRATION. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Read the Integration Kickoff Prompt left by the test task and inspect both code/test worktrees referenced. \n4. Use git worktree `wt/b3-docs-integ` (or merge branches into it) and follow the scope details below: \nReview and merge documentation worktree wt/b3-docs, run markdown lint/spellcheck, confirm instructions align with implemented behavior. \n5. Run the integration commands, resolve conflicts, append an END entry, and mark the task \"completed\" when done (or \"blocked\" with explanation).",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "C1-code",

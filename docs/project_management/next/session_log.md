@@ -125,3 +125,11 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Updated README, INSTALLATION, USAGE, CONFIGURATION, CHANGELOG, and the execution plan with the new pass-through shim model, manager manifest/overlay references, shim doctor/repair usage, and world enable/deps breadcrumbs (work committed in `wt/b3-docs`)
 - Commands: `cargo fmt --all`, `npx markdownlint-cli README.md docs/INSTALLATION.md docs/USAGE.md docs/CONFIGURATION.md docs/project_management/next/substrate_isolated_shell_plan.md docs/project_management/next/substrate_isolated_shell_data_map.md` (markdownlint still reports legacy MD013 line-length warnings across the existing docs/data-map)
 - Notes: No new kickoff prompts required for B3; integration can reference README/INSTALLATION/USAGE/CONFIGURATION for the documented behavior
+## [2025-11-16 16:05 UTC] Codex – B3-integ – START
+- Reading kickoff prompt + planning docs to prepare integration of B3 documentation updates
+- Next: work in wt/b3-docs-integ, merge wt/b3-docs, run cargo fmt + markdownlint, verify README/INSTALLATION/USAGE/CONFIGURATION/plan entries
+- Blockers: none; will log command outputs + lint warnings in END entry
+## [2025-11-16 16:07 UTC] Codex – B3-integ – END
+- Merged wt/b3-docs into wt/b3-docs-integ, reviewed README/INSTALLATION/USAGE/CONFIGURATION/CHANGELOG/execution plan updates for pass-through shims + world CLI references, and synced results back onto feat/isolated-shell-plan
+- Commands: `cargo fmt --all`, `npx markdownlint-cli README.md docs/INSTALLATION.md docs/USAGE.md docs/CONFIGURATION.md docs/project_management/next/substrate_isolated_shell_plan.md docs/project_management/next/substrate_isolated_shell_data_map.md` (only legacy MD013 line-length warnings remain as expected)
+- Kickoff prompt reference: docs/project_management/next/kickoff_prompts/B3-integ.md; no blockers, ready for Phase C tasks
