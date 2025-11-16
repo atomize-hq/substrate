@@ -585,7 +585,7 @@
       "worktree": "wt/c3-installer-code",
       "integration_task": "C3-integ",
       "kickoff_prompt": "Task C3-code (Update installer/uninstaller scripts) \u2013 CODE. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Before editing code, gather requirements and prepare the Test Agent Kickoff Prompt for the paired test task (see `concurrent_with` or session log). Provide that prompt to the user per AI instructions. \n4. Use git worktree `wt/c3-installer-code` from /home/spenser/__Active_code/substrate. Follow the scope details below: \nUpdate installation scripts as per plan: add --no-world path, drop PATH exports, create manager-init artifacts, call world enable later. Test via dry-run in container. \n5. Run the commands/tests noted above. After finishing, append an END entry to the session log, update this task\u2019s status to \"completed\", and ensure the Test Agent Kickoff Prompt reference is captured there.",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "C3-test",

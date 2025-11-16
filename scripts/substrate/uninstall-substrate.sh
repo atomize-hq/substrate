@@ -40,35 +40,6 @@ pkill -f '/substrate/bin/substrate-shim' || true
 pkill -f '/substrate-forwarder' || true
 pkill -f '/substrate-world-agent' || true
 
-log "Removing PATH/BASH_ENV snippets..."
-run_python - <<'PY'
-import pathlib
-home = pathlib.Path.home()
-marker = 'substrate installer'
-for rc_name in ['.zshrc', '.bashrc', '.bash_profile']:
-    path = home / rc_name
-    if not path.exists():
-        continue
-    lines = path.read_text().splitlines()
-    new_lines = []
-    skip = False
-    for line in lines:
-        if marker in line:
-            skip = True
-            continue
-        if skip:
-            if line.strip() == 'fi':
-                skip = False
-                continue
-            if 'substrate_bashenv' in line or 'BASH_ENV' in line:
-                continue
-            continue
-        if 'substrate_bashenv' in line:
-            continue
-        new_lines.append(line)
-    path.write_text('\n'.join(new_lines) + ('\n' if new_lines else ''))
-PY
-
 log "Removing substrate directories..."
 run_python - <<'PY'
 import pathlib, shutil

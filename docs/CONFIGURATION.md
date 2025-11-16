@@ -53,6 +53,20 @@ Environment variables and advanced configuration options for Substrate.
 | `SUBSTRATE_WORLD_ENABLED` | Cached world enablement flag (installer) | `1` | `0` |
 | `SUBSTRATE_WORLD_DEPS_MANIFEST` | Override manifest for `world deps` | bundled manifest | `/tmp/world_deps.yaml` |
 
+## Install Metadata (`~/.substrate/config.json`)
+
+The installer and `substrate world enable` command keep a small metadata file at
+`~/.substrate/config.json` with the fields Substrate needs to determine whether
+the world backend is active. Today the file only stores
+`{ "world_enabled": <bool> }`, but the format intentionally mirrors the Rust
+`InstallConfig` struct (`extras` keys are preserved for future expansion).
+
+- Fresh installs write `{"world_enabled": true}` unless `--no-world` is used.
+- `substrate world enable` overwrites the file after provisioning succeeds.
+- The generated `~/.substrate/manager_env.sh` exports `SUBSTRATE_WORLD` and
+  `SUBSTRATE_WORLD_ENABLED` so shims and subprocesses read a consistent view of
+  this metadata even before the CLI runs.
+
 ## CLI Flags
 
 ### Shim Management
@@ -83,7 +97,7 @@ Environment variables and advanced configuration options for Substrate.
 
 | Variable | Purpose | Default | Example |
 |----------|---------|---------|---------|
-| `BASH_ENV` | Bash startup script | *none* | `~/.substrate_bashenv` |
+| `BASH_ENV` | Bash startup script | *none* | `~/.substrate/manager_env.sh` |
 | `TRACE_LOG_MAX_MB` | Log rotation size limit | `100` | `200` |
 | `TEST_MODE` | Skip TTY checks in tests | *none* | `1` |
 

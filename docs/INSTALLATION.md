@@ -32,10 +32,23 @@ The installer will:
 3. Link `~/.substrate/bin/*` and stage shims in `~/.substrate/shims/`
    (host shells remain untouched—Substrate injects the shim directory at runtime)
 4. Generate the runtime manager files (`~/.substrate/manager_init.sh`,
-   `~/.substrate/manager_env.sh`) so the shell can source managers on demand
-5. Install `substrate-world-agent` under `/usr/local/bin` and manage the
+   `~/.substrate/manager_env.sh`) so Substrate-owned shells can source managers
+   on demand. The manager env script also exports `SUBSTRATE_WORLD` and
+   `SUBSTRATE_WORLD_ENABLED` so shims know whether isolation is active.
+5. Write install metadata to `~/.substrate/config.json`
+   (`{ "world_enabled": true }` unless `--no-world` is provided). The metadata
+   is consumed by `substrate world enable` and shims/CLI commands that need to
+   detect pass-through mode.
+6. Install `substrate-world-agent` under `/usr/local/bin` and manage the
    systemd service (`/etc/systemd/system/substrate-world-agent.service`)
-6. Run `substrate world doctor --json` for a final readiness report
+7. Run `substrate world doctor --json` for a final readiness report
+
+Add `~/.substrate/bin` (or your custom `--prefix` bin directory) to PATH—or
+invoke `~/.substrate/bin/substrate` directly—because the installer no longer
+edits shell rc files. Supplying `--no-world` skips step 6, writes
+`~/.substrate/config.json` with `{"world_enabled": false}`, and prints the exact
+`substrate world enable` command to run when you are ready to provision the
+backend.
 
 ### Prerequisites
 
@@ -61,7 +74,7 @@ During installation the script:
 
 Use the copy of `scripts/substrate/install-substrate.sh` shipped inside the bundle. The script
 accepts the same flags as the hosted version (`--version`, `--prefix`,
-`--no-world`, `--no-shims`, `--dry-run`).
+`--no-world`, `--no-shims`, `--sync-deps`, `--dry-run`, `--archive/--artifact-dir`).
 
 ### macOS (arm64)
 
@@ -147,10 +160,11 @@ snippet (plus a `.bak` backup) to `~/.substrate_bashenv`.
 | `--prefix <path>` | Override the installation prefix (default: `~/.substrate`) |
 | `--no-world` | Skip provisioning the world backend (use `substrate world enable` later) |
 | `--no-shims` | Skip shim deployment (useful for CI images) |
+| `--sync-deps` | Run `substrate world deps sync --all --verbose` after provisioning completes |
 | `--dry-run` | Print all actions without executing them |
 | `--archive <path>` | Install from a local tarball instead of downloading |
 
-When using a non-default prefix, add `<prefix>/bin` to PATH so the
+Add `<prefix>/bin` (default: `~/.substrate/bin`) to PATH so the
 `substrate` binary is discoverable. The shim directory (`<prefix>/shims`) is
 only injected inside Substrate-managed processes.
 
