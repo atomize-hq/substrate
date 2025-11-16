@@ -6,6 +6,7 @@ Summary:
 - Add integration coverage for `substrate shim doctor` in both human-readable and `--json` modes, verifying that manifest-derived hints and PATH diagnostics align with the data map expectations.
 - Exercise `substrate shim repair --manager <name>` with temporary homes to ensure the repair snippet is appended (with backup file) and that repeated invocations remain idempotent.
 - Document the current `cargo test -p substrate-shell` status (expected to pass once B2-code lands) so the integration agent has a clear verification target.
+- Keep production sources untouched—this task only writes tests/fixtures.
 
 Focus files / context:
 - `crates/shell/tests/` (existing CLI + shim deployment tests)
@@ -19,4 +20,6 @@ Commands to run:
 Reminders:
 - Begin at `AI_AGENT_START_HERE.md`, update coordination files on `feat/isolated-shell-plan`, and log START/END entries before touching tests.
 - Work in `wt/b2-doctor-test`, keep coordination artifacts untouched there, and consume the Test Agent Kickoff Prompt left by B2-code for any implementation specifics.
+- Expect `cargo test -p substrate-shell shim_doctor` to fail until the code lands; capture the current output once and describe it in your END entry so integration knows what to re-run.
 - Before finishing, craft the Integration Agent Kickoff Prompt for `B2-integ` and record its location in the session log.
+- Finish steps checklist: (1) commit/push worktree changes, (2) switch back to `feat/isolated-shell-plan`, (3) update session log/tasks/kickoff prompt references, (4) commit/push coordination files.

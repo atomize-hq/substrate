@@ -103,7 +103,7 @@ Before declaring any task done:
 5. When integration worktree is clean and tests pass:
    - Merge its results back into the main coordination worktree/branch `feat/isolated-shell-plan`.
    - While on `feat/isolated-shell-plan`, append the END entry with results, update task status (`completed` or `blocked`), and commit any remaining coordination files (session log, tasks.json, kickoff prompts).
-   - Prepare kickoff prompts for the next task pair (code + test) in the sequence, even if they are in the next phase. Store those prompts (e.g., in `docs/project_management/next/kickoff_prompts/`) and note their paths in the session log so the next agents can start immediately.
+   - Prepare kickoff prompts for the next task pair (code + test) in the sequence, even if they are in the next phase. Each prompt must include the finish-steps checklist noted above. Store those prompts (e.g., in `docs/project_management/next/kickoff_prompts/`) and note their paths in the session log so the next agents can start immediately.
 
 ---
 
