@@ -196,3 +196,11 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Added the automated installer/uninstaller harness at `tests/installers/install_smoke.sh` with stubbed system commands + fake system utilities + fake release builder, plus doc/task/coordination updates (C3-integ kickoff prompt, uninstall guide expectations)
 - Commands: `./tests/installers/install_smoke.sh --scenario default`, `./tests/installers/install_smoke.sh --scenario no-world`, `./tests/installers/install_smoke.sh --scenario uninstall` (all currently fail because the installer still edits rc files and lacks the new metadata hooks)
 - Integration prompt recorded at docs/project_management/next/kickoff_prompts/C3-integ.md; C3-test marked completed in tasks.json
+## [2025-11-17 00:32 UTC] Codex – C3-integ – START
+- Reviewed docs/project_management/next/kickoff_prompts/C3-integ.md plus the latest session log/tasks, marked C3-integ `in_progress` in docs/project_management/next/tasks.json, and created wt/c3-installer-integ from feat/isolated-shell-plan before merging wt/c3-installer-code/test.
+- Next: reconcile the installer/uninstaller + doc updates with the new harness, ensure manager_env/config metadata match the pass-through requirements, and run the smoke scenarios called out in the kickoff prompt.
+- Blockers: none; will capture the harness outputs + command list in the END entry once all flows pass.
+## [2025-11-17 01:14 UTC] Codex – C3-integ – END
+- Finished merging code/test worktrees, imported `tests/installers/install_smoke.sh`, tweaked the installer to source `manager_init.sh` + `.substrate_bashenv` while persisting `config.json`, and fixed the harness JSON parser so it can validate the `world_enabled` flag without shell errors.
+- Commands: `./tests/installers/install_smoke.sh --scenario default`, `./tests/installers/install_smoke.sh --scenario no-world`, `./tests/installers/install_smoke.sh --scenario uninstall` (all passed; latest temp fixtures live at `/tmp/substrate-installer-default.2DEcHT`, `/tmp/substrate-installer-no-world.OwHUDX`, `/tmp/substrate-installer-uninstall.OqIsA5` for follow-up if needed).
+- Result: wt/c3-installer-integ now contains the pass-through installer metadata plus the harness artifacts/log references noted above; C3-integ marked completed in tasks.json.

@@ -523,16 +523,22 @@ write_manager_env_script() {
   mkdir -p "${env_dir}"
   local today
   today="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  local manager_env_literal manager_init_literal legacy_literal
+  manager_env_literal="$(printf '%q' "${MANAGER_ENV_PATH}")"
+  manager_init_literal="$(printf '%q' "${MANAGER_INIT_PATH}")"
+  legacy_literal="\${HOME}/.substrate_bashenv"
   cat > "${MANAGER_ENV_PATH}.tmp" <<EOF
 #!/usr/bin/env bash
 # Managed by ${INSTALLER_NAME} on ${today}
 export SUBSTRATE_WORLD=${state}
 export SUBSTRATE_WORLD_ENABLED=${enabled_flag}
+export SUBSTRATE_MANAGER_ENV=${manager_env_literal}
+export SUBSTRATE_MANAGER_INIT=${manager_init_literal}
 
-substrate_manager_init="\${SUBSTRATE_MANAGER_INIT:-}"
-if [[ -n "\${substrate_manager_init}" && -f "\${substrate_manager_init}" ]]; then
+manager_init_path=${manager_init_literal}
+if [[ -f "\${manager_init_path}" ]]; then
   # shellcheck disable=SC1090
-  source "\${substrate_manager_init}"
+  source "\${manager_init_path}"
 fi
 
 substrate_original="\${SUBSTRATE_ORIGINAL_BASH_ENV:-}"
@@ -541,7 +547,7 @@ if [[ -n "\${substrate_original}" && -f "\${substrate_original}" ]]; then
   source "\${substrate_original}"
 fi
 
-legacy_bashenv="\${HOME}/.substrate_bashenv"
+legacy_bashenv="${legacy_literal}"
 if [[ -f "\${legacy_bashenv}" ]]; then
   # shellcheck disable=SC1090
   source "\${legacy_bashenv}"
