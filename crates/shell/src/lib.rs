@@ -354,6 +354,7 @@ pub enum WorldAction {
         json: bool,
     },
     Enable(WorldEnableArgs),
+    Deps(WorldDepsCmd),
 }
 
 #[derive(clap::Args, Debug, Clone)]
@@ -376,6 +377,49 @@ pub struct WorldEnableArgs {
     /// Seconds to wait for the world socket/doctor health checks
     #[arg(long = "timeout", value_name = "SECONDS", default_value_t = 120)]
     pub timeout: u64,
+}
+
+#[derive(clap::Args, Debug)]
+pub struct WorldDepsCmd {
+    #[command(subcommand)]
+    pub action: WorldDepsAction,
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum WorldDepsAction {
+    Status(WorldDepsStatusArgs),
+    Install(WorldDepsInstallArgs),
+    Sync(WorldDepsSyncArgs),
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct WorldDepsStatusArgs {
+    /// Specific tools to inspect (defaults to all manifest entries)
+    #[arg(value_name = "TOOL")]
+    pub tools: Vec<String>,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct WorldDepsInstallArgs {
+    /// Tool names to install inside the guest
+    #[arg(value_name = "TOOL", required = true)]
+    pub tools: Vec<String>,
+    /// Show planned actions without executing them
+    #[arg(long = "dry-run")]
+    pub dry_run: bool,
+    /// Stream guest logs while running installers
+    #[arg(long = "verbose")]
+    pub verbose: bool,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct WorldDepsSyncArgs {
+    /// Install every missing tool in the manifest (even if not detected on the host)
+    #[arg(long = "all")]
+    pub all: bool,
+    /// Stream guest logs while running installers
+    #[arg(long = "verbose")]
+    pub verbose: bool,
 }
 
 #[derive(clap::Args, Debug)]
@@ -791,7 +835,7 @@ impl ShellConfig {
                     std::process::exit(0);
                 }
                 SubCommands::World(world_cmd) => {
-                    handle_world_command(world_cmd)?;
+                    handle_world_command(world_cmd, &cli)?;
                     std::process::exit(0);
                 }
                 SubCommands::Shim(shim_cmd) => {
@@ -961,7 +1005,7 @@ fn handle_graph_command(cmd: &GraphCmd) -> Result<()> {
     Ok(())
 }
 
-fn handle_world_command(cmd: &WorldCmd) -> Result<()> {
+fn handle_world_command(cmd: &WorldCmd, cli: &Cli) -> Result<()> {
     match &cmd.action {
         WorldAction::Doctor { json } => {
             let code = world_doctor_main(*json);
@@ -969,6 +1013,9 @@ fn handle_world_command(cmd: &WorldCmd) -> Result<()> {
         }
         WorldAction::Enable(opts) => {
             commands::world_enable::run_enable(opts)?;
+        }
+        WorldAction::Deps(opts) => {
+            commands::world_deps::run(opts, cli.no_world)?;
         }
     }
     Ok(())
@@ -4556,13 +4603,13 @@ fn handle_builtin(
     Ok(builtin_result)
 }
 
-struct AgentStreamOutcome {
+pub(crate) struct AgentStreamOutcome {
     exit_code: i32,
     scopes_used: Vec<String>,
     fs_diff: Option<substrate_common::FsDiff>,
 }
 
-fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStreamOutcome> {
+pub(crate) fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStreamOutcome> {
     let (client, request, agent_id) = build_agent_client_and_request(command)?;
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async move {
@@ -4818,7 +4865,7 @@ mod streaming_tests {
     }
 }
 
-fn build_agent_client_and_request(
+pub(crate) fn build_agent_client_and_request(
     cmd: &str,
 ) -> anyhow::Result<(
     agent_api_client::AgentClient,
@@ -5377,6 +5424,23 @@ pub(crate) fn manager_manifest_base_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("config/manager_hooks.yaml"))
 }
 
+pub(crate) fn world_deps_manifest_base_path() -> PathBuf {
+    if let Ok(override_path) = env::var("SUBSTRATE_WORLD_DEPS_MANIFEST") {
+        return PathBuf::from(override_path);
+    }
+
+    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    crate_dir
+        .parent()
+        .and_then(|dir| dir.parent())
+        .map(|root| {
+            root.join("scripts")
+                .join("substrate")
+                .join("world-deps.yaml")
+        })
+        .unwrap_or_else(|| PathBuf::from("scripts/substrate/world-deps.yaml"))
+}
+
 pub(crate) fn current_platform() -> Platform {
     if cfg!(target_os = "macos") {
         Platform::MacOs
@@ -5669,6 +5733,36 @@ managers:
         let resolved = manager_manifest_base_path();
         assert_eq!(resolved, override_path);
         restore_env("SUBSTRATE_MANAGER_MANIFEST", previous);
+    }
+
+    #[test]
+    #[serial]
+    fn world_deps_manifest_base_path_prefers_env_override() {
+        let temp = tempdir().unwrap();
+        let override_path = temp.path().join("deps.yaml");
+        let previous = set_env(
+            "SUBSTRATE_WORLD_DEPS_MANIFEST",
+            &override_path.display().to_string(),
+        );
+        let resolved = world_deps_manifest_base_path();
+        assert_eq!(resolved, override_path);
+        restore_env("SUBSTRATE_WORLD_DEPS_MANIFEST", previous);
+    }
+
+    #[test]
+    #[serial]
+    fn world_deps_manifest_base_path_defaults_to_repo_location() {
+        let previous = env::var("SUBSTRATE_WORLD_DEPS_MANIFEST").ok();
+        env::remove_var("SUBSTRATE_WORLD_DEPS_MANIFEST");
+        let resolved = world_deps_manifest_base_path();
+        assert!(
+            resolved
+                .components()
+                .any(|c| c.as_os_str() == "world-deps.yaml"),
+            "path should point to scripts/substrate/world-deps.yaml (found {})",
+            resolved.display()
+        );
+        restore_env("SUBSTRATE_WORLD_DEPS_MANIFEST", previous);
     }
 }
 

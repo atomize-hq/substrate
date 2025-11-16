@@ -20,6 +20,7 @@ NO_WORLD=0
 NO_SHIMS=0
 DRY_RUN=0
 AUTO_SOURCE=1
+SYNC_DEPS=0
 ARTIFACT_DIR="${SUBSTRATE_INSTALL_ARTIFACT_DIR:-${SUBSTRATE_INSTALL_ARCHIVE:-}}"
 BASE_URL="${SUBSTRATE_INSTALL_BASE_URL:-$DEFAULT_BASE_URL}"
 TMPDIR=""
@@ -57,6 +58,7 @@ Options:
   --no-world           Skip world backend provisioning
   --no-shims           Skip shim deployment
   --no-auto-source     Do not source ~/.substrate_bashenv in the current shell after install
+  --sync-deps          Run 'substrate world deps sync --all' after provisioning completes
   --dry-run            Print actions without executing
   --artifact-dir <dir> Use pre-downloaded host bundle + SHA256SUMS
   --archive <dir>      Alias for --artifact-dir (deprecated)
@@ -397,6 +399,10 @@ parse_args() {
         ;;
       --no-auto-source)
         AUTO_SOURCE=0
+        shift
+        ;;
+      --sync-deps)
+        SYNC_DEPS=1
         shift
         ;;
       --artifact-dir|--archive)
@@ -1087,6 +1093,26 @@ run_world_checks() {
   fi
 }
 
+sync_world_deps() {
+  local substrate_bin="$1"
+  if [[ "${SYNC_DEPS}" -ne 1 ]]; then
+    return
+  fi
+  if [[ "${NO_WORLD}" -eq 1 ]]; then
+    log "Skipping world dependency sync because --no-world was used."
+    return
+  fi
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    printf '[%s][dry-run] %s world deps sync --all --verbose\n' "${INSTALLER_NAME}" "${substrate_bin}" >&2
+    return
+  fi
+
+  log "Syncing guest dependencies via 'substrate world deps sync --all'..."
+  if ! "${substrate_bin}" world deps sync --all --verbose; then
+    warn "world deps sync failed; run 'substrate world deps sync --all' later to finish provisioning."
+  fi
+}
+
 install_macos() {
   ensure_macos_prereqs
   ensure_version_selected
@@ -1130,6 +1156,7 @@ install_macos() {
   doctor_original_path="${bin_dir}:${ORIGINAL_PATH}"
   log "Doctor PATH: ${doctor_original_path}"
   PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" run_world_checks "${substrate_bin}"
+  PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" sync_world_deps "${substrate_bin}"
 
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     log "Installation complete (dry run). Open a new terminal or 'source ~/.substrate_bashenv' when running for real."
@@ -1183,6 +1210,7 @@ install_linux() {
   doctor_original_path="${bin_dir}:${ORIGINAL_PATH}"
   log "Doctor PATH: ${doctor_original_path}"
   PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" run_world_checks "${substrate_bin}"
+  PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" sync_world_deps "${substrate_bin}"
 
   if [[ "${IS_WSL}" -eq 1 ]]; then
     log "Detected WSL environment. Windows host components (forwarder, uninstall) must be managed via PowerShell scripts."

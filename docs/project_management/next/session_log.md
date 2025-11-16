@@ -173,3 +173,11 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Added `crates/shell/tests/world_deps.rs` with a temp HOME/PREFIX harness that seeds base + overlay manifests, fake host/guest detectors, and stub install scripts to cover `status`, `install`, `sync --all`, dry-run, overlay overrides, and failure toggles
 - Commands: `cargo fmt --all`, `cargo test -p substrate-shell world_deps` (fails because `substrate world` does not recognize the `deps` subcommand yet: `error: Found argument 'deps' which wasn't expected, or isn't valid in this context`)
 - Integration Agent Kickoff Prompt recorded at docs/project_management/next/kickoff_prompts/C2-integ.md; ready for wt/c2-world-deps-integ to merge the CLI branch and re-run the suite
+## [2025-11-16 21:55 UTC] Codex – C2-integ – START
+- Reviewed docs/project_management/next/kickoff_prompts/C2-integ.md plus the latest session log/tasks to confirm merge targets, env overrides, and required commands before switching into wt/c2-world-deps-integ
+- Plan: merge wt/c2-world-deps-code/test, resolve CLI/manifest conflicts, ensure overlay + installer sync wiring, then run `cargo fmt --all` and `cargo test -p substrate-shell world_deps`; optional manual status run deferred until after automated tests
+- Blockers: none; expect to add session log + tasks.json updates after integration succeeds
+## [2025-11-16 22:37 UTC] Codex – C2-integ – END
+- Merged wt/c2-world-deps-code and wt/c2-world-deps-test, added the world deps CLI/manifest loader, guest-install fallback handling, and installer `--sync-deps` hook, then synced the integrated branch back toward feat/isolated-shell-plan
+- Commands: `cargo fmt --all`, `cargo test -p substrate-shell world_deps` (passes with new CLI + tests)
+- Prompt reference: docs/project_management/next/kickoff_prompts/C2-integ.md; manual CLI sanity check deferred since automated test suite now covers the flows
