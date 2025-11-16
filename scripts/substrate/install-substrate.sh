@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly INSTALLER_NAME="substrate-install"
+if [[ -z "${INSTALLER_NAME:-}" ]]; then
+  INSTALLER_NAME="substrate-install"
+fi
+readonly INSTALLER_NAME
 # shellcheck disable=SC2034 # used for release metadata
 readonly INSTALLER_VERSION="0.1.0-dev"
 readonly DEFAULT_FALLBACK_VERSION="0.2.2"
