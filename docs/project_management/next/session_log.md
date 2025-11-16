@@ -117,3 +117,11 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Implemented `crates/shell/tests/shim_doctor.rs` (temp HOME fixture, doctor human/JSON assertions, repair snippet/backup coverage) on `wt/b2-doctor-test` and committed as `test: add shim doctor integration coverage`
 - Commands: `cargo fmt --all`, `cargo test -p substrate-shell shim_doctor`, `cargo test -p substrate-shell --test shim_doctor` (both test invocations fail because the current `substrate` binary does not recognize the `shim` subcommand: `error: unrecognized subcommand 'shim'`)
 - Integration Agent Kickoff Prompt recorded at docs/project_management/next/kickoff_prompts/B2-integ.md; waiting on wt/b2-doctor-code to land the CLI so these tests can pass
+## [2025-11-16 15:12 UTC] Codex – B3-docs – START
+- Reviewed AI entry doc, execution plan §Workstream B3, and kickoff prompt at docs/project_management/next/kickoff_prompts/B3-docs.md; marked task in progress
+- Next: switch to `wt/b3-docs`, refresh README/INSTALLATION/USAGE/CONFIGURATION per pass-through shims + shim doctor guidance, then run `cargo fmt --all` and the documented markdownlint command
+- Blockers: none; will capture summary/tests + any follow-ups in END entry
+## [2025-11-16 16:02 UTC] Codex – B3-docs – END
+- Updated README, INSTALLATION, USAGE, CONFIGURATION, CHANGELOG, and the execution plan with the new pass-through shim model, manager manifest/overlay references, shim doctor/repair usage, and world enable/deps breadcrumbs (work committed in `wt/b3-docs`)
+- Commands: `cargo fmt --all`, `npx markdownlint-cli README.md docs/INSTALLATION.md docs/USAGE.md docs/CONFIGURATION.md docs/project_management/next/substrate_isolated_shell_plan.md docs/project_management/next/substrate_isolated_shell_data_map.md` (markdownlint still reports legacy MD013 line-length warnings across the existing docs/data-map)
+- Notes: No new kickoff prompts required for B3; integration can reference README/INSTALLATION/USAGE/CONFIGURATION for the documented behavior
