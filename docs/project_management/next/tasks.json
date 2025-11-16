@@ -441,7 +441,7 @@
       "worktree": "wt/c1-world-enable-code",
       "integration_task": "C1-integ",
       "kickoff_prompt": "Task C1-code (Implement `substrate world enable` command) \u2013 CODE. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Before editing code, gather requirements and prepare the Test Agent Kickoff Prompt for the paired test task (see `concurrent_with` or session log). Provide that prompt to the user per AI instructions. \n4. Use git worktree `wt/c1-world-enable-code` from /home/spenser/__Active_code/substrate. Follow the scope details below: \nImplement the world enable command per the plan. Wire it into CLI, call provisioning script, update ~/.substrate/config.json. After coding run `cargo check -p substrate-shell`. \n5. Run the commands/tests noted above. After finishing, append an END entry to the session log, update this task\u2019s status to \"completed\", and ensure the Test Agent Kickoff Prompt reference is captured there.",
-      "status": "in_progress"
+      "status": "completed"
     },
     {
       "id": "C1-test",

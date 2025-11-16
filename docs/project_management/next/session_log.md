@@ -137,6 +137,10 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Reviewed AI entry doc, execution plan §5.3/§5.6, data map env metadata, and session log; marked C1-code in progress per tasks.json
 - Next: craft the C1-test kickoff prompt, then switch to `wt/c1-world-enable-code` to add the `substrate world enable` CLI that reuses installer provisioning, updates config metadata/env vars, and runs `cargo fmt --all` + `cargo check -p substrate-shell`
 - Blockers: none; will document provisioning script integration + health checks in END entry
+## [2025-11-16 17:34 UTC] Codex – C1-code – END
+- Added shared install metadata helpers + new `scripts/substrate/world-enable.sh`, wired `substrate world enable` command + ShellConfig config detection, updated installer to persist `world_enabled`, and recorded the C1-test kickoff prompt at docs/project_management/next/kickoff_prompts/C1-test.md
+- Commands: `cargo fmt --all`, `cargo check -p substrate-shell`
+- Next: C1-test should mock the helper via `SUBSTRATE_WORLD_ENABLE_SCRIPT`, cover success/failure/dry-run/force flows, and ensure config/env toggles + log messaging match expectations before handing to C1-integ
 ## [2025-11-16 16:54 UTC] Codex – C1-test – START
 - Reviewed AI entry doc + Phase C references, read C1-code kickoff prompt, and set C1-test to in_progress in tasks.json
 - Next: switch into `wt/c1-world-enable-test`, inspect world enable implementation/fixtures, and add integration tests covering success/failure/idempotent/missing-config cases before running `cargo fmt --all` + `cargo test -p substrate-shell world_enable`
