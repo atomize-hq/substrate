@@ -6,6 +6,7 @@
 
 use anyhow::Result;
 use serde_json::Value;
+use serial_test::serial;
 use std::fs;
 use tempfile::TempDir;
 
@@ -34,6 +35,7 @@ fn get_shim_binary_path() -> String {
 
 /// Test the complete shim execution flow with real binary resolution
 #[test]
+#[serial]
 fn test_shim_execution_flow() -> Result<()> {
     let temp = TempDir::new()?;
     let shim_dir = temp.path().join("shims");
@@ -196,6 +198,7 @@ fn test_claude_code_hash_pinning_scenario() -> Result<()> {
 
 /// Test SHIM_BYPASS functionality
 #[test]
+#[serial]
 fn test_shim_bypass() -> Result<()> {
     let temp = TempDir::new()?;
     let bin_dir = temp.path().join("bin");
@@ -362,6 +365,7 @@ fn test_session_correlation() -> Result<()> {
 
 /// Test credential redaction functionality
 #[test]
+#[serial]
 fn test_credential_redaction() -> Result<()> {
     let temp = TempDir::new()?;
     let bin_dir = temp.path().join("bin");
@@ -479,6 +483,7 @@ fn test_missing_command_error() -> Result<()> {
 
 /// Ensure runtime PATH mutations from managers like pyenv/nvm are honored
 #[test]
+#[serial]
 fn test_runtime_path_overrides_original_var() -> Result<()> {
     let temp = TempDir::new()?;
     let shim_dir = temp.path().join("shims");
@@ -560,6 +565,7 @@ fn test_runtime_path_overrides_original_var() -> Result<()> {
 }
 
 #[test]
+#[serial]
 fn manager_hint_logging_records_entry() -> Result<()> {
     let temp = TempDir::new()?;
     let shim_dir = temp.path().join("shims");
