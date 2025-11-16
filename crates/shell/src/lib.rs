@@ -1,5 +1,6 @@
 pub(crate) mod agent_events;
 pub(crate) mod async_repl;
+pub(crate) mod commands;
 mod editor;
 pub mod lock;
 pub mod manager_init;
@@ -317,6 +318,7 @@ pub struct Cli {
 pub enum SubCommands {
     Graph(GraphCmd),
     World(WorldCmd),
+    Shim(ShimCmd),
 }
 
 #[derive(clap::Args, Debug)]
@@ -350,6 +352,29 @@ pub enum WorldAction {
         /// Output machine-readable JSON for CI
         #[arg(long)]
         json: bool,
+    },
+}
+
+#[derive(clap::Args, Debug)]
+pub struct ShimCmd {
+    #[command(subcommand)]
+    pub action: ShimAction,
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum ShimAction {
+    Doctor {
+        /// Output machine-readable JSON instead of the text report
+        #[arg(long)]
+        json: bool,
+    },
+    Repair {
+        /// Manager name as defined in the manifest
+        #[arg(long = "manager", value_name = "NAME")]
+        manager: String,
+        /// Apply the repair snippet without prompting
+        #[arg(short = 'y', long = "yes")]
+        yes: bool,
     },
 }
 
@@ -746,6 +771,9 @@ impl ShellConfig {
                     handle_world_command(world_cmd)?;
                     std::process::exit(0);
                 }
+                SubCommands::Shim(shim_cmd) => {
+                    handle_shim_command(shim_cmd);
+                }
             }
         }
 
@@ -898,6 +926,55 @@ fn handle_world_command(cmd: &WorldCmd) -> Result<()> {
         WorldAction::Doctor { json } => {
             let code = world_doctor_main(*json);
             std::process::exit(code);
+        }
+    }
+}
+
+fn handle_shim_command(cmd: &ShimCmd) -> ! {
+    match &cmd.action {
+        ShimAction::Doctor { json } => {
+            let exit = match commands::shim_doctor::run_doctor(*json) {
+                Ok(_) => 0,
+                Err(err) => {
+                    eprintln!("substrate shim doctor failed: {:#}", err);
+                    1
+                }
+            };
+            std::process::exit(exit);
+        }
+        ShimAction::Repair { manager, yes } => {
+            let exit = match commands::shim_doctor::run_repair(manager, *yes) {
+                Ok(commands::shim_doctor::RepairOutcome::Applied {
+                    manager,
+                    bashenv_path,
+                    backup_path,
+                }) => {
+                    if let Some(backup) = &backup_path {
+                        println!(
+                            "Updated {} with repair snippet for `{}` (backup at {})",
+                            bashenv_path.display(),
+                            manager,
+                            backup.display()
+                        );
+                    } else {
+                        println!(
+                            "Created {} with repair snippet for `{}`",
+                            bashenv_path.display(),
+                            manager
+                        );
+                    }
+                    0
+                }
+                Ok(commands::shim_doctor::RepairOutcome::Skipped { manager, reason }) => {
+                    println!("No changes applied for `{}`: {}", manager, reason);
+                    0
+                }
+                Err(err) => {
+                    eprintln!("substrate shim repair failed: {:#}", err);
+                    1
+                }
+            };
+            std::process::exit(exit);
         }
     }
 }
@@ -5243,7 +5320,7 @@ fn configure_manager_init(config: &ShellConfig) -> Option<manager_init::ManagerI
     }
 }
 
-fn manager_manifest_base_path() -> PathBuf {
+pub(crate) fn manager_manifest_base_path() -> PathBuf {
     if let Ok(override_path) = env::var("SUBSTRATE_MANAGER_MANIFEST") {
         return PathBuf::from(override_path);
     }
@@ -5256,7 +5333,7 @@ fn manager_manifest_base_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("config/manager_hooks.yaml"))
 }
 
-fn current_platform() -> Platform {
+pub(crate) fn current_platform() -> Platform {
     if cfg!(target_os = "macos") {
         Platform::MacOs
     } else if cfg!(windows) {
