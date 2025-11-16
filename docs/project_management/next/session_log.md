@@ -133,3 +133,15 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Merged wt/b3-docs into wt/b3-docs-integ, reviewed README/INSTALLATION/USAGE/CONFIGURATION/CHANGELOG/execution plan updates for pass-through shims + world CLI references, and synced results back onto feat/isolated-shell-plan
 - Commands: `cargo fmt --all`, `npx markdownlint-cli README.md docs/INSTALLATION.md docs/USAGE.md docs/CONFIGURATION.md docs/project_management/next/substrate_isolated_shell_plan.md docs/project_management/next/substrate_isolated_shell_data_map.md` (only legacy MD013 line-length warnings remain as expected)
 - Kickoff prompt reference: docs/project_management/next/kickoff_prompts/B3-integ.md; no blockers, ready for Phase C tasks
+## [2025-11-16 16:53 UTC] Codex – C1-code – START
+- Reviewed AI entry doc, execution plan §5.3/§5.6, data map env metadata, and session log; marked C1-code in progress per tasks.json
+- Next: craft the C1-test kickoff prompt, then switch to `wt/c1-world-enable-code` to add the `substrate world enable` CLI that reuses installer provisioning, updates config metadata/env vars, and runs `cargo fmt --all` + `cargo check -p substrate-shell`
+- Blockers: none; will document provisioning script integration + health checks in END entry
+## [2025-11-16 16:54 UTC] Codex – C1-test – START
+- Reviewed AI entry doc + Phase C references, read C1-code kickoff prompt, and set C1-test to in_progress in tasks.json
+- Next: switch into `wt/c1-world-enable-test`, inspect world enable implementation/fixtures, and add integration tests covering success/failure/idempotent/missing-config cases before running `cargo fmt --all` + `cargo test -p substrate-shell world_enable`
+- Blockers: Code task still in progress per session log; will note any missing hooks or assumptions needed for testing
+## [2025-11-16 17:09 UTC] Codex – C1-test – END
+- Added `crates/shell/tests/world_enable.rs` with a temp HOME/PREFIX fixture that injects a fake `SUBSTRATE_WORLD_ENABLE_SCRIPT`, overrides `SUBSTRATE_WORLD_SOCKET`, and covers success (config/env toggled + verbose streaming), helper failure, missing socket, idempotent/`--force`, `--dry-run`, and corrupt-config recovery scenarios
+- Commands: `cargo fmt --all`, `cargo test -p substrate-shell world_enable` (fails: `error: unrecognized subcommand 'enable'` because the CLI branch hasn’t landed yet), `cargo test -p substrate-shell world_enable -- --exact world_enable_provisions_and_sets_config_and_env_state --nocapture` (same failure captured for logs)
+- Integration Kickoff Prompt recorded at docs/project_management/next/kickoff_prompts/C1-integ.md; tests need the code branch to add `substrate world enable` + env overrides so these cases can pass
