@@ -207,3 +207,5 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 ## [2025-11-17 01:42 UTC] Codex – Phase D Prep – NOTE
 - Fast-forwarded `feat/isolated-shell-plan` with wt/c3-installer-integ (`git merge wt/c3-installer-integ`) so the installer harness + metadata fixes are now on the coordination branch, then authored the next Workstream kickoff prompts at `docs/project_management/next/kickoff_prompts/D2-code.md` and `docs/project_management/next/kickoff_prompts/D2-test.md`.
 - Updated `docs/project_management/next/tasks.json` to reference the new prompt paths for D2-code/D2-test so future agents know where to look.
+## [2025-11-17 01:55 UTC] Codex – D1 prompt refresh – NOTE
+- Revisited the older D1-code/D1-test kickoff prompts to align them with the current pass-through manager/doctor work, expanding the instructions in `docs/project_management/next/kickoff_prompts/D1-code.md` and `.../D1-test.md` so they reflect the latest schema expectations, command list, and coordination steps.

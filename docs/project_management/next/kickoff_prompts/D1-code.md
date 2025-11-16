@@ -3,21 +3,22 @@
 Task ID: **D1-code** (Add Tier-2 manager entries)
 
 Summary:
-- Populate `config/manager_hooks.yaml` with the Tier-2 managers called out in the plan (mise/rtx, rbenv, sdkman, bun, volta, goenv, etc.), including detect/init/repair/guest sections that match the data map schema.
-- Keep comments + ordering consistent with the Tier-1 entries so future overlays remain readable, and ensure every detect rule follows the expansion helpers (tilde/env) already documented.
-- Update any supporting docs (plan, data map, file audit) if new managers introduce behaviors or guest install requirements that aren’t currently described.
-- Leave testing to the paired D1-test task; focus on shipping a valid manifest + docs.
+- Expand `config/manager_hooks.yaml` with the Tier-2 managers identified in the Workstream D1 plan (mise/rtx, rbenv, sdkman, bun, volta, goenv, asdf-node, etc.). Each entry must provide complete `detect`, `init`, `repair_hint`, and `guest` blocks that align with the schema in `docs/project_management/next/substrate_isolated_shell_data_map.md`.
+- Ensure detection heuristics take advantage of the existing helpers (tilde/env expansion, `files` + `commands` arrays, optional custom `script`) and avoid host mutations. Snippets and repair hints need to work under the pass-through model (`manager_env.sh` sources them before user rc files).
+- Populate the `guest` install metadata so later Workstreams (C2/D2) can expose the same managers through `world deps` and doctor/health summaries. Document any new guest prerequisites or platform quirks in the plan/data map as needed.
+- Keep comments/version headers consistent, and group Tier-2 entries logically (matching Tier-1 ordering) so overlays remain stable. Testing lives in D1-test; this task owns manifest + doc updates only.
 
 Focus files / context:
-- `config/manager_hooks.yaml` (primary deliverable; keep version header and comments intact)
-- Planning references: `docs/project_management/next/substrate_isolated_shell_plan.md` (§5.9), `.../substrate_isolated_shell_data_map.md`, `.../substrate_isolated_shell_file_audit.md`
-- Existing Tier-1 manifest entries + schema helpers in `crates/common/src/manager_manifest.rs` for field names/constraints
+- `config/manager_hooks.yaml` (primary deliverable; maintain version header, section comments, and manifest ordering).
+- Planning references: `docs/project_management/next/substrate_isolated_shell_plan.md` (§5.9 “Tier-2 managers”), `docs/project_management/next/substrate_isolated_shell_data_map.md`, and `docs/project_management/next/substrate_isolated_shell_file_audit.md`.
+- Schema helpers in `crates/common/src/manager_manifest.rs` plus recent manager-related docs (`docs/USAGE.md`, `docs/CONFIGURATION.md`) to keep terminology aligned.
 
 Commands to run:
 1. `cargo fmt --all`
 2. `cargo test -p substrate-common manager_manifest`
+3. (Optional sanity check) `cargo test -p substrate-shell manager_init`
 
 Reminders:
-- Start from `AI_AGENT_START_HERE.md`, set this task to `in_progress` in `docs/project_management/next/tasks.json`, and add a START entry in `docs/project_management/next/session_log.md` before editing.
-- Work inside git worktree `wt/d1-managers-code`; avoid touching coordination files there. Capture any schema surprises or open questions in the session log.
-- When finished: run the commands above, commit/push changes in the worktree, switch back to `feat/isolated-shell-plan`, append an END entry + status update, and reference this kickoff prompt for the paired test agent.
+- Begin at `AI_AGENT_START_HERE.md`, set D1-code to `in_progress` in `docs/project_management/next/tasks.json`, and log a START entry in `docs/project_management/next/session_log.md` before changing files.
+- Work entirely inside git worktree `wt/d1-managers-code`; capture any manifest/schema questions in the session log so the Test agent can consume them.
+- When finished, run the commands above, commit/push from the worktree, switch back to `feat/isolated-shell-plan`, append an END entry + status update, and reference this kickoff prompt so D1-test knows where the manifest landed.
