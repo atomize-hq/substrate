@@ -157,3 +157,15 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Merged wt/c1-world-enable-code and wt/c1-world-enable-test into wt/c1-world-enable-integ, updated the CLI to normalize `SUBSTRATE_WORLD_SOCKET`, repair install metadata/manager_env exports, and ensured verbose streaming + timeout handling matched the new tests before syncing back onto feat/isolated-shell-plan
 - Commands: `cargo fmt --all`, `cargo test -p substrate-shell world_enable`, `SUBSTRATE_WORLD_ENABLE_SCRIPT=$PWD/scripts/substrate/world-enable.sh target/debug/substrate world enable --dry-run --prefix /tmp/tmp.XKsYXHEYxS --profile release --verbose`
 - Result: integration commit `feat: integrate world enable CLI` is on wt/c1-world-enable-integ with tests + manual dry-run passing; ready for follow-on coordination work
+## [2025-11-16 19:28 UTC] Codex – C2-code – START
+- Reviewing Phase C §4/§5.5 docs plus session log to scope `substrate world deps` CLI + manifest plumbing
+- Next: switch to worktree `wt/c2-world-deps-code`, craft C2-test kickoff prompt, implement CLI/manifest/guest execution, and run `cargo fmt --all` followed by `cargo check -p substrate-shell`
+- Blockers: none; world backend APIs + manifest schema still under review before coding
+## [2025-11-16 19:30 UTC] Codex – C2-test – START
+- Consumed C2-test kickoff prompt + world-deps planning docs to understand CLI expectations, manifest overrides, and fake guest execution approach before writing tests
+- Next: switch to worktree `wt/c2-world-deps-test`, add temp HOME fixtures + helper scripts under `crates/shell/tests/world_deps.rs`, and run `cargo fmt --all` plus `cargo test -p substrate-shell world_deps`
+- Blockers: need to inspect the new CLI implementation in wt/c2-world-deps-code for available env hooks; otherwise unblocked
+## [2025-11-16 19:41 UTC] Codex – C2-test – END
+- Added `crates/shell/tests/world_deps.rs` with a temp HOME/PREFIX harness that seeds base + overlay manifests, fake host/guest detectors, and stub install scripts to cover `status`, `install`, `sync --all`, dry-run, overlay overrides, and failure toggles
+- Commands: `cargo fmt --all`, `cargo test -p substrate-shell world_deps` (fails because `substrate world` does not recognize the `deps` subcommand yet: `error: Found argument 'deps' which wasn't expected, or isn't valid in this context`)
+- Integration Agent Kickoff Prompt recorded at docs/project_management/next/kickoff_prompts/C2-integ.md; ready for wt/c2-world-deps-integ to merge the CLI branch and re-run the suite
