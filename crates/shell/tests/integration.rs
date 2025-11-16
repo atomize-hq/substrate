@@ -588,6 +588,12 @@ managers:
     init:
       shell: |
         export MANAGER_MARKER="manager_init_loaded"
+  - name: Volta
+    detect:
+      script: "exit 0"
+    init:
+      shell: |
+        export VOLTA_MARKER="volta_loaded"
 "#,
     );
     let host_bash_env = fixture.home().join("host_bash_env.sh");
@@ -665,6 +671,12 @@ managers:
     assert!(
         manager_env_contents.contains(".substrate_bashenv"),
         "manager_env missing legacy bashenv sourcing"
+    );
+    let manager_init_contents =
+        fs::read_to_string(fixture.manager_init_path()).expect("manager init contents");
+    assert!(
+        manager_init_contents.contains("VOLTA_MARKER"),
+        "manager init snippet missing Tier-2 manager content"
     );
 }
 

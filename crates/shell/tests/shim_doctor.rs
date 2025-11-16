@@ -205,6 +205,78 @@ managers:
 }
 
 #[test]
+fn shim_doctor_json_reports_tier2_managers() {
+    let manifest = r#"version: 1
+managers:
+  - name: Bun
+    priority: 10
+    detect:
+      script: "exit 0"
+    init:
+      shell: |
+        export BUN_MARKER=1
+    repair_hint: |
+      curl https://bun.sh/install | bash
+  - name: Volta
+    priority: 12
+    detect:
+      script: "exit 0"
+    init:
+      shell: |
+        export VOLTA_MARKER=1
+    repair_hint: |
+      export VOLTA_HOME="$HOME/.volta"
+"#;
+    let fixture = DoctorFixture::new(manifest);
+    fixture.write_hint_event(
+        "Bun",
+        "curl https://bun.sh/install | bash",
+        "2025-11-17T00:00:00Z",
+    );
+
+    let output = fixture
+        .command()
+        .arg("shim")
+        .arg("doctor")
+        .arg("--json")
+        .output()
+        .expect("failed to run shim doctor --json");
+    assert!(
+        output.status.success(),
+        "shim doctor --json should succeed: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let report: Value = serde_json::from_slice(&output.stdout).expect("doctor output JSON");
+    let states = report["states"]
+        .as_array()
+        .expect("states array missing from report");
+    let bun_state = states
+        .iter()
+        .find(|state| state["name"] == "Bun")
+        .expect("bun state missing");
+    assert_eq!(bun_state["repair_available"], true);
+    assert_eq!(
+        bun_state["last_hint"]["hint"],
+        "curl https://bun.sh/install | bash"
+    );
+    let volta_state = states
+        .iter()
+        .find(|state| state["name"] == "Volta")
+        .expect("volta state missing");
+    assert_eq!(volta_state["detected"], true);
+
+    let hints = report["hints"]
+        .as_array()
+        .expect("hints array missing from report");
+    assert!(
+        hints.iter().any(|hint| hint["name"] == "Bun"),
+        "expected Bun hint in report"
+    );
+}
+
+#[test]
 fn shim_doctor_json_mode_surfaces_states_hints_and_path_details() {
     let missing_file = "/nonexistent/path/for/json-test";
     let manifest = format!(
