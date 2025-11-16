@@ -188,3 +188,11 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 ## [2025-11-16 23:55 UTC] Codex – C3-code – END
 - Updated the Linux/macOS installer for pass-through shells (manager_init/env generation, config.json metadata, world doctor skips for --no-world, dry-run friendly logs), rewrote the uninstall script to avoid touching rc files, and refreshed INSTALLATION/USAGE/CONFIGURATION/UNINSTALL guidance plus the C3-test kickoff prompt at docs/project_management/next/kickoff_prompts/C3-test.md
 - Commands: `./scripts/substrate/install-substrate.sh --dry-run --prefix /tmp/substrate-c3 --sync-deps`, `./scripts/substrate/install-substrate.sh --dry-run --prefix /tmp/substrate-c3-no-world --no-world`, `./scripts/substrate/uninstall-substrate.sh --dry-run --prefix /tmp/substrate-c3`
+## [2025-11-16 22:50 UTC] Codex – C3-test – START
+- Consumed C3-code kickoff prompt + Workstream C3 docs to capture expected installer artifacts/dry-run output and set C3-test to `in_progress` in tasks.json before touching code
+- Next: work from `wt/c3-installer-test`, build `tests/installers/install_smoke.sh` harness covering default, `--no-world`, and uninstall flows while stubbing HOME/SUBSTRATE_PREFIX and checking PATH/config outputs
+- Blockers: none; pending harness implementation and doc/test updates
+## [2025-11-16 23:45 UTC] Codex – C3-test – END
+- Added the automated installer/uninstaller harness at `tests/installers/install_smoke.sh` with stubbed system commands + fake release builder, plus doc/task/coordination updates (C3-integ kickoff prompt, uninstall guide expectations)
+- Commands: `./tests/installers/install_smoke.sh --scenario default`, `./tests/installers/install_smoke.sh --scenario no-world`, `./tests/installers/install_smoke.sh --scenario uninstall` (all currently fail because the installer still edits rc files and lacks the new metadata hooks)
+- Integration prompt recorded at docs/project_management/next/kickoff_prompts/C3-integ.md; C3-test marked completed in tasks.json
