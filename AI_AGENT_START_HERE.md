@@ -27,12 +27,13 @@ Always read the relevant planning document(s) before editing code or tests.
 
 Steps:
 1. Ensure the main worktree is on `feat/isolated-shell-plan` (`git checkout feat/isolated-shell-plan` if needed).
-2. Open `docs/project_management/next/tasks.json`.
+2. Pull the latest coordination updates (`git fetch --all` + `git pull --ff-only`) so task/log edits never clobber someone else’s work.
+3. Open `docs/project_management/next/tasks.json`.
 3. Find the earliest task with `"status": "pending"` that you are authorized to perform (code/test/integration).
 4. Respect dependencies listed in `depends_on`. Do not start a task until its prerequisites are `"completed"`.
 5. Update the task’s `status` to `"in_progress"` **while on `feat/isolated-shell-plan`**.
 6. Append a START entry to `docs/project_management/next/session_log.md` (also on `feat/isolated-shell-plan`).
-7. Only after the above should you switch to the specific git worktree noted in the task.
+7. Only after the above should you switch to the specific git worktree noted in the task. Once you leave `feat/isolated-shell-plan`, do not touch `tasks.json`, `session_log.md`, or other coordination files until you return for the END entry.
 
 > **Note:** Tasks are grouped by phase (see execution plan). Parallelism is encouraged where `concurrent_with` lists other tasks.
 
@@ -50,6 +51,7 @@ At the **end**:
 1. After finishing the work in the dedicated worktree, return to `feat/isolated-shell-plan`.
 2. Append an END entry summarizing results/tests and any follow-ups.
 3. Update the task’s status in `tasks.json` (`completed` or `blocked`).
+> **Reminder:** Never edit the session log or task file from a per-task worktree. Always switch back to `feat/isolated-shell-plan` before touching coordination artifacts.
 
 ### Log Entry Template
 ```
@@ -63,21 +65,27 @@ At the **end**:
 
 ## 4. Execution Flow per Task Type
 
+### Concurrent Code/Test Workflow
+
+- Code and test agents run in parallel on *separate* worktrees. Neither agent merges, rebases, or edits the coordination branch outside of the START/END bookkeeping noted above.
+- If a required command (e.g., `cargo test`) cannot pass because the paired task has not landed yet, still run it once to capture the current behavior, then record the result/expected failure in your END log entry and kickoff prompt so the integration agent knows what to verify later.
+- Only the integration agent merges worktree results back into `feat/isolated-shell-plan`.
+
 ### Code Tasks
 1. On `feat/isolated-shell-plan`, set status to `in_progress` and log START (see §2–3).
 2. Gather requirements (planning docs, file audit entries, dependency notes).
 3. Switch into the code worktree (`worktree` field) and implement changes. Do **not** modify `tasks.json` or `session_log.md` from within that worktree.
 4. **Before writing code**, craft the Test Agent Kickoff Prompt (task id, summary, files touched, commands, reminder to read this doc). Save it locally and be ready to record it when you return to the coordination branch.
-5. Run the commands listed in the task’s prompt while still in the code worktree.
+5. Run the commands listed in the task’s prompt while still in the code worktree. If a command depends on the yet-to-be-written tests (or vice versa), note the limitation in your END entry instead of touching the coordination branch.
 6. After coding/tests are complete, return to the main worktree on `feat/isolated-shell-plan`, append the END log entry, update task status to `completed`, and record the Test Agent Kickoff Prompt (e.g., include it in the session log).
 
 ### Test Tasks
 1. On `feat/isolated-shell-plan`, read this doc, planning references, and session log. Set status to `in_progress`, log START.
 2. Consume the Test Agent Kickoff Prompt left by the code task (session log).
 3. Switch into the designated test worktree and implement tests there; keep coordination files untouched in that worktree.
-4. Run the required commands/tests.
+4. Run the required commands/tests. If the paired code task has not landed and the suite fails, capture the current output once and document the expected failure in your END entry and kickoff prompt.
 5. **Before finishing**, craft the Integration Agent Kickoff Prompt.
-6. After tests pass, return to `feat/isolated-shell-plan`, record the Integration prompt + END log entry, set task status to `completed`.
+6. After tests pass (or are blocked pending the code task), return to `feat/isolated-shell-plan`, record the Integration prompt + END log entry (mentioning any deferred test results), set task status to `completed` or `blocked` as appropriate.
 
 ### Integration Tasks
 1. On `feat/isolated-shell-plan`, mark status `in_progress` and log START.

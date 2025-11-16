@@ -75,3 +75,12 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Copied env injection sources from wt/a3-shell-env-code + regression tests from wt/a3-shell-env-test into wt/a3-shell-env-integ, resolved resulting differences, and synced them back onto feat/isolated-shell-plan
 - Commands: `cargo fmt --all`, `cargo test -p substrate-shell shell_env`, `HOME=target/tests-tmp/manual-path-check/home USERPROFILE=target/tests-tmp/manual-path-check/home SUBSTRATE_WORLD=disabled SUBSTRATE_MANAGER_MANIFEST=target/tests-tmp/manual-path-check/home/manager_hooks.yaml target/debug/substrate -c 'printf "__HOST_PATH_CHECK__\n%s\n" "$PATH"'`
 - Next: Phase B tasks (B1-code/B1-test/B1-integ) can start now that the per-session env injection code/tests are merged
+
+## [2025-11-15 18:05 UTC] Codex – B1-test – START
+- Reviewed the B1-code branch plus plan/data docs to understand the manager hint logging + no-world expectations before writing tests
+- Next: create worktree `wt/b1-shim-test`, add integration coverage for hint logs + no-world bypass, and run `cargo test -p substrate-shim`
+- Blockers: none yet; will craft Integration Agent prompt before finishing
+## [2025-11-15 18:52 UTC] Codex – B1-test – END
+- Added two new shim integration tests that spin up temporary manifests/binaries to (a) assert `manager_hint` records appear when stderr matches manifest patterns and (b) ensure hints are suppressed when `SUBSTRATE_WORLD_ENABLED=false`
+- Commands: `cargo fmt --all`, `cargo test -p substrate-shim` (fails at `manager_hint_logging_records_entry` because B1-code has not yet wired manifest hint logging)
+- Integration Agent Kickoff Prompt recorded at docs/project_management/next/kickoff_prompts/B1-integ.md; unblock once B1-code lands the manifest-driven hint + no-world bypass plumbing
