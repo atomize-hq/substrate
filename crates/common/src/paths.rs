@@ -41,6 +41,10 @@ pub fn lock_file() -> Result<PathBuf> {
     Ok(substrate_home()?.join(".substrate.lock"))
 }
 
+pub fn config_file() -> Result<PathBuf> {
+    Ok(substrate_home()?.join("config.json"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -80,6 +84,13 @@ mod tests {
     fn test_lock_file() {
         let path = lock_file().unwrap();
         assert!(path.ends_with(".substrate.lock"));
+        assert!(path.parent().unwrap().ends_with(SUBSTRATE_DIR_NAME));
+    }
+
+    #[test]
+    fn test_config_file() {
+        let path = config_file().unwrap();
+        assert!(path.ends_with("config.json"));
         assert!(path.parent().unwrap().ends_with(SUBSTRATE_DIR_NAME));
     }
 
