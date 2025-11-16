@@ -105,6 +105,10 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Reviewing B2 doctor/repair CLI scope, kickoff prompt, and planning docs plus manager manifest/init helpers before coding
 - Next: switch to worktree `wt/b2-doctor-code`, prep the Test Agent Kickoff Prompt, implement CLI + repair plumbing, then run `cargo fmt --all` and `cargo check -p substrate-shell`
 - Blockers: none; will document command results + prompt location in END entry
+## [2025-11-16 14:39 UTC] Codex – B2-code – END
+- Implemented `substrate shim doctor/repair` in `wt/b2-doctor-code`, including the new report structs, trace log ingestion, PATH summary, repair snippet writer with backups/telemetry, and CLI wiring + output formatting
+- Commands: `cargo fmt --all`, `cargo check -p substrate-shell`
+- Test Agent Kickoff Prompt updated at docs/project_management/next/kickoff_prompts/B2-test.md; ready for wt/b2-doctor-test to add coverage
 ## [2025-11-16 14:20 UTC] Codex – B2-test – START
 - Read AI entry doc, plan/execution/data-map references, and kickoff prompt at docs/project_management/next/kickoff_prompts/B2-test.md to scope doctor/repair coverage expectations
 - Next: switch to worktree `wt/b2-doctor-test`, add shim doctor + repair integration tests under `crates/shell/tests`, and run `cargo fmt --all` plus `cargo test -p substrate-shell shim_doctor`

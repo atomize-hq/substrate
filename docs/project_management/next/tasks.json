@@ -325,7 +325,7 @@
       "worktree": "wt/b2-doctor-code",
       "integration_task": "B2-integ",
       "kickoff_prompt": "Task B2-code (Implement shim doctor/repair CLI) \u2013 CODE. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Before editing code, gather requirements and prepare the Test Agent Kickoff Prompt for the paired test task (see `concurrent_with` or session log). Provide that prompt to the user per AI instructions. \n4. Use git worktree `wt/b2-doctor-code` from /home/spenser/__Active_code/substrate. Follow the scope details below: \nImplement the shim doctor/repair commands per the plan. Add CLI args, output formatting, repair file writes. Reference plan/data map. Run `cargo check -p substrate-shell` afterwards. \n5. Run the commands/tests noted above. After finishing, append an END entry to the session log, update this task\u2019s status to \"completed\", and ensure the Test Agent Kickoff Prompt reference is captured there.",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "B2-test",

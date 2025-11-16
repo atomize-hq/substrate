@@ -50,10 +50,15 @@ This document enumerates every new/updated data type, trait, environment variabl
 ## `crates/shell/src/commands/shim_doctor.rs` (new)
 
 - **Structs**
-  - `ShimDoctorReport { states: Vec<ManagerState>, hints: Vec<HintRecord> }`
-  - `HintRecord { name: String, hint: String, last_seen: DateTime<Utc> }`
+  - `ShimDoctorReport { manifest: ManifestInfo, path: PathDoctorStatus, trace_log: PathBuf, skip_all_requested: bool, states: Vec<ManagerDoctorState>, hints: Vec<HintRecord> }`
+  - `ManifestInfo { base: PathBuf, overlay: Option<PathBuf>, overlay_exists: bool }`
+  - `PathDoctorStatus { shim_dir: PathBuf, shim_dir_exists: bool, path_first_entry: Option<String>, shim_in_path: bool, shim_first_in_path: bool, bashenv_path: PathBuf, bashenv_exists: bool }`
+  - `ManagerDoctorState { name: String, detected: bool, reason: Option<String>, init_sourced: bool, has_snippet: bool, repair_available: bool, last_hint: Option<HintRecord> }`
+  - `HintRecord { name: String, hint: String, pattern: Option<String>, last_seen: DateTime<Utc> }`
+  - `RepairOutcome::{Applied { manager, bashenv_path, backup_path }, Skipped { manager, reason } }`
 - **Behavior**
-  - Reads `manager_init` output + trace logs to display status; optionally patch `~/.substrate_bashenv` when applying repair hints.
+  - `substrate shim doctor` reuses manifest detection + override rules, parses `~/.substrate/trace.jsonl` for the latest `manager_hint` entries, and prints either a text table (managers, PATH health, recent hints) or the JSON report above.
+  - `substrate shim repair --manager <name> [--yes]` writes a delimited snippet block into `~/.substrate_bashenv`, creates/refreshes `~/.substrate_bashenv.bak`, logs a `shim_repair` telemetry event, and skips duplicate blocks by replacing them in-place when re-run.
 
 ## `crates/shell/src/world/mod.rs` (existing/new modules)
 
