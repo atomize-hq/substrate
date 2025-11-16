@@ -161,6 +161,10 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Reviewing Phase C §4/§5.5 docs plus session log to scope `substrate world deps` CLI + manifest plumbing
 - Next: switch to worktree `wt/c2-world-deps-code`, craft C2-test kickoff prompt, implement CLI/manifest/guest execution, and run `cargo fmt --all` followed by `cargo check -p substrate-shell`
 - Blockers: none; world backend APIs + manifest schema still under review before coding
+## [2025-11-16 20:39 UTC] Codex – C2-code – END
+- Implemented `world deps` manifest loader + CLI (`status`/`install`/`sync`), hooked guest execution + installer `--sync-deps` flag, and left detailed test notes at docs/project_management/next/kickoff_prompts/C2-test.md
+- Commands: `cargo fmt --all`, `cargo check -p substrate-shell`
+- Next: C2-test should add mocks around `world_deps` CLI (host/guest detection, verbose streaming, failure paths) and validate installer flag behavior before handing to C2-integ
 ## [2025-11-16 19:30 UTC] Codex – C2-test – START
 - Consumed C2-test kickoff prompt + world-deps planning docs to understand CLI expectations, manifest overrides, and fake guest execution approach before writing tests
 - Next: switch to worktree `wt/c2-world-deps-test`, add temp HOME fixtures + helper scripts under `crates/shell/tests/world_deps.rs`, and run `cargo fmt --all` plus `cargo test -p substrate-shell world_deps`
