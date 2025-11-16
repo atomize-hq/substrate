@@ -181,3 +181,10 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Merged wt/c2-world-deps-code and wt/c2-world-deps-test, added the world deps CLI/manifest loader, guest-install fallback handling, and installer `--sync-deps` hook, then synced the integrated branch back toward feat/isolated-shell-plan
 - Commands: `cargo fmt --all`, `cargo test -p substrate-shell world_deps` (passes with new CLI + tests)
 - Prompt reference: docs/project_management/next/kickoff_prompts/C2-integ.md; manual CLI sanity check deferred since automated test suite now covers the flows
+## [2025-11-16 23:15 UTC] Codex – C3-code – START
+- Reviewed Workstream C3 plan/data map + kickoff prompt, created worktree wt/c3-installer-code, and set task C3-code to in_progress in docs/project_management/next/tasks.json while confirming the Test Agent prompt lives at docs/project_management/next/kickoff_prompts/C3-test.md
+- Next: refresh installer/uninstaller scripts to stop PATH edits, write manager_env.sh/manager_init.sh, persist config.json with world_enabled + SUBSTRATE_WORLD_ENABLED exports, document --no-world/`substrate world enable`, and prep guidance for the Test agent
+- Blockers: none; will record dry-run command outputs + prompt references in END entry once code/doc updates & required scripts are complete
+## [2025-11-16 23:55 UTC] Codex – C3-code – END
+- Updated the Linux/macOS installer for pass-through shells (manager_init/env generation, config.json metadata, world doctor skips for --no-world, dry-run friendly logs), rewrote the uninstall script to avoid touching rc files, and refreshed INSTALLATION/USAGE/CONFIGURATION/UNINSTALL guidance plus the C3-test kickoff prompt at docs/project_management/next/kickoff_prompts/C3-test.md
+- Commands: `./scripts/substrate/install-substrate.sh --dry-run --prefix /tmp/substrate-c3 --sync-deps`, `./scripts/substrate/install-substrate.sh --dry-run --prefix /tmp/substrate-c3-no-world --no-world`, `./scripts/substrate/uninstall-substrate.sh --dry-run --prefix /tmp/substrate-c3`
