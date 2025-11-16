@@ -50,7 +50,7 @@ pub struct PathDoctorStatus {
     pub shim_dir: PathBuf,
     pub shim_dir_exists: bool,
     pub path_first_entry: Option<String>,
-    pub shim_in_path: bool,
+    pub host_contains_shims: bool,
     pub shim_first_in_path: bool,
     pub bashenv_path: PathBuf,
     pub bashenv_exists: bool,
@@ -62,7 +62,8 @@ pub struct ManagerDoctorState {
     pub detected: bool,
     pub reason: Option<String>,
     pub init_sourced: bool,
-    pub has_snippet: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snippet: Option<String>,
     pub repair_available: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_hint: Option<HintRecord>,
@@ -234,7 +235,7 @@ fn collect_states(
             detected: state.detected,
             reason: state.reason,
             init_sourced: snippet_present && state.detected,
-            has_snippet: snippet_present,
+            snippet: state.snippet,
             repair_available,
             last_hint: None,
         });
@@ -261,7 +262,7 @@ fn build_path_status() -> Result<PathDoctorStatus> {
         .split(separator)
         .map(|segment| segment.to_string())
         .collect();
-    let shim_in_path = path_segments
+    let host_contains_shims = path_segments
         .iter()
         .any(|segment| same_path(segment, &shim_dir_str));
     let path_first_entry = path_segments.get(0).cloned().filter(|s| !s.is_empty());
@@ -276,7 +277,7 @@ fn build_path_status() -> Result<PathDoctorStatus> {
         shim_dir,
         shim_dir_exists,
         path_first_entry,
-        shim_in_path,
+        host_contains_shims,
         shim_first_in_path,
         bashenv_path,
         bashenv_exists,
@@ -514,11 +515,15 @@ fn print_text_report(report: &ShimDoctorReport) {
             "missing"
         }
     );
+    println!(
+        "  Host PATH includes Substrate shims: {}",
+        bool_str(report.path.host_contains_shims)
+    );
     let first_entry = report.path.path_first_entry.as_deref().unwrap_or("<empty>");
     println!("  PATH first entry: {}", first_entry);
     println!(
         "  Shim in PATH: {} (first = {})",
-        bool_str(report.path.shim_in_path),
+        bool_str(report.path.host_contains_shims),
         bool_str(report.path.shim_first_in_path)
     );
     println!(

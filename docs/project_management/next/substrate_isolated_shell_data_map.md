@@ -52,8 +52,8 @@ This document enumerates every new/updated data type, trait, environment variabl
 - **Structs**
   - `ShimDoctorReport { manifest: ManifestInfo, path: PathDoctorStatus, trace_log: PathBuf, skip_all_requested: bool, states: Vec<ManagerDoctorState>, hints: Vec<HintRecord> }`
   - `ManifestInfo { base: PathBuf, overlay: Option<PathBuf>, overlay_exists: bool }`
-  - `PathDoctorStatus { shim_dir: PathBuf, shim_dir_exists: bool, path_first_entry: Option<String>, shim_in_path: bool, shim_first_in_path: bool, bashenv_path: PathBuf, bashenv_exists: bool }`
-  - `ManagerDoctorState { name: String, detected: bool, reason: Option<String>, init_sourced: bool, has_snippet: bool, repair_available: bool, last_hint: Option<HintRecord> }`
+  - `PathDoctorStatus { shim_dir: PathBuf, shim_dir_exists: bool, path_first_entry: Option<String>, host_contains_shims: bool, shim_first_in_path: bool, bashenv_path: PathBuf, bashenv_exists: bool }`
+  - `ManagerDoctorState { name: String, detected: bool, reason: Option<String>, init_sourced: bool, snippet: Option<String>, repair_available: bool, last_hint: Option<HintRecord> }`
   - `HintRecord { name: String, hint: String, pattern: Option<String>, last_seen: DateTime<Utc> }`
   - `RepairOutcome::{Applied { manager, bashenv_path, backup_path }, Skipped { manager, reason } }`
 - **Behavior**
@@ -98,6 +98,7 @@ This document enumerates every new/updated data type, trait, environment variabl
 - `SUBSTRATE_SKIP_MANAGER_INIT`
 - `SUBSTRATE_SKIP_MANAGER_INIT_LIST`
 - `SUBSTRATE_MANAGER_INIT_DEBUG`
+- `SUBSTRATE_MANAGER_INIT_SHELL`
 - `SUBSTRATE_SHIM_HINTS` (existing switch)
 - `SUBSTRATE_WORLD_ENABLED` (derived from config; ensures shim sees `no_world`)
 - `SUBSTRATE_WORLD_DEPS_MANIFEST`

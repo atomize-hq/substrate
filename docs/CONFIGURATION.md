@@ -31,6 +31,7 @@ Environment variables and advanced configuration options for Substrate.
 | `SUBSTRATE_DISABLE_PTY` | Disable PTY globally | *none* | `1` |
 | `SUBSTRATE_PTY_DEBUG` | Enable PTY debug logging | *none* | `1` |
 | `SUBSTRATE_PTY_PIPELINE_LAST` | PTY for last pipeline segment | *none* | `1` |
+| `SUBSTRATE_MANAGER_INIT_SHELL` | Override shell used for detect scripts | Host `SHELL` or `/bin/sh` | `/usr/local/bin/bash` |
 
 ## CLI Flags
 

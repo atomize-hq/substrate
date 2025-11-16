@@ -1,6 +1,8 @@
 use std::{
     collections::HashSet,
-    env, fs,
+    env,
+    ffi::{OsStr, OsString},
+    fs,
     io::Write,
     path::{Path, PathBuf},
     process::Command,
@@ -268,18 +270,47 @@ fn detect_script(script: &str, platform: Platform) -> Result<Option<String>> {
 }
 
 fn run_detect_script(script: &str, platform: Platform) -> Result<bool> {
-    let mut cmd = if platform == Platform::Windows {
-        let mut command = Command::new("powershell");
-        command.arg("-NoProfile").arg("-Command").arg(script);
-        command
-    } else {
-        let mut command = Command::new("sh");
-        command.arg("-c").arg(script);
-        command
+    let mut cmd = match platform {
+        Platform::Windows => {
+            let mut command = Command::new("powershell");
+            command.arg("-NoProfile").arg("-Command").arg(script);
+            command
+        }
+        Platform::Linux | Platform::MacOs => {
+            let shell = select_posix_shell();
+            let mut command = Command::new(&shell);
+            command.arg("-c").arg(script);
+            command
+        }
     };
 
     let status = cmd.status()?;
     Ok(status.success())
+}
+
+fn select_posix_shell() -> OsString {
+    if let Some(shell) = env::var_os("SUBSTRATE_MANAGER_INIT_SHELL") {
+        if !shell.as_os_str().is_empty() {
+            return shell;
+        }
+    }
+    if let Some(shell) = env::var_os("SHELL") {
+        if path_is_absolute_and_exists(&shell) {
+            return shell;
+        }
+    }
+    for candidate in ["/bin/sh", "/usr/bin/sh", "/system/bin/sh"] {
+        let path = Path::new(candidate);
+        if path.exists() {
+            return OsString::from(candidate);
+        }
+    }
+    OsString::from("sh")
+}
+
+fn path_is_absolute_and_exists(value: &OsStr) -> bool {
+    let path = Path::new(value);
+    path.is_absolute() && path.exists()
 }
 
 fn select_snippet(spec: &ManagerSpec, platform: Platform) -> Option<String> {
