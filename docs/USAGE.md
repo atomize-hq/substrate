@@ -186,6 +186,11 @@ manager and point `BASH_ENV` at `~/.substrate_bashenv` explicitly.
 - `substrate world deps status|install|sync` – inspect and copy host toolchains
   into the guest once B3 reach parity (CLI scaffolding is already wired up)
 
+The installer and `substrate world enable` keep `~/.substrate/config.json`
+(`world_enabled: true/false`) and rewrite `~/.substrate/manager_env.sh` so
+`SUBSTRATE_WORLD`/`SUBSTRATE_WORLD_ENABLED` reflect the latest state without
+needing to source dotfiles manually.
+
 Use `SUBSTRATE_WORLD_ENABLED=0` to force pass-through mode temporarily and
 `SUBSTRATE_WORLD_DEPS_MANIFEST` to point world-deps at a custom definition file.
 ## Log Analysis

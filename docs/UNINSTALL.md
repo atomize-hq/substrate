@@ -14,13 +14,13 @@ curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/s
 Regardless of platform, the script:
 
 1. Stops running `substrate` processes (`pkill -f substrate`).
-2. Removes installer-managed PATH/BASH_ENV snippets from `~/.zshrc`,
-   `~/.bashrc`, and `~/.bash_profile`.
-3. Deletes `~/.substrate*` state, shim directories, history files, and locks.
-4. Clears the shell command hash table (`hash -r`).
+2. Deletes `~/.substrate*` state (manager env/init files, `config.json`,
+   shims, history, locks, etc.).
+3. Clears the shell command hash table (`hash -r`).
 
-If you manually edited additional shell files, remove the Substrate snippet
-manually after running the script.
+Since the installer no longer edits `.bashrc`, `.zshrc`, or other rc files, no
+shell snippets are touched during removal. If you previously added custom PATH
+entries or aliases, remove them manually after running the script.
 
 ## Linux & Windows (WSL)
 

@@ -193,6 +193,6 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Next: work from `wt/c3-installer-test`, build `tests/installers/install_smoke.sh` harness covering default, `--no-world`, and uninstall flows while stubbing HOME/SUBSTRATE_PREFIX and checking PATH/config outputs
 - Blockers: none; pending harness implementation and doc/test updates
 ## [2025-11-16 23:45 UTC] Codex – C3-test – END
-- Added the automated installer/uninstaller harness at `tests/installers/install_smoke.sh` with stubbed system commands + fake release builder, plus doc/task/coordination updates (C3-integ kickoff prompt, uninstall guide expectations)
+- Added the automated installer/uninstaller harness at `tests/installers/install_smoke.sh` with stubbed system commands + fake system utilities + fake release builder, plus doc/task/coordination updates (C3-integ kickoff prompt, uninstall guide expectations)
 - Commands: `./tests/installers/install_smoke.sh --scenario default`, `./tests/installers/install_smoke.sh --scenario no-world`, `./tests/installers/install_smoke.sh --scenario uninstall` (all currently fail because the installer still edits rc files and lacks the new metadata hooks)
 - Integration prompt recorded at docs/project_management/next/kickoff_prompts/C3-integ.md; C3-test marked completed in tasks.json
