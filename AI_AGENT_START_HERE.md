@@ -65,6 +65,14 @@ At the **end**:
 
 ## 4. Execution Flow per Task Type
 
+### Task Wrap-Up Checklist
+
+Before declaring any task done:
+1. Commit / push code changes inside your per-task worktree (keep coordination files untouched there).
+2. Switch back to the main coordination worktree on `feat/isolated-shell-plan`.
+3. Update `docs/project_management/next/session_log.md`, `tasks.json`, and any kickoff prompts.
+4. Commit / push those coordination changes so the next agent starts with a clean branch.
+
 ### Concurrent Code/Test Workflow
 
 - Code and test agents run in parallel on *separate* worktrees. Neither agent merges, rebases, or edits the coordination branch outside of the START/END bookkeeping noted above.
@@ -116,6 +124,7 @@ At the **end**:
   - Commands to execute
   - Reminder to read this AI entry file first and update session log
   - Related documentation references
+  - Finish steps checklist (commit worktree changes → return to `feat/isolated-shell-plan` → update coordination files → commit coordination changes)
 
 This keeps the workflow mostly autonomous—only the initial user prompt is required.
 
