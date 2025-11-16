@@ -3,9 +3,10 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::Utc;
 use serde_json::{Map, Value};
 use std::env;
+use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -27,6 +28,10 @@ impl InstallConfig {
 
     pub fn set_world_enabled(&mut self, enabled: bool) {
         self.world_enabled = enabled;
+    }
+
+    pub fn set_existed(&mut self, existed: bool) {
+        self.existed = existed;
     }
 }
 
@@ -94,8 +99,23 @@ pub fn run_enable(args: &WorldEnableArgs) -> Result<()> {
     }
 
     let prefix = resolve_prefix(args.prefix.as_deref())?;
-    let config_path = prefix.join("config.json");
-    let mut config = load_install_config(&config_path)?;
+    let config_path = substrate_paths::config_file()?;
+    let manager_env_path = resolve_manager_env_path()?;
+    let mut corrupt_config = false;
+    let mut config = match load_install_config(&config_path) {
+        Ok(cfg) => cfg,
+        Err(err) => {
+            corrupt_config = true;
+            println!(
+                "substrate: warn: install metadata at {} is invalid ({err}); it will be replaced after provisioning.",
+                config_path.display()
+            );
+            let mut cfg = InstallConfig::default();
+            cfg.set_existed(false);
+            cfg.set_world_enabled(false);
+            cfg
+        }
+    };
 
     if config.world_enabled && config.exists() && !args.force && !args.dry_run {
         println!(
@@ -105,40 +125,69 @@ pub fn run_enable(args: &WorldEnableArgs) -> Result<()> {
         return Ok(());
     }
 
-    if !config.exists() {
+    if !config.exists() && !corrupt_config {
         println!(
             "substrate: info: no install metadata at {}; continuing and creating it after provisioning",
             config_path.display()
         );
     }
 
-    let version_dir = resolve_version_dir(&prefix)?;
-    let script_path = locate_helper_script(&prefix, &version_dir)?;
-    let log_path = prepare_log_file(&prefix)?;
-    append_log_line(&log_path, &format!("helper: {}", script_path.display()))?;
-
-    run_helper_script(&script_path, args, &prefix, &log_path)?;
+    let helper_override = env::var("SUBSTRATE_WORLD_ENABLE_SCRIPT")
+        .ok()
+        .map(PathBuf::from);
+    let version_dir = if helper_override.is_some() {
+        None
+    } else {
+        Some(resolve_version_dir(&prefix)?)
+    };
+    let script_path = locate_helper_script(&prefix, version_dir.as_deref(), helper_override)?;
+    let log_path = next_log_path(&prefix)?;
 
     if args.dry_run {
+        print_dry_run_plan(&script_path, args, &prefix, &log_path)?;
         println!(
-            "Dry run complete. Review provisioning log at {}",
-            log_path.display()
+            "Dry run only – no changes were made. Run 'substrate world doctor --json' after provisioning to verify connectivity."
         );
         return Ok(());
     }
 
-    verify_world_health(&log_path, Duration::from_secs(args.timeout), args.verbose)?;
+    initialize_log_file(&log_path)?;
+    append_log_line(&log_path, &format!("helper: {}", script_path.display()))?;
+    let socket_override = resolve_world_socket_path();
+    let wait_seconds = if socket_override.is_some() {
+        // Test overrides inject their own socket paths; keep retries short to
+        // avoid long hangs in the fixtures.
+        args.timeout.min(5)
+    } else {
+        args.timeout
+    };
+    run_helper_script(
+        &script_path,
+        args,
+        &prefix,
+        &log_path,
+        socket_override.as_deref(),
+    )?;
+
+    verify_world_health(
+        &log_path,
+        Duration::from_secs(wait_seconds),
+        args.verbose,
+        socket_override.as_deref(),
+    )?;
 
     config.set_world_enabled(true);
     save_install_config(&config_path, &config)?;
+    update_manager_env_exports(&manager_env_path, true)?;
 
     println!(
         "World provisioning complete. Metadata updated at {}.",
         config_path.display()
     );
     println!(
-        "Provisioning log: {}\nNext: run 'substrate world doctor --json' or start a new shell to use the world backend.",
-        log_path.display()
+        "Provisioning log: {}\nManager env updated at {} with SUBSTRATE_WORLD exports.\nNext: run 'substrate world doctor --json' or start a new shell to use the world backend.",
+        log_path.display(),
+        manager_env_path.display()
     );
 
     Ok(())
@@ -148,8 +197,18 @@ fn resolve_prefix(explicit: Option<&Path>) -> Result<PathBuf> {
     if let Some(prefix) = explicit {
         return Ok(prefix.to_path_buf());
     }
+    if let Ok(prefix) = env::var("SUBSTRATE_PREFIX") {
+        return Ok(PathBuf::from(prefix));
+    }
     substrate_paths::substrate_home()
         .context("failed to locate Substrate home (override via --prefix or SUBSTRATE_HOME)")
+}
+
+fn resolve_manager_env_path() -> Result<PathBuf> {
+    if let Ok(path) = env::var("SUBSTRATE_MANAGER_ENV") {
+        return Ok(PathBuf::from(path));
+    }
+    Ok(substrate_paths::substrate_home()?.join("manager_env.sh"))
 }
 
 fn resolve_version_dir(prefix: &Path) -> Result<PathBuf> {
@@ -177,18 +236,23 @@ fn resolve_version_dir(prefix: &Path) -> Result<PathBuf> {
     Ok(version_dir.to_path_buf())
 }
 
-fn locate_helper_script(prefix: &Path, version_dir: &Path) -> Result<PathBuf> {
-    if let Ok(override_path) = env::var("SUBSTRATE_WORLD_ENABLE_SCRIPT") {
-        let path = PathBuf::from(&override_path);
+fn locate_helper_script(
+    prefix: &Path,
+    version_dir: Option<&Path>,
+    override_path: Option<PathBuf>,
+) -> Result<PathBuf> {
+    if let Some(path) = override_path {
         if path.exists() {
             return Ok(path);
         }
         bail!(
             "SUBSTRATE_WORLD_ENABLE_SCRIPT={} does not exist",
-            override_path
+            path.display()
         );
     }
 
+    let version_dir =
+        version_dir.ok_or_else(|| anyhow!("missing version directory for helper discovery"))?;
     let candidates = [
         version_dir.join("scripts/substrate/world-enable.sh"),
         prefix.join("scripts/substrate/world-enable.sh"),
@@ -206,23 +270,57 @@ fn locate_helper_script(prefix: &Path, version_dir: &Path) -> Result<PathBuf> {
     )
 }
 
-fn prepare_log_file(prefix: &Path) -> Result<PathBuf> {
+fn next_log_path(prefix: &Path) -> Result<PathBuf> {
     let log_dir = prefix.join("logs");
-    fs::create_dir_all(&log_dir)
-        .with_context(|| format!("failed to create {}", log_dir.display()))?;
     let stamp = Utc::now().format("%Y%m%d-%H%M%S");
-    let path = log_dir.join(format!("world-enable-{}.log", stamp));
+    Ok(log_dir.join(format!("world-enable-{}.log", stamp)))
+}
+
+fn initialize_log_file(path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+    }
     let mut file = OpenOptions::new()
         .create(true)
         .write(true)
         .truncate(true)
-        .open(&path)?;
+        .open(path)?;
     writeln!(
         file,
         "# Substrate world enable log\ntimestamp: {}",
         Utc::now().to_rfc3339()
     )?;
-    Ok(path)
+    Ok(())
+}
+
+fn print_dry_run_plan(
+    script: &Path,
+    args: &WorldEnableArgs,
+    prefix: &Path,
+    log_path: &Path,
+) -> Result<()> {
+    let mut command_line = vec![
+        script.display().to_string(),
+        "--prefix".to_string(),
+        prefix.display().to_string(),
+        "--profile".to_string(),
+        args.profile.clone(),
+    ];
+    if args.verbose {
+        command_line.push("--verbose".into());
+    }
+    if args.force {
+        command_line.push("--force".into());
+    }
+    command_line.push("--dry-run".into());
+    println!("Dry run: {}", command_line.join(" "));
+    if let Some(parent) = log_path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+    }
+    println!("Helper log would be written to {}", log_path.display());
+    Ok(())
 }
 
 fn run_helper_script(
@@ -230,6 +328,7 @@ fn run_helper_script(
     args: &WorldEnableArgs,
     prefix: &Path,
     log_path: &Path,
+    socket_override: Option<&Path>,
 ) -> Result<()> {
     append_log_line(
         log_path,
@@ -253,6 +352,9 @@ fn run_helper_script(
     }
     if args.force {
         cmd.arg("--force");
+    }
+    if let Some(socket_path) = socket_override {
+        cmd.env("SUBSTRATE_WORLD_SOCKET", socket_path);
     }
 
     let mut child = cmd
@@ -290,7 +392,7 @@ fn run_helper_script(
 
     if !status.success() {
         bail!(
-            "world enable helper exited with status {}. See {} for details.",
+            "world enable helper exited with status {}. See {} for details, then run 'substrate world doctor --json' for diagnostics.",
             status,
             log_path.display()
         );
@@ -323,42 +425,66 @@ where
                 file.flush().ok();
             }
             if echo {
-                print!("[{}] {}", label, line);
+                if label == "stderr" {
+                    eprint!("[{}] {}", label, line);
+                } else {
+                    print!("[{}] {}", label, line);
+                }
             }
         }
         Ok(())
     })
 }
 
-fn verify_world_health(log_path: &Path, timeout: Duration, verbose: bool) -> Result<()> {
+fn verify_world_health(
+    log_path: &Path,
+    timeout: Duration,
+    verbose: bool,
+    socket_path: Option<&Path>,
+) -> Result<()> {
     #[cfg(target_os = "linux")]
     {
-        wait_for_socket(timeout, log_path)?;
+        wait_for_socket(socket_path, timeout, log_path)?;
     }
     run_world_doctor(log_path, verbose)
 }
 
 #[cfg(target_os = "linux")]
-fn wait_for_socket(timeout: Duration, log_path: &Path) -> Result<()> {
-    let socket_path = Path::new("/run/substrate.sock");
+fn wait_for_socket(
+    socket_override: Option<&Path>,
+    timeout: Duration,
+    log_path: &Path,
+) -> Result<()> {
+    let socket_path = socket_override.unwrap_or_else(|| Path::new("/run/substrate.sock"));
     let deadline = Instant::now() + timeout;
     while Instant::now() <= deadline {
         if socket_path.exists() {
-            append_log_line(log_path, "socket: /run/substrate.sock detected")?;
+            append_log_line(
+                log_path,
+                &format!("socket: {} detected", socket_path.display()),
+            )?;
             return Ok(());
         }
         thread::sleep(Duration::from_millis(500));
     }
-    append_log_line(log_path, "socket: timeout waiting for /run/substrate.sock")?;
+    append_log_line(
+        log_path,
+        &format!("socket: timeout waiting for {}", socket_path.display()),
+    )?;
     bail!(
-        "Timed out waiting for /run/substrate.sock after {} seconds. See {} for logs.",
+        "Timed out waiting for {} after {} seconds. See {} for logs, then run 'substrate world doctor --json' to inspect the backend.",
+        socket_path.display(),
         timeout.as_secs(),
         log_path.display()
     )
 }
 
 #[cfg(not(target_os = "linux"))]
-fn wait_for_socket(_timeout: Duration, _log_path: &Path) -> Result<()> {
+fn wait_for_socket(
+    _socket_override: Option<&Path>,
+    _timeout: Duration,
+    _log_path: &Path,
+) -> Result<()> {
     Ok(())
 }
 
@@ -422,4 +548,107 @@ fn append_log_line(log_path: &Path, message: &str) -> Result<()> {
         .with_context(|| format!("failed to open {}", log_path.display()))?;
     writeln!(file, "{}", message)?;
     Ok(())
+}
+
+fn resolve_world_socket_path() -> Option<PathBuf> {
+    env::var_os("SUBSTRATE_WORLD_SOCKET")
+        .map(PathBuf::from)
+        .map(|path| normalize_path(&path))
+}
+
+fn update_manager_env_exports(path: &Path, enabled: bool) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).with_context(|| {
+            format!(
+                "failed to create directory for manager env at {}",
+                parent.display()
+            )
+        })?;
+    }
+
+    let existing = fs::read_to_string(path).unwrap_or_else(|_| String::new());
+    let mut lines: Vec<String> = existing.lines().map(|line| line.to_string()).collect();
+    let mut shebang = None;
+    if let Some(first) = lines.first() {
+        if first.starts_with("#!") {
+            shebang = Some(lines.remove(0));
+        }
+    }
+    lines.retain(|line| {
+        let trimmed = line.trim_start();
+        !trimmed.starts_with("export SUBSTRATE_WORLD=")
+            && !trimmed.starts_with("export SUBSTRATE_WORLD_ENABLED=")
+    });
+
+    let mut output = Vec::new();
+    if let Some(sb) = shebang {
+        output.push(sb);
+    }
+    output.push("# Managed by `substrate world enable`".to_string());
+    output.push(format!(
+        "export SUBSTRATE_WORLD={}",
+        if enabled { "enabled" } else { "disabled" }
+    ));
+    output.push(format!(
+        "export SUBSTRATE_WORLD_ENABLED={}",
+        if enabled { "1" } else { "0" }
+    ));
+    if !lines.is_empty() {
+        output.push(String::new());
+        output.extend(lines);
+    }
+
+    let mut body = output.join("\n");
+    body.push('\n');
+    fs::write(path, body)
+        .with_context(|| format!("failed to update manager env at {}", path.display()))?;
+    Ok(())
+}
+
+fn normalize_path(path: &Path) -> PathBuf {
+    let mut prefix_component: Option<std::ffi::OsString> = None;
+    let mut has_root = false;
+    let mut parts: Vec<std::ffi::OsString> = Vec::new();
+
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if let Some(last) = parts.last() {
+                    if last != OsStr::new("..") {
+                        parts.pop();
+                        continue;
+                    }
+                }
+                if has_root || prefix_component.is_some() {
+                    continue;
+                }
+                parts.push(std::ffi::OsString::from(".."));
+            }
+            Component::RootDir => {
+                has_root = true;
+                parts.clear();
+            }
+            Component::Prefix(prefix) => {
+                prefix_component = Some(prefix.as_os_str().to_os_string());
+                parts.clear();
+            }
+            Component::Normal(part) => parts.push(part.to_os_string()),
+        }
+    }
+
+    let mut normalized = PathBuf::new();
+    if let Some(prefix) = prefix_component {
+        normalized.push(prefix);
+    }
+    if has_root {
+        normalized.push(Path::new("/"));
+    }
+    for part in parts {
+        normalized.push(part);
+    }
+    if normalized.as_os_str().is_empty() {
+        normalized.push(".");
+    }
+    normalized
 }
