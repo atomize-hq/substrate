@@ -29,29 +29,31 @@ The installer will:
 
 1. Download `substrate-v<version>-linux_<arch>.tar.gz` from the release bucket
 2. Place the bundle under `~/.substrate/versions/<version>`
-3. Link `~/.substrate/bin/*` and prepend shims to your shell PATH via
-   `~/.substrate_bashenv`
-4. Install `substrate-world-agent` under `/usr/local/bin` and manage the
+3. Link `~/.substrate/bin/*` and stage shims in `~/.substrate/shims/`
+   (host shells remain untouched—Substrate injects the shim directory at runtime)
+4. Generate the runtime manager files (`~/.substrate/manager_init.sh`,
+   `~/.substrate/manager_env.sh`) so the shell can source managers on demand
+5. Install `substrate-world-agent` under `/usr/local/bin` and manage the
    systemd service (`/etc/systemd/system/substrate-world-agent.service`)
-5. Run `substrate world doctor --json` for a final readiness report
+6. Run `substrate world doctor --json` for a final readiness report
 
-**Prerequisites**
+### Prerequisites
 
 - PID 1 must be `systemd` (`ps -p 1 -o comm=`). On WSL, enable systemd by adding
   `boot.systemd=true` under `[boot]` in `/etc/wsl.conf`, then `wsl --shutdown`.
 - `sudo`, `curl`, `tar`, and `jq` must be available on the host.
 
 During installation the script:
-- Sanitises the current PATH (removes any stale shims) and records it in
-  `SHIM_ORIGINAL_PATH`.
-- Deploys fresh shims and writes `~/.substrate_bashenv`, including a trampoline
-  if `BASH_ENV` was already set, so automated shells inherit the right PATH.
-- Installs `substrate-world-agent` as a systemd service and runs
-  `substrate world doctor --json` **without** the shim directory in either PATH
-  or `SHIM_ORIGINAL_PATH`, mirroring the macOS installer’s behaviour and
-  avoiding self-referential shim lookups during the doctor check.
 
-**Offline install**
+- Records the host PATH (for use as `SHIM_ORIGINAL_PATH`) without mutating it.
+- Deploys fresh shims but leaves `.bashrc`, `.zshrc`, `BASH_ENV`, and PowerShell
+  profiles alone—runtime helpers source the generated manager snippets only when
+  `substrate` is executed.
+- Installs `substrate-world-agent` as a systemd service and runs
+  `substrate world doctor --json` without adding the shim directory to PATH to
+  avoid self-referential lookups.
+
+### Offline install
 
 ```bash
 ./scripts/substrate/install-substrate.sh --archive /path/to/substrate-v0.2.0-beta-linux_x86_64.tar.gz
@@ -88,33 +90,54 @@ pwsh -File scripts/windows/install-substrate.ps1
 - Defaults to `$env:LOCALAPPDATA\Substrate` and provisions the
   `substrate-wsl` distro unless `-NoWorld` is supplied.
 - Hosted one-liner:
+
   ```powershell
   irm https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/windows/install-substrate.ps1 | iex
   ```
+
 - Requires WSL2 (with systemd enabled inside the distro) and PowerShell 7+.
 
 ## Post-Install Checks
 
 After the script completes:
 
-- **macOS / Linux / WSL:**
-  ```bash
-  source ~/.substrate_bashenv
-  substrate --version
-  substrate --shim-status
-  substrate world doctor --json | jq '.'
-  ```
-  (The installer already ran the doctor using PATH values without the shim
-  directory, so this re-run should match what the script saw.)
-- **Windows:**
-  ```powershell
-  . "$env:LOCALAPPDATA\Substrate\substrate-profile.ps1"
-  substrate.exe --shim-status
-  substrate.exe world doctor --json | ConvertFrom-Json | Select-Object status,message
-  ```
+### macOS / Linux / WSL
 
-If `world doctor` surfaces failures, consult `docs/WORLD.md` and the troubleshooting
+```bash
+substrate --version
+substrate --shim-status
+substrate shim doctor --json | jq '{path: .path, states: .states}'
+substrate world doctor --json | jq '.summary'
+```
+
+(The installer already ran the doctor without the shim directory in PATH, so
+your output should match unless the host environment changed.)
+
+### Windows
+
+```powershell
+substrate.exe --version
+substrate.exe --shim-status
+substrate.exe shim doctor --json | ConvertFrom-Json | Select-Object path
+substrate.exe world doctor --json | ConvertFrom-Json | Select-Object status,message
+```
+
+If you installed with `--no-world`, run `substrate world enable` once you are
+ready to provision the backend (macOS Lima VM, Linux namespaces, or WSL). If
+either doctor surfaces failures, consult `docs/WORLD.md` and the troubleshooting
 appendices for the relevant platform.
+
+### Verify PATH isolation
+
+```bash
+printf "host PATH -> %s\n" "$PATH"
+substrate -c 'printf "substrate PATH -> %s\n" "$PATH"'
+```
+
+Substrate builds its PATH + manager environment on demand, so the host PATH and
+dotfiles stay untouched. Need legacy shells to source managers automatically?
+Run `substrate shim repair --manager <name> --yes` to append the recommended
+snippet (plus a `.bak` backup) to `~/.substrate_bashenv`.
 
 ## Installer Options Reference
 
@@ -122,13 +145,14 @@ appendices for the relevant platform.
 | ---- | ------- |
 | `--version <semver>` | Install a specific published release (default: `0.2.0-beta`) |
 | `--prefix <path>` | Override the installation prefix (default: `~/.substrate`) |
-| `--no-world` | Skip provisioning the world backend (requires manual setup) |
+| `--no-world` | Skip provisioning the world backend (use `substrate world enable` later) |
 | `--no-shims` | Skip shim deployment (useful for CI images) |
 | `--dry-run` | Print all actions without executing them |
 | `--archive <path>` | Install from a local tarball instead of downloading |
 
-When using a non-default prefix, remember to export
-`PATH="<prefix>/shims:<prefix>/bin:$PATH"` in your shell or automation.
+When using a non-default prefix, add `<prefix>/bin` to PATH so the
+`substrate` binary is discoverable. The shim directory (`<prefix>/shims`) is
+only injected inside Substrate-managed processes.
 
 ## Manual Build (Developers)
 
@@ -177,15 +201,22 @@ tooling.
 
 ## Troubleshooting Highlights
 
-- **No shim interception**: ensure `~/.substrate/shims` is first in `PATH`, then
-  run `hash -r`.
-- **World doctor fails (Linux/WSL)**: confirm `systemctl status
+- **No shim interception**: run `substrate --shim-status` and compare
+  `substrate -c 'which git'` vs `which git`. If only the host shell is missing a
+  manager snippet, run `substrate shim repair --manager <name> --yes` to update
+  `~/.substrate_bashenv`.
+- **Doctor failures**: capture `substrate shim doctor --json` and
+  `substrate world doctor --json`; attach both to bug reports so we can spot
+  PATH vs kernel/virtualization gaps quickly.
+- **World agent inactive (Linux/WSL)**: confirm `systemctl status
   substrate-world-agent` reports `active (running)` and that `/run/substrate.sock`
   exists (`sudo ls -l /run/substrate.sock`).
-- **WSL systemd disabled**: edit `/etc/wsl.conf`, set `[boot]\nsystemd=true`, run
+- **WSL systemd disabled**: edit `/etc/wsl.conf`, set `[boot]
+systemd=true`, run
   `wsl --shutdown`, and reopen the distribution.
 - **macOS virtualization disabled**: enable "Virtualization" in System Settings
-  → Privacy & Security, then rerun the installer.
+  → Privacy & Security, then rerun the installer or `substrate world enable`.
 
-For deeper diagnostics, tail `~/.substrate/trace.jsonl` and rerun
-`substrate world doctor --json` to capture a fresh health report.
+For deeper diagnostics, tail `~/.substrate/trace.jsonl` and rerun both
+`substrate shim doctor --json` and `substrate world doctor --json` to capture a
+fresh health report.

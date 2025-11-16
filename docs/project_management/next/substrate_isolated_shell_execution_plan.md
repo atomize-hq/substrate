@@ -54,6 +54,7 @@ Each task description below includes:
 - Can run parallel with B1/B2 but must merge after functionality ready.
 - *Code Agent*: update docs per audit; add new env var descriptions.
 - *Test Agent*: not applicable (docs) – instead run spellcheck/format if applicable.
+- Reference locations: README Quick Start, `docs/INSTALLATION.md`, `docs/USAGE.md`, and `docs/CONFIGURATION.md` now describe the pass-through shims, manifest overlays, shim doctor/repair, and world CLI flags.
 
 ### Phase C – World CLI & Installer Changes
 

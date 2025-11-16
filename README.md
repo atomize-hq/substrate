@@ -4,7 +4,7 @@
 
 [![Rust](https://img.shields.io/badge/rust-1.89%2B-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Build](https://img.shields.io/badge/build-passing-green.svg)](#development)
+[![Build](https://img.shields.io/badge/build-passing-green.svg)](docs/DEVELOPMENT.md)
 
 ## Vision
 
@@ -28,16 +28,26 @@ Today, Substrate delivers a cross-platform **command tracing stack**:
 
 ## Quick Start
 
+Substrate now builds its PATH + manager environment on the fly, so the host
+shell remains untouched after install.
+
 ```bash
 # 1. Run the installer (Linux/macOS)
 curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/substrate/install-substrate.sh | bash
 
-# 2. Source the environment helpers and start the shell
-source ~/.substrate_bashenv
-substrate
+# 2. Launch Substrate (no sourcing required)
+substrate --shim-deploy          # ensures the shim dir exists
+substrate shim doctor            # inspect manifest + PATH diagnostics
+substrate                        # start the interactive shell
 
-# Shims are deployed automatically on first run
+# Optional: compare PATHs
+printf "host PATH  -> %s\n" "$PATH"
+substrate -c 'printf "substrate PATH -> %s\n" "$PATH"'
 ```
+
+> Need to test against a temp HOME? Override `HOME`, `USERPROFILE`, and
+> `SUBSTRATE_MANAGER_MANIFEST` exactly like the integration tests do and the CLI
+> will confine itself to the fixture directories.
 
 ### Windows Quick Start
 
@@ -58,29 +68,74 @@ pwsh -File scripts\windows\wsl-smoke.ps1
 
 Detailed setup guidance, doctor output, and troubleshooting live in [`docs/cross-platform/wsl_world_setup.md`](docs/cross-platform/wsl_world_setup.md).
 
-### Shim Deployment
+> Windows installers follow the same pass-through model—host shells keep their
+> PATH, and `substrate shim doctor` provides the canonical view of manager
+> status plus repair hints.
 
-Substrate automatically deploys command shims on first run. The shims are:
-- **Symlinks on Unix systems** (efficient, instant updates)
-- **File copies on Windows systems** (for compatibility)
-- **Version-tracked** to avoid unnecessary redeployment
-- **Deployed to** `~/.substrate/shims/`
+### Pass-Through Shims & Manager Init
 
-To manage shims manually:
+- The installer no longer edits `.bashrc`, `.zshrc`, or PowerShell profiles.
+- Every `substrate` invocation prepends `~/.substrate/shims` to `PATH` in-memory,
+  writes `SUBSTRATE_MANAGER_INIT`/`SUBSTRATE_MANAGER_ENV`, and sources the
+  generated manager snippets before running your command.
+- Legacy `.substrate_bashenv` is still honored so existing automation keeps
+  working, but new installs do not touch it unless you explicitly run
+  `substrate shim repair`.
+
+Shim helpers remain scriptable:
+
 ```bash
-# Check shim status
-substrate --shim-status
-
-# Force redeployment
-substrate --shim-deploy
-
-# Remove all shims
-substrate --shim-remove
-
-# Skip automatic deployment
-export SUBSTRATE_NO_SHIMS=1
-substrate
+substrate --shim-status   # report version + location
+substrate --shim-deploy   # redeploy in-place
+substrate --shim-remove   # delete ~/.substrate/shims
+SUBSTRATE_NO_SHIMS=1 substrate   # skip deployment for this invocation
 ```
+
+### Shim Doctor & Repair
+
+`substrate shim doctor` surfaces manifest paths, PATH diagnostics, detected
+managers, and the latest repair hints:
+
+```bash
+substrate shim doctor
+substrate shim doctor --json | jq '.path'
+```
+
+When a manager needs to export a snippet into your host shell, apply it with:
+
+```bash
+substrate shim repair --manager nvm --yes
+cat ~/.substrate_bashenv
+```
+
+The repair command appends (or replaces) a delimited block for the selected
+manager and writes `~/.substrate_bashenv.bak` before mutating the file.
+
+### Manager Manifest & Overlays
+
+- Shipping manifest: `config/manager_hooks.yaml`
+- User overlay: `~/.substrate/manager_hooks.local.yaml`
+- Tests/automation can point at a custom manifest by exporting
+  `SUBSTRATE_MANAGER_MANIFEST=/path/to/manager_hooks.yaml`.
+
+Manifest entries control detection, init snippets, repair hints, and future
+guest install recipes. The same data powers manager detection, shim doctor,
+and shim hint logging.
+
+### World Enable & Dependency Sync (Preview)
+
+The B-phase roadmap delivers two CLI additions so operators can manage isolated
+worlds without reinstalling:
+
+```bash
+substrate world enable          # re-run provisioning if --no-world was used
+substrate world deps status     # inspect host vs world toolchains
+substrate world deps install    # install missing dependencies
+substrate world deps sync       # one-shot plan + install
+```
+
+Linux uses namespaces/cgroups, macOS rides Lima, and Windows leverages WSL. Use
+`substrate world doctor` (already available) to confirm host readiness.
 
 ### Alternative: Build from Source (development)
 
@@ -137,11 +192,11 @@ Additional capabilities planned for later phases:
 - **[Development](docs/DEVELOPMENT.md)** - Building, testing, and architecture
 - **[Contributing](CONTRIBUTING.md)** - How to contribute to the project
 - **[Security](SECURITY.md)** - Security model and vulnerability reporting
- - **[Replay](docs/REPLAY.md)** - Replaying traced commands (with Linux isolation option)
- - **[Graph](docs/GRAPH.md)** - Graph architecture and CLI (mock backend)
- - **[Privileged Tests](docs/HOWTO_PRIVILEGED_TESTS.md)** - Running isolation/netfilter tests on Linux
- - **[Windows World Setup](docs/cross-platform/wsl_world_setup.md)** - WSL2 provisioning, warm/doctor/smoke automation, and troubleshooting
- - **[Transport Parity Design](docs/cross-platform/transport_parity_design.md)** - The cross-platform transport architecture that underpins Windows parity
+- **[Replay](docs/REPLAY.md)** - Replaying traced commands (with Linux isolation option)
+- **[Graph](docs/GRAPH.md)** - Graph architecture and CLI (mock backend)
+- **[Privileged Tests](docs/HOWTO_PRIVILEGED_TESTS.md)** - Running isolation/netfilter tests on Linux
+- **[Windows World Setup](docs/cross-platform/wsl_world_setup.md)** - WSL2 provisioning, warm/doctor/smoke automation, and troubleshooting
+- **[Transport Parity Design](docs/cross-platform/transport_parity_design.md)** - The cross-platform transport architecture that underpins Windows parity
 
 ### World Doctor & Host Readiness
 
@@ -156,12 +211,14 @@ substrate world doctor --json | jq .
 ```
 
 Linux report highlights:
+
 - overlayfs kernel support (with best-effort `modprobe overlay` when privileged)
 - FUSE availability: `/dev/fuse` and `fuse-overlayfs` in `PATH`
 - cgroup v2 presence, nft availability, and `kernel.dmesg_restrict`
 - Per-user runtime roots for overlay and copy-diff
 
 macOS report highlights:
+
 - Lima tooling (`limactl`), Virtualization.framework (`sysctl kern.hv_support`), and optional `vsock-proxy`
 - Lima VM `substrate` status plus SSH connectivity
 - Guest `substrate-world-agent` service, socket, and `/v1/capabilities` response
@@ -175,6 +232,7 @@ pwsh -File scripts\windows\wsl-doctor.ps1 -DistroName substrate-wsl -Verbose
 ```
 
 Linux packaging note: we recommend installing `fuse-overlayfs` so Substrate can fall back to user-space overlay where kernel overlay mounts are unavailable. For example:
+
 - Debian/Ubuntu: `apt-get install -y fuse-overlayfs fuse3`
 - Fedora/RHEL/CentOS: `dnf install -y fuse-overlayfs`
 - Arch/Manjaro: `pacman -S --needed fuse-overlayfs`
