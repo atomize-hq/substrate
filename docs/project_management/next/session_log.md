@@ -149,3 +149,11 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Added `crates/shell/tests/world_enable.rs` with a temp HOME/PREFIX fixture that injects a fake `SUBSTRATE_WORLD_ENABLE_SCRIPT`, overrides `SUBSTRATE_WORLD_SOCKET`, and covers success (config/env toggled + verbose streaming), helper failure, missing socket, idempotent/`--force`, `--dry-run`, and corrupt-config recovery scenarios
 - Commands: `cargo fmt --all`, `cargo test -p substrate-shell world_enable` (fails: `error: unrecognized subcommand 'enable'` because the CLI branch hasn’t landed yet), `cargo test -p substrate-shell world_enable -- --exact world_enable_provisions_and_sets_config_and_env_state --nocapture` (same failure captured for logs)
 - Integration Kickoff Prompt recorded at docs/project_management/next/kickoff_prompts/C1-integ.md; tests need the code branch to add `substrate world enable` + env overrides so these cases can pass
+## [2025-11-16 17:56 UTC] Codex – C1-integ – START
+- Reviewed docs/project_management/next/kickoff_prompts/C1-integ.md plus session log/tasks to confirm code/test branches and required commands for wt/c1-world-enable-integ
+- Plan: branch from feat/isolated-shell-plan, merge wt/c1-world-enable-code/test, resolve CLI/config/env wiring conflicts, then run cargo fmt/test and the manual dry-run check listed in the kickoff prompt
+- Blockers: none; will capture test outputs + manual command details in END entry
+## [2025-11-16 17:58 UTC] Codex – C1-integ – END
+- Merged wt/c1-world-enable-code and wt/c1-world-enable-test into wt/c1-world-enable-integ, updated the CLI to normalize `SUBSTRATE_WORLD_SOCKET`, repair install metadata/manager_env exports, and ensured verbose streaming + timeout handling matched the new tests before syncing back onto feat/isolated-shell-plan
+- Commands: `cargo fmt --all`, `cargo test -p substrate-shell world_enable`, `SUBSTRATE_WORLD_ENABLE_SCRIPT=$PWD/scripts/substrate/world-enable.sh target/debug/substrate world enable --dry-run --prefix /tmp/tmp.XKsYXHEYxS --profile release --verbose`
+- Result: integration commit `feat: integrate world enable CLI` is on wt/c1-world-enable-integ with tests + manual dry-run passing; ready for follow-on coordination work
