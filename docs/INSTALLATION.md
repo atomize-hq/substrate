@@ -120,6 +120,7 @@ After the script completes:
 substrate --version
 substrate --shim-status
 substrate shim doctor --json | jq '{path: .path, states: .states}'
+substrate health --json | jq '.summary'
 substrate world doctor --json | jq '.summary'
 ```
 
@@ -132,6 +133,7 @@ your output should match unless the host environment changed.)
 substrate.exe --version
 substrate.exe --shim-status
 substrate.exe shim doctor --json | ConvertFrom-Json | Select-Object path
+substrate.exe health --json | ConvertFrom-Json | Select-Object summary
 substrate.exe world doctor --json | ConvertFrom-Json | Select-Object status,message
 ```
 

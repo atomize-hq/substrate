@@ -236,11 +236,25 @@ HOME=$PWD/target/tests-tmp/ci \
 
 # Capture a health snapshot for evidence logs
 substrate shim doctor --json > artifacts/shim_doctor.json
+substrate health --json > artifacts/substrate_health.json
 substrate world doctor --json > artifacts/world_doctor.json
 ```
 
 Need a legacy pipeline to inject snippets automatically? Run `substrate shim repair`
 first, then export `BASH_ENV="$HOME/.substrate_bashenv"` explicitly for that job.
+
+### Health Fixtures (Tests / Support)
+
+To stub the expensive world checks, drop JSON fixtures under
+`~/.substrate/health/`:
+
+- `world_doctor.json` – consumed by `substrate shim doctor` and
+  `substrate health` before falling back to `substrate world doctor --json`.
+- `world_deps.json` – matches the `WorldDepsStatusReport` schema. Leave the
+  file out to exercise the live `substrate world deps status --json` path.
+
+These overrides keep CI sandboxes deterministic while still exercising the same
+code paths as production builds.
 
 ### Development Tools
 

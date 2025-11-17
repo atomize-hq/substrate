@@ -6,6 +6,7 @@ use crate::{
 use anyhow::{anyhow, bail, Context, Result};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
     env,
@@ -19,19 +20,57 @@ use tokio::runtime::Runtime;
 
 static WORLD_EXEC_FALLBACK: AtomicBool = AtomicBool::new(false);
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct WorldDepsStatusReport {
+    pub manifest: WorldDepsManifestInfo,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub world_disabled_reason: Option<String>,
+    pub tools: Vec<WorldDepStatusEntry>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct WorldDepsManifestInfo {
+    pub base: PathBuf,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub overlay: Option<PathBuf>,
+    pub overlay_exists: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct WorldDepStatusEntry {
+    pub name: String,
+    pub host_detected: bool,
+    pub guest: WorldDepGuestStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct WorldDepGuestStatus {
+    pub status: WorldDepGuestState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WorldDepGuestState {
+    Present,
+    Missing,
+    Skipped,
+    Unavailable,
+}
+
+pub(crate) fn status_report_for_health(
+    cli_no_world: bool,
+    tools: &[String],
+) -> Result<WorldDepsStatusReport> {
+    let runner = build_runner(cli_no_world)?;
+    runner.status_report(tools)
+}
+
 pub fn run(cmd: &WorldDepsCmd, cli_no_world: bool) -> Result<()> {
-    let manifest_paths = ManifestPaths::resolve()?;
-    let manifest = WorldDepsManifest::load(&manifest_paths.base, manifest_paths.overlay.as_deref())
-        .with_context(|| {
-            format!(
-                "failed to load world deps manifest from {}",
-                manifest_paths.base.display()
-            )
-        })?;
-
-    let world = WorldState::detect(cli_no_world)?;
-    let runner = WorldDepsRunner::new(manifest, manifest_paths, world);
-
+    let runner = build_runner(cli_no_world)?;
     match &cmd.action {
         WorldDepsAction::Status(args) => runner.run_status(args),
         WorldDepsAction::Install(args) => runner.run_install(args),
@@ -59,6 +98,19 @@ impl ManifestPaths {
     }
 }
 
+fn build_runner(cli_no_world: bool) -> Result<WorldDepsRunner> {
+    let manifest_paths = ManifestPaths::resolve()?;
+    let manifest = WorldDepsManifest::load(&manifest_paths.base, manifest_paths.overlay.as_deref())
+        .with_context(|| {
+            format!(
+                "failed to load world deps manifest from {}",
+                manifest_paths.base.display()
+            )
+        })?;
+    let world = WorldState::detect(cli_no_world)?;
+    Ok(WorldDepsRunner::new(manifest, manifest_paths, world))
+}
+
 struct WorldDepsRunner {
     manifest: WorldDepsManifest,
     paths: ManifestPaths,
@@ -75,39 +127,76 @@ impl WorldDepsRunner {
     }
 
     fn run_status(&self, args: &WorldDepsStatusArgs) -> Result<()> {
-        let tools = self.select_tools(&args.tools)?;
-        if tools.is_empty() {
-            println!("No tools defined in manifest {}", self.paths.base.display());
+        let report = self.status_report(&args.tools)?;
+        if args.json {
+            println!("{}", serde_json::to_string_pretty(&report)?);
             return Ok(());
         }
 
-        println!("Manifest: {}", self.paths.base.display());
-        if self.paths.overlay_exists() {
-            if let Some(overlay) = &self.paths.overlay {
-                println!("Overlay: {}", overlay.display());
-            }
+        if report.tools.is_empty() {
+            println!(
+                "No tools defined in manifest {}",
+                report.manifest.base.display()
+            );
+            return Ok(());
         }
 
-        let world_reason = self.world.reason();
-        if let Some(message) = &world_reason {
+        println!("Manifest: {}", report.manifest.base.display());
+        if let Some(overlay) = &report.manifest.overlay {
+            let status = if report.manifest.overlay_exists {
+                "present"
+            } else {
+                "missing"
+            };
+            println!("Overlay: {} ({status})", overlay.display());
+        } else {
+            println!("Overlay: <not configured>");
+        }
+
+        if let Some(message) = &report.world_disabled_reason {
             println!("substrate: warn: world backend disabled ({message})");
         }
 
-        let mut rows = Vec::new();
-        for tool in tools {
-            let host_detected = detect_host(&tool.host.commands);
-            let guest_status = self.probe_guest(tool);
+        print_status_table(&report.tools);
+        Ok(())
+    }
 
-            rows.push(StatusRow {
-                tool,
-                host: host_detected,
-                guest: guest_status,
-                provider: tool.install.first().map(|recipe| recipe.provider.as_str()),
+    fn status_report(&self, tool_names: &[String]) -> Result<WorldDepsStatusReport> {
+        let tools = self.select_tools(tool_names)?;
+        if tools.is_empty() {
+            return Ok(WorldDepsStatusReport {
+                manifest: WorldDepsManifestInfo {
+                    base: self.paths.base.clone(),
+                    overlay: self.paths.overlay.clone(),
+                    overlay_exists: self.paths.overlay_exists(),
+                },
+                world_disabled_reason: self.world.reason(),
+                tools: Vec::new(),
             });
         }
 
-        print_status_table(&rows);
-        Ok(())
+        let mut entries = Vec::with_capacity(tools.len());
+        for tool in tools {
+            let host_detected = detect_host(&tool.host.commands);
+            let guest_status = self.probe_guest(tool);
+            let provider = tool.install.first().map(|recipe| recipe.provider.clone());
+            entries.push(WorldDepStatusEntry {
+                name: tool.name.clone(),
+                host_detected,
+                provider,
+                guest: WorldDepGuestStatus::from_probe(guest_status),
+            });
+        }
+
+        Ok(WorldDepsStatusReport {
+            manifest: WorldDepsManifestInfo {
+                base: self.paths.base.clone(),
+                overlay: self.paths.overlay.clone(),
+                overlay_exists: self.paths.overlay_exists(),
+            },
+            world_disabled_reason: self.world.reason(),
+            tools: entries,
+        })
     }
 
     fn run_install(&self, args: &WorldDepsInstallArgs) -> Result<()> {
@@ -250,28 +339,45 @@ impl WorldDepsRunner {
     }
 }
 
-struct StatusRow<'a> {
-    tool: &'a WorldDepTool,
-    host: bool,
-    guest: GuestProbe,
-    provider: Option<&'a str>,
-}
-
 enum GuestProbe {
     Available(bool),
     Skipped(String),
     Unavailable(String),
 }
 
-impl GuestProbe {
+impl WorldDepGuestStatus {
+    fn from_probe(probe: GuestProbe) -> Self {
+        match probe {
+            GuestProbe::Available(true) => Self {
+                status: WorldDepGuestState::Present,
+                reason: None,
+            },
+            GuestProbe::Available(false) => Self {
+                status: WorldDepGuestState::Missing,
+                reason: None,
+            },
+            GuestProbe::Skipped(reason) => Self {
+                status: WorldDepGuestState::Skipped,
+                reason: Some(sanitize_reason(&reason)),
+            },
+            GuestProbe::Unavailable(reason) => Self {
+                status: WorldDepGuestState::Unavailable,
+                reason: Some(sanitize_reason(&reason)),
+            },
+        }
+    }
+
     fn label(&self) -> String {
-        match self {
-            GuestProbe::Available(true) => "present".to_string(),
-            GuestProbe::Available(false) => "missing".to_string(),
-            GuestProbe::Skipped(reason) => format!("n/a ({})", sanitize_reason(reason)),
-            GuestProbe::Unavailable(reason) => {
-                format!("missing ({})", sanitize_reason(reason))
+        match self.status {
+            WorldDepGuestState::Present => "present".to_string(),
+            WorldDepGuestState::Missing => "missing".to_string(),
+            WorldDepGuestState::Skipped => {
+                format!("n/a ({})", self.reason.as_deref().unwrap_or("skipped"))
             }
+            WorldDepGuestState::Unavailable => format!(
+                "missing ({})",
+                self.reason.as_deref().unwrap_or("backend unavailable")
+            ),
         }
     }
 }
@@ -284,14 +390,18 @@ fn sanitize_reason(reason: &str) -> String {
         .join(" ")
 }
 
-fn print_status_table(rows: &[StatusRow<'_>]) {
-    for row in rows {
-        let provider = row.provider.unwrap_or("n/a");
+fn print_status_table(entries: &[WorldDepStatusEntry]) {
+    for entry in entries {
+        let provider = entry.provider.as_deref().unwrap_or("n/a");
         println!(
             "- {}: host={} guest={} installer={}",
-            row.tool.name,
-            if row.host { "present" } else { "missing" },
-            row.guest.label(),
+            entry.name,
+            if entry.host_detected {
+                "present"
+            } else {
+                "missing"
+            },
+            entry.guest.label(),
             provider
         );
     }

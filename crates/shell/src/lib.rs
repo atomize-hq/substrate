@@ -319,6 +319,7 @@ pub enum SubCommands {
     Graph(GraphCmd),
     World(WorldCmd),
     Shim(ShimCmd),
+    Health(HealthCmd),
 }
 
 #[derive(clap::Args, Debug)]
@@ -397,6 +398,9 @@ pub struct WorldDepsStatusArgs {
     /// Specific tools to inspect (defaults to all manifest entries)
     #[arg(value_name = "TOOL")]
     pub tools: Vec<String>,
+    /// Emit JSON summary for automation
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(clap::Args, Debug, Clone)]
@@ -426,6 +430,13 @@ pub struct WorldDepsSyncArgs {
 pub struct ShimCmd {
     #[command(subcommand)]
     pub action: ShimAction,
+}
+
+#[derive(clap::Args, Debug)]
+pub struct HealthCmd {
+    /// Output machine-readable JSON summary
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -841,6 +852,10 @@ impl ShellConfig {
                 SubCommands::Shim(shim_cmd) => {
                     handle_shim_command(shim_cmd);
                 }
+                SubCommands::Health(health_cmd) => {
+                    handle_health_command(health_cmd, &cli)?;
+                    std::process::exit(0);
+                }
             }
         }
 
@@ -1019,6 +1034,10 @@ fn handle_world_command(cmd: &WorldCmd, cli: &Cli) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn handle_health_command(cmd: &HealthCmd, cli: &Cli) -> Result<()> {
+    commands::health::run(cmd.json, cli.no_world)
 }
 
 fn handle_shim_command(cmd: &ShimCmd) -> ! {

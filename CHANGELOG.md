@@ -4,6 +4,11 @@ All notable changes to this project are tracked here. Dates use UTC.
 
 ## [Unreleased]
 
+### Added
+
+- `substrate health` command with aggregated shim/world summaries plus upgraded
+  `substrate shim doctor --json` payloads for support bundle collection.
+
 ### Docs
 
 - Updated README Quick Start plus INSTALLATION/USAGE/CONFIGURATION to describe

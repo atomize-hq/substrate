@@ -1,3 +1,4 @@
+use super::world_deps::{self, WorldDepGuestState, WorldDepsStatusReport};
 use crate::{
     current_platform,
     manager_init::{self, ManagerInitConfig, ManifestPaths},
@@ -6,13 +7,14 @@ use crate::{
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::{
     collections::HashMap,
     env,
     fs::{self, File},
     io::{self, BufRead, BufReader, Write},
     path::{Path, PathBuf},
+    process::Command,
 };
 use substrate_common::{
     log_schema,
@@ -35,6 +37,10 @@ pub struct ShimDoctorReport {
     pub skip_all_requested: bool,
     pub states: Vec<ManagerDoctorState>,
     pub hints: Vec<HintRecord>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub world: Option<WorldDoctorSnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub world_deps: Option<WorldDepsDoctorSection>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -78,6 +84,32 @@ pub struct HintRecord {
     pub last_seen: DateTime<Utc>,
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct WorldDoctorSnapshot {
+    pub ok: bool,
+    pub platform: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stderr: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<Value>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct WorldDepsDoctorSection {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub report: Option<WorldDepsStatusReport>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
 #[derive(Debug)]
 pub enum RepairOutcome {
     Applied {
@@ -92,13 +124,17 @@ pub enum RepairOutcome {
 }
 
 pub fn run_doctor(json_mode: bool) -> Result<()> {
-    let report = build_report()?;
+    let report = collect_report(false)?;
     if json_mode {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
         print_text_report(&report);
     }
     Ok(())
+}
+
+pub(crate) fn collect_report(cli_no_world: bool) -> Result<ShimDoctorReport> {
+    build_report(cli_no_world)
 }
 
 pub fn run_repair(manager: &str, auto_confirm: bool) -> Result<RepairOutcome> {
@@ -163,7 +199,7 @@ pub fn run_repair(manager: &str, auto_confirm: bool) -> Result<RepairOutcome> {
     })
 }
 
-fn build_report() -> Result<ShimDoctorReport> {
+fn build_report(cli_no_world: bool) -> Result<ShimDoctorReport> {
     let (manifest_info, manifest_paths) = build_manifest_paths()?;
     let manifest = ManagerManifest::load(&manifest_info.base, manifest_info.overlay.as_deref())?;
     let spec_map = manifest_spec_map(manifest);
@@ -189,6 +225,8 @@ fn build_report() -> Result<ShimDoctorReport> {
         skip_all_requested: skip_requested,
         states,
         hints,
+        world: Some(gather_world_doctor_snapshot()),
+        world_deps: Some(gather_world_deps_section(cli_no_world)),
     })
 }
 
@@ -372,6 +410,185 @@ fn parse_ts(raw: &str) -> Option<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(raw)
         .map(|dt| dt.with_timezone(&Utc))
         .ok()
+}
+
+fn gather_world_doctor_snapshot() -> WorldDoctorSnapshot {
+    match try_load_health_fixture("world_doctor.json") {
+        Ok(Some(value)) => {
+            let snapshot = snapshot_from_value(value, "fixture");
+            return snapshot;
+        }
+        Err(err) => {
+            return WorldDoctorSnapshot {
+                ok: false,
+                platform: env::consts::OS.to_string(),
+                source: Some("fixture".to_string()),
+                exit_code: None,
+                stderr: None,
+                error: Some(format!("failed to read world doctor fixture: {err}")),
+                details: None,
+            };
+        }
+        Ok(None) => {}
+    }
+
+    match run_json_subcommand(&["world", "doctor", "--json"]) {
+        Ok(output) => snapshot_from_command(output),
+        Err(err) => WorldDoctorSnapshot {
+            ok: false,
+            platform: env::consts::OS.to_string(),
+            source: Some("command".to_string()),
+            exit_code: None,
+            stderr: None,
+            error: Some(format!("failed to gather world doctor output: {err}")),
+            details: None,
+        },
+    }
+}
+
+fn gather_world_deps_section(cli_no_world: bool) -> WorldDepsDoctorSection {
+    match try_load_health_fixture("world_deps.json") {
+        Ok(Some(value)) => match serde_json::from_value::<WorldDepsStatusReport>(value.clone()) {
+            Ok(report) => {
+                return WorldDepsDoctorSection {
+                    report: Some(report),
+                    error: None,
+                    source: Some("fixture".to_string()),
+                };
+            }
+            Err(err) => {
+                return WorldDepsDoctorSection {
+                    report: None,
+                    error: Some(format!("invalid world deps fixture: {err}")),
+                    source: Some("fixture".to_string()),
+                };
+            }
+        },
+        Err(err) => {
+            return WorldDepsDoctorSection {
+                report: None,
+                error: Some(format!("failed to read world deps fixture: {err}")),
+                source: Some("fixture".to_string()),
+            };
+        }
+        Ok(None) => {}
+    }
+
+    let requested: Vec<String> = Vec::new();
+    match world_deps::status_report_for_health(cli_no_world, &requested) {
+        Ok(report) => WorldDepsDoctorSection {
+            report: Some(report),
+            error: None,
+            source: Some("command".to_string()),
+        },
+        Err(err) => WorldDepsDoctorSection {
+            report: None,
+            error: Some(format!("failed to collect world deps status: {:#}", err)),
+            source: Some("command".to_string()),
+        },
+    }
+}
+
+fn snapshot_from_value(value: Value, source: &str) -> WorldDoctorSnapshot {
+    let ok = value.get("ok").and_then(Value::as_bool).unwrap_or(true);
+    let platform = value
+        .get("platform")
+        .and_then(Value::as_str)
+        .unwrap_or(env::consts::OS)
+        .to_string();
+    WorldDoctorSnapshot {
+        ok,
+        platform,
+        source: Some(source.to_string()),
+        exit_code: None,
+        stderr: None,
+        error: None,
+        details: Some(value),
+    }
+}
+
+fn snapshot_from_command(output: JsonCommandOutput) -> WorldDoctorSnapshot {
+    let mut ok = output
+        .value
+        .get("ok")
+        .and_then(Value::as_bool)
+        .unwrap_or_else(|| output.exit_code.unwrap_or(0) == 0);
+    if let Some(code) = output.exit_code {
+        if code != 0 {
+            ok = false;
+        }
+    }
+    let platform = output
+        .value
+        .get("platform")
+        .and_then(Value::as_str)
+        .unwrap_or(env::consts::OS)
+        .to_string();
+    let stderr = if output.stderr.is_empty() {
+        None
+    } else {
+        Some(output.stderr)
+    };
+    WorldDoctorSnapshot {
+        ok,
+        platform,
+        source: Some("command".to_string()),
+        exit_code: output.exit_code,
+        stderr,
+        error: None,
+        details: Some(output.value),
+    }
+}
+
+fn try_load_health_fixture(name: &str) -> Result<Option<Value>> {
+    let Some(path) = health_fixture_path(name) else {
+        return Ok(None);
+    };
+    let raw = fs::read_to_string(&path)
+        .with_context(|| format!("failed to read health fixture {}", path.display()))?;
+    let value = serde_json::from_str(&raw)
+        .with_context(|| format!("failed to parse health fixture {}", path.display()))?;
+    Ok(Some(value))
+}
+
+fn health_fixture_path(name: &str) -> Option<PathBuf> {
+    let base = substrate_paths::substrate_home().ok()?;
+    let path = base.join("health").join(name);
+    if path.exists() {
+        Some(path)
+    } else {
+        None
+    }
+}
+
+struct JsonCommandOutput {
+    value: Value,
+    exit_code: Option<i32>,
+    stderr: String,
+}
+
+fn run_json_subcommand(args: &[&str]) -> Result<JsonCommandOutput> {
+    let exe = env::current_exe().with_context(|| "failed to locate substrate binary")?;
+    let output = Command::new(&exe)
+        .args(args)
+        .output()
+        .with_context(|| format!("failed to execute `{}`", args.join(" ")))?;
+    if output.stdout.is_empty() {
+        return Err(anyhow!("`{}` produced no JSON output", args.join(" ")));
+    }
+    let value: Value = serde_json::from_slice(&output.stdout).with_context(|| {
+        format!(
+            "failed to parse JSON output from `{}`: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stdout)
+        )
+    })?;
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Ok(JsonCommandOutput {
+        value,
+        exit_code: output.status.code(),
+        stderr,
+    })
 }
 
 fn build_manager_block(name: &str, snippet: &str) -> String {
@@ -561,6 +778,11 @@ fn print_text_report(report: &ShimDoctorReport) {
             );
         }
     }
+
+    println!();
+    print_world_section(report.world.as_ref());
+    println!();
+    print_world_deps_section(report.world_deps.as_ref());
 }
 
 fn print_manager_table(states: &[ManagerDoctorState]) {
@@ -601,6 +823,91 @@ fn print_manager_table(states: &[ManagerDoctorState]) {
             hint_text,
             name_width = name_width
         );
+    }
+}
+
+fn print_world_section(section: Option<&WorldDoctorSnapshot>) {
+    println!("World backend:");
+    match section {
+        Some(snapshot) => {
+            println!(
+                "  Status: {}",
+                if snapshot.ok {
+                    "healthy"
+                } else {
+                    "needs attention"
+                }
+            );
+            println!("  Platform: {}", snapshot.platform);
+            if let Some(source) = &snapshot.source {
+                println!("  Source: {}", source);
+            }
+            if let Some(code) = snapshot.exit_code {
+                println!("  Exit code: {}", code);
+            }
+            if let Some(err) = &snapshot.error {
+                println!("  Error: {}", err);
+            } else if let Some(stderr) = &snapshot.stderr {
+                if !stderr.is_empty() {
+                    println!("  Notes: {}", stderr);
+                }
+            }
+            println!("  Details: run `substrate world doctor --json` for full output.");
+        }
+        None => println!("  No data available."),
+    }
+}
+
+fn print_world_deps_section(section: Option<&WorldDepsDoctorSection>) {
+    println!("World deps:");
+    match section {
+        Some(section) => {
+            if let Some(source) = &section.source {
+                println!("  Source: {}", source);
+            }
+            if let Some(report) = &section.report {
+                println!("  Manifest: {}", report.manifest.base.display());
+                if let Some(overlay) = &report.manifest.overlay {
+                    let status = if report.manifest.overlay_exists {
+                        "present"
+                    } else {
+                        "missing"
+                    };
+                    println!("  Overlay: {} ({status})", overlay.display());
+                } else {
+                    println!("  Overlay: <not configured>");
+                }
+                if let Some(reason) = &report.world_disabled_reason {
+                    println!("  Backend: disabled ({reason})");
+                } else {
+                    println!("  Backend: enabled");
+                }
+                if report.tools.is_empty() {
+                    println!("  Tools: manifest empty");
+                    return;
+                }
+                let missing: Vec<&str> = report
+                    .tools
+                    .iter()
+                    .filter(|entry| entry.guest.status == WorldDepGuestState::Missing)
+                    .map(|entry| entry.name.as_str())
+                    .collect();
+                if missing.is_empty() {
+                    println!("  Guest tools: all present");
+                } else {
+                    println!(
+                        "  Guest tools missing ({}): {}",
+                        missing.len(),
+                        missing.join(", ")
+                    );
+                }
+            } else if let Some(err) = &section.error {
+                println!("  Error: {}", err);
+            } else {
+                println!("  No data available.");
+            }
+        }
+        None => println!("  No data available."),
     }
 }
 

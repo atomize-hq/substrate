@@ -214,6 +214,8 @@ Pain points:
 4. **Phase D – Expansion**
    - Add Tier-2 managers (mise/rtx, rbenv, sdkman, bun, volta, goenv, etc.).
    - Add richer doctor/health reporting commands (no telemetry dashboards required).
+     `substrate shim doctor --json` now surfaces world sections and the new
+     `substrate health [--json]` command wraps the host/guest checks for support snapshots.
    - Windows remains experimental; match Linux/mac behavior where feasible and plan future native rewrite (PowerShell init deferred).
 
 ---

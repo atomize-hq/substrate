@@ -137,6 +137,21 @@ Doctor mode respects `HOME`, `USERPROFILE`, `SUBSTRATE_MANAGER_MANIFEST`, and
 real dotfiles. Repair writes `~/.substrate_bashenv` (creating
 `~/.substrate_bashenv.bak`) but leaves everything else untouched.
 
+### Health Snapshots
+
+Capture full host/guest readiness with the aggregated health command:
+
+```bash
+substrate health                # text summary (managers + world doctor + world deps)
+substrate health --json | jq '.summary'
+substrate shim doctor --json    # detailed shim-centric payload
+```
+
+Both commands honor the same overrides (`HOME`, `SUBSTRATE_MANAGER_MANIFEST`,
+`SHIM_TRACE_LOG`). Drop fixture files into `~/.substrate/health/world_doctor.json`
+and `~/.substrate/health/world_deps.json` when you need deterministic outputs in
+tests or support bundles.
+
 ### Manager Hints & Telemetry
 
 When shims intercept a failing command they emit `manager_hint` events in
