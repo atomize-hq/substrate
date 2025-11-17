@@ -245,6 +245,14 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Reviewing docs/project_management/next/kickoff_prompts/D2-code.md plus Workstream D2 plan/data-map sections before touching code
 - Next: operate in git worktree wt/d2-health-code, mark the D2-code task in docs/project_management/next/tasks.json as in_progress, and gather requirements for the new health command + doctor aggregation
 - Blockers: none; will coordinate Test Agent needs via kickoff prompt + END notes
+## [2025-11-17 09:30 UTC] Codex – D2-integ – START
+- Resuming integration per docs/project_management/next/kickoff_prompts/D2-integ.md to merge `wt/d2-health-code` + `wt/d2-health-test` into `wt/d2-health-integ`
+- Plan: fast-forward integration worktree with both branches, run `cargo fmt --all`, `cargo test -p substrate-shell shim_doctor`, and `cargo test -p substrate-shell --test shim_health -- --nocapture`, then capture sample `substrate shim doctor --json` / `substrate health --json` outputs using the same temp HOME harness referenced in the tests
+- Blockers: none
+## [2025-11-17 10:05 UTC] Codex – D2-integ – END
+- Fast-forwarded wt/d2-health-integ with the code+test worktrees, re-ran the fmt/test commands (warnings remain for unused helper methods because each test binary builds different parts of the shared fixture), and captured sample JSON outputs under `target/tests-tmp/cli-health-sample.x3tvSy/` for docs/reference
+- Commands: `cargo fmt --all`, `cargo test -p substrate-shell shim_doctor`, `cargo test -p substrate-shell --test shim_health -- --nocapture`, `target/debug/substrate shim doctor --json`, `target/debug/substrate health --json`
+- Next: feat/isolated-shell-plan now contains the aggregated health command/tests/docs; no outstanding blockers
 ## [2025-11-17 07:25 UTC] Codex – D2-test – START
 - D2-code has now landed the aggregated `substrate health` command + richer shim doctor output; resuming test work in `wt/d2-health-test` per kickoff prompt at `docs/project_management/next/kickoff_prompts/D2-test.md`
 - Plan: sync the worktree, inspect CLI changes, extend `crates/shell/tests/shim_doctor.rs`, add a new `shim_health` integration test module with shared fixtures for world doctor/deps data, then run `cargo fmt --all`, `cargo test -p substrate-shell shim_doctor`, and `cargo test -p substrate-shell --test shim_health -- --nocapture`
