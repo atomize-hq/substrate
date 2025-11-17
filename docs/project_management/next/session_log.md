@@ -225,3 +225,11 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Added Tier-2 coverage in crates/common/src/manager_manifest.rs plus new shell + shim integration tests (manager_init integration binary, shim doctor JSON, bun hint logging, and shell_env snippet assertions) to prove the new manifest entries are parsed, snippets written, and hints surfaced
 - Commands: `cargo fmt --all`, `cargo test -p substrate-common manager_manifest`, `cargo test -p substrate-shell manager_init`, `cargo test -p substrate-shell --test manager_init`, `cargo test -p substrate-shim`
 - Integration Agent Kickoff Prompt recorded at docs/project_management/next/kickoff_prompts/D1-integ.md; wt/d1-managers-test pushed to origin/wt/d1-managers-test
+## [2025-11-17 04:05 UTC] Codex – D1-integ – START
+- Read docs/project_management/next/kickoff_prompts/D1-integ.md plus the latest session log/tasks, marked the task in progress, and created `wt/d1-managers-integ` from `feat/isolated-shell-plan` before reviewing `wt/d1-managers-code`/`wt/d1-managers-test`
+- Next: merge both worktrees, bring `config/manager_hooks.yaml` + Tier-2 tests together, reconcile manifest/test expectations, then run the fmt/test commands listed in the kickoff prompt
+- Blockers: none; will capture manifest alignment + command outputs in END entry
+## [2025-11-17 05:12 UTC] Codex – D1-integ – END
+- Merged wt/d1-managers-code/test into wt/d1-managers-integ, copied the shipping `config/manager_hooks.yaml` (mise/rtx/rbenv/sdkman/bun/volta/goenv/asdf-node metadata) into the repo, verified shell/shim/common tests reference the same hints/install data, and staged the manifest + planning updates
+- Commands: `cargo fmt --all`, `cargo test -p substrate-common manager_manifest`, `cargo test -p substrate-shell manager_init`, `cargo test -p substrate-shell --test manager_init`, `cargo test -p substrate-shim`
+- Notes: Required manifest/tests are now in sync for Phase D2; manual manager_env inspection deferred because the integration tests already validate snippet ordering/BASH_ENV sourcing
