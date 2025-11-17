@@ -233,3 +233,11 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Merged wt/d1-managers-code/test into wt/d1-managers-integ, copied the shipping `config/manager_hooks.yaml` (mise/rtx/rbenv/sdkman/bun/volta/goenv/asdf-node metadata) into the repo, verified shell/shim/common tests reference the same hints/install data, and staged the manifest + planning updates
 - Commands: `cargo fmt --all`, `cargo test -p substrate-common manager_manifest`, `cargo test -p substrate-shell manager_init`, `cargo test -p substrate-shell --test manager_init`, `cargo test -p substrate-shim`
 - Notes: Required manifest/tests are now in sync for Phase D2; manual manager_env inspection deferred because the integration tests already validate snippet ordering/BASH_ENV sourcing
+## [2025-11-17 02:05 UTC] Codex – D2-test – START
+- Consumed kickoff prompt + plan docs (`docs/project_management/next/kickoff_prompts/D2-test.md`) and reviewed current doctor/health implementation to scope new coverage
+- Next: switch into worktree `wt/d2-health-test`, expand `crates/shell/tests/shim_doctor.rs` (plus a new `shim_health` test binary) to cover verbose/text vs JSON output, PATH diagnostics, hint metadata, and failure cases from D2-code
+- Blockers: none; will capture helper/fixture details plus command results (`cargo fmt --all`, `cargo test -p substrate-shell shim_doctor`, `cargo test -p substrate-shell --test shim_health -- --nocapture`) in END entry
+## [2025-11-17 06:40 UTC] Codex – D2-code – START
+- Reviewing docs/project_management/next/kickoff_prompts/D2-code.md plus Workstream D2 plan/data-map sections before touching code
+- Next: operate in git worktree wt/d2-health-code, mark the D2-code task in docs/project_management/next/tasks.json as in_progress, and gather requirements for the new health command + doctor aggregation
+- Blockers: none; will coordinate Test Agent needs via kickoff prompt + END notes

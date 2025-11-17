@@ -721,7 +721,7 @@
       "worktree": "wt/d2-health-code",
       "integration_task": "D2-integ",
       "kickoff_prompt": "Task D2-code (Enhance doctor/health reporting) \u2013 CODE. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Before editing code, gather requirements and prepare the Test Agent Kickoff Prompt for the paired test task (see `concurrent_with` or session log). Provide that prompt to the user per AI instructions. \n4. Use git worktree `wt/d2-health-code` from /home/spenser/__Active_code/substrate. Follow the scope details below: \nEnhance doctor/health reporting per plan. Aggregate manager + world deps info. Update CLI docs/help. \n5. Run the commands/tests noted above. After finishing, append an END entry to the session log, update this task\u2019s status to \"completed\", and ensure the Test Agent Kickoff Prompt reference is captured there. (Full kickoff prompt: docs/project_management/next/kickoff_prompts/D2-code.md)",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "D2-test",
@@ -739,7 +739,7 @@
       "worktree": "wt/d2-health-test",
       "integration_task": "D2-integ",
       "kickoff_prompt": "Task D2-test (Test doctor/health enhancements) \u2013 TEST. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Consume the Test Agent Kickoff Prompt left by the corresponding code task (session log) to understand context and expectations. \n4. Work inside git worktree `wt/d2-health-test` and follow the scope details below: \n5. Before finishing, craft the Integration Agent Kickoff Prompt for the integration task and record it in the session log. \nAdd tests covering the enhanced doctor/health command outputs, using fixtures for manager/world states. \n6. Execute the required tests/commands, append an END entry, update status to \"completed\", and ensure the Integration prompt location is documented. (Full kickoff prompt: docs/project_management/next/kickoff_prompts/D2-test.md)",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "D2-integ",
