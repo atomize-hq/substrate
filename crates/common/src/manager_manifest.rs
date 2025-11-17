@@ -556,7 +556,7 @@ fn insert_entries(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{env, fs};
+    use std::{env, fs, path::Path};
     use tempfile::tempdir;
 
     #[test]
@@ -865,5 +865,274 @@ managers:
         let linux = manifest.resolve_for_platform(Platform::Linux);
         assert!(linux[0].init.shell.is_some());
         assert!(linux[0].init.powershell.is_none());
+    }
+
+    #[test]
+    fn tier2_managers_include_complete_metadata() {
+        let dir = tempdir().unwrap();
+        let manifest_path = dir.path().join("tier2.yaml");
+        let tier2_root = dir.path().join("tier2-home");
+        fs::create_dir_all(&tier2_root).unwrap();
+        env::set_var("TIER2_HOME", &tier2_root);
+
+        let manifest_body = format!(
+            r#"
+version: 1
+managers:
+  - name: mise
+    priority: 9
+    detect:
+      commands: ["mise --version"]
+      env:
+        MISE_DATA_DIR: "$TIER2_HOME/state/mise"
+      script: |
+        test -x "$MISE_DATA_DIR/bin/mise"
+    init:
+      shell: |
+        export MISE_DATA_DIR="${{MISE_DATA_DIR:-$HOME/.local/share/mise}}"
+        eval "$(mise activate bash)"
+    errors:
+      - "mise: command not found"
+    repair_hint: |
+      eval "$(mise activate bash)"
+    guest_detect:
+      command: "mise --version"
+    guest_install:
+      apt: "sudo apt install mise"
+  - name: rtx
+    priority: 12
+    detect:
+      files:
+        - "~/.local/share/rtx/bin/rtx"
+      commands: ["rtx --version"]
+    init:
+      shell: |
+        eval "$(rtx activate bash)"
+    errors:
+      - "rtx: command not found"
+    repair_hint: |
+      eval "$(rtx activate bash)"
+    guest_detect:
+      command: "rtx --version"
+    guest_install:
+      custom: "curl https://rtx.pub/install.sh | sh"
+  - name: rbenv
+    priority: 14
+    detect:
+      files:
+        - "{tier2}/.rbenv/bin/rbenv"
+      env:
+        RBENV_ROOT: "{tier2}/.rbenv"
+    init:
+      shell: |
+        export RBENV_ROOT="${{RBENV_ROOT:-$HOME/.rbenv}}"
+        eval "$(rbenv init - bash)"
+    errors:
+      - "rbenv: command not found"
+    repair_hint: |
+      eval "$(rbenv init - bash)"
+    guest_detect:
+      command: "rbenv --version"
+    guest_install:
+      apt: "sudo apt install rbenv"
+  - name: sdkman
+    priority: 18
+    detect:
+      files:
+        - "~/.sdkman/bin/sdkman-init.sh"
+      env:
+        SDKMAN_DIR: "~/.sdkman"
+      script: |
+        test -d "$SDKMAN_DIR/candidates"
+    init:
+      shell: |
+        export SDKMAN_DIR="${{SDKMAN_DIR:-$HOME/.sdkman}}"
+        source "$SDKMAN_DIR/bin/sdkman-init.sh"
+    errors:
+      - "sdk: command not found"
+    repair_hint: |
+      source "$SDKMAN_DIR/bin/sdkman-init.sh"
+    guest_detect:
+      command: "sdk version"
+    guest_install:
+      custom: "curl -s https://get.sdkman.io | bash"
+  - name: bun
+    priority: 30
+    detect:
+      commands: ["bun --version"]
+      files:
+        - "~/.bun/bin/bun"
+    init:
+      shell: |
+        export BUN_INSTALL="${{BUN_INSTALL:-$HOME/.bun}}"
+        export PATH="$BUN_INSTALL/bin:$PATH"
+    errors:
+      - "bun: command not found"
+    repair_hint: |
+      curl https://bun.sh/install | bash
+    guest_detect:
+      command: "bun --version"
+    guest_install:
+      custom: "curl https://bun.sh/install | bash"
+  - name: volta
+    priority: 22
+    detect:
+      env:
+        VOLTA_HOME: "$TIER2_HOME/.volta"
+      script: |
+        test -x "$VOLTA_HOME/bin/volta"
+    init:
+      shell: |
+        export VOLTA_HOME="${{VOLTA_HOME:-$HOME/.volta}}"
+        export PATH="$VOLTA_HOME/bin:$PATH"
+    errors:
+      - "volta: command not found"
+    repair_hint: |
+      export VOLTA_HOME="${{VOLTA_HOME:-$HOME/.volta}}"
+    guest_detect:
+      command: "volta --version"
+    guest_install:
+      apt: "sudo apt install volta"
+  - name: goenv
+    priority: 35
+    detect:
+      files:
+        - "{tier2}/.goenv/bin/goenv"
+      env:
+        GOENV_ROOT: "{tier2}/.goenv"
+    init:
+      shell: |
+        export GOENV_ROOT="${{GOENV_ROOT:-$HOME/.goenv}}"
+        eval "$(goenv init -)"
+    errors:
+      - "goenv: command not found"
+    repair_hint: |
+      eval "$(goenv init -)"
+    guest_detect:
+      command: "goenv --version"
+    guest_install:
+      apt: "sudo apt install goenv"
+      custom: "brew install goenv"
+  - name: asdf-node
+    priority: 40
+    detect:
+      commands:
+        - "asdf current nodejs"
+    init:
+      shell: |
+        asdf exec node --version >/dev/null 2>&1
+    errors:
+      - "asdf: .*"
+    repair_hint: |
+      asdf plugin add nodejs
+    guest_detect:
+      command: "asdf current nodejs"
+    guest_install:
+      custom: "asdf plugin add nodejs && asdf install nodejs latest"
+"#,
+            tier2 = tier2_root.display()
+        );
+        fs::write(&manifest_path, manifest_body).unwrap();
+
+        let manifest = ManagerManifest::load(&manifest_path, None).unwrap();
+        env::remove_var("TIER2_HOME");
+
+        let expected = [
+            "mise",
+            "rtx",
+            "rbenv",
+            "sdkman",
+            "bun",
+            "volta",
+            "goenv",
+            "asdf-node",
+        ];
+        for name in expected {
+            assert!(
+                manifest.managers.iter().any(|spec| spec.name == name),
+                "expected {name} entry in manifest"
+            );
+        }
+
+        let find = |name: &str| -> &ManagerSpec {
+            manifest
+                .managers
+                .iter()
+                .find(|spec| spec.name == name)
+                .unwrap_or_else(|| panic!("missing {name} spec"))
+        };
+
+        let tier2_mise_dir = tier2_root.join("state").join("mise");
+        let mise = find("mise");
+        let mise_data = mise
+            .detect
+            .env
+            .get("MISE_DATA_DIR")
+            .expect("MISE_DATA_DIR env");
+        assert_eq!(Path::new(mise_data), tier2_mise_dir);
+        assert!(
+            mise.repair_hint
+                .as_deref()
+                .map(|hint| hint.contains("mise activate bash"))
+                .unwrap_or(false),
+            "expected mise repair hint to mention activation",
+        );
+        assert!(mise
+            .detect
+            .script
+            .as_deref()
+            .unwrap()
+            .contains("$MISE_DATA_DIR/bin/mise"));
+        assert_eq!(mise.guest.detect_cmd.as_deref(), Some("mise --version"));
+        let mise_install = mise.guest.install.as_ref().expect("mise install spec");
+        assert_eq!(mise_install.apt.as_deref(), Some("sudo apt install mise"));
+
+        let home = dirs::home_dir().expect("home directory");
+        let rtx = find("rtx");
+        assert_eq!(rtx.detect.files[0], home.join(".local/share/rtx/bin/rtx"));
+        let rtx_install = rtx.guest.install.as_ref().expect("rtx install spec");
+        assert_eq!(
+            rtx_install.custom.as_deref(),
+            Some("curl https://rtx.pub/install.sh | sh")
+        );
+
+        let rbenv = find("rbenv");
+        assert_eq!(rbenv.detect.files[0], tier2_root.join(".rbenv/bin/rbenv"));
+        let expected_rbenv_root = format!("{}/.rbenv", tier2_root.display());
+        assert_eq!(
+            rbenv.detect.env.get("RBENV_ROOT").map(String::as_str),
+            Some(expected_rbenv_root.as_str())
+        );
+        assert_eq!(rbenv.guest.detect_cmd.as_deref(), Some("rbenv --version"));
+
+        let sdkman = find("sdkman");
+        let sdkman_dir = sdkman.detect.env.get("SDKMAN_DIR").expect("SDKMAN_DIR env");
+        assert_eq!(Path::new(sdkman_dir), home.join(".sdkman"));
+        assert!(sdkman
+            .detect
+            .script
+            .as_deref()
+            .unwrap()
+            .contains("candidates"));
+
+        let bun = find("bun");
+        assert_eq!(bun.detect.files[0], home.join(".bun/bin/bun"));
+        assert_eq!(bun.errors[0].pattern, "bun: command not found".to_string());
+
+        let volta = find("volta");
+        let volta_home = volta.detect.env.get("VOLTA_HOME").expect("VOLTA_HOME env");
+        assert_eq!(Path::new(volta_home), tier2_root.join(".volta"));
+
+        let goenv = find("goenv");
+        let install = goenv.guest.install.as_ref().expect("goenv install");
+        assert_eq!(install.apt.as_deref(), Some("sudo apt install goenv"));
+        assert_eq!(install.custom.as_deref(), Some("brew install goenv"));
+
+        let asdf_node = find("asdf-node");
+        assert_eq!(
+            asdf_node.guest.detect_cmd.as_deref(),
+            Some("asdf current nodejs")
+        );
+        assert!(asdf_node.repair_hint.as_ref().unwrap().contains("plugin"));
     }
 }
