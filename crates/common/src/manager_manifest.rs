@@ -920,9 +920,9 @@ managers:
     priority: 14
     detect:
       files:
-        - "{tier2}/.rbenv/bin/rbenv"
+        - '{tier2}/.rbenv/bin/rbenv'
       env:
-        RBENV_ROOT: "{tier2}/.rbenv"
+        RBENV_ROOT: '{tier2}/.rbenv'
     init:
       shell: |
         export RBENV_ROOT="${{RBENV_ROOT:-$HOME/.rbenv}}"
@@ -997,9 +997,9 @@ managers:
     priority: 35
     detect:
       files:
-        - "{tier2}/.goenv/bin/goenv"
+        - '{tier2}/.goenv/bin/goenv'
       env:
-        GOENV_ROOT: "{tier2}/.goenv"
+        GOENV_ROOT: '{tier2}/.goenv'
     init:
       shell: |
         export GOENV_ROOT="${{GOENV_ROOT:-$HOME/.goenv}}"

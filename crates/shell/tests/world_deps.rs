@@ -263,6 +263,7 @@ impl WorldDepsFixture {
         Self::read_log(&self.host_log_path)
     }
 
+    #[allow(dead_code)]
     fn guest_log(&self) -> String {
         Self::read_log(&self.guest_log_path)
     }

@@ -74,13 +74,8 @@ fn health_json_reports_summary_details() {
     assert_eq!(summary["missing_guest_tools"], json!(["bun"]));
     assert_eq!(summary["world_ok"], json!(false));
     assert_eq!(summary["ok"], json!(false));
-    assert!(
-        summary["failures"]
-            .as_array()
-            .expect("failures array")
-            .len()
-            >= 1
-    );
+    let failures = summary["failures"].as_array().expect("failures array");
+    assert!(!failures.is_empty(), "expected at least one failure entry");
 
     let shim = payload.get("shim").expect("shim report missing");
     assert!(
