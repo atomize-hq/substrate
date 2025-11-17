@@ -53,6 +53,11 @@ Environment variables and advanced configuration options for Substrate.
 | `SUBSTRATE_WORLD_ENABLED` | Cached world enablement flag (installer) | `1` | `0` |
 | `SUBSTRATE_WORLD_DEPS_MANIFEST` | Override manifest for `world deps` | bundled manifest | `/tmp/world_deps.yaml` |
 
+### Host-only driver helpers
+
+- Use `scripts/dev/substrate_shell_driver` when invoking `target/debug/substrate` from shell scripts or automation. It resolves the workspace binary, exports `SUBSTRATE_WORLD=disabled` and `SUBSTRATE_WORLD_ENABLED=0`, and passes through all CLI arguments.
+- Rust integration tests rely on `crates/shell/tests/common.rs::substrate_shell_driver()` to obtain an `assert_cmd::Command` with the same environment overrides. Reuse that helper instead of reimplementing binary lookup or TMPDIR wiring.
+
 ## Install Metadata (`~/.substrate/config.json`)
 
 The installer and `substrate world enable` command keep a small metadata file at

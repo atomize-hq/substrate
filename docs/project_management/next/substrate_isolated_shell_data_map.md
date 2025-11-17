@@ -86,6 +86,8 @@ This document enumerates every new/updated data type, trait, environment variabl
 
 ## Scripts / Metadata
 
+- `scripts/dev/substrate_shell_driver`
+  - Shared host-only wrapper that sets `SUBSTRATE_WORLD=disabled`/`SUBSTRATE_WORLD_ENABLED=0` and locates the workspace `substrate` binary. Tests + scripts should call this helper instead of invoking `target/debug/substrate` directly.
 - `install-substrate.sh`
   - Recognize `--no-world`, write `~/.substrate/config.json` (new) with `{"world_enabled": true/false}`.
   - Stop exporting PATH entries.

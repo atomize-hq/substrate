@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_ROOT}/.." && pwd)"
+DRIVER="${REPO_ROOT}/scripts/dev/substrate_shell_driver"
+
 # Phase D validation script: shim status/deploy/resolution basics
 
-BIN="${BIN:-./target/debug/substrate}"
+BIN="${BIN:-${REPO_ROOT}/target/debug/substrate}"
 
 echo "== Phase D: validate --shim-status, redeploy, PATH checks =="
 
@@ -12,9 +16,13 @@ if [[ ! -x "$BIN" ]]; then
   exit 2
 fi
 
+run_substrate() {
+  SUBSTRATE_BIN="${BIN}" "${DRIVER}" "$@"
+}
+
 echo "-- Baseline status --"
 set +e
-"$BIN" --shim-status
+run_substrate --shim-status
 RC=$?
 set -e
 echo "RC=$RC"
@@ -26,21 +34,21 @@ if [[ -d "$SHIMS_DIR" ]]; then
   rm -f "$SHIMS_DIR/npm" || true
 else
   echo "shims dir not found; attempting deploy first"
-  "$BIN" --shim-deploy || true
+  run_substrate --shim-deploy || true
 fi
 
 set +e
-"$BIN" --shim-status
+run_substrate --shim-status
 RC=$?
 set -e
 echo "RC=$RC (expect 1 and \"Needs redeploy\")"
 
 echo
 echo "-- Force redeploy --"
-"$BIN" --shim-deploy || true
+run_substrate --shim-deploy || true
 
 set +e
-"$BIN" --shim-status
+run_substrate --shim-status
 RC=$?
 set -e
 echo "RC=$RC (expect 0)"
@@ -49,7 +57,7 @@ echo
 echo "-- PATH misorder (prepend /usr/bin) --"
 export PATH="/usr/bin:$PATH"
 set +e
-"$BIN" --shim-status
+run_substrate --shim-status
 RC=$?
 set -e
 echo "RC=$RC (expect 0 with PATH: WARN)"

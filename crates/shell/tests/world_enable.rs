@@ -1,13 +1,15 @@
 #![cfg(unix)]
 
+#[path = "common.rs"]
+mod common;
+
 use assert_cmd::Command;
+use common::{shared_tmpdir, substrate_shell_driver, temp_dir};
 use serde_json::{json, Value};
 use std::fs;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
-use std::path::{Path, PathBuf};
-use std::process::Command as StdCommand;
-use std::sync::OnceLock;
-use tempfile::{Builder, TempDir};
+use std::path::PathBuf;
+use tempfile::TempDir;
 
 const HELPER_SCRIPT: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
@@ -72,14 +74,14 @@ struct WorldEnableFixture {
 
 impl WorldEnableFixture {
     fn new() -> Self {
-        let temp = new_temp_dir();
+        let temp = temp_dir("substrate-world-enable-");
         let home = temp.path().join("home");
         let prefix = temp.path().join("prefix");
         let substrate_home = home.join(".substrate");
         let manager_env_path = substrate_home.join("manager_env.sh");
         let script_path = temp.path().join("scripts/world-enable.sh");
         let log_path = temp.path().join("logs/world-enable.log");
-        let socket_path = temp.path().join("run/substrate.sock");
+        let socket_path = temp.path().join("sock");
 
         fs::create_dir_all(&home).expect("failed to create fixture home");
         fs::create_dir_all(&prefix).expect("failed to create fixture prefix");
@@ -118,7 +120,7 @@ impl WorldEnableFixture {
     }
 
     fn command(&self) -> Command {
-        let mut cmd = substrate_binary();
+        let mut cmd = substrate_shell_driver();
         cmd.arg("world")
             .arg("enable")
             .env("TMPDIR", shared_tmpdir())
@@ -181,57 +183,6 @@ impl WorldEnableFixture {
             self.socket_path.display()
         );
     }
-}
-
-fn substrate_binary() -> Command {
-    ensure_substrate_built();
-
-    let mut cmd = Command::new(binary_path());
-    cmd.env("SUBSTRATE_WORLD", "disabled");
-    cmd
-}
-
-fn ensure_substrate_built() {
-    static BUILD_ONCE: OnceLock<()> = OnceLock::new();
-    BUILD_ONCE.get_or_init(|| {
-        let status = StdCommand::new("cargo")
-            .args(["build", "-p", "substrate"])
-            .status()
-            .expect("failed to invoke cargo build -p substrate");
-        assert!(status.success(), "cargo build -p substrate failed");
-    });
-}
-
-fn binary_path() -> String {
-    let binary_name = if cfg!(windows) {
-        "substrate.exe"
-    } else {
-        "substrate"
-    };
-
-    if let Ok(workspace_dir) = std::env::var("CARGO_WORKSPACE_DIR") {
-        format!("{workspace_dir}/target/debug/{binary_name}")
-    } else {
-        format!("../../target/debug/{binary_name}")
-    }
-}
-
-fn shared_tmpdir() -> &'static Path {
-    static TMP: OnceLock<PathBuf> = OnceLock::new();
-    TMP.get_or_init(|| {
-        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/tests-tmp");
-        std::fs::create_dir_all(&base).expect("failed to create shared TMPDIR");
-        std::env::set_var("TMPDIR", &base);
-        base
-    })
-}
-
-fn new_temp_dir() -> TempDir {
-    let base = shared_tmpdir();
-    Builder::new()
-        .prefix("substrate-world-enable-")
-        .tempdir_in(base)
-        .expect("failed to create world enable temp dir")
 }
 
 #[test]

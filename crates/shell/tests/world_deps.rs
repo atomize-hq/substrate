@@ -1,13 +1,15 @@
 #![cfg(unix)]
 
+#[path = "common.rs"]
+mod common;
+
 use assert_cmd::Command;
+use common::{shared_tmpdir, substrate_shell_driver, temp_dir};
 use serde_json::{json, Map, Value};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::process::Command as StdCommand;
-use std::sync::OnceLock;
-use tempfile::{Builder, TempDir};
+use tempfile::TempDir;
 
 const HOST_SCRIPT_TEMPLATE: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
@@ -64,7 +66,7 @@ struct WorldDepsFixture {
 
 impl WorldDepsFixture {
     fn new() -> Self {
-        let temp = new_temp_dir();
+        let temp = temp_dir("substrate-world-deps-");
         let home = temp.path().join("home");
         let substrate_home = home.join(".substrate");
         let manifest_path = temp.path().join("manifests/world-deps.yaml");
@@ -101,7 +103,7 @@ impl WorldDepsFixture {
     }
 
     fn command(&self) -> Command {
-        let mut cmd = substrate_binary();
+        let mut cmd = substrate_shell_driver();
         cmd.arg("world")
             .arg("deps")
             .env("TMPDIR", shared_tmpdir())
@@ -267,55 +269,6 @@ impl WorldDepsFixture {
     fn executor_log(&self) -> String {
         Self::read_log(&self.executor_log_path)
     }
-}
-
-fn substrate_binary() -> Command {
-    ensure_substrate_built();
-
-    Command::new(binary_path())
-}
-
-fn ensure_substrate_built() {
-    static BUILD_ONCE: OnceLock<()> = OnceLock::new();
-    BUILD_ONCE.get_or_init(|| {
-        let status = StdCommand::new("cargo")
-            .args(["build", "-p", "substrate"])
-            .status()
-            .expect("cargo build substrate");
-        assert!(status.success(), "cargo build -p substrate failed");
-    });
-}
-
-fn binary_path() -> String {
-    let binary_name = if cfg!(windows) {
-        "substrate.exe"
-    } else {
-        "substrate"
-    };
-
-    if let Ok(workspace_dir) = std::env::var("CARGO_WORKSPACE_DIR") {
-        format!("{workspace_dir}/target/debug/{binary_name}")
-    } else {
-        format!("../../target/debug/{binary_name}")
-    }
-}
-
-fn shared_tmpdir() -> &'static Path {
-    static TMP: OnceLock<PathBuf> = OnceLock::new();
-    TMP.get_or_init(|| {
-        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/tests-tmp");
-        fs::create_dir_all(&base).expect("shared tmpdir");
-        std::env::set_var("TMPDIR", &base);
-        base
-    })
-}
-
-fn new_temp_dir() -> TempDir {
-    let base = shared_tmpdir();
-    Builder::new()
-        .prefix("substrate-world-deps-")
-        .tempdir_in(base)
-        .expect("create world deps temp dir")
 }
 
 #[test]

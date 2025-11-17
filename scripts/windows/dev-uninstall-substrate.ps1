@@ -45,11 +45,17 @@ if ($substrateBin) {
     Write-Log "Removing shims via $substrateBin"
     $originalPath = $env:PATH
     $previousShimOriginal = $env:SHIM_ORIGINAL_PATH
+    $previousWorld = $null
+    $previousWorldEnabled = $null
     try {
         $env:SUBSTRATE_ROOT = $Prefix
         if (-not $env:SHIM_ORIGINAL_PATH) {
             $env:SHIM_ORIGINAL_PATH = $originalPath
         }
+        $previousWorld = $env:SUBSTRATE_WORLD
+        $previousWorldEnabled = $env:SUBSTRATE_WORLD_ENABLED
+        $env:SUBSTRATE_WORLD = 'disabled'
+        $env:SUBSTRATE_WORLD_ENABLED = '0'
         & $substrateBin --shim-remove
     } catch {
         Write-Warn "substrate --shim-remove returned an error: $_"
@@ -58,6 +64,16 @@ if ($substrateBin) {
             $env:SHIM_ORIGINAL_PATH = $previousShimOriginal
         } else {
             Remove-Item Env:SHIM_ORIGINAL_PATH -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousWorld) {
+            $env:SUBSTRATE_WORLD = $previousWorld
+        } else {
+            Remove-Item Env:SUBSTRATE_WORLD -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousWorldEnabled) {
+            $env:SUBSTRATE_WORLD_ENABLED = $previousWorldEnabled
+        } else {
+            Remove-Item Env:SUBSTRATE_WORLD_ENABLED -ErrorAction SilentlyContinue
         }
         Remove-Item Env:SUBSTRATE_ROOT -ErrorAction SilentlyContinue
         $env:PATH = $originalPath

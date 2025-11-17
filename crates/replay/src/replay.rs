@@ -435,8 +435,11 @@ fn world_isolation_available() -> bool {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
         let disabled = std::env::var("SUBSTRATE_WORLD")
-            .map(|v| v == "disabled")
-            .unwrap_or(false);
+            .map(|v| v.eq_ignore_ascii_case("disabled"))
+            .unwrap_or(false)
+            || std::env::var("SUBSTRATE_WORLD_ENABLED")
+                .map(|v| v == "0")
+                .unwrap_or(false);
         !disabled
     }
 

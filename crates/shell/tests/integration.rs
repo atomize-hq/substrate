@@ -1,64 +1,20 @@
 #![cfg(unix)]
+
+#[path = "common.rs"]
+mod common;
+
 use assert_cmd::Command;
+use common::{substrate_shell_driver, temp_dir};
 use predicates::prelude::*;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command as StdCommand;
-use std::sync::OnceLock;
 use substrate_common::dedupe_path;
-use tempfile::{Builder, TempDir};
+use tempfile::TempDir;
 
 /// Helper function to get the substrate binary from workspace root
 fn get_substrate_binary() -> Command {
-    ensure_substrate_built();
-
-    let mut cmd = Command::new(binary_path());
-    cmd.env("TMPDIR", shared_tmpdir());
-    cmd.env("SUBSTRATE_WORLD", "disabled");
-    cmd
-}
-
-fn ensure_substrate_built() {
-    static BUILD_ONCE: OnceLock<()> = OnceLock::new();
-    BUILD_ONCE.get_or_init(|| {
-        let status = StdCommand::new("cargo")
-            .args(["build", "-p", "substrate"])
-            .status()
-            .expect("failed to invoke cargo build -p substrate");
-        assert!(status.success(), "cargo build -p substrate failed");
-    });
-}
-
-fn binary_path() -> String {
-    let binary_name = if cfg!(windows) {
-        "substrate.exe"
-    } else {
-        "substrate"
-    };
-    if let Ok(workspace_dir) = std::env::var("CARGO_WORKSPACE_DIR") {
-        format!("{}/target/debug/{}", workspace_dir, binary_name)
-    } else {
-        format!("../../target/debug/{}", binary_name)
-    }
-}
-
-fn shared_tmpdir() -> &'static Path {
-    static TMP: OnceLock<PathBuf> = OnceLock::new();
-    TMP.get_or_init(|| {
-        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/tests-tmp");
-        std::fs::create_dir_all(&base).expect("failed to create shared TMPDIR");
-        env::set_var("TMPDIR", &base);
-        base
-    })
-}
-
-fn new_temp_dir() -> TempDir {
-    let base = shared_tmpdir();
-    Builder::new()
-        .prefix("substrate-test-")
-        .tempdir_in(base)
-        .expect("failed to create temp dir in shared TMPDIR")
+    substrate_shell_driver()
 }
 
 struct ShellEnvFixture {
@@ -68,7 +24,7 @@ struct ShellEnvFixture {
 
 impl ShellEnvFixture {
     fn new() -> Self {
-        let temp = new_temp_dir();
+        let temp = temp_dir("substrate-test-");
         let home = temp.path().join("home");
         fs::create_dir_all(home.join(".substrate/shims"))
             .expect("failed to create shims directory");
@@ -141,7 +97,7 @@ fn payload_lines(stdout: &[u8]) -> Vec<String> {
 
 #[test]
 fn test_command_start_finish_json_roundtrip() {
-    let temp = new_temp_dir();
+    let temp = temp_dir("substrate-test-");
     let log_file = temp.path().join("trace.jsonl");
 
     get_substrate_binary()
@@ -230,7 +186,7 @@ fn test_command_start_finish_json_roundtrip() {
 
 #[test]
 fn test_builtin_cd_side_effects() {
-    let temp = new_temp_dir();
+    let temp = temp_dir("substrate-test-");
     let target_dir = temp.path().join("test_dir");
     fs::create_dir(&target_dir).unwrap();
 
@@ -249,7 +205,7 @@ fn test_builtin_cd_side_effects() {
 
 #[test]
 fn test_ci_flag_strict_mode_ordering() {
-    let temp = new_temp_dir();
+    let temp = temp_dir("substrate-test-");
     let log_file = temp.path().join("trace.jsonl");
 
     // Test that undefined variable causes failure in CI mode
@@ -278,7 +234,7 @@ fn test_ci_flag_strict_mode_ordering() {
 
 #[test]
 fn test_script_mode_single_process() {
-    let temp = new_temp_dir();
+    let temp = temp_dir("substrate-test-");
     let script_file = temp.path().join("test.sh");
 
     // Test that script state persists (cd, export, etc)
@@ -295,7 +251,7 @@ fn test_script_mode_single_process() {
 
 #[test]
 fn test_redaction_header_values() {
-    let temp = new_temp_dir();
+    let temp = temp_dir("substrate-test-");
     let log_file = temp.path().join("trace.jsonl");
 
     // Test environment variable redaction for sensitive values
@@ -323,7 +279,7 @@ fn test_redaction_header_values() {
 
 #[test]
 fn test_redaction_user_pass() {
-    let temp = new_temp_dir();
+    let temp = temp_dir("substrate-test-");
     let log_file = temp.path().join("trace.jsonl");
 
     // Test environment variable redaction for password values
@@ -350,7 +306,7 @@ fn test_redaction_user_pass() {
 
 #[test]
 fn test_log_directory_creation() {
-    let temp = new_temp_dir();
+    let temp = temp_dir("substrate-test-");
     let nested_log = temp.path().join("subdir").join("logs").join("trace.jsonl");
 
     // Directory should not exist yet
@@ -372,7 +328,7 @@ fn test_log_directory_creation() {
 
 #[test]
 fn test_pipe_mode_detection() {
-    let temp = new_temp_dir();
+    let temp = temp_dir("substrate-test-");
     let log_file = temp.path().join("trace.jsonl");
 
     get_substrate_binary()
@@ -408,8 +364,8 @@ fn test_sigterm_exit_code() {
 
     // Test that SIGTERM results in exit code 143 (128 + 15)
     // Note: This test is disabled on macOS due to signal handling differences
-    ensure_substrate_built();
-    let substrate_bin = std::path::PathBuf::from(binary_path());
+    common::ensure_substrate_built();
+    let substrate_bin = std::path::PathBuf::from(common::binary_path());
 
     let mut child = StdCommand::new(substrate_bin)
         .arg("--no-world")
@@ -451,7 +407,7 @@ fn test_sigterm_exit_code() {
 
 #[test]
 fn test_log_rotation() {
-    let temp = new_temp_dir();
+    let temp = temp_dir("substrate-test-");
     let log_file = temp.path().join("trace.jsonl");
 
     // Create a large log file (just over 1MB) to keep the test fast
@@ -487,7 +443,7 @@ fn test_log_rotation() {
 
 #[test]
 fn test_cd_minus_behavior() {
-    let temp = new_temp_dir();
+    let temp = temp_dir("substrate-test-");
     let log_file = temp.path().join("trace.jsonl");
 
     // Test basic cd functionality - cd - functionality is complex in subshells
@@ -510,7 +466,7 @@ fn test_cd_minus_behavior() {
 
 #[test]
 fn test_raw_mode_no_redaction() {
-    let temp = new_temp_dir();
+    let temp = temp_dir("substrate-test-");
     let log_file = temp.path().join("trace.jsonl");
 
     get_substrate_binary()
@@ -528,7 +484,7 @@ fn test_raw_mode_no_redaction() {
 
 #[test]
 fn test_export_complex_values_deferred() {
-    let temp = new_temp_dir();
+    let temp = temp_dir("substrate-test-");
     let log_file = temp.path().join("trace.jsonl");
 
     // Test that complex export statements are deferred to shell
@@ -543,7 +499,7 @@ fn test_export_complex_values_deferred() {
 
 #[test]
 fn test_pty_field_in_logs() {
-    let temp = new_temp_dir();
+    let temp = temp_dir("substrate-test-");
     let log_file = temp.path().join("trace.jsonl");
 
     // Non-PTY mode
@@ -560,7 +516,7 @@ fn test_pty_field_in_logs() {
 
 #[test]
 fn test_process_group_signal_handling() {
-    let temp = new_temp_dir();
+    let temp = temp_dir("substrate-test-");
     let log_file = temp.path().join("trace.jsonl");
 
     // Run a pipeline command

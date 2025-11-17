@@ -5,65 +5,72 @@ use serde_json::{json, Value};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::Command as StdCommand;
 use std::sync::OnceLock;
 use tempfile::{Builder, TempDir};
+
+/// Return an `assert_cmd::Command` pre-configured to run `substrate`
+/// in host-only mode. This helper ensures we reuse the already-built binary,
+/// sets a shared TMPDIR for deterministic fixtures, and propagates the
+/// `SUBSTRATE_WORLD`/`SUBSTRATE_WORLD_ENABLED` overrides that bypass world init.
+pub fn substrate_shell_driver() -> Command {
+    ensure_substrate_built();
+
+    let mut cmd = Command::new(binary_path());
+    cmd.env("TMPDIR", shared_tmpdir());
+    cmd.env("SUBSTRATE_WORLD", "disabled");
+    cmd.env("SUBSTRATE_WORLD_ENABLED", "0");
+    cmd.env_remove("SUBSTRATE_WORLD_ID");
+    cmd
+}
+
+/// Shared temp directory root so every test writes into `target/tests-tmp`.
+pub fn shared_tmpdir() -> &'static Path {
+    static TMP: OnceLock<PathBuf> = OnceLock::new();
+    TMP.get_or_init(|| {
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/tests-tmp");
+        fs::create_dir_all(&base).expect("failed to create shared TMPDIR");
+        std::env::set_var("TMPDIR", &base);
+        base
+    })
+}
+
+/// Allocate a temporary directory with a descriptive prefix under the shared root.
+pub fn temp_dir(prefix: &str) -> TempDir {
+    Builder::new()
+        .prefix(prefix)
+        .tempdir_in(shared_tmpdir())
+        .expect("failed to allocate integration test temp dir")
+}
+
+pub fn ensure_substrate_built() {
+    static BUILD_ONCE: OnceLock<()> = OnceLock::new();
+    BUILD_ONCE.get_or_init(|| {
+        let status = StdCommand::new("cargo")
+            .args(["build", "-p", "substrate"])
+            .status()
+            .expect("failed to invoke cargo build -p substrate");
+        assert!(status.success(), "cargo build -p substrate failed");
+    });
+}
+
+pub fn binary_path() -> String {
+    let binary_name = if cfg!(windows) {
+        "substrate.exe"
+    } else {
+        "substrate"
+    };
+
+    if let Ok(workspace_dir) = std::env::var("CARGO_WORKSPACE_DIR") {
+        format!("{workspace_dir}/target/debug/{binary_name}")
+    } else {
+        format!("../../target/debug/{binary_name}")
+    }
+}
 
 /// Shared helpers for shim doctor/health integration tests.
 pub mod doctor_fixture {
     use super::*;
-
-    /// Ensure we reuse the already-built substrate binary across tests.
-    pub fn substrate_binary() -> Command {
-        ensure_substrate_built();
-
-        let mut cmd = Command::new(binary_path());
-        cmd.env("TMPDIR", shared_tmpdir());
-        cmd.env("SUBSTRATE_WORLD", "disabled");
-        cmd
-    }
-
-    fn ensure_substrate_built() {
-        static BUILD_ONCE: OnceLock<()> = OnceLock::new();
-        BUILD_ONCE.get_or_init(|| {
-            let status = std::process::Command::new("cargo")
-                .args(["build", "-p", "substrate"])
-                .status()
-                .expect("failed to invoke cargo build -p substrate");
-            assert!(status.success(), "cargo build -p substrate failed");
-        });
-    }
-
-    fn binary_path() -> String {
-        let binary_name = if cfg!(windows) {
-            "substrate.exe"
-        } else {
-            "substrate"
-        };
-
-        if let Ok(workspace_dir) = std::env::var("CARGO_WORKSPACE_DIR") {
-            format!("{workspace_dir}/target/debug/{binary_name}")
-        } else {
-            format!("../../target/debug/{binary_name}")
-        }
-    }
-
-    fn shared_tmpdir() -> &'static Path {
-        static TMP: OnceLock<PathBuf> = OnceLock::new();
-        TMP.get_or_init(|| {
-            let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/tests-tmp");
-            std::fs::create_dir_all(&base).expect("failed to create shared TMPDIR");
-            std::env::set_var("TMPDIR", &base);
-            base
-        })
-    }
-
-    fn new_temp_dir() -> TempDir {
-        let base = shared_tmpdir();
-        Builder::new()
-            .prefix("substrate-doctor-")
-            .tempdir_in(base)
-            .expect("failed to create doctor test temp dir")
-    }
 
     pub struct DoctorFixture {
         _temp: TempDir,
@@ -76,7 +83,7 @@ pub mod doctor_fixture {
 
     impl DoctorFixture {
         pub fn new(manifest_contents: &str) -> Self {
-            let temp = new_temp_dir();
+            let temp = super::temp_dir("substrate-doctor-");
             let home = temp.path().join("home");
             let shim_dir = home.join(".substrate/shims");
             fs::create_dir_all(&shim_dir).expect("failed to prepare shim directory");
@@ -130,7 +137,7 @@ pub mod doctor_fixture {
         }
 
         pub fn command(&self) -> Command {
-            let mut cmd = substrate_binary();
+            let mut cmd = super::substrate_shell_driver();
             cmd.env("HOME", &self.home)
                 .env("USERPROFILE", &self.home)
                 .env("SUBSTRATE_MANAGER_MANIFEST", &self.manifest)
