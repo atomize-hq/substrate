@@ -488,8 +488,10 @@ pub struct ShellConfig {
 
 impl ShellConfig {
     pub fn from_args() -> Result<Self> {
-        let cli = Cli::parse();
+        Self::from_cli(Cli::parse())
+    }
 
+    pub fn from_cli(cli: Cli) -> Result<Self> {
         // macOS-only: apply CLI overrides to environment for platform detection precedence
         #[cfg(target_os = "macos")]
         {
@@ -878,7 +880,13 @@ impl ShellConfig {
         let install_config =
             commands::world_enable::load_install_config(&substrate_paths::config_file()?)?;
         let config_disables_world = !install_config.world_enabled;
-        let final_no_world = cli.no_world || config_disables_world;
+        let env_disables_world = env::var("SUBSTRATE_WORLD")
+            .map(|value| value.eq_ignore_ascii_case("disabled"))
+            .unwrap_or(false)
+            || env::var("SUBSTRATE_WORLD_ENABLED")
+                .map(|value| value == "0")
+                .unwrap_or(false);
+        let final_no_world = cli.no_world || config_disables_world || env_disables_world;
         update_world_env(final_no_world);
         let manager_init_path = substrate_home.join("manager_init.sh");
         let manager_env_path = substrate_home.join("manager_env.sh");
@@ -1770,7 +1778,11 @@ mod world_doctor_macos {
 }
 
 pub fn run_shell() -> Result<i32> {
-    let mut config = ShellConfig::from_args()?;
+    run_shell_with_cli(Cli::parse())
+}
+
+pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
+    let mut config = ShellConfig::from_cli(cli)?;
 
     if matches!(config.mode, ShellMode::Interactive { .. }) {
         let stdin_is_tty = io::stdin().is_terminal();
