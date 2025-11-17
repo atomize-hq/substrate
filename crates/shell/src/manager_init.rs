@@ -430,7 +430,8 @@ mod tests {
         let missing = dir.path().join("missing");
         let present = dir.path().join("present");
         fs::write(&present, "ok").unwrap();
-        let reason = detect_files(&vec![missing, present.clone()]);
+        let files = [missing, present.clone()];
+        let reason = detect_files(&files);
         assert_eq!(reason, Some(format!("file:{}", present.display())));
     }
 

@@ -69,9 +69,11 @@ pub fn binary_path() -> String {
 }
 
 /// Shared helpers for shim doctor/health integration tests.
+#[allow(dead_code)]
 pub mod doctor_fixture {
     use super::*;
 
+    #[allow(dead_code)]
     pub struct DoctorFixture {
         _temp: TempDir,
         home: PathBuf,
@@ -81,6 +83,7 @@ pub mod doctor_fixture {
         health_dir: PathBuf,
     }
 
+    #[allow(dead_code)]
     impl DoctorFixture {
         pub fn new(manifest_contents: &str) -> Self {
             let temp = super::temp_dir("substrate-doctor-");
@@ -157,6 +160,7 @@ pub mod doctor_fixture {
             self.home.join(".substrate_bashenv")
         }
 
+        #[allow(clippy::to_string_in_format_args)]
         pub fn write_hint_event(&self, name: &str, hint: &str, ts: &str) {
             let event = json!({
                 "ts": ts,
@@ -174,7 +178,7 @@ pub mod doctor_fixture {
                 .append(true)
                 .open(&self.trace)
                 .expect("failed to open trace log for append");
-            writeln!(file, "{}", event.to_string()).expect("failed to write hint event");
+            writeln!(file, "{}", event).expect("failed to write hint event");
         }
 
         pub fn health_dir(&self) -> &Path {
