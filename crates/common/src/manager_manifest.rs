@@ -1099,10 +1099,14 @@ managers:
 
         let rbenv = find("rbenv");
         assert_eq!(rbenv.detect.files[0], tier2_root.join(".rbenv/bin/rbenv"));
-        let expected_rbenv_root = format!("{}/.rbenv", tier2_root.display());
+        let expected_rbenv_root = tier2_root.join(".rbenv");
         assert_eq!(
-            rbenv.detect.env.get("RBENV_ROOT").map(String::as_str),
-            Some(expected_rbenv_root.as_str())
+            rbenv
+                .detect
+                .env
+                .get("RBENV_ROOT")
+                .map(|value| Path::new(value)),
+            Some(expected_rbenv_root.as_path())
         );
         assert_eq!(rbenv.guest.detect_cmd.as_deref(), Some("rbenv --version"));
 
@@ -1125,6 +1129,15 @@ managers:
         assert_eq!(Path::new(volta_home), tier2_root.join(".volta"));
 
         let goenv = find("goenv");
+        let expected_goenv_root = tier2_root.join(".goenv");
+        assert_eq!(
+            goenv
+                .detect
+                .env
+                .get("GOENV_ROOT")
+                .map(|value| Path::new(value)),
+            Some(expected_goenv_root.as_path())
+        );
         let install = goenv.guest.install.as_ref().expect("goenv install");
         assert_eq!(install.apt.as_deref(), Some("sudo apt install goenv"));
         assert_eq!(install.custom.as_deref(), Some("brew install goenv"));
