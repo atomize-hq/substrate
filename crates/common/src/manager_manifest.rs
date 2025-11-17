@@ -875,6 +875,7 @@ managers:
         fs::create_dir_all(&tier2_root).unwrap();
         env::set_var("TIER2_HOME", &tier2_root);
 
+        let tier2_str = tier2_root.to_string_lossy().replace('\\', "\\\\");
         let manifest_body = format!(
             r#"
 version: 1
@@ -1030,7 +1031,7 @@ managers:
     guest_install:
       custom: "asdf plugin add nodejs && asdf install nodejs latest"
 "#,
-            tier2 = tier2_root.display()
+            tier2 = tier2_str
         );
         fs::write(&manifest_path, manifest_body).unwrap();
 

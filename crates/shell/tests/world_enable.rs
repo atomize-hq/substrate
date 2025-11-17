@@ -133,8 +133,13 @@ impl WorldEnableFixture {
             .env("SUBSTRATE_PREFIX", &self.prefix)
             .env("SUBSTRATE_WORLD", "disabled")
             .env("SUBSTRATE_WORLD_ENABLED", "0")
-            .env("SUBSTRATE_TEST_WORLD_LOG", &self.log_path)
-            .env("SUBSTRATE_WORLD_ENABLE_SKIP_DOCTOR", "1");
+            .env("SUBSTRATE_TEST_WORLD_LOG", &self.log_path);
+        cmd
+    }
+
+    fn command_skip_doctor(&self) -> Command {
+        let mut cmd = self.command();
+        cmd.env("SUBSTRATE_WORLD_ENABLE_SKIP_DOCTOR", "1");
         cmd
     }
 
@@ -190,7 +195,7 @@ impl WorldEnableFixture {
 fn world_enable_provisions_and_sets_config_and_env_state() {
     let fixture = WorldEnableFixture::new();
 
-    let mut cmd = fixture.command();
+    let mut cmd = fixture.command_skip_doctor();
     cmd.arg("--prefix")
         .arg(&fixture.prefix)
         .arg("--profile")
@@ -244,7 +249,7 @@ fn world_enable_fails_when_helper_exits_non_zero() {
     let fixture = WorldEnableFixture::new();
     fixture.write_config(false);
 
-    let mut cmd = fixture.command();
+    let mut cmd = fixture.command_skip_doctor();
     cmd.arg("--prefix")
         .arg(&fixture.prefix)
         .env("SUBSTRATE_TEST_WORLD_EXIT", "42");
@@ -275,7 +280,7 @@ fn world_enable_short_circuits_when_already_enabled() {
 
     // First run succeeds and toggles config.
     fixture
-        .command()
+        .command_skip_doctor()
         .arg("--prefix")
         .arg(&fixture.prefix)
         .assert()
@@ -284,7 +289,7 @@ fn world_enable_short_circuits_when_already_enabled() {
 
     // Second run should short-circuit and avoid running helper.
     let assert = fixture
-        .command()
+        .command_skip_doctor()
         .arg("--prefix")
         .arg(&fixture.prefix)
         .assert()
@@ -299,7 +304,7 @@ fn world_enable_force_reinvokes_even_when_enabled() {
     let fixture = WorldEnableFixture::new();
 
     fixture
-        .command()
+        .command_skip_doctor()
         .arg("--prefix")
         .arg(&fixture.prefix)
         .assert()
@@ -307,7 +312,7 @@ fn world_enable_force_reinvokes_even_when_enabled() {
     let first_count = fixture.log_line_count();
 
     fixture
-        .command()
+        .command_skip_doctor()
         .arg("--prefix")
         .arg(&fixture.prefix)
         .arg("--force")
@@ -325,7 +330,7 @@ fn world_enable_dry_run_skips_all_mutations() {
     let initial_env = fixture.manager_env_contents();
 
     fixture
-        .command()
+        .command_skip_doctor()
         .arg("--prefix")
         .arg(&fixture.prefix)
         .arg("--dry-run")
@@ -343,7 +348,7 @@ fn world_enable_recovers_from_invalid_config_file() {
     fixture.write_invalid_config();
 
     fixture
-        .command()
+        .command_skip_doctor()
         .arg("--prefix")
         .arg(&fixture.prefix)
         .assert()

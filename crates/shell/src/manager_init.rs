@@ -366,6 +366,7 @@ mod tests {
     use std::{
         collections::{HashMap, HashSet},
         env, fs,
+        path::Path,
     };
     use tempfile::{tempdir, TempDir};
 
@@ -527,20 +528,20 @@ mod tests {
   - name: FileMgr
     priority: 10
     detect:
-      files: ['{}']
+      files: ["{}"]
     init:
       shell: |
         export FILE=1
   - name: CommandMgr
     priority: 20
     detect:
-      commands: ['{}']
+      commands: ["{}"]
     init:
       shell: |
         export CMD=1
 "#,
-            file_path.display(),
-            exe.display()
+            yaml_path(&file_path),
+            yaml_path(&exe)
         );
         let (paths, _tmp) = make_manifest(&manifest_body);
 
@@ -582,12 +583,12 @@ mod tests {
   - name: SkipMe
     priority: 5
     detect:
-      files: ['{}']
+      files: ["{}"]
     init:
       shell: |
         export SKIP=1
 "#,
-            file_path.display()
+            yaml_path(&file_path)
         );
         let (paths, _tmp) = make_manifest(&manifest_body);
 
@@ -656,5 +657,8 @@ mod tests {
         assert_eq!(array[0]["has_snippet"], true);
         assert_eq!(array[1]["has_snippet"], false);
         assert_eq!(array[2]["has_snippet"], false);
+    }
+    fn yaml_path(path: &Path) -> String {
+        path.to_string_lossy().replace('\\', "\\\\")
     }
 }
