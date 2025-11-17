@@ -22,7 +22,7 @@ use crate::context::{
     build_clean_search_path, merge_path_sources, world_features_enabled, ShimContext,
     ORIGINAL_PATH_VAR, SHIM_CALLER_VAR, SHIM_CALL_STACK_VAR, SHIM_DEPTH_VAR, SHIM_PARENT_CMD_VAR,
 };
-use crate::logger::{format_timestamp, log_execution, write_log_entry};
+use crate::logger::{format_timestamp, log_execution, write_log_entry, ExecutionLogMetadata};
 use crate::resolver::resolve_real_binary;
 use substrate_broker::{quick_check, Decision};
 use substrate_common::{
@@ -236,16 +236,13 @@ pub fn run_shim() -> Result<i32> {
 
     // Always log execution with depth and session correlation
     if let Some(log_path) = &ctx.log_file {
-        if let Err(e) = log_execution(
-            log_path,
-            &ctx,
-            &args,
-            &status,
+        let metadata = ExecutionLogMetadata {
             duration,
             timestamp,
-            &real_binary,
-            manager_hint_payload.as_ref(),
-        ) {
+            resolved_path: &real_binary,
+            manager_hint: manager_hint_payload.as_ref(),
+        };
+        if let Err(e) = log_execution(log_path, &ctx, &args, &status, &metadata) {
             eprintln!("Warning: Failed to log execution: {e}");
         }
     }

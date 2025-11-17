@@ -303,7 +303,7 @@ fn build_path_status() -> Result<PathDoctorStatus> {
     let host_contains_shims = path_segments
         .iter()
         .any(|segment| same_path(segment, &shim_dir_str));
-    let path_first_entry = path_segments.get(0).cloned().filter(|s| !s.is_empty());
+    let path_first_entry = path_segments.first().cloned().filter(|s| !s.is_empty());
     let shim_first_in_path = path_first_entry
         .as_deref()
         .map(|entry| same_path(entry, &shim_dir_str))
@@ -791,12 +791,11 @@ fn print_manager_table(states: &[ManagerDoctorState]) {
         name_width = name_width.max(state.name.len());
     }
     println!(
-        "{:<name_width$} {:<9} {:<6} {:<7} {}",
+        "{:<name_width$} {:<9} {:<6} {:<7} Last Hint",
         "Name",
         "Detected",
         "Init",
         "Repair",
-        "Last Hint",
         name_width = name_width
     );
     println!(
@@ -939,9 +938,7 @@ fn same_path(lhs: &str, rhs: &str) -> bool {
 
 fn normalize_path(segment: &str) -> String {
     let trimmed = segment.trim();
-    let without_sep = trimmed
-        .trim_end_matches(|c| c == '/' || c == '\\')
-        .to_string();
+    let without_sep = trimmed.trim_end_matches(['/', '\\']).to_string();
     if without_sep.is_empty() {
         trimmed.to_string()
     } else {

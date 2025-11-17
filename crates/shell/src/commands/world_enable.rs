@@ -10,7 +10,9 @@ use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(target_os = "linux")]
+use std::time::Instant;
 use substrate_common::paths as substrate_paths;
 use tempfile::NamedTempFile;
 
@@ -446,6 +448,10 @@ fn verify_world_health(
     {
         wait_for_socket(socket_path, timeout, log_path)?;
     }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (timeout, socket_path);
+    }
     run_world_doctor(log_path, verbose)
 }
 
@@ -477,15 +483,6 @@ fn wait_for_socket(
         timeout.as_secs(),
         log_path.display()
     )
-}
-
-#[cfg(not(target_os = "linux"))]
-fn wait_for_socket(
-    _socket_override: Option<&Path>,
-    _timeout: Duration,
-    _log_path: &Path,
-) -> Result<()> {
-    Ok(())
 }
 
 fn run_world_doctor(log_path: &Path, verbose: bool) -> Result<()> {

@@ -659,7 +659,7 @@ managers:
             detect.env.get("MANAGER_HOME").map(String::as_str),
             Some(expected_env.as_str())
         );
-        assert!(detect.env.get("ENVY_ROOT").is_some());
+        assert!(detect.env.contains_key("ENVY_ROOT"));
         assert!(detect
             .env
             .get("ENVY_ROOT")
