@@ -237,7 +237,19 @@ Append all task activity here using the template defined in `AI_AGENT_START_HERE
 - Consumed kickoff prompt + plan docs (`docs/project_management/next/kickoff_prompts/D2-test.md`) and reviewed current doctor/health implementation to scope new coverage
 - Next: switch into worktree `wt/d2-health-test`, expand `crates/shell/tests/shim_doctor.rs` (plus a new `shim_health` test binary) to cover verbose/text vs JSON output, PATH diagnostics, hint metadata, and failure cases from D2-code
 - Blockers: none; will capture helper/fixture details plus command results (`cargo fmt --all`, `cargo test -p substrate-shell shim_doctor`, `cargo test -p substrate-shell --test shim_health -- --nocapture`) in END entry
+## [2025-11-17 02:19 UTC] Codex – D2-test – END
+- Blocked because wt/d2-health-code had not yet implemented the aggregated health/doctor output (searching for the new CLI returned nothing), so there was no behavior to test
+- Commands: `git worktree list`, `git status -sb wt/d2-health-code`, `rg -n "health" -g'*.rs' crates/shell`
+- Next steps: resume once D2-code lands the CLI/schema updates; marked task `blocked`
 ## [2025-11-17 06:40 UTC] Codex – D2-code – START
 - Reviewing docs/project_management/next/kickoff_prompts/D2-code.md plus Workstream D2 plan/data-map sections before touching code
 - Next: operate in git worktree wt/d2-health-code, mark the D2-code task in docs/project_management/next/tasks.json as in_progress, and gather requirements for the new health command + doctor aggregation
 - Blockers: none; will coordinate Test Agent needs via kickoff prompt + END notes
+## [2025-11-17 07:25 UTC] Codex – D2-test – START
+- D2-code has now landed the aggregated `substrate health` command + richer shim doctor output; resuming test work in `wt/d2-health-test` per kickoff prompt at `docs/project_management/next/kickoff_prompts/D2-test.md`
+- Plan: sync the worktree, inspect CLI changes, extend `crates/shell/tests/shim_doctor.rs`, add a new `shim_health` integration test module with shared fixtures for world doctor/deps data, then run `cargo fmt --all`, `cargo test -p substrate-shell shim_doctor`, and `cargo test -p substrate-shell --test shim_health -- --nocapture`
+- Blockers: none
+## [2025-11-17 07:55 UTC] Codex – D2-test – END
+- Added the shared `crates/shell/tests/common.rs` fixture plus new/extended tests in `shim_doctor.rs` and `shim_health.rs` (developed in wt/d2-health-code per user instruction, then copied into wt/d2-health-test) to cover world snapshot/deps errors, skip-manager scenarios, guest-missing summaries, and human/JSON output for the new `substrate health` command
+- Commands: `cargo fmt --all`, `cargo test -p substrate-shell shim_doctor`, `cargo test -p substrate-shell --test shim_health -- --nocapture` (warnings expected from unused fixture helpers when only one test target builds them)
+- Integration Agent Kickoff Prompt recorded at `docs/project_management/next/kickoff_prompts/D2-integ.md`; next agent should merge wt/d2-health-code + wt/d2-health-test inside wt/d2-health-integ and rerun the commands above, then capture sample `substrate health --json` output if desired
