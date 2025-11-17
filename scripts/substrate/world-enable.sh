@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck disable=SC2034
 INSTALLER_NAME="substrate-world-enable"
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 RELEASE_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)

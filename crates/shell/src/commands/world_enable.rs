@@ -486,6 +486,16 @@ fn wait_for_socket(
 }
 
 fn run_world_doctor(log_path: &Path, verbose: bool) -> Result<()> {
+    if env::var("SUBSTRATE_WORLD_ENABLE_SKIP_DOCTOR")
+        .map(|value| matches!(value.trim(), "1" | "true" | "TRUE"))
+        .unwrap_or(false)
+    {
+        append_log_line(
+            log_path,
+            "skipping: substrate world doctor --json (SUBSTRATE_WORLD_ENABLE_SKIP_DOCTOR=1)",
+        )?;
+        return Ok(());
+    }
     append_log_line(log_path, "running: substrate world doctor --json")?;
     let exe = env::current_exe().context("failed to locate current executable")?;
     let output = Command::new(exe)

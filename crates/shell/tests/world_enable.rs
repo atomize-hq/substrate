@@ -133,7 +133,8 @@ impl WorldEnableFixture {
             .env("SUBSTRATE_PREFIX", &self.prefix)
             .env("SUBSTRATE_WORLD", "disabled")
             .env("SUBSTRATE_WORLD_ENABLED", "0")
-            .env("SUBSTRATE_TEST_WORLD_LOG", &self.log_path);
+            .env("SUBSTRATE_TEST_WORLD_LOG", &self.log_path)
+            .env("SUBSTRATE_WORLD_ENABLE_SKIP_DOCTOR", "1");
         cmd
     }
 

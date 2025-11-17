@@ -527,14 +527,14 @@ mod tests {
   - name: FileMgr
     priority: 10
     detect:
-      files: ["{}"]
+      files: ['{}']
     init:
       shell: |
         export FILE=1
   - name: CommandMgr
     priority: 20
     detect:
-      commands: ["{}"]
+      commands: ['{}']
     init:
       shell: |
         export CMD=1
@@ -582,7 +582,7 @@ mod tests {
   - name: SkipMe
     priority: 5
     detect:
-      files: ["{}"]
+      files: ['{}']
     init:
       shell: |
         export SKIP=1
