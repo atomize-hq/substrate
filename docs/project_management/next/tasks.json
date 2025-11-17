@@ -796,7 +796,7 @@
       "worktree": "wt/d3-world-audit-test",
       "integration_task": "D3-integ",
       "kickoff_prompt": "Task D3-test (Test world env toggle audit) \u2013 TEST. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Consume the Test Agent Kickoff Prompt left by D3-code. \n4. Use git worktree `wt/d3-world-audit-test` to add regression tests around the helper and critical flows (shell integration suite, installer/world enable harness, replay/world doctor). Ensure these suites run under `SUBSTRATE_WORLD=disabled` in a single `cargo test`. \n5. Craft the Integration Agent Kickoff Prompt (docs/project_management/next/kickoff_prompts/D3-test.md), run the commands listed there (including `cargo test -p substrate-shell integration`), append END entry, and mark the task \"completed\"."
-      "status": "blocked"
+      "status": "completed"
     },
     {
       "id": "D3-integ",
@@ -813,7 +813,7 @@
       ],
       "worktree": "wt/d3-world-audit-integ",
       "kickoff_prompt": "Task D3-integ (Integrate world env audit fixes) \u2013 INTEGRATION. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Merge `wt/d3-world-audit-code` + `wt/d3-world-audit-test` into `wt/d3-world-audit-integ`, resolve conflicts, and verify every crate/bin/script uses the shared helper. \n4. Run `cargo fmt --all`, `cargo test -p substrate-shell`, plus any installer/world harness commands identified by the Test Agent, capturing relevant logs if behavior changed. \n5. Append END entry, mark the task \"completed\" (or \"blocked\" with explanation), and push the integration branch.",
-      "status": "pending"
+      "status": "completed"
     }
   ]
 }
