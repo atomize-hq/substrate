@@ -65,8 +65,7 @@ impl ShellEnvFixture {
 fn substrate_command_for_home(fixture: &ShellEnvFixture) -> Command {
     let mut cmd = get_substrate_binary();
     cmd.env("HOME", fixture.home())
-        .env("USERPROFILE", fixture.home())
-        .env("SUBSTRATE_WORLD", "disabled");
+        .env("USERPROFILE", fixture.home());
     cmd
 }
 
@@ -575,6 +574,8 @@ managers:
     let output = substrate_command_for_home(&fixture)
         .env("PATH", &host_path_str)
         .env("BASH_ENV", &host_bash_env)
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
         .env("SUBSTRATE_MANAGER_MANIFEST", path_str(&manifest))
         .arg("-c")
         .arg(script)
@@ -716,6 +717,8 @@ managers:
     );
     let output = substrate_command_for_home(&fixture)
         .env("SUBSTRATE_MANAGER_MANIFEST", path_str(&manifest))
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
         .arg("-c")
         .arg(script)
         .output()

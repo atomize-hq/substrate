@@ -111,6 +111,7 @@ impl WorldDepsFixture {
             .env("USERPROFILE", &self.home)
             .env("SUBSTRATE_HOME", &self.substrate_home)
             .env("SUBSTRATE_WORLD", "enabled")
+            .env("SUBSTRATE_WORLD_ENABLED", "1")
             .env("SUBSTRATE_WORLD_DEPS_MANIFEST", &self.manifest_path)
             .env("SUBSTRATE_WORLD_DEPS_MARKER_DIR", &self.guest_marker_dir)
             .env("SUBSTRATE_WORLD_DEPS_HOST_LOG", &self.host_log_path)
@@ -280,6 +281,7 @@ fn world_deps_status_warns_when_world_disabled_but_reports_host_info() {
     let assert = fixture
         .command()
         .env("SUBSTRATE_WORLD", "disabled")
+        .env("SUBSTRATE_WORLD_ENABLED", "0")
         .arg("status")
         .assert()
         .success();
@@ -374,6 +376,7 @@ fn world_deps_install_fails_when_world_disabled() {
     let assert = fixture
         .command()
         .env("SUBSTRATE_WORLD", "disabled")
+        .env("SUBSTRATE_WORLD_ENABLED", "0")
         .arg("install")
         .arg("git")
         .assert()
