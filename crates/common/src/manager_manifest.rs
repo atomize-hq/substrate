@@ -1098,7 +1098,10 @@ managers:
         );
 
         let rbenv = find("rbenv");
-        assert_eq!(rbenv.detect.files[0], tier2_root.join(".rbenv/bin/rbenv"));
+        assert_eq!(
+            rbenv.detect.files[0],
+            tier2_root.join(".rbenv").join("bin").join("rbenv")
+        );
         let expected_rbenv_root = tier2_root.join(".rbenv");
         assert_eq!(
             rbenv.detect.env.get("RBENV_ROOT").map(Path::new),
