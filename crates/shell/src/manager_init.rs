@@ -659,6 +659,6 @@ mod tests {
         assert_eq!(array[2]["has_snippet"], false);
     }
     fn yaml_path(path: &Path) -> String {
-        path.to_string_lossy().into_owned()
+        path.to_string_lossy().replace('\\', "\\\\")
     }
 }
