@@ -182,8 +182,17 @@ impl InitSpec {
 
     fn keep_only(&mut self, platform: Platform) {
         match platform {
-            Platform::Windows => self.shell = None,
-            Platform::Linux | Platform::MacOs => self.powershell = None,
+            Platform::Windows => {
+                // Prefer a PowerShell snippet on Windows when present,
+                // but fall back to a cross-platform shell snippet.
+                if self.powershell.is_some() {
+                    self.shell = None;
+                }
+            }
+            Platform::Linux | Platform::MacOs => {
+                // Non-Windows platforms never use PowerShell snippets.
+                self.powershell = None;
+            }
         }
     }
 }

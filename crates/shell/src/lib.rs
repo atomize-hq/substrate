@@ -5401,6 +5401,9 @@ fn configure_manager_init(config: &ShellConfig) -> Option<manager_init::ManagerI
 
     match manager_init::detect_and_generate(manifest_paths, init_cfg) {
         Ok(result) => {
+            if cfg!(test) {
+                eprintln!("configure_manager_init snippet:\n{}", result.snippet);
+            }
             if let Err(err) =
                 manager_init::write_snippet(&config.manager_init_path, &result.snippet)
             {
