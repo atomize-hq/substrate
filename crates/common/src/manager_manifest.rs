@@ -1101,11 +1101,7 @@ managers:
         assert_eq!(rbenv.detect.files[0], tier2_root.join(".rbenv/bin/rbenv"));
         let expected_rbenv_root = tier2_root.join(".rbenv");
         assert_eq!(
-            rbenv
-                .detect
-                .env
-                .get("RBENV_ROOT")
-                .map(|value| Path::new(value)),
+            rbenv.detect.env.get("RBENV_ROOT").map(Path::new),
             Some(expected_rbenv_root.as_path())
         );
         assert_eq!(rbenv.guest.detect_cmd.as_deref(), Some("rbenv --version"));
@@ -1131,11 +1127,7 @@ managers:
         let goenv = find("goenv");
         let expected_goenv_root = tier2_root.join(".goenv");
         assert_eq!(
-            goenv
-                .detect
-                .env
-                .get("GOENV_ROOT")
-                .map(|value| Path::new(value)),
+            goenv.detect.env.get("GOENV_ROOT").map(Path::new),
             Some(expected_goenv_root.as_path())
         );
         let install = goenv.guest.install.as_ref().expect("goenv install");
