@@ -324,7 +324,6 @@ fn select_snippet(spec: &ManagerSpec, platform: Platform) -> Option<String> {
     }
 }
 
-
 fn build_snippet(states: &[ManagerState]) -> String {
     let mut content = String::from(SNIPPET_HEADER);
     let mut appended = false;
