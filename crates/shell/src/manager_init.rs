@@ -315,10 +315,15 @@ fn path_is_absolute_and_exists(value: &OsStr) -> bool {
 
 fn select_snippet(spec: &ManagerSpec, platform: Platform) -> Option<String> {
     match platform {
-        Platform::Windows => spec.init.powershell.clone(),
+        Platform::Windows => spec
+            .init
+            .powershell
+            .clone()
+            .or_else(|| spec.init.shell.clone()),
         Platform::Linux | Platform::MacOs => spec.init.shell.clone(),
     }
 }
+
 
 fn build_snippet(states: &[ManagerState]) -> String {
     let mut content = String::from(SNIPPET_HEADER);
@@ -528,14 +533,14 @@ mod tests {
   - name: FileMgr
     priority: 10
     detect:
-      files: ["{}"]
+      files: ['{}']
     init:
       shell: |
         export FILE=1
   - name: CommandMgr
     priority: 20
     detect:
-      commands: ["{}"]
+      commands: ['{}']
     init:
       shell: |
         export CMD=1
@@ -583,7 +588,7 @@ mod tests {
   - name: SkipMe
     priority: 5
     detect:
-      files: ["{}"]
+      files: ['{}']
     init:
       shell: |
         export SKIP=1

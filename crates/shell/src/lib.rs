@@ -5677,7 +5677,7 @@ mod manager_init_wiring_tests {
         let detect_path = temp.path().join("detect-me");
         fs::write(&detect_path, "detect").unwrap();
         let manifest_contents = format!(
-            "version: 1\nmanagers:\n  - name: Demo\n    priority: 5\n    detect:\n      files: [\"{}\"]\n    init:\n      shell: |\n        export DEMO=1\n",
+            "version: 1\nmanagers:\n  - name: Demo\n    priority: 5\n    detect:\n      files: ['{}']\n    init:\n      shell: |\n        export DEMO=1\n",
             detect_path.display()
         );
         let manifest_path = write_manifest(&temp, "manager_hooks.yaml", &manifest_contents);
@@ -5708,7 +5708,7 @@ mod manager_init_wiring_tests {
     fn configure_manager_init_honors_overlay_file() {
         let temp = tempdir().unwrap();
         let manifest_contents = format!(
-            "version: 1\nmanagers:\n  - name: Demo\n    detect:\n      files: [\"{}\"]\n    init:\n      shell: |\n        export BASE=1\n",
+            "version: 1\nmanagers:\n  - name: Demo\n    detect:\n      files: ['{}']\n    init:\n      shell: |\n        export BASE=1\n",
             temp.path().join("missing").display()
         );
         let manifest_path = write_manifest(&temp, "manager_hooks.yaml", &manifest_contents);
