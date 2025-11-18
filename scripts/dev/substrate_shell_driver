@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+usage() {
+  cat <<'USAGE'
+substrate_shell_driver - host-only wrapper around the substrate CLI
+
+Usage:
+  substrate_shell_driver [--bin <path>] [--help]
+  substrate_shell_driver [substrate args...]
+
+Options:
+  --bin <path>  Explicit substrate binary to run (env SUBSTRATE_BIN works too)
+  --help        Show this message
+
+By default the driver uses SUBSTRATE_BIN if set, otherwise it searches
+<repo>/target/debug/substrate and target/release/substrate. The wrapper exports
+SUBSTRATE_WORLD=disabled and SUBSTRATE_WORLD_ENABLED=0 to prevent world
+provisioning during tests and developer scripts.
+USAGE
+}
+
+BIN_OVERRIDE=""
+ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --bin)
+      [[ $# -ge 2 ]] || { echo "error: --bin requires a path" >&2; exit 2; }
+      BIN_OVERRIDE="$2"
+      shift 2
+      ;;
+    --help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      ARGS+=("$@")
+      break
+      ;;
+    *)
+      ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+SUBSTRATE_BIN="${BIN_OVERRIDE:-${SUBSTRATE_BIN:-}}"
+if [[ -z "${SUBSTRATE_BIN}" ]]; then
+  if [[ -x "${REPO_ROOT}/target/debug/substrate" ]]; then
+    SUBSTRATE_BIN="${REPO_ROOT}/target/debug/substrate"
+  elif [[ -x "${REPO_ROOT}/target/release/substrate" ]]; then
+    SUBSTRATE_BIN="${REPO_ROOT}/target/release/substrate"
+  fi
+fi
+
+if [[ -z "${SUBSTRATE_BIN}" ]]; then
+  echo "error: substrate binary not found. Build it (cargo build -p substrate) or set SUBSTRATE_BIN" >&2
+  exit 2
+fi
+
+if [[ ! -x "${SUBSTRATE_BIN}" ]]; then
+  echo "error: substrate binary at ${SUBSTRATE_BIN} is not executable" >&2
+  exit 2
+fi
+
+export SUBSTRATE_WORLD=disabled
+export SUBSTRATE_WORLD_ENABLED=0
+unset SUBSTRATE_WORLD_ID || true
+exec "${SUBSTRATE_BIN}" "${ARGS[@]}"

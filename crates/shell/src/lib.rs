@@ -1,7 +1,9 @@
 pub(crate) mod agent_events;
 pub(crate) mod async_repl;
+pub(crate) mod commands;
 mod editor;
 pub mod lock;
+pub mod manager_init;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod platform_world;
 mod pty_exec;
@@ -16,6 +18,7 @@ use lazy_static::lazy_static;
 use serde_json::json;
 use std::collections::HashMap;
 use std::env;
+use std::fs;
 use std::io::{self, BufRead, IsTerminal};
 // (avoid unused: import Read/Write locally where needed)
 use agent_api_types::ExecuteStreamFrame;
@@ -29,7 +32,7 @@ use std::sync::Mutex;
 use substrate_broker::{detect_profile, evaluate, Decision};
 use substrate_common::{
     agent_events::{AgentEvent, AgentEventKind},
-    dedupe_path, log_schema, paths as substrate_paths, redact_sensitive,
+    dedupe_path, log_schema, paths as substrate_paths, redact_sensitive, Platform,
 };
 use substrate_trace::{
     append_to_trace, create_span_builder, init_trace, PolicyDecision, TransportMeta,
@@ -190,9 +193,16 @@ pub(crate) fn initialize_global_sigwinch_handler() {
 }
 
 const BASH_PREEXEC_SCRIPT: &str = r#"# Substrate PTY command logging
+substrate_manager_env="${SUBSTRATE_MANAGER_ENV:-$HOME/.substrate/manager_env.sh}"
+if [[ -n "$substrate_manager_env" && -f "$substrate_manager_env" ]]; then
+    # shellcheck disable=SC1090
+    source "$substrate_manager_env"
+fi
+
 # Source user's bashrc ONLY in interactive shells
 [[ $- == *i* ]] && [[ -f ~/.bashrc ]] && source ~/.bashrc
 
+if [[ "${SUBSTRATE_ENABLE_PREEXEC:-0}" == "1" ]]; then
 __substrate_preexec() {
     [[ -z "$SHIM_TRACE_LOG" ]] && return 0
     [[ "$BASH_COMMAND" == __substrate_preexec* ]] && return 0
@@ -203,6 +213,7 @@ __substrate_preexec() {
         "${SHIM_SESSION_ID:-unknown}" >> "$SHIM_TRACE_LOG" 2>/dev/null || true
 }
 trap '__substrate_preexec' DEBUG
+fi
 "#;
 
 const SHELL_AGENT_ID: &str = "shell";
@@ -307,6 +318,8 @@ pub struct Cli {
 pub enum SubCommands {
     Graph(GraphCmd),
     World(WorldCmd),
+    Shim(ShimCmd),
+    Health(HealthCmd),
 }
 
 #[derive(clap::Args, Debug)]
@@ -341,6 +354,106 @@ pub enum WorldAction {
         #[arg(long)]
         json: bool,
     },
+    Enable(WorldEnableArgs),
+    Deps(WorldDepsCmd),
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct WorldEnableArgs {
+    /// Installation prefix to upgrade (defaults to ~/.substrate or SUBSTRATE_HOME)
+    #[arg(long = "prefix", value_name = "PATH")]
+    pub prefix: Option<PathBuf>,
+    /// Provisioning profile label passed to the helper script
+    #[arg(long = "profile", value_name = "NAME", default_value = "release")]
+    pub profile: String,
+    /// Show provisioning actions without executing them
+    #[arg(long = "dry-run")]
+    pub dry_run: bool,
+    /// Stream helper output to stdout/stderr in addition to the log file
+    #[arg(long = "verbose")]
+    pub verbose: bool,
+    /// Re-run provisioning even if metadata reports the world is already enabled
+    #[arg(long = "force")]
+    pub force: bool,
+    /// Seconds to wait for the world socket/doctor health checks
+    #[arg(long = "timeout", value_name = "SECONDS", default_value_t = 120)]
+    pub timeout: u64,
+}
+
+#[derive(clap::Args, Debug)]
+pub struct WorldDepsCmd {
+    #[command(subcommand)]
+    pub action: WorldDepsAction,
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum WorldDepsAction {
+    Status(WorldDepsStatusArgs),
+    Install(WorldDepsInstallArgs),
+    Sync(WorldDepsSyncArgs),
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct WorldDepsStatusArgs {
+    /// Specific tools to inspect (defaults to all manifest entries)
+    #[arg(value_name = "TOOL")]
+    pub tools: Vec<String>,
+    /// Emit JSON summary for automation
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct WorldDepsInstallArgs {
+    /// Tool names to install inside the guest
+    #[arg(value_name = "TOOL", required = true)]
+    pub tools: Vec<String>,
+    /// Show planned actions without executing them
+    #[arg(long = "dry-run")]
+    pub dry_run: bool,
+    /// Stream guest logs while running installers
+    #[arg(long = "verbose")]
+    pub verbose: bool,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct WorldDepsSyncArgs {
+    /// Install every missing tool in the manifest (even if not detected on the host)
+    #[arg(long = "all")]
+    pub all: bool,
+    /// Stream guest logs while running installers
+    #[arg(long = "verbose")]
+    pub verbose: bool,
+}
+
+#[derive(clap::Args, Debug)]
+pub struct ShimCmd {
+    #[command(subcommand)]
+    pub action: ShimAction,
+}
+
+#[derive(clap::Args, Debug)]
+pub struct HealthCmd {
+    /// Output machine-readable JSON summary
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum ShimAction {
+    Doctor {
+        /// Output machine-readable JSON instead of the text report
+        #[arg(long)]
+        json: bool,
+    },
+    Repair {
+        /// Manager name as defined in the manifest
+        #[arg(long = "manager", value_name = "NAME")]
+        manager: String,
+        /// Apply the repair snippet without prompting
+        #[arg(short = 'y', long = "yes")]
+        yes: bool,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -365,12 +478,20 @@ pub struct ShellConfig {
     pub no_world: bool,
     pub async_repl: bool,
     pub env_vars: HashMap<String, String>,
+    pub manager_init_path: PathBuf,
+    pub manager_env_path: PathBuf,
+    pub shimmed_path: Option<String>,
+    pub host_bash_env: Option<String>,
+    pub bash_preexec_path: PathBuf,
+    pub preexec_available: bool,
 }
 
 impl ShellConfig {
     pub fn from_args() -> Result<Self> {
-        let cli = Cli::parse();
+        Self::from_cli(Cli::parse())
+    }
 
+    pub fn from_cli(cli: Cli) -> Result<Self> {
         // macOS-only: apply CLI overrides to environment for platform detection precedence
         #[cfg(target_os = "macos")]
         {
@@ -727,7 +848,14 @@ impl ShellConfig {
                     std::process::exit(0);
                 }
                 SubCommands::World(world_cmd) => {
-                    handle_world_command(world_cmd)?;
+                    handle_world_command(world_cmd, &cli)?;
+                    std::process::exit(0);
+                }
+                SubCommands::Shim(shim_cmd) => {
+                    handle_shim_command(shim_cmd);
+                }
+                SubCommands::Health(health_cmd) => {
+                    handle_health_command(health_cmd, &cli)?;
                     std::process::exit(0);
                 }
             }
@@ -748,6 +876,31 @@ impl ShellConfig {
             .context("No PATH found")?;
 
         let shim_dir = substrate_common::paths::shims_dir()?;
+        let substrate_home = substrate_paths::substrate_home()?;
+        let install_config =
+            commands::world_enable::load_install_config(&substrate_paths::config_file()?)?;
+        let config_disables_world = !install_config.world_enabled;
+        let env_disables_world = env::var("SUBSTRATE_WORLD")
+            .map(|value| value.eq_ignore_ascii_case("disabled"))
+            .unwrap_or(false)
+            || env::var("SUBSTRATE_WORLD_ENABLED")
+                .map(|value| value == "0")
+                .unwrap_or(false);
+        let final_no_world = cli.no_world || config_disables_world || env_disables_world;
+        update_world_env(final_no_world);
+        let manager_init_path = substrate_home.join("manager_init.sh");
+        let manager_env_path = substrate_home.join("manager_env.sh");
+        let bash_preexec_path = PathBuf::from(&home).join(".substrate_preexec");
+        let host_bash_env = env::var("BASH_ENV").ok();
+
+        let skip_shims_flag = cli.shim_skip || env::var("SUBSTRATE_NO_SHIMS").is_ok();
+        let shimmed_path = if skip_shims_flag || final_no_world {
+            None
+        } else {
+            let sep = if cfg!(windows) { ';' } else { ':' };
+            let path_with_shims = format!("{}{}{}", shim_dir.display(), sep, &original_path);
+            Some(dedupe_path(&path_with_shims))
+        };
 
         // Determine shell to use
         #[cfg(target_os = "windows")]
@@ -801,11 +954,29 @@ impl ShellConfig {
             shell_path,
             ci_mode: cli.ci_mode,
             no_exit_on_error: cli.no_exit_on_error,
-            skip_shims: cli.shim_skip,
-            no_world: cli.no_world,
+            skip_shims: skip_shims_flag,
+            no_world: final_no_world,
             async_repl: async_repl_enabled,
             env_vars: HashMap::new(),
+            manager_init_path,
+            manager_env_path,
+            shimmed_path,
+            host_bash_env,
+            bash_preexec_path,
+            preexec_available: false,
         })
+    }
+}
+
+fn update_world_env(no_world: bool) {
+    if no_world {
+        env::set_var("SUBSTRATE_WORLD_ENABLED", "0");
+        env::set_var("SUBSTRATE_WORLD", "disabled");
+    } else {
+        env::set_var("SUBSTRATE_WORLD_ENABLED", "1");
+        if env::var("SUBSTRATE_WORLD").is_err() {
+            env::set_var("SUBSTRATE_WORLD", "enabled");
+        }
     }
 }
 
@@ -857,11 +1028,71 @@ fn handle_graph_command(cmd: &GraphCmd) -> Result<()> {
     Ok(())
 }
 
-fn handle_world_command(cmd: &WorldCmd) -> Result<()> {
+fn handle_world_command(cmd: &WorldCmd, cli: &Cli) -> Result<()> {
     match &cmd.action {
         WorldAction::Doctor { json } => {
             let code = world_doctor_main(*json);
             std::process::exit(code);
+        }
+        WorldAction::Enable(opts) => {
+            commands::world_enable::run_enable(opts)?;
+        }
+        WorldAction::Deps(opts) => {
+            commands::world_deps::run(opts, cli.no_world)?;
+        }
+    }
+    Ok(())
+}
+
+fn handle_health_command(cmd: &HealthCmd, cli: &Cli) -> Result<()> {
+    commands::health::run(cmd.json, cli.no_world)
+}
+
+fn handle_shim_command(cmd: &ShimCmd) -> ! {
+    match &cmd.action {
+        ShimAction::Doctor { json } => {
+            let exit = match commands::shim_doctor::run_doctor(*json) {
+                Ok(_) => 0,
+                Err(err) => {
+                    eprintln!("substrate shim doctor failed: {:#}", err);
+                    1
+                }
+            };
+            std::process::exit(exit);
+        }
+        ShimAction::Repair { manager, yes } => {
+            let exit = match commands::shim_doctor::run_repair(manager, *yes) {
+                Ok(commands::shim_doctor::RepairOutcome::Applied {
+                    manager,
+                    bashenv_path,
+                    backup_path,
+                }) => {
+                    if let Some(backup) = &backup_path {
+                        println!(
+                            "Updated {} with repair snippet for `{}` (backup at {})",
+                            bashenv_path.display(),
+                            manager,
+                            backup.display()
+                        );
+                    } else {
+                        println!(
+                            "Created {} with repair snippet for `{}`",
+                            bashenv_path.display(),
+                            manager
+                        );
+                    }
+                    0
+                }
+                Ok(commands::shim_doctor::RepairOutcome::Skipped { manager, reason }) => {
+                    println!("No changes applied for `{}`: {}", manager, reason);
+                    0
+                }
+                Err(err) => {
+                    eprintln!("substrate shim repair failed: {:#}", err);
+                    1
+                }
+            };
+            std::process::exit(exit);
         }
     }
 }
@@ -1547,7 +1778,11 @@ mod world_doctor_macos {
 }
 
 pub fn run_shell() -> Result<i32> {
-    let config = ShellConfig::from_args()?;
+    run_shell_with_cli(Cli::parse())
+}
+
+pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
+    let mut config = ShellConfig::from_cli(cli)?;
 
     if matches!(config.mode, ShellMode::Interactive { .. }) {
         let stdin_is_tty = io::stdin().is_terminal();
@@ -1563,6 +1798,47 @@ pub fn run_shell() -> Result<i32> {
     // Initialize trace
     if let Err(e) = init_trace(None) {
         eprintln!("substrate: warning: failed to initialize trace: {}", e);
+    }
+
+    let manager_init_result = if config.no_world {
+        None
+    } else {
+        configure_manager_init(&config)
+    };
+
+    if let Some(result) = &manager_init_result {
+        if let Err(err) = log_manager_init_event(&config, result) {
+            warn!(
+                target = "substrate::shell",
+                error = %err,
+                "failed to record manager init telemetry"
+            );
+        }
+    }
+
+    if config.no_world {
+        env::remove_var("SUBSTRATE_MANAGER_INIT");
+        env::remove_var("SUBSTRATE_MANAGER_ENV");
+    } else {
+        if let Err(err) = write_manager_env_script(&config) {
+            warn!(
+                target = "substrate::shell",
+                error = %err,
+                "failed to write manager_env.sh"
+            );
+        }
+        match write_bash_preexec_script(&config.bash_preexec_path) {
+            Ok(()) => config.preexec_available = true,
+            Err(err) => {
+                config.preexec_available = false;
+                warn!(
+                    target = "substrate::shell",
+                    error = %err,
+                    "failed to write BASH preexec script"
+                );
+            }
+        }
+        env::set_var("SUBSTRATE_MANAGER_ENV", &config.manager_env_path);
     }
 
     // Default-on world initialization (Linux only)
@@ -1649,7 +1925,7 @@ pub fn run_shell() -> Result<i32> {
 
     // Deploy shims if needed (non-blocking, continues on error)
     // Skip if either the CLI flag is set or the environment variable is set
-    let skip_shims = config.skip_shims || env::var("SUBSTRATE_NO_SHIMS").is_ok();
+    let skip_shims = config.skip_shims;
     match ShimDeployer::with_skip(skip_shims)?.ensure_deployed() {
         Ok(DeploymentStatus::Deployed) => {
             // Shims were deployed, no additional action needed
@@ -1675,16 +1951,6 @@ pub fn run_shell() -> Result<i32> {
     // Clear SHIM_ACTIVE to allow shims to work properly
     // The substrate shell itself should not be considered "active" shimming
     env::remove_var("SHIM_ACTIVE");
-
-    // Ensure shim directory is in PATH with deduplication (use OS-specific separator)
-    let sep = if cfg!(windows) { ';' } else { ':' };
-    let path_with_shims = format!(
-        "{}{}{}",
-        config.shim_dir.display(),
-        sep,
-        config.original_path
-    );
-    env::set_var("PATH", dedupe_path(&path_with_shims));
 
     match &config.mode {
         ShellMode::Interactive { use_pty: _ } => {
@@ -1899,12 +2165,12 @@ fn run_script_mode(config: &ShellConfig, script_path: &Path) -> Result<i32> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
 
-    // Set BASH_ENV for builtin command tracking when using bash
-    // Only in script mode where we need to track script internals
-    // Skip for simple -c commands to avoid duplicate logging
-    if is_bash && matches!(config.mode, ShellMode::Script(_)) {
-        set_bashenv_trampoline(&mut cmd);
-    }
+    configure_child_shell_env(
+        &mut cmd,
+        config,
+        is_bash,
+        matches!(config.mode, ShellMode::Script(_)),
+    );
 
     // Make child process a group leader on Unix
     #[cfg(unix)]
@@ -2466,33 +2732,6 @@ mod fs_diff_parse_tests {
         assert!(diff.mods.is_empty());
         assert!(diff.deletes.is_empty());
         assert!(!diff.truncated);
-    }
-}
-
-fn set_bashenv_trampoline(cmd: &mut Command) {
-    if let Ok(home) = std::env::var("HOME") {
-        let preexec_path = format!("{home}/.substrate_preexec");
-        // Base trap file we already write:
-        let _ = std::fs::write(&preexec_path, BASH_PREEXEC_SCRIPT);
-
-        // If user had BASH_ENV, create a trampoline that sources it first.
-        if let Ok(user_be) = std::env::var("BASH_ENV") {
-            let tramp = format!("{home}/.substrate_bashenv_trampoline");
-            let content = format!(
-                r#"#!/usr/bin/env bash
-# chain user's BASH_ENV then our trap
-[[ -f "{}" ]] && source "{}"
-source "{}"
-"#,
-                shellexpand::tilde(&user_be).as_ref().replace('"', r#"\""#),
-                shellexpand::tilde(&user_be).as_ref().replace('"', r#"\""#),
-                preexec_path.replace('"', r#"\""#)
-            );
-            let _ = std::fs::write(&tramp, content);
-            cmd.env("BASH_ENV", &tramp);
-        } else {
-            cmd.env("BASH_ENV", &preexec_path);
-        }
     }
 }
 
@@ -4395,13 +4634,13 @@ fn handle_builtin(
     Ok(builtin_result)
 }
 
-struct AgentStreamOutcome {
+pub(crate) struct AgentStreamOutcome {
     exit_code: i32,
     scopes_used: Vec<String>,
     fs_diff: Option<substrate_common::FsDiff>,
 }
 
-fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStreamOutcome> {
+pub(crate) fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStreamOutcome> {
     let (client, request, agent_id) = build_agent_client_and_request(command)?;
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async move {
@@ -4657,7 +4896,7 @@ mod streaming_tests {
     }
 }
 
-fn build_agent_client_and_request(
+pub(crate) fn build_agent_client_and_request(
     cmd: &str,
 ) -> anyhow::Result<(
     agent_api_client::AgentClient,
@@ -4869,12 +5108,12 @@ fn execute_external(
     cmd.env_remove("SHIM_CALL_STACK"); // Clear call stack for fresh command
                                        // Keep PATH as-is with shims - the env_remove("SHIM_ACTIVE") should be sufficient
 
-    // Set BASH_ENV for builtin command tracking when using bash
-    // Only in script mode where we need to track script internals
-    // Skip for simple -c commands to avoid duplicate logging
-    if is_bash && matches!(config.mode, ShellMode::Script(_)) {
-        set_bashenv_trampoline(&mut cmd);
-    }
+    configure_child_shell_env(
+        &mut cmd,
+        config,
+        is_bash,
+        matches!(config.mode, ShellMode::Script(_)),
+    );
 
     // Handle I/O based on mode - always inherit stdin for better compatibility and stream output ourselves
     cmd.stdin(Stdio::inherit());
@@ -5145,6 +5384,420 @@ fn log_command_event(
     append_to_trace(&log_entry)?;
 
     Ok(())
+}
+
+fn configure_manager_init(config: &ShellConfig) -> Option<manager_init::ManagerInitResult> {
+    let overlay = config
+        .manager_init_path
+        .parent()
+        .map(|dir| dir.join("manager_hooks.local.yaml"));
+
+    let manifest_paths = manager_init::ManifestPaths {
+        base: manager_manifest_base_path(),
+        overlay,
+    };
+
+    let init_cfg = manager_init::ManagerInitConfig::from_env(current_platform());
+
+    match manager_init::detect_and_generate(manifest_paths, init_cfg) {
+        Ok(result) => {
+            if cfg!(test) {
+                eprintln!("configure_manager_init snippet:\n{}", result.snippet);
+            }
+            if let Err(err) =
+                manager_init::write_snippet(&config.manager_init_path, &result.snippet)
+            {
+                warn!(
+                    target = "substrate::shell",
+                    error = %err,
+                    "failed to write manager init snippet"
+                );
+                let _ = log_manager_init_error(config, &format!("write_failed: {}", err));
+                None
+            } else {
+                env::set_var("SUBSTRATE_MANAGER_INIT", &config.manager_init_path);
+                Some(result)
+            }
+        }
+        Err(err) => {
+            warn!(
+                target = "substrate::shell",
+                error = %err,
+                "manager init generation failed"
+            );
+            let placeholder = format!(
+                "# Generated by Substrate – do not edit\n# manager init unavailable: {}\n",
+                err
+            );
+            if let Err(write_err) =
+                manager_init::write_snippet(&config.manager_init_path, &placeholder)
+            {
+                warn!(
+                    target = "substrate::shell",
+                    error = %write_err,
+                    "failed to write placeholder manager init snippet"
+                );
+            }
+            env::set_var("SUBSTRATE_MANAGER_INIT", &config.manager_init_path);
+            let _ = log_manager_init_error(config, &err.to_string());
+            None
+        }
+    }
+}
+
+pub(crate) fn manager_manifest_base_path() -> PathBuf {
+    if let Ok(override_path) = env::var("SUBSTRATE_MANAGER_MANIFEST") {
+        return PathBuf::from(override_path);
+    }
+
+    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    crate_dir
+        .parent()
+        .and_then(|dir| dir.parent())
+        .map(|root| root.join("config").join("manager_hooks.yaml"))
+        .unwrap_or_else(|| PathBuf::from("config/manager_hooks.yaml"))
+}
+
+pub(crate) fn world_deps_manifest_base_path() -> PathBuf {
+    if let Ok(override_path) = env::var("SUBSTRATE_WORLD_DEPS_MANIFEST") {
+        return PathBuf::from(override_path);
+    }
+
+    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    crate_dir
+        .parent()
+        .and_then(|dir| dir.parent())
+        .map(|root| {
+            root.join("scripts")
+                .join("substrate")
+                .join("world-deps.yaml")
+        })
+        .unwrap_or_else(|| PathBuf::from("scripts/substrate/world-deps.yaml"))
+}
+
+pub(crate) fn current_platform() -> Platform {
+    if cfg!(target_os = "macos") {
+        Platform::MacOs
+    } else if cfg!(windows) {
+        Platform::Windows
+    } else {
+        Platform::Linux
+    }
+}
+
+fn log_manager_init_event(
+    config: &ShellConfig,
+    result: &manager_init::ManagerInitResult,
+) -> Result<()> {
+    let entry = json!({
+        log_schema::TIMESTAMP: Utc::now().to_rfc3339(),
+        log_schema::EVENT_TYPE: "manager_init",
+        log_schema::SESSION_ID: config.session_id,
+        log_schema::COMPONENT: "shell",
+        "snippet_path": config.manager_init_path.display().to_string(),
+        "skipped": result.skipped,
+        "states": manager_init::telemetry_payload(&result.states),
+    });
+    append_to_trace(&entry)?;
+    Ok(())
+}
+
+fn log_manager_init_error(config: &ShellConfig, error: &str) -> Result<()> {
+    let entry = json!({
+        log_schema::TIMESTAMP: Utc::now().to_rfc3339(),
+        log_schema::EVENT_TYPE: "manager_init",
+        log_schema::SESSION_ID: config.session_id,
+        log_schema::COMPONENT: "shell",
+        "snippet_path": config.manager_init_path.display().to_string(),
+        "error": error,
+    });
+    append_to_trace(&entry)?;
+    Ok(())
+}
+
+fn write_manager_env_script(config: &ShellConfig) -> Result<()> {
+    static SCRIPT: &str = r#"#!/usr/bin/env bash
+# Generated by Substrate – do not edit
+substrate_manager_init="${SUBSTRATE_MANAGER_INIT:-}"
+if [[ -n "$substrate_manager_init" && -f "$substrate_manager_init" ]]; then
+    # shellcheck disable=SC1090
+    source "$substrate_manager_init"
+fi
+
+substrate_original="${SUBSTRATE_ORIGINAL_BASH_ENV:-}"
+if [[ -n "$substrate_original" && -f "$substrate_original" ]]; then
+    # shellcheck disable=SC1090
+    source "$substrate_original"
+fi
+
+legacy_bashenv="${HOME}/.substrate_bashenv"
+if [[ -f "$legacy_bashenv" ]]; then
+    # shellcheck disable=SC1090
+    source "$legacy_bashenv"
+fi
+"#;
+
+    manager_init::write_snippet(&config.manager_env_path, SCRIPT)
+}
+
+fn write_bash_preexec_script(path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).ok();
+    }
+    fs::write(path, BASH_PREEXEC_SCRIPT)
+        .with_context(|| format!("failed to write bash preexec script at {}", path.display()))?;
+    Ok(())
+}
+
+trait CommandEnvAdapter {
+    fn set_env_var(&mut self, key: &str, value: &str);
+    fn remove_env_var(&mut self, key: &str);
+}
+
+impl CommandEnvAdapter for Command {
+    fn set_env_var(&mut self, key: &str, value: &str) {
+        self.env(key, value);
+    }
+
+    fn remove_env_var(&mut self, key: &str) {
+        self.env_remove(key);
+    }
+}
+
+impl CommandEnvAdapter for portable_pty::CommandBuilder {
+    fn set_env_var(&mut self, key: &str, value: &str) {
+        self.env(key, value);
+    }
+
+    fn remove_env_var(&mut self, key: &str) {
+        self.env_remove(key);
+    }
+}
+
+pub(crate) fn configure_child_shell_env<E: CommandEnvAdapter>(
+    cmd: &mut E,
+    config: &ShellConfig,
+    is_bash: bool,
+    enable_preexec: bool,
+) {
+    if config.no_world {
+        return;
+    }
+
+    if let Some(path) = config.shimmed_path.as_deref() {
+        cmd.set_env_var("PATH", path);
+    }
+
+    if let Some(original) = &config.host_bash_env {
+        cmd.set_env_var("SUBSTRATE_ORIGINAL_BASH_ENV", original);
+    } else {
+        cmd.remove_env_var("SUBSTRATE_ORIGINAL_BASH_ENV");
+    }
+
+    if !is_bash {
+        cmd.remove_env_var("SUBSTRATE_ENABLE_PREEXEC");
+        return;
+    }
+
+    let bash_env_path = if config.preexec_available {
+        Some(config.bash_preexec_path.as_path())
+    } else {
+        Some(config.manager_env_path.as_path())
+    };
+
+    if let Some(path) = bash_env_path {
+        let path_str = path.display().to_string();
+        cmd.set_env_var("BASH_ENV", &path_str);
+        if config.preexec_available && enable_preexec {
+            cmd.set_env_var("SUBSTRATE_ENABLE_PREEXEC", "1");
+        } else {
+            cmd.remove_env_var("SUBSTRATE_ENABLE_PREEXEC");
+        }
+    } else {
+        cmd.remove_env_var("BASH_ENV");
+        cmd.remove_env_var("SUBSTRATE_ENABLE_PREEXEC");
+    }
+}
+
+#[cfg(test)]
+mod manager_init_wiring_tests {
+    use super::*;
+    use serial_test::serial;
+    use std::{collections::HashMap, env, fs, path::PathBuf};
+    use tempfile::{tempdir, TempDir};
+
+    fn test_shell_config(temp: &TempDir) -> ShellConfig {
+        ShellConfig {
+            mode: ShellMode::Interactive { use_pty: false },
+            session_id: "test-session".to_string(),
+            trace_log_file: temp.path().join("trace.jsonl"),
+            original_path: env::var("PATH").unwrap_or_default(),
+            shim_dir: temp.path().join("shims"),
+            shell_path: if cfg!(windows) {
+                "cmd.exe".to_string()
+            } else {
+                "/bin/sh".to_string()
+            },
+            ci_mode: false,
+            no_exit_on_error: false,
+            skip_shims: false,
+            no_world: false,
+            async_repl: false,
+            env_vars: HashMap::new(),
+            manager_init_path: temp.path().join("manager_init.sh"),
+            manager_env_path: temp.path().join("manager_env.sh"),
+            shimmed_path: Some(temp.path().join("shims").display().to_string()),
+            host_bash_env: None,
+            bash_preexec_path: temp.path().join(".substrate_preexec"),
+            preexec_available: true,
+        }
+    }
+
+    fn write_manifest(temp: &TempDir, name: &str, contents: &str) -> PathBuf {
+        let path = temp.path().join(name);
+        fs::write(&path, contents).unwrap();
+        path
+    }
+
+    fn set_env(key: &str, value: &str) -> Option<String> {
+        let previous = env::var(key).ok();
+        env::set_var(key, value);
+        previous
+    }
+
+    fn restore_env(key: &str, previous: Option<String>) {
+        if let Some(value) = previous {
+            env::set_var(key, value);
+        } else {
+            env::remove_var(key);
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn configure_manager_init_generates_snippet_and_exports_env() {
+        let temp = tempdir().unwrap();
+        let detect_path = temp.path().join("detect-me");
+        fs::write(&detect_path, "detect").unwrap();
+        let manifest_contents = format!(
+            "version: 1\nmanagers:\n  - name: Demo\n    priority: 5\n    detect:\n      files: ['{}']\n    init:\n      shell: |\n        export DEMO=1\n",
+            detect_path.display()
+        );
+        let manifest_path = write_manifest(&temp, "manager_hooks.yaml", &manifest_contents);
+        let previous_manifest = set_env(
+            "SUBSTRATE_MANAGER_MANIFEST",
+            &manifest_path.display().to_string(),
+        );
+        let previous_init = env::var("SUBSTRATE_MANAGER_INIT").ok();
+
+        let config = test_shell_config(&temp);
+        let result = configure_manager_init(&config).expect("manager init result");
+        assert_eq!(result.states.len(), 1);
+        assert!(result.states[0].detected);
+        let snippet = fs::read_to_string(&config.manager_init_path).unwrap();
+        assert!(snippet.contains("# manager: Demo"));
+        assert!(snippet.contains("export DEMO=1"));
+        assert_eq!(
+            env::var("SUBSTRATE_MANAGER_INIT").unwrap(),
+            config.manager_init_path.display().to_string()
+        );
+
+        restore_env("SUBSTRATE_MANAGER_MANIFEST", previous_manifest);
+        restore_env("SUBSTRATE_MANAGER_INIT", previous_init);
+    }
+
+    #[test]
+    #[serial]
+    fn configure_manager_init_honors_overlay_file() {
+        let temp = tempdir().unwrap();
+        let manifest_contents = format!(
+            "version: 1\nmanagers:\n  - name: Demo\n    detect:\n      files: ['{}']\n    init:\n      shell: |\n        export BASE=1\n",
+            temp.path().join("missing").display()
+        );
+        let manifest_path = write_manifest(&temp, "manager_hooks.yaml", &manifest_contents);
+        let overlay_path = temp.path().join("manager_hooks.local.yaml");
+        let overlay_contents = r#"version: 1
+managers:
+  - name: Demo
+    detect:
+      script: "exit 0"
+    init:
+      shell: |
+        export OVERLAY=1
+"#;
+        fs::write(&overlay_path, overlay_contents).unwrap();
+
+        let previous_manifest = set_env(
+            "SUBSTRATE_MANAGER_MANIFEST",
+            &manifest_path.display().to_string(),
+        );
+        let previous_init = env::var("SUBSTRATE_MANAGER_INIT").ok();
+
+        let config = test_shell_config(&temp);
+        let result = configure_manager_init(&config).expect("overlay manager init result");
+        assert_eq!(result.states[0].reason.as_deref(), Some("script"));
+        let snippet = fs::read_to_string(&config.manager_init_path).unwrap();
+        assert!(snippet.contains("OVERLAY=1"));
+
+        restore_env("SUBSTRATE_MANAGER_MANIFEST", previous_manifest);
+        restore_env("SUBSTRATE_MANAGER_INIT", previous_init);
+    }
+
+    #[test]
+    #[serial]
+    fn manager_env_script_sources_manager_and_legacy_snippets() {
+        let temp = tempdir().unwrap();
+        let config = test_shell_config(&temp);
+        write_manager_env_script(&config).expect("write manager env");
+        let script = fs::read_to_string(&config.manager_env_path).unwrap();
+        assert!(script.contains("SUBSTRATE_MANAGER_INIT"));
+        assert!(script.contains("SUBSTRATE_ORIGINAL_BASH_ENV"));
+        assert!(script.contains(".substrate_bashenv"));
+    }
+
+    #[test]
+    #[serial]
+    fn manager_manifest_base_path_prefers_env_override() {
+        let temp = tempdir().unwrap();
+        let override_path = temp.path().join("custom.yaml");
+        let previous = set_env(
+            "SUBSTRATE_MANAGER_MANIFEST",
+            &override_path.display().to_string(),
+        );
+        let resolved = manager_manifest_base_path();
+        assert_eq!(resolved, override_path);
+        restore_env("SUBSTRATE_MANAGER_MANIFEST", previous);
+    }
+
+    #[test]
+    #[serial]
+    fn world_deps_manifest_base_path_prefers_env_override() {
+        let temp = tempdir().unwrap();
+        let override_path = temp.path().join("deps.yaml");
+        let previous = set_env(
+            "SUBSTRATE_WORLD_DEPS_MANIFEST",
+            &override_path.display().to_string(),
+        );
+        let resolved = world_deps_manifest_base_path();
+        assert_eq!(resolved, override_path);
+        restore_env("SUBSTRATE_WORLD_DEPS_MANIFEST", previous);
+    }
+
+    #[test]
+    #[serial]
+    fn world_deps_manifest_base_path_defaults_to_repo_location() {
+        let previous = env::var("SUBSTRATE_WORLD_DEPS_MANIFEST").ok();
+        env::remove_var("SUBSTRATE_WORLD_DEPS_MANIFEST");
+        let resolved = world_deps_manifest_base_path();
+        assert!(
+            resolved
+                .components()
+                .any(|c| c.as_os_str() == "world-deps.yaml"),
+            "path should point to scripts/substrate/world-deps.yaml (found {})",
+            resolved.display()
+        );
+        restore_env("SUBSTRATE_WORLD_DEPS_MANIFEST", previous);
+    }
 }
 
 // Helper function to setup signal handlers

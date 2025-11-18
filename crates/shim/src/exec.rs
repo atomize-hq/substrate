@@ -5,9 +5,13 @@
 //! and logging.
 
 use anyhow::{anyhow, Context, Result};
+use serde_json::json;
+use std::collections::HashSet;
 use std::env;
+use std::io::{self, BufReader, Read, Write};
 use std::path::PathBuf;
-use std::process::{Command, ExitStatus};
+use std::process::{ChildStderr, Command, ExitStatus, Stdio};
+use std::thread;
 use std::time::{Instant, SystemTime};
 use world_api::FsDiff;
 
@@ -15,12 +19,16 @@ use world_api::FsDiff;
 use std::os::unix::process::CommandExt;
 
 use crate::context::{
-    build_clean_search_path, ShimContext, ORIGINAL_PATH_VAR, SHIM_CALLER_VAR, SHIM_CALL_STACK_VAR,
-    SHIM_DEPTH_VAR, SHIM_PARENT_CMD_VAR,
+    build_clean_search_path, merge_path_sources, world_features_enabled, ShimContext,
+    ORIGINAL_PATH_VAR, SHIM_CALLER_VAR, SHIM_CALL_STACK_VAR, SHIM_DEPTH_VAR, SHIM_PARENT_CMD_VAR,
 };
-use crate::logger::{log_execution, write_log_entry};
+use crate::logger::{format_timestamp, log_execution, write_log_entry, ExecutionLogMetadata};
 use crate::resolver::resolve_real_binary;
 use substrate_broker::{quick_check, Decision};
+use substrate_common::{
+    manager_manifest::{ManagerManifest, ManagerSpec, Platform, RegexPattern},
+    paths,
+};
 use substrate_trace::{create_span_builder, init_trace};
 
 /// Main shim execution function
@@ -53,6 +61,12 @@ pub fn run_shim() -> Result<i32> {
     // Set up environment for execution
     ctx.setup_execution_env();
 
+    let mut hint_engine = ManagerHintEngine::new();
+    let capture_stderr = hint_engine
+        .as_ref()
+        .map(|engine| engine.is_active())
+        .unwrap_or(false);
+
     // Handle explicit paths (containing '/') differently
     let real_binary = if ctx.command_name.contains(std::path::MAIN_SEPARATOR) {
         // Explicit path - don't search PATH
@@ -81,7 +95,7 @@ pub fn run_shim() -> Result<i32> {
     let mut policy_decision = None;
     let mut active_span = None;
 
-    if env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
+    if world_features_enabled() {
         // Initialize trace if needed
         let _ = init_trace(None);
 
@@ -163,8 +177,8 @@ pub fn run_shim() -> Result<i32> {
     let timestamp = SystemTime::now();
 
     // Execute the real command with spawn failure telemetry
-    let status = match execute_command(&real_binary, &args, &ctx.command_name) {
-        Ok(status) => status,
+    let outcome = match execute_command(&real_binary, &args, &ctx.command_name, capture_stderr) {
+        Ok(outcome) => outcome,
         Err(e) => {
             // Log spawn failure with detailed error information
             if let Some(log_path) = &ctx.log_file {
@@ -193,19 +207,42 @@ pub fn run_shim() -> Result<i32> {
         }
     };
 
+    let mut manager_hint_payload = None;
+    if let Some(engine) = hint_engine.as_mut() {
+        if engine.is_active()
+            && !outcome.status.success()
+            && capture_stderr
+            && outcome.captured_stderr.is_some()
+        {
+            if let Some(match_info) = engine.evaluate(outcome.captured_stderr.as_deref().unwrap()) {
+                eprintln!(
+                    "substrate: {} hint matched (pattern: {})\n{}",
+                    match_info.manager_name,
+                    match_info.pattern,
+                    match_info.hint.trim_end()
+                );
+                manager_hint_payload = Some(json!({
+                    "name": match_info.manager_name,
+                    "hint": match_info.hint,
+                    "pattern": match_info.pattern,
+                    "ts": format_timestamp(SystemTime::now())
+                }));
+            }
+        }
+    }
+
+    let status = outcome.status;
     let duration = start_time.elapsed();
 
     // Always log execution with depth and session correlation
     if let Some(log_path) = &ctx.log_file {
-        if let Err(e) = log_execution(
-            log_path,
-            &ctx,
-            &args,
-            &status,
+        let metadata = ExecutionLogMetadata {
             duration,
             timestamp,
-            &real_binary,
-        ) {
+            resolved_path: &real_binary,
+            manager_hint: manager_hint_payload.as_ref(),
+        };
+        if let Err(e) = log_execution(log_path, &ctx, &args, &status, &metadata) {
             eprintln!("Warning: Failed to log execution: {e}");
         }
     }
@@ -215,12 +252,11 @@ pub fn run_shim() -> Result<i32> {
         let exit_code = status.code().unwrap_or(-1);
 
         // Collect scopes and fs_diff from world backend if enabled
-        let (scopes_used, fs_diff) =
-            if std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
-                collect_world_telemetry(span.get_span_id())
-            } else {
-                (vec![], None)
-            };
+        let (scopes_used, fs_diff) = if world_features_enabled() {
+            collect_world_telemetry(span.get_span_id())
+        } else {
+            (vec![], None)
+        };
 
         let _ = span.finish(exit_code, scopes_used, fs_diff);
     }
@@ -290,12 +326,11 @@ fn handle_bypass_mode() -> Result<i32> {
 /// Execute real binary when in bypass mode (nested shim call)
 fn execute_real_binary_bypass(ctx: &ShimContext) -> Result<i32> {
     // Get clean PATH without shim directory
-    let original_path = env::var(ORIGINAL_PATH_VAR)
-        .or_else(|_| env::var("PATH"))
-        .unwrap_or_default();
+    let merged_path = merge_path_sources(env::var(ORIGINAL_PATH_VAR).ok())
+        .ok_or_else(|| anyhow!("No PATH available for bypass resolution"))?;
 
     // Build clean search paths
-    let search_paths = build_clean_search_path(&ctx.shim_dir, Some(original_path))?;
+    let search_paths = build_clean_search_path(&ctx.shim_dir, Some(merged_path))?;
 
     // Resolve the real binary
     let real_binary = resolve_real_binary(&ctx.command_name, &search_paths)
@@ -391,12 +426,19 @@ fn execute_real_binary_bypass(ctx: &ShimContext) -> Result<i32> {
     Ok(exit_code)
 }
 
+#[derive(Debug)]
+struct CommandOutcome {
+    status: ExitStatus,
+    captured_stderr: Option<Vec<u8>>,
+}
+
 /// Execute command with preserved argv[0] semantics
 fn execute_command(
     binary: &PathBuf,
     args: &[std::ffi::OsString],
     #[allow(unused_variables)] command_name: &str,
-) -> Result<ExitStatus> {
+    capture_stderr: bool,
+) -> Result<CommandOutcome> {
     // Proactive guard: ensure the binary exists and is executable on Unix.
     // This makes failure behavior consistent across environments (some distros may
     // return different errors when spawning invalid paths).
@@ -424,12 +466,60 @@ fn execute_command(
     #[cfg(unix)]
     cmd.arg0(command_name); // Preserve argv[0] semantics for tools that check invocation name
 
-    let status = cmd
-        .args(args)
-        .status()
-        .with_context(|| format!("Failed to execute {}", binary.display()))?;
+    if capture_stderr {
+        let mut child = cmd
+            .args(args)
+            .stderr(Stdio::piped())
+            .spawn()
+            .with_context(|| format!("Failed to execute {}", binary.display()))?;
 
-    Ok(status)
+        let stderr_handle = child.stderr.take().map(spawn_stderr_collector);
+        let status = child
+            .wait()
+            .with_context(|| format!("Failed to execute {}", binary.display()))?;
+        let captured = match stderr_handle {
+            Some(handle) => match handle.join() {
+                Ok(Ok(buf)) => Some(buf),
+                _ => None,
+            },
+            None => None,
+        };
+
+        Ok(CommandOutcome {
+            status,
+            captured_stderr: captured,
+        })
+    } else {
+        let status = cmd
+            .args(args)
+            .status()
+            .with_context(|| format!("Failed to execute {}", binary.display()))?;
+
+        Ok(CommandOutcome {
+            status,
+            captured_stderr: None,
+        })
+    }
+}
+
+fn spawn_stderr_collector(stderr: ChildStderr) -> thread::JoinHandle<io::Result<Vec<u8>>> {
+    thread::spawn(move || {
+        let mut buffer = Vec::new();
+        let mut stderr_writer = io::stderr();
+        let mut reader = BufReader::new(stderr);
+        let mut chunk = [0u8; 8192];
+
+        loop {
+            let read = reader.read(&mut chunk)?;
+            if read == 0 {
+                break;
+            }
+            stderr_writer.write_all(&chunk[..read])?;
+            buffer.extend_from_slice(&chunk[..read]);
+        }
+
+        Ok(buffer)
+    })
 }
 
 /// Check if a path is executable (cross-platform)
@@ -506,6 +596,158 @@ fn collect_world_telemetry(span_id: &str) -> (Vec<String>, Option<FsDiff>) {
     }
 }
 
+struct ManagerHintEngine {
+    rules: Vec<ManagerHintRule>,
+    emitted: HashSet<String>,
+}
+
+impl ManagerHintEngine {
+    fn new() -> Option<Self> {
+        if !world_features_enabled() || hints_disabled() {
+            return None;
+        }
+
+        let (base, overlay) = manifest_paths()?;
+        let manifest = ManagerManifest::load(&base, overlay.as_deref()).ok()?;
+        let specs = manifest.resolve_for_platform(current_platform());
+
+        let mut rules = Vec::new();
+        for spec in specs {
+            if let Some(rule) = ManagerHintRule::from_spec(&spec) {
+                rules.push(rule);
+            }
+        }
+
+        if rules.is_empty() {
+            None
+        } else {
+            Some(Self {
+                rules,
+                emitted: HashSet::new(),
+            })
+        }
+    }
+
+    fn is_active(&self) -> bool {
+        !self.rules.is_empty()
+    }
+
+    fn evaluate(&mut self, stderr: &[u8]) -> Option<HintMatch> {
+        let stderr_text = String::from_utf8_lossy(stderr);
+        for rule in &self.rules {
+            if self.emitted.contains(&rule.key) {
+                continue;
+            }
+            if let Some(pattern) = rule.matches(&stderr_text) {
+                self.emitted.insert(rule.key.clone());
+                return Some(HintMatch {
+                    manager_name: rule.name.clone(),
+                    hint: rule.hint.clone(),
+                    pattern,
+                });
+            }
+        }
+        None
+    }
+}
+
+struct ManagerHintRule {
+    name: String,
+    key: String,
+    hint: String,
+    patterns: Vec<RegexPattern>,
+}
+
+impl ManagerHintRule {
+    fn from_spec(spec: &ManagerSpec) -> Option<Self> {
+        let hint = spec.repair_hint.as_ref()?.trim();
+        if hint.is_empty() || spec.errors.is_empty() {
+            return None;
+        }
+
+        Some(Self {
+            name: spec.name.clone(),
+            key: spec.name.to_ascii_lowercase(),
+            hint: hint.to_string(),
+            patterns: spec.errors.clone(),
+        })
+    }
+
+    fn matches(&self, stderr: &str) -> Option<String> {
+        for pattern in &self.patterns {
+            if pattern.regex.is_match(stderr) {
+                return Some(pattern.pattern.clone());
+            }
+        }
+        None
+    }
+}
+
+struct HintMatch {
+    manager_name: String,
+    hint: String,
+    pattern: String,
+}
+
+fn hints_disabled() -> bool {
+    match env::var("SUBSTRATE_SHIM_HINTS") {
+        Ok(value) => disabled_flag(&value),
+        Err(_) => false,
+    }
+}
+
+fn disabled_flag(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "0" | "false" | "off" | "disabled"
+    )
+}
+
+fn manifest_paths() -> Option<(PathBuf, Option<PathBuf>)> {
+    if let Ok(override_path) = env::var("SUBSTRATE_MANAGER_MANIFEST") {
+        return Some((PathBuf::from(override_path), manifest_overlay_path()));
+    }
+
+    if let Ok(home) = paths::substrate_home() {
+        let base = home.join("manager_hooks.yaml");
+        if base.exists() {
+            return Some((base, Some(home.join("manager_hooks.local.yaml"))));
+        }
+    }
+
+    let fallback = repo_manifest_path();
+    if fallback.exists() {
+        Some((fallback, manifest_overlay_path()))
+    } else {
+        None
+    }
+}
+
+fn manifest_overlay_path() -> Option<PathBuf> {
+    paths::substrate_home()
+        .ok()
+        .map(|home| home.join("manager_hooks.local.yaml"))
+}
+
+fn repo_manifest_path() -> PathBuf {
+    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    crate_dir
+        .parent()
+        .and_then(|dir| dir.parent())
+        .map(|root| root.join("config").join("manager_hooks.yaml"))
+        .unwrap_or_else(|| PathBuf::from("config/manager_hooks.yaml"))
+}
+
+fn current_platform() -> Platform {
+    if cfg!(target_os = "macos") {
+        Platform::MacOs
+    } else if cfg!(windows) {
+        Platform::Windows
+    } else {
+        Platform::Linux
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -544,6 +786,7 @@ mod tests {
             &PathBuf::from("/nonexistent/command"),
             &[OsString::from("arg1")],
             "nonexistent",
+            false,
         );
 
         assert!(result.is_err());
@@ -761,7 +1004,7 @@ mod tests {
 
         // Test that error contexts are properly preserved through the call stack
         let nonexistent = PathBuf::from("/definitely/does/not/exist/command");
-        let result = execute_command(&nonexistent, &[OsString::from("test")], "test");
+        let result = execute_command(&nonexistent, &[OsString::from("test")], "test", false);
 
         assert!(result.is_err());
 

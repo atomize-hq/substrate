@@ -1,0 +1,819 @@
+{
+  "tasks": [
+    {
+      "id": "A1-code",
+      "name": "Implement manager manifest parser",
+      "phase": "Phase A",
+      "type": "code",
+      "status": "completed",
+      "description": "Add the shared manifest loader in crates/common so other crates can detect managers, init snippets, and guest recipes.",
+      "references": [
+        "docs/project_management/next/substrate_isolated_shell_plan.md",
+        "docs/project_management/next/substrate_isolated_shell_file_audit.md",
+        "docs/project_management/next/substrate_isolated_shell_data_map.md",
+        "docs/project_management/next/substrate_isolated_shell_dependency_graph.md",
+        "crates/common/src"
+      ],
+      "acceptance_criteria": [
+        "New module `crates/common/src/manager_manifest.rs` defines the schema described in the data map.",
+        "Loading base and overlay manifests works with env/tilde expansion.",
+        "Priority sorting and validation (duplicate names, invalid regex) implemented.",
+        "Code compiles under `cargo check -p substrate-common`."
+      ],
+      "depends_on": [],
+      "concurrent_with": [
+        "A1-test"
+      ],
+      "worktree": "wt/a1-manifest-code",
+      "integration_task": "A1-integ",
+      "kickoff_prompt": "Task A1-code (Implement manager manifest parser) \u2013 CODE. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Before editing code, gather requirements and prepare the Test Agent Kickoff Prompt for the paired test task (see `concurrent_with` or session log). Provide that prompt to the user per AI instructions. \n4. Use git worktree `wt/a1-manifest-code` from /home/spenser/__Active_code/substrate. Follow the scope details below: \nTask A1-code (manager manifest parser). 1) Begin at AI_AGENT_START_HERE.md, follow the workflow, and read the planning docs listed there plus docs/project_management/next/substrate_isolated_shell_plan.md, .../file_audit.md, .../data_map.md, .../dependency_graph.md. 2) In docs/project_management/next/tasks.json set this task\u2019s status to \"in_progress\" and append a START entry to docs/project_management/next/session_log.md. 3) Create/use git worktree wt/a1-manifest-code from /home/spenser/__Active_code/substrate. 4) Implement crates/common/src/manager_manifest.rs per the documented schema (base + overlay + validation). 5) Run `cargo check -p substrate-common`. 6) Before writing large changes, gather context and craft the Test Agent Kickoff Prompt for task A1-test (per AI_AGENT_START_HERE instructions) so it can start once you finish. 7) When complete, append END log entry, update this task\u2019s status to \"completed\", and link to A1-test prompt in the session log. \n5. Run the commands/tests noted above. After finishing, append an END entry to the session log, update this task\u2019s status to \"completed\", and ensure the Test Agent Kickoff Prompt reference is captured there."
+    },
+    {
+      "id": "A1-test",
+      "name": "Test manager manifest parser",
+      "phase": "Phase A",
+      "type": "test",
+      "status": "completed",
+      "description": "Author unit tests covering manifest parsing, overlay merging, and validation failures.",
+      "references": [
+        "docs/project_management/next/substrate_isolated_shell_plan.md",
+        "docs/project_management/next/substrate_isolated_shell_data_map.md",
+        "crates/common/src/manager_manifest.rs"
+      ],
+      "acceptance_criteria": [
+        "Tests cover success (base + overlay) and failure paths (duplicate manager, invalid regex, missing files).",
+        "All tests run via `cargo test -p substrate-common manager_manifest`.",
+        "No production code duplication\u2014tests live alongside the module or in dedicated file."
+      ],
+      "depends_on": [],
+      "concurrent_with": [],
+      "worktree": "wt/a1-manifest-test",
+      "integration_task": "A1-integ",
+      "kickoff_prompt": "Task A1-test (Test manager manifest parser) \u2013 TEST. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Consume the Test Agent Kickoff Prompt left by the corresponding code task (session log) to understand context and expectations. \n4. Work inside git worktree `wt/a1-manifest-test` and follow the scope details below: \n5. Before finishing, craft the Integration Agent Kickoff Prompt for the integration task and record it in the session log. \nTask A1-test (manifest parser tests). 1) Start at AI_AGENT_START_HERE.md, follow instructions (read plan/data map, review session log). 2) Consume the Test Agent Kickoff Prompt produced by A1-code to understand context. 3) Update tasks.json status to \"in_progress\" and append START entry to session_log.md. 4) Work inside git worktree wt/a1-manifest-test. 5) Add unit tests for crates/common/src/manager_manifest.rs covering success/overlay/env/error cases. 6) Run `cargo test -p substrate-common manager_manifest`. 7) Before finishing, craft the Integration Agent Kickoff Prompt for task A1-integ (include commands/log expectations) and record it in the session log. 8) Append END entry and set this task\u2019s status to \"completed\". \n6. Execute the required tests/commands, append an END entry, update status to \"completed\", and ensure the Integration prompt location is documented."
+    },
+    {
+      "id": "A1-integ",
+      "name": "Integrate manifest parser worktrees",
+      "phase": "Phase A",
+      "type": "integration",
+      "status": "completed",
+      "description": "Merge the code and test worktrees for A1, resolve conflicts, and validate the parser end-to-end.",
+      "references": [
+        "docs/project_management/next/substrate_isolated_shell_execution_plan.md"
+      ],
+      "acceptance_criteria": [
+        "Both code and test changes merged into main worktree.",
+        "Command `cargo test -p substrate-common manager_manifest` passes.",
+        "Notes recorded for any fixes applied during integration."
+      ],
+      "depends_on": [
+        "A1-code",
+        "A1-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/a1-manifest-integ",
+      "kickoff_prompt": "Task A1-integ (Integrate manifest parser worktrees) \u2013 INTEGRATION. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Read the Integration Kickoff Prompt left by the test task and inspect both code/test worktrees referenced. \n4. Use git worktree `wt/a1-manifest-integ` (or merge branches into it) and follow the scope details below: \nTask A1-integ (manifest parser integration). 1) Begin at AI_AGENT_START_HERE.md, read session log entries from A1-code/A1-test, and follow workflow. 2) Update tasks.json status to \"in_progress\" and log START entry. 3) Using git, merge wt/a1-manifest-code and wt/a1-manifest-test into worktree wt/a1-manifest-integ, resolving conflicts. 4) Follow the Integration Kickoff Prompt left by A1-test, including required commands (`cargo test -p substrate-common manager_manifest`). 5) Capture any fixes applied in session_log END entry. 6) Mark status \"completed\" once tests pass. \n5. Run the integration commands, resolve conflicts, append an END entry, and mark the task \"completed\" when done (or \"blocked\" with explanation)."
+    },
+    {
+      "id": "A2-code",
+      "name": "Implement manager init module",
+      "phase": "Phase A",
+      "type": "code",
+      "description": "Create crates/shell/src/manager_init.rs and integrate it with ShellConfig to generate snippets and telemetry.",
+      "references": [
+        "docs/project_management/next/substrate_isolated_shell_plan.md",
+        "docs/project_management/next/substrate_isolated_shell_file_audit.md",
+        "docs/project_management/next/substrate_isolated_shell_data_map.md",
+        "docs/project_management/next/substrate_isolated_shell_dependency_graph.md",
+        "crates/shell/src"
+      ],
+      "acceptance_criteria": [
+        "New module loads manifest via common crate and produces ManagerState list + snippet string.",
+        "Supports skip env vars (`SUBSTRATE_SKIP_MANAGER_INIT`, list).",
+        "Writes snippet to `~/.substrate/manager_init.sh` and exposes path to shell runtime.",
+        "Compilation succeeds: `cargo check -p substrate-shell`."
+      ],
+      "depends_on": [
+        "A1-integ"
+      ],
+      "concurrent_with": [
+        "A2-test"
+      ],
+      "worktree": "wt/a2-manager-init-code",
+      "integration_task": "A2-integ",
+      "kickoff_prompt": "Task A2-code (Implement manager init module) \u2013 CODE. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Before editing code, gather requirements and prepare the Test Agent Kickoff Prompt for the paired test task (see `concurrent_with` or session log). Provide that prompt to the user per AI instructions. \n4. Use git worktree `wt/a2-manager-init-code` from /home/spenser/__Active_code/substrate. Follow the scope details below: \nAdd manager init support to crates/shell per the plan. Create `src/manager_init.rs`, load the manifest, generate snippets, honor skip env vars, and expose telemetry data. Reference plan/data map. After coding, run `cargo check -p substrate-shell`. \n5. Run the commands/tests noted above. After finishing, append an END entry to the session log, update this task\u2019s status to \"completed\", and ensure the Test Agent Kickoff Prompt reference is captured there.",
+      "status": "completed"
+    },
+    {
+      "id": "A2-test",
+      "name": "Test manager init module",
+      "phase": "Phase A",
+      "type": "test",
+      "description": "Provide unit tests for detection, skip logic, and snippet generation.",
+      "references": [
+        "docs/project_management/next/substrate_isolated_shell_plan.md",
+        "crates/shell/src/manager_init.rs"
+      ],
+      "acceptance_criteria": [
+        "Tests cover detection success/failure, skip env behavior, and snippet ordering.",
+        "`cargo test -p substrate-shell manager_init` (or module-specific target) passes.",
+        "Tests mock filesystem/manifest paths without touching real home."
+      ],
+      "depends_on": [
+        "A1-integ"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/a2-manager-init-test",
+      "integration_task": "A2-integ",
+      "kickoff_prompt": "Task A2-test (Test manager init module) \u2013 TEST. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Consume the Test Agent Kickoff Prompt left by the corresponding code task (session log) to understand context and expectations. \n4. Work inside git worktree `wt/a2-manager-init-test` and follow the scope details below: \n5. Before finishing, craft the Integration Agent Kickoff Prompt for the integration task and record it in the session log. \nCreate unit tests for crates/shell/src/manager_init.rs. Mock manifest data and ensure skip flags and snippet content behave per the plan. Execute `cargo test -p substrate-shell manager_init`. \n6. Execute the required tests/commands, append an END entry, update status to \"completed\", and ensure the Integration prompt location is documented.",
+      "status": "completed"
+    },
+    {
+      "id": "A2-integ",
+      "name": "Integrate manager init worktrees",
+      "phase": "Phase A",
+      "type": "integration",
+      "description": "Merge A2 code/test, verify manager init module works in isolation.",
+      "references": [
+        "docs/project_management/next/substrate_isolated_shell_execution_plan.md"
+      ],
+      "acceptance_criteria": [
+        "Merged code+tests run `cargo test -p substrate-shell manager_init` cleanly.",
+        "Resolved issues documented."
+      ],
+      "depends_on": [
+        "A2-code",
+        "A2-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/a2-manager-init-integ",
+      "kickoff_prompt": "Task A2-integ (Integrate manager init worktrees) \u2013 INTEGRATION. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Read the Integration Kickoff Prompt left by the test task and inspect both code/test worktrees referenced. \n4. Use git worktree `wt/a2-manager-init-integ` (or merge branches into it) and follow the scope details below: \nMerge wt/a2-manager-init-code and wt/a2-manager-init-test. Resolve conflicts then run `cargo test -p substrate-shell manager_init`. Report outcomes. \n5. Run the integration commands, resolve conflicts, append an END entry, and mark the task \"completed\" when done (or \"blocked\" with explanation).",
+      "status": "completed"
+    },
+    {
+      "id": "A3-code",
+      "name": "Implement per-session shell env injection",
+      "phase": "Phase A",
+      "type": "code",
+      "description": "Update the shell runtime so shims/managers are only injected inside Substrate processes; add `--no-world` runtime handling.",
+      "references": [
+        "docs/project_management/next/substrate_isolated_shell_plan.md",
+        "docs/project_management/next/substrate_isolated_shell_file_audit.md",
+        "crates/shell/src/lib.rs",
+        "crates/shell/src/async_repl.rs",
+        "crates/shell/src/pty_exec.rs"
+      ],
+      "acceptance_criteria": [
+        "Shell sets PATH only for child processes and writes manager_env.sh referencing manager_init + legacy bashenv.",
+        "`--no-world` flag causes pass-through execution with no shim injection.",
+        "PTY bootstrap sources SUBSTRATE_MANAGER_INIT before user bashrc.",
+        "`cargo check -p substrate-shell` passes."
+      ],
+      "depends_on": [
+        "A2-integ"
+      ],
+      "concurrent_with": [
+        "A3-test"
+      ],
+      "worktree": "wt/a3-shell-env-code",
+      "integration_task": "A3-integ",
+      "kickoff_prompt": "Task A3-code (Implement per-session shell env injection) \u2013 CODE. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Before editing code, gather requirements and prepare the Test Agent Kickoff Prompt for the paired test task (see `concurrent_with` or session log). Provide that prompt to the user per AI instructions. \n4. Use git worktree `wt/a3-shell-env-code` from /home/spenser/__Active_code/substrate. Follow the scope details below: \nModify the shell runtime per the isolated-shell plan: inject PATH/snippets per session, respect --no-world, update PTY script. Reference plan + file audit. Run `cargo check -p substrate-shell` after coding. \n5. Run the commands/tests noted above. After finishing, append an END entry to the session log, update this task\u2019s status to \"completed\", and ensure the Test Agent Kickoff Prompt reference is captured there.",
+      "status": "completed"
+    },
+    {
+      "id": "A3-test",
+      "name": "Test shell env injection",
+      "phase": "Phase A",
+      "type": "test",
+      "description": "Add integration tests ensuring host PATH unaffected and manager snippet runs only within Substrate. Cover --no-world behavior.",
+      "references": [
+        "docs/project_management/next/substrate_isolated_shell_plan.md",
+        "crates/shell/tests"
+      ],
+      "acceptance_criteria": [
+        "Tests simulate `substrate -c` verifying PATH modifications inside process only.",
+        "--no-world test ensures commands bypass manager snippet.",
+        "Target command (documented) passes locally."
+      ],
+      "depends_on": [
+        "A2-integ"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/a3-shell-env-test",
+      "integration_task": "A3-integ",
+      "kickoff_prompt": "Task A3-test (Test shell env injection) \u2013 TEST. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Consume the Test Agent Kickoff Prompt left by the corresponding code task (session log) to understand context and expectations. \n4. Work inside git worktree `wt/a3-shell-env-test` and follow the scope details below: \n5. Before finishing, craft the Integration Agent Kickoff Prompt for the integration task and record it in the session log. \nWrite integration tests confirming the new per-session PATH/manager injection and the --no-world pass-through. Use temporary HOME directories. Execute the documented test binary (e.g., `cargo test -p substrate-shell shell_env`). \n6. Execute the required tests/commands, append an END entry, update status to \"completed\", and ensure the Integration prompt location is documented.",
+      "status": "completed"
+    },
+    {
+      "id": "A3-integ",
+      "name": "Integrate shell env injection",
+      "phase": "Phase A",
+      "type": "integration",
+      "description": "Merge the code/test branches for per-session env injection and run the agreed test suite.",
+      "references": [
+        "docs/project_management/next/substrate_isolated_shell_execution_plan.md"
+      ],
+      "acceptance_criteria": [
+        "`cargo test -p substrate-shell shell_env` (or equivalent) passes.",
+        "Host PATH remains untouched when manually verified (document steps)."
+      ],
+      "depends_on": [
+        "A3-code",
+        "A3-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/a3-shell-env-integ",
+      "kickoff_prompt": "Task A3-integ (Integrate shell env injection) \u2013 INTEGRATION. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Read the Integration Kickoff Prompt left by the test task and inspect both code/test worktrees referenced. \n4. Use git worktree `wt/a3-shell-env-integ` (or merge branches into it) and follow the scope details below: \nMerge wt/a3-shell-env-code and wt/a3-shell-env-test, then run the shell env tests plus `cargo test -p substrate-shell`. Confirm host PATH unaffected (describe manual check). \n5. Run the integration commands, resolve conflicts, append an END entry, and mark the task \"completed\" when done (or \"blocked\" with explanation).",
+      "status": "completed"
+    },
+    {
+      "id": "B1-code",
+      "name": "Implement shim hinting and no-world bypass",
+      "phase": "Phase B",
+      "type": "code",
+      "description": "Update substrate-shim to consume the manifest, emit manager hints, and honor no-world pass-through.",
+      "references": [
+        "docs/project_management/next/substrate_isolated_shell_plan.md",
+        "docs/project_management/next/substrate_isolated_shell_data_map.md",
+        "crates/shim/src/exec.rs",
+        "crates/shim/src/context.rs"
+      ],
+      "acceptance_criteria": [
+        "Shim loads manifest hints, matches stderr patterns, and logs structured manager_hint entries.",
+        "Per-process deduping prevents repeated hints.",
+        "`SUBSTRATE_WORLD_ENABLED=false` (or env) bypasses manager injection and runs directly on host.",
+        "`cargo check -p substrate-shim` passes."
+      ],
+      "depends_on": [
+        "A3-integ"
+      ],
+      "concurrent_with": [
+        "B1-test"
+      ],
+      "worktree": "wt/b1-shim-code",
+      "integration_task": "B1-integ",
+      "kickoff_prompt": "Task B1-code (Implement shim hinting and no-world bypass) \u2013 CODE. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Before editing code, gather requirements and prepare the Test Agent Kickoff Prompt for the paired test task (see `concurrent_with` or session log). Provide that prompt to the user per AI instructions. \n4. Use git worktree `wt/b1-shim-code` from /home/spenser/__Active_code/substrate. Follow the scope details below: \nModify substrate-shim to use the manifest for hint matching and to honor the no-world pass-through. Reference plan/data map. After coding, run `cargo check -p substrate-shim`. \n5. Run the commands/tests noted above. After finishing, append an END entry to the session log, update this task\u2019s status to \"completed\", and ensure the Test Agent Kickoff Prompt reference is captured there.",
+      "status": "completed"
+    },
+    {
+      "id": "B1-test",
+      "name": "Test shim hinting",
+      "phase": "Phase B",
+      "type": "test",
+      "description": "Expand shim integration tests to cover hint logging and pass-through mode.",
+      "references": [
+        "crates/shim/tests/integration.rs"
+      ],
+      "acceptance_criteria": [
+        "Tests assert log entries contain manager_hint by reading log output.",
+        "--no-world test ensures shim bypass path runs without manifest lookup.",
+        "Document the current `cargo test -p substrate-shim` result (expected failure allowed until B1-code lands) so the integration agent knows what to re-run."
+      ],
+      "depends_on": [
+        "A3-integ"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/b1-shim-test",
+      "integration_task": "B1-integ",
+      "kickoff_prompt": "Task B1-test (Test shim hinting) \u2013 TEST. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Consume the Test Agent Kickoff Prompt left by the corresponding code task (session log) to understand context and expectations. \n4. Work inside git worktree `wt/b1-shim-test` and follow the scope details below (keep coordination files untouched until you return for the END entry). \n5. Before finishing, craft the Integration Agent Kickoff Prompt for the integration task and record it in the session log. \nAdd shim integration tests verifying new hint logging and no-world bypass. Use temp dirs. Run `cargo test -p substrate-shim` when possible; if the code task is still in-flight, capture the failing output once and document it in your END entry so integration can re-run. \n6. Execute the required tests/commands (or record why they are blocked), append an END entry, update status to \"completed\"/\"blocked\" as appropriate, and ensure the Integration prompt location is documented.",
+      "status": "completed"
+    },
+    {
+      "id": "B1-integ",
+      "name": "Integrate shim hinting",
+      "phase": "Phase B",
+      "type": "integration",
+      "description": "Merge B1 code/test worktrees and validate via full shim test suite.",
+      "references": [
+        "docs/project_management/next/substrate_isolated_shell_execution_plan.md"
+      ],
+      "acceptance_criteria": [
+        "`cargo test -p substrate-shim` passes.",
+        "Manager hint log verified manually for a sample command (document command/output)."
+      ],
+      "depends_on": [
+        "B1-code",
+        "B1-test"
+      ],
+      "worktree": "wt/b1-shim-integ",
+      "kickoff_prompt": "Task B1-integ (Integrate shim hinting) \u2013 INTEGRATION. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Read the Integration Kickoff Prompt left by the test task and inspect both code/test worktrees referenced. \n4. Use git worktree `wt/b1-shim-integ` (or merge branches into it) and follow the scope details below: \nMerge wt/b1-shim-code and wt/b1-shim-test, resolve conflicts, then run `cargo test -p substrate-shim`. Capture a sample hint log for records. \n5. Run the integration commands, resolve conflicts, append an END entry, and mark the task \"completed\" when done (or \"blocked\" with explanation).",
+      "status": "completed"
+    },
+    {
+      "id": "B2-code",
+      "name": "Implement shim doctor/repair CLI",
+      "phase": "Phase B",
+      "type": "code",
+      "description": "Add CLI subcommands to report manager status and apply repair hints.",
+      "references": [
+        "docs/project_management/next/substrate_isolated_shell_plan.md",
+        "crates/shell/src/lib.rs",
+        "crates/shell/src/commands"
+      ],
+      "acceptance_criteria": [
+        "`substrate shim doctor` prints state/hints (text + --json).",
+        "`substrate shim repair --manager <name>` appends repair hint to ~/.substrate_bashenv with backup and confirmation.",
+        "Command wiring covered in help/usage.",
+        "`cargo check -p substrate-shell` passes."
+      ],
+      "depends_on": [
+        "B1-integ"
+      ],
+      "concurrent_with": [
+        "B2-test"
+      ],
+      "worktree": "wt/b2-doctor-code",
+      "integration_task": "B2-integ",
+      "kickoff_prompt": "Task B2-code (Implement shim doctor/repair CLI) \u2013 CODE. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Before editing code, gather requirements and prepare the Test Agent Kickoff Prompt for the paired test task (see `concurrent_with` or session log). Provide that prompt to the user per AI instructions. \n4. Use git worktree `wt/b2-doctor-code` from /home/spenser/__Active_code/substrate. Follow the scope details below: \nImplement the shim doctor/repair commands per the plan. Add CLI args, output formatting, repair file writes. Reference plan/data map. Run `cargo check -p substrate-shell` afterwards. \n5. Run the commands/tests noted above. After finishing, append an END entry to the session log, update this task\u2019s status to \"completed\", and ensure the Test Agent Kickoff Prompt reference is captured there.",
+      "status": "completed"
+    },
+    {
+      "id": "B2-test",
+      "name": "Test shim doctor/repair CLI",
+      "phase": "Phase B",
+      "type": "test",
+      "description": "Add integration tests for doctor + repair commands (JSON + text).",
+      "references": [
+        "crates/shell/tests",
+        "docs/project_management/next/substrate_isolated_shell_execution_plan.md"
+      ],
+      "acceptance_criteria": [
+        "Tests simulate hints and ensure CLI output matches expected structures.",
+        "Repair test writes to temp bashenv and validates backup/append logic.",
+        "`cargo test -p substrate-shell shim_doctor` passes."
+      ],
+      "depends_on": [
+        "B1-integ"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/b2-doctor-test",
+      "integration_task": "B2-integ",
+      "kickoff_prompt": "Task B2-test (Test shim doctor/repair CLI) \u2013 TEST. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Consume the Test Agent Kickoff Prompt left by the corresponding code task (session log) to understand context and expectations. \n4. Work inside git worktree `wt/b2-doctor-test` and follow the scope details below: \n5. Before finishing, craft the Integration Agent Kickoff Prompt for the integration task and record it in the session log. \nWrite CLI tests covering doctor and repair behavior. Use temp directories for ~/.substrate. Execute `cargo test -p substrate-shell shim_doctor`. \n6. Execute the required tests/commands, append an END entry, update status to \"completed\", and ensure the Integration prompt location is documented.",
+      "status": "completed"
+    },
+    {
+      "id": "B2-integ",
+      "name": "Integrate shim doctor CLI",
+      "phase": "Phase B",
+      "type": "integration",
+      "description": "Merge B2 branches and run the CLI test suite.",
+      "references": [],
+      "acceptance_criteria": [
+        "`cargo test -p substrate-shell shim_doctor` passes.",
+        "Manual smoke: run `substrate shim doctor --json` on sample manifest (document result)."
+      ],
+      "depends_on": [
+        "B2-code",
+        "B2-test"
+      ],
+      "worktree": "wt/b2-doctor-integ",
+      "kickoff_prompt": "Task B2-integ (Integrate shim doctor CLI) \u2013 INTEGRATION. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Read the Integration Kickoff Prompt left by the test task and inspect both code/test worktrees referenced. \n4. Use git worktree `wt/b2-doctor-integ` (or merge branches into it) and follow the scope details below: \nMerge wt/b2-doctor-code and wt/b2-doctor-test. Run `cargo test -p substrate-shell shim_doctor` plus a manual CLI invocation with fixtures. \n5. Run the integration commands, resolve conflicts, append an END entry, and mark the task \"completed\" when done (or \"blocked\" with explanation).",
+      "status": "completed"
+    },
+    {
+      "id": "B3-docs",
+      "name": "Update documentation and configuration references",
+      "phase": "Phase B",
+      "type": "code",
+      "description": "Refresh README/INSTALLATION/USAGE/CONFIGURATION to describe pass-through shims, manager init, shim doctor, and world enable.",
+      "references": [
+        "docs/README.md",
+        "docs/INSTALLATION.md",
+        "docs/USAGE.md",
+        "docs/CONFIGURATION.md",
+        "docs/project_management/next/substrate_isolated_shell_plan.md"
+      ],
+      "acceptance_criteria": [
+        "Docs explain `--no-world` install/run, manager auto-init, shim doctor, world deps.",
+        "Each new env var documented.",
+        "Links to manifests + CLI usage added.",
+        "Spelling/formatting checks pass."
+      ],
+      "depends_on": [
+        "B2-integ"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/b3-docs",
+      "integration_task": "B3-integ",
+      "kickoff_prompt": "Task B3-docs (Update documentation and configuration references) \u2013 CODE. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Before editing code, gather requirements and prepare the Test Agent Kickoff Prompt for the paired test task (see `concurrent_with` or session log). Provide that prompt to the user per AI instructions. \n4. Use git worktree `wt/b3-docs` from /home/spenser/__Active_code/substrate. Follow the scope details below: \nRevise README/INSTALLATION/USAGE/CONFIGURATION referencing the new behavior. Follow file audit guidance. Run markdown lint/spellcheck if available. \n5. Run the commands/tests noted above. After finishing, append an END entry to the session log, update this task\u2019s status to \"completed\", and ensure the Test Agent Kickoff Prompt reference is captured there.",
+      "status": "completed"
+    },
+    {
+      "id": "B3-integ",
+      "name": "Review documentation updates",
+      "phase": "Phase B",
+      "type": "integration",
+      "description": "Validate doc changes and ensure references are accurate.",
+      "references": [],
+      "acceptance_criteria": [
+        "All updated docs render without lint issues.",
+        "Cross-references to commands/env vars verified."
+      ],
+      "depends_on": [
+        "B3-docs"
+      ],
+      "worktree": "wt/b3-docs-integ",
+      "kickoff_prompt": "Task B3-integ (Review documentation updates) \u2013 INTEGRATION. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Read the Integration Kickoff Prompt left by the test task and inspect both code/test worktrees referenced. \n4. Use git worktree `wt/b3-docs-integ` (or merge branches into it) and follow the scope details below: \nReview and merge documentation worktree wt/b3-docs, run markdown lint/spellcheck, confirm instructions align with implemented behavior. \n5. Run the integration commands, resolve conflicts, append an END entry, and mark the task \"completed\" when done (or \"blocked\" with explanation).",
+      "status": "completed"
+    },
+    {
+      "id": "C1-code",
+      "name": "Implement `substrate world enable` command",
+      "phase": "Phase C",
+      "type": "code",
+      "description": "Add CLI support to upgrade a no-world install into a full world deployment.",
+      "references": [
+        "docs/project_management/next/substrate_isolated_shell_plan.md",
+        "scripts/substrate/install-substrate.sh",
+        "crates/shell/src/lib.rs"
+      ],
+      "acceptance_criteria": [
+        "`substrate world enable` invokes provisioning scripts, updates config metadata, and verifies socket availability.",
+        "CLI help updated.",
+        "`cargo check -p substrate-shell` passes."
+      ],
+      "depends_on": [
+        "A3-integ"
+      ],
+      "concurrent_with": [
+        "C1-test"
+      ],
+      "worktree": "wt/c1-world-enable-code",
+      "integration_task": "C1-integ",
+      "kickoff_prompt": "Task C1-code (Implement `substrate world enable` command) \u2013 CODE. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Before editing code, gather requirements and prepare the Test Agent Kickoff Prompt for the paired test task (see `concurrent_with` or session log). Provide that prompt to the user per AI instructions. \n4. Use git worktree `wt/c1-world-enable-code` from /home/spenser/__Active_code/substrate. Follow the scope details below: \nImplement the world enable command per the plan. Wire it into CLI, call provisioning script, update ~/.substrate/config.json. After coding run `cargo check -p substrate-shell`. \n5. Run the commands/tests noted above. After finishing, append an END entry to the session log, update this task\u2019s status to \"completed\", and ensure the Test Agent Kickoff Prompt reference is captured there.",
+      "status": "completed"
+    },
+    {
+      "id": "C1-test",
+      "name": "Test world enable command",
+      "phase": "Phase C",
+      "type": "test",
+      "description": "Add tests/mocks ensuring world enable updates metadata and handles failures.",
+      "references": [
+        "crates/shell/tests"
+      ],
+      "acceptance_criteria": [
+        "Tests mock provisioning script (fake binary) and verify config fields toggled.",
+        "Failure case surfaces helpful errors.",
+        "`cargo test -p substrate-shell world_enable` passes."
+      ],
+      "depends_on": [
+        "A3-integ"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/c1-world-enable-test",
+      "integration_task": "C1-integ",
+      "kickoff_prompt": "Task C1-test (Test world enable command) \u2013 TEST. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Consume the Test Agent Kickoff Prompt left by the corresponding code task (session log) to understand context and expectations. \n4. Work inside git worktree `wt/c1-world-enable-test` and follow the scope details below: \n5. Before finishing, craft the Integration Agent Kickoff Prompt for the integration task and record it in the session log. \nCreate tests for the new world enable command using mock scripts/config files. Run `cargo test -p substrate-shell world_enable`. \n6. Execute the required tests/commands, append an END entry, update status to \"completed\", and ensure the Integration prompt location is documented.",
+      "status": "completed"
+    },
+    {
+      "id": "C1-integ",
+      "name": "Integrate world enable command",
+      "phase": "Phase C",
+      "type": "integration",
+      "description": "Merge code/test branches and run CLI tests.",
+      "references": [],
+      "acceptance_criteria": [
+        "`cargo test -p substrate-shell world_enable` passes.",
+        "Manual dry-run of `substrate world enable --dry-run` documented."
+      ],
+      "depends_on": [
+        "C1-code",
+        "C1-test"
+      ],
+      "worktree": "wt/c1-world-enable-integ",
+      "kickoff_prompt": "Task C1-integ (Integrate world enable command) \u2013 INTEGRATION. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Read the Integration Kickoff Prompt left by the test task and inspect both code/test worktrees referenced. \n4. Use git worktree `wt/c1-world-enable-integ` (or merge branches into it) and follow the scope details below: \nMerge worktrees and run the world enable tests plus a manual dry-run invocation. \n5. Run the integration commands, resolve conflicts, append an END entry, and mark the task \"completed\" when done (or \"blocked\" with explanation).",
+      "status": "completed"
+    },
+    {
+      "id": "C2-code",
+      "name": "Implement world deps CLI",
+      "phase": "Phase C",
+      "type": "code",
+      "description": "Add `substrate world deps status/install/sync` commands using manifest guest entries.",
+      "references": [
+        "docs/project_management/next/substrate_isolated_shell_plan.md",
+        "crates/shell/src/world",
+        "crates/world-backend-factory",
+        "crates/world-agent"
+      ],
+      "acceptance_criteria": [
+        "`world deps status` reports host vs guest availability.",
+        "`install` executes apt/custom scripts via world-agent.",
+        "`sync` iterates over missing tools with optional --all.",
+        "Commands respect --no-world (display warning)."
+      ],
+      "depends_on": [
+        "C1-integ",
+        "A1-integ"
+      ],
+      "concurrent_with": [
+        "C2-test"
+      ],
+      "worktree": "wt/c2-world-deps-code",
+      "integration_task": "C2-integ",
+      "kickoff_prompt": "Task C2-code (Implement world deps CLI) \u2013 CODE. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Before editing code, gather requirements and prepare the Test Agent Kickoff Prompt for the paired test task (see `concurrent_with` or session log). Provide that prompt to the user per AI instructions. \n4. Use git worktree `wt/c2-world-deps-code` from /home/spenser/__Active_code/substrate. Follow the scope details below: \nImplement world deps CLI commands wired to manifest guest_* entries and backend factory. Reference plan/data map. Run `cargo check -p substrate-shell`. \n5. Run the commands/tests noted above. After finishing, append an END entry to the session log, update this task\u2019s status to \"completed\", and ensure the Test Agent Kickoff Prompt reference is captured there.",
+      "status": "completed"
+    },
+    {
+      "id": "C2-test",
+      "name": "Test world deps CLI",
+      "phase": "Phase C",
+      "type": "test",
+      "description": "Add integration tests using mocked world agent responses.",
+      "references": [
+        "crates/shell/tests",
+        "crates/world-agent/tests"
+      ],
+      "acceptance_criteria": [
+        "Tests stub world-agent endpoints to simulate missing tools.",
+        "`world deps install` dry-run test ensures scripts invoked correctly.",
+        "`cargo test -p substrate-shell world_deps` passes."
+      ],
+      "depends_on": [
+        "C1-integ",
+        "A1-integ"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/c2-world-deps-test",
+      "integration_task": "C2-integ",
+      "kickoff_prompt": "Task C2-test (Test world deps CLI) \u2013 TEST. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Consume the Test Agent Kickoff Prompt left by the corresponding code task (session log) to understand context and expectations. \n4. Work inside git worktree `wt/c2-world-deps-test` and follow the scope details below: \n5. Before finishing, craft the Integration Agent Kickoff Prompt for the integration task and record it in the session log. \nCreate tests for world deps CLI using mock backend/agent. Execute `cargo test -p substrate-shell world_deps`. \n6. Execute the required tests/commands, append an END entry, update status to \"completed\", and ensure the Integration prompt location is documented.",
+      "status": "completed"
+    },
+    {
+      "id": "C2-integ",
+      "name": "Integrate world deps CLI",
+      "phase": "Phase C",
+      "type": "integration",
+      "acceptance_criteria": [
+        "`cargo test -p substrate-shell world_deps` passes.",
+        "Manual `substrate world deps status` on dev env documented."
+      ],
+      "depends_on": [
+        "C2-code",
+        "C2-test"
+      ],
+      "worktree": "wt/c2-world-deps-integ",
+      "kickoff_prompt": "Task C2-integ (Integrate world deps CLI) \u2013 INTEGRATION. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Read the Integration Kickoff Prompt left by the test task and inspect both code/test worktrees referenced. \n4. Use git worktree `wt/c2-world-deps-integ` (or merge branches into it) and follow the scope details below: \nMerge world deps code/test worktrees, run tests, perform manual status command. \n5. Run the integration commands, resolve conflicts, append an END entry, and mark the task \"completed\" when done (or \"blocked\" with explanation).",
+      "status": "completed"
+    },
+    {
+      "id": "C3-code",
+      "name": "Update installer/uninstaller scripts",
+      "phase": "Phase C",
+      "type": "code",
+      "description": "Modify install scripts to stop host PATH hijack, add --no-world install path, create manager init files, and hook world enable command.",
+      "references": [
+        "scripts/substrate/install-substrate.sh",
+        "scripts/substrate/dev-install-substrate.sh",
+        "scripts/substrate/uninstall-substrate.sh",
+        "docs/project_management/next/substrate_isolated_shell_plan.md"
+      ],
+      "acceptance_criteria": [
+        "`--no-world` flag installs minimal assets and sets metadata.",
+        "Default install no longer modifies host PATH; ensures manager_init files created.",
+        "Uninstaller removes new files.",
+        "Shell script lint passes (if available)."
+      ],
+      "depends_on": [
+        "C1-integ",
+        "A3-integ"
+      ],
+      "concurrent_with": [
+        "C3-test"
+      ],
+      "worktree": "wt/c3-installer-code",
+      "integration_task": "C3-integ",
+      "kickoff_prompt": "Task C3-code (Update installer/uninstaller scripts) \u2013 CODE. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Before editing code, gather requirements and prepare the Test Agent Kickoff Prompt for the paired test task (see `concurrent_with` or session log). Provide that prompt to the user per AI instructions. \n4. Use git worktree `wt/c3-installer-code` from /home/spenser/__Active_code/substrate. Follow the scope details below: \nUpdate installation scripts as per plan: add --no-world path, drop PATH exports, create manager-init artifacts, call world enable later. Test via dry-run in container. \n5. Run the commands/tests noted above. After finishing, append an END entry to the session log, update this task\u2019s status to \"completed\", and ensure the Test Agent Kickoff Prompt reference is captured there.",
+      "status": "completed"
+    },
+    {
+      "id": "C3-test",
+      "name": "Test installer changes",
+      "phase": "Phase C",
+      "type": "test",
+      "description": "Create automated/dry-run tests verifying new install paths and metadata.",
+      "references": [
+        "scripts/substrate/install-substrate.sh",
+        "docs/project_management/next/substrate_isolated_shell_execution_plan.md"
+      ],
+      "acceptance_criteria": [
+        "CI-friendly script executes installer with --no-world and default to confirm PATH unchanged (check env).",
+        "Tests verify config JSON produced with world_enabled flag.",
+        "Results documented."
+      ],
+      "depends_on": [
+        "C1-integ",
+        "A3-integ"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/c3-installer-test",
+      "integration_task": "C3-integ",
+      "kickoff_prompt": "Task C3-test (Test installer changes) \u2013 TEST. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Consume the Test Agent Kickoff Prompt left by the corresponding code task (session log) to understand context and expectations. \n4. Work inside git worktree `wt/c3-installer-test` and follow the scope details below: \n5. Before finishing, craft the Integration Agent Kickoff Prompt for the integration task and record it in the session log. \nAuthor test harness (bash or Python) to run installer in temp dirs with and without --no-world, verifying PATH unaffected and config files created. Document commands. \n6. Execute the required tests/commands, append an END entry, update status to \"completed\", and ensure the Integration prompt location is documented.",
+      "status": "completed"
+    },
+    {
+      "id": "C3-integ",
+      "name": "Integrate installer updates",
+      "phase": "Phase C",
+      "type": "integration",
+      "acceptance_criteria": [
+        "Installer scripts lint/dry-run succeed for both default and --no-world modes.",
+        "Documentation references updated accordingly."
+      ],
+      "depends_on": [
+        "C3-code",
+        "C3-test",
+        "B3-integ"
+      ],
+      "worktree": "wt/c3-installer-integ",
+      "kickoff_prompt": "Task C3-integ (Integrate installer updates) \u2013 INTEGRATION. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Read the Integration Kickoff Prompt left by the test task and inspect both code/test worktrees referenced. \n4. Use git worktree `wt/c3-installer-integ` (or merge branches into it) and follow the scope details below: \nMerge installer code/test worktrees, run provided harnesses for default and --no-world installs, record outputs. Ensure docs mention new flags. \n5. Run the integration commands, resolve conflicts, append an END entry, and mark the task \"completed\" when done (or \"blocked\" with explanation).",
+      "status": "completed"
+    },
+    {
+      "id": "D1-code",
+      "name": "Add Tier-2 manager entries",
+      "phase": "Phase D",
+      "type": "code",
+      "description": "Extend the manifest with additional managers (mise/rtx, rbenv, sdkman, bun, volta, goenv, etc.) and detection helpers.",
+      "references": [
+        "config/manager_hooks.yaml",
+        "docs/project_management/next/substrate_isolated_shell_plan.md"
+      ],
+      "acceptance_criteria": [
+        "Manifest entries include detect/init/repair/guest sections for each new manager.",
+        "Any platform-specific logic documented.",
+        "`cargo fmt`/lint passes."
+      ],
+      "depends_on": [
+        "B2-integ"
+      ],
+      "concurrent_with": [
+        "D1-test"
+      ],
+      "worktree": "wt/d1-managers-code",
+      "integration_task": "D1-integ",
+      "kickoff_prompt": "Task D1-code (Add Tier-2 manager entries) \u2013 CODE. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Before editing code, gather requirements and prepare the Test Agent Kickoff Prompt for the paired test task (see `concurrent_with` or session log). Provide that prompt to the user per AI instructions. \n4. Use git worktree `wt/d1-managers-code` from /home/spenser/__Active_code/substrate. Follow the scope details below: \nExtend config/manager_hooks.yaml per the plan to include Tier-2 managers, updating comments and ensuring schema validity. \n5. Run the commands/tests noted above. After finishing, append an END entry to the session log, update this task\u2019s status to \"completed\", and ensure the Test Agent Kickoff Prompt reference is captured there.",
+      "status": "completed"
+    },
+    {
+      "id": "D1-test",
+      "name": "Test new manager entries",
+      "phase": "Phase D",
+      "type": "test",
+      "description": "Add tests verifying detection + hint coverage for new managers.",
+      "references": [
+        "crates/common/src/manager_manifest.rs",
+        "crates/shim/tests/integration.rs"
+      ],
+      "acceptance_criteria": [
+        "Parser tests cover new entries.",
+        "Shim tests simulate at least one new manager hint.",
+        "`cargo test` for affected crates passes."
+      ],
+      "depends_on": [
+        "B2-integ"
+      ],
+      "worktree": "wt/d1-managers-test",
+      "integration_task": "D1-integ",
+      "kickoff_prompt": "Task D1-test (Test new manager entries) \u2013 TEST. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Consume the Test Agent Kickoff Prompt left by the corresponding code task (session log) to understand context and expectations. \n4. Work inside git worktree `wt/d1-managers-test` and follow the scope details below: \n5. Before finishing, craft the Integration Agent Kickoff Prompt for the integration task and record it in the session log. \nWrite parser + shim tests covering the newly added managers in the manifest. Execute the relevant test suites. \n6. Execute the required tests/commands, append an END entry, update status to \"completed\", and ensure the Integration prompt location is documented.",
+      "status": "completed"
+    },
+    {
+      "id": "D1-integ",
+      "name": "Integrate Tier-2 managers",
+      "phase": "Phase D",
+      "type": "integration",
+      "acceptance_criteria": [
+        "`cargo test -p substrate-common manager_manifest` and `cargo test -p substrate-shim` pass.",
+        "Docs mention new managers if needed."
+      ],
+      "depends_on": [
+        "D1-code",
+        "D1-test"
+      ],
+      "worktree": "wt/d1-managers-integ",
+      "kickoff_prompt": "Task D1-integ (Integrate Tier-2 managers) \u2013 INTEGRATION. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Read the Integration Kickoff Prompt left by the test task and inspect both code/test worktrees referenced. \n4. Use git worktree `wt/d1-managers-integ` (or merge branches into it) and follow the scope details below: \nMerge Tier-2 manager code/test branches and run relevant tests. \n5. Run the integration commands, resolve conflicts, append an END entry, and mark the task \"completed\" when done (or \"blocked\" with explanation).",
+      "status": "completed"
+    },
+    {
+      "id": "D2-code",
+      "name": "Enhance doctor/health reporting",
+      "phase": "Phase D",
+      "type": "code",
+      "description": "Extend shim doctor and new health commands with aggregated world deps + manager state reporting.",
+      "references": [
+        "docs/project_management/next/substrate_isolated_shell_plan.md",
+        "crates/shell/src/commands"
+      ],
+      "acceptance_criteria": [
+        "Doctor output includes world deps status summary.",
+        "New `substrate health` command (or extension) prints consolidated info.",
+        "`cargo check -p substrate-shell` passes."
+      ],
+      "depends_on": [
+        "C2-integ",
+        "D1-integ"
+      ],
+      "concurrent_with": [
+        "D2-test"
+      ],
+      "worktree": "wt/d2-health-code",
+      "integration_task": "D2-integ",
+      "kickoff_prompt": "Task D2-code (Enhance doctor/health reporting) \u2013 CODE. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Before editing code, gather requirements and prepare the Test Agent Kickoff Prompt for the paired test task (see `concurrent_with` or session log). Provide that prompt to the user per AI instructions. \n4. Use git worktree `wt/d2-health-code` from /home/spenser/__Active_code/substrate. Follow the scope details below: \nEnhance doctor/health reporting per plan. Aggregate manager + world deps info. Update CLI docs/help. \n5. Run the commands/tests noted above. After finishing, append an END entry to the session log, update this task\u2019s status to \"completed\", and ensure the Test Agent Kickoff Prompt reference is captured there. (Full kickoff prompt: docs/project_management/next/kickoff_prompts/D2-code.md)",
+      "status": "completed"
+    },
+    {
+      "id": "D2-test",
+      "name": "Test doctor/health enhancements",
+      "phase": "Phase D",
+      "type": "test",
+      "acceptance_criteria": [
+        "Integration tests verify new output sections.",
+        "`cargo test -p substrate-shell health` passes."
+      ],
+      "depends_on": [
+        "C2-integ",
+        "D1-integ"
+      ],
+      "worktree": "wt/d2-health-test",
+      "integration_task": "D2-integ",
+      "kickoff_prompt": "Task D2-test (Test doctor/health enhancements) \u2013 TEST. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Consume the Test Agent Kickoff Prompt left by the corresponding code task (session log) to understand context and expectations. \n4. Work inside git worktree `wt/d2-health-test` and follow the scope details below: \n5. Before finishing, craft the Integration Agent Kickoff Prompt for the integration task and record it in the session log. \nAdd tests covering the enhanced doctor/health command outputs, using fixtures for manager/world states. \n6. Execute the required tests/commands, append an END entry, update status to \"completed\", and ensure the Integration prompt location is documented. (Full kickoff prompt: docs/project_management/next/kickoff_prompts/D2-test.md)",
+      "status": "completed"
+    },
+    {
+      "id": "D2-integ",
+      "name": "Integrate health reporting",
+      "phase": "Phase D",
+      "type": "integration",
+      "acceptance_criteria": [
+        "`cargo test -p substrate-shell health` passes.",
+        "Manual CLI output captured in docs if needed."
+      ],
+      "depends_on": [
+        "D2-code",
+        "D2-test"
+      ],
+      "worktree": "wt/d2-health-integ",
+      "kickoff_prompt": "Task D2-integ (Integrate health reporting) \u2013 INTEGRATION. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Read the Integration Kickoff Prompt left by the test task and inspect both code/test worktrees referenced. \n4. Use git worktree `wt/d2-health-integ` (or merge branches into it) and follow the scope details below: \nMerge code/test, run health command tests, capture sample output. \n5. Run the integration commands, resolve conflicts, append an END entry, and mark the task \"completed\" when done (or \"blocked\" with explanation).",
+      "status": "completed"
+    },
+    {
+      "id": "D3-code",
+      "name": "Audit world env toggles across crates",
+      "phase": "Phase D",
+      "type": "code",
+      "acceptance_criteria": [
+        "Inventory every crate/bin/script that spawns `substrate` or relies on world state.",
+        "Introduce a shared helper so those entry points honor `SUBSTRATE_WORLD` / `SUBSTRATE_WORLD_ENABLED` overrides (plus `--no-world`).",
+        "Document the helper + toggle expectations in `docs/CONFIGURATION.md` and the data map.",
+        "`cargo check --workspace` passes."
+      ],
+      "depends_on": [
+        "D2-integ"
+      ],
+      "concurrent_with": [
+        "D3-test"
+      ],
+      "worktree": "wt/d3-world-audit-code",
+      "integration_task": "D3-integ",
+      "kickoff_prompt": "Task D3-code (Audit world env toggles across crates) \u2013 CODE. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read the Workstream D plan/docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Use git worktree `wt/d3-world-audit-code` to inventory every crate/bin/script that launches `substrate` or depends on world enablement (shell, shim, installer harness, replay/world tools, test drivers). \n4. Add a shared helper (or reuse `ShellConfig`) so callers can opt into host-only execution via `SUBSTRATE_WORLD` / `SUBSTRATE_WORLD_ENABLED` / `--no-world`, and apply the helper across the inventory. Update docs/data map accordingly. \n5. Run `cargo check --workspace` (and targeted tests for touched crates). After finishing, append an END entry, update this task\u2019s status to \"completed\", and record the Test Agent Kickoff Prompt at docs/project_management/next/kickoff_prompts/D3-code.md.",
+      "status": "completed"
+    },
+    {
+      "id": "D3-test",
+      "name": "Test world env toggle audit",
+      "phase": "Phase D",
+      "type": "test",
+      "acceptance_criteria": [
+        "Add regression tests for the shared helper and key CLI entry points proving `SUBSTRATE_WORLD`/`SUBSTRATE_WORLD_ENABLED` shortcuts disable world provisioning.",
+        "`cargo test -p substrate-shell integration` passes without hangs.",
+        "Installer/world CLI harnesses run successfully with `SUBSTRATE_WORLD=disabled`."
+      ],
+      "depends_on": [
+        "D3-code"
+      ],
+      "worktree": "wt/d3-world-audit-test",
+      "integration_task": "D3-integ",
+      "kickoff_prompt": "Task D3-test (Test world env toggle audit) \u2013 TEST. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Consume the Test Agent Kickoff Prompt left by D3-code. \n4. Use git worktree `wt/d3-world-audit-test` to add regression tests around the helper and critical flows (shell integration suite, installer/world enable harness, replay/world doctor). Ensure these suites run under `SUBSTRATE_WORLD=disabled` in a single `cargo test`. \n5. Craft the Integration Agent Kickoff Prompt (docs/project_management/next/kickoff_prompts/D3-test.md), run the commands listed there (including `cargo test -p substrate-shell integration`), append END entry, and mark the task \"completed\"."
+      "status": "completed"
+    },
+    {
+      "id": "D3-integ",
+      "name": "Integrate world env audit fixes",
+      "phase": "Phase D",
+      "type": "integration",
+      "acceptance_criteria": [
+        "`cargo test -p substrate-shell` (full suite) passes without timeouts.",
+        "Installer/world CLI harness docs reference the shared helper."
+      ],
+      "depends_on": [
+        "D3-code",
+        "D3-test"
+      ],
+      "worktree": "wt/d3-world-audit-integ",
+      "kickoff_prompt": "Task D3-integ (Integrate world env audit fixes) \u2013 INTEGRATION. \n1. Start at AI_AGENT_START_HERE.md, follow the repository workflow, read all referenced planning docs, and review docs/project_management/next/session_log.md. \n2. Update docs/project_management/next/tasks.json by setting this task\u2019s status to \"in_progress\" and append a START entry to the session log before making changes. \n3. Merge `wt/d3-world-audit-code` + `wt/d3-world-audit-test` into `wt/d3-world-audit-integ`, resolve conflicts, and verify every crate/bin/script uses the shared helper. \n4. Run `cargo fmt --all`, `cargo test -p substrate-shell`, plus any installer/world harness commands identified by the Test Agent, capturing relevant logs if behavior changed. \n5. Append END entry, mark the task \"completed\" (or \"blocked\" with explanation), and push the integration branch.",
+      "status": "completed"
+    }
+  ]
+}

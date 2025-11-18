@@ -1,0 +1,38 @@
+version: 1
+managers:
+  git:
+    summary: "Git CLI"
+    detect:
+      commands:
+        - "git --version"
+    guest_detect:
+      command: "git --version"
+    guest_install:
+      apt: |
+        sudo apt-get update
+        sudo apt-get install -y git
+
+  node:
+    summary: "Node.js runtime + npm"
+    detect:
+      commands:
+        - "node --version"
+        - "npm --version"
+    guest_detect:
+      command: "node --version"
+    guest_install:
+      custom: |
+        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+        sudo apt-get install -y nodejs
+
+  python:
+    summary: "Python 3 runtime"
+    detect:
+      commands:
+        - "python3 --version"
+    guest_detect:
+      command: "python3 --version"
+    guest_install:
+      apt: |
+        sudo apt-get update
+        sudo apt-get install -y python3 python3-venv python3-pip

@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly INSTALLER_NAME="substrate-install"
+if [[ -z "${INSTALLER_NAME:-}" ]]; then
+  INSTALLER_NAME="substrate-install"
+fi
+readonly INSTALLER_NAME
 # shellcheck disable=SC2034 # used for release metadata
 readonly INSTALLER_VERSION="0.1.0-dev"
 readonly DEFAULT_FALLBACK_VERSION="0.2.2"
@@ -16,7 +19,7 @@ PREFIX="$DEFAULT_PREFIX"
 NO_WORLD=0
 NO_SHIMS=0
 DRY_RUN=0
-AUTO_SOURCE=1
+SYNC_DEPS=0
 ARTIFACT_DIR="${SUBSTRATE_INSTALL_ARTIFACT_DIR:-${SUBSTRATE_INSTALL_ARCHIVE:-}}"
 BASE_URL="${SUBSTRATE_INSTALL_BASE_URL:-$DEFAULT_BASE_URL}"
 TMPDIR=""
@@ -27,6 +30,9 @@ ORIGINAL_PATH="${PATH}"
 PKG_MANAGER=""
 APT_UPDATED=0
 SUDO_CMD=()
+MANAGER_ENV_PATH=""
+MANAGER_INIT_PATH=""
+INSTALL_CONFIG_PATH=""
 
 log() {
   printf '[%s] %s\n' "${INSTALLER_NAME}" "$*" >&2
@@ -53,7 +59,7 @@ Options:
   --prefix <path>      Installation prefix (default: ~/.substrate)
   --no-world           Skip world backend provisioning
   --no-shims           Skip shim deployment
-  --no-auto-source     Do not source ~/.substrate_bashenv in the current shell after install
+  --sync-deps          Run 'substrate world deps sync --all' after provisioning completes
   --dry-run            Print actions without executing
   --artifact-dir <dir> Use pre-downloaded host bundle + SHA256SUMS
   --archive <dir>      Alias for --artifact-dir (deprecated)
@@ -392,8 +398,8 @@ parse_args() {
         DRY_RUN=1
         shift
         ;;
-      --no-auto-source)
-        AUTO_SOURCE=0
+      --sync-deps)
+        SYNC_DEPS=1
         shift
         ;;
       --artifact-dir|--archive)
@@ -461,6 +467,125 @@ ensure_version_selected() {
 prepare_tmpdir() {
   TMPDIR="$(mktemp -d -t substrate-install.XXXXXX)"
   trap cleanup EXIT
+}
+
+normalize_prefix() {
+  if [[ "${PREFIX}" != "/" ]]; then
+    PREFIX="${PREFIX%/}"
+    if [[ -z "${PREFIX}" ]]; then
+      PREFIX="/"
+    fi
+  fi
+}
+
+initialize_metadata_paths() {
+  MANAGER_ENV_PATH="${PREFIX}/manager_env.sh"
+  MANAGER_INIT_PATH="${PREFIX}/manager_init.sh"
+  INSTALL_CONFIG_PATH="${PREFIX}/config.json"
+}
+
+ensure_manager_init_placeholder() {
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    printf '[%s][dry-run] Create manager_init placeholder at %s\n' "${INSTALLER_NAME}" "${MANAGER_INIT_PATH}" >&2
+    return
+  fi
+
+  local init_dir
+  init_dir="$(dirname "${MANAGER_INIT_PATH}")"
+  mkdir -p "${init_dir}"
+  if [[ -f "${MANAGER_INIT_PATH}" ]]; then
+    return
+  fi
+
+  cat > "${MANAGER_INIT_PATH}.tmp" <<'EOF'
+# Substrate manager init placeholder – this file is replaced at runtime by `substrate`.
+EOF
+  mv "${MANAGER_INIT_PATH}.tmp" "${MANAGER_INIT_PATH}"
+  chmod 0644 "${MANAGER_INIT_PATH}" || true
+}
+
+write_manager_env_script() {
+  local enabled="$1"
+  local state="disabled"
+  local enabled_flag="0"
+  if [[ "${enabled}" -eq 1 ]]; then
+    state="enabled"
+    enabled_flag="1"
+  fi
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    printf '[%s][dry-run] Write manager_env.sh at %s (world_enabled=%s)\n' "${INSTALLER_NAME}" "${MANAGER_ENV_PATH}" "${state}" >&2
+    return
+  fi
+
+  local env_dir
+  env_dir="$(dirname "${MANAGER_ENV_PATH}")"
+  mkdir -p "${env_dir}"
+  local today
+  today="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  local manager_env_literal manager_init_literal legacy_literal
+  manager_env_literal="$(printf '%q' "${MANAGER_ENV_PATH}")"
+  manager_init_literal="$(printf '%q' "${MANAGER_INIT_PATH}")"
+  legacy_literal="\${HOME}/.substrate_bashenv"
+  cat > "${MANAGER_ENV_PATH}.tmp" <<EOF
+#!/usr/bin/env bash
+# Managed by ${INSTALLER_NAME} on ${today}
+export SUBSTRATE_WORLD=${state}
+export SUBSTRATE_WORLD_ENABLED=${enabled_flag}
+export SUBSTRATE_MANAGER_ENV=${manager_env_literal}
+export SUBSTRATE_MANAGER_INIT=${manager_init_literal}
+
+manager_init_path=${manager_init_literal}
+if [[ -f "\${manager_init_path}" ]]; then
+  # shellcheck disable=SC1090
+  source "\${manager_init_path}"
+fi
+
+substrate_original="\${SUBSTRATE_ORIGINAL_BASH_ENV:-}"
+if [[ -n "\${substrate_original}" && -f "\${substrate_original}" ]]; then
+  # shellcheck disable=SC1090
+  source "\${substrate_original}"
+fi
+
+legacy_bashenv="${legacy_literal}"
+if [[ -f "\${legacy_bashenv}" ]]; then
+  # shellcheck disable=SC1090
+  source "\${legacy_bashenv}"
+fi
+EOF
+  mv "${MANAGER_ENV_PATH}.tmp" "${MANAGER_ENV_PATH}"
+  chmod 0644 "${MANAGER_ENV_PATH}" || true
+}
+
+write_install_config() {
+  local enabled="$1"
+  local flag="false"
+  if [[ "${enabled}" -eq 1 ]]; then
+    flag="true"
+  fi
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    printf '[%s][dry-run] Write install metadata to %s (world_enabled=%s)\n' "${INSTALLER_NAME}" "${INSTALL_CONFIG_PATH}" "${flag}" >&2
+    return
+  fi
+
+  local config_dir
+  config_dir="$(dirname "${INSTALL_CONFIG_PATH}")"
+  mkdir -p "${config_dir}"
+  cat > "${INSTALL_CONFIG_PATH}.tmp" <<EOF
+{
+  "world_enabled": ${flag}
+}
+EOF
+  mv "${INSTALL_CONFIG_PATH}.tmp" "${INSTALL_CONFIG_PATH}"
+  chmod 0644 "${INSTALL_CONFIG_PATH}" || true
+}
+
+finalize_install_metadata() {
+  local enabled="$1"
+  ensure_manager_init_placeholder
+  write_manager_env_script "${enabled}"
+  write_install_config "${enabled}"
 }
 
 ensure_macos_prereqs() {
@@ -780,107 +905,6 @@ link_binaries() {
   fi
 }
 
-ensure_shell_integration() {
-  local shim_dir="$1"
-  local bin_dir="$2"
-  local bashenv="${HOME}/.substrate_bashenv"
-  local tramp="${HOME}/.substrate_bashenv_trampoline"
-  local existing_be="${BASH_ENV:-}"
-  local today
-  today="$(date)"
-
-  if [[ "${DRY_RUN}" -eq 0 ]]; then
-    mkdir -p "$(dirname "${bashenv}")"
-    cat > "${bashenv}.tmp" <<EOF
-# Generated by ${INSTALLER_NAME} on ${today}
-export SUBSTRATE_ROOT="${PREFIX}"
-if [ -z "\${SHIM_ORIGINAL_PATH:-}" ]; then
-  export SHIM_ORIGINAL_PATH="\${PATH}"
-fi
-export PATH="${shim_dir}:${bin_dir}:\${SHIM_ORIGINAL_PATH}"
-export SHIM_ORIGINAL_PATH
-EOF
-    mv "${bashenv}.tmp" "${bashenv}"
-  else
-    printf '[%s][dry-run] Update %s with PATH exports\n' "${INSTALLER_NAME}" "${bashenv}" >&2
-  fi
-
-  local target_bash_env="${bashenv}"
-
-  if [[ -n "${existing_be}" ]]; then
-    target_bash_env="${tramp}"
-    local expanded_be="${existing_be}"
-    if [[ "${expanded_be}" == ~* ]]; then
-      expanded_be="${expanded_be/#~/$HOME}"
-    fi
-    if command -v envsubst >/dev/null 2>&1; then
-      expanded_be="$(envsubst <<<"${expanded_be}")"
-    fi
-    local escaped_be
-    escaped_be="$(printf '%q' "${expanded_be}")"
-
-    if [[ "${DRY_RUN}" -eq 0 ]]; then
-      cat > "${tramp}.tmp" <<EOF
-#!/usr/bin/env bash
-orig=${escaped_be}
-if [ -n "\${orig}" ] && [ -f "\${orig}" ]; then
-  # shellcheck disable=SC1090
-  source "\${orig}"
-fi
-# shellcheck disable=SC1090
-source "${bashenv}"
-EOF
-      mv "${tramp}.tmp" "${tramp}"
-      chmod +x "${tramp}"
-    else
-      printf '[%s][dry-run] Create trampoline at %s chaining %s\n' "${INSTALLER_NAME}" "${tramp}" "${expanded_be}" >&2
-    fi
-  fi
-
-  local snippet
-  snippet="$(cat <<EOF
-# Added by substrate installer
-if [ -f "\$HOME/.substrate_bashenv" ]; then
-  # shellcheck disable=SC1090
-  source "\$HOME/.substrate_bashenv"
-  export BASH_ENV="${target_bash_env}"
-fi
-EOF
-)"
-
-  local shells=( "${HOME}/.zshrc" "${HOME}/.bashrc" "${HOME}/.bash_profile" )
-  for shell_rc in "${shells[@]}"; do
-    if [[ "${DRY_RUN}" -eq 1 ]]; then
-      printf '[%s][dry-run] Ensure PATH/BASH_ENV snippet in %s\n' "${INSTALLER_NAME}" "${shell_rc}" >&2
-      continue
-    fi
-
-    if [[ -f "${shell_rc}" ]]; then
-      if ! grep -Fq 'source "$HOME/.substrate_bashenv"' "${shell_rc}"; then
-        printf '\n%s\n' "${snippet}" >> "${shell_rc}"
-      fi
-    else
-      printf '#!/usr/bin/env bash\n%s\n' "${snippet}" > "${shell_rc}"
-    fi
-  done
-
-  if [[ "${DRY_RUN}" -eq 0 ]]; then
-    if [[ "${AUTO_SOURCE}" -eq 1 ]]; then
-      if [ -f "${bashenv}" ]; then
-        # shellcheck disable=SC1090
-        source "${bashenv}" 2>/dev/null || true
-      fi
-      export SUBSTRATE_ORIGINAL_BASH_ENV="${existing_be}"
-      export BASH_ENV="${target_bash_env}"
-      log "Sourced ~/.substrate_bashenv; PATH updated for this session."
-    else
-      log "Auto-source disabled (--no-auto-source); run 'source ~/.substrate_bashenv' to refresh this shell."
-    fi
-  elif [[ "${AUTO_SOURCE}" -eq 1 ]]; then
-    log "[dry-run] Would source ~/.substrate_bashenv for current shell."
-  fi
-}
-
 deploy_shims() {
   local substrate_bin="$1"
   if [[ "${NO_SHIMS}" -eq 1 ]]; then
@@ -1005,7 +1029,12 @@ provision_linux_world() {
   fi
 
   if [[ -z "${world_agent}" ]]; then
-    fatal "Linux world-agent binary not found in release bundle under ${version_dir}/bin."
+    if [[ "${DRY_RUN}" -eq 1 ]]; then
+      world_agent="${version_dir}/bin/world-agent"
+      warn "Linux world-agent binary not found in release bundle; using placeholder path for dry run."
+    else
+      fatal "Linux world-agent binary not found in release bundle under ${version_dir}/bin."
+    fi
   fi
 
   log "Installing Linux world agent systemd service..."
@@ -1073,6 +1102,10 @@ UNIT
 
 run_world_checks() {
   local substrate_bin="$1"
+  if [[ "${NO_WORLD}" -eq 1 ]]; then
+    log "Skipping world doctor (--no-world)."
+    return
+  fi
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     printf '[%s][dry-run] %s world doctor --json\n' "${INSTALLER_NAME}" "${substrate_bin}" >&2
     return
@@ -1081,6 +1114,26 @@ run_world_checks() {
   log "Running substrate world doctor..."
   if ! "${substrate_bin}" world doctor --json | jq '.'; then
     warn "World doctor reported issues. Review output above."
+  fi
+}
+
+sync_world_deps() {
+  local substrate_bin="$1"
+  if [[ "${SYNC_DEPS}" -ne 1 ]]; then
+    return
+  fi
+  if [[ "${NO_WORLD}" -eq 1 ]]; then
+    log "Skipping world dependency sync because --no-world was used."
+    return
+  fi
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    printf '[%s][dry-run] %s world deps sync --all --verbose\n' "${INSTALLER_NAME}" "${substrate_bin}" >&2
+    return
+  fi
+
+  log "Syncing guest dependencies via 'substrate world deps sync --all'..."
+  if ! "${substrate_bin}" world deps sync --all --verbose; then
+    warn "world deps sync failed; run 'substrate world deps sync --all' later to finish provisioning."
   fi
 }
 
@@ -1117,7 +1170,11 @@ install_macos() {
   fi
 
   link_binaries "${version_dir}" "${bin_dir}"
-  ensure_shell_integration "${shim_dir}" "${bin_dir}"
+
+  local world_enabled=1
+  if [[ "${NO_WORLD}" -eq 1 ]]; then
+    world_enabled=0
+  fi
 
   local substrate_bin="${bin_dir}/substrate"
   deploy_shims "${substrate_bin}"
@@ -1127,13 +1184,23 @@ install_macos() {
   doctor_original_path="${bin_dir}:${ORIGINAL_PATH}"
   log "Doctor PATH: ${doctor_original_path}"
   PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" run_world_checks "${substrate_bin}"
+  PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" sync_world_deps "${substrate_bin}"
+
+  finalize_install_metadata "${world_enabled}"
 
   if [[ "${DRY_RUN}" -eq 1 ]]; then
-    log "Installation complete (dry run). Open a new terminal or 'source ~/.substrate_bashenv' when running for real."
-  elif [[ "${AUTO_SOURCE}" -eq 1 ]]; then
-    log "Installation complete. Substrate is ready to use in this shell and future sessions."
+    log "Installation complete (dry run). After a real install add ${bin_dir} to your PATH or run ${bin_dir}/substrate directly."
   else
-    log "Installation complete. Run 'source ~/.substrate_bashenv' or open a new terminal to begin using Substrate."
+    log "Installation complete. Add ${bin_dir} to your PATH or invoke ${bin_dir}/substrate directly."
+  fi
+  log "manager_init placeholder: ${MANAGER_INIT_PATH}"
+  log "manager_env script: ${MANAGER_ENV_PATH}"
+  log "install metadata: ${INSTALL_CONFIG_PATH}"
+
+  if [[ "${world_enabled}" -eq 1 ]]; then
+    log "World backend enabled; run '${bin_dir}/substrate world doctor --json' or '${bin_dir}/substrate world deps sync --all' as needed."
+  else
+    log "World backend disabled (--no-world). Run '${bin_dir}/substrate world enable --prefix \"${PREFIX}\"' when you are ready to provision."
   fi
 }
 
@@ -1170,7 +1237,11 @@ install_linux() {
   fi
 
   link_binaries "${version_dir}" "${bin_dir}"
-  ensure_shell_integration "${shim_dir}" "${bin_dir}"
+
+  local world_enabled=1
+  if [[ "${NO_WORLD}" -eq 1 ]]; then
+    world_enabled=0
+  fi
 
   local substrate_bin="${bin_dir}/substrate"
   deploy_shims "${substrate_bin}"
@@ -1180,23 +1251,35 @@ install_linux() {
   doctor_original_path="${bin_dir}:${ORIGINAL_PATH}"
   log "Doctor PATH: ${doctor_original_path}"
   PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" run_world_checks "${substrate_bin}"
+  PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" sync_world_deps "${substrate_bin}"
+
+  finalize_install_metadata "${world_enabled}"
 
   if [[ "${IS_WSL}" -eq 1 ]]; then
     log "Detected WSL environment. Windows host components (forwarder, uninstall) must be managed via PowerShell scripts."
   fi
 
   if [[ "${DRY_RUN}" -eq 1 ]]; then
-    log "Installation complete (dry run). Open a new terminal or 'source ~/.substrate_bashenv' when running for real."
-  elif [[ "${AUTO_SOURCE}" -eq 1 ]]; then
-    log "Installation complete. Substrate is ready to use in this shell and future sessions."
+    log "Installation complete (dry run). After a real install add ${bin_dir} to your PATH or run ${bin_dir}/substrate directly."
   else
-    log "Installation complete. Run 'source ~/.substrate_bashenv' or open a new terminal to begin using Substrate."
+    log "Installation complete. Add ${bin_dir} to your PATH or invoke ${bin_dir}/substrate directly."
+  fi
+  log "manager_init placeholder: ${MANAGER_INIT_PATH}"
+  log "manager_env script: ${MANAGER_ENV_PATH}"
+  log "install metadata: ${INSTALL_CONFIG_PATH}"
+
+  if [[ "${world_enabled}" -eq 1 ]]; then
+    log "World backend enabled; run '${bin_dir}/substrate world doctor --json' for diagnostics or '${bin_dir}/substrate world deps sync --all' to mirror host tools."
+  else
+    log "World backend disabled (--no-world). Run '${bin_dir}/substrate world enable --prefix \"${PREFIX}\"' when you are ready to provision."
   fi
 }
 
 main() {
   sanitize_env_path
   parse_args "$@"
+  normalize_prefix
+  initialize_metadata_paths
   detect_platform
   prepare_tmpdir
 
@@ -1217,4 +1300,6 @@ main() {
   esac
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

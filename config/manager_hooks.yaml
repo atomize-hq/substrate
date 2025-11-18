@@ -1,0 +1,493 @@
+# Substrate manager manifest
+# Tier ordering matters for overlays—keep Tier-1 managers at the top so overrides remain stable.
+# Each entry provides detect/init/error/repair metadata plus guest install recipes for world deps.
+
+version: 1
+
+managers:
+  # Tier-1 managers (Phase B parity)
+  - name: nvm
+    priority: 10
+    detect:
+      files:
+        - "$HOME/.nvm/nvm.sh"
+        - "$HOME/.config/nvm/nvm.sh"
+        - "/usr/local/opt/nvm/nvm.sh"
+      commands:
+        - nvm
+      env:
+        NVM_DIR: ""
+    init:
+      shell: |
+        export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+        if [ -d "$NVM_DIR" ]; then
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          [ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"
+        fi
+    errors:
+      - "nvm:.*command not found"
+      - "node:.*command not found"
+    repair_hint: |
+      cat <<'EOF' >> ~/.substrate_bashenv
+      export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+      if [ -d "$NVM_DIR" ]; then
+        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+        [ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"
+      fi
+      EOF
+      source ~/.substrate_bashenv
+    guest_detect:
+      command: "bash -lc '[ -s \"$HOME/.nvm/nvm.sh\" ]'"
+    guest_install:
+      custom: |
+        if [ ! -d "$HOME/.nvm" ]; then
+          curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+        else
+          cd "$HOME/.nvm" && git pull --ff-only
+        fi
+
+  - name: pyenv
+    priority: 20
+    detect:
+      files:
+        - "$HOME/.pyenv/bin/pyenv"
+      commands:
+        - pyenv
+      env:
+        PYENV_ROOT: ""
+    init:
+      shell: |
+        export PYENV_ROOT="${PYENV_ROOT:-$HOME/.pyenv}"
+        if [ -d "$PYENV_ROOT" ]; then
+          export PATH="$PYENV_ROOT/bin:$PATH"
+          eval "$(pyenv init -)"
+        fi
+    errors:
+      - "pyenv:.*command not found"
+    repair_hint: |
+      cat <<'EOF' >> ~/.substrate_bashenv
+      export PYENV_ROOT="${PYENV_ROOT:-$HOME/.pyenv}"
+      if [ -d "$PYENV_ROOT" ]; then
+        export PATH="$PYENV_ROOT/bin:$PATH"
+        eval "$(pyenv init -)"
+      fi
+      EOF
+      source ~/.substrate_bashenv
+    guest_detect:
+      command: "pyenv --version"
+    guest_install:
+      custom: |
+        sudo apt-get update
+        sudo apt-get install -y make build-essential libssl-dev zlib1g-dev \
+          libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm \
+          libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
+        if [ ! -d "$HOME/.pyenv" ]; then
+          git clone https://github.com/pyenv/pyenv.git "$HOME/.pyenv"
+        else
+          cd "$HOME/.pyenv" && git pull --ff-only
+        fi
+
+  - name: direnv
+    priority: 30
+    detect:
+      commands:
+        - direnv
+      files:
+        - "$HOME/.config/direnv/direnvrc"
+        - "$HOME/.direnvrc"
+    init:
+      shell: |
+        if command -v direnv >/dev/null 2>&1; then
+          eval "$(direnv hook bash)"
+        fi
+    errors:
+      - "direnv:.*command not found"
+    repair_hint: |
+      cat <<'EOF' >> ~/.substrate_bashenv
+      if command -v direnv >/dev/null 2>&1; then
+        eval "$(direnv hook bash)"
+      fi
+      EOF
+      source ~/.substrate_bashenv
+    guest_detect:
+      command: "direnv version"
+    guest_install:
+      apt: |
+        sudo apt-get update
+        sudo apt-get install -y direnv
+
+  - name: asdf
+    priority: 40
+    detect:
+      files:
+        - "$HOME/.asdf/asdf.sh"
+        - "$HOME/.asdf/bin/asdf"
+      commands:
+        - asdf
+      env:
+        ASDF_DIR: ""
+    init:
+      shell: |
+        export ASDF_DIR="${ASDF_DIR:-$HOME/.asdf}"
+        export ASDF_DATA_DIR="${ASDF_DATA_DIR:-$ASDF_DIR}"
+        if [ -s "$ASDF_DIR/asdf.sh" ]; then
+          . "$ASDF_DIR/asdf.sh"
+        fi
+        if [ -s "$ASDF_DIR/completions/asdf.bash" ]; then
+          . "$ASDF_DIR/completions/asdf.bash"
+        fi
+    errors:
+      - "asdf:.*command not found"
+    repair_hint: |
+      cat <<'EOF' >> ~/.substrate_bashenv
+      export ASDF_DIR="${ASDF_DIR:-$HOME/.asdf}"
+      export ASDF_DATA_DIR="${ASDF_DATA_DIR:-$ASDF_DIR}"
+      if [ -s "$ASDF_DIR/asdf.sh" ]; then
+        . "$ASDF_DIR/asdf.sh"
+      fi
+      if [ -s "$ASDF_DIR/completions/asdf.bash" ]; then
+        . "$ASDF_DIR/completions/asdf.bash"
+      fi
+      EOF
+      source ~/.substrate_bashenv
+    guest_detect:
+      command: "asdf --version"
+    guest_install:
+      custom: |
+        sudo apt-get update
+        sudo apt-get install -y git curl
+        if [ ! -d "$HOME/.asdf" ]; then
+          git clone https://github.com/asdf-vm/asdf.git "$HOME/.asdf" --branch v0.14.0
+        else
+          cd "$HOME/.asdf" && git pull --ff-only
+        fi
+
+  - name: conda
+    priority: 50
+    detect:
+      files:
+        - "$HOME/miniconda3/etc/profile.d/conda.sh"
+        - "$HOME/anaconda3/etc/profile.d/conda.sh"
+      commands:
+        - conda
+      env:
+        CONDA_ROOT: ""
+    init:
+      shell: |
+        if [ -z "${CONDA_ROOT:-}" ]; then
+          if [ -d "$HOME/miniconda3" ]; then
+            export CONDA_ROOT="$HOME/miniconda3"
+          elif [ -d "$HOME/anaconda3" ]; then
+            export CONDA_ROOT="$HOME/anaconda3"
+          fi
+        fi
+        if [ -n "${CONDA_ROOT:-}" ] && [ -s "$CONDA_ROOT/etc/profile.d/conda.sh" ]; then
+          . "$CONDA_ROOT/etc/profile.d/conda.sh"
+        fi
+    errors:
+      - "conda:.*command not found"
+    repair_hint: |
+      cat <<'EOF' >> ~/.substrate_bashenv
+      if [ -z "${CONDA_ROOT:-}" ]; then
+        if [ -d "$HOME/miniconda3" ]; then
+          export CONDA_ROOT="$HOME/miniconda3"
+        elif [ -d "$HOME/anaconda3" ]; then
+          export CONDA_ROOT="$HOME/anaconda3"
+        fi
+      fi
+      if [ -n "${CONDA_ROOT:-}" ] && [ -s "$CONDA_ROOT/etc/profile.d/conda.sh" ]; then
+        . "$CONDA_ROOT/etc/profile.d/conda.sh"
+      fi
+      EOF
+      source ~/.substrate_bashenv
+    guest_detect:
+      command: "conda --version"
+    guest_install:
+      custom: |
+        if [ ! -d "$HOME/miniconda3" ]; then
+          curl -fsSL https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -o /tmp/miniconda.sh
+          bash /tmp/miniconda.sh -b -p "$HOME/miniconda3"
+        fi
+        "$HOME/miniconda3/bin/conda" init bash >/dev/null 2>&1 || true
+
+  # Tier-2 managers (Phase D expansion)
+  - name: mise
+    priority: 60
+    detect:
+      files:
+        - "$HOME/.local/share/mise/bin/mise"
+        - "$HOME/.local/share/rtx/bin/rtx"
+        - "$HOME/.mise/bin/mise"
+        - "$HOME/.rtx/bin/rtx"
+      commands:
+        - mise
+        - rtx
+      env:
+        MISE_HOME: ""
+        RTX_HOME: ""
+    init:
+      shell: |
+        if command -v mise >/dev/null 2>&1; then
+          eval "$(mise activate bash)"
+        elif command -v rtx >/dev/null 2>&1; then
+          eval "$(rtx activate bash)"
+        fi
+    errors:
+      - "mise:.*command not found"
+      - "rtx:.*command not found"
+    repair_hint: |
+      cat <<'EOF' >> ~/.substrate_bashenv
+      if command -v mise >/dev/null 2>&1; then
+        eval "$(mise activate bash)"
+      elif command -v rtx >/dev/null 2>&1; then
+        eval "$(rtx activate bash)"
+      fi
+      EOF
+      source ~/.substrate_bashenv
+    guest_detect:
+      command: "mise --version"
+    guest_install:
+      custom: |
+        if ! command -v mise >/dev/null 2>&1 && ! command -v rtx >/dev/null 2>&1; then
+          curl https://mise.run | sh
+        else
+          mise self-update >/dev/null 2>&1 || true
+        fi
+
+  - name: rbenv
+    priority: 70
+    detect:
+      files:
+        - "$HOME/.rbenv/bin/rbenv"
+        - "$HOME/.rbenv/shims"
+      commands:
+        - rbenv
+      env:
+        RBENV_ROOT: ""
+    init:
+      shell: |
+        export RBENV_ROOT="${RBENV_ROOT:-$HOME/.rbenv}"
+        if [ -d "$RBENV_ROOT" ]; then
+          export PATH="$RBENV_ROOT/bin:$PATH"
+          eval "$(rbenv init -)"
+        fi
+    errors:
+      - "rbenv:.*command not found"
+      - "ruby:.*command not found"
+    repair_hint: |
+      cat <<'EOF' >> ~/.substrate_bashenv
+      export RBENV_ROOT="${RBENV_ROOT:-$HOME/.rbenv}"
+      if [ -d "$RBENV_ROOT" ]; then
+        export PATH="$RBENV_ROOT/bin:$PATH"
+        eval "$(rbenv init -)"
+      fi
+      EOF
+      source ~/.substrate_bashenv
+    guest_detect:
+      command: "rbenv --version"
+    guest_install:
+      custom: |
+        sudo apt-get update
+        sudo apt-get install -y git build-essential libssl-dev libreadline-dev zlib1g-dev
+        if [ ! -d "$HOME/.rbenv" ]; then
+          git clone https://github.com/rbenv/rbenv.git "$HOME/.rbenv"
+          git clone https://github.com/rbenv/ruby-build.git "$HOME/.rbenv/plugins/ruby-build"
+        else
+          cd "$HOME/.rbenv" && git pull --ff-only
+          cd "$HOME/.rbenv/plugins/ruby-build" && git pull --ff-only
+        fi
+
+  - name: sdkman
+    priority: 80
+    detect:
+      files:
+        - "$HOME/.sdkman/bin/sdkman-init.sh"
+      commands:
+        - sdk
+      env:
+        SDKMAN_DIR: ""
+    init:
+      shell: |
+        export SDKMAN_DIR="${SDKMAN_DIR:-$HOME/.sdkman}"
+        if [ -s "$SDKMAN_DIR/bin/sdkman-init.sh" ]; then
+          . "$SDKMAN_DIR/bin/sdkman-init.sh"
+        fi
+    errors:
+      - "sdk:.*command not found"
+    repair_hint: |
+      cat <<'EOF' >> ~/.substrate_bashenv
+      export SDKMAN_DIR="${SDKMAN_DIR:-$HOME/.sdkman}"
+      if [ -s "$SDKMAN_DIR/bin/sdkman-init.sh" ]; then
+        . "$SDKMAN_DIR/bin/sdkman-init.sh"
+      fi
+      EOF
+      source ~/.substrate_bashenv
+    guest_detect:
+      command: "bash -lc 'source \"$HOME/.sdkman/bin/sdkman-init.sh\" >/dev/null 2>&1 && sdk version'"
+    guest_install:
+      custom: |
+        if [ ! -d "$HOME/.sdkman" ]; then
+          curl -s "https://get.sdkman.io" | bash
+        fi
+        bash -lc 'source "$HOME/.sdkman/bin/sdkman-init.sh" >/dev/null 2>&1 && sdk selfupdate'
+
+  - name: bun
+    priority: 90
+    detect:
+      files:
+        - "$HOME/.bun/bin/bun"
+      commands:
+        - bun
+      env:
+        BUN_INSTALL: ""
+    init:
+      shell: |
+        export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
+        if [ -d "$BUN_INSTALL/bin" ]; then
+          export PATH="$BUN_INSTALL/bin:$PATH"
+        fi
+    errors:
+      - "bun:.*command not found"
+    repair_hint: |
+      cat <<'EOF' >> ~/.substrate_bashenv
+      export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
+      if [ -d "$BUN_INSTALL/bin" ]; then
+        export PATH="$BUN_INSTALL/bin:$PATH"
+      fi
+      EOF
+      source ~/.substrate_bashenv
+    guest_detect:
+      command: "bun --version"
+    guest_install:
+      custom: |
+        if [ ! -d "$HOME/.bun" ]; then
+          curl -fsSL https://bun.sh/install | bash
+        else
+          "$HOME/.bun/bin/bun" upgrade
+        fi
+
+  - name: volta
+    priority: 100
+    detect:
+      files:
+        - "$HOME/.volta/bin/volta"
+      commands:
+        - volta
+      env:
+        VOLTA_HOME: ""
+    init:
+      shell: |
+        export VOLTA_HOME="${VOLTA_HOME:-$HOME/.volta}"
+        if [ -d "$VOLTA_HOME/bin" ]; then
+          export PATH="$VOLTA_HOME/bin:$PATH"
+        fi
+    errors:
+      - "volta:.*command not found"
+    repair_hint: |
+      cat <<'EOF' >> ~/.substrate_bashenv
+      export VOLTA_HOME="${VOLTA_HOME:-$HOME/.volta}"
+      if [ -d "$VOLTA_HOME/bin" ]; then
+        export PATH="$VOLTA_HOME/bin:$PATH"
+      fi
+      EOF
+      source ~/.substrate_bashenv
+    guest_detect:
+      command: "volta --version"
+    guest_install:
+      custom: |
+        if [ ! -d "$HOME/.volta" ]; then
+          curl https://get.volta.sh | bash
+        else
+          "$HOME/.volta/bin/volta" upgrade
+        fi
+
+  - name: goenv
+    priority: 110
+    detect:
+      files:
+        - "$HOME/.goenv/bin/goenv"
+      commands:
+        - goenv
+      env:
+        GOENV_ROOT: ""
+    init:
+      shell: |
+        export GOENV_ROOT="${GOENV_ROOT:-$HOME/.goenv}"
+        if [ -d "$GOENV_ROOT" ]; then
+          export PATH="$GOENV_ROOT/bin:$PATH"
+          eval "$(goenv init -)"
+        fi
+    errors:
+      - "goenv:.*command not found"
+      - "go:.*command not found"
+    repair_hint: |
+      cat <<'EOF' >> ~/.substrate_bashenv
+      export GOENV_ROOT="${GOENV_ROOT:-$HOME/.goenv}"
+      if [ -d "$GOENV_ROOT" ]; then
+        export PATH="$GOENV_ROOT/bin:$PATH"
+        eval "$(goenv init -)"
+      fi
+      EOF
+      source ~/.substrate_bashenv
+    guest_detect:
+      command: "goenv --version"
+    guest_install:
+      custom: |
+        sudo apt-get update
+        sudo apt-get install -y git build-essential
+        if [ ! -d "$HOME/.goenv" ]; then
+          git clone https://github.com/syndbg/goenv.git "$HOME/.goenv"
+        else
+          cd "$HOME/.goenv" && git pull --ff-only
+        fi
+
+  - name: asdf-node
+    priority: 120
+    detect:
+      files:
+        - "$HOME/.asdf/plugins/nodejs"
+        - "$HOME/.asdf/installs/nodejs"
+      commands:
+        - asdf
+      script: "bash -lc 'asdf plugin list 2>/dev/null | grep -q nodejs'"
+    init:
+      shell: |
+        export ASDF_DIR="${ASDF_DIR:-$HOME/.asdf}"
+        if [ -s "$ASDF_DIR/asdf.sh" ]; then
+          . "$ASDF_DIR/asdf.sh"
+          export PATH="$ASDF_DIR/shims:$PATH"
+          asdf reshim nodejs >/dev/null 2>&1 || true
+        fi
+    errors:
+      - "node:.*command not found"
+    repair_hint: |
+      cat <<'EOF' >> ~/.substrate_bashenv
+      export ASDF_DIR="${ASDF_DIR:-$HOME/.asdf}"
+      if [ -s "$ASDF_DIR/asdf.sh" ]; then
+        . "$ASDF_DIR/asdf.sh"
+        export PATH="$ASDF_DIR/shims:$PATH"
+        asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git >/dev/null 2>&1 || true
+        asdf install nodejs latest >/dev/null 2>&1 || true
+      fi
+      EOF
+      source ~/.substrate_bashenv
+    guest_detect:
+      command: "bash -lc 'ASDF_DIR=${ASDF_DIR:-$HOME/.asdf} && \"$ASDF_DIR/bin/asdf\" list nodejs'"
+    guest_install:
+      custom: |
+        sudo apt-get update
+        sudo apt-get install -y git curl dirmngr gpg
+        export ASDF_DIR="${ASDF_DIR:-$HOME/.asdf}"
+        if [ ! -d "$ASDF_DIR" ]; then
+          git clone https://github.com/asdf-vm/asdf.git "$ASDF_DIR" --branch v0.14.0
+        else
+          cd "$ASDF_DIR" && git pull --ff-only
+        fi
+        ASDF_BIN="$ASDF_DIR/bin/asdf"
+        if ! "$ASDF_BIN" plugin list | grep -q nodejs; then
+          "$ASDF_BIN" plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git
+          bash "$ASDF_DIR/plugins/nodejs/bin/import-release-team-keyring"
+        fi
+        "$ASDF_BIN" install nodejs latest
+        "$ASDF_BIN" global nodejs latest
+

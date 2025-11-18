@@ -5,11 +5,20 @@
 //! scenarios that were proven to work with Claude Code through manual testing.
 
 use anyhow::Result;
+use serde_json::Value;
+use serial_test::serial;
 use std::fs;
 use tempfile::TempDir;
 
 /// Helper function to get the substrate-shim binary path from workspace root
 fn get_shim_binary_path() -> String {
+    if let Some(bin) = option_env!("CARGO_BIN_EXE_substrate_shim_test_bin") {
+        return bin.to_string();
+    }
+    if let Ok(bin) = std::env::var("CARGO_BIN_EXE_substrate_shim_test_bin") {
+        return bin;
+    }
+
     let binary_name = if cfg!(windows) {
         "substrate-shim.exe"
     } else {
@@ -26,6 +35,7 @@ fn get_shim_binary_path() -> String {
 
 /// Test the complete shim execution flow with real binary resolution
 #[test]
+#[serial]
 fn test_shim_execution_flow() -> Result<()> {
     let temp = TempDir::new()?;
     let shim_dir = temp.path().join("shims");
@@ -65,11 +75,14 @@ fn test_shim_execution_flow() -> Result<()> {
     let session_id = uuid::Uuid::now_v7().to_string();
     let log_file = temp.path().join("trace.jsonl");
 
+    let shimmed_path = format!("{}:{}", shim_dir.display(), bin_dir.display());
+
     let output = std::process::Command::new(&shim_binary)
         .args(["test", "message"])
         .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
         .env("SHIM_TRACE_LOG", &log_file)
         .env("SHIM_SESSION_ID", &session_id)
+        .env("PATH", &shimmed_path)
         .env_remove("SHIM_DEPTH") // Ensure deterministic test environment
         .env_remove("SHIM_ACTIVE")
         .output()?;
@@ -185,6 +198,7 @@ fn test_claude_code_hash_pinning_scenario() -> Result<()> {
 
 /// Test SHIM_BYPASS functionality
 #[test]
+#[serial]
 fn test_shim_bypass() -> Result<()> {
     let temp = TempDir::new()?;
     let bin_dir = temp.path().join("bin");
@@ -223,10 +237,13 @@ fn test_shim_bypass() -> Result<()> {
         fs::set_permissions(&shim_echo, perms)?;
     }
 
+    let shimmed_path = format!("{}:{}", shim_dir.display(), bin_dir.display());
+
     // Test with SHIM_BYPASS=1 - should execute directly without logging
     let output = std::process::Command::new(&shim_echo)
         .env("SHIM_BYPASS", "1")
         .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("PATH", &shimmed_path)
         .arg("bypass works")
         .output()?;
 
@@ -277,6 +294,8 @@ fn test_session_correlation() -> Result<()> {
     // Generate session ID
     let session_id = uuid::Uuid::now_v7().to_string();
 
+    let shimmed_path = format!("{}:{}", shim_dir.display(), bin_dir.display());
+
     // Run multiple commands with same session ID
     for i in 1..=3 {
         let mut cmd = std::process::Command::new(&shim_binary);
@@ -290,6 +309,7 @@ fn test_session_correlation() -> Result<()> {
             .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
             .env("SHIM_TRACE_LOG", &log_file)
             .env("SHIM_SESSION_ID", &session_id)
+            .env("PATH", &shimmed_path)
             .env("SHIM_DEPTH", (i - 1).to_string()) // Simulate nested execution
             .output()?;
 
@@ -345,6 +365,7 @@ fn test_session_correlation() -> Result<()> {
 
 /// Test credential redaction functionality
 #[test]
+#[serial]
 fn test_credential_redaction() -> Result<()> {
     let temp = TempDir::new()?;
     let bin_dir = temp.path().join("bin");
@@ -380,6 +401,8 @@ fn test_credential_redaction() -> Result<()> {
         fs::set_permissions(&shim_binary, perms)?;
     }
 
+    let shimmed_path = format!("{}:{}", shim_dir.display(), bin_dir.display());
+
     // Test with sensitive arguments
     let output = std::process::Command::new(&shim_binary)
         .args([
@@ -393,6 +416,7 @@ fn test_credential_redaction() -> Result<()> {
         ])
         .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
         .env("SHIM_TRACE_LOG", &log_file)
+        .env("PATH", &shimmed_path)
         .output()?;
 
     assert!(output.status.success());
@@ -440,9 +464,12 @@ fn test_missing_command_error() -> Result<()> {
         fs::set_permissions(&shim_binary, perms)?;
     }
 
+    let shimmed_path = format!("{}:{}", shim_dir.display(), bin_dir.display());
+
     // Try to execute nonexistent command
     let output = std::process::Command::new(&shim_binary)
         .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("PATH", &shimmed_path)
         .output()?;
 
     // Should fail with appropriate error code
@@ -450,6 +477,455 @@ fn test_missing_command_error() -> Result<()> {
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("Command 'nonexistent' not found"));
+
+    Ok(())
+}
+
+/// Ensure runtime PATH mutations from managers like pyenv/nvm are honored
+#[test]
+#[serial]
+fn test_runtime_path_overrides_original_var() -> Result<()> {
+    let temp = TempDir::new()?;
+    let shim_dir = temp.path().join("shims");
+    let original_dir = temp.path().join("original");
+    let override_dir = temp.path().join("override");
+    let log_file = temp.path().join("runtime_path.jsonl");
+
+    fs::create_dir_all(&shim_dir)?;
+    fs::create_dir_all(&original_dir)?;
+    fs::create_dir_all(&override_dir)?;
+
+    let original_python = original_dir.join("python");
+    let override_python = override_dir.join("python");
+
+    fs::write(&original_python, "#!/bin/bash\necho original-python")?;
+    fs::write(&override_python, "#!/bin/bash\necho override-python")?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for script in [&original_python, &override_python] {
+            let mut perms = fs::metadata(script)?.permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(script, perms)?;
+        }
+    }
+
+    let shim_binary_path = get_shim_binary_path();
+    let shim_python = shim_dir.join("python");
+    fs::copy(shim_binary_path, &shim_python)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&shim_python)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&shim_python, perms)?;
+    }
+
+    let path_with_manager = format!(
+        "{}:{}:{}",
+        override_dir.display(),
+        shim_dir.display(),
+        original_dir.display()
+    );
+
+    let output = std::process::Command::new(&shim_python)
+        .env("PATH", &path_with_manager)
+        .env(
+            "SHIM_ORIGINAL_PATH",
+            original_dir.to_string_lossy().as_ref(),
+        )
+        .env("SHIM_TRACE_LOG", &log_file)
+        .env("SHIM_CACHE_BUST", "1")
+        .env_remove("SHIM_ACTIVE")
+        .env_remove("SHIM_DEPTH")
+        .output()?;
+
+    assert!(
+        output.status.success(),
+        "shim execution failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let log_content = fs::read_to_string(&log_file)?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("override-python"),
+        "expected override binary to run, got: {stdout}"
+    );
+
+    assert!(
+        log_content.contains(&override_dir.display().to_string()),
+        "log should record resolved override path: {log_content}"
+    );
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn manager_hint_logging_records_entry() -> Result<()> {
+    let temp = TempDir::new()?;
+    let shim_dir = temp.path().join("shims");
+    let bin_dir = temp.path().join("bin");
+    let log_file = temp.path().join("hint_log.jsonl");
+    let manifest_path = temp.path().join("manager_hooks.yaml");
+
+    fs::create_dir_all(&shim_dir)?;
+    fs::create_dir_all(&bin_dir)?;
+
+    fs::write(
+        &manifest_path,
+        r#"version: 1
+managers:
+  - name: nvm
+    priority: 10
+    detect: {}
+    init: {}
+    errors:
+      - "nvm: command not found"
+    repair_hint: "initialize nvm inside Substrate"
+"#,
+    )?;
+
+    let failing = bin_dir.join("nvm");
+    fs::write(
+        &failing,
+        "#!/usr/bin/env bash\necho 'shim-outer'\necho 'nvm: command not found' >&2\nexit 127\n",
+    )?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&failing)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&failing, perms)?;
+    }
+
+    let shim_binary_path = get_shim_binary_path();
+    let shim_copy = shim_dir.join("nvm");
+    fs::copy(shim_binary_path, &shim_copy)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&shim_copy)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&shim_copy, perms)?;
+    }
+
+    let host_path = std::env::var("PATH").unwrap_or_default();
+    let shimmed_path = if host_path.is_empty() {
+        format!("{}:{}:/usr/bin:/bin", shim_dir.display(), bin_dir.display())
+    } else {
+        format!(
+            "{}:{}:{}:/usr/bin:/bin",
+            shim_dir.display(),
+            bin_dir.display(),
+            host_path
+        )
+    };
+
+    let output = std::process::Command::new(&shim_copy)
+        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("PATH", &shimmed_path)
+        .env("SHIM_TRACE_LOG", &log_file)
+        .env(
+            "SUBSTRATE_MANAGER_MANIFEST",
+            manifest_path.to_string_lossy().as_ref(),
+        )
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_SHIM_HINTS", "1")
+        .output()?;
+
+    assert!(!output.status.success(), "shim should propagate failure");
+
+    let log_content = fs::read_to_string(&log_file)?;
+    let mut hint_found = false;
+    for line in log_content.lines() {
+        if let Ok(Value::Object(obj)) = serde_json::from_str::<Value>(line) {
+            if let Some(hint) = obj.get("manager_hint") {
+                hint_found = true;
+                assert_eq!(hint.get("name").and_then(|v| v.as_str()), Some("nvm"));
+                assert!(hint.get("hint").is_some());
+                break;
+            }
+        }
+    }
+
+    assert!(hint_found, "manager_hint entry missing in log");
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn tier2_manager_hint_logging_records_entry() -> Result<()> {
+    let temp = TempDir::new()?;
+    let shim_dir = temp.path().join("shims");
+    let bin_dir = temp.path().join("bin");
+    let log_file = temp.path().join("bun_hint_log.jsonl");
+    let manifest_path = temp.path().join("manager_hooks.yaml");
+
+    fs::create_dir_all(&shim_dir)?;
+    fs::create_dir_all(&bin_dir)?;
+
+    fs::write(
+        &manifest_path,
+        r#"version: 1
+managers:
+  - name: bun
+    priority: 15
+    detect: {}
+    init: {}
+    errors:
+      - "bun: command not found"
+    repair_hint: "install bun inside Substrate"
+"#,
+    )?;
+
+    let failing = bin_dir.join("bun");
+    fs::write(
+        &failing,
+        "#!/usr/bin/env bash\necho 'bun: command not found' >&2\nexit 127\n",
+    )?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&failing)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&failing, perms)?;
+    }
+
+    let shim_binary_path = get_shim_binary_path();
+    let shim_copy = shim_dir.join("bun");
+    fs::copy(shim_binary_path, &shim_copy)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&shim_copy)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&shim_copy, perms)?;
+    }
+
+    let host_path = std::env::var("PATH").unwrap_or_default();
+    let shimmed_path = if host_path.is_empty() {
+        format!("{}:{}:/usr/bin:/bin", shim_dir.display(), bin_dir.display())
+    } else {
+        format!(
+            "{}:{}:{}:/usr/bin:/bin",
+            shim_dir.display(),
+            bin_dir.display(),
+            host_path
+        )
+    };
+
+    let output = std::process::Command::new(&shim_copy)
+        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("PATH", &shimmed_path)
+        .env("SHIM_TRACE_LOG", &log_file)
+        .env(
+            "SUBSTRATE_MANAGER_MANIFEST",
+            manifest_path.to_string_lossy().as_ref(),
+        )
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_SHIM_HINTS", "1")
+        .output()?;
+
+    assert!(
+        !output.status.success(),
+        "bun shim should propagate failure so hints emit"
+    );
+
+    let log_content = fs::read_to_string(&log_file)?;
+    let mut bun_hint = None;
+    for line in log_content.lines() {
+        if let Ok(Value::Object(obj)) = serde_json::from_str::<Value>(line) {
+            if let Some(hint) = obj.get("manager_hint") {
+                bun_hint = Some(hint.clone());
+                break;
+            }
+        }
+    }
+
+    let hint = bun_hint.expect("bun manager hint missing");
+    assert_eq!(hint.get("name").and_then(|v| v.as_str()), Some("bun"));
+    assert_eq!(
+        hint.get("hint").and_then(|v| v.as_str()),
+        Some("install bun inside Substrate")
+    );
+    Ok(())
+}
+
+#[test]
+fn manager_hint_skipped_when_world_disabled() -> Result<()> {
+    let temp = TempDir::new()?;
+    let shim_dir = temp.path().join("shims");
+    let bin_dir = temp.path().join("bin");
+    let log_file = temp.path().join("hint_disabled.jsonl");
+    let manifest_path = temp.path().join("manager_hooks.yaml");
+
+    fs::create_dir_all(&shim_dir)?;
+    fs::create_dir_all(&bin_dir)?;
+
+    fs::write(
+        &manifest_path,
+        r#"version: 1
+managers:
+  - name: direnv
+    priority: 5
+    detect: {}
+    init: {}
+    errors:
+      - "direnv: command not found"
+    repair_hint: "install direnv"
+"#,
+    )?;
+
+    let failing = bin_dir.join("direnv");
+    fs::write(
+        &failing,
+        "#!/usr/bin/env bash\necho 'direnv: command not found' >&2\nexit 127\n",
+    )?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&failing)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&failing, perms)?;
+    }
+
+    let shim_binary_path = get_shim_binary_path();
+    let shim_copy = shim_dir.join("direnv");
+    fs::copy(shim_binary_path, &shim_copy)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&shim_copy)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&shim_copy, perms)?;
+    }
+
+    let host_path = std::env::var("PATH").unwrap_or_default();
+    let shimmed_path = if host_path.is_empty() {
+        format!("{}:{}:/usr/bin:/bin", shim_dir.display(), bin_dir.display())
+    } else {
+        format!(
+            "{}:{}:{}:/usr/bin:/bin",
+            shim_dir.display(),
+            bin_dir.display(),
+            host_path
+        )
+    };
+
+    let output = std::process::Command::new(&shim_copy)
+        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("PATH", &shimmed_path)
+        .env("SHIM_TRACE_LOG", &log_file)
+        .env(
+            "SUBSTRATE_MANAGER_MANIFEST",
+            manifest_path.to_string_lossy().as_ref(),
+        )
+        .env("SUBSTRATE_WORLD_ENABLED", "false")
+        .env("SUBSTRATE_WORLD", "disabled")
+        .output()?;
+
+    assert!(!output.status.success());
+
+    let hint_entry = fs::read_to_string(&log_file)?
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .find(|value| value.get("manager_hint").is_some());
+
+    assert!(
+        hint_entry.is_none(),
+        "hint should be skipped when world disabled"
+    );
+    Ok(())
+}
+
+/// Ensure bypass mode (nested shims) still respects runtime PATH changes
+#[test]
+fn test_bypass_mode_honors_runtime_path_changes() -> Result<()> {
+    let temp = TempDir::new()?;
+    let shim_dir = temp.path().join("shims");
+    let original_dir = temp.path().join("original");
+    let override_dir = temp.path().join("override");
+    let log_file = temp.path().join("bypass_path.jsonl");
+
+    fs::create_dir_all(&shim_dir)?;
+    fs::create_dir_all(&original_dir)?;
+    fs::create_dir_all(&override_dir)?;
+
+    let original_node = original_dir.join("node");
+    let override_node = override_dir.join("node");
+
+    fs::write(&original_node, "#!/bin/bash\necho original-node")?;
+    fs::write(&override_node, "#!/bin/bash\necho override-node")?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for script in [&original_node, &override_node] {
+            let mut perms = fs::metadata(script)?.permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(script, perms)?;
+        }
+    }
+
+    let shim_binary_path = get_shim_binary_path();
+    let shim_node = shim_dir.join("node");
+    fs::copy(shim_binary_path, &shim_node)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&shim_node)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&shim_node, perms)?;
+    }
+
+    let path_with_manager = format!(
+        "{}:{}:{}",
+        override_dir.display(),
+        shim_dir.display(),
+        original_dir.display()
+    );
+
+    let output = std::process::Command::new(&shim_node)
+        .env("PATH", &path_with_manager)
+        .env(
+            "SHIM_ORIGINAL_PATH",
+            original_dir.to_string_lossy().as_ref(),
+        )
+        .env("SHIM_ACTIVE", "1") // simulate nested invocation
+        .env("SHIM_TRACE_LOG", &log_file)
+        .env("SHIM_CACHE_BUST", "1")
+        .env_remove("SHIM_DEPTH")
+        .output()?;
+
+    assert!(
+        output.status.success(),
+        "bypass execution failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("override-node"),
+        "expected override binary to run in bypass mode, got: {stdout}"
+    );
+
+    let log_content = fs::read_to_string(&log_file)?;
+    assert!(
+        log_content.contains(&override_dir.display().to_string()),
+        "log should record resolved override path: {log_content}"
+    );
 
     Ok(())
 }

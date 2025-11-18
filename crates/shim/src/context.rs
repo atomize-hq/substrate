@@ -18,6 +18,8 @@ pub const CACHE_BUST_VAR: &str = "SHIM_CACHE_BUST"; // Forces cache invalidation
 pub const SHIM_CALLER_VAR: &str = "SHIM_CALLER"; // First shim in the call chain
 pub const SHIM_CALL_STACK_VAR: &str = "SHIM_CALL_STACK"; // Comma-separated chain (capped at 8)
 pub const SHIM_PARENT_CMD_VAR: &str = "SHIM_PARENT_CMD_ID"; // Links to substrate shell cmd_id
+pub const SUBSTRATE_WORLD_VAR: &str = "SUBSTRATE_WORLD";
+pub const SUBSTRATE_WORLD_ENABLED_VAR: &str = "SUBSTRATE_WORLD_ENABLED";
 
 /// Execution context for a shim invocation
 #[derive(Debug)]
@@ -76,7 +78,8 @@ impl ShimContext {
         }
 
         let original_path = env::var(ORIGINAL_PATH_VAR).ok();
-        let search_paths = build_clean_search_path(&shim_dir, original_path)?;
+        let merged_path = merge_path_sources(original_path);
+        let search_paths = build_clean_search_path(&shim_dir, merged_path)?;
 
         let log_file = env::var(TRACE_LOG_VAR).ok().map(PathBuf::from);
 
@@ -274,6 +277,59 @@ pub fn build_clean_search_path(
     }
 
     Ok(paths)
+}
+
+/// Merge the live PATH with the stored SHIM_ORIGINAL_PATH so that runtime
+/// managers (pyenv, nvm, etc.) that rewrite PATH remain visible to shims.
+pub fn merge_path_sources(original_path: Option<String>) -> Option<String> {
+    let mut sources = Vec::new();
+
+    if let Ok(current) = env::var("PATH") {
+        if !current.is_empty() {
+            sources.push(current);
+        }
+    }
+
+    if let Some(original) = original_path {
+        if !original.is_empty() {
+            sources.push(original);
+        }
+    }
+
+    match sources.len() {
+        0 => None,
+        1 => sources.into_iter().next(),
+        _ => {
+            let separator = if cfg!(windows) { ';' } else { ':' };
+            let sep = separator.to_string();
+            Some(sources.join(&sep))
+        }
+    }
+}
+
+fn is_disabled_flag(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "0" | "false" | "off" | "disabled"
+    )
+}
+
+/// True when pass-through mode was requested via SUBSTRATE world flags.
+pub fn world_disabled() -> bool {
+    matches!(env::var(SUBSTRATE_WORLD_VAR).as_deref(), Ok("disabled"))
+        || env::var(SUBSTRATE_WORLD_ENABLED_VAR)
+            .map(|value| is_disabled_flag(&value))
+            .unwrap_or(false)
+}
+
+/// True when shim should enable world-aware policy + telemetry features.
+pub fn world_features_enabled() -> bool {
+    if world_disabled() {
+        return false;
+    }
+    env::var(SUBSTRATE_WORLD_VAR)
+        .map(|value| value == "enabled")
+        .unwrap_or(false)
 }
 
 #[cfg(test)]

@@ -80,67 +80,134 @@ export SUBSTRATE_DISABLE_PTY=1    # Disable PTY globally
 export SUBSTRATE_PTY_DEBUG=1      # Enable PTY debug logging
 ```
 
-## Command Interception
+## Command Interception & Manager Health
 
 ### Automatic Deployment
 
-Substrate automatically deploys shims on first run:
+`substrate` still deploys shims on demand, but the installer no longer edits
+`.bashrc`, `.zshrc`, or PowerShell profiles. Each CLI invocation builds a clean
+PATH (`~/.substrate/shims:$SHIM_ORIGINAL_PATH`), exports
+`SUBSTRATE_MANAGER_INIT`/`SUBSTRATE_MANAGER_ENV`, and sources the generated
+manager snippet before executing your command. Host shells therefore keep their
+original PATH and dotfiles.
 
 ```bash
-# First run deploys shims automatically
-substrate
-
-# Check deployment status
-substrate --shim-status
+substrate --shim-status   # show version + path
+substrate --shim-deploy   # redeploy (idempotent)
+substrate --shim-remove   # delete ~/.substrate/shims
+SUBSTRATE_NO_SHIMS=1 substrate   # skip deployment for this invocation
 ```
 
-### Manual Shim Management
+### PATH Isolation & Legacy Hosts
+
+Compare the host vs Substrate PATH at any time:
 
 ```bash
-# Force redeployment (useful after updates)
-substrate --shim-deploy
-
-# Remove all shims
-substrate --shim-remove
-
-# Skip automatic deployment for this run
-substrate --shim-skip
-
-# Disable automatic deployment permanently
-export SUBSTRATE_NO_SHIMS=1
-substrate
+printf "host PATH -> %s
+" "$PATH"
+substrate -c 'printf "substrate PATH -> %s
+" "$PATH"'
 ```
 
-### PATH Configuration
+Need to re-export manager snippets into a legacy shell? Run
+`substrate shim repair --manager <name> --yes` to append the delimited block to
+`~/.substrate_bashenv` (with a `.bak`). The CLI never edits the file unless you
+explicitly request a repair.
 
-To use shims for command interception:
+### Manager Manifest & Overlays
+
+- Shipping manifest: `config/manager_hooks.yaml`
+- User overlay: `~/.substrate/manager_hooks.local.yaml`
+- Override for tests/automation: `SUBSTRATE_MANAGER_MANIFEST=/path/to/manifest`
+
+Each entry defines detect probes, init snippets, repair hints, and guest install
+recipes. The manifest is platform-aware, and Substrate records the chosen path
+in shim doctor output for transparency.
+
+### Shim Doctor & Repair
 
 ```bash
-# Configure PATH
-export PATH="$HOME/.substrate/shims:$PATH"
-export SHIM_ORIGINAL_PATH="$PATH"
-hash -r
+substrate shim doctor              # text report (manifest, PATH, managers, hints)
+substrate shim doctor --json | jq '.path'
+substrate shim repair --manager nvm --yes
 ```
 
-### Claude Code Integration
+Doctor mode respects `HOME`, `USERPROFILE`, `SUBSTRATE_MANAGER_MANIFEST`, and
+`SHIM_TRACE_LOG`, so tests can point it at temporary directories without touching
+real dotfiles. Repair writes `~/.substrate_bashenv` (creating
+`~/.substrate_bashenv.bak`) but leaves everything else untouched.
 
-Proven integration pattern for AI assistants:
+### Health Snapshots
+
+Capture full host/guest readiness with the aggregated health command:
 
 ```bash
-# 1. Set up non-interactive shell environment
-./scripts/create_bashenv.sh
-export BASH_ENV="$HOME/.substrate_bashenv"
-
-# 2. Use hash pinning for reliable resolution
-hash -r
-hash -p "$HOME/.substrate/shims/git" git
-hash -p "$HOME/.substrate/shims/npm" npm
-
-# 3. Verify integration
-which git  # Should show shim path
-git --version  # Should work with logging
+substrate health                # text summary (managers + world doctor + world deps)
+substrate health --json | jq '.summary'
+substrate shim doctor --json    # detailed shim-centric payload
 ```
 
+Both commands honor the same overrides (`HOME`, `SUBSTRATE_MANAGER_MANIFEST`,
+`SHIM_TRACE_LOG`). Drop fixture files into `~/.substrate/health/world_doctor.json`
+and `~/.substrate/health/world_deps.json` when you need deterministic outputs in
+tests or support bundles.
+
+### Manager Hints & Telemetry
+
+When shims intercept a failing command they emit `manager_hint` events in
+`~/.substrate/trace.jsonl` (and attach the latest hint inside doctor output).
+Use those records to confirm hint deduplication or to troubleshoot missing
+managers:
+
+```bash
+jq 'select(.manager_hint) | .manager_hint' ~/.substrate/trace.jsonl | tail -5
+```
+
+Enable verbose logging with `SUBSTRATE_MANAGER_INIT_DEBUG=1` or skip certain
+managers entirely via `SUBSTRATE_SKIP_MANAGER_INIT` /
+`SUBSTRATE_SKIP_MANAGER_INIT_LIST`.
+
+### Temporary HOMEs & CI
+
+All CLI entry points honor standard overrides so you can stage sandboxes for
+integration tests:
+
+```bash
+TMP=$PWD/target/tests-tmp/doctor
+mkdir -p "$TMP/.substrate"
+HOME=$TMP USERPROFILE=$TMP \
+  SUBSTRATE_MANAGER_MANIFEST=$TMP/manager_hooks.yaml \
+  SHIM_TRACE_LOG=$TMP/.substrate/trace.jsonl \
+  substrate shim doctor --json
+```
+
+Windows follows the same pattern using `USERPROFILE`.
+
+### Claude Code / Editor Integrations
+
+Assistants that expect a sourced `BASH_ENV` can still rely on the generated
+`~/.substrate/manager_env.sh`, but most workflows simply launch `substrate -c` or
+`substrate` interactively and let the pass-through model set everything up. If
+an agent needs to seed host shells, run `substrate shim repair` for the relevant
+manager and point `BASH_ENV` at `~/.substrate_bashenv` explicitly.
+
+### World Commands
+
+- `substrate world doctor [--json]` – host readiness report (Linux namespaces,
+  macOS Lima, Windows WSL)
+- `substrate --no-world ...` – run commands directly on the host (no isolation)
+- `substrate world enable` – provision the backend later if `--no-world` was
+  used at install time
+- `substrate world deps status|install|sync` – inspect and copy host toolchains
+  into the guest once B3 reach parity (CLI scaffolding is already wired up)
+
+The installer and `substrate world enable` keep `~/.substrate/config.json`
+(`world_enabled: true/false`) and rewrite `~/.substrate/manager_env.sh` so
+`SUBSTRATE_WORLD`/`SUBSTRATE_WORLD_ENABLED` reflect the latest state without
+needing to source dotfiles manually.
+
+Use `SUBSTRATE_WORLD_ENABLED=0` to force pass-through mode temporarily and
+`SUBSTRATE_WORLD_DEPS_MANIFEST` to point world-deps at a custom definition file.
 ## Log Analysis
 
 Commands are logged in structured JSONL format:

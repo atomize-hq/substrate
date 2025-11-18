@@ -14,15 +14,21 @@ use std::time::{Duration, SystemTime};
 use crate::context::ShimContext;
 use substrate_trace::{append_to_trace, init_trace};
 
+/// Aggregated metadata passed to [`log_execution`] to keep the argument list lean.
+pub struct ExecutionLogMetadata<'a> {
+    pub duration: Duration,
+    pub timestamp: SystemTime,
+    pub resolved_path: &'a Path,
+    pub manager_hint: Option<&'a Value>,
+}
+
 /// Log a command execution with full context
 pub fn log_execution(
     log_path: &Path,
     ctx: &ShimContext,
     args: &[std::ffi::OsString],
     status: &ExitStatus,
-    duration: Duration,
-    timestamp: SystemTime,
-    resolved_path: &Path,
+    meta: &ExecutionLogMetadata<'_>,
 ) -> Result<()> {
     let cwd = env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/unknown"));
 
@@ -53,19 +59,19 @@ pub fn log_execution(
     let ppid = None::<i32>;
 
     let mut log_entry = json!({
-        "ts": format_timestamp(timestamp),
+        "ts": format_timestamp(meta.timestamp),
         "command": ctx.command_name,
         "argv": argv,
         "cwd": cwd.to_string_lossy(),
         "exit_code": exit_code.unwrap_or(-1),
-        "duration_ms": duration.as_millis(),
+        "duration_ms": meta.duration.as_millis(),
         "pid": pid,
         "hostname": hostname,
         "platform": get_platform_info(),
         "component": "shim",
         "depth": ctx.depth,
         "session_id": ctx.session_id,
-        "resolved_path": resolved_path.display().to_string(),
+        "resolved_path": meta.resolved_path.display().to_string(),
         "caller": env::var("SHIM_CALLER").ok(),
         "call_stack": env::var("SHIM_CALL_STACK").ok(),
         "parent_cmd_id": env::var("SHIM_PARENT_CMD_ID").ok(),
@@ -89,6 +95,10 @@ pub fn log_execution(
     // Add signal information if process was terminated by signal
     if let Some(signal) = term_signal {
         log_entry["term_signal"] = json!(signal);
+    }
+
+    if let Some(hint) = meta.manager_hint {
+        log_entry["manager_hint"] = hint.clone();
     }
 
     write_log_entry(log_path, &log_entry)

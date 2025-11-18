@@ -21,11 +21,11 @@ exec_in_ctr 'export HOME=/root PATH=/usr/local/cargo/bin:$PATH; cd /src && cargo
 
 CMD='export HOME=/root TRACE_LOG_MAX_MB=1 TRACE_LOG_KEEP=2; \
      rm -f /root/.substrate/trace.jsonl /root/.substrate/trace.jsonl.* || true; \
-     for i in $(seq 1 4000); do /src/target/debug/substrate -c true >/dev/null 2>&1 || true; done; \
+     for i in $(seq 1 4000); do SUBSTRATE_BIN=/src/target/debug/substrate /src/scripts/dev/substrate_shell_driver --no-world -c true >/dev/null 2>&1 || true; done; \
      ls -l /root/.substrate | grep trace.jsonl || true; \
-     for i in $(seq 1 4000); do /src/target/debug/substrate -c true >/dev/null 2>&1 || true; done; \
+     for i in $(seq 1 4000); do SUBSTRATE_BIN=/src/target/debug/substrate /src/scripts/dev/substrate_shell_driver --no-world -c true >/dev/null 2>&1 || true; done; \
      ls -l /root/.substrate | grep trace.jsonl || true; \
-     for i in $(seq 1 4000); do /src/target/debug/substrate -c true >/dev/null 2>&1 || true; done; \
+     for i in $(seq 1 4000); do SUBSTRATE_BIN=/src/target/debug/substrate /src/scripts/dev/substrate_shell_driver --no-world -c true >/dev/null 2>&1 || true; done; \
      ls -l /root/.substrate | grep trace.jsonl || true; \
      if command -v stat >/dev/null 2>&1; then \
        stat -c "%n %s" /root/.substrate/trace.jsonl /root/.substrate/trace.jsonl.1 /root/.substrate/trace.jsonl.2 2>/dev/null || true; \
