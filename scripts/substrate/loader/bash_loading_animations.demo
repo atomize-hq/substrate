@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+
+# shellcheck disable=SC2034 # https://github.com/koalaman/shellcheck/wiki/SC2034
+
+# Load in the functions and animations
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/bash_loading_animations.sh"
+# Run BLA::stop_loading_animation if the script is interrupted
+trap BLA::stop_loading_animation SIGINT
+
+demo_loading_animation() {
+  BLA_active_loading_animation=( "${@}" )
+  # Extract the delay between each frame from the active_loading_animation array
+  BLA_loading_animation_frame_interval="${BLA_active_loading_animation[0]}"
+  local frame_count=$(( ${#BLA_active_loading_animation[@]} - 1 ))
+  local demo_duration="3"
+  if command -v bc >/dev/null 2>&1; then
+    demo_duration=$( echo "${BLA_active_loading_animation[0]} * ${frame_count}" | bc -l )
+    if [[ $( echo "${demo_duration} < 3" | bc -l ) -eq 1 ]]; then
+      demo_duration=3
+    fi
+  fi
+  unset "BLA_active_loading_animation[0]"
+  echo
+  BLA::play_loading_animation_loop &
+  BLA_loading_animation_pid="${!}"
+  sleep "${demo_duration}"
+  kill "${BLA_loading_animation_pid}" &> /dev/null
+  clear
+}
+
+tput civis # Hide the terminal cursor
+clear
+
+# demo_loading_animation "${BLA_braille_whitespace[@]}"
+demo_loading_animation "${BLA_braille_fill_bar[@]}"
+
+tput cnorm # Restore the terminal cursor
+
+exit 0
