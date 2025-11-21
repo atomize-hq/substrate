@@ -382,6 +382,130 @@
       "worktree": "wt/ss-s2-settings-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S2-integ.md"
+    },
+    {
+      "id": "S3-code",
+      "name": "Implement caged root guard",
+      "type": "code",
+      "phase": "Settings Stack",
+      "status": "pending",
+      "description": "Replace the world-root flags with a standalone caged mode (boolean) that anchors the shell to a chosen root even when the world backend is disabled.",
+      "references": [
+        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/CONFIGURATION.md",
+        "crates/shell/src/lib.rs",
+        "scripts/substrate/dev-install-substrate.sh",
+        "tests/installers/install_smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "CLI exposes --caged/--uncaged (boolean) and persists the setting in config/settings files independent of world enablement.",
+        "Anchor/root resolution still honors the existing precedence stack (flag > dir config > global config > env > default).",
+        "Shell enforces the anchor locally: attempts to leave the root trigger an informational warning and return to the anchor, even when world isolation is disabled.",
+        "Docs mention the renamed setting and how to configure it."
+      ],
+      "start_checklist": [
+        "Checkout feat/settings-stack, pull latest",
+        "Set S3-code to in_progress, update session_log.md, commit docs update",
+        "Create task branch ss-s3-caged-code",
+        "Create worktree wt/ss-s3-caged-code from that branch",
+        "Ensure git status is clean before coding"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/targeted tests pass; capture outputs in the log",
+        "Commit worktree changes and merge back to feat/settings-stack",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm S3-test kickoff prompt path is recorded"
+      ],
+      "depends_on": [
+        "S2-integ"
+      ],
+      "concurrent_with": [
+        "S3-test"
+      ],
+      "worktree": "wt/ss-s3-caged-code",
+      "integration_task": "S3-integ",
+      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S3-code.md"
+    },
+    {
+      "id": "S3-test",
+      "name": "Test caged root guard",
+      "type": "test",
+      "phase": "Settings Stack",
+      "status": "pending",
+      "description": "Add tests that cover the caged boolean, anchor enforcement while world is disabled, and precedence across flags/config/env.",
+      "references": [
+        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "crates/shell/src/lib.rs",
+        "tests/installers/install_smoke.sh",
+        "scripts/substrate/dev-install-substrate.sh"
+      ],
+      "acceptance_criteria": [
+        "Unit/integration tests verify caged enforcement when isolation is disabled and enabled (bounce back with warning).",
+        "Tests assert config/dir settings/env/flag precedence for the caged setting (boolean) and that installer metadata carries it.",
+        "No production code changes beyond minimal test scaffolding in this task."
+      ],
+      "start_checklist": [
+        "Checkout feat/settings-stack, pull latest",
+        "Set S3-test to in_progress, update session_log.md, commit docs update",
+        "Create task branch ss-s3-caged-test",
+        "Create worktree wt/ss-s3-caged-test from that branch",
+        "Ensure git status is clean before editing tests"
+      ],
+      "end_checklist": [
+        "Run fmt and targeted tests/scripts; capture outputs in the session log",
+        "Commit worktree changes, merge back to feat/settings-stack, remove worktree",
+        "Update tasks.json + session_log.md with END entry (commands/results/blockers)",
+        "Create/confirm S3-integ kickoff prompt and reference prompts in the log"
+      ],
+      "depends_on": [
+        "S2-integ"
+      ],
+      "concurrent_with": [
+        "S3-code"
+      ],
+      "worktree": "wt/ss-s3-caged-test",
+      "integration_task": "S3-integ",
+      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S3-test.md"
+    },
+    {
+      "id": "S3-integ",
+      "name": "Integrate caged root guard",
+      "type": "integration",
+      "phase": "Settings Stack",
+      "status": "pending",
+      "description": "Merge the caged guard code + tests, resolve conflicts, and ensure fmt/clippy/tests and installer scenarios pass.",
+      "references": [
+        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "crates/shell",
+        "scripts/substrate",
+        "tests/installers"
+      ],
+      "acceptance_criteria": [
+        "wt/ss-s3-caged-integ merges code+tests with clean fmt/clippy/tests/installer smoke.",
+        "feat/settings-stack updated with integration results and doc/task/log entries committed.",
+        "Any follow-up kickoff prompts are recorded before ending the session."
+      ],
+      "start_checklist": [
+        "Checkout feat/settings-stack, pull latest",
+        "Confirm S3-code/test completed",
+        "Set S3-integ to in_progress, update session_log.md, commit docs update",
+        "Create task branch ss-s3-caged-integ",
+        "Create worktree wt/ss-s3-caged-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration branch/worktree and resolve conflicts",
+        "Run required fmt/clippy/tests and installer smoke scenarios",
+        "Merge integration branch back to feat/settings-stack and remove the worktree",
+        "Update tasks.json + session_log.md with END entry; push or hand off"
+      ],
+      "depends_on": [
+        "S3-code",
+        "S3-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ss-s3-caged-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S3-integ.md"
     }
   ]
 }
