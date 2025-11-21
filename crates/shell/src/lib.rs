@@ -14,7 +14,7 @@ use shim_deploy::{DeploymentStatus, ShimDeployer};
 
 use anyhow::{Context, Result};
 use chrono::Utc;
-use clap::{Parser, ValueEnum};
+use clap::{ArgAction, Parser, ValueEnum};
 use lazy_static::lazy_static;
 use serde_json::json;
 use std::collections::HashMap;
@@ -326,11 +326,11 @@ pub struct Cli {
     pub replay_verbose: bool,
 
     /// Keep the shell anchored to the resolved root
-    #[arg(long = "caged", conflicts_with = "uncaged")]
+    #[arg(long = "caged", action = ArgAction::SetTrue, conflicts_with = "uncaged")]
     pub caged: bool,
 
     /// Allow leaving the resolved root anchor
-    #[arg(long = "uncaged", conflicts_with = "caged")]
+    #[arg(long = "uncaged", action = ArgAction::SetTrue, conflicts_with = "caged")]
     pub uncaged: bool,
 
     /// Control how the world root is selected (project, follow-cwd, or custom)

@@ -327,7 +327,7 @@ if root_path != "":
 if caged is None:
     raise SystemExit("world.caged missing under [world]")
 if caged is not True:
-    raise SystemExit(f"world.caged={caged!r} (expected True)")
+    raise SystemExit(f"world.caged={caged} (expected true)")
 PY
 
   log "Verified install config at ${config} (world_enabled=${expected_flag}; root_mode=project root_path=\"\" caged=true)"

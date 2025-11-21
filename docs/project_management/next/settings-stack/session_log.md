@@ -176,14 +176,6 @@ Template (copy/paste and fill in):
 - Docs commit: pending (tasks/status/log updates on feat/settings-stack)
 - Next steps / blockers: merge branch into feat/settings-stack and remove worktree when ready
 
-## [2025-11-21 18:48 UTC] Code – S3-code – END
-- Worktree commits: d9dcfea
-- Commands: cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_root
-- Results: all commands passed
-- Kickoff prompts created: n/a
-- Docs commit: pending (tasks/status/log updates on feat/settings-stack)
-- Next steps / blockers: merge branch into feat/settings-stack and remove worktree when ready
-
 ## [2025-11-21 18:00 UTC] Test – S3-test – START
 - Checked out feat/settings-stack, pulled latest
 - Confirmed S2-integ merged; coordinating with S3-code agent (S3-code in progress on wt/ss-s3-caged-code)
@@ -203,7 +195,15 @@ Template (copy/paste and fill in):
 ## [2025-11-21 19:19 UTC] Integ – S3-integ – START
 - Checked out feat/settings-stack, pulled latest
 - Confirmed S3-test merged; S3-code commit present (not yet on feat/settings-stack)
-- Updated tasks.json + session log (commit: pending)
+- Updated tasks.json + session log (commit: docs: start S3-integ)
 - Worktree: pending (will create wt/ss-s3-caged-integ)
 - Plan: create integration branch/worktree; merge S3 code/test branches and reconcile; run cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_root; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world; update tasks/logs and merge back to feat/settings-stack
 - Blockers: none
+
+## [2025-11-21 19:37 UTC] Integ – S3-integ – END
+- Worktree commits: pending (merge commit)
+- Commands: cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_root; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
+- Results: all commands passed; installer temp roots /tmp/substrate-installer-default.jG6wBp (world_enabled=true, caged=true) and /tmp/substrate-installer-no-world.ed6XiN (world_enabled=false, caged=true)
+- Kickoff prompts created: n/a
+- Docs commit: pending (included with merge)
+- Next steps / blockers: merge into feat/settings-stack and drop the integration worktree

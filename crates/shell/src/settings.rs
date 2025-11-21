@@ -97,10 +97,7 @@ pub(crate) fn apply_world_root_env(settings: &WorldRootSettings) {
         "SUBSTRATE_WORLD_ROOT_PATH",
         settings.path.to_string_lossy().to_string(),
     );
-    env::set_var(
-        "SUBSTRATE_CAGED",
-        if settings.caged { "true" } else { "false" },
-    );
+    env::set_var("SUBSTRATE_CAGED", if settings.caged { "1" } else { "0" });
 }
 
 pub(crate) fn world_root_from_env() -> WorldRootSettings {
