@@ -90,3 +90,11 @@ Template (copy/paste and fill in):
 - Created worktree: planned wt/ss-s1-config-test
 - Plan: add unit tests for config load/save, extend installer smoke to validate config.toml payloads for default/--no-world, run targeted installer + unit tests
 - Blockers: none
+
+## [2025-11-21 14:27 UTC] Test – S1-test – END
+- Worktree commits: 69cb34b, ff483d4
+- Commands: cargo fmt; cargo test -p substrate-shell world_enable; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
+- Results: cargo fmt + world_enable unit/integration tests passed; installer smoke scenarios succeeded (temp roots: /tmp/substrate-installer-default.0wbijG, /tmp/substrate-installer-no-world.3yYZeb)
+- Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S1-integ.md; docs/project_management/next/settings-stack/kickoff_prompts/S2-code.md; docs/project_management/next/settings-stack/kickoff_prompts/S2-test.md (S2 tasks wait for S1-integ to merge)
+- Docs commit: docs: finish S1-test + prompts (this commit)
+- Next steps / blockers: none
