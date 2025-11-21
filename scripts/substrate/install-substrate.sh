@@ -581,63 +581,6 @@ EOF
   chmod 0644 "${INSTALL_CONFIG_PATH}" || true
 }
 
-ensure_shell_path_snippet() {
-  local bin_dir="$1"
-  if [[ -z "${HOME:-}" ]]; then
-    warn "HOME not set; skipping PATH snippet."
-    return
-  fi
-  local -a candidates=()
-  if [[ -n "${SHELL:-}" ]]; then
-    case "${SHELL##*/}" in
-      bash) candidates+=("${HOME}/.bashrc") ;;
-      zsh) candidates+=("${HOME}/.zshrc") ;;
-    esac
-  fi
-  candidates+=("${HOME}/.bashrc" "${HOME}/.zshrc")
-
-  local seen=":"
-  local marker_start="# >>> substrate bin path >>>"
-  local marker_end="# <<< substrate bin path <<<"
-  for rc in "${candidates[@]}"; do
-    [[ -z "${rc}" ]] && continue
-    if [[ "${seen}" == *":${rc}:"* ]]; then
-      continue
-    fi
-    seen="${seen}${rc}:"
-
-    local rc_dir
-    rc_dir="$(dirname "${rc}")"
-    if [[ -n "${rc_dir}" && ! -d "${rc_dir}" ]]; then
-      if [[ "${DRY_RUN}" -eq 1 ]]; then
-        printf '[%s][dry-run] mkdir -p %s\n' "${INSTALLER_NAME}" "${rc_dir}" >&2
-      else
-        mkdir -p "${rc_dir}"
-      fi
-    fi
-
-    if [[ -f "${rc}" ]] && grep -Fq "${marker_start}" "${rc}"; then
-      continue
-    fi
-
-    if [[ "${DRY_RUN}" -eq 1 ]]; then
-      printf '[%s][dry-run] Append PATH snippet to %s\n' "${INSTALLER_NAME}" "${rc}" >&2
-      continue
-    fi
-
-    {
-      printf '\n%s\n' "${marker_start}"
-      cat <<EOF
-if [[ -d "${bin_dir}" ]] && [[ ":\$PATH:" != *":${bin_dir}:"* ]]; then
-  export PATH="${bin_dir}:\$PATH"
-fi
-EOF
-      printf '%s\n' "${marker_end}"
-    } >>"${rc}"
-    log "Added PATH snippet to ${rc}"
-  done
-}
-
 finalize_install_metadata() {
   local enabled="$1"
   ensure_manager_init_placeholder
@@ -1244,7 +1187,6 @@ install_macos() {
   PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" sync_world_deps "${substrate_bin}"
 
   finalize_install_metadata "${world_enabled}"
-  ensure_shell_path_snippet "${bin_dir}"
 
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     log "Installation complete (dry run). After a real install add ${bin_dir} to your PATH or run ${bin_dir}/substrate directly."
@@ -1312,7 +1254,6 @@ install_linux() {
   PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" sync_world_deps "${substrate_bin}"
 
   finalize_install_metadata "${world_enabled}"
-  ensure_shell_path_snippet "${bin_dir}"
 
   if [[ "${IS_WSL}" -eq 1 ]]; then
     log "Detected WSL environment. Windows host components (forwarder, uninstall) must be managed via PowerShell scripts."
