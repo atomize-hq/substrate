@@ -272,6 +272,7 @@ body = path.read_text()
 world_enabled = None
 root_mode = None
 root_path = None
+caged = None
 section = None
 
 
@@ -308,6 +309,8 @@ for raw in body.splitlines():
             root_mode = parse_string(value)
         elif key == "root_path":
             root_path = parse_string(value)
+        elif key == "caged":
+            caged = parse_bool(value)
 
 if world_enabled is None:
     raise SystemExit("world_enabled missing under [install]")
@@ -321,9 +324,13 @@ if root_path is None:
     raise SystemExit("world.root_path missing under [world]")
 if root_path != "":
     raise SystemExit(f"world.root_path={root_path!r} (expected empty string)")
+if caged is None:
+    raise SystemExit("world.caged missing under [world]")
+if caged is not True:
+    raise SystemExit(f"world.caged={caged!r} (expected True)")
 PY
 
-  log "Verified install config at ${config} (world_enabled=${expected_flag}; root_mode=project root_path=\"\")"
+  log "Verified install config at ${config} (world_enabled=${expected_flag}; root_mode=project root_path=\"\" caged=true)"
 }
 
 assert_manifest_present() {

@@ -579,6 +579,7 @@ world_enabled = ${flag}
 [world]
 root_mode = "project"
 root_path = ""
+caged = true
 EOF
   mv "${INSTALL_CONFIG_PATH}.tmp" "${INSTALL_CONFIG_PATH}"
   chmod 0644 "${INSTALL_CONFIG_PATH}" || true

@@ -325,6 +325,14 @@ pub struct Cli {
     #[arg(long = "replay-verbose", requires = "replay")]
     pub replay_verbose: bool,
 
+    /// Keep the shell anchored to the resolved root
+    #[arg(long = "caged", conflicts_with = "uncaged")]
+    pub caged: bool,
+
+    /// Allow leaving the resolved root anchor
+    #[arg(long = "uncaged", conflicts_with = "caged")]
+    pub uncaged: bool,
+
     /// Control how the world root is selected (project, follow-cwd, or custom)
     #[arg(long = "world-root-mode", value_name = "MODE")]
     pub world_root_mode: Option<WorldRootModeArg>,
@@ -891,9 +899,17 @@ impl ShellConfig {
         }
 
         let launch_cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let cli_caged = if cli.caged {
+            Some(true)
+        } else if cli.uncaged {
+            Some(false)
+        } else {
+            None
+        };
         let world_root_settings = resolve_world_root(
             cli.world_root_mode.map(WorldRootMode::from),
             cli.world_root_path.clone(),
+            cli_caged,
             &launch_cwd,
         )?;
         apply_world_root_env(&world_root_settings);
@@ -4556,6 +4572,47 @@ fn ok_status() -> Result<ExitStatus> {
     .context("Failed to create success status")
 }
 
+fn canonicalize_cd_target(current_dir: &Path, target: &str) -> Result<PathBuf> {
+    let requested = Path::new(target);
+    let absolute = if requested.is_absolute() {
+        requested.to_path_buf()
+    } else {
+        current_dir.join(requested)
+    };
+    fs::canonicalize(&absolute)
+        .with_context(|| format!("failed to resolve directory {}", absolute.display()))
+}
+
+fn enforce_caged_destination(
+    settings: &settings::WorldRootSettings,
+    current_dir: &Path,
+    requested: PathBuf,
+) -> (PathBuf, Option<String>) {
+    if !settings.caged || settings.mode == WorldRootMode::FollowCwd {
+        return (requested, None);
+    }
+
+    let anchor = settings.anchor_root(current_dir);
+    let anchor_clean = canonicalize_or(&anchor);
+    if path_within_root(&anchor_clean, &requested) {
+        (requested, None)
+    } else {
+        let message = format!(
+            "substrate: info: caged root guard: returning to {}",
+            anchor_clean.display()
+        );
+        (anchor_clean, Some(message))
+    }
+}
+
+fn canonicalize_or(path: &Path) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn path_within_root(anchor: &Path, candidate: &Path) -> bool {
+    candidate == anchor || candidate.starts_with(anchor)
+}
+
 fn handle_builtin(
     config: &ShellConfig,
     command: &str,
@@ -4582,7 +4639,13 @@ fn handle_builtin(
             };
             let expanded = shellexpand::tilde(&target);
             let prev = env::current_dir()?;
-            env::set_current_dir(expanded.as_ref())?;
+            let requested = canonicalize_cd_target(&prev, expanded.as_ref())?;
+            let (destination, warning) =
+                enforce_caged_destination(&config.world_root, &prev, requested);
+            if let Some(message) = warning {
+                eprintln!("{message}");
+            }
+            env::set_current_dir(&destination)?;
             env::set_var("OLDPWD", prev);
             env::set_var("PWD", env::current_dir()?.display().to_string());
             Some(ok_status()?)
@@ -5682,6 +5745,7 @@ mod manager_init_wiring_tests {
             world_root: settings::WorldRootSettings {
                 mode: WorldRootMode::Project,
                 path: temp.path().to_path_buf(),
+                caged: true,
             },
             async_repl: false,
             env_vars: HashMap::new(),
@@ -5711,6 +5775,23 @@ mod manager_init_wiring_tests {
             env::set_var(key, value);
         } else {
             env::remove_var(key);
+        }
+    }
+
+    struct DirGuard {
+        original: PathBuf,
+    }
+
+    impl DirGuard {
+        fn new() -> Self {
+            let original = env::current_dir().expect("capture cwd");
+            Self { original }
+        }
+    }
+
+    impl Drop for DirGuard {
+        fn drop(&mut self) {
+            let _ = env::set_current_dir(&self.original);
         }
     }
 
@@ -5782,6 +5863,139 @@ managers:
 
         restore_env("SUBSTRATE_MANAGER_MANIFEST", previous_manifest);
         restore_env("SUBSTRATE_MANAGER_INIT", previous_init);
+    }
+
+    #[test]
+    fn enforce_caged_destination_bounces_outside_anchor() {
+        let temp = tempdir().unwrap();
+        let root = temp.path().join("root");
+        let outside = temp.path().join("outside");
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        let settings = settings::WorldRootSettings {
+            mode: WorldRootMode::Project,
+            path: fs::canonicalize(&root).unwrap(),
+            caged: true,
+        };
+        let requested = fs::canonicalize(&outside).unwrap();
+
+        let (destination, warning) =
+            enforce_caged_destination(&settings, &settings.path, requested);
+        assert_eq!(destination, settings.path);
+        let message = warning.expect("expected caged warning");
+        assert!(message.contains("caged root guard"));
+        assert!(message.contains(settings.path.to_str().unwrap()));
+    }
+
+    #[test]
+    #[serial]
+    fn cd_bounces_when_caged_without_world() {
+        let temp = tempdir().unwrap();
+        let root = temp.path().join("root");
+        let inside = root.join("inside");
+        let outside = temp.path().join("outside");
+        fs::create_dir_all(&inside).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+
+        let mut config = test_shell_config(&temp);
+        config.world_root.path = fs::canonicalize(&root).unwrap();
+        config.world_root.caged = true;
+        config.no_world = true;
+
+        let prev_world = set_env("SUBSTRATE_WORLD", "disabled");
+        let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "0");
+        let prev_pwd = env::var("PWD").ok();
+        let prev_oldpwd = env::var("OLDPWD").ok();
+        let _guard = DirGuard::new();
+        let inside_canon = fs::canonicalize(&inside).unwrap();
+        env::set_current_dir(&inside_canon).unwrap();
+
+        let status = handle_builtin(&config, "cd ../../outside", "test-cmd").unwrap();
+        assert!(status.is_some());
+
+        assert_eq!(env::current_dir().unwrap(), config.world_root.path);
+        assert_eq!(
+            env::var("OLDPWD").unwrap(),
+            inside_canon.display().to_string()
+        );
+
+        restore_env("SUBSTRATE_WORLD", prev_world);
+        restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
+        restore_env("PWD", prev_pwd);
+        restore_env("OLDPWD", prev_oldpwd);
+    }
+
+    #[test]
+    #[serial]
+    fn cd_bounces_when_caged_with_world_enabled() {
+        let temp = tempdir().unwrap();
+        let root = temp.path().join("root");
+        let inside = root.join("inside");
+        let outside = temp.path().join("outside");
+        fs::create_dir_all(&inside).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+
+        let mut config = test_shell_config(&temp);
+        config.world_root.path = fs::canonicalize(&root).unwrap();
+        config.world_root.caged = true;
+        config.no_world = false;
+
+        let prev_world = set_env("SUBSTRATE_WORLD", "enabled");
+        let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "1");
+        let prev_pwd = env::var("PWD").ok();
+        let prev_oldpwd = env::var("OLDPWD").ok();
+        let _guard = DirGuard::new();
+        let inside_canon = fs::canonicalize(&inside).unwrap();
+        env::set_current_dir(&inside_canon).unwrap();
+
+        let status = handle_builtin(&config, "cd ../../outside", "test-cmd").unwrap();
+        assert!(status.is_some());
+
+        assert_eq!(env::current_dir().unwrap(), config.world_root.path);
+        assert_eq!(
+            env::var("OLDPWD").unwrap(),
+            inside_canon.display().to_string()
+        );
+
+        restore_env("SUBSTRATE_WORLD", prev_world);
+        restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
+        restore_env("PWD", prev_pwd);
+        restore_env("OLDPWD", prev_oldpwd);
+    }
+
+    #[test]
+    #[serial]
+    fn cd_allows_uncaged_escape_from_anchor() {
+        let temp = tempdir().unwrap();
+        let root = temp.path().join("root");
+        let inside = root.join("inside");
+        let outside = temp.path().join("outside");
+        fs::create_dir_all(&inside).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+
+        let mut config = test_shell_config(&temp);
+        config.world_root.path = fs::canonicalize(&root).unwrap();
+        config.world_root.caged = false;
+        config.no_world = true;
+
+        let prev_world = set_env("SUBSTRATE_WORLD", "disabled");
+        let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "0");
+        let prev_pwd = env::var("PWD").ok();
+        let prev_oldpwd = env::var("OLDPWD").ok();
+        let _guard = DirGuard::new();
+        let inside_canon = fs::canonicalize(&inside).unwrap();
+        env::set_current_dir(&inside_canon).unwrap();
+
+        let status = handle_builtin(&config, "cd ../../outside", "test-cmd").unwrap();
+        assert!(status.is_some());
+
+        let outside_canon = fs::canonicalize(&outside).unwrap();
+        assert_eq!(env::current_dir().unwrap(), outside_canon);
+
+        restore_env("SUBSTRATE_WORLD", prev_world);
+        restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
+        restore_env("PWD", prev_pwd);
+        restore_env("OLDPWD", prev_oldpwd);
     }
 
     #[test]

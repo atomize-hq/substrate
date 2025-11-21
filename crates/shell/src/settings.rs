@@ -11,6 +11,7 @@ use toml::value::{Table as TomlTable, Value as TomlValue};
 pub struct WorldRootSettings {
     pub mode: WorldRootMode,
     pub path: PathBuf,
+    pub caged: bool,
 }
 
 impl WorldRootSettings {
@@ -20,22 +21,32 @@ impl WorldRootSettings {
             _ => self.path.clone(),
         }
     }
+
+    pub fn anchor_root(&self, current_dir: &Path) -> PathBuf {
+        match self.mode {
+            WorldRootMode::FollowCwd => current_dir.to_path_buf(),
+            _ => self.path.clone(),
+        }
+    }
 }
 
 #[derive(Default)]
 struct PartialWorldRoot {
     mode: Option<WorldRootMode>,
     path: Option<PathBuf>,
+    caged: Option<bool>,
 }
 
 pub(crate) fn resolve_world_root(
     cli_mode: Option<WorldRootMode>,
     cli_path: Option<PathBuf>,
+    cli_caged: Option<bool>,
     launch_dir: &Path,
 ) -> Result<WorldRootSettings> {
     let cli = PartialWorldRoot {
         mode: cli_mode,
         path: cli_path,
+        caged: cli_caged,
     };
     let dir_settings = load_directory_settings(launch_dir)?;
     let global_settings = load_global_settings()?;
@@ -66,10 +77,17 @@ pub(crate) fn resolve_world_root(
     }
 
     let resolved_path = path.unwrap_or_else(|| launch_dir.to_path_buf());
+    let caged = cli
+        .caged
+        .or(dir_settings.caged)
+        .or(global_settings.caged)
+        .or(env_settings.caged)
+        .unwrap_or(true);
 
     Ok(WorldRootSettings {
         mode,
         path: resolved_path,
+        caged,
     })
 }
 
@@ -78,6 +96,10 @@ pub(crate) fn apply_world_root_env(settings: &WorldRootSettings) {
     env::set_var(
         "SUBSTRATE_WORLD_ROOT_PATH",
         settings.path.to_string_lossy().to_string(),
+    );
+    env::set_var(
+        "SUBSTRATE_CAGED",
+        if settings.caged { "true" } else { "false" },
     );
 }
 
@@ -98,7 +120,11 @@ pub(crate) fn world_root_from_env() -> WorldRootSettings {
         WorldRootMode::FollowCwd => cwd,
         _ => base_path,
     };
-    WorldRootSettings { mode, path }
+    let caged = env::var("SUBSTRATE_CAGED")
+        .ok()
+        .and_then(|value| parse_bool_flag(&value))
+        .unwrap_or(true);
+    WorldRootSettings { mode, path, caged }
 }
 
 fn load_directory_settings(base_dir: &Path) -> Result<PartialWorldRoot> {
@@ -164,9 +190,22 @@ fn parse_world_settings(path: &Path, contents: &str) -> Result<PartialWorldRoot>
         None => None,
     };
 
+    let caged = match table.get("caged") {
+        Some(TomlValue::Boolean(value)) => Some(*value),
+        Some(other) => {
+            bail!(
+                "world.caged in {} must be a boolean (found {})",
+                path.display(),
+                toml_type_name(other)
+            );
+        }
+        None => None,
+    };
+
     Ok(PartialWorldRoot {
         mode,
         path: path_value,
+        caged,
     })
 }
 
@@ -191,6 +230,11 @@ fn load_env_settings() -> Result<PartialWorldRoot> {
         }
     }
 
+    if let Ok(raw) = env::var("SUBSTRATE_CAGED") {
+        let parsed = parse_bool_env("SUBSTRATE_CAGED", &raw)?;
+        partial.caged = Some(parsed);
+    }
+
     Ok(partial)
 }
 
@@ -203,6 +247,24 @@ fn parse_mode(value: &str, path: &Path, key: &str) -> Result<WorldRootMode> {
             value
         )
     })
+}
+
+fn parse_bool_env(key: &str, raw: &str) -> Result<bool> {
+    parse_bool_flag(raw).ok_or_else(|| {
+        anyhow!(
+            "{} must be true/false/1/0/yes/no (found {})",
+            key,
+            raw.trim()
+        )
+    })
+}
+
+fn parse_bool_flag(raw: &str) -> Option<bool> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
+    }
 }
 
 fn toml_type_name(value: &TomlValue) -> &'static str {
@@ -270,13 +332,24 @@ mod tests {
         }
     }
 
-    fn write_world_settings(path: &Path, mode: &str, root_path: Option<&Path>) {
+    fn write_world_settings(
+        path: &Path,
+        mode: &str,
+        root_path: Option<&Path>,
+        caged: Option<bool>,
+    ) {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).expect("create settings parent");
         }
         let mut body = format!("[world]\nroot_mode = \"{mode}\"\n");
         if let Some(root) = root_path {
             body.push_str(&format!("root_path = \"{}\"\n", root.display()));
+        }
+        if let Some(flag) = caged {
+            body.push_str(&format!(
+                "caged = {}\n",
+                if flag { "true" } else { "false" }
+            ));
         }
         std::fs::write(path, body).expect("write settings file");
     }
@@ -296,14 +369,16 @@ mod tests {
             ("SUBSTRATE_HOME", Some(home.display().to_string())),
             ("SUBSTRATE_WORLD_ROOT_MODE", None),
             ("SUBSTRATE_WORLD_ROOT_PATH", None),
+            ("SUBSTRATE_CAGED", None),
         ]);
         let launch_dir = temp.path().join("workspace");
         std::fs::create_dir_all(&launch_dir).unwrap();
 
-        let settings = resolve_world_root(None, None, &launch_dir).expect("default settings");
+        let settings = resolve_world_root(None, None, None, &launch_dir).expect("default settings");
 
         assert_eq!(settings.mode, WorldRootMode::Project);
         assert_eq!(settings.path, launch_dir);
+        assert!(settings.caged);
     }
 
     #[test]
@@ -315,14 +390,16 @@ mod tests {
             ("SUBSTRATE_HOME", Some(home.display().to_string())),
             ("SUBSTRATE_WORLD_ROOT_MODE", Some("custom".into())),
             ("SUBSTRATE_WORLD_ROOT_PATH", Some("/env/root".into())),
+            ("SUBSTRATE_CAGED", Some("false".into())),
         ]);
         let launch_dir = temp.path().join("project");
         std::fs::create_dir_all(&launch_dir).unwrap();
 
-        let settings = resolve_world_root(None, None, &launch_dir).expect("env settings");
+        let settings = resolve_world_root(None, None, None, &launch_dir).expect("env settings");
 
         assert_eq!(settings.mode, WorldRootMode::Custom);
         assert_eq!(settings.path, PathBuf::from("/env/root"));
+        assert!(!settings.caged);
     }
 
     #[test]
@@ -331,19 +408,21 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let home = setup_substrate_home(&temp);
         let config_path = home.join("config.toml");
-        write_world_settings(&config_path, "follow-cwd", None);
+        write_world_settings(&config_path, "follow-cwd", None, Some(true));
         let _env = EnvGuard::new(vec![
             ("SUBSTRATE_HOME", Some(home.display().to_string())),
             ("SUBSTRATE_WORLD_ROOT_MODE", Some("custom".into())),
             ("SUBSTRATE_WORLD_ROOT_PATH", Some("/env/root".into())),
+            ("SUBSTRATE_CAGED", Some("false".into())),
         ]);
         let launch_dir = temp.path().join("project");
         std::fs::create_dir_all(&launch_dir).unwrap();
 
-        let settings = resolve_world_root(None, None, &launch_dir).expect("global settings");
+        let settings = resolve_world_root(None, None, None, &launch_dir).expect("global settings");
 
         assert_eq!(settings.mode, WorldRootMode::FollowCwd);
         assert_eq!(settings.path, launch_dir);
+        assert!(settings.caged);
     }
 
     #[test]
@@ -352,21 +431,34 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let home = setup_substrate_home(&temp);
         let config_path = home.join("config.toml");
-        write_world_settings(&config_path, "project", Some(Path::new("/global/root")));
+        write_world_settings(
+            &config_path,
+            "project",
+            Some(Path::new("/global/root")),
+            Some(true),
+        );
         let _env = EnvGuard::new(vec![
             ("SUBSTRATE_HOME", Some(home.display().to_string())),
             ("SUBSTRATE_WORLD_ROOT_MODE", Some("custom".into())),
             ("SUBSTRATE_WORLD_ROOT_PATH", Some("/env/root".into())),
+            ("SUBSTRATE_CAGED", Some("false".into())),
         ]);
         let launch_dir = temp.path().join("project");
         std::fs::create_dir_all(launch_dir.join(".substrate")).unwrap();
         let dir_settings = launch_dir.join(".substrate/settings.toml");
-        write_world_settings(&dir_settings, "custom", Some(Path::new("/dir/root")));
+        write_world_settings(
+            &dir_settings,
+            "custom",
+            Some(Path::new("/dir/root")),
+            Some(false),
+        );
 
-        let settings = resolve_world_root(None, None, &launch_dir).expect("dir config settings");
+        let settings =
+            resolve_world_root(None, None, None, &launch_dir).expect("dir config settings");
 
         assert_eq!(settings.mode, WorldRootMode::Custom);
         assert_eq!(settings.path, PathBuf::from("/dir/root"));
+        assert!(!settings.caged);
     }
 
     #[test]
@@ -375,27 +467,40 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let home = setup_substrate_home(&temp);
         let config_path = home.join("config.toml");
-        write_world_settings(&config_path, "project", Some(Path::new("/global/root")));
+        write_world_settings(
+            &config_path,
+            "project",
+            Some(Path::new("/global/root")),
+            Some(true),
+        );
         let _env = EnvGuard::new(vec![
             ("SUBSTRATE_HOME", Some(home.display().to_string())),
             ("SUBSTRATE_WORLD_ROOT_MODE", Some("project".into())),
             ("SUBSTRATE_WORLD_ROOT_PATH", Some("/env/root".into())),
+            ("SUBSTRATE_CAGED", Some("false".into())),
         ]);
         let launch_dir = temp.path().join("project");
         std::fs::create_dir_all(launch_dir.join(".substrate")).unwrap();
         let dir_settings = launch_dir.join(".substrate/settings.toml");
-        write_world_settings(&dir_settings, "custom", Some(Path::new("/dir/root")));
+        write_world_settings(
+            &dir_settings,
+            "custom",
+            Some(Path::new("/dir/root")),
+            Some(false),
+        );
         let cli_path = PathBuf::from("/cli/root");
 
         let settings = resolve_world_root(
             Some(WorldRootMode::Custom),
             Some(cli_path.clone()),
+            Some(true),
             &launch_dir,
         )
         .expect("cli settings");
 
         assert_eq!(settings.mode, WorldRootMode::Custom);
         assert_eq!(settings.path, cli_path);
+        assert!(settings.caged);
     }
 
     #[test]
@@ -407,11 +512,12 @@ mod tests {
             ("SUBSTRATE_HOME", Some(home.display().to_string())),
             ("SUBSTRATE_WORLD_ROOT_MODE", None),
             ("SUBSTRATE_WORLD_ROOT_PATH", None),
+            ("SUBSTRATE_CAGED", None),
         ]);
         let launch_dir = temp.path().join("project");
         std::fs::create_dir_all(&launch_dir).unwrap();
 
-        let err = resolve_world_root(Some(WorldRootMode::Custom), None, &launch_dir)
+        let err = resolve_world_root(Some(WorldRootMode::Custom), None, None, &launch_dir)
             .expect_err("custom without path should error");
         let message = err.to_string();
         assert!(
@@ -434,6 +540,7 @@ mod tests {
         let settings = WorldRootSettings {
             mode: WorldRootMode::FollowCwd,
             path: PathBuf::from("/should/be/ignored"),
+            caged: true,
         };
 
         assert_eq!(settings.effective_root(), target_cwd);
