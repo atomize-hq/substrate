@@ -297,14 +297,14 @@
       ],
       "worktree": "wt/ss-s2-settings-code",
       "integration_task": "S2-integ",
-      "kickoff_prompt": "To be created by prior session"
+      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S2-code.md"
     },
     {
       "id": "S2-test",
       "name": "Test settings stack",
       "type": "test",
       "phase": "Settings Stack",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add targeted tests that verify precedence (flag > dir config > global config > env > default) and world root behavior.",
       "references": [
         "docs/project_management/next/settings-stack/settings_stack_plan.md",
@@ -339,7 +339,7 @@
       ],
       "worktree": "wt/ss-s2-settings-test",
       "integration_task": "S2-integ",
-      "kickoff_prompt": "To be created by prior session"
+      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S2-test.md"
     },
     {
       "id": "S2-integ",
@@ -381,7 +381,7 @@
       "concurrent_with": [],
       "worktree": "wt/ss-s2-settings-integ",
       "integration_task": null,
-      "kickoff_prompt": "To be created by S2-test"
+      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S2-integ.md"
     }
   ]
 }

@@ -136,3 +136,11 @@ Template (copy/paste and fill in):
 - Worktree: planned wt/ss-s2-settings-test
 - Plan: add tests for world root precedence (flag > dir > global > env > default) and project/follow-cwd/custom modes, extend installer/tests for config.toml keys, run cargo fmt; cargo test -p substrate-shell world_enable; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
 - Blockers: none
+
+## [2025-11-21 16:05 UTC] Test – S2-test – END
+- Worktree commits: 6c6b882
+- Commands: cargo fmt; cargo test -p substrate-shell world_enable; cargo test -p substrate-shell world_root; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
+- Results: settings stack precedence/mode tests added and passing; installer smoke scenarios passed with `[world]` keys present (temp roots: /tmp/substrate-installer-default.1ItEHH, /tmp/substrate-installer-no-world.eSf6vW)
+- Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S2-integ.md
+- Docs commit: docs: finish S2-test (this commit)
+- Next steps / blockers: hand off to S2-integ to merge code/test work
