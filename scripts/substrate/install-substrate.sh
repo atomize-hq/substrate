@@ -575,6 +575,10 @@ write_install_config() {
   cat > "${INSTALL_CONFIG_PATH}.tmp" <<EOF
 [install]
 world_enabled = ${flag}
+
+[world]
+root_mode = "project"
+root_path = ""
 EOF
   mv "${INSTALL_CONFIG_PATH}.tmp" "${INSTALL_CONFIG_PATH}"
   chmod 0644 "${INSTALL_CONFIG_PATH}" || true

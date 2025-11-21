@@ -267,37 +267,63 @@ import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
-expected = sys.argv[2].lower() == "true"
+expected_enabled = sys.argv[2].lower() == "true"
 body = path.read_text()
 world_enabled = None
-in_install = False
+root_mode = None
+root_path = None
+section = None
+
+
+def parse_bool(raw):
+    val = raw.strip().lower()
+    if val in ("true", "false"):
+        return val == "true"
+    raise SystemExit(f"invalid boolean value: {raw}")
+
+
+def parse_string(raw):
+    val = raw.strip()
+    if val.startswith('"') and val.endswith('"') and len(val) >= 2:
+        return val[1:-1]
+    return val
+
+
 for raw in body.splitlines():
     line = raw.split("#", 1)[0].strip()
     if not line:
         continue
     if line.startswith("[") and line.endswith("]"):
-        in_install = line == "[install]"
+        section = line[1:-1].strip()
         continue
-    if not in_install:
-        continue
-    if "=" not in line:
+    if "=" not in line or section is None:
         continue
     key, value = line.split("=", 1)
-    if key.strip() != "world_enabled":
-        continue
-    val = value.strip().lower()
-    if val in ("true", "false"):
-        world_enabled = val == "true"
-        break
-    raise SystemExit(f"invalid world_enabled value: {value.strip()}")
+    key = key.strip()
+    value = value.strip()
+    if section == "install" and key == "world_enabled":
+        world_enabled = parse_bool(value)
+    elif section == "world":
+        if key == "root_mode":
+            root_mode = parse_string(value)
+        elif key == "root_path":
+            root_path = parse_string(value)
 
 if world_enabled is None:
     raise SystemExit("world_enabled missing under [install]")
-if world_enabled != expected:
-    raise SystemExit(f"world_enabled={world_enabled} (expected {expected})")
+if world_enabled != expected_enabled:
+    raise SystemExit(f"world_enabled={world_enabled} (expected {expected_enabled})")
+if root_mode is None:
+    raise SystemExit("world.root_mode missing under [world]")
+if root_mode != "project":
+    raise SystemExit(f"world.root_mode={root_mode} (expected project)")
+if root_path is None:
+    raise SystemExit("world.root_path missing under [world]")
+if root_path != "":
+    raise SystemExit(f"world.root_path={root_path!r} (expected empty string)")
 PY
 
-  log "Verified install config at ${config} (world_enabled=${expected_flag})"
+  log "Verified install config at ${config} (world_enabled=${expected_flag}; root_mode=project root_path=\"\")"
 }
 
 assert_manifest_present() {
