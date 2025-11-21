@@ -7,13 +7,14 @@ pub mod manager_init;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod platform_world;
 mod pty_exec;
+mod settings;
 pub mod shim_deploy; // Made public for integration tests
 
 use shim_deploy::{DeploymentStatus, ShimDeployer};
 
 use anyhow::{Context, Result};
 use chrono::Utc;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use lazy_static::lazy_static;
 use serde_json::json;
 use std::collections::HashMap;
@@ -32,7 +33,7 @@ use std::sync::Mutex;
 use substrate_broker::{detect_profile, evaluate, Decision};
 use substrate_common::{
     agent_events::{AgentEvent, AgentEventKind},
-    dedupe_path, log_schema, paths as substrate_paths, redact_sensitive, Platform,
+    dedupe_path, log_schema, paths as substrate_paths, redact_sensitive, Platform, WorldRootMode,
 };
 use substrate_trace::{
     append_to_trace, create_span_builder, init_trace, PolicyDecision, TransportMeta,
@@ -47,6 +48,7 @@ use crate::agent_events::{
     clear_agent_event_sender, format_event_line, init_event_channel, publish_agent_event,
     publish_command_completion, schedule_demo_burst, schedule_demo_events,
 };
+use crate::settings::{apply_world_root_env, resolve_world_root, world_root_from_env};
 
 // Reedline imports
 use reedline::Signal;
@@ -222,6 +224,24 @@ fn is_shell_stream_event(event: &AgentEvent) -> bool {
     event.agent_id == SHELL_AGENT_ID && matches!(event.kind, AgentEventKind::PtyData)
 }
 
+#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
+#[value(rename_all = "kebab-case")]
+pub enum WorldRootModeArg {
+    Project,
+    FollowCwd,
+    Custom,
+}
+
+impl From<WorldRootModeArg> for WorldRootMode {
+    fn from(value: WorldRootModeArg) -> Self {
+        match value {
+            WorldRootModeArg::Project => WorldRootMode::Project,
+            WorldRootModeArg::FollowCwd => WorldRootMode::FollowCwd,
+            WorldRootModeArg::Custom => WorldRootMode::Custom,
+        }
+    }
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "substrate")]
 #[command(version, about = "Substrate shell wrapper with comprehensive tracing", long_about = None)]
@@ -304,6 +324,14 @@ pub struct Cli {
     /// Verbose output during replay (prints command, cwd, mode, and capability warnings)
     #[arg(long = "replay-verbose", requires = "replay")]
     pub replay_verbose: bool,
+
+    /// Control how the world root is selected (project, follow-cwd, or custom)
+    #[arg(long = "world-root-mode", value_name = "MODE")]
+    pub world_root_mode: Option<WorldRootModeArg>,
+
+    /// Explicit world root path (used when --world-root-mode=custom)
+    #[arg(long = "world-root-path", value_name = "PATH")]
+    pub world_root_path: Option<PathBuf>,
 
     /// Disable world isolation (Linux only)
     #[arg(long = "no-world")]
@@ -476,6 +504,7 @@ pub struct ShellConfig {
     pub no_exit_on_error: bool,
     pub skip_shims: bool,
     pub no_world: bool,
+    pub world_root: settings::WorldRootSettings,
     pub async_repl: bool,
     pub env_vars: HashMap<String, String>,
     pub manager_init_path: PathBuf,
@@ -861,6 +890,14 @@ impl ShellConfig {
             }
         }
 
+        let launch_cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let world_root_settings = resolve_world_root(
+            cli.world_root_mode.map(WorldRootMode::from),
+            cli.world_root_path.clone(),
+            &launch_cwd,
+        )?;
+        apply_world_root_env(&world_root_settings);
+
         let session_id = env::var("SHIM_SESSION_ID").unwrap_or_else(|_| Uuid::now_v7().to_string());
 
         let home = env::var("HOME")
@@ -956,6 +993,7 @@ impl ShellConfig {
             no_exit_on_error: cli.no_exit_on_error,
             skip_shims: skip_shims_flag,
             no_world: final_no_world,
+            world_root: world_root_settings,
             async_repl: async_repl_enabled,
             env_vars: HashMap::new(),
             manager_init_path,
@@ -1894,8 +1932,7 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
                             limits: ResourceLimits::default(),
                             enable_preload: false,
                             allowed_domains: substrate_broker::allowed_domains(),
-                            project_dir: std::env::current_dir()
-                                .unwrap_or_else(|_| std::path::PathBuf::from(".")),
+                            project_dir: world_root_settings.effective_root(),
                             always_isolate: false,
                         };
                         if let Ok(handle) = ctx.backend.ensure_session(&spec) {
@@ -4313,7 +4350,7 @@ where
                 limits: ResourceLimits::default(),
                 enable_preload: false,
                 allowed_domains: substrate_broker::allowed_domains(),
-                project_dir: env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+                project_dir: world_root_from_env().path,
                 always_isolate: false,
             };
             let backend = LinuxLocalBackend::new();
@@ -5642,6 +5679,10 @@ mod manager_init_wiring_tests {
             no_exit_on_error: false,
             skip_shims: false,
             no_world: false,
+            world_root: settings::WorldRootSettings {
+                mode: WorldRootMode::Project,
+                path: temp.path().to_path_buf(),
+            },
             async_repl: false,
             env_vars: HashMap::new(),
             manager_init_path: temp.path().join("manager_init.sh"),

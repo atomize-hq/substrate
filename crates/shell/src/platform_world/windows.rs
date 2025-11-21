@@ -1,4 +1,5 @@
 use super::{PlatformWorldContext, WorldTransport};
+use crate::settings;
 use crate::Cli;
 use agent_api_client::{AgentClient, Transport};
 use anyhow::Result;
@@ -93,7 +94,7 @@ pub fn world_spec() -> WorldSpec {
         limits: ResourceLimits::default(),
         enable_preload: false,
         allowed_domains: substrate_broker::allowed_domains(),
-        project_dir: current_dir(),
+        project_dir: settings::world_root_from_env().path,
         always_isolate: false,
     }
 }

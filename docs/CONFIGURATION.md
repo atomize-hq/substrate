@@ -56,7 +56,33 @@ and `scripts/substrate/world-deps.yaml` in the repository root.
 |----------|---------|---------|---------|
 | `SUBSTRATE_WORLD` | Force pass-through execution (`disabled`) | `enabled` | `disabled` |
 | `SUBSTRATE_WORLD_ENABLED` | Cached world enablement flag (installer) | `1` | `0` |
+| `SUBSTRATE_WORLD_ROOT_MODE` | World root selection (`project`, `follow-cwd`, `custom`) | `project` | `follow-cwd` |
+| `SUBSTRATE_WORLD_ROOT_PATH` | Custom world root directory (paired with `custom` mode) | shell launch directory | `/workspaces/substrate` |
 | `SUBSTRATE_WORLD_DEPS_MANIFEST` | Override manifest for `world deps` | `<prefix>/versions/<version>/config/world-deps.yaml` | `/tmp/world_deps.yaml` |
+
+### World root settings stack
+
+Substrate resolves the world root from highest to lowest:
+
+1. CLI flags: `--world-root-mode` / `--world-root-path`
+2. Directory config: `.substrate/settings.toml` in the shell launch directory
+3. Global config: `~/.substrate/config.toml` `[world]` table
+4. Environment variables: `SUBSTRATE_WORLD_ROOT_MODE` / `SUBSTRATE_WORLD_ROOT_PATH`
+5. Default: `project` mode anchored to the shell launch directory
+
+Modes:
+
+- `project` – anchor the overlay to the directory where `substrate` started.
+- `follow-cwd` – recompute the root whenever the working directory changes.
+- `custom` – use an explicit path (set via `root_path` or `--world-root-path`).
+
+Both the global config and per-directory settings file use the same schema:
+
+```toml
+[world]
+root_mode = "project"
+root_path = ""
+```
 
 ### Host-only driver helpers
 
@@ -66,11 +92,17 @@ and `scripts/substrate/world-deps.yaml` in the repository root.
 ## Install Metadata (`~/.substrate/config.toml`)
 
 The installer and `substrate world enable` command keep a small metadata file at
-`~/.substrate/config.toml` with install-level fields under `[install]`:
+`~/.substrate/config.toml` with install-level fields under `[install]`. The
+same file (and optional `.substrate/settings.toml` in a repo) can carry a
+`[world]` table when you want a persistent root override:
 
 ```toml
 [install]
 world_enabled = true
+
+[world]
+root_mode = "project"
+root_path = ""
 ```
 
 Unknown keys and extra tables are preserved for future expansion.
@@ -81,6 +113,8 @@ Unknown keys and extra tables are preserved for future expansion.
 - The generated `~/.substrate/manager_env.sh` exports `SUBSTRATE_WORLD` and
   `SUBSTRATE_WORLD_ENABLED` so shims and subprocesses read a consistent view of
   this metadata even before the CLI runs.
+- Directory configs live at `.substrate/settings.toml` under the launch
+  directory and only carry the `[world]` table shown above.
 
 ## CLI Flags
 
@@ -102,6 +136,8 @@ Unknown keys and extra tables are preserved for future expansion.
 | `--ci` | CI mode (no banner, strict errors) | `substrate --ci -c "npm test"` |
 | `--no-exit-on-error` | Continue on error in CI mode | `substrate --ci --no-exit-on-error` |
 | `--pty` | Force PTY for command | `substrate --pty -c "vim"` |
+| `--world-root-mode <mode>` | Select world root strategy (`project`, `follow-cwd`, `custom`) | `substrate --world-root-mode follow-cwd -c "npm test"` |
+| `--world-root-path <path>` | Explicit world root when using `custom` mode | `substrate --world-root-mode custom --world-root-path /opt/work` |
 | `--version-json` | Output version info as JSON | `substrate --version-json` |
 | `--legacy-repl` | Fall back to the legacy synchronous REPL | `substrate --legacy-repl` |
 

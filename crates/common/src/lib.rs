@@ -6,6 +6,7 @@ pub mod agent_events;
 pub mod fs_diff;
 pub mod manager_manifest;
 pub mod paths;
+pub mod settings;
 pub mod world_deps_manifest;
 
 pub use agent_events::{AgentEvent, AgentEventKind};
@@ -14,6 +15,7 @@ pub use manager_manifest::{
     DetectSpec, GuestSpec, InitSpec, InstallSpec, ManagerManifest, ManagerSpec, Platform,
     RegexPattern,
 };
+pub use settings::WorldRootMode;
 pub use world_deps_manifest::{
     WorldDepDetectSpec, WorldDepInstallRecipe, WorldDepTool, WorldDepsManifest,
 };
