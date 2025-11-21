@@ -53,3 +53,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S0-integ.md; docs/project_management/next/settings-stack/kickoff_prompts/S1-code.md; docs/project_management/next/settings-stack/kickoff_prompts/S1-test.md
 - Docs commit: docs: finish S0-test + prompts
 - Next steps / blockers: none
+
+## [2025-11-21 13:41 UTC] Integ – S0-integ – START
+- Checked out feat/settings-stack, pulled latest
+- Updated tasks.json + session log (commit: docs: start S0-integ)
+- Worktree: planned wt/ss-s0-manifest-integ
+- Plan: merge S0 code/test work, run installer smoke (default, no-world), capture prefixes/results, update docs/tasks
+- Blockers: none
