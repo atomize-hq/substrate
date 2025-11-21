@@ -45,7 +45,7 @@
       "name": "Test bundled manager manifest",
       "type": "test",
       "phase": "Settings Stack",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add/extend tests to confirm installers emit config/manager_hooks.yaml and that substrate health works after install.",
       "references": [
         "docs/project_management/next/settings-stack/settings_stack_plan.md",
