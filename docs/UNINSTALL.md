@@ -2,11 +2,12 @@
 
 Use this guide to remove Substrate, its shims, and world backends on macOS,
 Linux, or Windows (WSL). Each section references the bundled
-`scripts/substrate/uninstall-substrate.sh` script, which you can run directly via
+`scripts/substrate/uninstall.sh` script (wrapper around
+`uninstall-substrate.sh`), which you can run directly via
 curl or from the release archive.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/substrate/uninstall-substrate.sh | bash
+curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/substrate/uninstall.sh | bash
 ```
 
 ## Common Cleanup Steps
@@ -27,7 +28,7 @@ entries or aliases, remove them manually after running the script.
 ### Scripted Removal
 
 ```bash
-sudo env HOME="$HOME" ./scripts/substrate/uninstall-substrate.sh
+sudo env HOME="$HOME" ./scripts/substrate/uninstall.sh
 ```
 
 Additional automated steps on systemd hosts:
@@ -55,7 +56,7 @@ immediately.
 ### Scripted Removal
 
 ```bash
-sudo env HOME="$HOME" ./scripts/substrate/uninstall-substrate.sh
+sudo env HOME="$HOME" ./scripts/substrate/uninstall.sh
 ```
 
 macOS-specific actions:
@@ -87,7 +88,7 @@ pwsh -File scripts/windows/uninstall-substrate.ps1 -RemoveWSLDistro
 ## Troubleshooting
 
 - **Permission denied removing system files (macOS/Linux)**: rerun the script
-  with a user that has `sudo` privileges (`sudo ./scripts/substrate/uninstall-substrate.sh`).
+  with a user that has `sudo` privileges (`sudo ./scripts/substrate/uninstall.sh`).
 - **Permission denied removing system files (Windows)**: rerun the PowerShell
   script in an elevated prompt.
 - **Systemd reports lingering unit**: check `/etc/systemd/system` for a cached

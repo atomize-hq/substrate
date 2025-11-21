@@ -5,13 +5,7 @@ Keep concise, actionable, and security-focused.
 
 ## Near-Term (Next 1–2 sprints)
 
-- **Top Priority – Fix REPL busy-spin / async agent output**
-  - Resolve the Reedline/crossterm busy loop that pegs a CPU core when idle (gate on TTY,
-    introduce backoff, or adopt the async event loop from the Phase 4 concurrent output design).
-  - See `docs/project_management/future/PHASE_4_CONCURRENT_OUTPUT_DESIGN.md` for context and remediation notes.
-  - Implement the async agent output path so events can stream without prompt corruption.
-
-- **High Priority – Global configuration UX**
+- **Top Priority – Global configuration UX**
   - Introduce `~/.substrate/config.toml` for persistent defaults (world behavior,
     broker enforcement toggle, default profiles).
   - Provide CLI commands to scaffold (`substrate config init`) and edit the
@@ -53,6 +47,14 @@ Keep concise, actionable, and security-focused.
     macOS/Windows agent calls (`crates/shell/src/lib.rs:3680-3703`, `3560-3663`).
   - Result: The shell only falls back to host execution after a single warning
     when the agent cannot be reached; routine runs stay in-world by default.
+
+
+- ~~Top Priority – Fix REPL busy-spin / async agent output~~  **(Done)**
+  - Resolve the Reedline/crossterm busy loop that pegs a CPU core when idle (gate on TTY,
+    introduce backoff, or adopt the async event loop from the Phase 4 concurrent output design).
+  - See `docs/project_management/future/PHASE_4_CONCURRENT_OUTPUT_DESIGN.md` for context and remediation notes.
+  - Implement the async agent output path so events can stream without prompt corruption.
+
 
 - Return fs_diff via agent HTTP execute
   - Extend `agent-api-types::ExecuteResponse` to include `fs_diff: Option<FsDiff>`; plumb through `world-agent` service.

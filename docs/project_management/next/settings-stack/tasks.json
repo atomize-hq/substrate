@@ -1,0 +1,347 @@
+{
+  "tasks": [
+    {
+      "id": "S0-code",
+      "name": "Bundle manager manifest in releases",
+      "type": "code",
+      "phase": "Settings Stack",
+      "status": "pending",
+      "description": "Ensure release bundles + installers carry config/manager_hooks.yaml (and related manifests) so health/doctor work out of the box.",
+      "references": [
+        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "dist/scripts/collect-supporting-artifacts.sh",
+        "dist/scripts/assemble-release-bundles.sh",
+        "scripts/substrate/install-substrate.sh",
+        "scripts/substrate/install.sh",
+        "docs/INSTALLATION.md"
+      ],
+      "acceptance_criteria": [
+        "Support bundle includes config/ directory (manager manifest, world deps manifest).",
+        "Platform bundles copy config/ into versions/<ver>/config during install.",
+        "Installer/uninstaller handle the new config directory without leaving stale files.",
+        "Docs mention the manifest location under ~/.substrate/versions/<ver>/config."
+      ],
+      "start_checklist": [
+        "Checkout feat/settings-stack, pull latest",
+        "Set S0-code to in_progress, log START entry, commit docs update",
+        "Create worktree wt/ss-s0-manifest-code"
+      ],
+      "end_checklist": [
+        "Run cargo fmt / shellcheck as needed",
+        "Commit worktree changes",
+        "Merge wt/ss-s0-manifest-code back to feat/settings-stack",
+        "Update tasks.json + session_log.md with END entry",
+        "Reference S0-test kickoff prompt and any installer commands executed",
+        "Commit docs update on feat/settings-stack"
+      ],
+      "depends_on": [],
+      "concurrent_with": ["S0-test"],
+      "worktree": "wt/ss-s0-manifest-code",
+      "integration_task": "S0-integ",
+      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S0-code.md"
+    },
+    {
+      "id": "S0-test",
+      "name": "Test bundled manager manifest",
+      "type": "test",
+      "phase": "Settings Stack",
+      "status": "pending",
+      "description": "Add/extend tests to confirm installers emit config/manager_hooks.yaml and that substrate health works after install.",
+      "references": [
+        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "tests/installers/install_smoke.sh",
+        "scripts/substrate/install-substrate.sh",
+        "docs/USAGE.md"
+      ],
+      "acceptance_criteria": [
+        "Installer harness checks that config/manager_hooks.yaml exists under the temp prefix after default and --no-world runs.",
+        "Add a smoke test to run 'substrate health --json' (or equivalent) against the installed prefix, confirming it no longer errors.",
+        "No production code modifications beyond minor test helpers."
+      ],
+      "start_checklist": [
+        "Checkout feat/settings-stack, pull latest",
+        "Set S0-test to in_progress, log START entry, commit docs update",
+        "Create worktree wt/ss-s0-manifest-test"
+      ],
+      "end_checklist": [
+        "Run installer harness scenarios and capture output",
+        "Commit worktree changes (tests only)",
+        "Merge wt/ss-s0-manifest-test back to feat/settings-stack",
+        "Update tasks.json + session_log.md with END entry",
+        "Create kickoff prompts for S0-integ and refresh S1-code/S1-test prompts",
+        "Commit docs update on feat/settings-stack"
+      ],
+      "depends_on": [],
+      "concurrent_with": ["S0-code"],
+      "worktree": "wt/ss-s0-manifest-test",
+      "integration_task": "S0-integ",
+      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S0-test.md"
+    },
+    {
+      "id": "S0-integ",
+      "name": "Integrate manifest bundling",
+      "type": "integration",
+      "phase": "Settings Stack",
+      "status": "pending",
+      "description": "Merge the manifest-packaging code + tests, run required scripts, and ensure feat/settings-stack reflects the fix before later stages begin.",
+      "references": [
+        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "dist/scripts",
+        "scripts/substrate",
+        "tests/installers"
+      ],
+      "acceptance_criteria": [
+        "wt/ss-s0-manifest-integ merges code/test branches with clean fmt/lint/test results.",
+        "feat/settings-stack contains the final manifest-packaging changes plus doc/task/log updates.",
+        "S1 kickoff prompts verified/updated based on the new baseline."
+      ],
+      "start_checklist": [
+        "Checkout feat/settings-stack, pull latest",
+        "Confirm S0-code/S0-test completed",
+        "Set S0-integ to in_progress, log START entry, commit docs update",
+        "Create worktree wt/ss-s0-manifest-integ"
+      ],
+      "end_checklist": [
+        "Merge worktrees, resolve conflicts",
+        "Run cargo fmt/clippy/tests and installer harness as required",
+        "Merge back to feat/settings-stack",
+        "Update tasks.json + session_log.md with END entry",
+        "Push / hand off"
+      ],
+      "depends_on": ["S0-code", "S0-test"],
+      "concurrent_with": [],
+      "worktree": "wt/ss-s0-manifest-integ",
+      "integration_task": null,
+      "kickoff_prompt": "To be created by S0-test"
+    },
+    {
+      "id": "S1-code",
+      "name": "Migrate install config to TOML",
+      "type": "code",
+      "phase": "Settings Stack",
+      "status": "pending",
+      "description": "Replace ~/.substrate/config.json with config.toml, update installers/CLI to read & write TOML, and refresh docs without touching tests.",
+      "references": [
+        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/INSTALLATION.md",
+        "docs/CONFIGURATION.md",
+        "crates/shell/src/commands/world_enable.rs",
+        "scripts/substrate/install-substrate.sh",
+        "scripts/substrate/uninstall.sh"
+      ],
+      "acceptance_criteria": [
+        "Install metadata persists to config.toml with [install] section.",
+        "Shell reads TOML and exports SUBSTRATE_WORLD* envs correctly.",
+        "Installer/uninstaller scripts write/read the TOML file and keep manager_env exports intact.",
+        "Docs updated to mention TOML format."
+      ],
+      "start_checklist": [
+        "Checkout feat/settings-stack, pull latest",
+        "Set S1-code to in_progress in tasks.json",
+        "Add START entry to session_log.md and commit docs update",
+        "Create worktree wt/ss-s1-config-code"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and cargo clippy -p substrate-shell -- -D warnings",
+        "Commit worktree changes",
+        "Merge wt/ss-s1-config-code back into feat/settings-stack",
+        "Update tasks.json + session_log.md with END entry",
+        "Reference S1-test kickoff prompt in log",
+        "Commit docs update on feat/settings-stack"
+      ],
+      "depends_on": ["S0-integ"],
+      "concurrent_with": ["S1-test"],
+      "worktree": "wt/ss-s1-config-code",
+      "integration_task": "S1-integ",
+      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S1-code.md"
+    },
+    {
+      "id": "S1-test",
+      "name": "Test TOML install config",
+      "type": "test",
+      "phase": "Settings Stack",
+      "status": "pending",
+      "description": "Add/refresh tests that cover loading/saving config.toml and guard against regressions.",
+      "references": [
+        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "crates/shell/src/commands/world_enable.rs",
+        "tests/installers/install_smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "Unit tests cover load/save of config.toml (missing keys, extras).",
+        "Installer harness validates TOML output for default and --no-world paths.",
+        "No production code changes beyond test scaffolding."
+      ],
+      "start_checklist": [
+        "Checkout feat/settings-stack, pull latest",
+        "Set S1-test to in_progress in tasks.json",
+        "Add START entry to session_log.md and commit docs update",
+        "Create worktree wt/ss-s1-config-test"
+      ],
+      "end_checklist": [
+        "Run targeted cargo test / installer scripts as noted",
+        "Commit worktree changes (tests only)",
+        "Merge wt/ss-s1-config-test into feat/settings-stack",
+        "Update tasks.json + session_log.md with END entry",
+        "Create kickoff prompts for S1-integ, S2-code, S2-test and reference paths",
+        "Commit docs update on feat/settings-stack"
+      ],
+      "depends_on": ["S0-integ"],
+      "concurrent_with": ["S1-code"],
+      "worktree": "wt/ss-s1-config-test",
+      "integration_task": "S1-integ",
+      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S1-test.md"
+    },
+    {
+      "id": "S1-integ",
+      "name": "Integrate TOML install config",
+      "type": "integration",
+      "phase": "Settings Stack",
+      "status": "pending",
+      "description": "Merge the TOML code + tests into feat/settings-stack, resolve conflicts, and ensure fmt/clippy/tests pass.",
+      "references": [
+        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "crates/shell",
+        "scripts/substrate",
+        "tests/installers"
+      ],
+      "acceptance_criteria": [
+        "wt/ss-s1-config-integ contains merged code+tests with fmt/clippy/tests passing.",
+        "feat/settings-stack updated with integration results and doc/task/log entries committed.",
+        "Next task kickoff prompts (S2 code/test) recorded by the test agent prior to this session."
+      ],
+      "start_checklist": [
+        "Checkout feat/settings-stack, pull latest",
+        "Confirm S1-code and S1-test are completed",
+        "Set S1-integ to in_progress in tasks.json",
+        "Add START entry to session_log.md and commit docs update",
+        "Create worktree wt/ss-s1-config-integ"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration worktree",
+        "Run cargo fmt, cargo clippy, and full test suite as required",
+        "Merge integration results back to feat/settings-stack",
+        "Update tasks.json + session_log.md with END entry (include command log)",
+        "Push or hand off per instructions"
+      ],
+      "depends_on": ["S1-code", "S1-test"],
+      "concurrent_with": [],
+      "worktree": "wt/ss-s1-config-integ",
+      "integration_task": null,
+      "kickoff_prompt": "To be created by S1-test" 
+    },
+    {
+      "id": "S2-code",
+      "name": "Implement settings stack & world root flag",
+      "type": "code",
+      "phase": "Settings Stack",
+      "status": "pending",
+      "description": "Add CLI flag/env parsing, directory/local config readers, and shell plumbing for world root precedence.",
+      "references": [
+        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/CONFIGURATION.md",
+        "crates/shell/src/lib.rs",
+        "crates/shell/src/platform_world",
+        "crates/world"
+      ],
+      "acceptance_criteria": [
+        "Shell honors --world-root-mode/--world-root-path with project/follow-cwd/custom modes.",
+        "Directory config (.substrate/settings.toml) and global config (config.toml) parsed and merged respecting precedence.",
+        "Env vars SUBSTRATE_WORLD_ROOT_MODE/PATH serve as fallback before default.",
+        "Docs updated (USAGE/CONFIGURATION) to describe the stack.",
+        "No test files touched."
+      ],
+      "start_checklist": [
+        "Checkout feat/settings-stack, pull latest",
+        "Set S2-code to in_progress, update session_log.md, commit docs update",
+        "Create worktree wt/ss-s2-settings-code"
+      ],
+      "end_checklist": [
+        "Run cargo fmt/clippy and targeted checks",
+        "Commit worktree changes",
+        "Merge back to feat/settings-stack",
+        "Update tasks.json + session_log.md (END entry)",
+        "Coordinate with S2-test for any shared prompts"
+      ],
+      "depends_on": ["S1-integ"],
+      "concurrent_with": ["S2-test"],
+      "worktree": "wt/ss-s2-settings-code",
+      "integration_task": "S2-integ",
+      "kickoff_prompt": "To be created by prior session"
+    },
+    {
+      "id": "S2-test",
+      "name": "Test settings stack",
+      "type": "test",
+      "phase": "Settings Stack",
+      "status": "pending",
+      "description": "Add targeted tests that verify precedence (flag > dir config > global config > env > default) and world root behavior.",
+      "references": [
+        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "crates/shell/src/lib.rs",
+        "crates/world",
+        "tests/installers/install_smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "Unit/integration tests cover layering (mock configs/env) and world root modes.",
+        "Installer/tests updated to assert config.toml stores the new keys where appropriate.",
+        "No production code modifications beyond test helpers."
+      ],
+      "start_checklist": [
+        "Checkout feat/settings-stack, pull latest",
+        "Set S2-test to in_progress, update session_log.md, commit docs update",
+        "Create worktree wt/ss-s2-settings-test"
+      ],
+      "end_checklist": [
+        "Run targeted tests and capture outputs",
+        "Commit worktree changes",
+        "Merge back to feat/settings-stack",
+        "Update tasks.json + session_log.md (END entry)",
+        "Create S2-integ kickoff prompt"
+      ],
+      "depends_on": ["S1-integ"],
+      "concurrent_with": ["S2-code"],
+      "worktree": "wt/ss-s2-settings-test",
+      "integration_task": "S2-integ",
+      "kickoff_prompt": "To be created by prior session"
+    },
+    {
+      "id": "S2-integ",
+      "name": "Integrate settings stack",
+      "type": "integration",
+      "phase": "Settings Stack",
+      "status": "pending",
+      "description": "Merge settings stack code/test worktrees, resolve conflicts, and ensure full fmt/clippy/test suite passes before updating feat/settings-stack.",
+      "references": [
+        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "crates/shell",
+        "crates/world",
+        "scripts/dev",
+        "docs/CONFIGURATION.md"
+      ],
+      "acceptance_criteria": [
+        "wt/ss-s2-settings-integ merges code+tests with clean fmt/clippy/tests.",
+        "feat/settings-stack contains final changes plus session log/task updates.",
+        "Kickoff prompts for any follow-up work recorded before ending session."
+      ],
+      "start_checklist": [
+        "Checkout feat/settings-stack, pull latest",
+        "Confirm S2-code/test completed",
+        "Set S2-integ to in_progress, update session_log.md, commit docs update",
+        "Create worktree wt/ss-s2-settings-integ"
+      ],
+      "end_checklist": [
+        "Merge code/test worktrees and resolve conflicts",
+        "Run required fmt/clippy/tests",
+        "Merge back to feat/settings-stack",
+        "Update tasks.json + session_log.md (END entry)",
+        "Push or hand off per instructions"
+      ],
+      "depends_on": ["S2-code", "S2-test"],
+      "concurrent_with": [],
+      "worktree": "wt/ss-s2-settings-integ",
+      "integration_task": null,
+      "kickoff_prompt": "To be created by S2-test"
+    }
+  ]
+}

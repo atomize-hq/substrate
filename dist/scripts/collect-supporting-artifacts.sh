@@ -20,6 +20,12 @@ for doc in "${docs[@]}"; do
   cp "${ROOT_DIR}/${doc}" "${STAGING_DIR}/docs/"
 done
 
+# Runtime configuration (manager manifest, etc.) bundled with releases.
+if [[ -d "${ROOT_DIR}/config" ]]; then
+  mkdir -p "${STAGING_DIR}/config"
+  cp -R "${ROOT_DIR}/config/." "${STAGING_DIR}/config/"
+fi
+
 # Platform helper scripts required by the rewritten installers.
 script_dirs=(
   "scripts/linux"
