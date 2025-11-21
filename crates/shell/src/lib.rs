@@ -5821,9 +5821,9 @@ mod manager_init_wiring_tests {
         let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home.display().to_string());
         let prev_world = set_env("SUBSTRATE_WORLD", "disabled");
         let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "0");
-        let prev_root_mode = env::var("SUBSTRATE_WORLD_ROOT_MODE").ok();
-        let prev_root_path = env::var("SUBSTRATE_WORLD_ROOT_PATH").ok();
-        let prev_caged = env::var("SUBSTRATE_CAGED").ok();
+        let prev_root_mode = set_env("SUBSTRATE_WORLD_ROOT_MODE", "project");
+        let prev_root_path = set_env("SUBSTRATE_WORLD_ROOT_PATH", "/env/root");
+        let prev_caged = set_env("SUBSTRATE_CAGED", "1");
         let prev_manager_env = env::var("SUBSTRATE_MANAGER_ENV").ok();
         let prev_manager_init = env::var("SUBSTRATE_MANAGER_INIT").ok();
         let _dir_guard = DirGuard::new();
@@ -5841,6 +5841,124 @@ mod manager_init_wiring_tests {
         restore_env("SUBSTRATE_CAGED", prev_caged);
         restore_env("SUBSTRATE_MANAGER_ENV", prev_manager_env);
         restore_env("SUBSTRATE_MANAGER_INIT", prev_manager_init);
+        restore_env("SUBSTRATE_WORLD", prev_world);
+        restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
+        restore_env("SUBSTRATE_HOME", prev_substrate_home);
+        restore_env("USERPROFILE", prev_userprofile);
+        restore_env("HOME", prev_home);
+    }
+
+    #[test]
+    #[serial]
+    fn world_flag_honors_directory_world_root_settings() {
+        let temp = tempdir().unwrap();
+        let home = temp.path().join("home");
+        let substrate_home = home.join(".substrate");
+        let workdir = temp.path().join("workspace");
+        let custom_root = workdir.join("nested-root");
+        fs::create_dir_all(substrate_home.join("shims")).unwrap();
+        fs::create_dir_all(workdir.join(".substrate")).unwrap();
+        fs::create_dir_all(&custom_root).unwrap();
+        fs::write(
+            substrate_home.join("config.toml"),
+            "[install]\nworld_enabled = false\n[world]\nroot_mode = \"project\"\nroot_path = \"\"\ncaged = true\n",
+        )
+        .unwrap();
+        fs::write(
+            workdir.join(".substrate/settings.toml"),
+            format!(
+                "[world]\nroot_mode = \"custom\"\nroot_path = \"{}\"\ncaged = false\n",
+                custom_root.display()
+            ),
+        )
+        .unwrap();
+
+        let prev_home = set_env("HOME", &home.display().to_string());
+        let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
+        let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home.display().to_string());
+        let prev_world = set_env("SUBSTRATE_WORLD", "disabled");
+        let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "0");
+        let prev_root_mode = set_env("SUBSTRATE_WORLD_ROOT_MODE", "project");
+        let prev_root_path = set_env("SUBSTRATE_WORLD_ROOT_PATH", "/env/root");
+        let prev_caged = set_env("SUBSTRATE_CAGED", "1");
+        let _dir_guard = DirGuard::new();
+        env::set_current_dir(&workdir).unwrap();
+
+        let cli = Cli::parse_from(["substrate", "--world"]);
+        let config = ShellConfig::from_cli(cli).expect("parse config with directory world root");
+        assert!(!config.no_world);
+        assert_eq!(config.world_root.mode, WorldRootMode::Custom);
+        assert_eq!(config.world_root.path, custom_root);
+        assert!(!config.world_root.caged);
+        assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
+        assert_eq!(env::var("SUBSTRATE_WORLD_ENABLED").unwrap(), "1");
+        assert_eq!(env::var("SUBSTRATE_WORLD_ROOT_MODE").unwrap(), "custom");
+        assert_eq!(
+            env::var("SUBSTRATE_WORLD_ROOT_PATH").unwrap(),
+            custom_root.display().to_string()
+        );
+        assert_eq!(env::var("SUBSTRATE_CAGED").unwrap(), "0");
+
+        restore_env("SUBSTRATE_WORLD_ROOT_MODE", prev_root_mode);
+        restore_env("SUBSTRATE_WORLD_ROOT_PATH", prev_root_path);
+        restore_env("SUBSTRATE_CAGED", prev_caged);
+        restore_env("SUBSTRATE_WORLD", prev_world);
+        restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
+        restore_env("SUBSTRATE_HOME", prev_substrate_home);
+        restore_env("USERPROFILE", prev_userprofile);
+        restore_env("HOME", prev_home);
+    }
+
+    #[test]
+    #[serial]
+    fn no_world_flag_disables_world_and_sets_root_exports() {
+        let temp = tempdir().unwrap();
+        let home = temp.path().join("home");
+        let substrate_home = home.join(".substrate");
+        let workdir = temp.path().join("workspace");
+        fs::create_dir_all(substrate_home.join("shims")).unwrap();
+        fs::create_dir_all(&workdir).unwrap();
+        fs::write(
+            substrate_home.join("config.toml"),
+            "[install]\nworld_enabled = true\n[world]\nroot_mode = \"project\"\nroot_path = \"\"\ncaged = true\n",
+        )
+        .unwrap();
+
+        let prev_home = set_env("HOME", &home.display().to_string());
+        let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
+        let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home.display().to_string());
+        let prev_world = set_env("SUBSTRATE_WORLD", "enabled");
+        let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "1");
+        let prev_root_mode = set_env("SUBSTRATE_WORLD_ROOT_MODE", "project");
+        let prev_root_path = set_env("SUBSTRATE_WORLD_ROOT_PATH", "/env/root");
+        let prev_caged = set_env("SUBSTRATE_CAGED", "1");
+        let _dir_guard = DirGuard::new();
+        env::set_current_dir(&workdir).unwrap();
+
+        let cli = Cli::parse_from([
+            "substrate",
+            "--no-world",
+            "--world-root-mode",
+            "follow-cwd",
+            "--uncaged",
+        ]);
+        let config = ShellConfig::from_cli(cli).expect("parse config with no-world flag");
+        assert!(config.no_world);
+        assert_eq!(config.world_root.mode, WorldRootMode::FollowCwd);
+        assert_eq!(config.world_root.path, workdir);
+        assert!(!config.world_root.caged);
+        assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "disabled");
+        assert_eq!(env::var("SUBSTRATE_WORLD_ENABLED").unwrap(), "0");
+        assert_eq!(env::var("SUBSTRATE_WORLD_ROOT_MODE").unwrap(), "follow-cwd");
+        assert_eq!(
+            env::var("SUBSTRATE_WORLD_ROOT_PATH").unwrap(),
+            workdir.display().to_string()
+        );
+        assert_eq!(env::var("SUBSTRATE_CAGED").unwrap(), "0");
+
+        restore_env("SUBSTRATE_WORLD_ROOT_MODE", prev_root_mode);
+        restore_env("SUBSTRATE_WORLD_ROOT_PATH", prev_root_path);
+        restore_env("SUBSTRATE_CAGED", prev_caged);
         restore_env("SUBSTRATE_WORLD", prev_world);
         restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
         restore_env("SUBSTRATE_HOME", prev_substrate_home);
