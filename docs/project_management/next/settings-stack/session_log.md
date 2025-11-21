@@ -98,3 +98,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S1-integ.md; docs/project_management/next/settings-stack/kickoff_prompts/S2-code.md; docs/project_management/next/settings-stack/kickoff_prompts/S2-test.md (S2 tasks wait for S1-integ to merge)
 - Docs commit: docs: finish S1-test + prompts (this commit)
 - Next steps / blockers: none
+
+## [2025-11-21 14:33 UTC] Integ – S1-integ – START
+- Checked out feat/settings-stack, pulled latest
+- Updated tasks.json + session log (commit: pending)
+- Worktree: planned wt/ss-s1-config-integ
+- Plan: create integration worktree, merge S1-code + S1-test branches, resolve conflicts, run cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_enable; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world; update tasks/logs and merge back to feat/settings-stack
+- Blockers: none
