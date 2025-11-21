@@ -42,7 +42,7 @@ pub fn lock_file() -> Result<PathBuf> {
 }
 
 pub fn config_file() -> Result<PathBuf> {
-    Ok(substrate_home()?.join("config.json"))
+    Ok(substrate_home()?.join("config.toml"))
 }
 
 #[cfg(test)]
@@ -90,7 +90,7 @@ mod tests {
     #[test]
     fn test_config_file() {
         let path = config_file().unwrap();
-        assert!(path.ends_with("config.json"));
+        assert!(path.ends_with("config.toml"));
         assert!(path.parent().unwrap().ends_with(SUBSTRATE_DIR_NAME));
     }
 

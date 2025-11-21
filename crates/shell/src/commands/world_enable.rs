@@ -1,7 +1,7 @@
 use crate::WorldEnableArgs;
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::Utc;
-use serde_json::{Map, Value};
+use serde_json::{Map, Value as JsonValue};
 use std::env;
 use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
@@ -15,12 +15,13 @@ use std::time::Duration;
 use std::time::Instant;
 use substrate_common::paths as substrate_paths;
 use tempfile::NamedTempFile;
+use toml::value::{Table as TomlTable, Value as TomlValue};
 
 #[derive(Debug, Clone)]
 pub struct InstallConfig {
     pub world_enabled: bool,
     existed: bool,
-    extras: Map<String, Value>,
+    extras: TomlTable,
 }
 
 impl InstallConfig {
@@ -42,37 +43,134 @@ impl Default for InstallConfig {
         Self {
             world_enabled: true,
             existed: false,
-            extras: Map::new(),
+            extras: TomlTable::new(),
         }
     }
 }
 
 pub fn load_install_config(path: &Path) -> Result<InstallConfig> {
     match fs::read_to_string(path) {
-        Ok(contents) => parse_config(path, &contents),
-        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(InstallConfig::default()),
+        Ok(contents) => parse_toml_config(path, &contents),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => load_legacy_install_config(path),
         Err(err) => Err(anyhow!("failed to read {}: {err}", path.display())),
     }
 }
 
-fn parse_config(path: &Path, contents: &str) -> Result<InstallConfig> {
-    let mut raw: Map<String, Value> = serde_json::from_str(contents)
-        .with_context(|| format!("invalid JSON in {}", path.display()))?;
-    let world_enabled = match raw.remove("world_enabled") {
-        Some(Value::Bool(value)) => value,
+fn load_legacy_install_config(new_path: &Path) -> Result<InstallConfig> {
+    let legacy_path = legacy_config_path(new_path);
+    match fs::read_to_string(&legacy_path) {
+        Ok(contents) => parse_legacy_json(&legacy_path, &contents),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(InstallConfig::default()),
+        Err(err) => Err(anyhow!(
+            "failed to read legacy {}: {err}",
+            legacy_path.display()
+        )),
+    }
+}
+
+fn parse_toml_config(path: &Path, contents: &str) -> Result<InstallConfig> {
+    let mut raw: TomlTable =
+        toml::from_str(contents).with_context(|| format!("invalid TOML in {}", path.display()))?;
+    let mut install = match raw.remove("install") {
+        Some(TomlValue::Table(table)) => table,
         Some(other) => {
             bail!(
-                "world_enabled in {} must be a boolean (found {other})",
-                path.display()
+                "install section in {} must be a table (found {})",
+                path.display(),
+                toml_type_name(&other)
             );
         }
+        None => TomlTable::new(),
+    };
+
+    let world_enabled = match install.remove("world_enabled") {
+        Some(TomlValue::Boolean(value)) => value,
+        Some(other) => bail!(
+            "install.world_enabled in {} must be a boolean (found {})",
+            path.display(),
+            toml_type_name(&other)
+        ),
         None => true,
     };
+
+    if !install.is_empty() {
+        raw.insert("install".to_string(), TomlValue::Table(install));
+    }
+
     Ok(InstallConfig {
         world_enabled,
         existed: true,
         extras: raw,
     })
+}
+
+fn parse_legacy_json(path: &Path, contents: &str) -> Result<InstallConfig> {
+    let mut raw: Map<String, JsonValue> = serde_json::from_str(contents)
+        .with_context(|| format!("invalid JSON in {}", path.display()))?;
+    let world_enabled = match raw.remove("world_enabled") {
+        Some(JsonValue::Bool(value)) => value,
+        Some(other) => bail!(
+            "world_enabled in {} must be a boolean (found {other})",
+            path.display()
+        ),
+        None => true,
+    };
+
+    Ok(InstallConfig {
+        world_enabled,
+        existed: true,
+        extras: json_map_to_toml(raw),
+    })
+}
+
+fn legacy_config_path(new_path: &Path) -> PathBuf {
+    new_path
+        .parent()
+        .map(|parent| parent.join("config.json"))
+        .unwrap_or_else(|| PathBuf::from("config.json"))
+}
+
+fn json_map_to_toml(raw: Map<String, JsonValue>) -> TomlTable {
+    let mut table = TomlTable::new();
+    for (key, value) in raw {
+        if let Some(converted) = json_to_toml(value) {
+            table.insert(key, converted);
+        }
+    }
+    table
+}
+
+fn json_to_toml(value: JsonValue) -> Option<TomlValue> {
+    match value {
+        JsonValue::Null => None,
+        JsonValue::Bool(value) => Some(TomlValue::Boolean(value)),
+        JsonValue::Number(num) => {
+            if let Some(int) = num.as_i64() {
+                Some(TomlValue::Integer(int))
+            } else {
+                num.as_f64().map(TomlValue::Float)
+            }
+        }
+        JsonValue::String(value) => Some(TomlValue::String(value)),
+        JsonValue::Array(values) => {
+            let mut items = Vec::with_capacity(values.len());
+            for value in values {
+                if let Some(converted) = json_to_toml(value) {
+                    items.push(converted);
+                }
+            }
+            Some(TomlValue::Array(items))
+        }
+        JsonValue::Object(map) => {
+            let mut table = TomlTable::new();
+            for (key, value) in map {
+                if let Some(converted) = json_to_toml(value) {
+                    table.insert(key, converted);
+                }
+            }
+            Some(TomlValue::Table(table))
+        }
+    }
 }
 
 pub fn save_install_config(path: &Path, cfg: &InstallConfig) -> Result<()> {
@@ -83,16 +181,44 @@ pub fn save_install_config(path: &Path, cfg: &InstallConfig) -> Result<()> {
         .with_context(|| format!("failed to create directory for {}", path.display()))?;
 
     let mut data = cfg.extras.clone();
-    data.insert("world_enabled".to_string(), Value::Bool(cfg.world_enabled));
+    let mut install_table = match data.remove("install") {
+        Some(TomlValue::Table(table)) => table,
+        Some(other) => {
+            bail!(
+                "install section in {} must be a table (found {})",
+                path.display(),
+                toml_type_name(&other)
+            );
+        }
+        None => TomlTable::new(),
+    };
+    install_table.insert(
+        "world_enabled".to_string(),
+        TomlValue::Boolean(cfg.world_enabled),
+    );
+    data.insert("install".to_string(), TomlValue::Table(install_table));
 
     let mut tmp = NamedTempFile::new_in(parent)
         .with_context(|| format!("failed to create temp file near {}", path.display()))?;
-    serde_json::to_writer_pretty(&mut tmp, &Value::Object(data))
+    let body = toml::to_string_pretty(&TomlValue::Table(data))
         .with_context(|| format!("failed to serialize install config at {}", path.display()))?;
+    tmp.write_all(body.as_bytes())?;
     tmp.flush()?;
     tmp.persist(path)
         .map_err(|e| anyhow!("failed to persist {}: {}", path.display(), e.error))?;
     Ok(())
+}
+
+fn toml_type_name(value: &TomlValue) -> &'static str {
+    match value {
+        TomlValue::Array(_) => "array",
+        TomlValue::Boolean(_) => "boolean",
+        TomlValue::Datetime(_) => "datetime",
+        TomlValue::Float(_) => "float",
+        TomlValue::Integer(_) => "integer",
+        TomlValue::String(_) => "string",
+        TomlValue::Table(_) => "table",
+    }
 }
 
 pub fn run_enable(args: &WorldEnableArgs) -> Result<()> {

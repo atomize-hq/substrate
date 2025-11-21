@@ -44,6 +44,7 @@ dirs = "5"
 fs2 = "0.4"        # For cross-platform file locking
 tempfile = "3.8"   # For atomic deployment
 serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
 substrate-trace = { version = "0.2.1", path = "../trace" }
 substrate-replay = { version = "0.1.0", path = "../replay" }
 substrate-graph = { version = "0.1.0", path = "../substrate-graph" }

@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/s
 Regardless of platform, the script:
 
 1. Stops running `substrate` processes (`pkill -f substrate`).
-2. Deletes `~/.substrate*` state (manager env/init files, `config.json`,
+2. Deletes `~/.substrate*` state (manager env/init files, `config.toml`,
    bundled manifests under `~/.substrate/versions/<version>/config/`, shims,
    history, locks, etc.).
 3. Clears the shell command hash table (`hash -r`).

@@ -481,7 +481,7 @@ normalize_prefix() {
 initialize_metadata_paths() {
   MANAGER_ENV_PATH="${PREFIX}/manager_env.sh"
   MANAGER_INIT_PATH="${PREFIX}/manager_init.sh"
-  INSTALL_CONFIG_PATH="${PREFIX}/config.json"
+  INSTALL_CONFIG_PATH="${PREFIX}/config.toml"
 }
 
 ensure_manager_init_placeholder() {
@@ -573,9 +573,8 @@ write_install_config() {
   config_dir="$(dirname "${INSTALL_CONFIG_PATH}")"
   mkdir -p "${config_dir}"
   cat > "${INSTALL_CONFIG_PATH}.tmp" <<EOF
-{
-  "world_enabled": ${flag}
-}
+[install]
+world_enabled = ${flag}
 EOF
   mv "${INSTALL_CONFIG_PATH}.tmp" "${INSTALL_CONFIG_PATH}"
   chmod 0644 "${INSTALL_CONFIG_PATH}" || true

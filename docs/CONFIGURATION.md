@@ -63,16 +63,21 @@ and `scripts/substrate/world-deps.yaml` in the repository root.
 - Use `scripts/dev/substrate_shell_driver` when invoking `target/debug/substrate` from shell scripts or automation. It resolves the workspace binary, exports `SUBSTRATE_WORLD=disabled` and `SUBSTRATE_WORLD_ENABLED=0`, and passes through all CLI arguments.
 - Rust integration tests rely on `crates/shell/tests/common.rs::substrate_shell_driver()` to obtain an `assert_cmd::Command` with the same environment overrides. Reuse that helper instead of reimplementing binary lookup or TMPDIR wiring.
 
-## Install Metadata (`~/.substrate/config.json`)
+## Install Metadata (`~/.substrate/config.toml`)
 
 The installer and `substrate world enable` command keep a small metadata file at
-`~/.substrate/config.json` with the fields Substrate needs to determine whether
-the world backend is active. Today the file only stores
-`{ "world_enabled": <bool> }`, but the format intentionally mirrors the Rust
-`InstallConfig` struct (`extras` keys are preserved for future expansion).
+`~/.substrate/config.toml` with install-level fields under `[install]`:
 
-- Fresh installs write `{"world_enabled": true}` unless `--no-world` is used.
-- `substrate world enable` overwrites the file after provisioning succeeds.
+```toml
+[install]
+world_enabled = true
+```
+
+Unknown keys and extra tables are preserved for future expansion.
+
+- Fresh installs write `world_enabled = true` unless `--no-world` is used.
+- `substrate world enable` overwrites `[install]` after provisioning succeeds and repairs malformed metadata.
+- Legacy installs that still have `config.json` are read automatically, but new writes use `config.toml`.
 - The generated `~/.substrate/manager_env.sh` exports `SUBSTRATE_WORLD` and
   `SUBSTRATE_WORLD_ENABLED` so shims and subprocesses read a consistent view of
   this metadata even before the CLI runs.
