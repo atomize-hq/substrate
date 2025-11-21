@@ -338,7 +338,7 @@ mod tests {
     use super::*;
 
     fn validate(input: &str) -> ValidationResult {
-        SubstrateValidator::default().validate(input)
+        SubstrateValidator.validate(input)
     }
 
     #[test]
