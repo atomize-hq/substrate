@@ -244,3 +244,11 @@ Template (copy/paste and fill in):
 - Worktree: planned wt/ss-s4-world-override-integ
 - Plan: create integration branch/worktree; merge S4 code/test branches and resolve conflicts; run cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_root; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world; merge back to feat/settings-stack and update docs/tasks/logs
 - Blockers: none
+
+## [2025-11-21 21:28 UTC] Integ – S4-integ – END
+- Worktree commits: n/a (code/test branches already aligned)
+- Commands: cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_root; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
+- Results: all commands passed; installer temp roots /tmp/substrate-installer-default.SXCFdl (world_enabled=true, caged=true) and /tmp/substrate-installer-no-world.0QmPac (world_enabled=false, caged=true)
+- Kickoff prompts created: n/a
+- Docs commit: docs: finish S4-integ (this commit)
+- Next steps / blockers: none; ready to merge into feat/settings-stack and remove worktree
