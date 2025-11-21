@@ -68,3 +68,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: n/a (verified docs/project_management/next/settings-stack/kickoff_prompts/S1-code.md and docs/project_management/next/settings-stack/kickoff_prompts/S1-test.md)
 - Docs commit: docs: finish S0-integ (tasks + session log)
 - Next steps / blockers: none
+
+## [2025-11-21 14:06 UTC] Code – S1-code – START
+- Checked out feat/settings-stack, pulled latest
+- Updated tasks.json + session log (commit: docs: start S1-code)
+- Worktree: planned wt/ss-s1-config-code
+- Plan: migrate install metadata to config.toml in CLI + installer/uninstaller, keep manager env exports consistent, refresh installation/configuration/uninstall docs
+- Blockers: none

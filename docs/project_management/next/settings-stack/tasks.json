@@ -129,7 +129,7 @@
       "name": "Migrate install config to TOML",
       "type": "code",
       "phase": "Settings Stack",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Replace ~/.substrate/config.json with config.toml, update installers/CLI to read & write TOML, and refresh docs without touching tests.",
       "references": [
         "docs/project_management/next/settings-stack/settings_stack_plan.md",
