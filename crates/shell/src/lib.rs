@@ -14,7 +14,7 @@ use shim_deploy::{DeploymentStatus, ShimDeployer};
 
 use anyhow::{Context, Result};
 use chrono::Utc;
-use clap::{Parser, ValueEnum};
+use clap::{ArgAction, Parser, ValueEnum};
 use lazy_static::lazy_static;
 use serde_json::json;
 use std::collections::HashMap;
@@ -332,6 +332,14 @@ pub struct Cli {
     /// Explicit world root path (used when --world-root-mode=custom)
     #[arg(long = "world-root-path", value_name = "PATH")]
     pub world_root_path: Option<PathBuf>,
+
+    /// Enforce staying within the resolved world root (caged mode)
+    #[arg(long = "caged", action = ArgAction::SetTrue, conflicts_with = "uncaged")]
+    pub caged: bool,
+
+    /// Disable the caged root guard
+    #[arg(long = "uncaged", action = ArgAction::SetTrue, conflicts_with = "caged")]
+    pub uncaged: bool,
 
     /// Disable world isolation (Linux only)
     #[arg(long = "no-world")]
@@ -890,10 +898,18 @@ impl ShellConfig {
             }
         }
 
+        let cli_caged = if cli.caged {
+            Some(true)
+        } else if cli.uncaged {
+            Some(false)
+        } else {
+            None
+        };
         let launch_cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         let world_root_settings = resolve_world_root(
             cli.world_root_mode.map(WorldRootMode::from),
             cli.world_root_path.clone(),
+            cli_caged,
             &launch_cwd,
         )?;
         apply_world_root_env(&world_root_settings);
@@ -4556,6 +4572,10 @@ fn ok_status() -> Result<ExitStatus> {
     .context("Failed to create success status")
 }
 
+fn normalize_for_cage(path: &Path) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
 fn handle_builtin(
     config: &ShellConfig,
     command: &str,
@@ -4583,8 +4603,25 @@ fn handle_builtin(
             let expanded = shellexpand::tilde(&target);
             let prev = env::current_dir()?;
             env::set_current_dir(expanded.as_ref())?;
+            let new_cwd = env::current_dir()?;
+            if config.world_root.caged {
+                let anchor = config.world_root.anchor_root(&new_cwd);
+                let anchor_norm = normalize_for_cage(&anchor);
+                let new_cwd_norm = normalize_for_cage(&new_cwd);
+                if !new_cwd_norm.starts_with(&anchor_norm) {
+                    eprintln!(
+                        "substrate: info: caged mode prevented leaving {}; returning to anchor",
+                        anchor_norm.display()
+                    );
+                    env::set_current_dir(&anchor)?;
+                    let anchor_cwd = env::current_dir()?;
+                    env::set_var("OLDPWD", prev);
+                    env::set_var("PWD", anchor_cwd.display().to_string());
+                    return Ok(Some(ok_status()?));
+                }
+            }
             env::set_var("OLDPWD", prev);
-            env::set_var("PWD", env::current_dir()?.display().to_string());
+            env::set_var("PWD", new_cwd.display().to_string());
             Some(ok_status()?)
         }
         "pwd" => {
@@ -5682,6 +5719,7 @@ mod manager_init_wiring_tests {
             world_root: settings::WorldRootSettings {
                 mode: WorldRootMode::Project,
                 path: temp.path().to_path_buf(),
+                caged: true,
             },
             async_repl: false,
             env_vars: HashMap::new(),

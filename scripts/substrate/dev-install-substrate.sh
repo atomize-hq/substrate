@@ -16,7 +16,7 @@ freshly built binaries. This is intended for local iteration after removing any
 production installation.
 
 Usage:
-  dev-install-substrate.sh [--prefix <path>] [--profile <debug|release>] [--version-label <name>] [--no-world] [--world-root-mode <mode>] [--world-root-path <path>] [--no-shims]
+  dev-install-substrate.sh [--prefix <path>] [--profile <debug|release>] [--version-label <name>] [--no-world] [--world-root-mode <mode>] [--world-root-path <path>] [--caged|--uncaged] [--no-shims]
   dev-install-substrate.sh --help
 
 Options:
@@ -26,6 +26,8 @@ Options:
   --no-world                Mark install metadata as world_disabled (skips provisioning entirely)
   --world-root-mode <mode>  Default world root mode (project|follow-cwd|custom; default: project)
   --world-root-path <path>  Default world root path (for custom mode)
+  --caged                   Write caged=true to install metadata (default)
+  --uncaged                 Write caged=false to install metadata
   --no-shims                Skip shim deployment (only run cargo build)
   --help                    Show this message
 USAGE
@@ -37,6 +39,7 @@ DEPLOY_SHIMS=1
 WORLD_ENABLED=1
 WORLD_ROOT_MODE="project"
 WORLD_ROOT_PATH=""
+WORLD_CAGED=1
 VERSION_LABEL="dev"
 
 while [[ $# -gt 0 ]]; do
@@ -69,6 +72,14 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || fatal "--world-root-path requires a value"
       WORLD_ROOT_PATH="$2"
       shift 2
+      ;;
+    --caged)
+      WORLD_CAGED=1
+      shift
+      ;;
+    --uncaged)
+      WORLD_CAGED=0
+      shift
       ;;
     --no-shims)
       DEPLOY_SHIMS=0
@@ -152,6 +163,7 @@ world_enabled = $([[ "${WORLD_ENABLED}" -eq 1 ]] && echo "true" || echo "false")
 [world]
 root_mode = "${WORLD_ROOT_MODE}"
 root_path = "${WORLD_ROOT_PATH}"
+caged = $([[ "${WORLD_CAGED}" -eq 1 ]] && echo "true" || echo "false")
 EOF
 mv "${INSTALL_CONFIG_PATH}.tmp" "${INSTALL_CONFIG_PATH}"
 chmod 0644 "${INSTALL_CONFIG_PATH}" || true
@@ -174,6 +186,7 @@ cat > "${MANAGER_ENV_PATH}.tmp" <<EOF
 # Managed by ${SCRIPT_NAME} on ${today}
 export SUBSTRATE_WORLD=$([[ "${WORLD_ENABLED}" -eq 1 ]] && echo "enabled" || echo "disabled")
 export SUBSTRATE_WORLD_ENABLED=$([[ "${WORLD_ENABLED}" -eq 1 ]] && echo "1" || echo "0")
+export SUBSTRATE_CAGED=$([[ "${WORLD_CAGED}" -eq 1 ]] && echo "1" || echo "0")
 export SUBSTRATE_MANAGER_ENV=${manager_env_literal}
 export SUBSTRATE_MANAGER_INIT=${manager_init_literal}
 

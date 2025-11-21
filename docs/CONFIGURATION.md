@@ -58,6 +58,7 @@ and `scripts/substrate/world-deps.yaml` in the repository root.
 | `SUBSTRATE_WORLD_ENABLED` | Cached world enablement flag (installer) | `1` | `0` |
 | `SUBSTRATE_WORLD_ROOT_MODE` | World root selection (`project`, `follow-cwd`, `custom`) | `project` | `follow-cwd` |
 | `SUBSTRATE_WORLD_ROOT_PATH` | Custom world root directory (paired with `custom` mode) | shell launch directory | `/workspaces/substrate` |
+| `SUBSTRATE_CAGED` | Enforce staying inside the resolved world root (`1`/`0`) | `1` | `0` |
 | `SUBSTRATE_WORLD_DEPS_MANIFEST` | Override manifest for `world deps` | `<prefix>/versions/<version>/config/world-deps.yaml` | `/tmp/world_deps.yaml` |
 
 ### World root settings stack
@@ -69,6 +70,10 @@ Substrate resolves the world root from highest to lowest:
 3. Global config: `~/.substrate/config.toml` `[world]` table
 4. Environment variables: `SUBSTRATE_WORLD_ROOT_MODE` / `SUBSTRATE_WORLD_ROOT_PATH`
 5. Default: `project` mode anchored to the shell launch directory
+
+The `caged` setting follows the same precedence stack (`--caged/--uncaged` → dir config → global
+config → env var `SUBSTRATE_CAGED` → default `true`) and prevents leaving the resolved root even
+when isolation is disabled.
 
 Modes:
 
@@ -82,6 +87,7 @@ Both the global config and per-directory settings file use the same schema:
 [world]
 root_mode = "project"
 root_path = ""
+caged = true
 ```
 
 ### Host-only driver helpers
@@ -103,6 +109,7 @@ world_enabled = true
 [world]
 root_mode = "project"
 root_path = ""
+caged = true
 ```
 
 Unknown keys and extra tables are preserved for future expansion.
@@ -110,9 +117,9 @@ Unknown keys and extra tables are preserved for future expansion.
 - Fresh installs write `world_enabled = true` unless `--no-world` is used.
 - `substrate world enable` overwrites `[install]` after provisioning succeeds and repairs malformed metadata.
 - Legacy installs that still have `config.json` are read automatically, but new writes use `config.toml`.
-- The generated `~/.substrate/manager_env.sh` exports `SUBSTRATE_WORLD` and
-  `SUBSTRATE_WORLD_ENABLED` so shims and subprocesses read a consistent view of
-  this metadata even before the CLI runs.
+- The generated `~/.substrate/manager_env.sh` exports `SUBSTRATE_WORLD`,
+  `SUBSTRATE_WORLD_ENABLED`, and `SUBSTRATE_CAGED` so shims and subprocesses read
+  a consistent view of this metadata even before the CLI runs.
 - Directory configs live at `.substrate/settings.toml` under the launch
   directory and only carry the `[world]` table shown above.
 
@@ -138,6 +145,7 @@ Unknown keys and extra tables are preserved for future expansion.
 | `--pty` | Force PTY for command | `substrate --pty -c "vim"` |
 | `--world-root-mode <mode>` | Select world root strategy (`project`, `follow-cwd`, `custom`) | `substrate --world-root-mode follow-cwd -c "npm test"` |
 | `--world-root-path <path>` | Explicit world root when using `custom` mode | `substrate --world-root-mode custom --world-root-path /opt/work` |
+| `--caged` / `--uncaged` | Toggle local caged root guard | `substrate --uncaged --world-root-mode project` |
 | `--version-json` | Output version info as JSON | `substrate --version-json` |
 | `--legacy-repl` | Fall back to the legacy synchronous REPL | `substrate --legacy-repl` |
 

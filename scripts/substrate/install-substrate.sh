@@ -508,6 +508,7 @@ write_manager_env_script() {
   local enabled="$1"
   local state="disabled"
   local enabled_flag="0"
+  local caged_flag="1"
   if [[ "${enabled}" -eq 1 ]]; then
     state="enabled"
     enabled_flag="1"
@@ -532,6 +533,7 @@ write_manager_env_script() {
 # Managed by ${INSTALLER_NAME} on ${today}
 export SUBSTRATE_WORLD=${state}
 export SUBSTRATE_WORLD_ENABLED=${enabled_flag}
+export SUBSTRATE_CAGED=${caged_flag}
 export SUBSTRATE_MANAGER_ENV=${manager_env_literal}
 export SUBSTRATE_MANAGER_INIT=${manager_init_literal}
 
@@ -579,6 +581,7 @@ world_enabled = ${flag}
 [world]
 root_mode = "project"
 root_path = ""
+caged = true
 EOF
   mv "${INSTALL_CONFIG_PATH}.tmp" "${INSTALL_CONFIG_PATH}"
   chmod 0644 "${INSTALL_CONFIG_PATH}" || true

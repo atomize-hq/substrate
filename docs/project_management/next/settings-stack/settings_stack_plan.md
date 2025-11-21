@@ -123,6 +123,7 @@ world_enabled = true
 [world]
 root_mode = "project"
 root_path = ""
+caged = true
 ```
 
 Directory config inherits the same schema but omits `[install]`.
