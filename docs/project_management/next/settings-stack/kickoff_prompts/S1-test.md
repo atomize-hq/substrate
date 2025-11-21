@@ -5,9 +5,10 @@
 2. Read `settings_stack_plan.md`, `tasks.json`, the latest `session_log.md`, and this prompt.
 3. Update `tasks.json` (set `S1-test` to `in_progress`) and add a START entry to
    the session log. Commit the doc-only change (`git commit -am "docs: start S1-test"`).
-4. Create the worktree:
+4. Create the task branch and worktree:
    ```
-   git worktree add wt/ss-s1-config-test feat/settings-stack
+   git checkout -b ss-s1-config-test
+   git worktree add wt/ss-s1-config-test ss-s1-config-test
    cd wt/ss-s1-config-test
    ```
 5. Confirm `git status` is clean before editing.

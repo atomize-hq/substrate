@@ -4,9 +4,10 @@
 1. `git checkout feat/settings-stack && git pull --ff-only`
 2. Read `settings_stack_plan.md`, `tasks.json`, latest `session_log.md`, and this prompt.
 3. Set `S0-test` to `in_progress` in `tasks.json` and add a START entry to the session log. Commit the doc update (`git commit -am "docs: start S0-test"`).
-4. Create the worktree:
+4. Create the task branch and worktree:
    ```
-   git worktree add wt/ss-s0-manifest-test feat/settings-stack
+   git checkout -b ss-s0-manifest-test
+   git worktree add wt/ss-s0-manifest-test ss-s0-manifest-test
    cd wt/ss-s0-manifest-test
    ```
 

@@ -24,18 +24,21 @@
       "start_checklist": [
         "Checkout feat/settings-stack, pull latest",
         "Set S0-code to in_progress, log START entry, commit docs update",
-        "Create worktree wt/ss-s0-manifest-code"
+        "Create task branch ss-s0-manifest-code",
+        "Create worktree wt/ss-s0-manifest-code from that branch"
       ],
       "end_checklist": [
-        "Run cargo fmt / shellcheck as needed",
+        "Ensure required fmt/lint/tests per prompt are green",
         "Commit worktree changes",
-        "Merge wt/ss-s0-manifest-code back to feat/settings-stack",
+        "Merge task branch back to feat/settings-stack",
         "Update tasks.json + session_log.md with END entry",
-        "Reference S0-test kickoff prompt and any installer commands executed",
+        "Create/confirm next kickoff prompts as required",
         "Commit docs update on feat/settings-stack"
       ],
       "depends_on": [],
-      "concurrent_with": ["S0-test"],
+      "concurrent_with": [
+        "S0-test"
+      ],
       "worktree": "wt/ss-s0-manifest-code",
       "integration_task": "S0-integ",
       "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S0-code.md"
@@ -61,18 +64,21 @@
       "start_checklist": [
         "Checkout feat/settings-stack, pull latest",
         "Set S0-test to in_progress, log START entry, commit docs update",
-        "Create worktree wt/ss-s0-manifest-test"
+        "Create task branch ss-s0-manifest-test",
+        "Create worktree wt/ss-s0-manifest-test from that branch"
       ],
       "end_checklist": [
-        "Run installer harness scenarios and capture output",
-        "Commit worktree changes (tests only)",
-        "Merge wt/ss-s0-manifest-test back to feat/settings-stack",
+        "Ensure required fmt/lint/tests per prompt are green",
+        "Commit worktree changes",
+        "Merge task branch back to feat/settings-stack",
         "Update tasks.json + session_log.md with END entry",
-        "Create kickoff prompts for S0-integ and refresh S1-code/S1-test prompts",
+        "Create/confirm next kickoff prompts as required",
         "Commit docs update on feat/settings-stack"
       ],
       "depends_on": [],
-      "concurrent_with": ["S0-code"],
+      "concurrent_with": [
+        "S0-code"
+      ],
       "worktree": "wt/ss-s0-manifest-test",
       "integration_task": "S0-integ",
       "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S0-test.md"
@@ -99,16 +105,20 @@
         "Checkout feat/settings-stack, pull latest",
         "Confirm S0-code/S0-test completed",
         "Set S0-integ to in_progress, log START entry, commit docs update",
-        "Create worktree wt/ss-s0-manifest-integ"
+        "Create task branch ss-s0-manifest-integ",
+        "Create worktree wt/ss-s0-manifest-integ from that branch"
       ],
       "end_checklist": [
-        "Merge worktrees, resolve conflicts",
-        "Run cargo fmt/clippy/tests and installer harness as required",
-        "Merge back to feat/settings-stack",
+        "Merge code/test branches into integration branch/worktree and resolve conflicts",
+        "Run required fmt/clippy/tests",
+        "Merge integration branch back to feat/settings-stack",
         "Update tasks.json + session_log.md with END entry",
-        "Push / hand off"
+        "Push or hand off"
       ],
-      "depends_on": ["S0-code", "S0-test"],
+      "depends_on": [
+        "S0-code",
+        "S0-test"
+      ],
       "concurrent_with": [],
       "worktree": "wt/ss-s0-manifest-integ",
       "integration_task": null,
@@ -139,18 +149,23 @@
         "Checkout feat/settings-stack, pull latest",
         "Set S1-code to in_progress in tasks.json",
         "Add START entry to session_log.md and commit docs update",
-        "Create worktree wt/ss-s1-config-code"
+        "Create task branch ss-s1-config-code",
+        "Create worktree wt/ss-s1-config-code from that branch"
       ],
       "end_checklist": [
-        "Run cargo fmt and cargo clippy -p substrate-shell -- -D warnings",
+        "Ensure required fmt/lint/tests per prompt are green",
         "Commit worktree changes",
-        "Merge wt/ss-s1-config-code back into feat/settings-stack",
+        "Merge task branch back to feat/settings-stack",
         "Update tasks.json + session_log.md with END entry",
-        "Reference S1-test kickoff prompt in log",
+        "Create/confirm next kickoff prompts as required",
         "Commit docs update on feat/settings-stack"
       ],
-      "depends_on": ["S0-integ"],
-      "concurrent_with": ["S1-test"],
+      "depends_on": [
+        "S0-integ"
+      ],
+      "concurrent_with": [
+        "S1-test"
+      ],
       "worktree": "wt/ss-s1-config-code",
       "integration_task": "S1-integ",
       "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S1-code.md"
@@ -176,18 +191,23 @@
         "Checkout feat/settings-stack, pull latest",
         "Set S1-test to in_progress in tasks.json",
         "Add START entry to session_log.md and commit docs update",
-        "Create worktree wt/ss-s1-config-test"
+        "Create task branch ss-s1-config-test",
+        "Create worktree wt/ss-s1-config-test from that branch"
       ],
       "end_checklist": [
-        "Run targeted cargo test / installer scripts as noted",
-        "Commit worktree changes (tests only)",
-        "Merge wt/ss-s1-config-test into feat/settings-stack",
+        "Ensure required fmt/lint/tests per prompt are green",
+        "Commit worktree changes",
+        "Merge task branch back to feat/settings-stack",
         "Update tasks.json + session_log.md with END entry",
-        "Create kickoff prompts for S1-integ, S2-code, S2-test and reference paths",
+        "Create/confirm next kickoff prompts as required",
         "Commit docs update on feat/settings-stack"
       ],
-      "depends_on": ["S0-integ"],
-      "concurrent_with": ["S1-code"],
+      "depends_on": [
+        "S0-integ"
+      ],
+      "concurrent_with": [
+        "S1-code"
+      ],
       "worktree": "wt/ss-s1-config-test",
       "integration_task": "S1-integ",
       "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S1-test.md"
@@ -215,20 +235,24 @@
         "Confirm S1-code and S1-test are completed",
         "Set S1-integ to in_progress in tasks.json",
         "Add START entry to session_log.md and commit docs update",
-        "Create worktree wt/ss-s1-config-integ"
+        "Create task branch ss-s1-config-integ",
+        "Create worktree wt/ss-s1-config-integ from that branch"
       ],
       "end_checklist": [
-        "Merge code/test branches into integration worktree",
-        "Run cargo fmt, cargo clippy, and full test suite as required",
-        "Merge integration results back to feat/settings-stack",
-        "Update tasks.json + session_log.md with END entry (include command log)",
-        "Push or hand off per instructions"
+        "Merge code/test branches into integration branch/worktree and resolve conflicts",
+        "Run required fmt/clippy/tests",
+        "Merge integration branch back to feat/settings-stack",
+        "Update tasks.json + session_log.md with END entry",
+        "Push or hand off"
       ],
-      "depends_on": ["S1-code", "S1-test"],
+      "depends_on": [
+        "S1-code",
+        "S1-test"
+      ],
       "concurrent_with": [],
       "worktree": "wt/ss-s1-config-integ",
       "integration_task": null,
-      "kickoff_prompt": "To be created by S1-test" 
+      "kickoff_prompt": "To be created by S1-test"
     },
     {
       "id": "S2-code",
@@ -254,17 +278,23 @@
       "start_checklist": [
         "Checkout feat/settings-stack, pull latest",
         "Set S2-code to in_progress, update session_log.md, commit docs update",
-        "Create worktree wt/ss-s2-settings-code"
+        "Create task branch ss-s2-settings-code",
+        "Create worktree wt/ss-s2-settings-code from that branch"
       ],
       "end_checklist": [
-        "Run cargo fmt/clippy and targeted checks",
+        "Ensure required fmt/lint/tests per prompt are green",
         "Commit worktree changes",
-        "Merge back to feat/settings-stack",
-        "Update tasks.json + session_log.md (END entry)",
-        "Coordinate with S2-test for any shared prompts"
+        "Merge task branch back to feat/settings-stack",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts as required",
+        "Commit docs update on feat/settings-stack"
       ],
-      "depends_on": ["S1-integ"],
-      "concurrent_with": ["S2-test"],
+      "depends_on": [
+        "S1-integ"
+      ],
+      "concurrent_with": [
+        "S2-test"
+      ],
       "worktree": "wt/ss-s2-settings-code",
       "integration_task": "S2-integ",
       "kickoff_prompt": "To be created by prior session"
@@ -290,17 +320,23 @@
       "start_checklist": [
         "Checkout feat/settings-stack, pull latest",
         "Set S2-test to in_progress, update session_log.md, commit docs update",
-        "Create worktree wt/ss-s2-settings-test"
+        "Create task branch ss-s2-settings-test",
+        "Create worktree wt/ss-s2-settings-test from that branch"
       ],
       "end_checklist": [
-        "Run targeted tests and capture outputs",
+        "Ensure required fmt/lint/tests per prompt are green",
         "Commit worktree changes",
-        "Merge back to feat/settings-stack",
-        "Update tasks.json + session_log.md (END entry)",
-        "Create S2-integ kickoff prompt"
+        "Merge task branch back to feat/settings-stack",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts as required",
+        "Commit docs update on feat/settings-stack"
       ],
-      "depends_on": ["S1-integ"],
-      "concurrent_with": ["S2-code"],
+      "depends_on": [
+        "S1-integ"
+      ],
+      "concurrent_with": [
+        "S2-code"
+      ],
       "worktree": "wt/ss-s2-settings-test",
       "integration_task": "S2-integ",
       "kickoff_prompt": "To be created by prior session"
@@ -328,16 +364,20 @@
         "Checkout feat/settings-stack, pull latest",
         "Confirm S2-code/test completed",
         "Set S2-integ to in_progress, update session_log.md, commit docs update",
-        "Create worktree wt/ss-s2-settings-integ"
+        "Create task branch ss-s2-settings-integ",
+        "Create worktree wt/ss-s2-settings-integ from that branch"
       ],
       "end_checklist": [
-        "Merge code/test worktrees and resolve conflicts",
+        "Merge code/test branches into integration branch/worktree and resolve conflicts",
         "Run required fmt/clippy/tests",
-        "Merge back to feat/settings-stack",
-        "Update tasks.json + session_log.md (END entry)",
-        "Push or hand off per instructions"
+        "Merge integration branch back to feat/settings-stack",
+        "Update tasks.json + session_log.md with END entry",
+        "Push or hand off"
       ],
-      "depends_on": ["S2-code", "S2-test"],
+      "depends_on": [
+        "S2-code",
+        "S2-test"
+      ],
       "concurrent_with": [],
       "worktree": "wt/ss-s2-settings-integ",
       "integration_task": null,
