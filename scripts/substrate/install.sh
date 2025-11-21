@@ -17,9 +17,9 @@ source "${LOADER_DIR}/bash_loading_animations.sh"
 
 detect_rc_file() {
   case "$(basename "${SHELL:-}")" in
-    bash) echo "~/.bashrc" ;;
-    zsh) echo "~/.zshrc" ;;
-    fish) echo "~/.config/fish/config.fish" ;;
+    bash) echo "${HOME}/.bashrc" ;;
+    zsh) echo "${HOME}/.zshrc" ;;
+    fish) echo "${HOME}/.config/fish/config.fish" ;;
     *) echo "your shell's rc file" ;;
   esac
 }

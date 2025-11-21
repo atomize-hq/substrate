@@ -61,7 +61,8 @@ _BLA_make_braille_fill_animation() {
     $'\e[34m⣇\e[0m' $'\e[35m⣧\e[0m' $'\e[95m⣷\e[0m' $'\e[97m⣿\e[0m'
   )
   local complete_color=$'\e[32m⣿\e[0m'
-  local flash_frame="$(printf '%.0s%s' $(seq 1 "${total_slots}") "${complete_color}")"
+  local flash_frame
+  flash_frame="$(printf '%.0s%s' $(seq 1 "${total_slots}") "${complete_color}")"
 
   local frames=()
   for ((pos=0; pos<total_slots; pos++)); do
