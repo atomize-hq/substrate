@@ -201,9 +201,9 @@ Template (copy/paste and fill in):
 - Blockers: none
 
 ## [2025-11-21 19:37 UTC] Integ – S3-integ – END
-- Worktree commits: pending (merge commit)
+- Worktree commits: 3fcf697
 - Commands: cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_root; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
 - Results: all commands passed; installer temp roots /tmp/substrate-installer-default.jG6wBp (world_enabled=true, caged=true) and /tmp/substrate-installer-no-world.ed6XiN (world_enabled=false, caged=true)
 - Kickoff prompts created: n/a
-- Docs commit: pending (included with merge)
+- Docs commit: 3fcf697 (merge with tasks/status/log updates)
 - Next steps / blockers: merge into feat/settings-stack and drop the integration worktree
