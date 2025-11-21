@@ -160,3 +160,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: n/a
 - Docs commit: docs: finish S2-integ (this commit)
 - Next steps / blockers: none
+
+## [2025-11-21 17:59 UTC] Code – S3-code – START
+- Checked out feat/settings-stack, pulled latest
+- Set S3-code to in_progress; updated session log (commit pending)
+- Created worktree: planned wt/ss-s3-caged-code
+- Plan: replace world-root flags with a caged boolean (flags/config/env precedence), enforce anchor bounce/warning even when world disabled, update docs + installer metadata, run fmt/clippy/tests (world_root) as needed
+- Blockers: none
