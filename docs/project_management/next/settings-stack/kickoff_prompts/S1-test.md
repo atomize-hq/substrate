@@ -16,9 +16,10 @@
 - Add/adjust tests that exercise the new TOML install config:
   - Unit tests in `crates/shell/src/commands/world_enable.rs` covering
     load/save (valid/invalid/missing keys, extras preserved).
-  - Extend `tests/installers/install_smoke.sh` (and/ or related fixtures) to
+  - Extend the S0 installer harness (`tests/installers/install_smoke.sh`) to
     assert the installer writes `config.toml` with correct `[install]` payload
-    for default and `--no-world` paths.
+    for default and `--no-world` paths while keeping the manifest + health checks
+    added in S0 passing.
 - Do **not** modify production code apart from tiny test-only helpers.
 - Keep runtime commands minimal; you may run targeted tests directly related to
   this task.

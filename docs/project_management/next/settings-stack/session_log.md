@@ -45,3 +45,11 @@ Template (copy/paste and fill in):
 - Worktree: planned wt/ss-s0-manifest-test
 - Plan: extend installer smoke harness to assert config/manager_hooks.yaml under default and --no-world prefixes, add post-install health smoke for installed substrate, run scenarios and capture outputs, author S0-integ/S1-code/S1-test kickoff prompts
 - Blockers: none
+
+## [2025-11-21 05:40 UTC] Test – S0-test – END
+- Worktree commits: 65dd5f3
+- Commands: ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
+- Results: both scenarios pass with manager_hooks.yaml staged under the temp prefixes and `substrate health --json` succeeding (temp roots: /tmp/substrate-installer-default.bblfQS, /tmp/substrate-installer-no-world.lNiFDI)
+- Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S0-integ.md; docs/project_management/next/settings-stack/kickoff_prompts/S1-code.md; docs/project_management/next/settings-stack/kickoff_prompts/S1-test.md
+- Docs commit: docs: finish S0-test + prompts
+- Next steps / blockers: none

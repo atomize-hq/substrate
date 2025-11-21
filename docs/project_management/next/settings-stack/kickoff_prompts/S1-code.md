@@ -16,10 +16,12 @@
 - Replace `~/.substrate/config.json` with TOML serialization:
   - Update `crates/shell/src/commands/world_enable.rs` to read/write
     `config.toml` (new parser/serializer with `[install] world_enabled`).
-  - Update installer/uninstaller (`scripts/substrate/install-substrate.sh`,
-    `scripts/substrate/uninstall.sh`) to create/update the TOML file.
-  - Ensure manager env exports (`SUBSTRATE_WORLD`, `SUBSTRATE_WORLD_ENABLED`)
-    still derive from the new metadata.
+- Update installer/uninstaller (`scripts/substrate/install-substrate.sh`,
+  `scripts/substrate/uninstall.sh`) to create/update the TOML file.
+- Ensure manager env exports (`SUBSTRATE_WORLD`, `SUBSTRATE_WORLD_ENABLED`)
+  still derive from the new metadata.
+- Preserve the S0 manifest bundling behavior and keep the installer smoke harness
+  (`tests/installers/install_smoke.sh`) green.
 - Refresh docs referencing the old JSON file (`docs/INSTALLATION.md`,
   `docs/CONFIGURATION.md`, `docs/UNINSTALL.md`, any other mention).
 - Do **not** modify test files; limit yourself to production code + docs.
@@ -30,6 +32,8 @@ Run as needed from the worktree (examples):
 cargo fmt
 cargo clippy -p substrate-shell -- -D warnings
 cargo test -p substrate-shell world_enable   # optional smoke if required
+# optional sanity: ./tests/installers/install_smoke.sh --scenario default
+# optional sanity: ./tests/installers/install_smoke.sh --scenario no-world
 ```
 Keep test runs minimal; no new tests should be authored in this task.
 

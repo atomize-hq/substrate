@@ -45,7 +45,7 @@
       "name": "Test bundled manager manifest",
       "type": "test",
       "phase": "Settings Stack",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add/extend tests to confirm installers emit config/manager_hooks.yaml and that substrate health works after install.",
       "references": [
         "docs/project_management/next/settings-stack/settings_stack_plan.md",
@@ -112,7 +112,7 @@
       "concurrent_with": [],
       "worktree": "wt/ss-s0-manifest-integ",
       "integration_task": null,
-      "kickoff_prompt": "To be created by S0-test"
+      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S0-integ.md"
     },
     {
       "id": "S1-code",
