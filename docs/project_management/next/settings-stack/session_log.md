@@ -23,3 +23,10 @@ Template (copy/paste and fill in):
 - Docs commit: <hash> (updated tasks + session log)
 - Next steps / blockers: <notes for next agent>
 ```
+
+## [2025-11-21 05:04 UTC] Code – S0-code – START
+- Checked out feat/settings-stack, pulled latest
+- Updated tasks.json + session log (commit: docs: start S0-code)
+- Worktree: planned wt/ss-s0-manifest-code
+- Plan: bundle config/manifests in release scripts, update installers/uninstaller for config dir, refresh installation/configuration/uninstall docs
+- Blockers: none
