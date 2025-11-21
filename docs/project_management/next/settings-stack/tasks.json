@@ -346,7 +346,7 @@
       "name": "Integrate settings stack",
       "type": "integration",
       "phase": "Settings Stack",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge settings stack code/test worktrees, resolve conflicts, and ensure full fmt/clippy/test suite passes before updating feat/settings-stack.",
       "references": [
         "docs/project_management/next/settings-stack/settings_stack_plan.md",

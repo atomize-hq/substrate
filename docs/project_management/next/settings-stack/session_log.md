@@ -144,3 +144,11 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S2-integ.md
 - Docs commit: docs: finish S2-test (this commit)
 - Next steps / blockers: hand off to S2-integ to merge code/test work
+
+## [2025-11-21 16:15 UTC] Integ – S2-integ – START
+- Checked out feat/settings-stack, pulled latest
+- Confirmed S2-code (0c135b3) and S2-test (6c6b882) merged
+- Updated tasks.json + session log (commit: pending)
+- Worktree: planned wt/ss-s2-settings-integ
+- Plan: create integration branch/worktree; merge code/test branches and resolve conflicts; run cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_enable; cargo test -p substrate-shell world_root; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world; update tasks/logs and merge back to feat/settings-stack
+- Blockers: none
