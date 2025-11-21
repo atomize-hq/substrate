@@ -8,7 +8,7 @@ use common::{shared_tmpdir, substrate_shell_driver, temp_dir};
 use std::fs;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::PathBuf;
-use tempfile::TempDir;
+use tempfile::{Builder, TempDir};
 use toml::Value as TomlValue;
 
 const HELPER_SCRIPT: &str = r#"#!/usr/bin/env bash
@@ -63,6 +63,7 @@ exit "$exit_code"
 
 struct WorldEnableFixture {
     _temp: TempDir,
+    _socket_temp: TempDir,
     home: PathBuf,
     prefix: PathBuf,
     substrate_home: PathBuf,
@@ -81,7 +82,11 @@ impl WorldEnableFixture {
         let manager_env_path = substrate_home.join("manager_env.sh");
         let script_path = temp.path().join("scripts/world-enable.sh");
         let log_path = temp.path().join("logs/world-enable.log");
-        let socket_path = temp.path().join("sock");
+        let socket_temp = Builder::new()
+            .prefix("substrate-world-enable-sock-")
+            .tempdir_in("/tmp")
+            .expect("failed to create socket tempdir");
+        let socket_path = socket_temp.path().join("sock");
 
         fs::create_dir_all(&home).expect("failed to create fixture home");
         fs::create_dir_all(&prefix).expect("failed to create fixture prefix");
@@ -98,6 +103,7 @@ impl WorldEnableFixture {
 
         let fixture = Self {
             _temp: temp,
+            _socket_temp: socket_temp,
             home,
             prefix,
             substrate_home,
