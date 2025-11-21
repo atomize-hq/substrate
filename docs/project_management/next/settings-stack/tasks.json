@@ -472,7 +472,7 @@
       "name": "Integrate caged root guard",
       "type": "integration",
       "phase": "Settings Stack",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge the caged guard code + tests, resolve conflicts, and ensure fmt/clippy/tests and installer scenarios pass.",
       "references": [
         "docs/project_management/next/settings-stack/settings_stack_plan.md",

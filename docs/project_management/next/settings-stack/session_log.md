@@ -199,3 +199,11 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S3-integ.md
 - Docs commit: docs: finish S3-test (this commit)
 - Next steps / blockers: none
+
+## [2025-11-21 19:19 UTC] Integ – S3-integ – START
+- Checked out feat/settings-stack, pulled latest
+- Confirmed S3-test merged; S3-code commit present (not yet on feat/settings-stack)
+- Updated tasks.json + session log (commit: pending)
+- Worktree: pending (will create wt/ss-s3-caged-integ)
+- Plan: create integration branch/worktree; merge S3 code/test branches and reconcile; run cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_root; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world; update tasks/logs and merge back to feat/settings-stack
+- Blockers: none
