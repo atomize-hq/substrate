@@ -431,7 +431,7 @@
       "name": "Test caged root guard",
       "type": "test",
       "phase": "Settings Stack",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add tests that cover the caged boolean, anchor enforcement while world is disabled, and precedence across flags/config/env.",
       "references": [
         "docs/project_management/next/settings-stack/settings_stack_plan.md",

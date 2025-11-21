@@ -175,3 +175,11 @@ Template (copy/paste and fill in):
 - Worktree: planned wt/ss-s3-caged-test
 - Plan: add caged precedence/enforcement tests in shell + installer config propagation; run cargo fmt; cargo test -p substrate-shell world_root; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
 - Blockers: none
+
+## [2025-11-21 18:38 UTC] Test – S3-test – END
+- Worktree commits: 5871a1a
+- Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell caged; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
+- Results: fmt clean; world_root + caged test suites pass; installer smoke scenarios pass with caged=true recorded (temp roots: /tmp/substrate-installer-default.lDU55G, /tmp/substrate-installer-no-world.Ohy3jK)
+- Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S3-integ.md
+- Docs commit: docs: finish S3-test (this commit)
+- Next steps / blockers: none
