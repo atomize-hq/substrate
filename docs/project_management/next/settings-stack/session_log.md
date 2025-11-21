@@ -237,3 +237,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S4-integ.md (confirmed)
 - Docs commit: docs: finish S4-test (this commit)
 - Next steps / blockers: ready for S4-integ to merge code+tests
+
+## [2025-11-21 21:25 UTC] Integ – S4-integ – START
+- Checked out feat/settings-stack, pulled latest
+- Updated tasks.json + session log (commit: pending)
+- Worktree: planned wt/ss-s4-world-override-integ
+- Plan: create integration branch/worktree; merge S4 code/test branches and resolve conflicts; run cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_root; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world; merge back to feat/settings-stack and update docs/tasks/logs
+- Blockers: none
