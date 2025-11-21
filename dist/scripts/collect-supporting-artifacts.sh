@@ -26,6 +26,12 @@ if [[ -d "${ROOT_DIR}/config" ]]; then
   cp -R "${ROOT_DIR}/config/." "${STAGING_DIR}/config/"
 fi
 
+world_deps_manifest="${ROOT_DIR}/scripts/substrate/world-deps.yaml"
+if [[ -f "${world_deps_manifest}" ]]; then
+  mkdir -p "${STAGING_DIR}/config"
+  cp "${world_deps_manifest}" "${STAGING_DIR}/config/world-deps.yaml"
+fi
+
 # Platform helper scripts required by the rewritten installers.
 script_dirs=(
   "scripts/linux"

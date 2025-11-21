@@ -36,7 +36,7 @@ Environment variables and advanced configuration options for Substrate.
 
 | Variable | Purpose | Default | Example |
 |----------|---------|---------|---------|
-| `SUBSTRATE_MANAGER_MANIFEST` | Override manifest path (base + overlay) | `config/manager_hooks.yaml` | `/tmp/manager_hooks.yaml` |
+| `SUBSTRATE_MANAGER_MANIFEST` | Override manifest path (base + overlay) | `<prefix>/versions/<version>/config/manager_hooks.yaml` | `/tmp/manager_hooks.yaml` |
 | `SUBSTRATE_MANAGER_INIT` | Generated manager snippet path | `~/.substrate/manager_init.sh` | `/custom/init.sh` |
 | `SUBSTRATE_MANAGER_ENV` | Tiny script sourced via `BASH_ENV` | `~/.substrate/manager_env.sh` | `/tmp/manager_env.sh` |
 | `SUBSTRATE_MANAGER_INIT_SHELL` | Force a specific shell for detect scripts | host `SHELL` or `/bin/sh` | `/usr/local/bin/bash` |
@@ -45,13 +45,18 @@ Environment variables and advanced configuration options for Substrate.
 | `SUBSTRATE_MANAGER_INIT_DEBUG` | Verbose detection logging | `0` | `1` |
 | `SUBSTRATE_SHIM_HINTS` | Disable/enable shim hint emission | `1` | `0` |
 
+Release bundles place the base manifests under
+`<prefix>/versions/<version>/config/` (`manager_hooks.yaml` and
+`world-deps.yaml`). Workspace builds fall back to `config/manager_hooks.yaml`
+and `scripts/substrate/world-deps.yaml` in the repository root.
+
 ## World Configuration
 
 | Variable | Purpose | Default | Example |
 |----------|---------|---------|---------|
 | `SUBSTRATE_WORLD` | Force pass-through execution (`disabled`) | `enabled` | `disabled` |
 | `SUBSTRATE_WORLD_ENABLED` | Cached world enablement flag (installer) | `1` | `0` |
-| `SUBSTRATE_WORLD_DEPS_MANIFEST` | Override manifest for `world deps` | bundled manifest | `/tmp/world_deps.yaml` |
+| `SUBSTRATE_WORLD_DEPS_MANIFEST` | Override manifest for `world deps` | `<prefix>/versions/<version>/config/world-deps.yaml` | `/tmp/world_deps.yaml` |
 
 ### Host-only driver helpers
 

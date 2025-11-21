@@ -46,6 +46,8 @@ import pathlib, shutil
 home = pathlib.Path.home()
 for target in [
     '.substrate',
+    '.substrate/config',
+    '.substrate/versions',
     '.substrate_bashenv',
     '.substrate_bashenv_trampoline',
     '.substrate_preexec',

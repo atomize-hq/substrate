@@ -16,7 +16,8 @@ Regardless of platform, the script:
 
 1. Stops running `substrate` processes (`pkill -f substrate`).
 2. Deletes `~/.substrate*` state (manager env/init files, `config.json`,
-   shims, history, locks, etc.).
+   bundled manifests under `~/.substrate/versions/<version>/config/`, shims,
+   history, locks, etc.).
 3. Clears the shell command hash table (`hash -r`).
 
 Since the installer no longer edits `.bashrc`, `.zshrc`, or other rc files, no
