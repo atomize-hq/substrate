@@ -167,3 +167,11 @@ Template (copy/paste and fill in):
 - Created worktree: planned wt/ss-s3-caged-code
 - Plan: replace world-root flags with a caged boolean (flags/config/env precedence), enforce anchor bounce/warning even when world disabled, update docs + installer metadata, run fmt/clippy/tests (world_root) as needed
 - Blockers: none
+
+## [2025-11-21 18:00 UTC] Test – S3-test – START
+- Checked out feat/settings-stack, pulled latest
+- Confirmed S2-integ merged; coordinating with S3-code agent (S3-code in progress on wt/ss-s3-caged-code)
+- Updated tasks.json + session log (commit: pending)
+- Worktree: planned wt/ss-s3-caged-test
+- Plan: add caged precedence/enforcement tests in shell + installer config propagation; run cargo fmt; cargo test -p substrate-shell world_root; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
+- Blockers: none
