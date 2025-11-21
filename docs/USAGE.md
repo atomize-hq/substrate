@@ -196,6 +196,8 @@ manager and point `BASH_ENV` at `~/.substrate_bashenv` explicitly.
 - `substrate world doctor [--json]` – host readiness report (Linux namespaces,
   macOS Lima, Windows WSL)
 - `substrate --no-world ...` – run commands directly on the host (no isolation)
+- `substrate --world ...` – force world isolation for a single invocation even
+  when install/config/env disables it (metadata remains unchanged)
 - `substrate world enable` – provision the backend later if `--no-world` was
   used at install time
 - `substrate world deps status|install|sync` – inspect and copy host toolchains
@@ -216,6 +218,8 @@ needing to source dotfiles manually.
 
 Use `SUBSTRATE_WORLD_ENABLED=0` to force pass-through mode temporarily and
 `SUBSTRATE_WORLD_DEPS_MANIFEST` to point world-deps at a custom definition file.
+Flags beat config/env: `--world` overrides disabled metadata/env, while
+`--no-world` always opts out.
 ## Log Analysis
 
 Commands are logged in structured JSONL format:

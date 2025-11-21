@@ -341,8 +341,12 @@ pub struct Cli {
     #[arg(long = "world-root-path", value_name = "PATH")]
     pub world_root_path: Option<PathBuf>,
 
-    /// Disable world isolation (Linux only)
-    #[arg(long = "no-world")]
+    /// Force world isolation for this run (overrides disabled install/config/env)
+    #[arg(long = "world", action = ArgAction::SetTrue, conflicts_with = "no_world")]
+    pub world: bool,
+
+    /// Disable world isolation (host pass-through)
+    #[arg(long = "no-world", action = ArgAction::SetTrue, conflicts_with = "world")]
     pub no_world: bool,
 
     /// Graph commands (ingest/status/what-changed)
@@ -889,7 +893,7 @@ impl ShellConfig {
                     std::process::exit(0);
                 }
                 SubCommands::Shim(shim_cmd) => {
-                    handle_shim_command(shim_cmd);
+                    handle_shim_command(shim_cmd, &cli);
                 }
                 SubCommands::Health(health_cmd) => {
                     handle_health_command(health_cmd, &cli)?;
@@ -939,7 +943,13 @@ impl ShellConfig {
             || env::var("SUBSTRATE_WORLD_ENABLED")
                 .map(|value| value == "0")
                 .unwrap_or(false);
-        let final_no_world = cli.no_world || config_disables_world || env_disables_world;
+        let final_no_world = if cli.world {
+            false
+        } else if cli.no_world {
+            true
+        } else {
+            config_disables_world || env_disables_world
+        };
         update_world_env(final_no_world);
         let manager_init_path = substrate_home.join("manager_init.sh");
         let manager_env_path = substrate_home.join("manager_env.sh");
@@ -1028,9 +1038,7 @@ fn update_world_env(no_world: bool) {
         env::set_var("SUBSTRATE_WORLD", "disabled");
     } else {
         env::set_var("SUBSTRATE_WORLD_ENABLED", "1");
-        if env::var("SUBSTRATE_WORLD").is_err() {
-            env::set_var("SUBSTRATE_WORLD", "enabled");
-        }
+        env::set_var("SUBSTRATE_WORLD", "enabled");
     }
 }
 
@@ -1092,20 +1100,20 @@ fn handle_world_command(cmd: &WorldCmd, cli: &Cli) -> Result<()> {
             commands::world_enable::run_enable(opts)?;
         }
         WorldAction::Deps(opts) => {
-            commands::world_deps::run(opts, cli.no_world)?;
+            commands::world_deps::run(opts, cli.no_world, cli.world)?;
         }
     }
     Ok(())
 }
 
 fn handle_health_command(cmd: &HealthCmd, cli: &Cli) -> Result<()> {
-    commands::health::run(cmd.json, cli.no_world)
+    commands::health::run(cmd.json, cli.no_world, cli.world)
 }
 
-fn handle_shim_command(cmd: &ShimCmd) -> ! {
+fn handle_shim_command(cmd: &ShimCmd, cli: &Cli) -> ! {
     match &cmd.action {
         ShimAction::Doctor { json } => {
-            let exit = match commands::shim_doctor::run_doctor(*json) {
+            let exit = match commands::shim_doctor::run_doctor(*json, cli.no_world, cli.world) {
                 Ok(_) => 0,
                 Err(err) => {
                     eprintln!("substrate shim doctor failed: {:#}", err);
@@ -5793,6 +5801,51 @@ mod manager_init_wiring_tests {
         fn drop(&mut self) {
             let _ = env::set_current_dir(&self.original);
         }
+    }
+
+    #[test]
+    #[serial]
+    fn world_flag_overrides_disabled_config_and_env() {
+        let temp = tempdir().unwrap();
+        let home = temp.path().join("home");
+        let substrate_home = home.join(".substrate");
+        fs::create_dir_all(substrate_home.join("shims")).unwrap();
+        fs::write(
+            substrate_home.join("config.toml"),
+            "[install]\nworld_enabled = false\n",
+        )
+        .unwrap();
+
+        let prev_home = set_env("HOME", &home.display().to_string());
+        let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
+        let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home.display().to_string());
+        let prev_world = set_env("SUBSTRATE_WORLD", "disabled");
+        let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "0");
+        let prev_root_mode = env::var("SUBSTRATE_WORLD_ROOT_MODE").ok();
+        let prev_root_path = env::var("SUBSTRATE_WORLD_ROOT_PATH").ok();
+        let prev_caged = env::var("SUBSTRATE_CAGED").ok();
+        let prev_manager_env = env::var("SUBSTRATE_MANAGER_ENV").ok();
+        let prev_manager_init = env::var("SUBSTRATE_MANAGER_INIT").ok();
+        let _dir_guard = DirGuard::new();
+        fs::create_dir_all(&home).unwrap();
+        env::set_current_dir(&home).unwrap();
+
+        let cli = Cli::parse_from(["substrate", "--world"]);
+        let config = ShellConfig::from_cli(cli).expect("parse config with world override");
+        assert!(!config.no_world);
+        assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
+        assert_eq!(env::var("SUBSTRATE_WORLD_ENABLED").unwrap(), "1");
+
+        restore_env("SUBSTRATE_WORLD_ROOT_MODE", prev_root_mode);
+        restore_env("SUBSTRATE_WORLD_ROOT_PATH", prev_root_path);
+        restore_env("SUBSTRATE_CAGED", prev_caged);
+        restore_env("SUBSTRATE_MANAGER_ENV", prev_manager_env);
+        restore_env("SUBSTRATE_MANAGER_INIT", prev_manager_init);
+        restore_env("SUBSTRATE_WORLD", prev_world);
+        restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
+        restore_env("SUBSTRATE_HOME", prev_substrate_home);
+        restore_env("USERPROFILE", prev_userprofile);
+        restore_env("HOME", prev_home);
     }
 
     #[test]

@@ -24,8 +24,8 @@ pub struct HealthSummary {
     pub failures: Vec<String>,
 }
 
-pub fn run(json_mode: bool, cli_no_world: bool) -> Result<()> {
-    let report = shim_doctor::collect_report(cli_no_world)?;
+pub fn run(json_mode: bool, cli_no_world: bool, cli_force_world: bool) -> Result<()> {
+    let report = shim_doctor::collect_report(cli_no_world, cli_force_world)?;
     let summary = HealthSummary::from_report(&report);
     let payload = HealthReport {
         shim: report,

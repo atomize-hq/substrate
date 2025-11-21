@@ -63,14 +63,15 @@ pub(crate) enum WorldDepGuestState {
 
 pub(crate) fn status_report_for_health(
     cli_no_world: bool,
+    cli_force_world: bool,
     tools: &[String],
 ) -> Result<WorldDepsStatusReport> {
-    let runner = build_runner(cli_no_world)?;
+    let runner = build_runner(cli_no_world, cli_force_world)?;
     runner.status_report(tools)
 }
 
-pub fn run(cmd: &WorldDepsCmd, cli_no_world: bool) -> Result<()> {
-    let runner = build_runner(cli_no_world)?;
+pub fn run(cmd: &WorldDepsCmd, cli_no_world: bool, cli_force_world: bool) -> Result<()> {
+    let runner = build_runner(cli_no_world, cli_force_world)?;
     match &cmd.action {
         WorldDepsAction::Status(args) => runner.run_status(args),
         WorldDepsAction::Install(args) => runner.run_install(args),
@@ -98,7 +99,7 @@ impl ManifestPaths {
     }
 }
 
-fn build_runner(cli_no_world: bool) -> Result<WorldDepsRunner> {
+fn build_runner(cli_no_world: bool, cli_force_world: bool) -> Result<WorldDepsRunner> {
     let manifest_paths = ManifestPaths::resolve()?;
     let manifest = WorldDepsManifest::load(&manifest_paths.base, manifest_paths.overlay.as_deref())
         .with_context(|| {
@@ -107,7 +108,7 @@ fn build_runner(cli_no_world: bool) -> Result<WorldDepsRunner> {
                 manifest_paths.base.display()
             )
         })?;
-    let world = WorldState::detect(cli_no_world)?;
+    let world = WorldState::detect(cli_no_world, cli_force_world)?;
     Ok(WorldDepsRunner::new(manifest, manifest_paths, world))
 }
 
@@ -408,13 +409,14 @@ fn print_status_table(entries: &[WorldDepStatusEntry]) {
 }
 
 struct WorldState {
+    cli_force_world: bool,
     cli_disabled: bool,
     env_disabled: bool,
     config_disabled: bool,
 }
 
 impl WorldState {
-    fn detect(cli_no_world: bool) -> Result<Self> {
+    fn detect(cli_no_world: bool, cli_force_world: bool) -> Result<Self> {
         let env_disabled = env::var("SUBSTRATE_WORLD")
             .map(|value| value.eq_ignore_ascii_case("disabled"))
             .unwrap_or(false)
@@ -424,6 +426,7 @@ impl WorldState {
 
         let install_config = world_enable::load_install_config(&substrate_paths::config_file()?)?;
         Ok(Self {
+            cli_force_world,
             cli_disabled: cli_no_world,
             env_disabled,
             config_disabled: !install_config.world_enabled,
@@ -431,6 +434,9 @@ impl WorldState {
     }
 
     fn is_disabled(&self) -> bool {
+        if self.cli_force_world {
+            return false;
+        }
         self.cli_disabled || self.env_disabled || self.config_disabled
     }
 
@@ -448,6 +454,9 @@ impl WorldState {
     }
 
     fn reason(&self) -> Option<String> {
+        if self.cli_force_world {
+            return None;
+        }
         if self.cli_disabled {
             Some("--no-world flag is active".to_string())
         } else if self.env_disabled {

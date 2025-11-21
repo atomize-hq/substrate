@@ -115,6 +115,9 @@ caged = true
 Unknown keys and extra tables are preserved for future expansion.
 
 - Fresh installs write `world_enabled = true` unless `--no-world` is used.
+- Use `--world` to force isolation for a single run even when install metadata
+  or `SUBSTRATE_WORLD*` env vars disable it; metadata stays unchanged and
+  `--no-world` still wins when provided.
 - `substrate world enable` overwrites `[install]` after provisioning succeeds and repairs malformed metadata.
 - Legacy installs that still have `config.json` are read automatically, but new writes use `config.toml`.
 - The generated `~/.substrate/manager_env.sh` exports `SUBSTRATE_WORLD`,
@@ -143,6 +146,8 @@ Unknown keys and extra tables are preserved for future expansion.
 | `--ci` | CI mode (no banner, strict errors) | `substrate --ci -c "npm test"` |
 | `--no-exit-on-error` | Continue on error in CI mode | `substrate --ci --no-exit-on-error` |
 | `--pty` | Force PTY for command | `substrate --pty -c "vim"` |
+| `--world` | Force world isolation for this invocation (overrides disabled install/config/env) | `substrate --world -c "npm test"` |
+| `--no-world` | Disable world isolation for this run | `substrate --no-world -c "npm test"` |
 | `--world-root-mode <mode>` | Select world root strategy (`project`, `follow-cwd`, `custom`) | `substrate --world-root-mode follow-cwd -c "npm test"` |
 | `--world-root-path <path>` | Explicit world root when using `custom` mode | `substrate --world-root-mode custom --world-root-path /opt/work` |
 | `--caged` / `--uncaged` | Toggle local caged root guard | `substrate --uncaged --world-root-mode project` |

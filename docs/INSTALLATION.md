@@ -51,7 +51,8 @@ invoke `~/.substrate/bin/substrate` directly—because the installer no longer
 edits shell rc files. Supplying `--no-world` skips step 6, writes
 `~/.substrate/config.toml` with `[install] world_enabled = false`, and prints
 the exact `substrate world enable` command to run when you are ready to
-provision the backend.
+provision the backend. You can still force a single world-isolated run later
+with `substrate --world ...` without changing the stored metadata.
 
 ### Prerequisites
 
