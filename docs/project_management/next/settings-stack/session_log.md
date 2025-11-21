@@ -75,3 +75,10 @@ Template (copy/paste and fill in):
 - Worktree: planned wt/ss-s1-config-code
 - Plan: migrate install metadata to config.toml in CLI + installer/uninstaller, keep manager env exports consistent, refresh installation/configuration/uninstall docs
 - Blockers: none
+
+## [2025-11-21 14:07 UTC] Test – S1-test – START
+- Checked out feat/settings-stack, pulled latest
+- Updated tasks.json + session log (commit: pending)
+- Created worktree: planned wt/ss-s1-config-test
+- Plan: add unit tests for config load/save, extend installer smoke to validate config.toml payloads for default/--no-world, run targeted installer + unit tests
+- Blockers: none
