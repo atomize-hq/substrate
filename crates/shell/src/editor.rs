@@ -49,7 +49,7 @@ pub(crate) fn build_editor(config: &ShellConfig) -> Result<EditorSetup> {
         .with_edit_mode(edit_mode)
         .with_completer(completer)
         .with_highlighter(Box::new(ExampleHighlighter::default()))
-        .with_validator(Box::new(SubstrateValidator::default()))
+        .with_validator(Box::new(SubstrateValidator))
         .with_transient_prompt(transient_prompt)
         .with_menu(ReedlineMenu::EngineCompleter(Box::new(
             ColumnarMenu::default().with_name("completion_menu"),
@@ -317,7 +317,7 @@ impl Validator for SubstrateValidator {
 }
 
 fn trailing_line_continuation(line: &str) -> bool {
-    let trimmed = line.trim_end_matches(|c| matches!(c, ' ' | '\t'));
+    let trimmed = line.trim_end_matches([' ', '\t']);
     if trimmed.is_empty() {
         return false;
     }
