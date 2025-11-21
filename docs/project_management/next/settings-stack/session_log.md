@@ -76,6 +76,14 @@ Template (copy/paste and fill in):
 - Plan: migrate install metadata to config.toml in CLI + installer/uninstaller, keep manager env exports consistent, refresh installation/configuration/uninstall docs
 - Blockers: none
 
+## [2025-11-21 14:22 UTC] Code – S1-code – END
+- Worktree commits: 51c73c6
+- Commands: cargo fmt; cargo clippy -p substrate-shell -- -D warnings
+- Results: both commands passed
+- Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S1-test.md (already present)
+- Docs commit: docs: finish S1-code (this commit)
+- Next steps / blockers: none; S1-test should cover config.toml parsing/load/save and installer smoke with the new metadata plus legacy config.json fallback
+
 ## [2025-11-21 14:07 UTC] Test – S1-test – START
 - Checked out feat/settings-stack, pulled latest
 - Updated tasks.json + session log (commit: pending)
