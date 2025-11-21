@@ -248,6 +248,58 @@ build_fake_release() {
   printf '%s  %s\n' "${checksum}" "${archive}" >"${ARTIFACT_DIR}/SHA256SUMS"
 }
 
+assert_install_config() {
+  local config="${PREFIX}/config.toml"
+  local expected_flag="true"
+  if [[ "${SCENARIO}" == "no-world" ]]; then
+    expected_flag="false"
+  fi
+
+  if [[ ! -f "${config}" ]]; then
+    if [[ -f "${PREFIX}/config.json" ]]; then
+      fatal "expected ${config} but found legacy config.json; installer should emit TOML"
+    fi
+    fatal "install config missing after install: ${config}"
+  fi
+
+  python3 - <<'PY' "${config}" "${expected_flag}"
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+expected = sys.argv[2].lower() == "true"
+body = path.read_text()
+world_enabled = None
+in_install = False
+for raw in body.splitlines():
+    line = raw.split("#", 1)[0].strip()
+    if not line:
+        continue
+    if line.startswith("[") and line.endswith("]"):
+        in_install = line == "[install]"
+        continue
+    if not in_install:
+        continue
+    if "=" not in line:
+        continue
+    key, value = line.split("=", 1)
+    if key.strip() != "world_enabled":
+        continue
+    val = value.strip().lower()
+    if val in ("true", "false"):
+        world_enabled = val == "true"
+        break
+    raise SystemExit(f"invalid world_enabled value: {value.strip()}")
+
+if world_enabled is None:
+    raise SystemExit("world_enabled missing under [install]")
+if world_enabled != expected:
+    raise SystemExit(f"world_enabled={world_enabled} (expected {expected})")
+PY
+
+  log "Verified install config at ${config} (world_enabled=${expected_flag})"
+}
+
 assert_manifest_present() {
   local manifest="${PREFIX}/versions/${FAKE_VERSION}/config/manager_hooks.yaml"
   if [[ ! -f "${manifest}" ]]; then
@@ -288,6 +340,7 @@ run_install() {
 prepare_stub_bin
 build_fake_release
 run_install
+assert_install_config
 assert_manifest_present
 run_health_smoke
 

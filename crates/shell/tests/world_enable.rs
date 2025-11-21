@@ -5,11 +5,11 @@ mod common;
 
 use assert_cmd::Command;
 use common::{shared_tmpdir, substrate_shell_driver, temp_dir};
-use serde_json::{json, Value};
 use std::fs;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::PathBuf;
 use tempfile::TempDir;
+use toml::Value as TomlValue;
 
 const HELPER_SCRIPT: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
@@ -148,7 +148,7 @@ impl WorldEnableFixture {
     }
 
     fn config_path(&self) -> PathBuf {
-        self.substrate_home.join("config.json")
+        self.substrate_home.join("config.toml")
     }
 
     fn config_exists(&self) -> bool {
@@ -156,19 +156,31 @@ impl WorldEnableFixture {
     }
 
     fn write_config(&self, enabled: bool) {
-        let body = json!({
-            "world_enabled": enabled
-        });
-        fs::write(self.config_path(), body.to_string()).expect("write config json");
+        let flag = if enabled { "true" } else { "false" };
+        let body = format!("[install]\nworld_enabled = {flag}\n");
+        fs::write(self.config_path(), body).expect("write config toml");
     }
 
     fn write_invalid_config(&self) {
-        fs::write(self.config_path(), "not-json").expect("write invalid config");
+        fs::write(
+            self.config_path(),
+            "[install]\nworld_enabled = \"invalid\"\n",
+        )
+        .expect("write invalid config");
     }
 
-    fn read_config(&self) -> Value {
+    fn read_config(&self) -> TomlValue {
         let data = fs::read_to_string(self.config_path()).expect("read config");
-        serde_json::from_str(&data).expect("parse config json")
+        toml::from_str(&data).expect("parse config toml")
+    }
+
+    fn install_world_enabled(&self) -> bool {
+        self.read_config()
+            .get("install")
+            .and_then(|value| value.as_table())
+            .and_then(|table| table.get("world_enabled"))
+            .and_then(|value| value.as_bool())
+            .expect("install.world_enabled missing")
     }
 
     fn log_contents(&self) -> Option<String> {
@@ -224,8 +236,10 @@ fn world_enable_provisions_and_sets_config_and_env_state() {
     );
 
     fixture.assert_socket_exists();
-    let config = fixture.read_config();
-    assert_eq!(config["world_enabled"], Value::Bool(true));
+    assert!(
+        fixture.install_world_enabled(),
+        "install config should mark world enabled"
+    );
 
     let env_contents = fixture.manager_env_contents();
     assert!(
@@ -255,8 +269,10 @@ fn world_enable_fails_when_helper_exits_non_zero() {
         .env("SUBSTRATE_TEST_WORLD_EXIT", "42");
 
     cmd.assert().failure();
-    let config = fixture.read_config();
-    assert_eq!(config["world_enabled"], Value::Bool(false));
+    assert!(
+        !fixture.install_world_enabled(),
+        "install config should remain disabled when helper fails"
+    );
 }
 
 #[test]
@@ -354,6 +370,5 @@ fn world_enable_recovers_from_invalid_config_file() {
         .assert()
         .success();
 
-    let config = fixture.read_config();
-    assert_eq!(config["world_enabled"], Value::Bool(true));
+    assert!(fixture.install_world_enabled());
 }

@@ -785,3 +785,148 @@ fn normalize_path(path: &Path) -> PathBuf {
     }
     normalized
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+    use toml::Value as TomlValue;
+
+    fn write_config(path: &Path, contents: &str) {
+        let parent = path.parent().expect("config path missing parent");
+        fs::create_dir_all(parent).expect("create parent for config");
+        fs::write(path, contents).expect("write config");
+    }
+
+    fn read_toml(path: &Path) -> TomlValue {
+        let raw = fs::read_to_string(path).expect("read config contents");
+        toml::from_str(&raw).expect("parse config.toml")
+    }
+
+    #[test]
+    fn load_install_config_defaults_when_file_missing() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+
+        let cfg = load_install_config(&path).expect("load default config");
+
+        assert!(cfg.world_enabled);
+        assert!(!cfg.exists());
+        assert!(cfg.extras.is_empty(), "extras should be empty by default");
+    }
+
+    #[test]
+    fn load_install_config_errors_on_non_bool_flag() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        write_config(
+            &path,
+            r#"
+[install]
+world_enabled = "yes"
+"#,
+        );
+
+        let err = load_install_config(&path).expect_err("invalid flag should error");
+        let message = err.to_string();
+        assert!(
+            message.contains("world_enabled"),
+            "unexpected error message: {message}"
+        );
+    }
+
+    #[test]
+    fn load_and_save_install_config_preserves_unknown_keys() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        write_config(
+            &path,
+            r#"
+[install]
+world_enabled = false
+mode = "keep-me"
+
+[world]
+root_mode = "follow-cwd"
+root_path = "/tmp/custom"
+"#,
+        );
+
+        let mut cfg = load_install_config(&path).expect("load config with extras");
+        assert!(cfg.exists());
+        assert!(!cfg.world_enabled);
+
+        cfg.set_world_enabled(true);
+        save_install_config(&path, &cfg).expect("save updated config");
+
+        let saved = read_toml(&path);
+        let install = saved
+            .get("install")
+            .and_then(|value| value.as_table())
+            .expect("install table missing after save");
+        assert_eq!(
+            install
+                .get("world_enabled")
+                .and_then(|value| value.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            install.get("mode").and_then(|value| value.as_str()),
+            Some("keep-me")
+        );
+
+        let world = saved
+            .get("world")
+            .and_then(|value| value.as_table())
+            .expect("world table missing after save");
+        assert_eq!(
+            world.get("root_mode").and_then(|value| value.as_str()),
+            Some("follow-cwd")
+        );
+        assert_eq!(
+            world.get("root_path").and_then(|value| value.as_str()),
+            Some("/tmp/custom")
+        );
+    }
+
+    #[test]
+    fn load_install_config_defaults_missing_flag_and_retains_sections() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        write_config(
+            &path,
+            r#"
+[world]
+root_mode = "project"
+"#,
+        );
+
+        let mut cfg = load_install_config(&path).expect("load config without install flag");
+        assert!(cfg.exists());
+        assert!(cfg.world_enabled, "missing flag should default to enabled");
+
+        cfg.set_world_enabled(false);
+        save_install_config(&path, &cfg).expect("persist updated config");
+
+        let saved = read_toml(&path);
+        let install = saved
+            .get("install")
+            .and_then(|value| value.as_table())
+            .expect("install table should be created during save");
+        assert_eq!(
+            install
+                .get("world_enabled")
+                .and_then(|value| value.as_bool()),
+            Some(false)
+        );
+        let world = saved
+            .get("world")
+            .and_then(|value| value.as_table())
+            .expect("world table should be preserved");
+        assert_eq!(
+            world.get("root_mode").and_then(|value| value.as_str()),
+            Some("project")
+        );
+    }
+}
