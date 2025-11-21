@@ -307,7 +307,8 @@ impl Validator for SubstrateValidator {
         let has_unmatched_braces = !brace_stack.is_empty() || subshell_depth > 0;
         let has_line_continuation = !in_single && trailing_line_continuation(line);
 
-        if has_unclosed_quotes || has_unmatched_braces || pending_operator || has_line_continuation {
+        if has_unclosed_quotes || has_unmatched_braces || pending_operator || has_line_continuation
+        {
             ValidationResult::Incomplete
         } else {
             ValidationResult::Complete
@@ -342,10 +343,7 @@ mod tests {
 
     #[test]
     fn detects_unclosed_single_quote() {
-        assert!(matches!(
-            validate("echo '"),
-            ValidationResult::Incomplete
-        ));
+        assert!(matches!(validate("echo '"), ValidationResult::Incomplete));
     }
 
     #[test]
@@ -386,9 +384,6 @@ mod tests {
             validate("echo foo && echo bar"),
             ValidationResult::Complete
         ));
-        assert!(matches!(
-            validate("echo '{'"),
-            ValidationResult::Complete
-        ));
+        assert!(matches!(validate("echo '{'"), ValidationResult::Complete));
     }
 }
