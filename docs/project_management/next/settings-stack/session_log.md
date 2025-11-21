@@ -120,3 +120,11 @@ Template (copy/paste and fill in):
 - Worktree: planned wt/ss-s2-settings-code
 - Plan: implement settings stack precedence (flags > dir config > global config > env > default), wire world root CLI flags, keep shell parsing aligned with install metadata, update configuration/usage docs, run fmt/clippy/tests as required
 - Blockers: none
+
+## [2025-11-21 15:03 UTC] Test – S2-test – START
+- Checked out feat/settings-stack, pulled latest
+- Confirmed S1-integ merged/completed
+- Updated tasks.json + session log (commit: docs: start S2-test)
+- Worktree: planned wt/ss-s2-settings-test
+- Plan: add tests for world root precedence (flag > dir > global > env > default) and project/follow-cwd/custom modes, extend installer/tests for config.toml keys, run cargo fmt; cargo test -p substrate-shell world_enable; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
+- Blockers: none
