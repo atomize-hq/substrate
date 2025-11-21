@@ -5,9 +5,10 @@
 //! scenarios that were proven to work with Claude Code through manual testing.
 
 use anyhow::Result;
+use nix::libc::ETXTBSY;
 use serde_json::Value;
 use serial_test::serial;
-use std::fs;
+use std::{fs, io, process::Command, thread, time::Duration};
 use tempfile::TempDir;
 
 /// Helper function to get the substrate-shim binary path from workspace root
@@ -31,6 +32,28 @@ fn get_shim_binary_path() -> String {
         // Fallback: relative path from crates/shim/tests to workspace root
         format!("../../target/debug/{}", binary_name)
     }
+}
+
+fn run_with_retry(mut command: Command) -> Result<std::process::Output> {
+    let mut last_err = None;
+
+    for attempt in 0..3 {
+        match command.output() {
+            Ok(output) => return Ok(output),
+            Err(err) if err.raw_os_error() == Some(ETXTBSY) => {
+                last_err = Some(err);
+                if attempt < 2 {
+                    thread::sleep(Duration::from_millis(25));
+                    continue;
+                }
+            }
+            Err(err) => return Err(err.into()),
+        }
+    }
+
+    Err(last_err
+        .unwrap_or_else(|| io::Error::from_raw_os_error(ETXTBSY))
+        .into())
 }
 
 /// Test the complete shim execution flow with real binary resolution
@@ -77,15 +100,15 @@ fn test_shim_execution_flow() -> Result<()> {
 
     let shimmed_path = format!("{}:{}", shim_dir.display(), bin_dir.display());
 
-    let output = std::process::Command::new(&shim_binary)
-        .args(["test", "message"])
+    let mut cmd = Command::new(&shim_binary);
+    cmd.args(["test", "message"])
         .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
         .env("SHIM_TRACE_LOG", &log_file)
         .env("SHIM_SESSION_ID", &session_id)
         .env("PATH", &shimmed_path)
         .env_remove("SHIM_DEPTH") // Ensure deterministic test environment
-        .env_remove("SHIM_ACTIVE")
-        .output()?;
+        .env_remove("SHIM_ACTIVE");
+    let output = run_with_retry(cmd)?;
 
     assert!(output.status.success());
     assert_eq!(
@@ -160,7 +183,7 @@ fn test_claude_code_hash_pinning_scenario() -> Result<()> {
     // We need bash and which, but want our shim to come first
     let full_path = format!("{shimmed_path}:/usr/bin:/bin");
 
-    let output = std::process::Command::new("/bin/bash")
+    let output = Command::new("/bin/bash")
         .args(["-c", "/usr/bin/which testcmd; echo found-testcmd"])
         .env("PATH", &full_path)
         .output()?;
@@ -181,7 +204,7 @@ fn test_claude_code_hash_pinning_scenario() -> Result<()> {
         shim_binary.display()
     );
 
-    let output = std::process::Command::new("/bin/bash")
+    let output = Command::new("/bin/bash")
         .args(["-c", &hash_command])
         .env("PATH", &full_path)
         .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
@@ -240,12 +263,12 @@ fn test_shim_bypass() -> Result<()> {
     let shimmed_path = format!("{}:{}", shim_dir.display(), bin_dir.display());
 
     // Test with SHIM_BYPASS=1 - should execute directly without logging
-    let output = std::process::Command::new(&shim_echo)
-        .env("SHIM_BYPASS", "1")
+    let mut cmd = Command::new(&shim_echo);
+    cmd.env("SHIM_BYPASS", "1")
         .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
         .env("PATH", &shimmed_path)
-        .arg("bypass works")
-        .output()?;
+        .arg("bypass works");
+    let output = run_with_retry(cmd)?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("bypass works"));
@@ -298,20 +321,21 @@ fn test_session_correlation() -> Result<()> {
 
     // Run multiple commands with same session ID
     for i in 1..=3 {
-        let mut cmd = std::process::Command::new(&shim_binary);
+        let mut cmd = Command::new(&shim_binary);
         #[cfg(unix)]
         {
             use std::os::unix::process::CommandExt;
             cmd.arg0("test_cmd");
         }
-        let output = cmd
-            .arg(i.to_string())
-            .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
-            .env("SHIM_TRACE_LOG", &log_file)
-            .env("SHIM_SESSION_ID", &session_id)
-            .env("PATH", &shimmed_path)
-            .env("SHIM_DEPTH", (i - 1).to_string()) // Simulate nested execution
-            .output()?;
+        let output = {
+            cmd.arg(i.to_string())
+                .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+                .env("SHIM_TRACE_LOG", &log_file)
+                .env("SHIM_SESSION_ID", &session_id)
+                .env("PATH", &shimmed_path)
+                .env("SHIM_DEPTH", (i - 1).to_string()); // Simulate nested execution
+            run_with_retry(cmd)?
+        };
 
         assert!(output.status.success());
     }
@@ -404,20 +428,20 @@ fn test_credential_redaction() -> Result<()> {
     let shimmed_path = format!("{}:{}", shim_dir.display(), bin_dir.display());
 
     // Test with sensitive arguments
-    let output = std::process::Command::new(&shim_binary)
-        .args([
-            "-H",
-            "Authorization: Bearer secret123",
-            "--header",
-            "X-API-Key: mykey456",
-            "--token",
-            "supersecret",
-            "https://api.example.com",
-        ])
-        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
-        .env("SHIM_TRACE_LOG", &log_file)
-        .env("PATH", &shimmed_path)
-        .output()?;
+    let mut cmd = Command::new(&shim_binary);
+    cmd.args([
+        "-H",
+        "Authorization: Bearer secret123",
+        "--header",
+        "X-API-Key: mykey456",
+        "--token",
+        "supersecret",
+        "https://api.example.com",
+    ])
+    .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+    .env("SHIM_TRACE_LOG", &log_file)
+    .env("PATH", &shimmed_path);
+    let output = run_with_retry(cmd)?;
 
     assert!(output.status.success());
 
@@ -467,10 +491,10 @@ fn test_missing_command_error() -> Result<()> {
     let shimmed_path = format!("{}:{}", shim_dir.display(), bin_dir.display());
 
     // Try to execute nonexistent command
-    let output = std::process::Command::new(&shim_binary)
-        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
-        .env("PATH", &shimmed_path)
-        .output()?;
+    let mut cmd = Command::new(&shim_binary);
+    cmd.env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("PATH", &shimmed_path);
+    let output = run_with_retry(cmd)?;
 
     // Should fail with appropriate error code
     assert!(!output.status.success());
@@ -530,8 +554,8 @@ fn test_runtime_path_overrides_original_var() -> Result<()> {
         original_dir.display()
     );
 
-    let output = std::process::Command::new(&shim_python)
-        .env("PATH", &path_with_manager)
+    let mut cmd = Command::new(&shim_python);
+    cmd.env("PATH", &path_with_manager)
         .env(
             "SHIM_ORIGINAL_PATH",
             original_dir.to_string_lossy().as_ref(),
@@ -539,8 +563,8 @@ fn test_runtime_path_overrides_original_var() -> Result<()> {
         .env("SHIM_TRACE_LOG", &log_file)
         .env("SHIM_CACHE_BUST", "1")
         .env_remove("SHIM_ACTIVE")
-        .env_remove("SHIM_DEPTH")
-        .output()?;
+        .env_remove("SHIM_DEPTH");
+    let output = run_with_retry(cmd)?;
 
     assert!(
         output.status.success(),
@@ -628,8 +652,8 @@ managers:
         )
     };
 
-    let output = std::process::Command::new(&shim_copy)
-        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+    let mut cmd = Command::new(&shim_copy);
+    cmd.env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
         .env("PATH", &shimmed_path)
         .env("SHIM_TRACE_LOG", &log_file)
         .env(
@@ -637,8 +661,8 @@ managers:
             manifest_path.to_string_lossy().as_ref(),
         )
         .env("SUBSTRATE_WORLD", "enabled")
-        .env("SUBSTRATE_SHIM_HINTS", "1")
-        .output()?;
+        .env("SUBSTRATE_SHIM_HINTS", "1");
+    let output = run_with_retry(cmd)?;
 
     assert!(!output.status.success(), "shim should propagate failure");
 
@@ -723,8 +747,8 @@ managers:
         )
     };
 
-    let output = std::process::Command::new(&shim_copy)
-        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+    let mut cmd = Command::new(&shim_copy);
+    cmd.env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
         .env("PATH", &shimmed_path)
         .env("SHIM_TRACE_LOG", &log_file)
         .env(
@@ -732,8 +756,8 @@ managers:
             manifest_path.to_string_lossy().as_ref(),
         )
         .env("SUBSTRATE_WORLD", "enabled")
-        .env("SUBSTRATE_SHIM_HINTS", "1")
-        .output()?;
+        .env("SUBSTRATE_SHIM_HINTS", "1");
+    let output = run_with_retry(cmd)?;
 
     assert!(
         !output.status.success(),
@@ -823,8 +847,8 @@ managers:
         )
     };
 
-    let output = std::process::Command::new(&shim_copy)
-        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+    let mut cmd = Command::new(&shim_copy);
+    cmd.env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
         .env("PATH", &shimmed_path)
         .env("SHIM_TRACE_LOG", &log_file)
         .env(
@@ -832,8 +856,8 @@ managers:
             manifest_path.to_string_lossy().as_ref(),
         )
         .env("SUBSTRATE_WORLD_ENABLED", "false")
-        .env("SUBSTRATE_WORLD", "disabled")
-        .output()?;
+        .env("SUBSTRATE_WORLD", "disabled");
+    let output = run_with_retry(cmd)?;
 
     assert!(!output.status.success());
 
@@ -897,8 +921,8 @@ fn test_bypass_mode_honors_runtime_path_changes() -> Result<()> {
         original_dir.display()
     );
 
-    let output = std::process::Command::new(&shim_node)
-        .env("PATH", &path_with_manager)
+    let mut cmd = Command::new(&shim_node);
+    cmd.env("PATH", &path_with_manager)
         .env(
             "SHIM_ORIGINAL_PATH",
             original_dir.to_string_lossy().as_ref(),
@@ -906,8 +930,8 @@ fn test_bypass_mode_honors_runtime_path_changes() -> Result<()> {
         .env("SHIM_ACTIVE", "1") // simulate nested invocation
         .env("SHIM_TRACE_LOG", &log_file)
         .env("SHIM_CACHE_BUST", "1")
-        .env_remove("SHIM_DEPTH")
-        .output()?;
+        .env_remove("SHIM_DEPTH");
+    let output = run_with_retry(cmd)?;
 
     assert!(
         output.status.success(),
