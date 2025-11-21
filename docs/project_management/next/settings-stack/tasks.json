@@ -512,7 +512,7 @@
       "name": "Force world override flag",
       "type": "code",
       "phase": "Settings Stack",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add a one-shot --world flag that overrides disabled installs/config to run in the world for a single invocation, keeping --no-world as the opt-out.",
       "references": [
         "docs/project_management/next/settings-stack/settings_stack_plan.md",
