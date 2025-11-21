@@ -82,7 +82,7 @@
       "name": "Integrate manifest bundling",
       "type": "integration",
       "phase": "Settings Stack",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge the manifest-packaging code + tests, run required scripts, and ensure feat/settings-stack reflects the fix before later stages begin.",
       "references": [
         "docs/project_management/next/settings-stack/settings_stack_plan.md",

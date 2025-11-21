@@ -60,3 +60,11 @@ Template (copy/paste and fill in):
 - Worktree: planned wt/ss-s0-manifest-integ
 - Plan: merge S0 code/test work, run installer smoke (default, no-world), capture prefixes/results, update docs/tasks
 - Blockers: none
+
+## [2025-11-21 13:43 UTC] Integ – S0-integ – END
+- Worktree commits: n/a (no integration code/test changes required)
+- Commands: ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
+- Results: both scenarios passed; manager_hooks.yaml present and `substrate health --json` succeeded (temp roots: /tmp/substrate-installer-default.pzsF0H, /tmp/substrate-installer-no-world.xoLPA4)
+- Kickoff prompts created: n/a (verified docs/project_management/next/settings-stack/kickoff_prompts/S1-code.md and docs/project_management/next/settings-stack/kickoff_prompts/S1-test.md)
+- Docs commit: docs: finish S0-integ (tasks + session log)
+- Next steps / blockers: none
