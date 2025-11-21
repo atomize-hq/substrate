@@ -554,7 +554,7 @@
       "name": "Test force world override",
       "type": "test",
       "phase": "Settings Stack",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add tests validating the new --world override against disabled installs/config/env and confirm interaction with --no-world/caged settings.",
       "references": [
         "docs/project_management/next/settings-stack/settings_stack_plan.md",

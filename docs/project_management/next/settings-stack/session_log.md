@@ -222,3 +222,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S4-test.md
 - Docs commit: pending (tasks/status/log updates on feat/settings-stack)
 - Next steps / blockers: merge branch into feat/settings-stack and remove worktree
+
+## [2025-11-21 21:04 UTC] Test – S4-test – START
+- Checked out feat/settings-stack, pulled latest
+- Updated tasks.json + session log (commit: pending)
+- Worktree: planned wt/ss-s4-world-override-test (branch ss-s4-world-override-test)
+- Plan: create worktree; add tests for --world override vs disabled install/config/env and --no-world; cover flag/config/env precedence with caged/world-root interactions; update installer smoke assertions if metadata/env exports change; run cargo fmt; cargo test -p substrate-shell world_root; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
+- Blockers: none
