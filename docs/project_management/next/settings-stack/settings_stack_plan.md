@@ -142,10 +142,17 @@ We are delivering this in two sequential buckets, each with code/test/integratio
 3. **S2 – Settings Stack & World Root**
    - Implement the layered settings stack, new CLI flag/env vars, config file
      parsing, and documentation (depends on S1 being merged).
+4. **S3 – Caged Root Guard**
+   - Replace world-root flags with a boolean caged guard, persist it in config,
+     and enforce anchor bounce even when world isolation is disabled.
+5. **S4 – Force World Override**
+   - Add a `--world` flag to temporarily override disabled installs/config,
+     mirror `--no-world` as the opt-out, and document precedence/behavior.
 
 S0-code/test run in parallel, followed by S0-integ. After S0-integ merges, S1
 code/test may start. Likewise, **do not** start S2 code/test until S1-integ has
 merged into `feat/settings-stack`; each stage builds on the previous one.
 Integration tasks always depend on the corresponding code + test tasks.
+S3 follows S2-integ, and S4 follows S3-integ.
 
 See `tasks.json` for detailed entries, worktree names, and dependencies.

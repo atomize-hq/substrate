@@ -506,6 +506,128 @@
       "worktree": "wt/ss-s3-caged-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S3-integ.md"
+    },
+    {
+      "id": "S4-code",
+      "name": "Force world override flag",
+      "type": "code",
+      "phase": "Settings Stack",
+      "status": "pending",
+      "description": "Add a one-shot --world flag that overrides disabled installs/config to run in the world for a single invocation, keeping --no-world as the opt-out.",
+      "references": [
+        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/CONFIGURATION.md",
+        "crates/shell/src/lib.rs",
+        "scripts/substrate/install-substrate.sh"
+      ],
+      "acceptance_criteria": [
+        "CLI exposes --world alongside --no-world; --world forces world isolation even when install metadata/env config is disabled.",
+        "Precedence documented: flag wins over config/env; --no-world still disables isolation explicitly.",
+        "Docs mention the override flag, with examples for toggling per-invocation without changing install metadata.",
+        "No regressions to caged/world-root precedence or installer metadata."
+      ],
+      "start_checklist": [
+        "Checkout feat/settings-stack, pull latest",
+        "Set S4-code to in_progress, update session_log.md, commit docs update",
+        "Create task branch ss-s4-world-override-code",
+        "Create worktree wt/ss-s4-world-override-code from that branch",
+        "Ensure git status is clean before coding"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/targeted tests pass; capture outputs in the session log",
+        "Commit worktree changes and merge back to feat/settings-stack",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm S4-test kickoff prompt path is recorded"
+      ],
+      "depends_on": [
+        "S3-integ"
+      ],
+      "concurrent_with": [
+        "S4-test"
+      ],
+      "worktree": "wt/ss-s4-world-override-code",
+      "integration_task": "S4-integ",
+      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S4-code.md"
+    },
+    {
+      "id": "S4-test",
+      "name": "Test force world override",
+      "type": "test",
+      "phase": "Settings Stack",
+      "status": "pending",
+      "description": "Add tests validating the new --world override against disabled installs/config/env and confirm interaction with --no-world/caged settings.",
+      "references": [
+        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "crates/shell/src/lib.rs",
+        "tests/installers/install_smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "Tests cover precedence: --world overrides disabled install/config/env; --no-world still disables isolation.",
+        "Installer/config metadata assertions updated if needed to reflect the new flag behavior.",
+        "No production code changes beyond minimal test scaffolding for this task."
+      ],
+      "start_checklist": [
+        "Checkout feat/settings-stack, pull latest",
+        "Set S4-test to in_progress, update session_log.md, commit docs update",
+        "Create task branch ss-s4-world-override-test",
+        "Create worktree wt/ss-s4-world-override-test from that branch",
+        "Ensure git status is clean before editing tests"
+      ],
+      "end_checklist": [
+        "Run fmt and targeted tests/scripts; capture outputs in the session log",
+        "Commit worktree changes, merge back to feat/settings-stack, remove worktree",
+        "Update tasks.json + session_log.md with END entry (commands/results/blockers)",
+        "Create/confirm S4-integ kickoff prompt and reference prompts in the log"
+      ],
+      "depends_on": [
+        "S3-integ"
+      ],
+      "concurrent_with": [
+        "S4-code"
+      ],
+      "worktree": "wt/ss-s4-world-override-test",
+      "integration_task": "S4-integ",
+      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S4-test.md"
+    },
+    {
+      "id": "S4-integ",
+      "name": "Integrate force world override",
+      "type": "integration",
+      "phase": "Settings Stack",
+      "status": "pending",
+      "description": "Merge the force-world flag code + tests, resolve conflicts, and ensure fmt/clippy/tests and installer scenarios pass.",
+      "references": [
+        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "crates/shell",
+        "scripts/substrate",
+        "tests/installers"
+      ],
+      "acceptance_criteria": [
+        "wt/ss-s4-world-override-integ merges code+tests with clean fmt/clippy/tests/installer smoke.",
+        "feat/settings-stack updated with integration results and doc/task/log entries committed.",
+        "Any follow-up kickoff prompts are recorded before ending the session."
+      ],
+      "start_checklist": [
+        "Checkout feat/settings-stack, pull latest",
+        "Confirm S4-code/test completed",
+        "Set S4-integ to in_progress, update session_log.md, commit docs update",
+        "Create task branch ss-s4-world-override-integ",
+        "Create worktree wt/ss-s4-world-override-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration branch/worktree and resolve conflicts",
+        "Run required fmt/clippy/tests and installer smoke scenarios",
+        "Merge integration branch back to feat/settings-stack and remove the worktree",
+        "Update tasks.json + session_log.md with END entry; push or hand off"
+      ],
+      "depends_on": [
+        "S4-code",
+        "S4-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ss-s4-world-override-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S4-integ.md"
     }
   ]
 }
