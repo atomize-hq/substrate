@@ -31,6 +31,14 @@ Template (copy/paste and fill in):
 - Plan: bundle config/manifests in release scripts, update installers/uninstaller for config dir, refresh installation/configuration/uninstall docs
 - Blockers: none
 
+## [2025-11-21 05:19 UTC] Code – S0-code – END
+- Worktree commits: e4cf22b
+- Commands: cargo fmt; bash -n scripts/substrate/install-substrate.sh; bash -n scripts/substrate/uninstall-substrate.sh
+- Results: fmt and shell syntax checks passed; installer smoke not run
+- Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S0-test.md
+- Docs commit: docs: finish S0-code (this commit)
+- Next steps / blockers: none
+
 ## [2025-11-21 05:06 UTC] Test – S0-test – START
 - Checked out feat/settings-stack, pulled latest
 - Updated tasks.json + session log (commit: docs: start S0-test)

@@ -5,7 +5,7 @@
       "name": "Bundle manager manifest in releases",
       "type": "code",
       "phase": "Settings Stack",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Ensure release bundles + installers carry config/manager_hooks.yaml (and related manifests) so health/doctor work out of the box.",
       "references": [
         "docs/project_management/next/settings-stack/settings_stack_plan.md",
