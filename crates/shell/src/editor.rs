@@ -4,9 +4,9 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use reedline::{
-    default_emacs_keybindings, ColumnarMenu, Completer, DefaultValidator, Emacs,
-    ExampleHighlighter, ExternalPrinter, FileBackedHistory, MenuBuilder, Prompt, PromptEditMode,
-    PromptHistorySearch, PromptHistorySearchStatus, Reedline, ReedlineMenu, Suggestion,
+    default_emacs_keybindings, ColumnarMenu, Completer, Emacs, ExampleHighlighter, ExternalPrinter,
+    FileBackedHistory, MenuBuilder, Prompt, PromptEditMode, PromptHistorySearch,
+    PromptHistorySearchStatus, Reedline, ReedlineMenu, Suggestion, ValidationResult, Validator,
 };
 
 use crate::ShellConfig;
@@ -49,7 +49,7 @@ pub(crate) fn build_editor(config: &ShellConfig) -> Result<EditorSetup> {
         .with_edit_mode(edit_mode)
         .with_completer(completer)
         .with_highlighter(Box::new(ExampleHighlighter::default()))
-        .with_validator(Box::new(DefaultValidator))
+        .with_validator(Box::new(SubstrateValidator::default()))
         .with_transient_prompt(transient_prompt)
         .with_menu(ReedlineMenu::EngineCompleter(Box::new(
             ColumnarMenu::default().with_name("completion_menu"),
@@ -196,5 +196,199 @@ fn path_separator() -> char {
         ';'
     } else {
         ':'
+    }
+}
+
+#[derive(Default)]
+struct SubstrateValidator;
+
+impl Validator for SubstrateValidator {
+    fn validate(&self, line: &str) -> ValidationResult {
+        if line.trim().is_empty() {
+            return ValidationResult::Complete;
+        }
+
+        let mut in_single = false;
+        let mut in_double = false;
+        let mut in_backticks = false;
+        let mut escape = false;
+        let mut subshell_depth = 0usize;
+        let mut brace_stack: Vec<char> = Vec::new();
+        let mut pending_operator = false;
+
+        let mut chars = line.chars().peekable();
+        while let Some(ch) = chars.next() {
+            if escape {
+                escape = false;
+                if pending_operator && !ch.is_whitespace() {
+                    pending_operator = false;
+                }
+                continue;
+            }
+
+            if pending_operator && !ch.is_whitespace() {
+                pending_operator = false;
+            }
+
+            if ch == '\\' && !in_single {
+                escape = true;
+                continue;
+            }
+
+            if ch == '$' && !in_single && !in_backticks {
+                if let Some('(') = chars.peek().copied() {
+                    chars.next();
+                    subshell_depth += 1;
+                    continue;
+                }
+            }
+
+            if in_single {
+                if ch == '\'' {
+                    in_single = false;
+                }
+                continue;
+            }
+
+            if in_double {
+                if ch == '"' {
+                    in_double = false;
+                }
+                continue;
+            }
+
+            if in_backticks {
+                if ch == '`' {
+                    in_backticks = false;
+                }
+                continue;
+            }
+
+            match ch {
+                '{' => brace_stack.push('}'),
+                '[' => brace_stack.push(']'),
+                '(' => brace_stack.push(')'),
+                '}' | ']' | ')' => {
+                    if brace_stack.last() == Some(&ch) {
+                        brace_stack.pop();
+                    }
+                    if ch == ')' && subshell_depth > 0 {
+                        subshell_depth -= 1;
+                    }
+                }
+                '`' => in_backticks = true,
+                '\'' => in_single = true,
+                '"' => in_double = true,
+                '&' => {
+                    if let Some(next) = chars.peek().copied() {
+                        if next == '&' {
+                            chars.next();
+                            pending_operator = true;
+                            continue;
+                        }
+                    }
+                }
+                '|' => {
+                    if let Some(next) = chars.peek().copied() {
+                        if next == '|' || next == '&' {
+                            chars.next();
+                            pending_operator = true;
+                            continue;
+                        }
+                    }
+                    pending_operator = true;
+                    continue;
+                }
+                _ => {}
+            }
+        }
+
+        let has_unclosed_quotes = in_single || in_double || in_backticks;
+        let has_unmatched_braces = !brace_stack.is_empty() || subshell_depth > 0;
+        let has_line_continuation = !in_single && trailing_line_continuation(line);
+
+        if has_unclosed_quotes || has_unmatched_braces || pending_operator || has_line_continuation {
+            ValidationResult::Incomplete
+        } else {
+            ValidationResult::Complete
+        }
+    }
+}
+
+fn trailing_line_continuation(line: &str) -> bool {
+    let trimmed = line.trim_end_matches(|c| matches!(c, ' ' | '\t'));
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    let mut count = 0;
+    for ch in trimmed.chars().rev() {
+        if ch == '\\' {
+            count += 1;
+        } else {
+            break;
+        }
+    }
+    count % 2 == 1
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn validate(input: &str) -> ValidationResult {
+        SubstrateValidator::default().validate(input)
+    }
+
+    #[test]
+    fn detects_unclosed_single_quote() {
+        assert!(matches!(
+            validate("echo '"),
+            ValidationResult::Incomplete
+        ));
+    }
+
+    #[test]
+    fn detects_unclosed_double_quote() {
+        assert!(matches!(
+            validate("echo \"foo"),
+            ValidationResult::Incomplete
+        ));
+    }
+
+    #[test]
+    fn detects_trailing_backslash() {
+        assert!(matches!(
+            validate("echo foo \\"),
+            ValidationResult::Incomplete
+        ));
+    }
+
+    #[test]
+    fn detects_pending_pipeline_operator() {
+        assert!(matches!(
+            validate("echo foo |"),
+            ValidationResult::Incomplete
+        ));
+        assert!(matches!(
+            validate("echo foo ||"),
+            ValidationResult::Incomplete
+        ));
+        assert!(matches!(
+            validate("echo foo &&"),
+            ValidationResult::Incomplete
+        ));
+    }
+
+    #[test]
+    fn completes_valid_command() {
+        assert!(matches!(
+            validate("echo foo && echo bar"),
+            ValidationResult::Complete
+        ));
+        assert!(matches!(
+            validate("echo '{'"),
+            ValidationResult::Complete
+        ));
     }
 }

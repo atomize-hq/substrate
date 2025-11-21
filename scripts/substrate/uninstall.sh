@@ -13,11 +13,11 @@ TMP_LOG="$(mktemp -t substrate-uninstall-log.XXXXXX)"
 cleanup() { rm -f "${TMP_LOG}"; }
 trap cleanup EXIT
 
-echo "[substrate-uninstall] Removing Substrate (logs: ${TMP_LOG})"
+printf "\033[32mSubstrate uninstall running…\033[0m\n"
 if "${UPSTREAM_UNINSTALL}" "$@" >"${TMP_LOG}" 2>&1; then
-  echo "[substrate-uninstall] Done."
+  printf "\033[32mSubstrate uninstall complete!\033[0m\n"
 else
-  echo "[substrate-uninstall] Failed. See ${TMP_LOG} for details." >&2
+  printf "\033[31mSubstrate uninstall failed.\033[0m See %s for details.\n" "${TMP_LOG}" >&2
   cat "${TMP_LOG}" >&2
   exit 1
 fi

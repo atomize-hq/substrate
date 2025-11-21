@@ -22,7 +22,7 @@ GitHub Releases (`https://github.com/atomize-hq/substrate/releases`).
 ### Linux / WSL (systemd)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/substrate/install-substrate.sh | bash
+curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/substrate/install.sh | bash
 ```
 
 The installer will:
@@ -69,17 +69,18 @@ During installation the script:
 ### Offline install
 
 ```bash
-./scripts/substrate/install-substrate.sh --archive /path/to/substrate-v0.2.0-beta-linux_x86_64.tar.gz
+./scripts/substrate/install.sh --archive /path/to/substrate-v0.2.0-beta-linux_x86_64.tar.gz
 ```
 
-Use the copy of `scripts/substrate/install-substrate.sh` shipped inside the bundle. The script
+Use the copy of `scripts/substrate/install.sh` (wrapper around
+`install-substrate.sh`) shipped inside the bundle. The script
 accepts the same flags as the hosted version (`--version`, `--prefix`,
 `--no-world`, `--no-shims`, `--sync-deps`, `--dry-run`, `--archive/--artifact-dir`).
 
 ### macOS (arm64)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/substrate/install-substrate.sh | bash
+curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/substrate/install.sh | bash
 ```
 
 The macOS flow mirrors the Linux installer but additionally:

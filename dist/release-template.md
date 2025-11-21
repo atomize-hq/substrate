@@ -5,7 +5,7 @@
 - **Linux / macOS** (ships binaries + Lima/WSL helpers):
 
   ```bash
-  curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/${RELEASE_TAG}/scripts/substrate/install-substrate.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/${RELEASE_TAG}/scripts/substrate/install.sh | bash
   ```
 
 - **Windows (PowerShell, run as Administrator):**
@@ -15,7 +15,7 @@
   ```
 
 - **Uninstall (all platforms):**
-  - Linux/macOS: `curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/${RELEASE_TAG}/scripts/substrate/uninstall-substrate.sh | bash`
+  - Linux/macOS: `curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/${RELEASE_TAG}/scripts/substrate/uninstall.sh | bash`
   - Windows: `iwr https://raw.githubusercontent.com/atomize-hq/substrate/${RELEASE_TAG}/scripts/windows/uninstall-substrate.ps1 -UseBasicParsing | iex`
 
 Refer to `docs/INSTALLATION.md` and `docs/WORLD.md` for advanced flags, prereqs, and Lima/WSL troubleshooting flows.

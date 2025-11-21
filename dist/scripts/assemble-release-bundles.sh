@@ -219,6 +219,10 @@ copy_support_contents() {
     mkdir -p "$bundle_root/scripts"
     cp -a "$SUPPORT_DIR/scripts/." "$bundle_root/scripts/"
   fi
+  if [[ -d "$SUPPORT_DIR/config" ]]; then
+    mkdir -p "$bundle_root/config"
+    cp -a "$SUPPORT_DIR/config/." "$bundle_root/config/"
+  fi
 }
 
 package_bundle() {
