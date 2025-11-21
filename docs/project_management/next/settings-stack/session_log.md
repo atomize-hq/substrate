@@ -229,3 +229,11 @@ Template (copy/paste and fill in):
 - Worktree: planned wt/ss-s4-world-override-test (branch ss-s4-world-override-test)
 - Plan: create worktree; add tests for --world override vs disabled install/config/env and --no-world; cover flag/config/env precedence with caged/world-root interactions; update installer smoke assertions if metadata/env exports change; run cargo fmt; cargo test -p substrate-shell world_root; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
 - Blockers: none
+
+## [2025-11-21 21:18 UTC] Test – S4-test – END
+- Worktree commits: 34a660f
+- Commands: cargo fmt; cargo test -p substrate-shell world_root; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
+- Results: world override/caged/world-root precedence tests added; world_root suite passes; installer smoke scenarios pass (temp roots: /tmp/substrate-installer-default.NazMko, /tmp/substrate-installer-no-world.39Xwvi)
+- Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S4-integ.md (confirmed)
+- Docs commit: pending (tasks/status/log updates on feat/settings-stack)
+- Next steps / blockers: ready for S4-integ to merge code+tests
