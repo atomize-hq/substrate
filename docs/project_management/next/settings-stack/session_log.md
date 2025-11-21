@@ -113,3 +113,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: n/a (verified docs/project_management/next/settings-stack/kickoff_prompts/S2-code.md and docs/project_management/next/settings-stack/kickoff_prompts/S2-test.md)
 - Docs commit: docs: finish S1-integ (this commit)
 - Next steps / blockers: none
+
+## [2025-11-21 14:54 UTC] Code – S2-code – START
+- Checked out feat/settings-stack, pulled latest
+- Updated tasks.json + session log (commit: pending)
+- Worktree: planned wt/ss-s2-settings-code
+- Plan: implement settings stack precedence (flags > dir config > global config > env > default), wire world root CLI flags, keep shell parsing aligned with install metadata, update configuration/usage docs, run fmt/clippy/tests as required
+- Blockers: none
