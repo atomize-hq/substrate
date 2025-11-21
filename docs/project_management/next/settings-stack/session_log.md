@@ -207,3 +207,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: n/a
 - Docs commit: 3fcf697 (merge with tasks/status/log updates)
 - Next steps / blockers: merge into feat/settings-stack and drop the integration worktree
+
+## [2025-11-21 20:21 UTC] Code – S4-code – START
+- Checked out feat/settings-stack, pulled latest
+- Set S4-code to in_progress in tasks.json; logging START entry
+- Worktree: planned wt/ss-s4-world-override-code (branch ss-s4-world-override-code)
+- Plan: add one-shot --world override with flag precedence updates; run cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_root
+- Blockers: none
