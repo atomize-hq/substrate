@@ -628,6 +628,131 @@
       "worktree": "wt/ss-s4-world-override-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S4-integ.md"
+    },
+    {
+      "id": "S5-code",
+      "name": "Rename root to anchor + caged guard fix",
+      "type": "code",
+      "phase": "Settings Stack",
+      "status": "pending",
+      "description": "Rename the world root selector to anchor terminology (mode/path) while keeping backward compatibility, and fix caged enforcement for complex commands when the world is disabled.",
+      "references": [
+        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "docs/CONFIGURATION.md",
+        "docs/USAGE.md",
+        "crates/shell/src/lib.rs",
+        "crates/shell/src/settings.rs",
+        "scripts/substrate/dev-install-substrate.sh"
+      ],
+      "acceptance_criteria": [
+        "CLI/env/config/installer metadata expose anchor_mode/anchor_path (with backward-compatible parsing of root_mode/root_path/envs/flags).",
+        "Docs and CLI help reflect the anchor naming while noting compatibility.",
+        "Caged root guard applies to complex commands (e.g., cd chains) even when world is disabled or unavailable.",
+        "No regressions to world/caged precedence; code-only changes (tests handled separately)."
+      ],
+      "start_checklist": [
+        "Checkout feat/settings-stack, pull latest",
+        "Set S5-code to in_progress, update session_log.md, commit docs update",
+        "Create task branch ss-s5-anchor-code",
+        "Create worktree wt/ss-s5-anchor-code from that branch",
+        "Ensure git status is clean before coding"
+      ],
+      "end_checklist": [
+        "Ensure required fmt/lint/tests per prompt are green",
+        "Commit worktree changes, merge back to feat/settings-stack, remove worktree",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm S5-test kickoff prompt path in the log"
+      ],
+      "depends_on": [
+        "S4-integ"
+      ],
+      "concurrent_with": [
+        "S5-test"
+      ],
+      "worktree": "wt/ss-s5-anchor-code",
+      "integration_task": "S5-integ",
+      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S5-code.md"
+    },
+    {
+      "id": "S5-test",
+      "name": "Test anchor naming + caged guard",
+      "type": "test",
+      "phase": "Settings Stack",
+      "status": "pending",
+      "description": "Add tests covering anchor naming compatibility and ensure caged enforcement applies to complex commands when the world is disabled or unavailable.",
+      "references": [
+        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "crates/shell/src/lib.rs",
+        "crates/shell/src/settings.rs",
+        "tests/installers/install_smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "Tests verify anchor_mode/anchor_path precedence and backward compatibility with root_mode/root_path env/config/flags.",
+        "Tests cover caged guard behavior for complex commands (e.g., chained cd) with world disabled and enabled.",
+        "Installer smoke expectations updated if metadata/env keys change.",
+        "No production code changes beyond minimal test scaffolding."
+      ],
+      "start_checklist": [
+        "Checkout feat/settings-stack, pull latest",
+        "Set S5-test to in_progress, update session_log.md, commit docs update",
+        "Create worktree wt/ss-s5-anchor-test from branch ss-s5-anchor-test",
+        "Ensure git status is clean before editing tests"
+      ],
+      "end_checklist": [
+        "Run required fmt/tests per prompt; capture outputs in session log",
+        "Commit worktree changes, merge back to feat/settings-stack, remove worktree",
+        "Update tasks.json + session_log.md with END entry (commands/results/blockers)",
+        "Create/confirm S5-integ kickoff prompt path in the log"
+      ],
+      "depends_on": [
+        "S4-integ"
+      ],
+      "concurrent_with": [
+        "S5-code"
+      ],
+      "worktree": "wt/ss-s5-anchor-test",
+      "integration_task": "S5-integ",
+      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S5-test.md"
+    },
+    {
+      "id": "S5-integ",
+      "name": "Integrate anchor naming + caged guard",
+      "type": "integration",
+      "phase": "Settings Stack",
+      "status": "pending",
+      "description": "Merge the anchor naming/code changes and caged guard fixes with the test updates, resolve conflicts, and ensure fmt/clippy/tests and installer scenarios pass.",
+      "references": [
+        "docs/project_management/next/settings-stack/settings_stack_plan.md",
+        "crates/shell",
+        "tests/installers",
+        "scripts/substrate"
+      ],
+      "acceptance_criteria": [
+        "wt/ss-s5-anchor-integ merges code+tests with clean fmt/clippy/tests/installer smoke.",
+        "feat/settings-stack updated with integration results and doc/task/log entries committed.",
+        "Any follow-up kickoff prompts are recorded before ending the session."
+      ],
+      "start_checklist": [
+        "Checkout feat/settings-stack, pull latest",
+        "Confirm S5-code/test completed",
+        "Set S5-integ to in_progress, update session_log.md, commit docs update",
+        "Create task branch ss-s5-anchor-integ",
+        "Create worktree wt/ss-s5-anchor-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration branch/worktree and resolve conflicts",
+        "Run required fmt/clippy/tests and installer smoke scenarios",
+        "Merge integration branch back to feat/settings-stack and remove the worktree",
+        "Update tasks.json + session_log.md with END entry; push or hand off"
+      ],
+      "depends_on": [
+        "S5-code",
+        "S5-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ss-s5-anchor-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/settings-stack/kickoff_prompts/S5-integ.md"
     }
   ]
 }
