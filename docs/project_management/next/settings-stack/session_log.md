@@ -270,15 +270,23 @@ Template (copy/paste and fill in):
 
 ## [2025-11-22 02:46 UTC] Test – S5-test – START
 - Checked out feat/settings-stack, pulled latest
-- Updated tasks.json + session log (commit: pending)
+- Updated tasks.json + session log (commit: docs: start S5-test)
 - Worktree: planned wt/ss-s5-anchor-test (branch ss-s5-anchor-test)
 - Plan: create task worktree; add tests for anchor_mode/path precedence + root_* compatibility; cover caged guard on complex commands with/without world; adjust installer smoke expectations if metadata/env changes; run cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell caged; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
 - Blockers: none
 
+## [2025-11-22 03:22 UTC] Test – S5-test – END
+- Worktree commits: cde5dec
+- Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell caged; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
+- Results: fmt clean; world_root + caged suites passed; installer smoke scenarios passed (temp roots: /tmp/substrate-installer-default.4KEHqs, /tmp/substrate-installer-no-world.Agesl7)
+- Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S5-integ.md (confirmed)
+- Docs commit: docs: finish S5-test (this commit)
+- Next steps / blockers: merge branch into feat/settings-stack and drop worktree when ready
+
 ## [2025-11-22 03:35 UTC] Integ – S5-integ – START
 - Checked out feat/settings-stack, pulled latest
 - Confirmed S5-code merged (feat/settings-stack includes ss-s5-anchor-code); integrating ss-s5-anchor-test
-- Updated tasks.json + session log (commit: pending)
+- Updated tasks.json + session log (commit: docs: start S5-integ)
 - Worktree: planned wt/ss-s5-anchor-integ (branch ss-s5-anchor-integ)
 - Plan: create integration branch/worktree; merge ss-s5-anchor-test into feat/settings-stack baseline; resolve any conflicts; run cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell caged; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
 - Blockers: none
