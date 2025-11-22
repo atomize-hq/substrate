@@ -381,6 +381,36 @@ mod tests {
         std::fs::write(path, body).expect("write settings file");
     }
 
+    fn write_anchor_world_settings(
+        path: &Path,
+        anchor_mode: &str,
+        anchor_path: Option<&Path>,
+        legacy_mode: Option<&str>,
+        legacy_path: Option<&Path>,
+        caged: Option<bool>,
+    ) {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("create anchor settings parent");
+        }
+        let mut body = format!("[world]\nanchor_mode = \"{anchor_mode}\"\n");
+        if let Some(anchor) = anchor_path {
+            body.push_str(&format!("anchor_path = \"{}\"\n", anchor.display()));
+        }
+        if let Some(mode) = legacy_mode {
+            body.push_str(&format!("root_mode = \"{mode}\"\n"));
+        }
+        if let Some(root) = legacy_path {
+            body.push_str(&format!("root_path = \"{}\"\n", root.display()));
+        }
+        if let Some(flag) = caged {
+            body.push_str(&format!(
+                "caged = {}\n",
+                if flag { "true" } else { "false" }
+            ));
+        }
+        std::fs::write(path, body).expect("write anchor settings file");
+    }
+
     fn setup_substrate_home(temp: &TempDir) -> PathBuf {
         let home = temp.path().join("home").join(".substrate");
         std::fs::create_dir_all(&home).expect("create substrate home");
@@ -394,12 +424,35 @@ mod tests {
         let home = setup_substrate_home(&temp);
         let _env = EnvGuard::new(vec![
             ("SUBSTRATE_HOME", Some(home.display().to_string())),
+            ("SUBSTRATE_ANCHOR_MODE", None),
+            ("SUBSTRATE_ANCHOR_PATH", None),
             ("SUBSTRATE_WORLD_ROOT_MODE", None),
             ("SUBSTRATE_WORLD_ROOT_PATH", None),
             ("SUBSTRATE_CAGED", None),
         ]);
+        assert!(std::env::var("SUBSTRATE_ANCHOR_MODE").is_err());
+        assert!(std::env::var("SUBSTRATE_ANCHOR_PATH").is_err());
+        assert!(std::env::var("SUBSTRATE_WORLD_ROOT_MODE").is_err());
+        assert!(std::env::var("SUBSTRATE_WORLD_ROOT_PATH").is_err());
         let launch_dir = temp.path().join("workspace");
         std::fs::create_dir_all(&launch_dir).unwrap();
+        let dir_settings = launch_dir.join(".substrate/settings.toml");
+        let global_settings = home.join("config.toml");
+        assert!(
+            !dir_settings.exists(),
+            "unexpected directory settings file at {}",
+            dir_settings.display()
+        );
+        assert!(
+            !global_settings.exists(),
+            "unexpected global config at {}",
+            global_settings.display()
+        );
+
+        let cwd = std::env::current_dir().unwrap();
+        let env_settings = world_root_from_env();
+        assert_eq!(env_settings.mode, WorldRootMode::Project);
+        assert_eq!(env_settings.path, cwd);
 
         let settings = resolve_world_root(None, None, None, &launch_dir).expect("default settings");
 
@@ -415,17 +468,70 @@ mod tests {
         let home = setup_substrate_home(&temp);
         let _env = EnvGuard::new(vec![
             ("SUBSTRATE_HOME", Some(home.display().to_string())),
+            ("SUBSTRATE_ANCHOR_MODE", None),
+            ("SUBSTRATE_ANCHOR_PATH", None),
             ("SUBSTRATE_WORLD_ROOT_MODE", Some("custom".into())),
             ("SUBSTRATE_WORLD_ROOT_PATH", Some("/env/root".into())),
             ("SUBSTRATE_CAGED", Some("false".into())),
         ]);
+        assert!(std::env::var("SUBSTRATE_ANCHOR_MODE").is_err());
+        assert!(std::env::var("SUBSTRATE_ANCHOR_PATH").is_err());
+        assert_eq!(
+            std::env::var("SUBSTRATE_WORLD_ROOT_MODE").as_deref(),
+            Ok("custom")
+        );
+        assert_eq!(
+            std::env::var("SUBSTRATE_WORLD_ROOT_PATH").as_deref(),
+            Ok("/env/root")
+        );
         let launch_dir = temp.path().join("project");
         std::fs::create_dir_all(&launch_dir).unwrap();
+        let dir_settings = launch_dir.join(".substrate/settings.toml");
+        let global_settings = home.join("config.toml");
+        assert!(
+            !dir_settings.exists(),
+            "unexpected directory settings file at {}",
+            dir_settings.display()
+        );
+        assert!(
+            !global_settings.exists(),
+            "unexpected global config at {}",
+            global_settings.display()
+        );
+
+        let env_settings = world_root_from_env();
+        assert_eq!(env_settings.mode, WorldRootMode::Custom);
+        assert_eq!(env_settings.path, PathBuf::from("/env/root"));
+        assert!(!env_settings.caged);
 
         let settings = resolve_world_root(None, None, None, &launch_dir).expect("env settings");
 
         assert_eq!(settings.mode, WorldRootMode::Custom);
         assert_eq!(settings.path, PathBuf::from("/env/root"));
+        assert!(!settings.caged);
+    }
+
+    #[test]
+    #[serial]
+    fn world_root_from_env_prefers_anchor_over_legacy_keys() {
+        let temp = TempDir::new().unwrap();
+        let home = setup_substrate_home(&temp);
+        let _env = EnvGuard::new(vec![
+            ("SUBSTRATE_HOME", Some(home.display().to_string())),
+            ("SUBSTRATE_ANCHOR_MODE", Some("custom".into())),
+            ("SUBSTRATE_WORLD_ROOT_MODE", Some("follow-cwd".into())),
+            ("SUBSTRATE_ANCHOR_PATH", Some("/env/anchor".into())),
+            ("SUBSTRATE_WORLD_ROOT_PATH", Some("/env/legacy".into())),
+            ("SUBSTRATE_CAGED", Some("0".into())),
+        ]);
+        let launch_dir = temp.path().join("project");
+        std::fs::create_dir_all(&launch_dir).unwrap();
+
+        let settings =
+            resolve_world_root(None, None, None, &launch_dir).expect("anchor env settings");
+
+        assert_eq!(settings.mode, WorldRootMode::Custom);
+        assert_eq!(settings.path, PathBuf::from("/env/anchor"));
         assert!(!settings.caged);
     }
 
@@ -438,6 +544,8 @@ mod tests {
         write_world_settings(&config_path, "follow-cwd", None, Some(true));
         let _env = EnvGuard::new(vec![
             ("SUBSTRATE_HOME", Some(home.display().to_string())),
+            ("SUBSTRATE_ANCHOR_MODE", None),
+            ("SUBSTRATE_ANCHOR_PATH", None),
             ("SUBSTRATE_WORLD_ROOT_MODE", Some("custom".into())),
             ("SUBSTRATE_WORLD_ROOT_PATH", Some("/env/root".into())),
             ("SUBSTRATE_CAGED", Some("false".into())),
@@ -466,6 +574,8 @@ mod tests {
         );
         let _env = EnvGuard::new(vec![
             ("SUBSTRATE_HOME", Some(home.display().to_string())),
+            ("SUBSTRATE_ANCHOR_MODE", None),
+            ("SUBSTRATE_ANCHOR_PATH", None),
             ("SUBSTRATE_WORLD_ROOT_MODE", Some("custom".into())),
             ("SUBSTRATE_WORLD_ROOT_PATH", Some("/env/root".into())),
             ("SUBSTRATE_CAGED", Some("false".into())),
@@ -502,6 +612,8 @@ mod tests {
         );
         let _env = EnvGuard::new(vec![
             ("SUBSTRATE_HOME", Some(home.display().to_string())),
+            ("SUBSTRATE_ANCHOR_MODE", None),
+            ("SUBSTRATE_ANCHOR_PATH", None),
             ("SUBSTRATE_WORLD_ROOT_MODE", Some("project".into())),
             ("SUBSTRATE_WORLD_ROOT_PATH", Some("/env/root".into())),
             ("SUBSTRATE_CAGED", Some("false".into())),
@@ -532,17 +644,87 @@ mod tests {
 
     #[test]
     #[serial]
+    fn resolve_world_root_honors_anchor_keys_and_legacy_precedence() {
+        let temp = TempDir::new().unwrap();
+        let home = setup_substrate_home(&temp);
+        let global_path = home.join("config.toml");
+        let launch_dir = temp.path().join("project");
+        std::fs::create_dir_all(&launch_dir).unwrap();
+        write_anchor_world_settings(
+            &global_path,
+            "custom",
+            Some(Path::new("/global/anchor")),
+            Some("project"),
+            Some(Path::new("/global/legacy")),
+            Some(true),
+        );
+        let _env = EnvGuard::new(vec![
+            ("SUBSTRATE_HOME", Some(home.display().to_string())),
+            ("SUBSTRATE_ANCHOR_MODE", Some("project".into())),
+            ("SUBSTRATE_WORLD_ROOT_MODE", Some("custom".into())),
+            ("SUBSTRATE_ANCHOR_PATH", Some("/env/anchor".into())),
+            ("SUBSTRATE_WORLD_ROOT_PATH", Some("/env/legacy".into())),
+            ("SUBSTRATE_CAGED", Some("false".into())),
+        ]);
+
+        let settings =
+            resolve_world_root(None, None, None, &launch_dir).expect("global anchor settings");
+        assert_eq!(settings.mode, WorldRootMode::Custom);
+        assert_eq!(settings.path, PathBuf::from("/global/anchor"));
+        assert!(settings.caged);
+
+        let dir_settings = launch_dir.join(".substrate/settings.toml");
+        write_world_settings(
+            &dir_settings,
+            "custom",
+            Some(Path::new("/dir/root")),
+            Some(false),
+        );
+
+        let settings_with_dir =
+            resolve_world_root(None, None, None, &launch_dir).expect("dir settings override");
+        assert_eq!(settings_with_dir.mode, WorldRootMode::Custom);
+        assert_eq!(settings_with_dir.path, PathBuf::from("/dir/root"));
+        assert!(!settings_with_dir.caged);
+    }
+
+    #[test]
+    #[serial]
     fn resolve_world_root_requires_path_for_custom_mode() {
         let temp = TempDir::new().unwrap();
         let home = setup_substrate_home(&temp);
         let _env = EnvGuard::new(vec![
             ("SUBSTRATE_HOME", Some(home.display().to_string())),
+            ("SUBSTRATE_ANCHOR_MODE", None),
+            ("SUBSTRATE_ANCHOR_PATH", None),
             ("SUBSTRATE_WORLD_ROOT_MODE", None),
             ("SUBSTRATE_WORLD_ROOT_PATH", None),
             ("SUBSTRATE_CAGED", None),
         ]);
+        assert!(std::env::var("SUBSTRATE_ANCHOR_MODE").is_err());
+        assert!(std::env::var("SUBSTRATE_ANCHOR_PATH").is_err());
+        assert!(std::env::var("SUBSTRATE_WORLD_ROOT_MODE").is_err());
+        assert!(std::env::var("SUBSTRATE_WORLD_ROOT_PATH").is_err());
         let launch_dir = temp.path().join("project");
         std::fs::create_dir_all(&launch_dir).unwrap();
+        let dir_settings = launch_dir.join(".substrate/settings.toml");
+        let global_settings = home.join("config.toml");
+        assert!(
+            !dir_settings.exists(),
+            "unexpected directory settings file at {}",
+            dir_settings.display()
+        );
+        assert!(
+            !global_settings.exists(),
+            "unexpected global config at {}",
+            global_settings.display()
+        );
+
+        let cwd = std::env::current_dir().unwrap();
+        let env_settings = world_root_from_env();
+        assert_eq!(env_settings.mode, WorldRootMode::Project);
+        assert_eq!(env_settings.path, cwd);
+        assert!(env_settings.caged);
 
         let err = resolve_world_root(Some(WorldRootMode::Custom), None, None, &launch_dir)
             .expect_err("custom without path should error");
@@ -552,13 +734,16 @@ mod tests {
             "unexpected error message: {message}"
         );
     }
-
     #[test]
     #[serial]
     fn effective_root_uses_current_directory_for_follow_mode() {
         let temp = TempDir::new().unwrap();
         let home = setup_substrate_home(&temp);
-        let _env = EnvGuard::new(vec![("SUBSTRATE_HOME", Some(home.display().to_string()))]);
+        let _env = EnvGuard::new(vec![
+            ("SUBSTRATE_HOME", Some(home.display().to_string())),
+            ("SUBSTRATE_ANCHOR_MODE", None),
+            ("SUBSTRATE_ANCHOR_PATH", None),
+        ]);
         let target_cwd = temp.path().join("changing");
         std::fs::create_dir_all(&target_cwd).unwrap();
         let _cwd_guard = CwdGuard::new();

@@ -270,6 +270,8 @@ path = Path(sys.argv[1])
 expected_enabled = sys.argv[2].lower() == "true"
 body = path.read_text()
 world_enabled = None
+anchor_mode = None
+anchor_path = None
 root_mode = None
 root_path = None
 caged = None
@@ -305,7 +307,11 @@ for raw in body.splitlines():
     if section == "install" and key == "world_enabled":
         world_enabled = parse_bool(value)
     elif section == "world":
-        if key == "root_mode":
+        if key == "anchor_mode":
+            anchor_mode = parse_string(value)
+        elif key == "anchor_path":
+            anchor_path = parse_string(value)
+        elif key == "root_mode":
             root_mode = parse_string(value)
         elif key == "root_path":
             root_path = parse_string(value)
@@ -316,21 +322,29 @@ if world_enabled is None:
     raise SystemExit("world_enabled missing under [install]")
 if world_enabled != expected_enabled:
     raise SystemExit(f"world_enabled={world_enabled} (expected {expected_enabled})")
+if anchor_mode is None:
+    raise SystemExit("world.anchor_mode missing under [world]")
+if anchor_mode != "project":
+    raise SystemExit(f"world.anchor_mode={anchor_mode} (expected project)")
+if anchor_path is None:
+    raise SystemExit("world.anchor_path missing under [world]")
+if anchor_path != "":
+    raise SystemExit(f"world.anchor_path={anchor_path!r} (expected empty string)")
 if root_mode is None:
-    raise SystemExit("world.root_mode missing under [world]")
-if root_mode != "project":
-    raise SystemExit(f"world.root_mode={root_mode} (expected project)")
+    raise SystemExit("world.root_mode missing under [world] (expected backward compatibility)")
+if root_mode != anchor_mode:
+    raise SystemExit(f"world.root_mode={root_mode} (expected {anchor_mode})")
 if root_path is None:
-    raise SystemExit("world.root_path missing under [world]")
-if root_path != "":
-    raise SystemExit(f"world.root_path={root_path!r} (expected empty string)")
+    raise SystemExit("world.root_path missing under [world] (expected backward compatibility)")
+if root_path != anchor_path:
+    raise SystemExit(f"world.root_path={root_path!r} (expected {anchor_path!r})")
 if caged is None:
     raise SystemExit("world.caged missing under [world]")
 if caged is not True:
     raise SystemExit(f"world.caged={caged} (expected true)")
 PY
 
-  log "Verified install config at ${config} (world_enabled=${expected_flag}; root_mode=project root_path=\"\" caged=true)"
+  log "Verified install config at ${config} (world_enabled=${expected_flag}; anchor_mode=project anchor_path=\"\" root_mode=project root_path=\"\" caged=true)"
 }
 
 assert_manifest_present() {
