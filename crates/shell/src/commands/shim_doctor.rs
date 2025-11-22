@@ -123,8 +123,8 @@ pub enum RepairOutcome {
     },
 }
 
-pub fn run_doctor(json_mode: bool) -> Result<()> {
-    let report = collect_report(false)?;
+pub fn run_doctor(json_mode: bool, cli_no_world: bool, cli_force_world: bool) -> Result<()> {
+    let report = collect_report(cli_no_world, cli_force_world)?;
     if json_mode {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
@@ -133,8 +133,11 @@ pub fn run_doctor(json_mode: bool) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn collect_report(cli_no_world: bool) -> Result<ShimDoctorReport> {
-    build_report(cli_no_world)
+pub(crate) fn collect_report(
+    cli_no_world: bool,
+    cli_force_world: bool,
+) -> Result<ShimDoctorReport> {
+    build_report(cli_no_world, cli_force_world)
 }
 
 pub fn run_repair(manager: &str, auto_confirm: bool) -> Result<RepairOutcome> {
@@ -199,7 +202,7 @@ pub fn run_repair(manager: &str, auto_confirm: bool) -> Result<RepairOutcome> {
     })
 }
 
-fn build_report(cli_no_world: bool) -> Result<ShimDoctorReport> {
+fn build_report(cli_no_world: bool, cli_force_world: bool) -> Result<ShimDoctorReport> {
     let (manifest_info, manifest_paths) = build_manifest_paths()?;
     let manifest = ManagerManifest::load(&manifest_info.base, manifest_info.overlay.as_deref())?;
     let spec_map = manifest_spec_map(manifest);
@@ -226,7 +229,7 @@ fn build_report(cli_no_world: bool) -> Result<ShimDoctorReport> {
         states,
         hints,
         world: Some(gather_world_doctor_snapshot()),
-        world_deps: Some(gather_world_deps_section(cli_no_world)),
+        world_deps: Some(gather_world_deps_section(cli_no_world, cli_force_world)),
     })
 }
 
@@ -446,7 +449,7 @@ fn gather_world_doctor_snapshot() -> WorldDoctorSnapshot {
     }
 }
 
-fn gather_world_deps_section(cli_no_world: bool) -> WorldDepsDoctorSection {
+fn gather_world_deps_section(cli_no_world: bool, cli_force_world: bool) -> WorldDepsDoctorSection {
     match try_load_health_fixture("world_deps.json") {
         Ok(Some(value)) => match serde_json::from_value::<WorldDepsStatusReport>(value.clone()) {
             Ok(report) => {
@@ -475,7 +478,7 @@ fn gather_world_deps_section(cli_no_world: bool) -> WorldDepsDoctorSection {
     }
 
     let requested: Vec<String> = Vec::new();
-    match world_deps::status_report_for_health(cli_no_world, &requested) {
+    match world_deps::status_report_for_health(cli_no_world, cli_force_world, &requested) {
         Ok(report) => WorldDepsDoctorSection {
             report: Some(report),
             error: None,

@@ -26,12 +26,19 @@ All agents (code, test, integration) **must** follow the same session flow on
 2. Read this plan, `tasks.json`, the latest `session_log.md`, and the kickoff
    prompt for your task.
 3. Update `tasks.json` (set your task to `in_progress`) and append a START entry
-   to the session log.
-4. Commit the doc-only change on `feat/settings-stack`
+   to the session log. Commit the doc-only change on `feat/settings-stack`
    (`git commit -am "docs: start <task-id>"`).
-5. Create the worktree listed in `tasks.json` (e.g.,
-   `git worktree add wt/ss-s1-config-code feat/settings-stack`). Never edit
-   docs/tasks/session log inside a worktree.
+4. Create a **dedicated task branch** from `feat/settings-stack`, named for the
+   task (e.g., `ss-s1-config-code`):
+   ```
+   git checkout -b ss-s1-config-code
+   ```
+5. Create the worktree from that task branch (from repo root):
+   ```
+   git worktree add wt/ss-s1-config-code ss-s1-config-code
+   cd wt/ss-s1-config-code
+   ```
+   Never edit docs/tasks/session log inside a worktree.
 
 ### Active Work (worktree)
 - Stay inside the scope defined by your kickoff prompt. Production changes go in
@@ -43,7 +50,14 @@ All agents (code, test, integration) **must** follow the same session flow on
 1. Ensure fmt/lint/tests (if required by the kickoff prompt) pass in the
    worktree.
 2. Commit your worktree changes with a descriptive message.
-3. Return to `feat/settings-stack` and merge/cherry-pick from the worktree.
+3. Return to the task branch in repo root and merge/cherry-pick from the
+   worktree (if the worktree is already on the task branch, skip merge).
+4. Merge the task branch back into `feat/settings-stack`:
+   ```
+   git checkout feat/settings-stack
+   git pull --ff-only
+   git merge --ff-only ss-s1-config-code   # or appropriate task branch
+   ```
 4. Update `tasks.json` (e.g., set to `completed`), append an END entry to the
    session log (include commands run, test results, blockers), and create the
    next kickoff prompt(s) you are responsible for.
@@ -109,6 +123,7 @@ world_enabled = true
 [world]
 root_mode = "project"
 root_path = ""
+caged = true
 ```
 
 Directory config inherits the same schema but omits `[install]`.
@@ -127,10 +142,17 @@ We are delivering this in two sequential buckets, each with code/test/integratio
 3. **S2 – Settings Stack & World Root**
    - Implement the layered settings stack, new CLI flag/env vars, config file
      parsing, and documentation (depends on S1 being merged).
+4. **S3 – Caged Root Guard**
+   - Replace world-root flags with a boolean caged guard, persist it in config,
+     and enforce anchor bounce even when world isolation is disabled.
+5. **S4 – Force World Override**
+   - Add a `--world` flag to temporarily override disabled installs/config,
+     mirror `--no-world` as the opt-out, and document precedence/behavior.
 
 S0-code/test run in parallel, followed by S0-integ. After S0-integ merges, S1
 code/test may start. Likewise, **do not** start S2 code/test until S1-integ has
 merged into `feat/settings-stack`; each stage builds on the previous one.
 Integration tasks always depend on the corresponding code + test tasks.
+S3 follows S2-integ, and S4 follows S3-integ.
 
 See `tasks.json` for detailed entries, worktree names, and dependencies.

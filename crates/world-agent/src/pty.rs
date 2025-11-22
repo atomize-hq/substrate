@@ -1,5 +1,7 @@
 //! PTY WebSocket handler for world-agent implementing JSON frame protocol
 
+#[cfg(target_os = "linux")]
+use crate::service::resolve_project_dir;
 use crate::service::WorldAgentService;
 use axum::extract::ws::{Message, WebSocket};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
@@ -178,13 +180,29 @@ pub async fn handle_ws_pty(
     #[cfg(target_os = "linux")]
     {
         use world_api::{ResourceLimits, WorldSpec};
+        let project_dir = match resolve_project_dir(Some(&env), Some(&cwd)) {
+            Ok(dir) => dir,
+            Err(err) => {
+                let _ = tx
+                    .lock()
+                    .await
+                    .send(Message::Text(
+                        serde_json::to_string(&ServerMessage::Error {
+                            message: format!("Failed to resolve world root: {}", err),
+                        })
+                        .unwrap(),
+                    ))
+                    .await;
+                return;
+            }
+        };
         let spec = WorldSpec {
             reuse_session: true,
             isolate_network: true,
             limits: ResourceLimits::default(),
             enable_preload: false,
             allowed_domains: substrate_broker::allowed_domains(),
-            project_dir: cwd.clone(),
+            project_dir,
             always_isolate: false, // Default: use heuristic-based isolation
         };
         if let Ok(world) = service.ensure_session_world(&spec) {

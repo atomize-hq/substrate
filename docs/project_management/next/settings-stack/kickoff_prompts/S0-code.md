@@ -5,9 +5,10 @@
 2. Read `settings_stack_plan.md`, `tasks.json`, `session_log.md`, and this prompt.
 3. Set `S0-code` to `in_progress` in `tasks.json`, add a START entry to
    `session_log.md`, and commit the docs update (`git commit -am "docs: start S0-code"`).
-4. Create the worktree and switch into it:
+4. Create the task branch and worktree:
    ```
-   git worktree add wt/ss-s0-manifest-code feat/settings-stack
+   git checkout -b ss-s0-manifest-code
+   git worktree add wt/ss-s0-manifest-code ss-s0-manifest-code
    cd wt/ss-s0-manifest-code
    ```
 

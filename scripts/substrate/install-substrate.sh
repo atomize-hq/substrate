@@ -481,7 +481,7 @@ normalize_prefix() {
 initialize_metadata_paths() {
   MANAGER_ENV_PATH="${PREFIX}/manager_env.sh"
   MANAGER_INIT_PATH="${PREFIX}/manager_init.sh"
-  INSTALL_CONFIG_PATH="${PREFIX}/config.json"
+  INSTALL_CONFIG_PATH="${PREFIX}/config.toml"
 }
 
 ensure_manager_init_placeholder() {
@@ -508,6 +508,7 @@ write_manager_env_script() {
   local enabled="$1"
   local state="disabled"
   local enabled_flag="0"
+  local caged_flag="1"
   if [[ "${enabled}" -eq 1 ]]; then
     state="enabled"
     enabled_flag="1"
@@ -532,6 +533,11 @@ write_manager_env_script() {
 # Managed by ${INSTALLER_NAME} on ${today}
 export SUBSTRATE_WORLD=${state}
 export SUBSTRATE_WORLD_ENABLED=${enabled_flag}
+export SUBSTRATE_CAGED=${caged_flag}
+export SUBSTRATE_ANCHOR_MODE="project"
+export SUBSTRATE_ANCHOR_PATH=""
+export SUBSTRATE_WORLD_ROOT_MODE="project"
+export SUBSTRATE_WORLD_ROOT_PATH=""
 export SUBSTRATE_MANAGER_ENV=${manager_env_literal}
 export SUBSTRATE_MANAGER_INIT=${manager_init_literal}
 
@@ -573,9 +579,15 @@ write_install_config() {
   config_dir="$(dirname "${INSTALL_CONFIG_PATH}")"
   mkdir -p "${config_dir}"
   cat > "${INSTALL_CONFIG_PATH}.tmp" <<EOF
-{
-  "world_enabled": ${flag}
-}
+[install]
+world_enabled = ${flag}
+
+[world]
+anchor_mode = "project"
+anchor_path = ""
+root_mode = "project"
+root_path = ""
+caged = true
 EOF
   mv "${INSTALL_CONFIG_PATH}.tmp" "${INSTALL_CONFIG_PATH}"
   chmod 0644 "${INSTALL_CONFIG_PATH}" || true
@@ -586,6 +598,35 @@ finalize_install_metadata() {
   ensure_manager_init_placeholder
   write_manager_env_script "${enabled}"
   write_install_config "${enabled}"
+}
+
+ensure_version_config_present() {
+  local version_dir="$1"
+  local config_dir="${version_dir}/config"
+  local manager_manifest="${config_dir}/manager_hooks.yaml"
+  local world_deps="${config_dir}/world-deps.yaml"
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    printf '[%s][dry-run] ensure config manifests exist under %s\n' "${INSTALLER_NAME}" "${config_dir}" >&2
+    return
+  fi
+
+  mkdir -p "${config_dir}"
+
+  if [[ ! -f "${manager_manifest}" ]]; then
+    fatal "manager manifest missing from bundle (expected ${manager_manifest})"
+  fi
+
+  if [[ ! -f "${world_deps}" ]]; then
+    local scripts_world_deps
+    scripts_world_deps="${version_dir}/scripts/substrate/world-deps.yaml"
+    if [[ -f "${scripts_world_deps}" ]]; then
+      cp "${scripts_world_deps}" "${world_deps}"
+      log "Staged world-deps manifest under ${config_dir}"
+    else
+      fatal "world-deps manifest missing from bundle (expected ${world_deps})"
+    fi
+  fi
 }
 
 ensure_macos_prereqs() {
@@ -1169,6 +1210,8 @@ install_macos() {
     cp -R "${release_root}"/. "${version_dir}"/
   fi
 
+  ensure_version_config_present "${version_dir}"
+
   link_binaries "${version_dir}" "${bin_dir}"
 
   local world_enabled=1
@@ -1195,6 +1238,7 @@ install_macos() {
   fi
   log "manager_init placeholder: ${MANAGER_INIT_PATH}"
   log "manager_env script: ${MANAGER_ENV_PATH}"
+  log "config manifests: ${version_dir}/config"
   log "install metadata: ${INSTALL_CONFIG_PATH}"
 
   if [[ "${world_enabled}" -eq 1 ]]; then
@@ -1236,6 +1280,8 @@ install_linux() {
     cp -R "${release_root}"/. "${version_dir}"/
   fi
 
+  ensure_version_config_present "${version_dir}"
+
   link_binaries "${version_dir}" "${bin_dir}"
 
   local world_enabled=1
@@ -1266,6 +1312,7 @@ install_linux() {
   fi
   log "manager_init placeholder: ${MANAGER_INIT_PATH}"
   log "manager_env script: ${MANAGER_ENV_PATH}"
+  log "config manifests: ${version_dir}/config"
   log "install metadata: ${INSTALL_CONFIG_PATH}"
 
   if [[ "${world_enabled}" -eq 1 ]]; then

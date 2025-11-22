@@ -5,9 +5,10 @@
 2. Read `settings_stack_plan.md`, `tasks.json`, the latest `session_log.md`, and this prompt.
 3. Update `tasks.json` (set `S1-test` to `in_progress`) and add a START entry to
    the session log. Commit the doc-only change (`git commit -am "docs: start S1-test"`).
-4. Create the worktree:
+4. Create the task branch and worktree:
    ```
-   git worktree add wt/ss-s1-config-test feat/settings-stack
+   git checkout -b ss-s1-config-test
+   git worktree add wt/ss-s1-config-test ss-s1-config-test
    cd wt/ss-s1-config-test
    ```
 5. Confirm `git status` is clean before editing.
@@ -16,9 +17,10 @@
 - Add/adjust tests that exercise the new TOML install config:
   - Unit tests in `crates/shell/src/commands/world_enable.rs` covering
     load/save (valid/invalid/missing keys, extras preserved).
-  - Extend `tests/installers/install_smoke.sh` (and/ or related fixtures) to
+  - Extend the S0 installer harness (`tests/installers/install_smoke.sh`) to
     assert the installer writes `config.toml` with correct `[install]` payload
-    for default and `--no-world` paths.
+    for default and `--no-world` paths while keeping the manifest + health checks
+    added in S0 passing.
 - Do **not** modify production code apart from tiny test-only helpers.
 - Keep runtime commands minimal; you may run targeted tests directly related to
   this task.

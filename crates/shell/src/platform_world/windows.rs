@@ -1,4 +1,5 @@
 use super::{PlatformWorldContext, WorldTransport};
+use crate::settings;
 use crate::Cli;
 use agent_api_client::{AgentClient, Transport};
 use anyhow::Result;
@@ -61,7 +62,7 @@ where
     }
 
     let world_env = std::env::var("SUBSTRATE_WORLD").unwrap_or_default();
-    if world_env == "disabled" {
+    if world_env == "disabled" && !cli.world {
         return Ok(None);
     }
 
@@ -93,13 +94,9 @@ pub fn world_spec() -> WorldSpec {
         limits: ResourceLimits::default(),
         enable_preload: false,
         allowed_domains: substrate_broker::allowed_domains(),
-        project_dir: current_dir(),
+        project_dir: settings::world_root_from_env().path,
         always_isolate: false,
     }
-}
-
-fn current_dir() -> PathBuf {
-    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
 
 fn warn_once(message: String) {
@@ -231,6 +228,25 @@ mod tests {
     }
 
     #[test]
+    fn ensure_world_ready_ignores_disabled_env_when_forced() {
+        std::env::set_var("SUBSTRATE_WORLD", "disabled");
+        std::env::remove_var("SUBSTRATE_WORLD_ID");
+
+        let cli = Cli::parse_from(["substrate", "--world"]);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let backend = Arc::new(StubBackend::new("wld_forced", calls.clone()));
+
+        let result = ensure_world_ready_impl(&cli, || Ok(backend.clone())).unwrap();
+        assert_eq!(result.as_deref(), Some("wld_forced"));
+        assert_eq!(std::env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
+        assert_eq!(std::env::var("SUBSTRATE_WORLD_ID").unwrap(), "wld_forced");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        std::env::remove_var("SUBSTRATE_WORLD");
+        std::env::remove_var("SUBSTRATE_WORLD_ID");
+    }
+
+    #[test]
     fn ensure_world_ready_respects_no_world_flag() {
         std::env::remove_var("SUBSTRATE_WORLD");
         std::env::remove_var("SUBSTRATE_WORLD_ID");
@@ -242,5 +258,8 @@ mod tests {
         let result = ensure_world_ready_impl(&cli, || Ok(backend.clone())).unwrap();
         assert!(result.is_none());
         assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+        std::env::remove_var("SUBSTRATE_WORLD");
+        std::env::remove_var("SUBSTRATE_WORLD_ID");
     }
 }

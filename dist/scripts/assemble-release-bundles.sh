@@ -211,17 +211,32 @@ stage_support_assets() {
 
 copy_support_contents() {
   local bundle_root="$1"
+  local config_dest="${bundle_root}/config"
+  local config_src="${SUPPORT_DIR}/config"
+  local scripts_src="${SUPPORT_DIR}/scripts"
   if [[ -d "$SUPPORT_DIR/docs" ]]; then
     mkdir -p "$bundle_root/docs"
     cp -a "$SUPPORT_DIR/docs/." "$bundle_root/docs/"
   fi
-  if [[ -d "$SUPPORT_DIR/scripts" ]]; then
+  if [[ -d "$scripts_src" ]]; then
     mkdir -p "$bundle_root/scripts"
-    cp -a "$SUPPORT_DIR/scripts/." "$bundle_root/scripts/"
+    cp -a "$scripts_src/." "$bundle_root/scripts/"
   fi
-  if [[ -d "$SUPPORT_DIR/config" ]]; then
-    mkdir -p "$bundle_root/config"
-    cp -a "$SUPPORT_DIR/config/." "$bundle_root/config/"
+  if [[ -d "$config_src" ]]; then
+    mkdir -p "$config_dest"
+    cp -a "$config_src/." "$config_dest/"
+  fi
+  local world_deps_dest="${config_dest}/world-deps.yaml"
+  if [[ ! -f "$world_deps_dest" && -f "${scripts_src}/substrate/world-deps.yaml" ]]; then
+    mkdir -p "$config_dest"
+    cp "${scripts_src}/substrate/world-deps.yaml" "$world_deps_dest"
+  fi
+
+  if [[ ! -f "${config_dest}/manager_hooks.yaml" ]]; then
+    fatal "manager_hooks.yaml missing from bundled config (expected ${config_dest}/manager_hooks.yaml)"
+  fi
+  if [[ ! -f "${config_dest}/world-deps.yaml" ]]; then
+    fatal "world-deps.yaml missing from bundled config (expected ${config_dest}/world-deps.yaml)"
   fi
 }
 

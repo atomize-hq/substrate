@@ -7,13 +7,14 @@ pub mod manager_init;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod platform_world;
 mod pty_exec;
+mod settings;
 pub mod shim_deploy; // Made public for integration tests
 
 use shim_deploy::{DeploymentStatus, ShimDeployer};
 
 use anyhow::{Context, Result};
 use chrono::Utc;
-use clap::Parser;
+use clap::{ArgAction, Parser, ValueEnum};
 use lazy_static::lazy_static;
 use serde_json::json;
 use std::collections::HashMap;
@@ -32,7 +33,7 @@ use std::sync::Mutex;
 use substrate_broker::{detect_profile, evaluate, Decision};
 use substrate_common::{
     agent_events::{AgentEvent, AgentEventKind},
-    dedupe_path, log_schema, paths as substrate_paths, redact_sensitive, Platform,
+    dedupe_path, log_schema, paths as substrate_paths, redact_sensitive, Platform, WorldRootMode,
 };
 use substrate_trace::{
     append_to_trace, create_span_builder, init_trace, PolicyDecision, TransportMeta,
@@ -47,6 +48,7 @@ use crate::agent_events::{
     clear_agent_event_sender, format_event_line, init_event_channel, publish_agent_event,
     publish_command_completion, schedule_demo_burst, schedule_demo_events,
 };
+use crate::settings::{apply_world_root_env, resolve_world_root};
 
 // Reedline imports
 use reedline::Signal;
@@ -222,6 +224,24 @@ fn is_shell_stream_event(event: &AgentEvent) -> bool {
     event.agent_id == SHELL_AGENT_ID && matches!(event.kind, AgentEventKind::PtyData)
 }
 
+#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
+#[value(rename_all = "kebab-case")]
+pub enum WorldRootModeArg {
+    Project,
+    FollowCwd,
+    Custom,
+}
+
+impl From<WorldRootModeArg> for WorldRootMode {
+    fn from(value: WorldRootModeArg) -> Self {
+        match value {
+            WorldRootModeArg::Project => WorldRootMode::Project,
+            WorldRootModeArg::FollowCwd => WorldRootMode::FollowCwd,
+            WorldRootModeArg::Custom => WorldRootMode::Custom,
+        }
+    }
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "substrate")]
 #[command(version, about = "Substrate shell wrapper with comprehensive tracing", long_about = None)]
@@ -305,8 +325,36 @@ pub struct Cli {
     #[arg(long = "replay-verbose", requires = "replay")]
     pub replay_verbose: bool,
 
-    /// Disable world isolation (Linux only)
-    #[arg(long = "no-world")]
+    /// Keep the shell anchored to the resolved root
+    #[arg(long = "caged", action = ArgAction::SetTrue, conflicts_with = "uncaged")]
+    pub caged: bool,
+
+    /// Allow leaving the resolved root anchor
+    #[arg(long = "uncaged", action = ArgAction::SetTrue, conflicts_with = "caged")]
+    pub uncaged: bool,
+
+    /// Control how the anchor root is selected (project, follow-cwd, or custom)
+    #[arg(
+        long = "anchor-mode",
+        visible_alias = "world-root-mode",
+        value_name = "MODE"
+    )]
+    pub world_root_mode: Option<WorldRootModeArg>,
+
+    /// Explicit anchor path (used when --anchor-mode=custom)
+    #[arg(
+        long = "anchor-path",
+        visible_alias = "world-root-path",
+        value_name = "PATH"
+    )]
+    pub world_root_path: Option<PathBuf>,
+
+    /// Force world isolation for this run (overrides disabled install/config/env)
+    #[arg(long = "world", action = ArgAction::SetTrue, conflicts_with = "no_world")]
+    pub world: bool,
+
+    /// Disable world isolation (host pass-through)
+    #[arg(long = "no-world", action = ArgAction::SetTrue, conflicts_with = "world")]
     pub no_world: bool,
 
     /// Graph commands (ingest/status/what-changed)
@@ -476,6 +524,7 @@ pub struct ShellConfig {
     pub no_exit_on_error: bool,
     pub skip_shims: bool,
     pub no_world: bool,
+    pub world_root: settings::WorldRootSettings,
     pub async_repl: bool,
     pub env_vars: HashMap<String, String>,
     pub manager_init_path: PathBuf,
@@ -852,7 +901,7 @@ impl ShellConfig {
                     std::process::exit(0);
                 }
                 SubCommands::Shim(shim_cmd) => {
-                    handle_shim_command(shim_cmd);
+                    handle_shim_command(shim_cmd, &cli);
                 }
                 SubCommands::Health(health_cmd) => {
                     handle_health_command(health_cmd, &cli)?;
@@ -860,6 +909,22 @@ impl ShellConfig {
                 }
             }
         }
+
+        let launch_cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let cli_caged = if cli.caged {
+            Some(true)
+        } else if cli.uncaged {
+            Some(false)
+        } else {
+            None
+        };
+        let world_root_settings = resolve_world_root(
+            cli.world_root_mode.map(WorldRootMode::from),
+            cli.world_root_path.clone(),
+            cli_caged,
+            &launch_cwd,
+        )?;
+        apply_world_root_env(&world_root_settings);
 
         let session_id = env::var("SHIM_SESSION_ID").unwrap_or_else(|_| Uuid::now_v7().to_string());
 
@@ -886,7 +951,13 @@ impl ShellConfig {
             || env::var("SUBSTRATE_WORLD_ENABLED")
                 .map(|value| value == "0")
                 .unwrap_or(false);
-        let final_no_world = cli.no_world || config_disables_world || env_disables_world;
+        let final_no_world = if cli.world {
+            false
+        } else if cli.no_world {
+            true
+        } else {
+            config_disables_world || env_disables_world
+        };
         update_world_env(final_no_world);
         let manager_init_path = substrate_home.join("manager_init.sh");
         let manager_env_path = substrate_home.join("manager_env.sh");
@@ -956,6 +1027,7 @@ impl ShellConfig {
             no_exit_on_error: cli.no_exit_on_error,
             skip_shims: skip_shims_flag,
             no_world: final_no_world,
+            world_root: world_root_settings,
             async_repl: async_repl_enabled,
             env_vars: HashMap::new(),
             manager_init_path,
@@ -974,9 +1046,7 @@ fn update_world_env(no_world: bool) {
         env::set_var("SUBSTRATE_WORLD", "disabled");
     } else {
         env::set_var("SUBSTRATE_WORLD_ENABLED", "1");
-        if env::var("SUBSTRATE_WORLD").is_err() {
-            env::set_var("SUBSTRATE_WORLD", "enabled");
-        }
+        env::set_var("SUBSTRATE_WORLD", "enabled");
     }
 }
 
@@ -1038,20 +1108,20 @@ fn handle_world_command(cmd: &WorldCmd, cli: &Cli) -> Result<()> {
             commands::world_enable::run_enable(opts)?;
         }
         WorldAction::Deps(opts) => {
-            commands::world_deps::run(opts, cli.no_world)?;
+            commands::world_deps::run(opts, cli.no_world, cli.world)?;
         }
     }
     Ok(())
 }
 
 fn handle_health_command(cmd: &HealthCmd, cli: &Cli) -> Result<()> {
-    commands::health::run(cmd.json, cli.no_world)
+    commands::health::run(cmd.json, cli.no_world, cli.world)
 }
 
-fn handle_shim_command(cmd: &ShimCmd) -> ! {
+fn handle_shim_command(cmd: &ShimCmd, cli: &Cli) -> ! {
     match &cmd.action {
         ShimAction::Doctor { json } => {
-            let exit = match commands::shim_doctor::run_doctor(*json) {
+            let exit = match commands::shim_doctor::run_doctor(*json, cli.no_world, cli.world) {
                 Ok(_) => 0,
                 Err(err) => {
                     eprintln!("substrate shim doctor failed: {:#}", err);
@@ -1894,8 +1964,7 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
                             limits: ResourceLimits::default(),
                             enable_preload: false,
                             allowed_domains: substrate_broker::allowed_domains(),
-                            project_dir: std::env::current_dir()
-                                .unwrap_or_else(|_| std::path::PathBuf::from(".")),
+                            project_dir: config.world_root.effective_root(),
                             always_isolate: false,
                         };
                         if let Ok(handle) = ctx.backend.ensure_session(&spec) {
@@ -4313,7 +4382,7 @@ where
                 limits: ResourceLimits::default(),
                 enable_preload: false,
                 allowed_domains: substrate_broker::allowed_domains(),
-                project_dir: env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+                project_dir: crate::settings::world_root_from_env().path,
                 always_isolate: false,
             };
             let backend = LinuxLocalBackend::new();
@@ -4519,6 +4588,47 @@ fn ok_status() -> Result<ExitStatus> {
     .context("Failed to create success status")
 }
 
+fn canonicalize_cd_target(current_dir: &Path, target: &str) -> Result<PathBuf> {
+    let requested = Path::new(target);
+    let absolute = if requested.is_absolute() {
+        requested.to_path_buf()
+    } else {
+        current_dir.join(requested)
+    };
+    fs::canonicalize(&absolute)
+        .with_context(|| format!("failed to resolve directory {}", absolute.display()))
+}
+
+fn enforce_caged_destination(
+    settings: &settings::WorldRootSettings,
+    current_dir: &Path,
+    requested: PathBuf,
+) -> (PathBuf, Option<String>) {
+    if !settings.caged || settings.mode == WorldRootMode::FollowCwd {
+        return (requested, None);
+    }
+
+    let anchor = settings.anchor_root(current_dir);
+    let anchor_clean = canonicalize_or(&anchor);
+    if path_within_root(&anchor_clean, &requested) {
+        (requested, None)
+    } else {
+        let message = format!(
+            "substrate: info: caged root guard: returning to {}",
+            anchor_clean.display()
+        );
+        (anchor_clean, Some(message))
+    }
+}
+
+fn canonicalize_or(path: &Path) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn path_within_root(anchor: &Path, candidate: &Path) -> bool {
+    candidate == anchor || candidate.starts_with(anchor)
+}
+
 fn handle_builtin(
     config: &ShellConfig,
     command: &str,
@@ -4545,7 +4655,13 @@ fn handle_builtin(
             };
             let expanded = shellexpand::tilde(&target);
             let prev = env::current_dir()?;
-            env::set_current_dir(expanded.as_ref())?;
+            let requested = canonicalize_cd_target(&prev, expanded.as_ref())?;
+            let (destination, warning) =
+                enforce_caged_destination(&config.world_root, &prev, requested);
+            if let Some(message) = warning {
+                eprintln!("{message}");
+            }
+            env::set_current_dir(&destination)?;
             env::set_var("OLDPWD", prev);
             env::set_var("PWD", env::current_dir()?.display().to_string());
             Some(ok_status()?)
@@ -5056,6 +5172,7 @@ fn execute_external(
     cmd_id: &str,
 ) -> Result<ExitStatus> {
     let shell = &config.shell_path;
+    let mut command = command.to_string();
 
     // Verify shell exists
     if which::which(shell).is_err() && !Path::new(shell).exists() {
@@ -5075,28 +5192,36 @@ fn execute_external(
     let is_powershell = shell_name == "powershell.exe" || shell_name == "powershell";
     let is_cmd = shell_name == "cmd.exe" || shell_name == "cmd";
     let is_bash = shell_name == "bash" || shell_name == "bash.exe";
+    let should_guard_anchor = config.world_root.caged
+        && config.world_root.mode != WorldRootMode::FollowCwd
+        && !cfg!(windows)
+        && needs_shell(&command);
+
+    if should_guard_anchor {
+        command = wrap_with_anchor_guard(&command, config);
+    }
+    let mut command_for_shell = command.clone();
 
     if is_pwsh || is_powershell {
         // PowerShell
         if config.ci_mode && !config.no_exit_on_error {
+            command_for_shell = format!("$ErrorActionPreference='Stop'; {command_for_shell}");
             cmd.arg("-NoProfile")
                 .arg("-NonInteractive")
                 .arg("-Command")
-                .arg(format!("$ErrorActionPreference='Stop'; {command}"));
+                .arg(command_for_shell);
         } else {
-            cmd.arg("-NoProfile").arg("-Command").arg(command);
+            cmd.arg("-NoProfile").arg("-Command").arg(command_for_shell);
         }
     } else if is_cmd {
         // Windows CMD
-        cmd.arg("/C").arg(command);
+        cmd.arg("/C").arg(command_for_shell);
     } else {
         // Unix shells (bash, sh, zsh, etc.)
-        let command = if config.ci_mode && !config.no_exit_on_error && is_bash {
-            format!("set -euo pipefail; {command}")
-        } else {
-            command.to_string()
-        };
-        cmd.arg("-c").arg(command);
+        if config.ci_mode && !config.no_exit_on_error && is_bash {
+            command_for_shell = format!("set -euo pipefail; {command_for_shell}");
+        }
+        cmd.arg("-c").arg(command_for_shell);
     }
 
     // Propagate environment
@@ -5172,6 +5297,27 @@ fn execute_external(
     }
 
     Ok(status)
+}
+
+fn wrap_with_anchor_guard(command: &str, config: &ShellConfig) -> String {
+    let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let anchor = canonicalize_or(&config.world_root.anchor_root(&current_dir));
+    let anchor_escaped = shell_escape_for_shell(&anchor);
+    let mut guarded = format!(
+        "__substrate_anchor_root={anchor}; substrate_anchor_cd() {{ command cd \"$@\" || return $?; dest=$(pwd -P); case \"$dest\" in \"$__substrate_anchor_root\"|\"$__substrate_anchor_root\"/*) ;; *) printf 'substrate: info: caged root guard: returning to %s\\n' \"$__substrate_anchor_root\" >&2; command cd \"$__substrate_anchor_root\" || return $?;; esac; unset dest; }}; cd() {{ substrate_anchor_cd \"$@\"; }}; substrate_anchor_cd .; ",
+        anchor = anchor_escaped,
+    );
+    guarded.push_str(command);
+    guarded
+}
+
+fn shell_escape_for_shell(path: &Path) -> String {
+    let raw = path.to_string_lossy();
+    if raw.contains('\'') {
+        format!("'{}'", raw.replace('\'', "'\"'\"'"))
+    } else {
+        format!("'{raw}'")
+    }
 }
 
 fn spawn_host_stream_thread<R>(
@@ -5623,6 +5769,8 @@ pub(crate) fn configure_child_shell_env<E: CommandEnvAdapter>(
 mod manager_init_wiring_tests {
     use super::*;
     use serial_test::serial;
+    #[cfg(unix)]
+    use std::process::Command;
     use std::{collections::HashMap, env, fs, path::PathBuf};
     use tempfile::{tempdir, TempDir};
 
@@ -5642,6 +5790,11 @@ mod manager_init_wiring_tests {
             no_exit_on_error: false,
             skip_shims: false,
             no_world: false,
+            world_root: settings::WorldRootSettings {
+                mode: WorldRootMode::Project,
+                path: temp.path().to_path_buf(),
+                caged: true,
+            },
             async_repl: false,
             env_vars: HashMap::new(),
             manager_init_path: temp.path().join("manager_init.sh"),
@@ -5671,6 +5824,268 @@ mod manager_init_wiring_tests {
         } else {
             env::remove_var(key);
         }
+    }
+
+    struct DirGuard {
+        original: PathBuf,
+    }
+
+    impl DirGuard {
+        fn new() -> Self {
+            let original = env::current_dir().expect("capture cwd");
+            Self { original }
+        }
+    }
+
+    impl Drop for DirGuard {
+        fn drop(&mut self) {
+            let _ = env::set_current_dir(&self.original);
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn world_flag_overrides_disabled_config_and_env() {
+        let temp = tempdir().unwrap();
+        let home = temp.path().join("home");
+        let substrate_home = home.join(".substrate");
+        fs::create_dir_all(substrate_home.join("shims")).unwrap();
+        fs::write(
+            substrate_home.join("config.toml"),
+            "[install]\nworld_enabled = false\n",
+        )
+        .unwrap();
+
+        let prev_home = set_env("HOME", &home.display().to_string());
+        let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
+        let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home.display().to_string());
+        let prev_world = set_env("SUBSTRATE_WORLD", "disabled");
+        let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "0");
+        let prev_root_mode = set_env("SUBSTRATE_WORLD_ROOT_MODE", "project");
+        let prev_root_path = set_env("SUBSTRATE_WORLD_ROOT_PATH", "/env/root");
+        let prev_caged = set_env("SUBSTRATE_CAGED", "1");
+        let prev_anchor_mode = env::var("SUBSTRATE_ANCHOR_MODE").ok();
+        let prev_anchor_path = env::var("SUBSTRATE_ANCHOR_PATH").ok();
+        let prev_manager_env = env::var("SUBSTRATE_MANAGER_ENV").ok();
+        let prev_manager_init = env::var("SUBSTRATE_MANAGER_INIT").ok();
+        let _dir_guard = DirGuard::new();
+        fs::create_dir_all(&home).unwrap();
+        env::set_current_dir(&home).unwrap();
+
+        let cli = Cli::parse_from(["substrate", "--world"]);
+        let config = ShellConfig::from_cli(cli).expect("parse config with world override");
+        assert!(!config.no_world);
+        assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
+        assert_eq!(env::var("SUBSTRATE_WORLD_ENABLED").unwrap(), "1");
+
+        restore_env("SUBSTRATE_WORLD_ROOT_MODE", prev_root_mode);
+        restore_env("SUBSTRATE_WORLD_ROOT_PATH", prev_root_path);
+        restore_env("SUBSTRATE_CAGED", prev_caged);
+        restore_env("SUBSTRATE_ANCHOR_MODE", prev_anchor_mode);
+        restore_env("SUBSTRATE_ANCHOR_PATH", prev_anchor_path);
+        restore_env("SUBSTRATE_MANAGER_ENV", prev_manager_env);
+        restore_env("SUBSTRATE_MANAGER_INIT", prev_manager_init);
+        restore_env("SUBSTRATE_WORLD", prev_world);
+        restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
+        restore_env("SUBSTRATE_HOME", prev_substrate_home);
+        restore_env("USERPROFILE", prev_userprofile);
+        restore_env("HOME", prev_home);
+    }
+
+    #[test]
+    #[serial]
+    fn world_flag_honors_directory_world_root_settings() {
+        let temp = tempdir().unwrap();
+        let home = temp.path().join("home");
+        let substrate_home = home.join(".substrate");
+        let workdir = temp.path().join("workspace");
+        let custom_root = workdir.join("nested-root");
+        fs::create_dir_all(substrate_home.join("shims")).unwrap();
+        fs::create_dir_all(workdir.join(".substrate")).unwrap();
+        fs::create_dir_all(&custom_root).unwrap();
+        fs::write(
+            substrate_home.join("config.toml"),
+            "[install]\nworld_enabled = false\n[world]\nroot_mode = \"project\"\nroot_path = \"\"\ncaged = true\n",
+        )
+        .unwrap();
+        let settings_body = format!(
+            "[world]\nroot_mode = \"custom\"\nroot_path = \"{}\"\ncaged = false\n",
+            custom_root.display().to_string().replace('\\', "\\\\")
+        );
+        fs::write(workdir.join(".substrate/settings.toml"), settings_body).unwrap();
+
+        let prev_home = set_env("HOME", &home.display().to_string());
+        let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
+        let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home.display().to_string());
+        let prev_world = set_env("SUBSTRATE_WORLD", "disabled");
+        let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "0");
+        let prev_root_mode = set_env("SUBSTRATE_WORLD_ROOT_MODE", "project");
+        let prev_root_path = set_env("SUBSTRATE_WORLD_ROOT_PATH", "/env/root");
+        let prev_caged = set_env("SUBSTRATE_CAGED", "1");
+        let prev_anchor_mode = env::var("SUBSTRATE_ANCHOR_MODE").ok();
+        let prev_anchor_path = env::var("SUBSTRATE_ANCHOR_PATH").ok();
+        let _dir_guard = DirGuard::new();
+        env::set_current_dir(&workdir).unwrap();
+
+        let cli = Cli::parse_from(["substrate", "--world"]);
+        let config = ShellConfig::from_cli(cli).expect("parse config with directory world root");
+        assert!(!config.no_world);
+        assert_eq!(config.world_root.mode, WorldRootMode::Custom);
+        assert_eq!(config.world_root.path, custom_root);
+        assert!(!config.world_root.caged);
+        assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
+        assert_eq!(env::var("SUBSTRATE_WORLD_ENABLED").unwrap(), "1");
+        assert_eq!(env::var("SUBSTRATE_WORLD_ROOT_MODE").unwrap(), "custom");
+        assert_eq!(
+            env::var("SUBSTRATE_WORLD_ROOT_PATH").unwrap(),
+            custom_root.display().to_string()
+        );
+        assert_eq!(env::var("SUBSTRATE_CAGED").unwrap(), "0");
+
+        restore_env("SUBSTRATE_WORLD_ROOT_MODE", prev_root_mode);
+        restore_env("SUBSTRATE_WORLD_ROOT_PATH", prev_root_path);
+        restore_env("SUBSTRATE_CAGED", prev_caged);
+        restore_env("SUBSTRATE_ANCHOR_MODE", prev_anchor_mode);
+        restore_env("SUBSTRATE_ANCHOR_PATH", prev_anchor_path);
+        restore_env("SUBSTRATE_WORLD", prev_world);
+        restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
+        restore_env("SUBSTRATE_HOME", prev_substrate_home);
+        restore_env("USERPROFILE", prev_userprofile);
+        restore_env("HOME", prev_home);
+    }
+
+    #[test]
+    #[serial]
+    fn anchor_flags_override_configs_and_export_legacy_env() {
+        let temp = tempdir().unwrap();
+        let home = temp.path().join("home");
+        let substrate_home = home.join(".substrate");
+        let workdir = temp.path().join("workspace");
+        let cli_anchor = workdir.join("cli-anchor");
+        let dir_anchor = workdir.join("dir-anchor");
+        fs::create_dir_all(substrate_home.join("shims")).unwrap();
+        fs::create_dir_all(workdir.join(".substrate")).unwrap();
+        fs::create_dir_all(&cli_anchor).unwrap();
+        fs::create_dir_all(&dir_anchor).unwrap();
+        fs::write(
+            substrate_home.join("config.toml"),
+            "[world]\nanchor_mode = \"project\"\nanchor_path = \"/config/root\"\ncaged = false\n",
+        )
+        .unwrap();
+        let settings_body = format!(
+            "[world]\nanchor_mode = \"custom\"\nanchor_path = \"{}\"\ncaged = false\n",
+            dir_anchor.display().to_string().replace('\\', "\\\\")
+        );
+        fs::write(workdir.join(".substrate/settings.toml"), settings_body).unwrap();
+
+        let prev_home = set_env("HOME", &home.display().to_string());
+        let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
+        let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home.display().to_string());
+        let prev_anchor_mode = set_env("SUBSTRATE_ANCHOR_MODE", "follow-cwd");
+        let prev_anchor_path = set_env("SUBSTRATE_ANCHOR_PATH", "/env/anchor");
+        let prev_root_mode = set_env("SUBSTRATE_WORLD_ROOT_MODE", "follow-cwd");
+        let prev_root_path = set_env("SUBSTRATE_WORLD_ROOT_PATH", "/env/root");
+        let prev_caged = set_env("SUBSTRATE_CAGED", "0");
+        let _dir_guard = DirGuard::new();
+        env::set_current_dir(&workdir).unwrap();
+
+        let cli_anchor_path = cli_anchor.display().to_string();
+        let cli = Cli::parse_from([
+            "substrate",
+            "--anchor-mode",
+            "custom",
+            "--anchor-path",
+            &cli_anchor_path,
+            "--caged",
+        ]);
+        let config = ShellConfig::from_cli(cli).expect("parse config with anchor flags");
+
+        assert_eq!(config.world_root.mode, WorldRootMode::Custom);
+        assert_eq!(config.world_root.path, cli_anchor);
+        assert!(config.world_root.caged);
+        assert_eq!(env::var("SUBSTRATE_ANCHOR_MODE").unwrap(), "custom");
+        assert_eq!(env::var("SUBSTRATE_WORLD_ROOT_MODE").unwrap(), "custom");
+        assert_eq!(
+            env::var("SUBSTRATE_ANCHOR_PATH").unwrap(),
+            cli_anchor.display().to_string()
+        );
+        assert_eq!(
+            env::var("SUBSTRATE_WORLD_ROOT_PATH").unwrap(),
+            cli_anchor.display().to_string()
+        );
+        assert_eq!(env::var("SUBSTRATE_CAGED").unwrap(), "1");
+
+        restore_env("SUBSTRATE_CAGED", prev_caged);
+        restore_env("SUBSTRATE_WORLD_ROOT_PATH", prev_root_path);
+        restore_env("SUBSTRATE_WORLD_ROOT_MODE", prev_root_mode);
+        restore_env("SUBSTRATE_ANCHOR_PATH", prev_anchor_path);
+        restore_env("SUBSTRATE_ANCHOR_MODE", prev_anchor_mode);
+        restore_env("SUBSTRATE_HOME", prev_substrate_home);
+        restore_env("USERPROFILE", prev_userprofile);
+        restore_env("HOME", prev_home);
+    }
+
+    #[test]
+    #[serial]
+    fn no_world_flag_disables_world_and_sets_root_exports() {
+        let temp = tempdir().unwrap();
+        let home = temp.path().join("home");
+        let substrate_home = home.join(".substrate");
+        let workdir = temp.path().join("workspace");
+        fs::create_dir_all(substrate_home.join("shims")).unwrap();
+        fs::create_dir_all(&workdir).unwrap();
+        fs::write(
+            substrate_home.join("config.toml"),
+            "[install]\nworld_enabled = true\n[world]\nroot_mode = \"project\"\nroot_path = \"\"\ncaged = true\n",
+        )
+        .unwrap();
+
+        let prev_home = set_env("HOME", &home.display().to_string());
+        let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
+        let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home.display().to_string());
+        let prev_world = set_env("SUBSTRATE_WORLD", "enabled");
+        let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "1");
+        let prev_root_mode = set_env("SUBSTRATE_WORLD_ROOT_MODE", "project");
+        let prev_root_path = set_env("SUBSTRATE_WORLD_ROOT_PATH", "/env/root");
+        let prev_caged = set_env("SUBSTRATE_CAGED", "1");
+        let prev_anchor_mode = env::var("SUBSTRATE_ANCHOR_MODE").ok();
+        let prev_anchor_path = env::var("SUBSTRATE_ANCHOR_PATH").ok();
+        let _dir_guard = DirGuard::new();
+        env::set_current_dir(&workdir).unwrap();
+
+        let cli = Cli::parse_from([
+            "substrate",
+            "--no-world",
+            "--world-root-mode",
+            "follow-cwd",
+            "--uncaged",
+        ]);
+        let config = ShellConfig::from_cli(cli).expect("parse config with no-world flag");
+        assert!(config.no_world);
+        assert_eq!(config.world_root.mode, WorldRootMode::FollowCwd);
+        let expected_workdir = fs::canonicalize(&workdir).unwrap_or_else(|_| workdir.clone());
+        let actual_workdir =
+            fs::canonicalize(&config.world_root.path).unwrap_or(config.world_root.path);
+        assert_eq!(actual_workdir, expected_workdir);
+        assert!(!config.world_root.caged);
+        assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "disabled");
+        assert_eq!(env::var("SUBSTRATE_WORLD_ENABLED").unwrap(), "0");
+        assert_eq!(env::var("SUBSTRATE_WORLD_ROOT_MODE").unwrap(), "follow-cwd");
+        let env_root_path = PathBuf::from(env::var("SUBSTRATE_WORLD_ROOT_PATH").unwrap());
+        let env_root_canon = fs::canonicalize(&env_root_path).unwrap_or(env_root_path);
+        assert_eq!(env_root_canon, expected_workdir);
+        assert_eq!(env::var("SUBSTRATE_CAGED").unwrap(), "0");
+
+        restore_env("SUBSTRATE_WORLD_ROOT_MODE", prev_root_mode);
+        restore_env("SUBSTRATE_WORLD_ROOT_PATH", prev_root_path);
+        restore_env("SUBSTRATE_CAGED", prev_caged);
+        restore_env("SUBSTRATE_ANCHOR_MODE", prev_anchor_mode);
+        restore_env("SUBSTRATE_ANCHOR_PATH", prev_anchor_path);
+        restore_env("SUBSTRATE_WORLD", prev_world);
+        restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
+        restore_env("SUBSTRATE_HOME", prev_substrate_home);
+        restore_env("USERPROFILE", prev_userprofile);
+        restore_env("HOME", prev_home);
     }
 
     #[test]
@@ -5741,6 +6156,231 @@ managers:
 
         restore_env("SUBSTRATE_MANAGER_MANIFEST", previous_manifest);
         restore_env("SUBSTRATE_MANAGER_INIT", previous_init);
+    }
+
+    #[test]
+    fn enforce_caged_destination_bounces_outside_anchor() {
+        let temp = tempdir().unwrap();
+        let root = temp.path().join("root");
+        let outside = temp.path().join("outside");
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        let settings = settings::WorldRootSettings {
+            mode: WorldRootMode::Project,
+            path: fs::canonicalize(&root).unwrap(),
+            caged: true,
+        };
+        let requested = fs::canonicalize(&outside).unwrap();
+
+        let (destination, warning) =
+            enforce_caged_destination(&settings, &settings.path, requested);
+        assert_eq!(destination, settings.path);
+        let message = warning.expect("expected caged warning");
+        assert!(message.contains("caged root guard"));
+        assert!(message.contains(settings.path.to_str().unwrap()));
+    }
+
+    #[test]
+    #[serial]
+    fn cd_bounces_when_caged_without_world() {
+        let temp = tempdir().unwrap();
+        let root = temp.path().join("root");
+        let inside = root.join("inside");
+        let outside = temp.path().join("outside");
+        fs::create_dir_all(&inside).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+
+        let mut config = test_shell_config(&temp);
+        config.world_root.path = fs::canonicalize(&root).unwrap();
+        config.world_root.caged = true;
+        config.no_world = true;
+
+        let prev_world = set_env("SUBSTRATE_WORLD", "disabled");
+        let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "0");
+        let prev_pwd = env::var("PWD").ok();
+        let prev_oldpwd = env::var("OLDPWD").ok();
+        let _guard = DirGuard::new();
+        let inside_canon = fs::canonicalize(&inside).unwrap();
+        env::set_current_dir(&inside_canon).unwrap();
+
+        let status = handle_builtin(&config, "cd ../../outside", "test-cmd").unwrap();
+        assert!(status.is_some());
+
+        assert_eq!(env::current_dir().unwrap(), config.world_root.path);
+        assert_eq!(
+            env::var("OLDPWD").unwrap(),
+            inside_canon.display().to_string()
+        );
+
+        restore_env("SUBSTRATE_WORLD", prev_world);
+        restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
+        restore_env("PWD", prev_pwd);
+        restore_env("OLDPWD", prev_oldpwd);
+    }
+
+    #[test]
+    #[serial]
+    fn cd_bounces_when_caged_with_world_enabled() {
+        let temp = tempdir().unwrap();
+        let root = temp.path().join("root");
+        let inside = root.join("inside");
+        let outside = temp.path().join("outside");
+        fs::create_dir_all(&inside).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+
+        let mut config = test_shell_config(&temp);
+        config.world_root.path = fs::canonicalize(&root).unwrap();
+        config.world_root.caged = true;
+        config.no_world = false;
+
+        let prev_world = set_env("SUBSTRATE_WORLD", "enabled");
+        let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "1");
+        let prev_pwd = env::var("PWD").ok();
+        let prev_oldpwd = env::var("OLDPWD").ok();
+        let _guard = DirGuard::new();
+        let inside_canon = fs::canonicalize(&inside).unwrap();
+        env::set_current_dir(&inside_canon).unwrap();
+
+        let status = handle_builtin(&config, "cd ../../outside", "test-cmd").unwrap();
+        assert!(status.is_some());
+
+        assert_eq!(env::current_dir().unwrap(), config.world_root.path);
+        assert_eq!(
+            env::var("OLDPWD").unwrap(),
+            inside_canon.display().to_string()
+        );
+
+        restore_env("SUBSTRATE_WORLD", prev_world);
+        restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
+        restore_env("PWD", prev_pwd);
+        restore_env("OLDPWD", prev_oldpwd);
+    }
+
+    #[test]
+    #[serial]
+    #[cfg(unix)]
+    fn anchor_guard_bounces_chained_cd_when_world_disabled() {
+        let temp = tempdir().unwrap();
+        let root = temp.path().join("root");
+        let inside = root.join("inside");
+        let outside = temp.path().join("outside");
+        fs::create_dir_all(&inside).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+
+        let mut config = test_shell_config(&temp);
+        config.world_root.path = fs::canonicalize(&root).unwrap();
+        config.world_root.caged = true;
+        config.no_world = true;
+
+        let prev_world = set_env("SUBSTRATE_WORLD", "disabled");
+        let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "0");
+        let _guard = DirGuard::new();
+        let inside_canon = fs::canonicalize(&inside).unwrap();
+        env::set_current_dir(&inside_canon).unwrap();
+
+        let wrapped = wrap_with_anchor_guard("cd .. && cd ../outside && pwd", &config);
+        let output = Command::new(&config.shell_path)
+            .arg("-c")
+            .arg(&wrapped)
+            .current_dir(&inside_canon)
+            .output()
+            .expect("execute guarded command");
+
+        assert!(output.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            config.world_root.path.display().to_string()
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("caged root guard"),
+            "stderr missing guard warning: {}",
+            stderr
+        );
+
+        restore_env("SUBSTRATE_WORLD", prev_world);
+        restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
+    }
+
+    #[test]
+    #[serial]
+    #[cfg(unix)]
+    fn anchor_guard_bounces_chained_cd_when_world_enabled() {
+        let temp = tempdir().unwrap();
+        let root = temp.path().join("root");
+        let inside = root.join("inside");
+        let outside = temp.path().join("outside");
+        fs::create_dir_all(&inside).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+
+        let mut config = test_shell_config(&temp);
+        config.world_root.path = fs::canonicalize(&root).unwrap();
+        config.world_root.caged = true;
+        config.no_world = false;
+
+        let prev_world = set_env("SUBSTRATE_WORLD", "enabled");
+        let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "1");
+        let _guard = DirGuard::new();
+        let inside_canon = fs::canonicalize(&inside).unwrap();
+        env::set_current_dir(&inside_canon).unwrap();
+
+        let wrapped = wrap_with_anchor_guard("cd .. && cd ../outside && pwd", &config);
+        let output = Command::new(&config.shell_path)
+            .arg("-c")
+            .arg(&wrapped)
+            .current_dir(&inside_canon)
+            .output()
+            .expect("execute guarded command");
+
+        assert!(output.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            config.world_root.path.display().to_string()
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("caged root guard"),
+            "stderr missing guard warning: {}",
+            stderr
+        );
+
+        restore_env("SUBSTRATE_WORLD", prev_world);
+        restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
+    }
+
+    #[test]
+    #[serial]
+    fn cd_allows_uncaged_escape_from_anchor() {
+        let temp = tempdir().unwrap();
+        let root = temp.path().join("root");
+        let inside = root.join("inside");
+        let outside = temp.path().join("outside");
+        fs::create_dir_all(&inside).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+
+        let mut config = test_shell_config(&temp);
+        config.world_root.path = fs::canonicalize(&root).unwrap();
+        config.world_root.caged = false;
+        config.no_world = true;
+
+        let prev_world = set_env("SUBSTRATE_WORLD", "disabled");
+        let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "0");
+        let prev_pwd = env::var("PWD").ok();
+        let prev_oldpwd = env::var("OLDPWD").ok();
+        let _guard = DirGuard::new();
+        let inside_canon = fs::canonicalize(&inside).unwrap();
+        env::set_current_dir(&inside_canon).unwrap();
+
+        let status = handle_builtin(&config, "cd ../../outside", "test-cmd").unwrap();
+        assert!(status.is_some());
+
+        let outside_canon = fs::canonicalize(&outside).unwrap();
+        assert_eq!(env::current_dir().unwrap(), outside_canon);
+
+        restore_env("SUBSTRATE_WORLD", prev_world);
+        restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
+        restore_env("PWD", prev_pwd);
+        restore_env("OLDPWD", prev_oldpwd);
     }
 
     #[test]

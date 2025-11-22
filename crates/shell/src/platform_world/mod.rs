@@ -7,6 +7,8 @@ pub fn detect() -> Result<PlatformWorldContext> {
     windows::detect()
 }
 
+#[cfg(not(target_os = "windows"))]
+use crate::settings;
 use anyhow::Result;
 use std::fmt;
 use std::path::PathBuf;
@@ -94,7 +96,7 @@ pub fn detect() -> Result<PlatformWorldContext> {
             limits: ResourceLimits::default(),
             enable_preload: false,
             allowed_domains: substrate_broker::allowed_domains(),
-            project_dir: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            project_dir: settings::world_root_from_env().path,
             always_isolate: false,
         };
         ensure_ready_backend.ensure_session(&spec).map(|_| ())
@@ -123,7 +125,7 @@ pub fn detect() -> Result<PlatformWorldContext> {
             limits: ResourceLimits::default(),
             enable_preload: false,
             allowed_domains: substrate_broker::allowed_domains(),
-            project_dir: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            project_dir: settings::world_root_from_env().path,
             always_isolate: false,
         };
         ensure_ready_backend.ensure_session(&spec).map(|_| ())

@@ -5,7 +5,7 @@ use agent_api_types::ExecuteStreamFrame;
 use agent_api_types::{Budget, ExecuteRequest, ExecuteResponse};
 #[cfg(target_os = "linux")]
 use anyhow::Context;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use axum::response::Response;
 #[cfg(target_os = "linux")]
 use axum::{
@@ -19,7 +19,9 @@ use futures_util::StreamExt;
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
 use std::convert::Infallible;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
+use substrate_common::WorldRootMode;
 #[cfg(target_os = "linux")]
 use tokio::task;
 #[cfg(target_os = "linux")]
@@ -27,6 +29,11 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 #[cfg(target_os = "linux")]
 use world::stream::{install_stream_sink, StreamKind, StreamSink};
 use world_api::{WorldBackend, WorldHandle, WorldSpec};
+
+const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
+const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
+const LEGACY_ROOT_MODE_ENV: &str = "SUBSTRATE_WORLD_ROOT_MODE";
+const LEGACY_ROOT_PATH_ENV: &str = "SUBSTRATE_WORLD_ROOT_PATH";
 
 /// Main service running inside the world.
 #[derive(Clone)]
@@ -124,6 +131,13 @@ impl WorldAgentService {
             }
         }
 
+        let cwd = req
+            .cwd
+            .clone()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        let project_dir = resolve_project_dir(req.env.as_ref(), Some(&cwd))?;
+
         // Create world spec from request
         let spec = WorldSpec {
             reuse_session: true,
@@ -131,11 +145,7 @@ impl WorldAgentService {
             limits: world_api::ResourceLimits::default(),
             enable_preload: false,
             allowed_domains: substrate_broker::allowed_domains(),
-            project_dir: req
-                .cwd
-                .clone()
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default()),
+            project_dir,
             // For agent non-PTY path, prefer consistent fs_diff collection
             // to enable immediate span enrichment in the shell.
             always_isolate: true,
@@ -153,10 +163,7 @@ impl WorldAgentService {
         // Prepare execution request
         let exec_req = world_api::ExecRequest {
             cmd: req.cmd,
-            cwd: req
-                .cwd
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default()),
+            cwd,
             env: req.env.unwrap_or_default(),
             pty: req.pty,
             span_id: None,
@@ -206,17 +213,20 @@ impl WorldAgentService {
             tracker.decrement_exec();
         }
 
+        let cwd = req
+            .cwd
+            .clone()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        let project_dir = resolve_project_dir(req.env.as_ref(), Some(&cwd))?;
+
         let spec = WorldSpec {
             reuse_session: true,
             isolate_network: true,
             limits: world_api::ResourceLimits::default(),
             enable_preload: false,
             allowed_domains: substrate_broker::allowed_domains(),
-            project_dir: req
-                .cwd
-                .clone()
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default()),
+            project_dir,
             always_isolate: true,
         };
 
@@ -230,11 +240,7 @@ impl WorldAgentService {
 
         let mut exec_req = world_api::ExecRequest {
             cmd: req.cmd.clone(),
-            cwd: req
-                .cwd
-                .clone()
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default()),
+            cwd: cwd.clone(),
             env: req.env.clone().unwrap_or_default(),
             pty: false,
             span_id: None,
@@ -339,6 +345,47 @@ impl StreamSink for StreamingSink {
         };
         let _ = self.tx.send(frame);
     }
+}
+
+pub(crate) fn resolve_project_dir(
+    env: Option<&HashMap<String, String>>,
+    cwd: Option<&Path>,
+) -> Result<PathBuf> {
+    let cwd_path = cwd
+        .map(|path| path.to_path_buf())
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+
+    let mode = if let Some((key, value)) =
+        env.and_then(|map| first_env_value(map, &[ANCHOR_MODE_ENV, LEGACY_ROOT_MODE_ENV]))
+    {
+        WorldRootMode::parse(value).ok_or_else(|| anyhow!("invalid {} value: {}", key, value))?
+    } else {
+        WorldRootMode::Project
+    };
+
+    let root_path = env
+        .and_then(|map| first_env_value(map, &[ANCHOR_PATH_ENV, LEGACY_ROOT_PATH_ENV]))
+        .map(|(_, value)| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from);
+
+    let base_dir = match mode {
+        WorldRootMode::Project => root_path.unwrap_or_else(|| cwd_path.clone()),
+        WorldRootMode::FollowCwd => cwd_path.clone(),
+        WorldRootMode::Custom => root_path.ok_or_else(|| {
+            anyhow!("world root mode 'custom' requires SUBSTRATE_WORLD_ROOT_PATH")
+        })?,
+    };
+
+    Ok(base_dir)
+}
+
+fn first_env_value<'a>(
+    env: &'a HashMap<String, String>,
+    keys: &[&'static str],
+) -> Option<(&'static str, &'a str)> {
+    keys.iter()
+        .find_map(|key| env.get(*key).map(|value| (*key, value.as_str())))
 }
 
 #[cfg(test)]

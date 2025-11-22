@@ -36,7 +36,7 @@ Environment variables and advanced configuration options for Substrate.
 
 | Variable | Purpose | Default | Example |
 |----------|---------|---------|---------|
-| `SUBSTRATE_MANAGER_MANIFEST` | Override manifest path (base + overlay) | `config/manager_hooks.yaml` | `/tmp/manager_hooks.yaml` |
+| `SUBSTRATE_MANAGER_MANIFEST` | Override manifest path (base + overlay) | `<prefix>/versions/<version>/config/manager_hooks.yaml` | `/tmp/manager_hooks.yaml` |
 | `SUBSTRATE_MANAGER_INIT` | Generated manager snippet path | `~/.substrate/manager_init.sh` | `/custom/init.sh` |
 | `SUBSTRATE_MANAGER_ENV` | Tiny script sourced via `BASH_ENV` | `~/.substrate/manager_env.sh` | `/tmp/manager_env.sh` |
 | `SUBSTRATE_MANAGER_INIT_SHELL` | Force a specific shell for detect scripts | host `SHELL` or `/bin/sh` | `/usr/local/bin/bash` |
@@ -45,32 +45,92 @@ Environment variables and advanced configuration options for Substrate.
 | `SUBSTRATE_MANAGER_INIT_DEBUG` | Verbose detection logging | `0` | `1` |
 | `SUBSTRATE_SHIM_HINTS` | Disable/enable shim hint emission | `1` | `0` |
 
+Release bundles place the base manifests under
+`<prefix>/versions/<version>/config/` (`manager_hooks.yaml` and
+`world-deps.yaml`). Workspace builds fall back to `config/manager_hooks.yaml`
+and `scripts/substrate/world-deps.yaml` in the repository root.
+
 ## World Configuration
 
 | Variable | Purpose | Default | Example |
 |----------|---------|---------|---------|
 | `SUBSTRATE_WORLD` | Force pass-through execution (`disabled`) | `enabled` | `disabled` |
 | `SUBSTRATE_WORLD_ENABLED` | Cached world enablement flag (installer) | `1` | `0` |
-| `SUBSTRATE_WORLD_DEPS_MANIFEST` | Override manifest for `world deps` | bundled manifest | `/tmp/world_deps.yaml` |
+| `SUBSTRATE_ANCHOR_MODE` | Anchor selection (`project`, `follow-cwd`, `custom`) | `project` | `follow-cwd` |
+| `SUBSTRATE_ANCHOR_PATH` | Custom anchor directory (paired with `custom` mode) | shell launch directory | `/workspaces/substrate` |
+| `SUBSTRATE_CAGED` | Enforce staying inside the resolved world root (`1`/`0`) | `1` | `0` |
+| `SUBSTRATE_WORLD_DEPS_MANIFEST` | Override manifest for `world deps` | `<prefix>/versions/<version>/config/world-deps.yaml` | `/tmp/world_deps.yaml` |
+
+Legacy environment variables `SUBSTRATE_WORLD_ROOT_MODE` / `SUBSTRATE_WORLD_ROOT_PATH` are still
+parsed for compatibility.
+
+### World root settings stack
+
+Substrate resolves the world root from highest to lowest:
+
+1. CLI flags: `--anchor-mode` / `--anchor-path` (also accepts `--world-root-mode` / `--world-root-path`)
+2. Directory config: `.substrate/settings.toml` in the shell launch directory
+3. Global config: `~/.substrate/config.toml` `[world]` table
+4. Environment variables: `SUBSTRATE_ANCHOR_MODE` / `SUBSTRATE_ANCHOR_PATH`
+5. Default: `project` mode anchored to the shell launch directory
+
+The `caged` setting follows the same precedence stack (`--caged/--uncaged` -> dir config -> global
+config -> env var `SUBSTRATE_CAGED` -> default `true`) and prevents leaving the resolved root even
+when isolation is disabled.
+
+Modes:
+
+- `project` – anchor the overlay to the directory where `substrate` started.
+- `follow-cwd` – recompute the root whenever the working directory changes.
+- `custom` – use an explicit path (set via `anchor_path` or `--anchor-path`).
+
+Both the global config and per-directory settings file use the same schema:
+
+```toml
+[world]
+anchor_mode = "project"
+anchor_path = ""
+# Legacy keys are still parsed for compatibility:
+root_mode = "project"
+root_path = ""
+caged = true
+```
 
 ### Host-only driver helpers
 
 - Use `scripts/dev/substrate_shell_driver` when invoking `target/debug/substrate` from shell scripts or automation. It resolves the workspace binary, exports `SUBSTRATE_WORLD=disabled` and `SUBSTRATE_WORLD_ENABLED=0`, and passes through all CLI arguments.
 - Rust integration tests rely on `crates/shell/tests/common.rs::substrate_shell_driver()` to obtain an `assert_cmd::Command` with the same environment overrides. Reuse that helper instead of reimplementing binary lookup or TMPDIR wiring.
 
-## Install Metadata (`~/.substrate/config.json`)
+## Install Metadata (`~/.substrate/config.toml`)
 
 The installer and `substrate world enable` command keep a small metadata file at
-`~/.substrate/config.json` with the fields Substrate needs to determine whether
-the world backend is active. Today the file only stores
-`{ "world_enabled": <bool> }`, but the format intentionally mirrors the Rust
-`InstallConfig` struct (`extras` keys are preserved for future expansion).
+`~/.substrate/config.toml` with install-level fields under `[install]`. The
+same file (and optional `.substrate/settings.toml` in a repo) can carry a
+`[world]` table when you want a persistent root override:
 
-- Fresh installs write `{"world_enabled": true}` unless `--no-world` is used.
-- `substrate world enable` overwrites the file after provisioning succeeds.
-- The generated `~/.substrate/manager_env.sh` exports `SUBSTRATE_WORLD` and
-  `SUBSTRATE_WORLD_ENABLED` so shims and subprocesses read a consistent view of
-  this metadata even before the CLI runs.
+```toml
+[install]
+world_enabled = true
+
+[world]
+root_mode = "project"
+root_path = ""
+caged = true
+```
+
+Unknown keys and extra tables are preserved for future expansion.
+
+- Fresh installs write `world_enabled = true` unless `--no-world` is used.
+- Use `--world` to force isolation for a single run even when install metadata
+  or `SUBSTRATE_WORLD*` env vars disable it; metadata stays unchanged and
+  `--no-world` still wins when provided.
+- `substrate world enable` overwrites `[install]` after provisioning succeeds and repairs malformed metadata.
+- Legacy installs that still have `config.json` are read automatically, but new writes use `config.toml`.
+- The generated `~/.substrate/manager_env.sh` exports `SUBSTRATE_WORLD`,
+  `SUBSTRATE_WORLD_ENABLED`, and `SUBSTRATE_CAGED` so shims and subprocesses read
+  a consistent view of this metadata even before the CLI runs.
+- Directory configs live at `.substrate/settings.toml` under the launch
+  directory and only carry the `[world]` table shown above.
 
 ## CLI Flags
 
@@ -92,6 +152,11 @@ the world backend is active. Today the file only stores
 | `--ci` | CI mode (no banner, strict errors) | `substrate --ci -c "npm test"` |
 | `--no-exit-on-error` | Continue on error in CI mode | `substrate --ci --no-exit-on-error` |
 | `--pty` | Force PTY for command | `substrate --pty -c "vim"` |
+| `--world` | Force world isolation for this invocation (overrides disabled install/config/env) | `substrate --world -c "npm test"` |
+| `--no-world` | Disable world isolation for this run | `substrate --no-world -c "npm test"` |
+| `--anchor-mode <mode>` | Select anchor strategy (`project`, `follow-cwd`, `custom`) | `substrate --anchor-mode follow-cwd -c "npm test"` |
+| `--anchor-path <path>` | Explicit anchor when using `custom` mode | `substrate --anchor-mode custom --anchor-path /opt/work` |
+| `--caged` / `--uncaged` | Toggle local caged root guard | `substrate --uncaged --anchor-mode project` |
 | `--version-json` | Output version info as JSON | `substrate --version-json` |
 | `--legacy-repl` | Fall back to the legacy synchronous REPL | `substrate --legacy-repl` |
 

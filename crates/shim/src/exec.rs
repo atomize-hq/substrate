@@ -603,7 +603,12 @@ struct ManagerHintEngine {
 
 impl ManagerHintEngine {
     fn new() -> Option<Self> {
-        if !world_features_enabled() || hints_disabled() {
+        if hints_disabled() {
+            return None;
+        }
+
+        let force_hints = env::var("SUBSTRATE_SHIM_HINTS").is_ok();
+        if !force_hints && !world_features_enabled() {
             return None;
         }
 

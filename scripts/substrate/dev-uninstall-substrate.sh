@@ -14,14 +14,15 @@ Substrate Dev Uninstaller
 Removes development shims and helper files produced by dev-install-substrate.sh.
 
 Usage:
-  dev-uninstall-substrate.sh [--prefix <path>] [--profile <debug|release>] [--bin <path>]
+  dev-uninstall-substrate.sh [--prefix <path>] [--profile <debug|release>] [--bin <path>] [--version-label <name>]
   dev-uninstall-substrate.sh --help
 
 Options:
-  --prefix <path>   Installation prefix that was used during dev install (default: ~/.substrate)
-  --profile <name>  Cargo profile whose binary should be used for shim removal
-  --bin <path>      Explicit path to substrate binary to invoke for shim removal
-  --help            Show this message
+  --prefix <path>        Installation prefix that was used during dev install (default: ~/.substrate)
+  --profile <name>       Cargo profile whose binary should be used for shim removal
+  --bin <path>           Explicit path to substrate binary to invoke for shim removal
+  --version-label <name> Version directory label used during dev install (default: dev)
+  --help                 Show this message
 
 If neither --profile nor --bin is provided the script will look for
 `target/release/substrate` first, then `target/debug/substrate`.
@@ -31,6 +32,7 @@ USAGE
 PREFIX="${HOME}/.substrate"
 PROFILE=""
 SUBSTRATE_BIN=""
+VERSION_LABEL="dev"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -49,6 +51,11 @@ while [[ $# -gt 0 ]]; do
       SUBSTRATE_BIN="$2"
       shift 2
       ;;
+    --version-label)
+      [[ $# -ge 2 ]] || fatal "--version-label requires a value"
+      VERSION_LABEL="$2"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -60,6 +67,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 BIN_DIR="${PREFIX%/}/bin"
+VERSION_DIR="${PREFIX%/}/versions/${VERSION_LABEL}"
+MANAGER_ENV_PATH="${PREFIX%/}/manager_env.sh"
+MANAGER_INIT_PATH="${PREFIX%/}/manager_init.sh"
+INSTALL_CONFIG_PATH="${PREFIX%/}/config.toml"
+SHIMS_DIR="${PREFIX%/}/shims"
+ENV_FILE="${PREFIX%/}/dev-shim-env.sh"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 if [[ -z "${SUBSTRATE_BIN}" ]]; then
@@ -97,9 +110,6 @@ else
   warn "No substrate binary found; skipping shim-remove invocation."
 fi
 
-SHIMS_DIR="${PREFIX%/}/shims"
-ENV_FILE="${PREFIX%/}/dev-shim-env.sh"
-
 if [[ -d "${SHIMS_DIR}" ]]; then
   log "Deleting ${SHIMS_DIR}"
   rm -rf "${SHIMS_DIR}"
@@ -108,6 +118,26 @@ fi
 if [[ -f "${ENV_FILE}" ]]; then
   log "Removing ${ENV_FILE}"
   rm -f "${ENV_FILE}"
+fi
+
+if [[ -d "${VERSION_DIR}" ]]; then
+  log "Deleting ${VERSION_DIR}"
+  rm -rf "${VERSION_DIR}"
+fi
+
+if [[ -f "${INSTALL_CONFIG_PATH}" ]]; then
+  log "Removing ${INSTALL_CONFIG_PATH}"
+  rm -f "${INSTALL_CONFIG_PATH}"
+fi
+
+if [[ -f "${MANAGER_ENV_PATH}" ]]; then
+  log "Removing ${MANAGER_ENV_PATH}"
+  rm -f "${MANAGER_ENV_PATH}"
+fi
+
+if [[ -f "${MANAGER_INIT_PATH}" ]]; then
+  log "Removing ${MANAGER_INIT_PATH}"
+  rm -f "${MANAGER_INIT_PATH}"
 fi
 
 if [[ -d "${BIN_DIR}" ]]; then
