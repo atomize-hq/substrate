@@ -678,7 +678,7 @@
       "name": "Test anchor naming + caged guard",
       "type": "test",
       "phase": "Settings Stack",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add tests covering anchor naming compatibility and ensure caged enforcement applies to complex commands when the world is disabled or unavailable.",
       "references": [
         "docs/project_management/next/settings-stack/settings_stack_plan.md",

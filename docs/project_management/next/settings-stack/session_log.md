@@ -267,3 +267,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S5-test.md (confirmed)
 - Docs commit: docs: finish S5-code (this commit)
 - Next steps / blockers: hand off to S5-test for compatibility + caged coverage
+
+## [2025-11-22 02:46 UTC] Test – S5-test – START
+- Checked out feat/settings-stack, pulled latest
+- Updated tasks.json + session log (commit: pending)
+- Worktree: planned wt/ss-s5-anchor-test (branch ss-s5-anchor-test)
+- Plan: create task worktree; add tests for anchor_mode/path precedence + root_* compatibility; cover caged guard on complex commands with/without world; adjust installer smoke expectations if metadata/env changes; run cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell caged; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
+- Blockers: none
