@@ -290,3 +290,11 @@ Template (copy/paste and fill in):
 - Worktree: planned wt/ss-s5-anchor-integ (branch ss-s5-anchor-integ)
 - Plan: create integration branch/worktree; merge ss-s5-anchor-test into feat/settings-stack baseline; resolve any conflicts; run cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell caged; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
 - Blockers: none
+
+## [2025-11-22 03:41 UTC] Integ – S5-integ – END
+- Worktree commits: ec28c1e
+- Commands: cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell caged; ./tests/installers/install_smoke.sh --scenario default; ./tests/installers/install_smoke.sh --scenario no-world
+- Results: all commands passed; installer temp roots /tmp/substrate-installer-default.lTUUM2 (world_enabled=true) and /tmp/substrate-installer-no-world.IeBvMx (world_enabled=false)
+- Kickoff prompts created: n/a
+- Docs commit: docs: finish S5-integ (this commit)
+- Next steps / blockers: none
