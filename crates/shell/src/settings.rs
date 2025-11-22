@@ -756,7 +756,8 @@ mod tests {
         };
 
         let expected = std::fs::canonicalize(&target_cwd).unwrap_or(target_cwd);
-        let actual = std::fs::canonicalize(settings.effective_root()).unwrap_or_else(|_| settings.effective_root());
+        let actual = std::fs::canonicalize(settings.effective_root())
+            .unwrap_or_else(|_| settings.effective_root());
         assert_eq!(actual, expected);
     }
 }
