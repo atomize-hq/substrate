@@ -1,6 +1,8 @@
 //! PTY WebSocket handler for world-agent implementing JSON frame protocol
 
-use crate::service::{resolve_project_dir, WorldAgentService};
+#[cfg(target_os = "linux")]
+use crate::service::resolve_project_dir;
+use crate::service::WorldAgentService;
 use axum::extract::ws::{Message, WebSocket};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use futures_util::{SinkExt, StreamExt};
