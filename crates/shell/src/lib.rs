@@ -6069,15 +6069,15 @@ mod manager_init_wiring_tests {
         let config = ShellConfig::from_cli(cli).expect("parse config with no-world flag");
         assert!(config.no_world);
         assert_eq!(config.world_root.mode, WorldRootMode::FollowCwd);
-        assert_eq!(config.world_root.path, workdir);
+        let expected_workdir = fs::canonicalize(&workdir).unwrap_or_else(|_| workdir.clone());
+        assert_eq!(config.world_root.path, expected_workdir);
         assert!(!config.world_root.caged);
         assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "disabled");
         assert_eq!(env::var("SUBSTRATE_WORLD_ENABLED").unwrap(), "0");
         assert_eq!(env::var("SUBSTRATE_WORLD_ROOT_MODE").unwrap(), "follow-cwd");
-        assert_eq!(
-            env::var("SUBSTRATE_WORLD_ROOT_PATH").unwrap(),
-            workdir.display().to_string()
-        );
+        let env_root_path = PathBuf::from(env::var("SUBSTRATE_WORLD_ROOT_PATH").unwrap());
+        let env_root_canon = fs::canonicalize(&env_root_path).unwrap_or(env_root_path);
+        assert_eq!(env_root_canon, expected_workdir);
         assert_eq!(env::var("SUBSTRATE_CAGED").unwrap(), "0");
 
         restore_env("SUBSTRATE_WORLD_ROOT_MODE", prev_root_mode);

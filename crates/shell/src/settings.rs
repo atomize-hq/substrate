@@ -755,6 +755,7 @@ mod tests {
             caged: true,
         };
 
-        assert_eq!(settings.effective_root(), target_cwd);
+        let expected = std::fs::canonicalize(&target_cwd).unwrap_or(target_cwd);
+        assert_eq!(settings.effective_root(), expected);
     }
 }
