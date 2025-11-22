@@ -252,3 +252,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: n/a
 - Docs commit: docs: finish S4-integ (this commit)
 - Next steps / blockers: none; ready to merge into feat/settings-stack and remove worktree
+
+## [2025-11-21 22:15 UTC] Code – S5-code – START
+- Checked out feat/settings-stack, pulled latest
+- Updated tasks.json + session log (commit: docs: start S5-code)
+- Created worktree: planned wt/ss-s5-anchor-code
+- Plan: rename world root selectors to anchor naming across CLI/env/config/installers with backward-compatible root_* parsing; update docs/CLI help for anchor terminology; fix caged enforcement for complex commands when world is disabled/unavailable; run cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_root
+- Blockers: none

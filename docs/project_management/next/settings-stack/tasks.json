@@ -634,7 +634,7 @@
       "name": "Rename root to anchor + caged guard fix",
       "type": "code",
       "phase": "Settings Stack",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Rename the world root selector to anchor terminology (mode/path) while keeping backward compatibility, and fix caged enforcement for complex commands when the world is disabled.",
       "references": [
         "docs/project_management/next/settings-stack/settings_stack_plan.md",
