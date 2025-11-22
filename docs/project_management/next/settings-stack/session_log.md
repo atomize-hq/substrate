@@ -259,3 +259,11 @@ Template (copy/paste and fill in):
 - Created worktree: planned wt/ss-s5-anchor-code
 - Plan: rename world root selectors to anchor naming across CLI/env/config/installers with backward-compatible root_* parsing; update docs/CLI help for anchor terminology; fix caged enforcement for complex commands when world is disabled/unavailable; run cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_root
 - Blockers: none
+
+## [2025-11-21 23:40 UTC] Code – S5-code – END
+- Worktree commits: f0e0993
+- Commands: cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_root
+- Results: fmt/clippy clean; world_root suite passed
+- Kickoff prompts created: docs/project_management/next/settings-stack/kickoff_prompts/S5-test.md (confirmed)
+- Docs commit: docs: finish S5-code (this commit)
+- Next steps / blockers: hand off to S5-test for compatibility + caged coverage
