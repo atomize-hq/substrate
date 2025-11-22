@@ -193,6 +193,7 @@ fn test_builtin_cd_side_effects() {
     let script = format!("cd {} && pwd", canonical_dir.display());
 
     get_substrate_binary()
+        .env("SUBSTRATE_CAGED", "0")
         .arg("-c")
         .arg(&script)
         .assert()
@@ -449,6 +450,7 @@ fn test_cd_minus_behavior() {
     // Just verify that cd commands are logged and work
     get_substrate_binary()
         .env("SHIM_TRACE_LOG", &log_file)
+        .env("SUBSTRATE_CAGED", "0")
         .arg("-c")
         .arg("cd /tmp && pwd")
         .assert()
