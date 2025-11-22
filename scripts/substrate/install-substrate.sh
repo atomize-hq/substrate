@@ -534,6 +534,10 @@ write_manager_env_script() {
 export SUBSTRATE_WORLD=${state}
 export SUBSTRATE_WORLD_ENABLED=${enabled_flag}
 export SUBSTRATE_CAGED=${caged_flag}
+export SUBSTRATE_ANCHOR_MODE="project"
+export SUBSTRATE_ANCHOR_PATH=""
+export SUBSTRATE_WORLD_ROOT_MODE="project"
+export SUBSTRATE_WORLD_ROOT_PATH=""
 export SUBSTRATE_MANAGER_ENV=${manager_env_literal}
 export SUBSTRATE_MANAGER_INIT=${manager_init_literal}
 
@@ -579,6 +583,8 @@ write_install_config() {
 world_enabled = ${flag}
 
 [world]
+anchor_mode = "project"
+anchor_path = ""
 root_mode = "project"
 root_path = ""
 caged = true

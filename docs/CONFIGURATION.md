@@ -56,19 +56,22 @@ and `scripts/substrate/world-deps.yaml` in the repository root.
 |----------|---------|---------|---------|
 | `SUBSTRATE_WORLD` | Force pass-through execution (`disabled`) | `enabled` | `disabled` |
 | `SUBSTRATE_WORLD_ENABLED` | Cached world enablement flag (installer) | `1` | `0` |
-| `SUBSTRATE_WORLD_ROOT_MODE` | World root selection (`project`, `follow-cwd`, `custom`) | `project` | `follow-cwd` |
-| `SUBSTRATE_WORLD_ROOT_PATH` | Custom world root directory (paired with `custom` mode) | shell launch directory | `/workspaces/substrate` |
+| `SUBSTRATE_ANCHOR_MODE` | Anchor selection (`project`, `follow-cwd`, `custom`) | `project` | `follow-cwd` |
+| `SUBSTRATE_ANCHOR_PATH` | Custom anchor directory (paired with `custom` mode) | shell launch directory | `/workspaces/substrate` |
 | `SUBSTRATE_CAGED` | Enforce staying inside the resolved world root (`1`/`0`) | `1` | `0` |
 | `SUBSTRATE_WORLD_DEPS_MANIFEST` | Override manifest for `world deps` | `<prefix>/versions/<version>/config/world-deps.yaml` | `/tmp/world_deps.yaml` |
+
+Legacy environment variables `SUBSTRATE_WORLD_ROOT_MODE` / `SUBSTRATE_WORLD_ROOT_PATH` are still
+parsed for compatibility.
 
 ### World root settings stack
 
 Substrate resolves the world root from highest to lowest:
 
-1. CLI flags: `--world-root-mode` / `--world-root-path`
+1. CLI flags: `--anchor-mode` / `--anchor-path` (also accepts `--world-root-mode` / `--world-root-path`)
 2. Directory config: `.substrate/settings.toml` in the shell launch directory
 3. Global config: `~/.substrate/config.toml` `[world]` table
-4. Environment variables: `SUBSTRATE_WORLD_ROOT_MODE` / `SUBSTRATE_WORLD_ROOT_PATH`
+4. Environment variables: `SUBSTRATE_ANCHOR_MODE` / `SUBSTRATE_ANCHOR_PATH`
 5. Default: `project` mode anchored to the shell launch directory
 
 The `caged` setting follows the same precedence stack (`--caged/--uncaged` -> dir config -> global
@@ -79,12 +82,15 @@ Modes:
 
 - `project` – anchor the overlay to the directory where `substrate` started.
 - `follow-cwd` – recompute the root whenever the working directory changes.
-- `custom` – use an explicit path (set via `root_path` or `--world-root-path`).
+- `custom` – use an explicit path (set via `anchor_path` or `--anchor-path`).
 
 Both the global config and per-directory settings file use the same schema:
 
 ```toml
 [world]
+anchor_mode = "project"
+anchor_path = ""
+# Legacy keys are still parsed for compatibility:
 root_mode = "project"
 root_path = ""
 caged = true
@@ -148,9 +154,9 @@ Unknown keys and extra tables are preserved for future expansion.
 | `--pty` | Force PTY for command | `substrate --pty -c "vim"` |
 | `--world` | Force world isolation for this invocation (overrides disabled install/config/env) | `substrate --world -c "npm test"` |
 | `--no-world` | Disable world isolation for this run | `substrate --no-world -c "npm test"` |
-| `--world-root-mode <mode>` | Select world root strategy (`project`, `follow-cwd`, `custom`) | `substrate --world-root-mode follow-cwd -c "npm test"` |
-| `--world-root-path <path>` | Explicit world root when using `custom` mode | `substrate --world-root-mode custom --world-root-path /opt/work` |
-| `--caged` / `--uncaged` | Toggle local caged root guard | `substrate --uncaged --world-root-mode project` |
+| `--anchor-mode <mode>` | Select anchor strategy (`project`, `follow-cwd`, `custom`) | `substrate --anchor-mode follow-cwd -c "npm test"` |
+| `--anchor-path <path>` | Explicit anchor when using `custom` mode | `substrate --anchor-mode custom --anchor-path /opt/work` |
+| `--caged` / `--uncaged` | Toggle local caged root guard | `substrate --uncaged --anchor-mode project` |
 | `--version-json` | Output version info as JSON | `substrate --version-json` |
 | `--legacy-repl` | Fall back to the legacy synchronous REPL | `substrate --legacy-repl` |
 

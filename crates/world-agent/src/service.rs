@@ -30,6 +30,11 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 use world::stream::{install_stream_sink, StreamKind, StreamSink};
 use world_api::{WorldBackend, WorldHandle, WorldSpec};
 
+const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
+const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
+const LEGACY_ROOT_MODE_ENV: &str = "SUBSTRATE_WORLD_ROOT_MODE";
+const LEGACY_ROOT_PATH_ENV: &str = "SUBSTRATE_WORLD_ROOT_PATH";
+
 /// Main service running inside the world.
 #[derive(Clone)]
 pub struct WorldAgentService {
@@ -350,16 +355,17 @@ pub(crate) fn resolve_project_dir(
         .map(|path| path.to_path_buf())
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
 
-    let mode = if let Some(value) = env.and_then(|map| map.get("SUBSTRATE_WORLD_ROOT_MODE")) {
-        WorldRootMode::parse(value)
-            .ok_or_else(|| anyhow!("invalid SUBSTRATE_WORLD_ROOT_MODE value: {}", value))?
+    let mode = if let Some((key, value)) =
+        env.and_then(|map| first_env_value(map, &[ANCHOR_MODE_ENV, LEGACY_ROOT_MODE_ENV]))
+    {
+        WorldRootMode::parse(value).ok_or_else(|| anyhow!("invalid {} value: {}", key, value))?
     } else {
         WorldRootMode::Project
     };
 
     let root_path = env
-        .and_then(|map| map.get("SUBSTRATE_WORLD_ROOT_PATH"))
-        .map(|value| value.trim())
+        .and_then(|map| first_env_value(map, &[ANCHOR_PATH_ENV, LEGACY_ROOT_PATH_ENV]))
+        .map(|(_, value)| value.trim())
         .filter(|value| !value.is_empty())
         .map(PathBuf::from);
 
@@ -372,6 +378,14 @@ pub(crate) fn resolve_project_dir(
     };
 
     Ok(base_dir)
+}
+
+fn first_env_value<'a>(
+    env: &'a HashMap<String, String>,
+    keys: &[&'static str],
+) -> Option<(&'static str, &'a str)> {
+    keys.iter()
+        .find_map(|key| env.get(*key).map(|value| (*key, value.as_str())))
 }
 
 #[cfg(test)]

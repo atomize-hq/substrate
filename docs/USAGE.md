@@ -203,13 +203,14 @@ manager and point `BASH_ENV` at `~/.substrate_bashenv` explicitly.
 - `substrate world deps status|install|sync` – inspect and copy host toolchains
   into the guest once B3 reach parity (CLI scaffolding is already wired up)
 
-World root precedence (highest wins): CLI flags
-(`--world-root-mode/--world-root-path`), `.substrate/settings.toml` in the
-launch directory, `~/.substrate/config.toml` `[world]`, environment variables
-`SUBSTRATE_WORLD_ROOT_MODE/PATH`, then the default `project` mode (rooted at the
-launch directory). Modes: `project` anchors to the launch directory,
+World root (anchor) precedence, highest wins: CLI flags
+(`--anchor-mode/--anchor-path`, legacy `--world-root-mode/--world-root-path`),
+`.substrate/settings.toml` in the launch directory, `~/.substrate/config.toml`
+`[world]`, environment variables `SUBSTRATE_ANCHOR_MODE/PATH` (legacy
+`SUBSTRATE_WORLD_ROOT_MODE/PATH`), then the default `project` mode (rooted at
+the launch directory). Modes: `project` anchors to the launch directory,
 `follow-cwd` tracks your working directory, and `custom` uses the path supplied
-via `root_path` or `--world-root-path`.
+via `anchor_path` or `--anchor-path`.
 
 The installer and `substrate world enable` keep `~/.substrate/config.toml`
 (`[install].world_enabled = true/false`) and rewrite `~/.substrate/manager_env.sh`

@@ -16,7 +16,7 @@ freshly built binaries. This is intended for local iteration after removing any
 production installation.
 
 Usage:
-  dev-install-substrate.sh [--prefix <path>] [--profile <debug|release>] [--version-label <name>] [--no-world] [--world-root-mode <mode>] [--world-root-path <path>] [--caged|--uncaged] [--no-shims]
+  dev-install-substrate.sh [--prefix <path>] [--profile <debug|release>] [--version-label <name>] [--no-world] [--anchor-mode <mode>] [--anchor-path <path>] [--caged|--uncaged] [--no-shims]
   dev-install-substrate.sh --help
 
 Options:
@@ -24,8 +24,8 @@ Options:
   --profile <name>          Cargo profile to build (debug or release; default: debug)
   --version-label <name>    Version directory label under <prefix>/versions (default: dev)
   --no-world                Mark install metadata as world_disabled (skips provisioning entirely)
-  --world-root-mode <mode>  Default world root mode (project|follow-cwd|custom; default: project)
-  --world-root-path <path>  Default world root path (for custom mode)
+  --anchor-mode <mode>      Default anchor mode (project|follow-cwd|custom; default: project) [alias: --world-root-mode]
+  --anchor-path <path>      Default anchor path (for custom mode; alias: --world-root-path)
   --caged                   Write caged=true to install metadata (default)
   --uncaged                 Write caged=false to install metadata
   --no-shims                Skip shim deployment (only run cargo build)
@@ -37,8 +37,8 @@ PREFIX="${HOME}/.substrate"
 PROFILE="debug"
 DEPLOY_SHIMS=1
 WORLD_ENABLED=1
-WORLD_ROOT_MODE="project"
-WORLD_ROOT_PATH=""
+ANCHOR_MODE="project"
+ANCHOR_PATH=""
 WORLD_CAGED=1
 VERSION_LABEL="dev"
 
@@ -63,14 +63,14 @@ while [[ $# -gt 0 ]]; do
       WORLD_ENABLED=0
       shift
       ;;
-    --world-root-mode)
-      [[ $# -ge 2 ]] || fatal "--world-root-mode requires a value"
-      WORLD_ROOT_MODE="$2"
+    --anchor-mode|--world-root-mode)
+      [[ $# -ge 2 ]] || fatal "--anchor-mode requires a value"
+      ANCHOR_MODE="$2"
       shift 2
       ;;
-    --world-root-path)
-      [[ $# -ge 2 ]] || fatal "--world-root-path requires a value"
-      WORLD_ROOT_PATH="$2"
+    --anchor-path|--world-root-path)
+      [[ $# -ge 2 ]] || fatal "--anchor-path requires a value"
+      ANCHOR_PATH="$2"
       shift 2
       ;;
     --caged)
@@ -100,13 +100,13 @@ case "${PROFILE}" in
   *) fatal "Unsupported profile '${PROFILE}'. Use 'debug' or 'release'." ;;
 esac
 
-case "${WORLD_ROOT_MODE}" in
+case "${ANCHOR_MODE}" in
   project|follow-cwd|custom) ;;
-  *) fatal "Unsupported world root mode '${WORLD_ROOT_MODE}'. Use project, follow-cwd, or custom." ;;
+  *) fatal "Unsupported anchor mode '${ANCHOR_MODE}'. Use project, follow-cwd, or custom." ;;
 esac
 
-if [[ "${WORLD_ROOT_MODE}" == "custom" && -z "${WORLD_ROOT_PATH}" ]]; then
-  fatal "--world-root-path is required when --world-root-mode=custom"
+if [[ "${ANCHOR_MODE}" == "custom" && -z "${ANCHOR_PATH}" ]]; then
+  fatal "--anchor-path is required when --anchor-mode=custom"
 fi
 
 if ! command -v cargo >/dev/null 2>&1; then
@@ -161,8 +161,10 @@ cat > "${INSTALL_CONFIG_PATH}.tmp" <<EOF
 world_enabled = $([[ "${WORLD_ENABLED}" -eq 1 ]] && echo "true" || echo "false")
 
 [world]
-root_mode = "${WORLD_ROOT_MODE}"
-root_path = "${WORLD_ROOT_PATH}"
+anchor_mode = "${ANCHOR_MODE}"
+anchor_path = "${ANCHOR_PATH}"
+root_mode = "${ANCHOR_MODE}"
+root_path = "${ANCHOR_PATH}"
 caged = $([[ "${WORLD_CAGED}" -eq 1 ]] && echo "true" || echo "false")
 EOF
 mv "${INSTALL_CONFIG_PATH}.tmp" "${INSTALL_CONFIG_PATH}"
@@ -187,6 +189,10 @@ cat > "${MANAGER_ENV_PATH}.tmp" <<EOF
 export SUBSTRATE_WORLD=$([[ "${WORLD_ENABLED}" -eq 1 ]] && echo "enabled" || echo "disabled")
 export SUBSTRATE_WORLD_ENABLED=$([[ "${WORLD_ENABLED}" -eq 1 ]] && echo "1" || echo "0")
 export SUBSTRATE_CAGED=$([[ "${WORLD_CAGED}" -eq 1 ]] && echo "1" || echo "0")
+export SUBSTRATE_ANCHOR_MODE="${ANCHOR_MODE}"
+export SUBSTRATE_ANCHOR_PATH="${ANCHOR_PATH}"
+export SUBSTRATE_WORLD_ROOT_MODE="${ANCHOR_MODE}"
+export SUBSTRATE_WORLD_ROOT_PATH="${ANCHOR_PATH}"
 export SUBSTRATE_MANAGER_ENV=${manager_env_literal}
 export SUBSTRATE_MANAGER_INIT=${manager_init_literal}
 

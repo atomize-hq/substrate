@@ -333,12 +333,20 @@ pub struct Cli {
     #[arg(long = "uncaged", action = ArgAction::SetTrue, conflicts_with = "caged")]
     pub uncaged: bool,
 
-    /// Control how the world root is selected (project, follow-cwd, or custom)
-    #[arg(long = "world-root-mode", value_name = "MODE")]
+    /// Control how the anchor root is selected (project, follow-cwd, or custom)
+    #[arg(
+        long = "anchor-mode",
+        visible_alias = "world-root-mode",
+        value_name = "MODE"
+    )]
     pub world_root_mode: Option<WorldRootModeArg>,
 
-    /// Explicit world root path (used when --world-root-mode=custom)
-    #[arg(long = "world-root-path", value_name = "PATH")]
+    /// Explicit anchor path (used when --anchor-mode=custom)
+    #[arg(
+        long = "anchor-path",
+        visible_alias = "world-root-path",
+        value_name = "PATH"
+    )]
     pub world_root_path: Option<PathBuf>,
 
     /// Force world isolation for this run (overrides disabled install/config/env)
@@ -5164,6 +5172,7 @@ fn execute_external(
     cmd_id: &str,
 ) -> Result<ExitStatus> {
     let shell = &config.shell_path;
+    let mut command = command.to_string();
 
     // Verify shell exists
     if which::which(shell).is_err() && !Path::new(shell).exists() {
@@ -5183,28 +5192,36 @@ fn execute_external(
     let is_powershell = shell_name == "powershell.exe" || shell_name == "powershell";
     let is_cmd = shell_name == "cmd.exe" || shell_name == "cmd";
     let is_bash = shell_name == "bash" || shell_name == "bash.exe";
+    let should_guard_anchor = config.world_root.caged
+        && config.world_root.mode != WorldRootMode::FollowCwd
+        && !cfg!(windows)
+        && needs_shell(&command);
+
+    if should_guard_anchor {
+        command = wrap_with_anchor_guard(&command, config);
+    }
+    let mut command_for_shell = command.clone();
 
     if is_pwsh || is_powershell {
         // PowerShell
         if config.ci_mode && !config.no_exit_on_error {
+            command_for_shell = format!("$ErrorActionPreference='Stop'; {command_for_shell}");
             cmd.arg("-NoProfile")
                 .arg("-NonInteractive")
                 .arg("-Command")
-                .arg(format!("$ErrorActionPreference='Stop'; {command}"));
+                .arg(command_for_shell);
         } else {
-            cmd.arg("-NoProfile").arg("-Command").arg(command);
+            cmd.arg("-NoProfile").arg("-Command").arg(command_for_shell);
         }
     } else if is_cmd {
         // Windows CMD
-        cmd.arg("/C").arg(command);
+        cmd.arg("/C").arg(command_for_shell);
     } else {
         // Unix shells (bash, sh, zsh, etc.)
-        let command = if config.ci_mode && !config.no_exit_on_error && is_bash {
-            format!("set -euo pipefail; {command}")
-        } else {
-            command.to_string()
-        };
-        cmd.arg("-c").arg(command);
+        if config.ci_mode && !config.no_exit_on_error && is_bash {
+            command_for_shell = format!("set -euo pipefail; {command_for_shell}");
+        }
+        cmd.arg("-c").arg(command_for_shell);
     }
 
     // Propagate environment
@@ -5280,6 +5297,27 @@ fn execute_external(
     }
 
     Ok(status)
+}
+
+fn wrap_with_anchor_guard(command: &str, config: &ShellConfig) -> String {
+    let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let anchor = canonicalize_or(&config.world_root.anchor_root(&current_dir));
+    let anchor_escaped = shell_escape_for_shell(&anchor);
+    let mut guarded = format!(
+        "__substrate_anchor_root={anchor}; substrate_anchor_cd() {{ command cd \"$@\" || return $?; dest=$(pwd -P); case \"$dest\" in \"$__substrate_anchor_root\"|\"$__substrate_anchor_root\"/*) ;; *) printf 'substrate: info: caged root guard: returning to %s\\n' \"$__substrate_anchor_root\" >&2; command cd \"$__substrate_anchor_root\" || return $?;; esac; unset dest; }}; cd() {{ substrate_anchor_cd \"$@\"; }}; substrate_anchor_cd .; ",
+        anchor = anchor_escaped,
+    );
+    guarded.push_str(command);
+    guarded
+}
+
+fn shell_escape_for_shell(path: &Path) -> String {
+    let raw = path.to_string_lossy();
+    if raw.contains('\'') {
+        format!("'{}'", raw.replace('\'', "'\"'\"'"))
+    } else {
+        format!("'{raw}'")
+    }
 }
 
 fn spawn_host_stream_thread<R>(

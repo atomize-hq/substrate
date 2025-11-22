@@ -7,6 +7,11 @@ use substrate_common::paths as substrate_paths;
 use substrate_common::WorldRootMode;
 use toml::value::{Table as TomlTable, Value as TomlValue};
 
+const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
+const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
+const LEGACY_ROOT_MODE_ENV: &str = "SUBSTRATE_WORLD_ROOT_MODE";
+const LEGACY_ROOT_PATH_ENV: &str = "SUBSTRATE_WORLD_ROOT_PATH";
+
 #[derive(Debug, Clone)]
 pub struct WorldRootSettings {
     pub mode: WorldRootMode,
@@ -70,7 +75,7 @@ pub(crate) fn resolve_world_root(
     } else if path.is_none() {
         if mode == WorldRootMode::Custom {
             bail!(
-                "world root mode 'custom' requires a path (use --world-root-path, a config file, or SUBSTRATE_WORLD_ROOT_PATH)"
+                "world root mode 'custom' requires a path (use --anchor-path/--world-root-path, a config file, or SUBSTRATE_ANCHOR_PATH/SUBSTRATE_WORLD_ROOT_PATH)"
             );
         }
         path = Some(launch_dir.to_path_buf());
@@ -92,23 +97,22 @@ pub(crate) fn resolve_world_root(
 }
 
 pub(crate) fn apply_world_root_env(settings: &WorldRootSettings) {
-    env::set_var("SUBSTRATE_WORLD_ROOT_MODE", settings.mode.as_str());
-    env::set_var(
-        "SUBSTRATE_WORLD_ROOT_PATH",
-        settings.path.to_string_lossy().to_string(),
-    );
+    let mode = settings.mode.as_str();
+    let path = settings.path.to_string_lossy().to_string();
+    env::set_var(ANCHOR_MODE_ENV, mode);
+    env::set_var(LEGACY_ROOT_MODE_ENV, mode);
+    env::set_var(ANCHOR_PATH_ENV, &path);
+    env::set_var(LEGACY_ROOT_PATH_ENV, &path);
     env::set_var("SUBSTRATE_CAGED", if settings.caged { "1" } else { "0" });
 }
 
 pub(crate) fn world_root_from_env() -> WorldRootSettings {
     let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let mode = env::var("SUBSTRATE_WORLD_ROOT_MODE")
-        .ok()
-        .and_then(|value| WorldRootMode::parse(&value))
+    let mode = first_env_value(&[ANCHOR_MODE_ENV, LEGACY_ROOT_MODE_ENV])
+        .and_then(|(_, value)| WorldRootMode::parse(&value))
         .unwrap_or(WorldRootMode::Project);
-    let base_path = env::var("SUBSTRATE_WORLD_ROOT_PATH")
-        .ok()
-        .and_then(|value| {
+    let base_path = first_env_value(&[ANCHOR_PATH_ENV, LEGACY_ROOT_PATH_ENV])
+        .and_then(|(_, value)| {
             let trimmed = value.trim();
             (!trimmed.is_empty()).then(|| PathBuf::from(trimmed))
         })
@@ -160,11 +164,20 @@ fn parse_world_settings(path: &Path, contents: &str) -> Result<PartialWorldRoot>
         }
     };
 
-    let mode = match table.get("root_mode") {
-        Some(TomlValue::String(value)) => Some(parse_mode(value, path, "world.root_mode")?),
+    let (mode_value, mode_key) = match table.get("anchor_mode") {
+        Some(value) => (Some(value), "world.anchor_mode"),
+        None => match table.get("root_mode") {
+            Some(value) => (Some(value), "world.root_mode"),
+            None => (None, ""),
+        },
+    };
+
+    let mode = match mode_value {
+        Some(TomlValue::String(value)) => Some(parse_mode(value, path, mode_key)?),
         Some(other) => {
             bail!(
-                "world.root_mode in {} must be a string (found {})",
+                "{} in {} must be a string (found {})",
+                mode_key,
                 path.display(),
                 toml_type_name(other)
             );
@@ -172,14 +185,23 @@ fn parse_world_settings(path: &Path, contents: &str) -> Result<PartialWorldRoot>
         None => None,
     };
 
-    let path_value = match table.get("root_path") {
+    let (path_value, path_key) = match table.get("anchor_path") {
+        Some(value) => (Some(value), "world.anchor_path"),
+        None => match table.get("root_path") {
+            Some(value) => (Some(value), "world.root_path"),
+            None => (None, ""),
+        },
+    };
+
+    let path_value = match path_value {
         Some(TomlValue::String(value)) => {
             let trimmed = value.trim();
             (!trimmed.is_empty()).then(|| PathBuf::from(trimmed))
         }
         Some(other) => {
             bail!(
-                "world.root_path in {} must be a string (found {})",
+                "{} in {} must be a string (found {})",
+                path_key,
                 path.display(),
                 toml_type_name(other)
             );
@@ -209,18 +231,11 @@ fn parse_world_settings(path: &Path, contents: &str) -> Result<PartialWorldRoot>
 fn load_env_settings() -> Result<PartialWorldRoot> {
     let mut partial = PartialWorldRoot::default();
 
-    if let Ok(mode) = env::var("SUBSTRATE_WORLD_ROOT_MODE") {
-        partial.mode = Some(
-            WorldRootMode::parse(&mode).ok_or_else(|| {
-                anyhow!(
-                    "SUBSTRATE_WORLD_ROOT_MODE must be one of project, follow-cwd, or custom (found {})",
-                    mode
-                )
-            })?,
-        );
+    if let Some((key, mode)) = first_env_value(&[ANCHOR_MODE_ENV, LEGACY_ROOT_MODE_ENV]) {
+        partial.mode = Some(parse_env_mode(key, &mode)?);
     }
 
-    if let Ok(path) = env::var("SUBSTRATE_WORLD_ROOT_PATH") {
+    if let Some((_, path)) = first_env_value(&[ANCHOR_PATH_ENV, LEGACY_ROOT_PATH_ENV]) {
         let trimmed = path.trim();
         if !trimmed.is_empty() {
             partial.path = Some(PathBuf::from(trimmed));
@@ -274,6 +289,21 @@ fn toml_type_name(value: &TomlValue) -> &'static str {
         TomlValue::String(_) => "string",
         TomlValue::Table(_) => "table",
     }
+}
+
+fn first_env_value(keys: &[&'static str]) -> Option<(&'static str, String)> {
+    keys.iter()
+        .find_map(|&key| env::var(key).ok().map(|value| (key, value)))
+}
+
+fn parse_env_mode(key: &str, raw: &str) -> Result<WorldRootMode> {
+    WorldRootMode::parse(raw).ok_or_else(|| {
+        anyhow!(
+            "{} must be one of project, follow-cwd, or custom (found {})",
+            key,
+            raw.trim()
+        )
+    })
 }
 
 #[cfg(test)]
