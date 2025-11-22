@@ -18,6 +18,8 @@ pub fn substrate_shell_driver() -> Command {
 
     let mut cmd = Command::new(binary_path());
     cmd.env("TMPDIR", shared_tmpdir());
+    // Ensure tests are deterministic even when run from inside the shimmed substrate shell.
+    cmd.env_remove("SHIM_ORIGINAL_PATH");
     cmd.env("SUBSTRATE_WORLD", "disabled");
     cmd.env("SUBSTRATE_WORLD_ENABLED", "0");
     cmd.env_remove("SUBSTRATE_WORLD_ID");
