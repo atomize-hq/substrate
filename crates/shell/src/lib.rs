@@ -6070,7 +6070,9 @@ mod manager_init_wiring_tests {
         assert!(config.no_world);
         assert_eq!(config.world_root.mode, WorldRootMode::FollowCwd);
         let expected_workdir = fs::canonicalize(&workdir).unwrap_or_else(|_| workdir.clone());
-        assert_eq!(config.world_root.path, expected_workdir);
+        let actual_workdir =
+            fs::canonicalize(&config.world_root.path).unwrap_or_else(|_| config.world_root.path);
+        assert_eq!(actual_workdir, expected_workdir);
         assert!(!config.world_root.caged);
         assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "disabled");
         assert_eq!(env::var("SUBSTRATE_WORLD_ENABLED").unwrap(), "0");
