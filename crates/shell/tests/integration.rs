@@ -65,7 +65,8 @@ impl ShellEnvFixture {
 fn substrate_command_for_home(fixture: &ShellEnvFixture) -> Command {
     let mut cmd = get_substrate_binary();
     cmd.env("HOME", fixture.home())
-        .env("USERPROFILE", fixture.home());
+        .env("USERPROFILE", fixture.home())
+        .env("SHELL", "/bin/bash");
     cmd
 }
 
