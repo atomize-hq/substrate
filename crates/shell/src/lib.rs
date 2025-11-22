@@ -5908,14 +5908,11 @@ mod manager_init_wiring_tests {
             "[install]\nworld_enabled = false\n[world]\nroot_mode = \"project\"\nroot_path = \"\"\ncaged = true\n",
         )
         .unwrap();
-        fs::write(
-            workdir.join(".substrate/settings.toml"),
-            format!(
-                "[world]\nroot_mode = \"custom\"\nroot_path = \"{}\"\ncaged = false\n",
-                custom_root.display()
-            ),
-        )
-        .unwrap();
+        let settings_body = format!(
+            "[world]\nroot_mode = \"custom\"\nroot_path = \"{}\"\ncaged = false\n",
+            custom_root.display().to_string().replace('\\', "\\\\")
+        );
+        fs::write(workdir.join(".substrate/settings.toml"), settings_body).unwrap();
 
         let prev_home = set_env("HOME", &home.display().to_string());
         let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
@@ -5975,14 +5972,11 @@ mod manager_init_wiring_tests {
             "[world]\nanchor_mode = \"project\"\nanchor_path = \"/config/root\"\ncaged = false\n",
         )
         .unwrap();
-        fs::write(
-            workdir.join(".substrate/settings.toml"),
-            format!(
-                "[world]\nanchor_mode = \"custom\"\nanchor_path = \"{}\"\ncaged = false\n",
-                dir_anchor.display()
-            ),
-        )
-        .unwrap();
+        let settings_body = format!(
+            "[world]\nanchor_mode = \"custom\"\nanchor_path = \"{}\"\ncaged = false\n",
+            dir_anchor.display().to_string().replace('\\', "\\\\")
+        );
+        fs::write(workdir.join(".substrate/settings.toml"), settings_body).unwrap();
 
         let prev_home = set_env("HOME", &home.display().to_string());
         let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
