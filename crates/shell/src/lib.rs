@@ -1964,7 +1964,7 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
                             limits: ResourceLimits::default(),
                             enable_preload: false,
                             allowed_domains: substrate_broker::allowed_domains(),
-                            project_dir: world_root_settings.effective_root(),
+                            project_dir: config.world_root.effective_root(),
                             always_isolate: false,
                         };
                         if let Ok(handle) = ctx.backend.ensure_session(&spec) {
