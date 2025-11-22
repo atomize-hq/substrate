@@ -661,7 +661,9 @@ managers:
             manifest_path.to_string_lossy().as_ref(),
         )
         .env("SUBSTRATE_WORLD", "enabled")
-        .env("SUBSTRATE_SHIM_HINTS", "1");
+        .env("SUBSTRATE_SHIM_HINTS", "1")
+        .env_remove("SHIM_ACTIVE")
+        .env_remove("SHIM_DEPTH");
     let output = run_with_retry(cmd)?;
 
     assert!(!output.status.success(), "shim should propagate failure");
@@ -756,7 +758,9 @@ managers:
             manifest_path.to_string_lossy().as_ref(),
         )
         .env("SUBSTRATE_WORLD", "enabled")
-        .env("SUBSTRATE_SHIM_HINTS", "1");
+        .env("SUBSTRATE_SHIM_HINTS", "1")
+        .env_remove("SHIM_ACTIVE")
+        .env_remove("SHIM_DEPTH");
     let output = run_with_retry(cmd)?;
 
     assert!(
