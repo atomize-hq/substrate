@@ -99,10 +99,6 @@ pub fn world_spec() -> WorldSpec {
     }
 }
 
-fn current_dir() -> PathBuf {
-    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-}
-
 fn warn_once(message: String) {
     static WARN_ONCE: Once = Once::new();
     WARN_ONCE.call_once(move || {

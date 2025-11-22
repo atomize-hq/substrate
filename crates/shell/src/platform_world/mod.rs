@@ -7,6 +7,7 @@ pub fn detect() -> Result<PlatformWorldContext> {
     windows::detect()
 }
 
+#[cfg(not(target_os = "windows"))]
 use crate::settings;
 use anyhow::Result;
 use std::fmt;

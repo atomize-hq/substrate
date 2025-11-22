@@ -48,7 +48,7 @@ use crate::agent_events::{
     clear_agent_event_sender, format_event_line, init_event_channel, publish_agent_event,
     publish_command_completion, schedule_demo_burst, schedule_demo_events,
 };
-use crate::settings::{apply_world_root_env, resolve_world_root, world_root_from_env};
+use crate::settings::{apply_world_root_env, resolve_world_root};
 
 // Reedline imports
 use reedline::Signal;
@@ -4382,7 +4382,7 @@ where
                 limits: ResourceLimits::default(),
                 enable_preload: false,
                 allowed_domains: substrate_broker::allowed_domains(),
-                project_dir: world_root_from_env().path,
+                project_dir: crate::settings::world_root_from_env().path,
                 always_isolate: false,
             };
             let backend = LinuxLocalBackend::new();
@@ -6071,7 +6071,7 @@ mod manager_init_wiring_tests {
         assert_eq!(config.world_root.mode, WorldRootMode::FollowCwd);
         let expected_workdir = fs::canonicalize(&workdir).unwrap_or_else(|_| workdir.clone());
         let actual_workdir =
-            fs::canonicalize(&config.world_root.path).unwrap_or_else(|_| config.world_root.path);
+            fs::canonicalize(&config.world_root.path).unwrap_or(config.world_root.path);
         assert_eq!(actual_workdir, expected_workdir);
         assert!(!config.world_root.caged);
         assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "disabled");
