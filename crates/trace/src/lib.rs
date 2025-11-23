@@ -571,6 +571,8 @@ pub fn policy_violation(cmd: &str, violation_type: &str, decision: &str) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
+    use std::sync::{Arc, Barrier};
     use tempfile::TempDir;
 
     fn ensure_trace_context() -> TraceContext {
@@ -741,5 +743,88 @@ mod tests {
         assert!(log_path.with_extension("jsonl.2").exists());
         // .3 should NOT exist because keep=2
         assert!(!log_path.with_extension("jsonl.3").exists());
+    }
+
+    #[test]
+    fn trace_contexts_do_not_share_policy_or_outputs() {
+        let tmp = TempDir::new().unwrap();
+        let log_a = tmp.path().join("trace_a.jsonl");
+        let log_b = tmp.path().join("trace_b.jsonl");
+
+        let ctx_a = TraceContext::new();
+        let ctx_b = TraceContext::new();
+        ctx_a.init_trace(Some(log_a.clone())).unwrap();
+        ctx_b.init_trace(Some(log_b.clone())).unwrap();
+        ctx_a.set_policy_id("policy-a");
+        ctx_b.set_policy_id("policy-b");
+
+        let barrier = Arc::new(Barrier::new(2));
+
+        let span_a = {
+            let ctx = ctx_a.clone();
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                let span = ctx
+                    .create_span_builder()
+                    .with_command("echo alpha")
+                    .start()
+                    .expect("start span for context A");
+                let span_id = span.get_span_id().to_string();
+                span.finish(0, vec![], None)
+                    .expect("finish span for context A");
+                span_id
+            })
+        };
+
+        let span_b = {
+            let ctx = ctx_b.clone();
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                let span = ctx
+                    .create_span_builder()
+                    .with_command("echo beta")
+                    .start()
+                    .expect("start span for context B");
+                let span_id = span.get_span_id().to_string();
+                span.finish(0, vec![], None)
+                    .expect("finish span for context B");
+                span_id
+            })
+        };
+
+        let span_id_a = span_a.join().expect("thread a panicked");
+        let span_id_b = span_b.join().expect("thread b panicked");
+
+        let records_a: Vec<Value> = std::fs::read_to_string(&log_a)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str::<Value>(line).unwrap())
+            .collect();
+        let records_b: Vec<Value> = std::fs::read_to_string(&log_b)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str::<Value>(line).unwrap())
+            .collect();
+
+        assert!(!records_a.is_empty(), "context A should write spans");
+        assert!(!records_b.is_empty(), "context B should write spans");
+
+        assert!(records_a
+            .iter()
+            .all(|value| value["policy_id"] == "policy-a"));
+        assert!(records_b
+            .iter()
+            .all(|value| value["policy_id"] == "policy-b"));
+
+        assert!(records_a.iter().any(|value| value["span_id"] == span_id_a));
+        assert!(records_b.iter().any(|value| value["span_id"] == span_id_b));
+
+        assert!(records_a.iter().all(|value| value["span_id"] != span_id_b));
+        assert!(records_b.iter().all(|value| value["span_id"] != span_id_a));
+
+        assert_eq!(ctx_a.policy_id(), "policy-a");
+        assert_eq!(ctx_b.policy_id(), "policy-b");
     }
 }

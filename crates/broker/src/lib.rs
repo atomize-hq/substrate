@@ -362,7 +362,7 @@ pub fn allowed_domains() -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
+    use std::sync::{Arc, Barrier};
     use tempfile::tempdir;
 
     fn poison_rwlock<T: Send + Sync + 'static>(lock: &Arc<RwLock<T>>) {
@@ -486,5 +486,99 @@ allow_shell_operators: true
         );
 
         broker.approvals.clear_poison();
+    }
+
+    #[test]
+    fn broker_handles_remain_isolated_in_parallel() {
+        let dir = tempdir().unwrap();
+        let policy_a = dir.path().join("policy_a.yaml");
+        let policy_b = dir.path().join("policy_b.yaml");
+
+        std::fs::write(
+            &policy_a,
+            r#"
+id: alpha
+name: Alpha Policy
+fs_read: []
+fs_write: []
+net_allowed: []
+cmd_allowed:
+  - alpha-allowed
+cmd_denied: []
+cmd_isolated: []
+require_approval: false
+allow_shell_operators: true
+"#,
+        )
+        .unwrap();
+
+        std::fs::write(
+            &policy_b,
+            r#"
+id: beta
+name: Beta Policy
+fs_read: []
+fs_write: []
+net_allowed: []
+cmd_allowed:
+  - beta-allowed
+cmd_denied: []
+cmd_isolated: []
+require_approval: false
+allow_shell_operators: true
+"#,
+        )
+        .unwrap();
+
+        let broker_a = BrokerHandle::new();
+        broker_a.initialize(Some(&policy_a)).unwrap();
+        broker_a.set_observe_only(false);
+
+        let broker_b = BrokerHandle::new();
+        broker_b.initialize(Some(&policy_b)).unwrap();
+
+        assert!(
+            broker_b.is_observe_only(),
+            "changing one broker handle should not affect another"
+        );
+        broker_b.set_observe_only(false);
+
+        let barrier = Arc::new(Barrier::new(2));
+        let thread_a = {
+            let barrier = barrier.clone();
+            let broker = broker_a.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                broker.evaluate("alpha-allowed", "/tmp", None)
+            })
+        };
+
+        let thread_b = {
+            let barrier = barrier.clone();
+            let broker = broker_b.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                broker.evaluate("beta-allowed", "/tmp", None)
+            })
+        };
+
+        let decision_a = thread_a.join().expect("thread a panicked").unwrap();
+        let decision_b = thread_b.join().expect("thread b panicked").unwrap();
+
+        assert!(matches!(decision_a, Decision::Allow));
+        assert!(matches!(decision_b, Decision::Allow));
+
+        assert!(matches!(
+            broker_a
+                .evaluate("beta-allowed", "/tmp", None)
+                .expect("evaluate beta on broker_a"),
+            Decision::Deny(_)
+        ));
+        assert!(matches!(
+            broker_b
+                .evaluate("alpha-allowed", "/tmp", None)
+                .expect("evaluate alpha on broker_b"),
+            Decision::Deny(_)
+        ));
     }
 }
