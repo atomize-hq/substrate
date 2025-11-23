@@ -816,7 +816,7 @@ impl Drop for MinimalTerminalGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicBool, AtomicI32};
+    use std::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
     use std::sync::mpsc;
     use std::sync::{Arc, Mutex, OnceLock};
 
@@ -829,7 +829,141 @@ mod tests {
             .expect("pty env guard poisoned")
     }
 
+    #[derive(Clone)]
+    struct MockMasterPty {
+        sizes: Arc<Mutex<Vec<PtySize>>>,
+        writes: Arc<Mutex<Vec<u8>>>,
+        flushes: Arc<AtomicUsize>,
+    }
+
+    impl MockMasterPty {
+        fn new(
+            sizes: Arc<Mutex<Vec<PtySize>>>,
+            writes: Arc<Mutex<Vec<u8>>>,
+            flushes: Arc<AtomicUsize>,
+        ) -> Self {
+            Self {
+                sizes,
+                writes,
+                flushes,
+            }
+        }
+
+        fn writer(&self) -> MockWriter {
+            MockWriter::new(self.writes.clone(), self.flushes.clone())
+        }
+    }
+
+    impl portable_pty::MasterPty for MockMasterPty {
+        fn resize(&self, size: PtySize) -> Result<(), anyhow::Error> {
+            self.sizes.lock().unwrap().push(size);
+            Ok(())
+        }
+
+        fn get_size(&self) -> Result<PtySize, anyhow::Error> {
+            Ok(PtySize {
+                rows: 24,
+                cols: 80,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+        }
+
+        fn try_clone_reader(&self) -> Result<Box<dyn Read + Send>, anyhow::Error> {
+            Ok(Box::new(io::empty()))
+        }
+
+        fn take_writer(&self) -> Result<Box<dyn Write + Send>, anyhow::Error> {
+            Ok(Box::new(self.writer()))
+        }
+
+        #[cfg(unix)]
+        fn process_group_leader(&self) -> Option<libc::pid_t> {
+            None
+        }
+
+        #[cfg(unix)]
+        fn as_raw_fd(&self) -> Option<portable_pty::unix::RawFd> {
+            None
+        }
+    }
+
+    #[derive(Clone)]
+    struct MockWriter {
+        writes: Arc<Mutex<Vec<u8>>>,
+        flushes: Arc<AtomicUsize>,
+    }
+
+    impl MockWriter {
+        fn new(writes: Arc<Mutex<Vec<u8>>>, flushes: Arc<AtomicUsize>) -> Self {
+            Self { writes, flushes }
+        }
+    }
+
+    impl Write for MockWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.writes.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            self.flushes.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
     // Mock implementations for testing PTY operations without actual PTY allocation
+    #[test]
+    fn pty_manager_processes_channel_commands() {
+        let sizes = Arc::new(Mutex::new(Vec::new()));
+        let writes = Arc::new(Mutex::new(Vec::new()));
+        let flushes = Arc::new(AtomicUsize::new(0));
+
+        let master = MockMasterPty::new(sizes.clone(), writes.clone(), flushes.clone());
+        let writer = master.writer();
+
+        let (tx, rx) = mpsc::channel();
+        let control = PtyControl { tx };
+
+        let manager =
+            thread::spawn(move || run_pty_manager(Box::new(master), Box::new(writer), rx));
+
+        let resize = PtySize {
+            rows: 22,
+            cols: 88,
+            pixel_width: 0,
+            pixel_height: 0,
+        };
+        control.resize(resize);
+        control.write(b"bytes".to_vec());
+        control.write(b"-more".to_vec());
+        control.close();
+
+        manager.join().expect("pty manager thread panicked");
+
+        assert_eq!(sizes.lock().unwrap().last().copied(), Some(resize));
+        assert_eq!(writes.lock().unwrap().as_slice(), b"bytes-more");
+        assert!(flushes.load(Ordering::SeqCst) >= 2);
+    }
+
+    #[test]
+    fn pty_manager_exits_when_channel_closes() {
+        let sizes = Arc::new(Mutex::new(Vec::new()));
+        let writes = Arc::new(Mutex::new(Vec::new()));
+        let flushes = Arc::new(AtomicUsize::new(0));
+
+        let master = MockMasterPty::new(sizes, writes, flushes);
+        let writer = master.writer();
+
+        let (tx, rx) = mpsc::channel();
+        let manager =
+            thread::spawn(move || run_pty_manager(Box::new(master), Box::new(writer), rx));
+
+        drop(tx);
+        manager
+            .join()
+            .expect("pty manager thread panicked on channel close");
+    }
 
     #[test]
     fn test_pty_exit_status_creation() {
