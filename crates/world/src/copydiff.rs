@@ -126,7 +126,9 @@ fn copy_tree(from: &Path, to: &Path) -> Result<()> {
             // Fallback: walk + copy
             for entry in WalkDir::new(from) {
                 let entry = entry?;
-                let rel = entry.path().strip_prefix(from).unwrap();
+                let rel = entry.path().strip_prefix(from).with_context(|| {
+                    format!("computing relative path for {}", entry.path().display())
+                })?;
                 if rel.as_os_str().is_empty() {
                     continue;
                 }
@@ -165,7 +167,16 @@ fn compute_diff(base: &Path, work: &Path) -> Result<FsDiff> {
 
     for entry in WalkDir::new(base) {
         let entry = entry?;
-        let rel = entry.path().strip_prefix(base).unwrap().to_path_buf();
+        let rel = entry
+            .path()
+            .strip_prefix(base)
+            .with_context(|| {
+                format!(
+                    "computing base relative path for {}",
+                    entry.path().display()
+                )
+            })?
+            .to_path_buf();
         if rel.as_os_str().is_empty() {
             continue;
         }
@@ -173,7 +184,16 @@ fn compute_diff(base: &Path, work: &Path) -> Result<FsDiff> {
     }
     for entry in WalkDir::new(work) {
         let entry = entry?;
-        let rel = entry.path().strip_prefix(work).unwrap().to_path_buf();
+        let rel = entry
+            .path()
+            .strip_prefix(work)
+            .with_context(|| {
+                format!(
+                    "computing work relative path for {}",
+                    entry.path().display()
+                )
+            })?
+            .to_path_buf();
         if rel.as_os_str().is_empty() {
             continue;
         }
@@ -207,8 +227,12 @@ fn compute_diff(base: &Path, work: &Path) -> Result<FsDiff> {
             diff.truncated = true;
             break;
         }
-        let b = base_map.get(rel).unwrap();
-        let w = work_map.get(rel).unwrap();
+        let b = base_map
+            .get(rel)
+            .with_context(|| format!("missing base entry for {}", rel.display()))?;
+        let w = work_map
+            .get(rel)
+            .with_context(|| format!("missing work entry for {}", rel.display()))?;
         match (&b.kind[..], &w.kind[..]) {
             ("d", "d") => { /* ignore dir metadata for now to reduce noise */ }
             ("f", "f") => {

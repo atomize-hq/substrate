@@ -3398,6 +3398,7 @@ dependencies = [
 name = "substrate-telemetry"
 version = "0.2.1"
 dependencies = [
+ "anyhow",
  "chrono",
  "lazy_static",
  "libc",

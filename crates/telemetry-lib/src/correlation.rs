@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Result};
 use lazy_static::lazy_static;
 use std::env;
 use std::sync::Mutex;
@@ -18,7 +19,7 @@ pub struct SessionInfo {
 }
 
 impl SessionInfo {
-    fn from_env() -> Self {
+    pub fn from_env() -> Self {
         Self {
             session_id: env::var("SUBSTRATE_SESSION_ID")
                 .unwrap_or_else(|_| format!("{}", Uuid::now_v7())),
@@ -35,7 +36,20 @@ impl SessionInfo {
 }
 
 pub fn get_session_info() -> SessionInfo {
-    SESSION_INFO.lock().unwrap().clone()
+    match get_session_info_result() {
+        Ok(info) => info,
+        Err(err) => {
+            eprintln!("[telemetry] failed to read session info: {err}");
+            SessionInfo::from_env()
+        }
+    }
+}
+
+pub fn get_session_info_result() -> Result<SessionInfo> {
+    let guard = SESSION_INFO
+        .lock()
+        .map_err(|e| anyhow!("Failed to acquire session info lock: {}", e))?;
+    Ok(guard.clone())
 }
 
 pub fn generate_span_id() -> String {

@@ -1,4 +1,4 @@
-use std::ffi::CString;
+use std::ffi::{c_void, CString};
 use std::os::raw::{c_char, c_int};
 use std::time::Instant;
 
@@ -22,6 +22,17 @@ unsafe fn get_original<T>(name: &str) -> Option<T> {
     } else {
         Some(std::mem::transmute_copy(&ptr))
     }
+}
+
+fn resolve_symbol(name: &str) -> Option<*mut c_void> {
+    CString::new(name).ok().and_then(|c_name| {
+        let ptr = unsafe { libc::dlsym(libc::RTLD_NEXT, c_name.as_ptr()) };
+        if ptr.is_null() {
+            None
+        } else {
+            Some(ptr.cast())
+        }
+    })
 }
 
 // Helper to convert flags to readable string
@@ -72,11 +83,7 @@ pub unsafe extern "C" fn open(path: *const c_char, flags: c_int, mode: c_int) ->
         || path_str.starts_with("/dev/")
     {
         // Call original without logging
-        let ptr = unsafe {
-            let c_name = CString::new("open").unwrap();
-            libc::dlsym(libc::RTLD_NEXT, c_name.as_ptr())
-        };
-        if !ptr.is_null() {
+        if let Some(ptr) = resolve_symbol("open") {
             if flags & libc::O_CREAT != 0 {
                 let original_fn: OpenFn = unsafe { std::mem::transmute(ptr) };
                 return unsafe { original_fn(path, flags, mode as libc::mode_t) };
@@ -98,11 +105,7 @@ pub unsafe extern "C" fn open(path: *const c_char, flags: c_int, mode: c_int) ->
     );
 
     // Call original open
-    let ptr = unsafe {
-        let c_name = CString::new("open").unwrap();
-        libc::dlsym(libc::RTLD_NEXT, c_name.as_ptr())
-    };
-    let result = if !ptr.is_null() {
+    let result = if let Some(ptr) = resolve_symbol("open") {
         if flags & libc::O_CREAT != 0 {
             let original_fn: OpenFn = unsafe { std::mem::transmute(ptr) };
             unsafe { original_fn(path, flags, mode as libc::mode_t) }
@@ -164,11 +167,7 @@ pub unsafe extern "C" fn openat(
         || path_str.starts_with("/sys/")
         || path_str.starts_with("/dev/")
     {
-        let ptr = unsafe {
-            let c_name = CString::new("openat").unwrap();
-            libc::dlsym(libc::RTLD_NEXT, c_name.as_ptr())
-        };
-        if !ptr.is_null() {
+        if let Some(ptr) = resolve_symbol("openat") {
             if flags & libc::O_CREAT != 0 {
                 let original_fn: OpenatFn = unsafe { std::mem::transmute(ptr) };
                 return unsafe { original_fn(dirfd, path, flags, mode as libc::mode_t) };
@@ -190,11 +189,7 @@ pub unsafe extern "C" fn openat(
     );
 
     // Call original openat
-    let ptr = unsafe {
-        let c_name = CString::new("openat").unwrap();
-        libc::dlsym(libc::RTLD_NEXT, c_name.as_ptr())
-    };
-    let result = if !ptr.is_null() {
+    let result = if let Some(ptr) = resolve_symbol("openat") {
         if flags & libc::O_CREAT != 0 {
             let original_fn: OpenatFn = unsafe { std::mem::transmute(ptr) };
             unsafe { original_fn(dirfd, path, flags, mode as libc::mode_t) }

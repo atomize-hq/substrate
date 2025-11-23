@@ -1,6 +1,6 @@
 //! DNS resolution and pinning for network isolation.
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::RwLock;
@@ -41,7 +41,10 @@ impl DnsResolver {
     }
 
     fn refresh_all(&self) -> Result<()> {
-        let mut cache = self.resolved_ips.write().unwrap();
+        let mut cache = self
+            .resolved_ips
+            .write()
+            .map_err(|e| anyhow!("Failed to acquire DNS cache write lock: {}", e))?;
         // Prune expired entries based on TTL
         let now = Instant::now();
         cache.retain(|_, v| v.expires_at > now);

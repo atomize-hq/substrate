@@ -120,7 +120,9 @@ fn parse_env_override(raw: &str) -> anyhow::Result<EnvOverride> {
     }
 
     let mut parts = trimmed.splitn(2, ':');
-    let mode_part = parts.next().unwrap();
+    let mode_part = parts
+        .next()
+        .ok_or_else(|| anyhow!("{TARGET_ENV} must include mode (tcp:PORT or uds:PATH)"))?;
     let mode: TargetModeSetting = mode_part.parse()?;
     let value = parts
         .next()

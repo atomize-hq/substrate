@@ -1,5 +1,6 @@
 #![allow(non_camel_case_types)]
 
+use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
 use lazy_static::lazy_static;
 use serde::Serialize;
@@ -50,21 +51,32 @@ struct TelemetryEvent {
 }
 
 fn init_telemetry() {
-    let mut initialized = INIT.lock().unwrap();
+    if let Err(err) = init_telemetry_inner() {
+        eprintln!("[telemetry] initialization failed: {err}");
+    }
+}
+
+fn init_telemetry_inner() -> Result<()> {
+    let mut initialized = INIT
+        .lock()
+        .map_err(|e| anyhow!("Failed to acquire telemetry init lock: {}", e))?;
     if *initialized {
-        return;
+        return Ok(());
     }
 
-    let session = get_session_info();
+    let session = get_session_info_result()?;
     let trace_path = session.trace_log.clone();
 
-    if let Ok(file) = OpenOptions::new()
+    let file = OpenOptions::new()
         .create(true)
         .append(true)
         .open(&trace_path)
-    {
-        *TRACE_FILE.lock().unwrap() = Some(file);
-    }
+        .with_context(|| format!("failed to open trace log {}", trace_path))?;
+
+    let mut trace_file = TRACE_FILE
+        .lock()
+        .map_err(|e| anyhow!("Failed to acquire trace file lock: {}", e))?;
+    *trace_file = Some(file);
 
     *initialized = true;
 
@@ -73,6 +85,8 @@ fn init_telemetry() {
         "[telemetry] Initialized - session: {}, trace: {}",
         session.session_id, trace_path
     );
+
+    Ok(())
 }
 
 pub fn log_syscall(
@@ -82,9 +96,21 @@ pub fn log_syscall(
     error: Option<String>,
     elapsed_us: u64,
 ) {
-    init_telemetry();
+    if let Err(err) = log_syscall_inner(syscall, args, result, error, elapsed_us) {
+        eprintln!("[telemetry] failed to log syscall {syscall}: {err}");
+    }
+}
 
-    let session = get_session_info();
+fn log_syscall_inner(
+    syscall: &str,
+    args: Vec<String>,
+    result: Option<String>,
+    error: Option<String>,
+    elapsed_us: u64,
+) -> Result<()> {
+    init_telemetry_inner()?;
+
+    let session = get_session_info_result()?;
     let event = TelemetryEvent {
         ts: Utc::now().to_rfc3339(),
         event_type: "syscall".to_string(),
@@ -99,14 +125,16 @@ pub fn log_syscall(
         error,
     };
 
-    if let Ok(json) = serde_json::to_string(&event) {
-        if let Ok(mut file) = TRACE_FILE.lock() {
-            if let Some(ref mut f) = *file {
-                let _ = writeln!(f, "{}", json);
-                let _ = f.flush();
-            }
-        }
+    let json = serde_json::to_string(&event).context("failed to serialize telemetry event")?;
+    let mut file = TRACE_FILE
+        .lock()
+        .map_err(|e| anyhow!("Failed to acquire trace file lock: {}", e))?;
+    if let Some(ref mut f) = *file {
+        writeln!(f, "{}", json).context("failed to write telemetry event")?;
+        f.flush().context("failed to flush telemetry event")?;
     }
+
+    Ok(())
 }
 
 /// Convert a C string pointer to a Rust `String`.

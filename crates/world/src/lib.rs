@@ -49,7 +49,10 @@ impl WorldBackend for LinuxLocalBackend {
 
         if spec.reuse_session {
             // Try to find existing session
-            let cache = self.session_cache.read().unwrap();
+            let cache = self
+                .session_cache
+                .read()
+                .map_err(|e| anyhow::anyhow!("Failed to acquire session cache read lock: {}", e))?;
             if let Some(world) = cache.values().next() {
                 return Ok(WorldHandle {
                     id: world.id.clone(),
@@ -65,7 +68,10 @@ impl WorldBackend for LinuxLocalBackend {
             id: world.id.clone(),
         };
 
-        let mut cache = self.session_cache.write().unwrap();
+        let mut cache = self
+            .session_cache
+            .write()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire session cache write lock: {}", e))?;
         cache.insert(world.id.clone(), world);
 
         Ok(handle)
@@ -74,7 +80,10 @@ impl WorldBackend for LinuxLocalBackend {
     fn exec(&self, world: &WorldHandle, req: ExecRequest) -> Result<ExecResult> {
         self.check_platform()?;
 
-        let mut cache = self.session_cache.write().unwrap();
+        let mut cache = self
+            .session_cache
+            .write()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire session cache write lock: {}", e))?;
         let session_world = cache
             .get_mut(&world.id)
             .context("World not found in cache")?;
@@ -85,7 +94,10 @@ impl WorldBackend for LinuxLocalBackend {
     fn fs_diff(&self, world: &WorldHandle, span_id: &str) -> Result<FsDiff> {
         self.check_platform()?;
 
-        let cache = self.session_cache.read().unwrap();
+        let cache = self
+            .session_cache
+            .read()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire session cache read lock: {}", e))?;
         let session_world = cache.get(&world.id).context("World not found in cache")?;
 
         session_world.compute_fs_diff(span_id)
@@ -94,7 +106,10 @@ impl WorldBackend for LinuxLocalBackend {
     fn apply_policy(&self, world: &WorldHandle, spec: &WorldSpec) -> Result<()> {
         self.check_platform()?;
 
-        let cache = self.session_cache.read().unwrap();
+        let cache = self
+            .session_cache
+            .read()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire session cache read lock: {}", e))?;
         let session_world = cache.get(&world.id).context("World not found in cache")?;
 
         session_world.apply_policy(spec)

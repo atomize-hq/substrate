@@ -234,18 +234,27 @@ pub fn reload_policy(path: &Path) -> Result<()> {
 }
 
 pub fn set_observe_only(observe: bool) {
-    let broker = GLOBAL_BROKER
-        .read()
-        .expect("Failed to acquire broker read lock");
-    broker.set_observe_only(observe);
+    match GLOBAL_BROKER.read() {
+        Ok(broker) => broker.set_observe_only(observe),
+        Err(err) => {
+            warn!(
+                "Failed to acquire broker read lock for set_observe_only: {}",
+                err
+            );
+        }
+    }
 }
 
 fn matches_pattern(cmd: &str, pattern: &str) -> bool {
     // Simple glob matching for now, can be enhanced
     if pattern.contains('*') {
-        let pattern =
-            glob::Pattern::new(pattern).unwrap_or_else(|_| glob::Pattern::new("").unwrap());
-        pattern.matches(cmd)
+        match glob::Pattern::new(pattern) {
+            Ok(pattern) => pattern.matches(cmd),
+            Err(err) => {
+                warn!("Invalid glob pattern '{}': {}", pattern, err);
+                false
+            }
+        }
     } else {
         cmd.contains(pattern)
     }
