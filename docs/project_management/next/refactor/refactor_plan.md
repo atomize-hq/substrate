@@ -39,6 +39,7 @@ All agents (code, test, integration) **must** follow the session flow on
 `feat/crate-refactor`. Treat the steps below as a mandatory runbook.
 
 ### Start Checklist (feat/crate-refactor)
+
 1. `git checkout feat/crate-refactor && git pull --ff-only`
 2. Read this plan, `tasks.json`, the latest `session_log.md`, the kickoff prompt
    for your task, and `CRATE_REFACTORING_ANALYSIS.md`.
@@ -55,12 +56,14 @@ All agents (code, test, integration) **must** follow the session flow on
    Never edit docs/tasks/session log inside a worktree.
 
 ### Active Work (worktree)
+
 - Stay inside the scope defined by your kickoff prompt. Production changes go in
   code tasks, test updates in test tasks.
 - Document outputs/commands you will need for the END log entry.
 - Commit worktree changes once they meet the acceptance criteria.
 
 ### End Checklist
+
 1. Ensure fmt/lint/tests (per kickoff prompt) pass in the worktree.
 2. Commit your worktree changes with a descriptive message.
 3. Return to the task branch in repo root and merge/cherry-pick from the
@@ -73,7 +76,10 @@ All agents (code, test, integration) **must** follow the session flow on
    ```
 5. Update `tasks.json` (e.g., set to `completed`), append an END entry to the
    session log (include commands run, test results, blockers), and create the
-   next kickoff prompt(s) you are responsible for.
+   next kickoff prompt(s) per role:
+   - Code agent: create the paired test prompt for the same spec.
+   - Test agent: create the integration prompt for this task.
+   - Integration agent: create the next code/test prompts after merging.
 6. Commit those doc updates on `feat/crate-refactor`
    (`git commit -am "docs: finish <task-id>"`).
 7. Remove the worktree if finished (`git worktree remove wt/...`) and push or
@@ -81,17 +87,19 @@ All agents (code, test, integration) **must** follow the session flow on
 
 ### Role Responsibilities
 
-| Role        | Allowed work                                                                 | Forbidden work                                 |
-|-------------|------------------------------------------------------------------------------|------------------------------------------------|
-| Code agent  | Production code, installer/binary plumbing, documentation supporting the refactor. | Creating/updating tests; touching harnesses.   |
-| Test agent  | Test files, fixtures, harness scripts, kickoff prompts for future tasks.     | Changing production code except tiny test-only helpers. |
-| Integration | Merge code/test worktrees, resolve conflicts, run fmt/clippy/tests, update docs/logs. | Adding new features or expanding test coverage. |
+| Role        | Allowed work                                                                          | Forbidden work                                          |
+| ----------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Code agent  | Production code, installer/binary plumbing, documentation supporting the refactor.    | Creating/updating tests; touching harnesses.            |
+| Test agent  | Test files, fixtures, harness scripts, kickoff prompts for future tasks.              | Changing production code except tiny test-only helpers. |
+| Integration | Merge code/test worktrees, resolve conflicts, run fmt/clippy/tests, update docs/logs. | Adding new features or expanding test coverage.         |
 
 Additional rules:
-- **Kickoff prompts** must be authored by the agent finishing a session. Code
-  agents produce the paired test prompt; test agents produce the integration
-  prompt and the next code/test prompts so those tasks can start while
-  integration runs.
+
+- **Kickoff prompts** must be authored by the agent finishing a session:
+  - Code agent: produce the paired test prompt for the same spec.
+  - Test agent: produce the integration prompt for the task you just finished.
+  - Integration agent: produce the next code/test prompts after merging so
+    subsequent tasks can start on the merged baseline.
 - Documentation/tasks/session log updates are committed **only** on
   `feat/crate-refactor` with descriptive messages.
 - Each session’s START/END entries must list commands executed, artifacts
