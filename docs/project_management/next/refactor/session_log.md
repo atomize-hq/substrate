@@ -257,3 +257,11 @@ Template (copy/paste and fill in):
 - Created worktree: pending (will create wt/cr-r5-exec-integ)
 - Plan: merge cr-r5-exec-code and cr-r5-exec-test into integration branch/worktree; resolve conflicts across execution module splits; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; log results for END entry
 - Blockers: none
+
+## [2025-11-23 23:30 UTC] Integration – R5-integ – END
+- Worktree commits: ac9b62da
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings (initial clippy::get-first in pty/control test fixed by switching to first()); cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: fmt/clippy/tests passed; R6 code/test kickoff prompts already present
+- Kickoff prompts created: n/a
+- Docs commit: pending (update tasks/status + session log)
+- Next steps / blockers: remove wt/cr-r5-exec-integ after cleanup; proceed to R6 tasks
