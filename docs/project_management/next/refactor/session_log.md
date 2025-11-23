@@ -130,3 +130,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R3-test.md
 - Docs commit: pending (tasks/status + session log)
 - Next steps / blockers: merge worktree branch into feat/crate-refactor (done); remove worktree when handoff complete
+
+## [2025-11-23 16:20 UTC] Test – R3-test – START
+- Checked out feat/crate-refactor, pulled latest
+- Updated tasks.json + session log (commit: pending)
+- Created worktree: pending (will create wt/cr-r3-boundaries-test)
+- Plan: set R3-test to in_progress; create cr-r3-boundaries-test branch/worktree; add broker/trace isolation tests and world-agent/host-proxy thin-binary harness coverage; run cargo fmt and targeted cargo test -p substrate-broker -p substrate-trace -p world-agent -p host-proxy; record results for END entry
+- Blockers: none
