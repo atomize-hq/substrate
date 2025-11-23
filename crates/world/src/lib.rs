@@ -119,6 +119,10 @@ impl WorldBackend for LinuxLocalBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
+    use std::collections::HashMap;
+    #[cfg(target_os = "linux")]
+    use std::sync::RwLock;
 
     #[test]
     fn test_backend_creation() {
@@ -138,5 +142,43 @@ mod tests {
     fn test_platform_check_succeeds_on_linux() {
         let backend = LinuxLocalBackend::new();
         assert!(backend.check_platform().is_ok());
+    }
+
+    #[cfg(target_os = "linux")]
+    fn poison_cache(cache: &RwLock<HashMap<String, SessionWorld>>) {
+        std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    let _guard = cache.write().unwrap();
+                    panic!("poison cache lock");
+                })
+                .join()
+                .ok();
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn poisoned_cache_returns_error_in_fs_diff() {
+        let backend = LinuxLocalBackend::new();
+        poison_cache(&backend.session_cache);
+        let handle = WorldHandle {
+            id: "missing".to_string(),
+        };
+
+        let result = std::panic::catch_unwind(|| backend.fs_diff(&handle, "span"));
+        assert!(result.is_ok(), "fs_diff panicked on poisoned cache");
+
+        let err = result
+            .unwrap()
+            .expect_err("expected error from poisoned cache");
+        assert!(
+            err.to_string()
+                .contains("Failed to acquire session cache read lock")
+                || err.to_string().contains("poison"),
+            "unexpected error: {err}"
+        );
+
+        backend.session_cache.clear_poison();
     }
 }

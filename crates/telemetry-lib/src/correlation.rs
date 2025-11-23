@@ -71,3 +71,38 @@ pub fn inherit_correlation_env() -> Vec<(String, String)> {
 
     env_vars
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Once;
+
+    fn silence_panic_output() {
+        static ONCE: Once = Once::new();
+        ONCE.call_once(|| {
+            let _ = std::panic::take_hook();
+            std::panic::set_hook(Box::new(|_| {}));
+        });
+    }
+
+    fn poison_session_info() {
+        let _ = std::thread::spawn(|| {
+            let _guard = SESSION_INFO.lock().unwrap();
+            panic!("poison session info lock");
+        })
+        .join();
+    }
+
+    #[test]
+    fn get_session_info_handles_poisoned_lock() {
+        silence_panic_output();
+        poison_session_info();
+
+        let result = std::panic::catch_unwind(get_session_info);
+        SESSION_INFO.clear_poison();
+        let mut guard = SESSION_INFO.lock().unwrap_or_else(|err| err.into_inner());
+        *guard = SessionInfo::from_env();
+
+        assert!(result.is_ok(), "get_session_info panicked on poisoned lock");
+    }
+}

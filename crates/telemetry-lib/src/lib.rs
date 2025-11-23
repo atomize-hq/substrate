@@ -180,6 +180,82 @@ static INIT_ARRAY: extern "C" fn() = {
     init_constructor
 };
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Once;
+    use tempfile::tempdir;
+
+    fn silence_panic_output() {
+        static ONCE: Once = Once::new();
+        ONCE.call_once(|| {
+            let _ = std::panic::take_hook();
+            std::panic::set_hook(Box::new(|_| {}));
+        });
+    }
+
+    fn poison_trace_file_lock() {
+        let _ = std::thread::spawn(|| {
+            let _guard = TRACE_FILE.lock().unwrap();
+            panic!("poison trace file lock");
+        })
+        .join();
+    }
+
+    fn poison_init_lock() {
+        let _ = std::thread::spawn(|| {
+            let _guard = INIT.lock().unwrap();
+            panic!("poison init lock");
+        })
+        .join();
+    }
+
+    fn reset_telemetry_state() {
+        TRACE_FILE.clear_poison();
+        INIT.clear_poison();
+        if let Ok(mut guard) = TRACE_FILE.lock() {
+            *guard = None;
+        }
+        if let Ok(mut init) = INIT.lock() {
+            *init = false;
+        }
+        std::env::remove_var("SUBSTRATE_TRACE_LOG");
+    }
+
+    #[test]
+    fn log_syscall_handles_poisoned_trace_lock() {
+        silence_panic_output();
+        let dir = tempdir().unwrap();
+        let trace_path = dir.path().join("trace.jsonl");
+        std::env::set_var("SUBSTRATE_TRACE_LOG", trace_path.display().to_string());
+
+        poison_trace_file_lock();
+        let result = std::panic::catch_unwind(|| {
+            log_syscall("open", vec!["/tmp/file".into()], Some("0".into()), None, 0);
+        });
+        reset_telemetry_state();
+        assert!(
+            result.is_ok(),
+            "log_syscall panicked on poisoned trace lock"
+        );
+    }
+
+    #[test]
+    fn log_syscall_handles_poisoned_init_lock() {
+        silence_panic_output();
+        let dir = tempdir().unwrap();
+        let trace_path = dir.path().join("trace.jsonl");
+        std::env::set_var("SUBSTRATE_TRACE_LOG", trace_path.display().to_string());
+
+        poison_init_lock();
+        let result = std::panic::catch_unwind(|| {
+            log_syscall("close", vec![], None, None, 1);
+        });
+        reset_telemetry_state();
+        assert!(result.is_ok(), "log_syscall panicked on poisoned init lock");
+    }
+}
+
 #[cfg(target_os = "macos")]
 #[no_mangle]
 #[link_section = "__DATA,__mod_init_func"]
