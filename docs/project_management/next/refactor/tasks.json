@@ -487,7 +487,7 @@
       "name": "Integrate polish/doc sweep",
       "type": "integration",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge polish/doc code/test branches, resolve conflicts, and ensure full fmt/clippy/tests (and relevant doctests/benches) pass.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",

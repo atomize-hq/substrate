@@ -191,3 +191,11 @@ Template (copy/paste and fill in):
 - Results: fmt clean; trace/replay/common suites and replay doctests passed; world-windows-wsl builds with tests skipped on non-Windows; property test added for common::dedupe_path and doctests validating trace/replay docs/prelude
 - Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R4-integ.md
 - Next steps / blockers: ready for R4 integration; remove worktree after merge
+
+## [2025-11-23 19:34 UTC] Integration – R4-integ – START
+- Checked out feat/crate-refactor, pulled latest
+- Confirmed R4-code and R4-test completed
+- Updated tasks.json + session log (commit: pending)
+- Created worktree: pending (will create wt/cr-r4-polish-integ after docs commit)
+- Plan: create cr-r4-polish-integ branch/worktree; merge cr-r4-polish-code and cr-r4-polish-test; resolve conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-trace; cargo test -p world-windows-wsl; cargo test -p substrate-replay --all-targets; cargo test --doc -p substrate-replay; cargo test -p substrate-common --all-targets; capture outputs for END log
+- Blockers: none
