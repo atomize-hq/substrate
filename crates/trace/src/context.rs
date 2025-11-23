@@ -13,6 +13,29 @@ use tracing::debug;
 static TRACE_CONTEXT: OnceLock<TraceContext> = OnceLock::new();
 const WORLD_IMAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Per-session tracing context that owns the current trace output and policy metadata.
+///
+/// ```
+/// use substrate_trace::TraceContext;
+/// use tempfile::TempDir;
+///
+/// # fn main() -> anyhow::Result<()> {
+/// let temp = TempDir::new()?;
+/// let ctx = TraceContext::default();
+/// ctx.init_trace(Some(temp.path().join("trace.jsonl")))?;
+///
+/// let span = ctx
+///     .create_span_builder()
+///     .with_command("echo trace-doc")
+///     .with_cwd("/tmp")
+///     .start()?;
+/// let span_id = span.get_span_id().to_string();
+/// span.finish(0, vec![], None)?;
+///
+/// let loaded = ctx.load_span(&span_id)?;
+/// assert_eq!(loaded.cmd, "echo trace-doc");
+/// # Ok(()) }
+/// ```
 #[derive(Clone)]
 pub struct TraceContext {
     output: Arc<RwLock<Option<TraceOutput>>>,

@@ -3233,6 +3233,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "dirs 5.0.1",
+ "proptest",
  "regex",
  "serde",
  "serde_json",

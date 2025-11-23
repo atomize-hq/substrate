@@ -21,6 +21,20 @@ pub use world_deps_manifest::{
 };
 
 /// Convenience re-exports for consumers that need the common substrate types.
+///
+/// ```
+/// use substrate_common::prelude::*;
+///
+/// let mut diff = FsDiff::default();
+/// assert!(diff.is_empty());
+///
+/// let redacted = redact_sensitive("token=secret");
+/// assert_eq!(redacted, "token=***");
+///
+/// let sample = if cfg!(windows) { r"C:\\bin;C:\\bin" } else { "/bin:/bin" };
+/// let deduped = dedupe_path(sample);
+/// assert_eq!(deduped, dedupe_path(&deduped));
+/// ```
 pub mod prelude {
     pub use crate::agent_events::{AgentEvent, AgentEventKind};
     pub use crate::fs_diff::FsDiff;
@@ -90,6 +104,8 @@ pub fn redact_sensitive(arg: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+    use proptest::string::string_regex;
 
     #[test]
     fn test_dedupe_path() {
@@ -109,5 +125,23 @@ mod tests {
         assert_eq!(redact_sensitive("normal_arg"), "normal_arg");
         assert_eq!(redact_sensitive("token=secret123"), "token=***");
         assert_eq!(redact_sensitive("--password"), "***");
+    }
+
+    proptest! {
+        #[test]
+        fn dedupe_path_is_idempotent(segments in proptest::collection::vec(
+            string_regex(r"[A-Za-z0-9_./\\:-]{1,12}").unwrap(),
+            1..6
+        )) {
+            let separator = if cfg!(windows) { ";" } else { ":" };
+            let path = segments.join(separator);
+            let once = dedupe_path(&path);
+            let twice = dedupe_path(&once);
+
+            prop_assert_eq!(once.clone(), twice);
+            if !once.is_empty() {
+                prop_assert!(once.split(separator).all(|part| !part.is_empty()));
+            }
+        }
     }
 }

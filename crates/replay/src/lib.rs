@@ -192,7 +192,35 @@ pub async fn find_spans_to_replay(
     state::filter_spans_from_trace(trace_file, filter).await
 }
 
-/// Filter criteria for selecting spans to replay
+/// Filter criteria for selecting spans to replay.
+///
+/// ```
+/// use substrate_replay::{find_spans_to_replay, SpanFilter};
+/// use tempfile::NamedTempFile;
+/// use tokio::runtime::Runtime;
+///
+/// # fn main() -> anyhow::Result<()> {
+/// let trace = NamedTempFile::new()?;
+/// std::fs::write(
+///     trace.path(),
+///     r#"{"ts":"2025-01-01T00:00:00Z","event_type":"command_complete","span_id":"spn-doc","session_id":"ses-doc","component":"shell","cmd":"echo doc","exit_code":0}"#,
+/// )?;
+///
+/// let rt = Runtime::new()?;
+/// let spans = rt.block_on(async {
+///     find_spans_to_replay(
+///         trace.path(),
+///         SpanFilter {
+///             command_patterns: vec!["echo".into()],
+///             ..Default::default()
+///         },
+///     )
+///     .await
+/// })?;
+///
+/// assert_eq!(spans, vec!["spn-doc".to_string()]);
+/// # Ok(()) }
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct SpanFilter {
     /// Only replay spans with these commands
