@@ -45,3 +45,19 @@ Template (copy/paste and fill in):
 - Created worktree: wt/cr-r1-panics-test
 - Plan: add panic-focused tests for broker/world/telemetry-lib/forwarder covering poisoned locks/error paths returning Result; keep fixtures test-only; run cargo fmt and targeted cargo test per crates; record results
 - Blockers: none
+
+## [2025-11-23 03:33 UTC] Integration – R1-integ – START
+- Checked out feat/crate-refactor, pulled latest
+- Confirmed R1-code merged to feat/crate-refactor; R1-test branch cr-r1-panics-test ready for integration
+- Updated tasks.json + session log (commit: pending)
+- Worktree: pending (to create wt/cr-r1-panics-integ after docs commit)
+- Plan: merge cr-r1-panics-code and cr-r1-panics-test into integration branch, resolve conflicts, run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p broker -p world -p telemetry-lib -p forwarder
+- Blockers: none
+
+## [2025-11-23 03:33 UTC] Integration – R1-integ – START
+- Checked out feat/crate-refactor, pulled latest
+- Confirmed R1-code merged into feat/crate-refactor and R1-test branch available for integration
+- Updated tasks.json + session log (commit: pending)
+- Created worktree: wt/cr-r1-panics-integ
+- Plan: merge cr-r1-panics-code and cr-r1-panics-test into integration branch; resolve conflicts; run cargo fmt, cargo clippy --workspace --all-targets -- -D warnings, cargo test -p broker/world/telemetry-lib/forwarder; log results
+- Blockers: none

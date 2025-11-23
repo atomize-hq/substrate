@@ -92,7 +92,7 @@
       "name": "Integrate panic remediation",
       "type": "integration",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge panic-remediation code/test worktrees, resolve conflicts, and ensure fmt/clippy/tests pass across the affected crates.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
