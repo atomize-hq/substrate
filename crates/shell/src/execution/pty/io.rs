@@ -1,117 +1,20 @@
+#[cfg(any(windows, test))]
+use super::control::active_pty_control;
+use super::control::{
+    initialize_global_sigwinch_handler_impl, ActivePtyGuard, PtyCommand, PtyControl,
+};
+use crate::execution::{
+    configure_child_shell_env, log_command_event, ShellConfig, ShellMode, PTY_ACTIVE,
+};
 use anyhow::{Context, Result};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde_json::json;
 use std::io::{self, Read, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-use std::sync::mpsc::{self, Sender};
-#[cfg(windows)]
-use std::sync::Condvar;
-use std::sync::{Arc, Mutex};
+use std::sync::mpsc;
+use std::sync::Arc;
 use std::thread;
-
-use lazy_static::lazy_static;
-
-use super::{configure_child_shell_env, log_command_event, ShellConfig, ShellMode, PTY_ACTIVE};
-
-#[derive(Clone)]
-struct PtyControl {
-    tx: Sender<PtyCommand>,
-}
-
-impl PtyControl {
-    #[cfg_attr(windows, allow(dead_code))]
-    fn resize(&self, size: PtySize) {
-        if let Err(err) = self.tx.send(PtyCommand::Resize(size)) {
-            log::warn!("Failed to dispatch PTY resize: {err}");
-        }
-    }
-
-    fn write(&self, data: Vec<u8>) {
-        if let Err(err) = self.tx.send(PtyCommand::Write(data)) {
-            log::warn!("Failed to dispatch PTY write: {err}");
-        }
-    }
-
-    fn close(&self) {
-        let _ = self.tx.send(PtyCommand::Close);
-    }
-}
-
-enum PtyCommand {
-    #[cfg_attr(windows, allow(dead_code))]
-    Resize(PtySize),
-    Write(Vec<u8>),
-    Close,
-}
-
-lazy_static! {
-    static ref ACTIVE_PTY: Mutex<Option<PtyControl>> = Mutex::new(None);
-}
-
-#[cfg(windows)]
-lazy_static! {
-    static ref WIN_PTY_INPUT_GATE: Arc<(Mutex<bool>, Condvar)> =
-        Arc::new((Mutex::new(false), Condvar::new()));
-}
-
-struct ActivePtyGuard;
-
-impl ActivePtyGuard {
-    fn register(control: PtyControl) -> Self {
-        if let Ok(mut slot) = ACTIVE_PTY.lock() {
-            *slot = Some(control);
-        }
-        #[cfg(windows)]
-        wake_input_gate();
-        ActivePtyGuard
-    }
-}
-
-impl Drop for ActivePtyGuard {
-    fn drop(&mut self) {
-        if let Ok(mut slot) = ACTIVE_PTY.lock() {
-            *slot = None;
-        }
-        #[cfg(windows)]
-        sleep_input_gate();
-    }
-}
-
-fn active_pty_control() -> Option<PtyControl> {
-    ACTIVE_PTY.lock().ok().and_then(|slot| slot.clone())
-}
-
-#[cfg(unix)]
-pub(crate) fn initialize_global_sigwinch_handler_impl() {
-    use signal_hook::{consts::SIGWINCH, iterator::Signals};
-
-    static INIT: std::sync::Once = std::sync::Once::new();
-
-    INIT.call_once(|| {
-        thread::spawn(|| {
-            let mut signals = match Signals::new([SIGWINCH]) {
-                Ok(s) => s,
-                Err(e) => {
-                    log::error!("Failed to register SIGWINCH handler: {e}");
-                    return;
-                }
-            };
-
-            for _ in signals.forever() {
-                if let Some(control) = active_pty_control() {
-                    if let Ok(size) = get_terminal_size() {
-                        control.resize(size);
-
-                        if std::env::var("SUBSTRATE_PTY_DEBUG").is_ok() {
-                            log::debug!("SIGWINCH: Resized PTY to {}x{}", size.cols, size.rows);
-                        }
-                    }
-                }
-            }
-        });
-    });
-}
 
 /// Custom exit status for PTY commands
 #[derive(Debug, Clone)]
@@ -221,7 +124,7 @@ pub fn execute_with_pty(
 ) -> Result<PtyExitStatus> {
     // Initialize global handlers once
     #[cfg(unix)]
-    super::initialize_global_sigwinch_handler();
+    initialize_global_sigwinch_handler_impl();
 
     #[cfg(windows)]
     initialize_windows_input_forwarder();
@@ -427,7 +330,7 @@ fn windows_console_size() -> Option<PtySize> {
     }
 }
 
-fn get_terminal_size() -> Result<PtySize> {
+pub(crate) fn get_terminal_size() -> Result<PtySize> {
     #[cfg(windows)]
     if let Some(sz) = windows_console_size() {
         return Ok(sz);
