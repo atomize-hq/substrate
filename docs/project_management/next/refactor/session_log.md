@@ -84,3 +84,10 @@ Template (copy/paste and fill in):
 - Created worktree: pending
 - Plan: set up cr-r2-shell-code worktree; split shell lib into execution/repl/builtins/scripts modules with ~200 line lib.rs surface; replace PTY Arc<Mutex> with channel-based manager; preserve CLI behavior; run cargo fmt, cargo clippy -p substrate-shell -- -D warnings, cargo test -p substrate-shell world_root/world_enable
 - Blockers: none
+
+## [2025-11-23 14:45 UTC] Test – R2-test – START
+- Checked out feat/crate-refactor, pulled latest
+- Updated tasks.json + session log (commit: pending)
+- Created worktree: pending (will create wt/cr-r2-shell-test)
+- Plan: create cr-r2-shell-test branch/worktree; move shell tests into crates/shell/tests aligned with new modules; add PTY channel manager coverage (resize/write/close) and module seam tests; run cargo fmt and cargo test -p substrate-shell world_root plus ./tests/installers/install_smoke.sh; document results for END entry
+- Blockers: none
