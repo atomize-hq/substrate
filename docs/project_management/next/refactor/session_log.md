@@ -153,3 +153,11 @@ Template (copy/paste and fill in):
 - Created worktree: pending (will create wt/cr-r3-boundaries-integ)
 - Plan: create cr-r3-boundaries-integ branch/worktree; merge cr-r3-boundaries-code and cr-r3-boundaries-test; resolve conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-broker -p substrate-trace -p world-agent -p host-proxy; record outputs for END entry
 - Blockers: none
+
+## [2025-11-23 16:39 UTC] Integration – R3-integ – END
+- Worktree commits: none (code/test branches already aligned)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-broker; cargo test -p substrate-trace; cargo test -p world-agent; cargo test -p host-proxy
+- Results: all commands passed; no merge conflicts between code/test branches
+- Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R4-code.md; docs/project_management/next/refactor/kickoff_prompts/R4-test.md
+- Docs commit: pending (updated tasks + session log + R4 prompts)
+- Next steps / blockers: integration branch already matches feat/crate-refactor; remove worktree after docs commit
