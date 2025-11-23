@@ -107,3 +107,11 @@ Template (copy/paste and fill in):
 - Created worktree: pending (will create wt/cr-r2-shell-integ)
 - Plan: create integration branch/worktree; merge cr-r2-shell-code and cr-r2-shell-test; resolve conflicts in shell modules/tests; run cargo fmt, cargo clippy -p substrate-shell -- -D warnings, cargo test -p substrate-shell world_root/world_enable, ./tests/installers/install_smoke.sh; record outputs for END entry
 - Blockers: none
+
+## [2025-11-23 15:10 UTC] Integration – R2-integ – END
+- Worktree commits: none (R2 code/test already fast-forwarded on feat/crate-refactor)
+- Commands: cargo fmt; cargo clippy -p substrate-shell -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; ./tests/installers/install_smoke.sh (skipped: non-Linux)
+- Results: fmt/clippy/tests passed; installer smoke auto-skipped with Linux-only message
+- Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R3-code.md; docs/project_management/next/refactor/kickoff_prompts/R3-test.md
+- Docs commit: (docs: finish R2-integ – tasks/status + session log + R3 prompts)
+- Next steps / blockers: remove integration worktree after merge; R3 tasks ready to start
