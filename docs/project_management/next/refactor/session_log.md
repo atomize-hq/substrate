@@ -23,3 +23,10 @@ Template (copy/paste and fill in):
 - Docs commit: <hash> (updated tasks + session log)
 - Next steps / blockers: <notes for next agent>
 ```
+
+## [2025-11-23 02:39 UTC] Code – R1-code – START
+- Checked out feat/crate-refactor, pulled latest
+- Updated tasks.json + session log (commit: pending)
+- Created worktree: wt/cr-r1-panics-code
+- Plan: scan broker/world/telemetry-lib/forwarder for library unwraps; refactor to Result with anyhow::Context; ensure no new panics; run cargo fmt and cargo clippy --workspace --all-targets -- -D warnings; run targeted tests if needed
+- Blockers: none noted
