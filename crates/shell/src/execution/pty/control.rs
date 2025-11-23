@@ -153,7 +153,7 @@ mod tests {
             "control cleared after guard drop"
         );
         assert!(
-            matches!(received.get(0), Some(PtyCommand::Resize(size)) if size.rows == expected_size.rows && size.cols == expected_size.cols)
+            matches!(received.first(), Some(PtyCommand::Resize(size)) if size.rows == expected_size.rows && size.cols == expected_size.cols)
         );
         assert!(matches!(
             received.get(1),
