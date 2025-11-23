@@ -249,3 +249,11 @@ Template (copy/paste and fill in):
 - Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R5-integ.md
 - Docs commit: pending (updated tasks + session log)
 - Next steps / blockers: ready for R5 integration; remove wt/cr-r5-exec-test after merge
+
+## [2025-11-23 23:25 UTC] Integration – R5-integ – START
+- Checked out feat/crate-refactor, pulled latest
+- Confirmed R5-code/test completed
+- Updated tasks.json + session log (commit: pending)
+- Created worktree: pending (will create wt/cr-r5-exec-integ)
+- Plan: merge cr-r5-exec-code and cr-r5-exec-test into integration branch/worktree; resolve conflicts across execution module splits; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; log results for END entry
+- Blockers: none

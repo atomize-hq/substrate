@@ -615,7 +615,7 @@
       "name": "Integrate shell execution decomposition",
       "type": "integration",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge shell execution code/test branches, resolve conflicts, and ensure fmt/clippy/tests stay green after the module split.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
