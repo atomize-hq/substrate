@@ -227,3 +227,10 @@ Template (copy/paste and fill in):
 - Worktree: pending (will create wt/cr-r5-exec-code after docs commit)
 - Plan: set R5-code to in_progress; create cr-r5-exec-code branch/worktree; split execution/mod.rs into routing/invocation/platform modules; split pty_exec into control/data planes; extract settings/manager init helpers; run cargo fmt, cargo clippy --workspace --all-targets -- -D warnings, cargo test -p substrate-shell world_root/world_enable
 - Blockers: none
+
+## [2025-11-23 22:35 UTC] Code – R5-code – END
+- Worktree commits: 9717cbc4 (cr-r5-exec-code)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: fmt/clippy clean; shell world_root/world_enable suites passed
+- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R5-test.md
+- Next steps / blockers: ready for R5-test/integration; remove wt/cr-r5-exec-code after merge

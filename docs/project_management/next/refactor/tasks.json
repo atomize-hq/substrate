@@ -529,7 +529,7 @@
       "name": "Shell execution decomposition",
       "type": "code",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Split shell execution stack into modules (routing, invocation planning, platform adapters) and break up pty_exec/settings/manager init without changing CLI behavior.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
