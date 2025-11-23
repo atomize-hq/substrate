@@ -145,3 +145,11 @@ Template (copy/paste and fill in):
 - Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R3-integ.md
 - Docs commit: pending (updated tasks + session log)
 - Next steps / blockers: ready for R3 integration; remove worktree when done
+
+## [2025-11-23 16:36 UTC] Integration – R3-integ – START
+- Checked out feat/crate-refactor, pulled latest
+- Confirmed R3-code/test completed
+- Updated tasks.json + session log (commit: pending)
+- Created worktree: pending (will create wt/cr-r3-boundaries-integ)
+- Plan: create cr-r3-boundaries-integ branch/worktree; merge cr-r3-boundaries-code and cr-r3-boundaries-test; resolve conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-broker -p substrate-trace -p world-agent -p host-proxy; record outputs for END entry
+- Blockers: none
