@@ -396,7 +396,7 @@
       "name": "Polish & documentation sweep",
       "type": "code",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Split remaining single-file crates (trace, world-windows-wsl), add replay/common prelude docs, and ensure CHANGELOG reflects refactor outcomes.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",

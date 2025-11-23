@@ -161,3 +161,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R4-code.md; docs/project_management/next/refactor/kickoff_prompts/R4-test.md
 - Docs commit: pending (updated tasks + session log + R4 prompts)
 - Next steps / blockers: integration branch already matches feat/crate-refactor; remove worktree after docs commit
+
+## [2025-11-23 17:02 UTC] Code – R4-code – START
+- Checked out feat/crate-refactor, pulled latest
+- Updated tasks.json + session log (commit: pending)
+- Created worktree: pending (will create wt/cr-r4-polish-code from cr-r4-polish-code)
+- Plan: split trace and world-windows-wsl into modules per analysis; add replay module-level rustdoc with runnable examples and consider common prelude; update CHANGELOG; run cargo fmt, cargo clippy --workspace --all-targets -- -D warnings, cargo test -p substrate-trace, cargo test -p world-windows-wsl (if applicable), cargo test -p substrate-replay --all-targets, cargo test -p substrate-common --all-targets, cargo test --doc -p substrate-replay
+- Blockers: none
