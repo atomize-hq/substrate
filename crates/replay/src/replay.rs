@@ -7,6 +7,7 @@ use std::path::PathBuf;
 #[cfg(target_os = "linux")]
 use std::process as stdprocess;
 use std::process::Stdio;
+use substrate_broker::{set_global_broker, BrokerHandle};
 use substrate_common::FsDiff;
 use tokio::process::Command;
 use tokio::time::{timeout, Duration};
@@ -41,6 +42,8 @@ pub async fn execute_in_world(
     state: &ExecutionState,
     timeout_secs: u64,
 ) -> Result<ExecutionResult> {
+    let _ = set_global_broker(BrokerHandle::new());
+
     // Use world backend when available (macOS/Linux), else fallback
     if world_isolation_available() {
         let verbose = std::env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1";

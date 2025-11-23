@@ -12,7 +12,7 @@ use std::process::ExitStatus;
 use std::time::{Duration, SystemTime};
 
 use crate::context::ShimContext;
-use substrate_trace::{append_to_trace, init_trace};
+use substrate_trace::{append_to_trace, init_trace, set_global_trace_context, TraceContext};
 
 /// Aggregated metadata passed to [`log_execution`] to keep the argument list lean.
 pub struct ExecutionLogMetadata<'a> {
@@ -106,6 +106,7 @@ pub fn log_execution(
 
 /// Helper function for writing log entries with optional fsync
 pub fn write_log_entry(_log_path: &Path, entry: &Value) -> Result<()> {
+    let _ = set_global_trace_context(TraceContext::default());
     // Initialize trace if not already set up (no-op if already initialized)
     let _ = init_trace(None);
     // Ensure single-line JSON (append_to_trace expects a single Value and handles flushing/rotation)

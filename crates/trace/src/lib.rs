@@ -1,6 +1,5 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
-use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -9,14 +8,136 @@ use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
-use tracing::{debug, trace, warn};
+use std::sync::{Arc, OnceLock};
+use tracing::{debug, trace};
 use uuid::Uuid;
 
-static TRACE_OUTPUT: Lazy<RwLock<Option<TraceOutput>>> = Lazy::new(|| RwLock::new(None));
-
-static CURRENT_POLICY_ID: Lazy<RwLock<String>> = Lazy::new(|| RwLock::new("default".to_string()));
-
+static TRACE_CONTEXT: OnceLock<TraceContext> = OnceLock::new();
 static WORLD_IMAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+#[derive(Clone)]
+pub struct TraceContext {
+    output: Arc<RwLock<Option<TraceOutput>>>,
+    policy_id: Arc<RwLock<String>>,
+}
+
+impl Default for TraceContext {
+    fn default() -> Self {
+        Self {
+            output: Arc::new(RwLock::new(None)),
+            policy_id: Arc::new(RwLock::new("default".to_string())),
+        }
+    }
+}
+
+impl TraceContext {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn init_trace(&self, path: Option<PathBuf>) -> Result<()> {
+        let trace_path = path.unwrap_or_else(|| {
+            env::var("SHIM_TRACE_LOG")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| {
+                    dirs::home_dir()
+                        .unwrap_or_else(|| PathBuf::from("/tmp"))
+                        .join(".substrate")
+                        .join("trace.jsonl")
+                })
+        });
+
+        if let Some(parent) = trace_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        if let Ok(meta) = fs::metadata(&trace_path) {
+            if meta.len() >= TraceOutput::max_bytes() {
+                let keep = TraceOutput::keep_files();
+                if keep > 0 {
+                    let oldest = trace_path.with_extension(format!("jsonl.{}", keep));
+                    let _ = fs::remove_file(&oldest);
+                    for i in (2..=keep).rev() {
+                        let from = trace_path.with_extension(format!("jsonl.{}", i - 1));
+                        let to = trace_path.with_extension(format!("jsonl.{}", i));
+                        let _ = fs::rename(&from, &to);
+                    }
+                }
+                let bak = trace_path.with_extension("jsonl.1");
+                let _ = fs::rename(&trace_path, &bak);
+            }
+        }
+
+        let output = TraceOutput::new(trace_path)?;
+        *self.output.write() = Some(output);
+
+        debug!("Initialized trace output");
+        Ok(())
+    }
+
+    pub fn set_policy_id(&self, policy_id: &str) {
+        *self.policy_id.write() = policy_id.to_string();
+    }
+
+    pub fn policy_id(&self) -> String {
+        self.policy_id.read().clone()
+    }
+
+    pub fn create_span_builder(&self) -> SpanBuilder {
+        SpanBuilder::new(self.clone())
+    }
+
+    pub fn append_to_trace(&self, entry: &serde_json::Value) -> Result<()> {
+        if let Some(ref mut output) = *self.output.write() {
+            output.rotate_if_needed()?;
+            writeln!(output.writer, "{}", entry)?;
+            if env::var("SHIM_FSYNC").unwrap_or_default() == "1" {
+                output.writer.flush()?;
+                output.writer.get_ref().sync_all()?;
+            } else {
+                output.writer.flush()?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn load_span(&self, span_id: &str) -> Result<Span> {
+        use std::io::{BufRead, BufReader};
+
+        let trace_path = self
+            .output
+            .read()
+            .as_ref()
+            .map(|o| o.path.clone())
+            .ok_or_else(|| anyhow!("Trace not initialized"))?;
+
+        let file = File::open(trace_path)?;
+        let reader = BufReader::new(file);
+
+        for line in reader.lines() {
+            let line = line?;
+            if let Ok(span) = serde_json::from_str::<Span>(&line) {
+                if span.span_id == span_id {
+                    return Ok(span);
+                }
+            }
+        }
+
+        Err(anyhow!("Span {} not found", span_id))
+    }
+
+    fn build_replay_context(&self) -> Result<ReplayContext> {
+        Ok(ReplayContext {
+            path: env::var("PATH").ok(),
+            env_hash: hash_env_vars()?,
+            umask: get_umask()?,
+            locale: env::var("LANG").ok(),
+            cwd: env::current_dir()?.to_string_lossy().to_string(),
+            policy_id: self.policy_id(),
+            policy_commit: get_policy_git_hash().ok(),
+            world_image_version: WORLD_IMAGE_VERSION.to_string(),
+        })
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Span {
@@ -185,68 +306,60 @@ impl TraceOutput {
     }
 }
 
-pub fn init_trace(path: Option<PathBuf>) -> Result<()> {
-    let trace_path = path.unwrap_or_else(|| {
-        env::var("SHIM_TRACE_LOG")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| {
-                dirs::home_dir()
-                    .unwrap_or_else(|| PathBuf::from("/tmp"))
-                    .join(".substrate")
-                    .join("trace.jsonl")
-            })
-    });
-
-    if let Some(parent) = trace_path.parent() {
-        std::fs::create_dir_all(parent)?;
+pub fn set_global_trace_context(context: TraceContext) -> Result<()> {
+    if TRACE_CONTEXT.get().is_some() {
+        return Ok(());
     }
-    // Pre-rotate if existing file already exceeds threshold
-    if let Ok(meta) = fs::metadata(&trace_path) {
-        if meta.len() >= TraceOutput::max_bytes() {
-            let keep = TraceOutput::keep_files();
-            if keep > 0 {
-                let oldest = trace_path.with_extension(format!("jsonl.{}", keep));
-                let _ = fs::remove_file(&oldest);
-                for i in (2..=keep).rev() {
-                    let from = trace_path.with_extension(format!("jsonl.{}", i - 1));
-                    let to = trace_path.with_extension(format!("jsonl.{}", i));
-                    let _ = fs::rename(&from, &to);
-                }
-            }
-            let bak = trace_path.with_extension("jsonl.1");
-            let _ = fs::rename(&trace_path, &bak);
-        }
-    }
-
-    let output = TraceOutput::new(trace_path)?;
-    *TRACE_OUTPUT.write() = Some(output);
-
-    debug!("Initialized trace output");
+    TRACE_CONTEXT
+        .set(context)
+        .map_err(|_| anyhow!("Trace context already initialized"))?;
     Ok(())
+}
+
+fn trace_context() -> Result<&'static TraceContext> {
+    TRACE_CONTEXT
+        .get()
+        .ok_or_else(|| anyhow!("Trace context not initialized; call set_global_trace_context"))
+}
+
+pub fn init_trace(path: Option<PathBuf>) -> Result<()> {
+    trace_context()?.init_trace(path)
 }
 
 pub fn new_span(_parent: Option<&str>) -> String {
     format!("spn_{}", Uuid::now_v7())
 }
 
-pub fn set_policy_id(policy_id: &str) {
-    *CURRENT_POLICY_ID.write() = policy_id.to_string();
+pub fn set_policy_id(policy_id: &str) -> Result<()> {
+    trace_context()?.set_policy_id(policy_id);
+    Ok(())
 }
 
 pub fn get_policy_id() -> String {
-    CURRENT_POLICY_ID.read().clone()
+    trace_context()
+        .map(|ctx| ctx.policy_id())
+        .unwrap_or_else(|_| "default".to_string())
 }
 
-pub fn create_span_builder() -> SpanBuilder {
-    SpanBuilder::new()
+pub fn create_span_builder() -> Result<SpanBuilder> {
+    Ok(trace_context()?.create_span_builder())
+}
+
+pub fn append_to_trace(entry: &serde_json::Value) -> Result<()> {
+    trace_context()?.append_to_trace(entry)
+}
+
+pub fn load_span(span_id: &str) -> Result<Span> {
+    trace_context()?.load_span(span_id)
 }
 
 pub struct SpanBuilder {
     span: Span,
+    context: TraceContext,
 }
 
 impl SpanBuilder {
-    fn new() -> Self {
+    fn new(context: TraceContext) -> Self {
         let session_id =
             env::var("SHIM_SESSION_ID").unwrap_or_else(|_| format!("ses_{}", Uuid::now_v7()));
 
@@ -261,6 +374,7 @@ impl SpanBuilder {
         };
 
         SpanBuilder {
+            context: context.clone(),
             span: Span {
                 ts: Utc::now(),
                 event_type: "command_start".to_string(),
@@ -269,7 +383,7 @@ impl SpanBuilder {
                 parent_span: env::var("SHIM_PARENT_SPAN").ok(),
                 component: component.to_string(),
                 world_id: env::var("SUBSTRATE_WORLD_ID").ok(),
-                policy_id: get_policy_id(),
+                policy_id: context.policy_id(),
                 agent_id,
                 cwd: env::current_dir()
                     .map(|p| p.to_string_lossy().to_string())
@@ -320,7 +434,7 @@ impl SpanBuilder {
     pub fn start(self) -> Result<ActiveSpan> {
         let span_id = self.span.span_id.clone();
 
-        if let Some(ref mut output) = *TRACE_OUTPUT.write() {
+        if let Some(ref mut output) = *self.context.output.write() {
             output.write_span(&self.span)?;
         }
 
@@ -329,6 +443,7 @@ impl SpanBuilder {
             command: self.span.cmd,
             cwd: self.span.cwd,
             transport: None,
+            context: self.context,
         })
     }
 }
@@ -338,6 +453,7 @@ pub struct ActiveSpan {
     command: String,
     cwd: String,
     transport: Option<TransportMeta>,
+    context: TraceContext,
 }
 
 impl ActiveSpan {
@@ -351,7 +467,7 @@ impl ActiveSpan {
         scopes: Vec<String>,
         fs_diff: Option<FsDiff>,
     ) -> Result<()> {
-        let replay_context = build_replay_context()?;
+        let replay_context = self.context.build_replay_context()?;
 
         let span = Span {
             ts: Utc::now(),
@@ -367,7 +483,7 @@ impl ActiveSpan {
             }
             .to_string(),
             world_id: env::var("SUBSTRATE_WORLD_ID").ok(),
-            policy_id: get_policy_id(),
+            policy_id: self.context.policy_id(),
             agent_id: env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string()),
             cwd: self.cwd,
             cmd: self.command,
@@ -380,7 +496,7 @@ impl ActiveSpan {
             policy_decision: None,
         };
 
-        if let Some(ref mut output) = *TRACE_OUTPUT.write() {
+        if let Some(ref mut output) = *self.context.output.write() {
             output.write_span(&span)?;
         }
 
@@ -395,18 +511,6 @@ impl ActiveSpan {
     pub fn get_span_id(&self) -> &str {
         &self.span_id
     }
-}
-fn build_replay_context() -> Result<ReplayContext> {
-    Ok(ReplayContext {
-        path: env::var("PATH").ok(),
-        env_hash: hash_env_vars()?,
-        umask: get_umask()?,
-        locale: env::var("LANG").ok(),
-        cwd: env::current_dir()?.to_string_lossy().to_string(),
-        policy_id: get_policy_id(),
-        policy_commit: get_policy_git_hash().ok(),
-        world_image_version: WORLD_IMAGE_VERSION.to_string(),
-    })
 }
 
 fn hash_env_vars() -> Result<String> {
@@ -449,7 +553,7 @@ fn get_policy_git_hash() -> Result<String> {
 }
 
 pub fn policy_violation(cmd: &str, violation_type: &str, decision: &str) -> Result<()> {
-    let span = create_span_builder()
+    let span = create_span_builder()?
         .with_command(cmd)
         .with_policy_decision(PolicyDecision {
             action: "violation_observed".to_string(),
@@ -462,69 +566,18 @@ pub fn policy_violation(cmd: &str, violation_type: &str, decision: &str) -> Resu
     Ok(())
 }
 
-pub fn budget_exceeded(agent_id: &str, budget_type: &str) -> Result<()> {
-    warn!("Budget exceeded for agent {}: {}", agent_id, budget_type);
-
-    let span = create_span_builder()
-        .with_command(&format!("budget_exceeded:{}", budget_type))
-        .with_policy_decision(PolicyDecision {
-            action: "deny".to_string(),
-            reason: Some(format!(
-                "Budget {} exceeded for agent {}",
-                budget_type, agent_id
-            )),
-            restrictions: None,
-        })
-        .start()?;
-
-    span.finish(126, vec![], None)?;
-    Ok(())
-}
-
-pub fn append_to_trace(entry: &serde_json::Value) -> Result<()> {
-    if let Some(ref mut output) = *TRACE_OUTPUT.write() {
-        output.rotate_if_needed()?;
-        writeln!(output.writer, "{}", entry)?;
-        if env::var("SHIM_FSYNC").unwrap_or_default() == "1" {
-            output.writer.flush()?;
-            output.writer.get_ref().sync_all()?;
-        } else {
-            output.writer.flush()?;
-        }
-    }
-    Ok(())
-}
-
-pub fn load_span(span_id: &str) -> Result<Span> {
-    use std::io::{BufRead, BufReader};
-
-    let trace_path = TRACE_OUTPUT
-        .read()
-        .as_ref()
-        .map(|o| o.path.clone())
-        .ok_or_else(|| anyhow::anyhow!("Trace not initialized"))?;
-
-    let file = File::open(trace_path)?;
-    let reader = BufReader::new(file);
-
-    for line in reader.lines() {
-        let line = line?;
-        if let Ok(span) = serde_json::from_str::<Span>(&line) {
-            if span.span_id == span_id {
-                return Ok(span);
-            }
-        }
-    }
-
-    Err(anyhow::anyhow!("Span {} not found", span_id))
-}
-
 // Graph DB integration is provided by the substrate-graph crate.
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    fn ensure_trace_context() -> TraceContext {
+        let ctx = TraceContext::default();
+        let _ = set_global_trace_context(ctx.clone());
+        ctx
+    }
 
     #[test]
     fn test_span_creation() {
@@ -534,7 +587,10 @@ mod tests {
 
     #[test]
     fn test_span_builder() {
+        ensure_trace_context();
+
         let span = create_span_builder()
+            .unwrap()
             .with_command("echo test")
             .with_cwd("/tmp")
             .with_world_id("wld_123")
@@ -550,6 +606,7 @@ mod tests {
         let tmp_dir = TempDir::new().unwrap();
         let trace_path = tmp_dir.path().join("trace.jsonl");
 
+        ensure_trace_context();
         let result = init_trace(Some(trace_path.clone()));
         assert!(result.is_ok());
         assert!(trace_path.exists());
@@ -643,7 +700,8 @@ mod tests {
         std::env::set_var("TRACE_LOG_MAX_MB", "1");
         std::env::set_var("TRACE_LOG_KEEP", "2");
 
-        init_trace(Some(log_path.clone())).unwrap();
+        let ctx = ensure_trace_context();
+        ctx.init_trace(Some(log_path.clone())).unwrap();
 
         let entry = serde_json::json!({"event_type":"test","ts":Utc::now().to_rfc3339()});
         append_to_trace(&entry).unwrap();
@@ -675,7 +733,8 @@ mod tests {
         std::env::set_var("TRACE_LOG_MAX_MB", "1");
         std::env::set_var("TRACE_LOG_KEEP", "2");
 
-        init_trace(Some(log_path.clone())).unwrap();
+        let ctx = ensure_trace_context();
+        ctx.init_trace(Some(log_path.clone())).unwrap();
 
         // After rotation, .2 should become .2 (shifted from .1), and .1 should be the old current
         assert!(log_path.with_extension("jsonl.1").exists());

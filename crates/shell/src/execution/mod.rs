@@ -29,13 +29,14 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Arc;
-use substrate_broker::{detect_profile, evaluate, Decision};
+use substrate_broker::{detect_profile, evaluate, set_global_broker, BrokerHandle, Decision};
 use substrate_common::{
     agent_events::{AgentEvent, AgentEventKind},
     dedupe_path, log_schema, paths as substrate_paths, redact_sensitive, Platform, WorldRootMode,
 };
 use substrate_trace::{
-    append_to_trace, create_span_builder, init_trace, PolicyDecision, TransportMeta,
+    append_to_trace, create_span_builder, init_trace, set_global_trace_context, PolicyDecision,
+    TraceContext, TransportMeta,
 };
 use tracing::{info, warn};
 use uuid::Uuid;
@@ -1827,6 +1828,9 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
         }
     }
 
+    let _ = set_global_broker(BrokerHandle::new());
+    let _ = set_global_trace_context(TraceContext::default());
+
     // Initialize trace
     if let Err(e) = init_trace(None) {
         eprintln!("substrate: warning: failed to initialize trace: {}", e);
@@ -3543,24 +3547,29 @@ pub(crate) fn execute_command(
         }
 
         // Create span with policy decision
-        let mut builder = create_span_builder()
-            .with_command(&redacted_for_logging)
-            .with_cwd(cwd.to_str().unwrap_or("."));
+        if let Ok(mut builder) = create_span_builder() {
+            builder = builder
+                .with_command(&redacted_for_logging)
+                .with_cwd(cwd.to_str().unwrap_or("."));
 
-        if let Some(pd) = policy_decision.clone() {
-            builder = builder.with_policy_decision(pd);
-        }
+            if let Some(pd) = policy_decision.clone() {
+                builder = builder.with_policy_decision(pd);
+            }
 
-        // Set parent span ID in environment for child processes
-        match builder.start() {
-            Ok(span) => {
-                std::env::set_var("SHIM_PARENT_SPAN", span.get_span_id());
-                Some(span)
+            // Set parent span ID in environment for child processes
+            match builder.start() {
+                Ok(span) => {
+                    std::env::set_var("SHIM_PARENT_SPAN", span.get_span_id());
+                    Some(span)
+                }
+                Err(e) => {
+                    eprintln!("substrate: failed to create span: {}", e);
+                    None
+                }
             }
-            Err(e) => {
-                eprintln!("substrate: failed to create span: {}", e);
-                None
-            }
+        } else {
+            eprintln!("substrate: failed to create span builder");
+            None
         }
     } else {
         None

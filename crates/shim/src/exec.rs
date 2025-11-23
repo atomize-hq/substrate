@@ -24,12 +24,12 @@ use crate::context::{
 };
 use crate::logger::{format_timestamp, log_execution, write_log_entry, ExecutionLogMetadata};
 use crate::resolver::resolve_real_binary;
-use substrate_broker::{quick_check, Decision};
+use substrate_broker::{quick_check, set_global_broker, BrokerHandle, Decision};
 use substrate_common::{
     manager_manifest::{ManagerManifest, ManagerSpec, Platform, RegexPattern},
     paths,
 };
-use substrate_trace::{create_span_builder, init_trace};
+use substrate_trace::{create_span_builder, init_trace, set_global_trace_context, TraceContext};
 
 /// Main shim execution function
 pub fn run_shim() -> Result<i32> {
@@ -39,6 +39,11 @@ pub fn run_shim() -> Result<i32> {
     }
 
     let ctx = ShimContext::from_current_exe()?;
+
+    let broker = BrokerHandle::new();
+    let _ = set_global_broker(broker.clone());
+    let trace_context = TraceContext::default();
+    let _ = set_global_trace_context(trace_context.clone());
 
     // Ensure SHIM_ORIGINAL_PATH is persisted for nested shims (clean PATH without shim dir)
     if std::env::var(ORIGINAL_PATH_VAR).is_err() {
@@ -131,9 +136,15 @@ pub fn run_shim() -> Result<i32> {
                 });
 
                 // Create span for denied command
-                let mut builder = create_span_builder()
-                    .with_command(&command_str)
-                    .with_cwd(cwd.to_str().unwrap_or("."));
+                let mut builder = match create_span_builder() {
+                    Ok(builder) => builder
+                        .with_command(&command_str)
+                        .with_cwd(cwd.to_str().unwrap_or(".")),
+                    Err(err) => {
+                        eprintln!("substrate: failed to create span: {}", err);
+                        return Ok(126);
+                    }
+                };
 
                 if let Some(pd) = policy_decision.clone() {
                     builder = builder.with_policy_decision(pd);
@@ -153,9 +164,15 @@ pub fn run_shim() -> Result<i32> {
         }
 
         // Create span for allowed command
-        let mut builder = create_span_builder()
-            .with_command(&command_str)
-            .with_cwd(cwd.to_str().unwrap_or("."));
+        let mut builder = match create_span_builder() {
+            Ok(builder) => builder
+                .with_command(&command_str)
+                .with_cwd(cwd.to_str().unwrap_or(".")),
+            Err(err) => {
+                eprintln!("substrate: failed to create span builder: {}", err);
+                return Ok(126);
+            }
+        };
 
         if let Some(pd) = policy_decision.clone() {
             builder = builder.with_policy_decision(pd);

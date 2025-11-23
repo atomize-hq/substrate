@@ -21,7 +21,7 @@ use substrate_common::{
     manager_manifest::{ManagerManifest, ManagerSpec},
     paths as substrate_paths,
 };
-use substrate_trace::{append_to_trace, init_trace};
+use substrate_trace::{append_to_trace, init_trace, set_global_trace_context, TraceContext};
 use tempfile::NamedTempFile;
 use tracing::warn;
 use uuid::Uuid;
@@ -696,6 +696,7 @@ fn log_repair_event(manager: &str, bashenv_path: &Path, backup_path: Option<&Pat
         "backup_path": backup_path.map(|p| p.display().to_string()),
         "snippet_length": block.lines().count()
     });
+    let _ = set_global_trace_context(TraceContext::default());
     if let Err(err) = init_trace(None).and_then(|_| append_to_trace(&entry)) {
         warn!(
             target = "substrate::shell",

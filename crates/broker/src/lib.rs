@@ -1,8 +1,7 @@
 use anyhow::{Context, Result};
-use once_cell::sync::Lazy;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, OnceLock, RwLock};
 use tracing::{debug, info, warn};
 
 mod approval;
@@ -14,8 +13,86 @@ pub use approval::{ApprovalCache, ApprovalContext, ApprovalStatus};
 pub use policy::{Decision, Policy, Restriction, RestrictionType};
 pub use profile::ProfileDetector;
 
-static GLOBAL_BROKER: Lazy<Arc<RwLock<Broker>>> =
-    Lazy::new(|| Arc::new(RwLock::new(Broker::new())));
+static GLOBAL_BROKER: OnceLock<BrokerHandle> = OnceLock::new();
+
+#[derive(Clone, Default)]
+pub struct BrokerHandle {
+    broker: Arc<RwLock<Broker>>,
+}
+
+impl BrokerHandle {
+    pub fn new() -> Self {
+        Self {
+            broker: Arc::new(RwLock::new(Broker::new())),
+        }
+    }
+
+    pub fn initialize(&self, config_path: Option<&Path>) -> Result<()> {
+        if let Some(path) = config_path {
+            self.load_policy(path)?;
+        }
+        self.apply_enforcement_env();
+        Ok(())
+    }
+
+    pub fn load_policy(&self, path: &Path) -> Result<()> {
+        let broker = self
+            .broker
+            .write()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire broker write lock: {}", e))?;
+        broker.load_policy(path)
+    }
+
+    pub fn detect_profile(&self, cwd: &Path) -> Result<()> {
+        let mut broker = self
+            .broker
+            .write()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire broker write lock: {}", e))?;
+        broker.detect_and_load_profile(cwd)
+    }
+
+    pub fn evaluate(&self, cmd: &str, cwd: &str, world_id: Option<&str>) -> Result<Decision> {
+        let broker = self
+            .broker
+            .read()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire broker read lock: {}", e))?;
+        broker.evaluate(cmd, cwd, world_id)
+    }
+
+    pub fn quick_check(&self, argv: &[String], cwd: &str) -> Result<Decision> {
+        let broker = self
+            .broker
+            .read()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire broker read lock: {}", e))?;
+        broker.quick_check(argv, cwd)
+    }
+
+    pub fn set_observe_only(&self, observe: bool) {
+        if let Ok(broker) = self.broker.read() {
+            broker.set_observe_only(observe);
+        }
+    }
+
+    pub fn is_observe_only(&self) -> bool {
+        self.broker
+            .read()
+            .map(|b| b.is_observe_only())
+            .unwrap_or(true)
+    }
+
+    pub fn allowed_domains(&self) -> Vec<String> {
+        self.broker
+            .read()
+            .map(|b| b.allowed_domains())
+            .unwrap_or_default()
+    }
+
+    fn apply_enforcement_env(&self) {
+        if std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
+            self.set_observe_only(false);
+        }
+    }
+}
 
 pub struct Broker {
     policy: Arc<RwLock<Policy>>,
@@ -168,6 +245,13 @@ impl Broker {
         self.observe_only.load(Ordering::Relaxed)
     }
 
+    pub fn allowed_domains(&self) -> Vec<String> {
+        let Ok(policy) = self.policy.read() else {
+            return Vec::new();
+        };
+        policy.net_allowed.clone()
+    }
+
     fn check_approval(&self, cmd: &str) -> Result<ApprovalStatus> {
         let approvals = self
             .approvals
@@ -187,60 +271,56 @@ impl Default for Broker {
     }
 }
 
+pub fn set_global_broker(broker: BrokerHandle) -> Result<()> {
+    if GLOBAL_BROKER.get().is_some() {
+        return Ok(());
+    }
+    GLOBAL_BROKER
+        .set(broker)
+        .map_err(|_| anyhow::anyhow!("Global broker already initialized"))?;
+    Ok(())
+}
+
+fn global_broker() -> Result<BrokerHandle> {
+    GLOBAL_BROKER
+        .get()
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("Broker not initialized; call set_global_broker first"))
+}
+
 // Global singleton functions for easy access
 pub fn init(config_path: Option<&Path>) -> Result<()> {
-    let broker = GLOBAL_BROKER
-        .write()
-        .map_err(|e| anyhow::anyhow!("Failed to acquire broker write lock: {}", e))?;
-
-    if let Some(path) = config_path {
-        broker.load_policy(path)?;
-    }
-
-    // Check for SUBSTRATE_WORLD=enabled to determine observe vs enforce
-    if std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
-        broker.set_observe_only(false);
-    }
-
+    let broker = GLOBAL_BROKER.get().cloned().unwrap_or_default();
+    broker.initialize(config_path)?;
+    set_global_broker(broker)?;
     Ok(())
 }
 
 pub fn evaluate(cmd: &str, cwd: &str, world_id: Option<&str>) -> Result<Decision> {
-    let broker = GLOBAL_BROKER
-        .read()
-        .map_err(|e| anyhow::anyhow!("Failed to acquire broker read lock: {}", e))?;
+    let broker = global_broker()?;
     broker.evaluate(cmd, cwd, world_id)
 }
 
 pub fn quick_check(argv: &[String], cwd: &str) -> Result<Decision> {
-    let broker = GLOBAL_BROKER
-        .read()
-        .map_err(|e| anyhow::anyhow!("Failed to acquire broker read lock: {}", e))?;
+    let broker = global_broker()?;
     broker.quick_check(argv, cwd)
 }
 
 pub fn detect_profile(cwd: &Path) -> Result<()> {
-    let mut broker = GLOBAL_BROKER
-        .write()
-        .map_err(|e| anyhow::anyhow!("Failed to acquire broker write lock: {}", e))?;
-    broker.detect_and_load_profile(cwd)
+    let broker = global_broker()?;
+    broker.detect_profile(cwd)
 }
 
 pub fn reload_policy(path: &Path) -> Result<()> {
-    let broker = GLOBAL_BROKER
-        .read()
-        .map_err(|e| anyhow::anyhow!("Failed to acquire broker read lock: {}", e))?;
+    let broker = global_broker()?;
     broker.load_policy(path)
 }
 
 pub fn set_observe_only(observe: bool) {
-    match GLOBAL_BROKER.read() {
+    match global_broker() {
         Ok(broker) => broker.set_observe_only(observe),
         Err(err) => {
-            warn!(
-                "Failed to acquire broker read lock for set_observe_only: {}",
-                err
-            );
+            warn!("Failed to set observe_only on global broker: {}", err);
         }
     }
 }
@@ -267,12 +347,16 @@ fn log_violation(cmd: &str, reason: &str) {
 
 /// Get the current list of allowed domains for network egress from the active policy.
 pub fn allowed_domains() -> Vec<String> {
-    if let Ok(broker) = GLOBAL_BROKER.read() {
-        if let Ok(policy) = broker.policy.read() {
-            return policy.net_allowed.clone();
+    match global_broker() {
+        Ok(broker) => broker.allowed_domains(),
+        Err(err) => {
+            warn!(
+                "Allowed domains requested before broker initialization: {}",
+                err
+            );
+            Vec::new()
         }
     }
-    Vec::new()
 }
 
 #[cfg(test)]
