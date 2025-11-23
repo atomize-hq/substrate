@@ -74,3 +74,66 @@ pub fn normalize_diff(diff: &mut FsDiff) {
         Some(display)
     };
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn to_wsl_path_resolves_relative_paths() {
+        let project = PathBuf::from("C:\\projects\\substrate");
+        let relative = PathBuf::from("src/main.rs");
+        let absolute = PathBuf::from("D:\\workspace\\logs\\shim.txt");
+
+        let relative_result = to_wsl_path(&project, &relative).expect("relative path resolves");
+        let absolute_result = to_wsl_path(&project, &absolute).expect("absolute path resolves");
+
+        assert_eq!(
+            relative_result,
+            "/mnt/c/projects/substrate/src/main.rs".to_string()
+        );
+        assert_eq!(
+            absolute_result,
+            "/mnt/d/workspace/logs/shim.txt".to_string()
+        );
+    }
+
+    #[test]
+    fn to_windows_display_path_handles_drives_and_unc() {
+        let drive_path = PathBuf::from("/mnt/c/repo/new.txt");
+        let unc_path = PathBuf::from("/mnt/unc/server/share/log.txt");
+
+        let drive_display =
+            to_windows_display_path(&drive_path).expect("drive letter should convert");
+        let unc_display = to_windows_display_path(&unc_path).expect("unc should convert");
+
+        assert_eq!(drive_display, "C:\\repo\\new.txt");
+        assert_eq!(unc_display, "\\\\server\\share\\log.txt");
+    }
+
+    #[test]
+    fn normalize_diff_populates_display_map() {
+        let mut diff = FsDiff {
+            writes: vec![PathBuf::from("/mnt/c/repo/create.txt")],
+            mods: vec![PathBuf::from("/mnt/c/repo/change.txt")],
+            deletes: vec![PathBuf::from("/mnt/c/repo/remove.txt")],
+            ..Default::default()
+        };
+
+        normalize_diff(&mut diff);
+        let display = diff.display_path.as_ref().expect("display mapping");
+
+        assert_eq!(
+            display.get("/mnt/c/repo/create.txt"),
+            Some(&"C:\\repo\\create.txt".to_string())
+        );
+        assert_eq!(
+            display.get("/mnt/c/repo/change.txt"),
+            Some(&"C:\\repo\\change.txt".to_string())
+        );
+        assert_eq!(
+            display.get("/mnt/c/repo/remove.txt"),
+            Some(&"C:\\repo\\remove.txt".to_string())
+        );
+    }
+}
