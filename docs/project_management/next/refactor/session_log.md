@@ -184,3 +184,10 @@ Template (copy/paste and fill in):
 - Created worktree: pending (will create wt/cr-r4-polish-test)
 - Plan: create cr-r4-polish-test branch/worktree; add doctests/property tests for trace/world-windows-wsl/replay/common module splits; run cargo fmt and targeted cargo test/doctest suites; log results and any skips/benchmarks for END entry
 - Blockers: none
+
+## [2025-11-23 17:43 UTC] Test – R4-test – END
+- Worktree commits: 9d62e3f (trace/replay/common doctests + property tests), 1372ccb (world-windows-wsl path conversion coverage)
+- Commands: cargo fmt; cargo test -p substrate-trace; cargo test -p world-windows-wsl (0 tests, cfg windows-only); cargo test -p substrate-replay --all-targets; cargo test --doc -p substrate-replay; cargo test -p substrate-common --all-targets
+- Results: fmt clean; trace/replay/common suites and replay doctests passed; world-windows-wsl builds with tests skipped on non-Windows; property test added for common::dedupe_path and doctests validating trace/replay docs/prelude
+- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R4-integ.md
+- Next steps / blockers: ready for R4 integration; remove worktree after merge
