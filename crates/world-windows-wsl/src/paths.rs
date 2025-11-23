@@ -34,7 +34,7 @@ pub fn to_windows_display_path(path: &Path) -> Option<String> {
             }
             let sep = std::path::MAIN_SEPARATOR.to_string();
             let converted = rest.replace('/', sep.as_str());
-            return Some(format!("\\{}", converted));
+            return Some(format!("\\\\{}", converted));
         }
 
         if prefix.len() == 1 {
