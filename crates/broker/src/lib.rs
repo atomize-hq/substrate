@@ -269,7 +269,17 @@ pub fn allowed_domains() -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
     use tempfile::tempdir;
+
+    fn poison_rwlock<T: Send + Sync + 'static>(lock: &Arc<RwLock<T>>) {
+        let cloned = Arc::clone(lock);
+        let _ = std::thread::spawn(move || {
+            let _guard = cloned.write().unwrap();
+            panic!("poison lock");
+        })
+        .join();
+    }
 
     #[test]
     fn test_broker_creation() {
@@ -336,5 +346,52 @@ allow_shell_operators: true
             )
             .unwrap();
         assert!(matches!(result, Decision::Deny(_)));
+    }
+
+    #[test]
+    fn poisoned_policy_lock_returns_error_in_evaluate() {
+        let broker = Broker::new();
+        poison_rwlock(&broker.policy);
+
+        let result = std::panic::catch_unwind(|| broker.evaluate("echo ok", "/tmp", None));
+        assert!(result.is_ok(), "broker.evaluate panicked on poisoned lock");
+
+        let err = result
+            .unwrap()
+            .expect_err("expected poisoned lock to return error");
+        assert!(
+            err.to_string()
+                .contains("Failed to acquire policy read lock"),
+            "unexpected error: {err}"
+        );
+
+        broker.policy.clear_poison();
+    }
+
+    #[test]
+    fn poisoned_approvals_lock_returns_error() {
+        let broker = Broker::new();
+        {
+            let mut policy = broker.policy.write().unwrap();
+            policy.require_approval = true;
+        }
+        broker.set_observe_only(false);
+        poison_rwlock(&broker.approvals);
+
+        let result = std::panic::catch_unwind(|| broker.evaluate("echo guarded", "/tmp", None));
+        assert!(
+            result.is_ok(),
+            "broker.evaluate panicked with poisoned approvals"
+        );
+
+        let err = result
+            .unwrap()
+            .expect_err("expected approval read failure to return error");
+        assert!(
+            err.to_string().contains("approvals read lock"),
+            "unexpected error: {err}"
+        );
+
+        broker.approvals.clear_poison();
     }
 }

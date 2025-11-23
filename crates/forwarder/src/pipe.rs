@@ -247,6 +247,12 @@ mod tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::windows::named_pipe::ClientOptions;
 
+    #[test]
+    fn pipe_listener_rejects_invalid_path() {
+        let result = PipeListener::new("invalid".to_string());
+        assert!(result.is_err());
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn pipe_listener_accepts_connection() {
         let pipe_name = format!(

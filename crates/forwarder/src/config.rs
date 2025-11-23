@@ -307,4 +307,25 @@ mod tests {
 
         std::env::remove_var(TARGET_ENV);
     }
+
+    #[test]
+    fn env_override_empty_is_error() {
+        let _guard = ENV_GUARD.lock().unwrap();
+        std::env::set_var(TARGET_ENV, "   ");
+
+        let pipe = r"\\.\pipe\substrate";
+        let result = ForwarderConfig::load(
+            "distro".to_string(),
+            pipe.to_string(),
+            None,
+            Some(PathBuf::from("does/not/exist.toml")),
+        );
+
+        assert!(
+            result.is_err(),
+            "expected empty {TARGET_ENV} to return an error"
+        );
+
+        std::env::remove_var(TARGET_ENV);
+    }
 }
