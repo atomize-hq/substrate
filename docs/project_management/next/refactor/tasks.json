@@ -49,7 +49,7 @@
       "name": "Panic guards for critical crates",
       "type": "test",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add panic-focused tests for broker, world, telemetry-lib, and forwarder to ensure poisoned locks and error paths return Result instead of panicking.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
@@ -92,7 +92,7 @@
       "name": "Integrate panic remediation",
       "type": "integration",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge panic-remediation code/test worktrees, resolve conflicts, and ensure fmt/clippy/tests pass across the affected crates.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",

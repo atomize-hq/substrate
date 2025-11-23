@@ -54,6 +54,14 @@ Template (copy/paste and fill in):
 - Plan: merge cr-r1-panics-code and cr-r1-panics-test into integration branch, resolve conflicts, run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p broker -p world -p telemetry-lib -p forwarder
 - Blockers: none
 
+## [2025-11-23 03:48 UTC] Integration – R1-integ – END
+- Worktree commits: 4a887e2 (chore: integrate R1 panic remediation)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings (first run failed: clippy items-after-test-module in telemetry-lib tests; moved tests below platform init arrays); cargo test -p broker (failed: package not found); cargo test -p substrate-broker; cargo test -p world; cargo test -p substrate-telemetry; cargo test -p substrate-forwarder
+- Results: fmt/clippy/tests passed; world tests emit cp warnings but succeed; telemetry tests log missing trace file warnings but pass; created stash `stash@{0}` capturing pre-existing telemetry-lib edits on feat/crate-refactor
+- Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R2-code.md; docs/project_management/next/refactor/kickoff_prompts/R2-test.md
+- Docs commit: pending
+- Next steps / blockers: none
+
 ## [2025-11-23 03:33 UTC] Integration – R1-integ – START
 - Checked out feat/crate-refactor, pulled latest
 - Confirmed R1-code merged into feat/crate-refactor and R1-test branch available for integration
