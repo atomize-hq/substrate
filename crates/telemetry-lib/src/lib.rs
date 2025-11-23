@@ -180,6 +180,17 @@ static INIT_ARRAY: extern "C" fn() = {
     init_constructor
 };
 
+#[cfg(target_os = "macos")]
+#[no_mangle]
+#[link_section = "__DATA,__mod_init_func"]
+#[used]
+static INIT_ARRAY: extern "C" fn() = {
+    extern "C" fn init_constructor() {
+        init_telemetry();
+    }
+    init_constructor
+};
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -255,14 +266,3 @@ mod tests {
         assert!(result.is_ok(), "log_syscall panicked on poisoned init lock");
     }
 }
-
-#[cfg(target_os = "macos")]
-#[no_mangle]
-#[link_section = "__DATA,__mod_init_func"]
-#[used]
-static INIT_ARRAY: extern "C" fn() = {
-    extern "C" fn init_constructor() {
-        init_telemetry();
-    }
-    init_constructor
-};
