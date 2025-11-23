@@ -1,0 +1,528 @@
+{
+  "tasks": [
+    {
+      "id": "R1-code",
+      "name": "Remove library panics (critical crates)",
+      "type": "code",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Replace .unwrap() panics with Result-based error handling in broker, world, telemetry-lib, and forwarder; add rich context and keep APIs stable.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/broker/src",
+        "crates/world/src",
+        "crates/telemetry-lib/src",
+        "crates/forwarder/src",
+        "CHANGELOG.md"
+      ],
+      "acceptance_criteria": [
+        "All .unwrap() usages in library code for the four crates are converted to Result-based flows with anyhow::Context messaging.",
+        "Public APIs remain backward-compatible or are documented with deprecation notes; no new panics introduced.",
+        "Docs/CHANGELOG entries capture panic removal and error surface changes.",
+        "cargo fmt && cargo clippy --workspace --all-targets -- -D warnings are clean for touched crates."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R1-code to in_progress, log START entry, commit docs update",
+        "Create task branch cr-r1-panics-code",
+        "Create worktree wt/cr-r1-panics-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests per prompt are green",
+        "Commit worktree changes",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts as required",
+        "Commit docs update on feat/crate-refactor"
+      ],
+      "depends_on": [],
+      "concurrent_with": [
+        "R1-test"
+      ],
+      "worktree": "wt/cr-r1-panics-code",
+      "integration_task": "R1-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R1-code.md"
+    },
+    {
+      "id": "R1-test",
+      "name": "Panic guards for critical crates",
+      "type": "test",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Add panic-focused tests for broker, world, telemetry-lib, and forwarder to ensure poisoned locks and error paths return Result instead of panicking.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/broker/tests",
+        "crates/world/tests",
+        "crates/telemetry-lib/tests",
+        "crates/forwarder/tests"
+      ],
+      "acceptance_criteria": [
+        "Tests cover poisoned lock scenarios and failure modes for each crate’s public API, asserting non-panicking behavior.",
+        "Any new test fixtures or helpers are isolated to test modules; production code remains untouched.",
+        "cargo fmt && targeted cargo test suites for the four crates pass and are logged in session_log.md.",
+        "Kickoff prompts for R1-integ and R2-code/test are authored as required."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R1-test to in_progress, log START entry, commit docs update",
+        "Create task branch cr-r1-panics-test",
+        "Create worktree wt/cr-r1-panics-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests per prompt are green",
+        "Commit worktree changes",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts as required",
+        "Commit docs update on feat/crate-refactor"
+      ],
+      "depends_on": [],
+      "concurrent_with": [
+        "R1-code"
+      ],
+      "worktree": "wt/cr-r1-panics-test",
+      "integration_task": "R1-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R1-test.md"
+    },
+    {
+      "id": "R1-integ",
+      "name": "Integrate panic remediation",
+      "type": "integration",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Merge panic-remediation code/test worktrees, resolve conflicts, and ensure fmt/clippy/tests pass across the affected crates.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "crates/broker",
+        "crates/world",
+        "crates/telemetry-lib",
+        "crates/forwarder"
+      ],
+      "acceptance_criteria": [
+        "wt/cr-r1-panics-integ merges R1-code/test with clean fmt/clippy/test runs.",
+        "feat/crate-refactor contains panic-free crates plus doc/task/log updates.",
+        "Kickoff prompts for R2 tasks verified/updated before ending session."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Confirm R1-code/R1-test completed",
+        "Set R1-integ to in_progress, log START entry, commit docs update",
+        "Create task branch cr-r1-panics-integ",
+        "Create worktree wt/cr-r1-panics-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration branch/worktree and resolve conflicts",
+        "Run required fmt/clippy/tests",
+        "Merge integration branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry",
+        "Push or hand off"
+      ],
+      "depends_on": [
+        "R1-code",
+        "R1-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cr-r1-panics-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R1-integ.md"
+    },
+    {
+      "id": "R2-code",
+      "name": "Shell decomposition & PTY channelization",
+      "type": "code",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Split shell/lib.rs into execution, repl, builtins, and scripts modules, replace nested Arc<Mutex> PTY handling with a channel-based pattern, and keep CLI/docs aligned.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/shell/src/lib.rs",
+        "crates/shell/src/pty_exec.rs",
+        "docs/USAGE.md",
+        "docs/CONFIGURATION.md"
+      ],
+      "acceptance_criteria": [
+        "shell/src/lib.rs reduced to thin public surface (~200 lines) with modules for execution/, repl/, builtins/, scripts/ as outlined in the analysis.",
+        "PTY management uses channel/message passing instead of nested Arc<Mutex>; no global mutable state for PTY writers.",
+        "CLI behavior preserved (help, flags), and docs updated to reflect module moves if paths referenced.",
+        "cargo fmt; cargo clippy -p substrate-shell -- -D warnings; targeted cargo test -p substrate-shell (world_root/world_enable) pass."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R2-code to in_progress, update session_log.md, commit docs update",
+        "Create task branch cr-r2-shell-code",
+        "Create worktree wt/cr-r2-shell-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure required fmt/lint/tests per prompt are green",
+        "Commit worktree changes",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts as required",
+        "Commit docs update on feat/crate-refactor"
+      ],
+      "depends_on": [
+        "R1-integ"
+      ],
+      "concurrent_with": [
+        "R2-test"
+      ],
+      "worktree": "wt/cr-r2-shell-code",
+      "integration_task": "R2-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R2-code.md"
+    },
+    {
+      "id": "R2-test",
+      "name": "Shell test extraction & coverage",
+      "type": "test",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Move shell tests out of lib.rs into tests/ modules, add coverage for the new PTY channel manager and module seams, and update fixtures.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/shell/tests",
+        "crates/shell/src",
+        "tests/installers/install_smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "Unit/integration tests relocated to crates/shell/tests (with common fixtures) and no remaining tests in lib.rs.",
+        "Coverage added for PTY channel manager (resize/write/close) and module boundaries; no production code edits beyond test-only helpers.",
+        "cargo fmt; cargo test -p substrate-shell world_root; ./tests/installers/install_smoke.sh scenarios documented in session log.",
+        "Kickoff prompts for R2-integ and R3-code/test captured."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R2-test to in_progress, update session_log.md, commit docs update",
+        "Create task branch cr-r2-shell-test",
+        "Create worktree wt/cr-r2-shell-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure required fmt/tests per prompt are green",
+        "Commit worktree changes",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts as required",
+        "Commit docs update on feat/crate-refactor"
+      ],
+      "depends_on": [
+        "R1-integ"
+      ],
+      "concurrent_with": [
+        "R2-code"
+      ],
+      "worktree": "wt/cr-r2-shell-test",
+      "integration_task": "R2-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R2-test.md"
+    },
+    {
+      "id": "R2-integ",
+      "name": "Integrate shell decomposition",
+      "type": "integration",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Merge shell decomposition code/test branches, resolve conflicts, and ensure fmt/clippy/tests plus installer smoke scripts pass.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "crates/shell",
+        "tests/installers",
+        "docs/USAGE.md"
+      ],
+      "acceptance_criteria": [
+        "wt/cr-r2-shell-integ merges R2 code+tests with clean fmt/clippy/test + installer smoke results logged.",
+        "feat/crate-refactor updated with integration results and doc/task/log entries committed.",
+        "Kickoff prompts for R3 tasks verified/updated."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Confirm R2-code/test completed",
+        "Set R2-integ to in_progress, update session_log.md, commit docs update",
+        "Create task branch cr-r2-shell-integ",
+        "Create worktree wt/cr-r2-shell-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration branch/worktree and resolve conflicts",
+        "Run required fmt/clippy/tests and installer smoke scenarios",
+        "Merge integration branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry",
+        "Push or hand off"
+      ],
+      "depends_on": [
+        "R2-code",
+        "R2-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cr-r2-shell-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R2-integ.md"
+    },
+    {
+      "id": "R3-code",
+      "name": "Global state & binary boundaries",
+      "type": "code",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Remove broker/trace global singletons, enforce thin binaries for world-agent and host-proxy, and expose context-based constructors.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/broker/src",
+        "crates/trace/src",
+        "crates/world-agent/src",
+        "crates/host-proxy/src"
+      ],
+      "acceptance_criteria": [
+        "Broker/trace contexts replace global Lazy singletons; public APIs accept explicit handles.",
+        "world-agent and host-proxy binaries reduced to thin mains delegating into library constructors/run loops.",
+        "Docs updated for lifecycle/initialization changes; backwards compatibility maintained or clearly documented.",
+        "cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; targeted cargo test for broker/trace/world-agent/host-proxy pass."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R3-code to in_progress, update session_log.md, commit docs update",
+        "Create task branch cr-r3-boundaries-code",
+        "Create worktree wt/cr-r3-boundaries-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure required fmt/lint/tests per prompt are green",
+        "Commit worktree changes",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts as required",
+        "Commit docs update on feat/crate-refactor"
+      ],
+      "depends_on": [
+        "R2-integ"
+      ],
+      "concurrent_with": [
+        "R3-test"
+      ],
+      "worktree": "wt/cr-r3-boundaries-code",
+      "integration_task": "R3-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R3-code.md"
+    },
+    {
+      "id": "R3-test",
+      "name": "State isolation & binary harness tests",
+      "type": "test",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Add tests ensuring broker/trace contexts are isolated (no shared global state) and cover world-agent/host-proxy thin binary entrypoints.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/broker/tests",
+        "crates/trace/tests",
+        "crates/world-agent",
+        "crates/host-proxy"
+      ],
+      "acceptance_criteria": [
+        "Tests verify independent broker/trace contexts can run in parallel without cross-talk; add mocks/helpers as needed.",
+        "Binary entrypoints for world-agent/host-proxy covered by integration tests or harness scripts confirming thin main behavior.",
+        "cargo fmt; targeted cargo test suites executed and logged in session_log.md.",
+        "Kickoff prompt for R3-integ plus R4-code/test recorded."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R3-test to in_progress, update session_log.md, commit docs update",
+        "Create task branch cr-r3-boundaries-test",
+        "Create worktree wt/cr-r3-boundaries-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure required fmt/tests per prompt are green",
+        "Commit worktree changes",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts as required",
+        "Commit docs update on feat/crate-refactor"
+      ],
+      "depends_on": [
+        "R2-integ"
+      ],
+      "concurrent_with": [
+        "R3-code"
+      ],
+      "worktree": "wt/cr-r3-boundaries-test",
+      "integration_task": "R3-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R3-test.md"
+    },
+    {
+      "id": "R3-integ",
+      "name": "Integrate state/binary boundary changes",
+      "type": "integration",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Merge broker/trace/world-agent/host-proxy code/test branches, resolve conflicts, and ensure fmt/clippy/tests are green.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "crates/broker",
+        "crates/trace",
+        "crates/world-agent",
+        "crates/host-proxy"
+      ],
+      "acceptance_criteria": [
+        "wt/cr-r3-boundaries-integ merges R3 code+tests with clean fmt/clippy/tests.",
+        "feat/crate-refactor updated with integration results and doc/task/log entries committed.",
+        "Kickoff prompts for R4 tasks verified/updated before end."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Confirm R3-code/test completed",
+        "Set R3-integ to in_progress, update session_log.md, commit docs update",
+        "Create task branch cr-r3-boundaries-integ",
+        "Create worktree wt/cr-r3-boundaries-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration branch/worktree and resolve conflicts",
+        "Run required fmt/clippy/tests",
+        "Merge integration branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry",
+        "Push or hand off"
+      ],
+      "depends_on": [
+        "R3-code",
+        "R3-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cr-r3-boundaries-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R3-integ.md"
+    },
+    {
+      "id": "R4-code",
+      "name": "Polish & documentation sweep",
+      "type": "code",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Split remaining single-file crates (trace, world-windows-wsl), add replay/common prelude docs, and ensure CHANGELOG reflects refactor outcomes.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/trace/src",
+        "crates/world-windows-wsl/src",
+        "crates/replay/src/lib.rs",
+        "crates/common/src/lib.rs",
+        "CHANGELOG.md"
+      ],
+      "acceptance_criteria": [
+        "trace and world-windows-wsl crates split into modules per analysis recommendations, keeping thin lib surfaces.",
+        "Replay crate gains module-level rustdoc with runnable examples; common crate exposes documented prelude if justified.",
+        "CHANGELOG.md updated for refactor outcomes and any API surface notes.",
+        "cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace -- --nocapture (or targeted suites) pass for touched crates."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R4-code to in_progress, update session_log.md, commit docs update",
+        "Create task branch cr-r4-polish-code",
+        "Create worktree wt/cr-r4-polish-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure required fmt/lint/tests per prompt are green",
+        "Commit worktree changes",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts as required",
+        "Commit docs update on feat/crate-refactor"
+      ],
+      "depends_on": [
+        "R3-integ"
+      ],
+      "concurrent_with": [
+        "R4-test"
+      ],
+      "worktree": "wt/cr-r4-polish-code",
+      "integration_task": "R4-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R4-code.md"
+    },
+    {
+      "id": "R4-test",
+      "name": "Documentation & polish validation",
+      "type": "test",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Add tests/doctests/property tests to cover new module splits, replay docs, and ensure benchmarks/fixtures stay stable.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/trace",
+        "crates/world-windows-wsl",
+        "crates/replay",
+        "crates/common"
+      ],
+      "acceptance_criteria": [
+        "Doctests/property tests added for replay docs and new module boundaries; fixtures updated without altering production code.",
+        "Benchmarks or performance checks recorded when applicable, with notes in session_log.md.",
+        "cargo fmt; targeted cargo test/doctest runs documented; no new clippy warnings.",
+        "Kickoff prompt for R4-integ produced with references to code/test branches."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R4-test to in_progress, update session_log.md, commit docs update",
+        "Create task branch cr-r4-polish-test",
+        "Create worktree wt/cr-r4-polish-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure required fmt/tests per prompt are green",
+        "Commit worktree changes",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts as required",
+        "Commit docs update on feat/crate-refactor"
+      ],
+      "depends_on": [
+        "R3-integ"
+      ],
+      "concurrent_with": [
+        "R4-code"
+      ],
+      "worktree": "wt/cr-r4-polish-test",
+      "integration_task": "R4-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R4-test.md"
+    },
+    {
+      "id": "R4-integ",
+      "name": "Integrate polish/doc sweep",
+      "type": "integration",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Merge polish/doc code/test branches, resolve conflicts, and ensure full fmt/clippy/tests (and relevant doctests/benches) pass.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "crates/trace",
+        "crates/world-windows-wsl",
+        "crates/replay",
+        "crates/common"
+      ],
+      "acceptance_criteria": [
+        "wt/cr-r4-polish-integ merges R4 code+tests with clean fmt/clippy/tests/doctests.",
+        "feat/crate-refactor contains final polish changes plus updated tasks/session_log.",
+        "Any remaining kickoff prompts or follow-up notes captured before ending session."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Confirm R4-code/test completed",
+        "Set R4-integ to in_progress, update session_log.md, commit docs update",
+        "Create task branch cr-r4-polish-integ",
+        "Create worktree wt/cr-r4-polish-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration branch/worktree and resolve conflicts",
+        "Run required fmt/clippy/tests/doctests (and benches if required)",
+        "Merge integration branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry",
+        "Push or hand off"
+      ],
+      "depends_on": [
+        "R4-code",
+        "R4-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cr-r4-polish-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R4-integ.md"
+    }
+  ]
+}
