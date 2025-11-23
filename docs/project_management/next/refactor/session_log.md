@@ -234,3 +234,10 @@ Template (copy/paste and fill in):
 - Results: fmt/clippy clean; shell world_root/world_enable suites passed
 - Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R5-test.md
 - Next steps / blockers: ready for R5-test/integration; remove wt/cr-r5-exec-code after merge
+
+## [2025-11-23 23:08 UTC] Test – R5-test – START
+- Checked out feat/crate-refactor, pulled latest
+- Updated tasks.json + session log (commit: pending)
+- Created worktree: pending (will create wt/cr-r5-exec-test after docs commit)
+- Plan: create cr-r5-exec-test branch/worktree; add execution routing/invocation + PTY control/data-plane tests and refresh fixtures; run cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
+- Blockers: none

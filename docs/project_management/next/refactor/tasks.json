@@ -573,7 +573,7 @@
       "name": "Shell execution decomposition tests",
       "type": "test",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add/reshape tests for the split shell execution modules and PTY pipeline, ensuring routing, plan building, and resize/write flows remain correct.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
