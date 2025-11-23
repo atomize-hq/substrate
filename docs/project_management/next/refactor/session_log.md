@@ -91,3 +91,11 @@ Template (copy/paste and fill in):
 - Created worktree: pending (will create wt/cr-r2-shell-test)
 - Plan: create cr-r2-shell-test branch/worktree; move shell tests into crates/shell/tests aligned with new modules; add PTY channel manager coverage (resize/write/close) and module seam tests; run cargo fmt and cargo test -p substrate-shell world_root plus ./tests/installers/install_smoke.sh; document results for END entry
 - Blockers: none
+
+## [2025-11-23 15:00 UTC] Test – R2-test – END
+- Worktree commits: a8b4cd6
+- Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; ./tests/installers/install_smoke.sh (skipped: Linux-only harness)
+- Results: fmt clean; world_root/world_enable suites passed; installer smoke skipped per platform guard
+- Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R2-integ.md
+- Docs commit: pending
+- Next steps / blockers: ready for R2 integration; remove worktree after merge

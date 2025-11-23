@@ -179,7 +179,7 @@
       "name": "Shell test extraction & coverage",
       "type": "test",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Move shell tests out of lib.rs into tests/ modules, add coverage for the new PTY channel manager and module seams, and update fixtures.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
