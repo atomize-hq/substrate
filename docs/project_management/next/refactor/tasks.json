@@ -134,7 +134,7 @@
       "name": "Shell decomposition & PTY channelization",
       "type": "code",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Split shell/lib.rs into execution, repl, builtins, and scripts modules, replace nested Arc<Mutex> PTY handling with a channel-based pattern, and keep CLI/docs aligned.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
