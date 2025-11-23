@@ -20,6 +20,23 @@ pub use world_deps_manifest::{
     WorldDepDetectSpec, WorldDepInstallRecipe, WorldDepTool, WorldDepsManifest,
 };
 
+/// Convenience re-exports for consumers that need the common substrate types.
+pub mod prelude {
+    pub use crate::agent_events::{AgentEvent, AgentEventKind};
+    pub use crate::fs_diff::FsDiff;
+    pub use crate::log_schema;
+    pub use crate::manager_manifest::{
+        DetectSpec, GuestSpec, InitSpec, InstallSpec, ManagerManifest, ManagerSpec, Platform,
+        RegexPattern,
+    };
+    pub use crate::paths;
+    pub use crate::settings::WorldRootMode;
+    pub use crate::world_deps_manifest::{
+        WorldDepDetectSpec, WorldDepInstallRecipe, WorldDepTool, WorldDepsManifest,
+    };
+    pub use crate::{dedupe_path, redact_sensitive};
+}
+
 /// Deduplicate PATH-like strings while preserving order
 pub fn dedupe_path(path: &str) -> String {
     let separator = if cfg!(windows) { ';' } else { ':' };

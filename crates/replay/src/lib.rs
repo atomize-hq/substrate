@@ -1,7 +1,36 @@
-//! Replay module for deterministic trace replay and regression testing
+//! # Substrate Replay
 //!
-//! This module provides functionality to replay recorded command sequences from trace.jsonl files,
-//! enabling regression testing and debugging by reproducing exact command execution patterns.
+//! Deterministically replays recorded command spans from `trace.jsonl` so regressions can be
+//! reproduced on demand. The crate provides helpers to select candidate spans, replay them in a
+//! controlled world, and compare the results against the original execution.
+//!
+//! ## Example
+//! ```rust
+//! use anyhow::Result;
+//! use substrate_replay::{find_spans_to_replay, ReplayConfig, SpanFilter};
+//!
+//! fn main() -> Result<()> {
+//!     let rt = tokio::runtime::Runtime::new()?;
+//!     let trace = tempfile::NamedTempFile::new()?;
+//!
+//!     std::fs::write(
+//!         trace.path(),
+//!         r#"{"ts":"2025-01-01T00:00:00Z","event_type":"command_complete","span_id":"spn_demo","session_id":"ses_demo","component":"shell","cmd":"echo demo","cwd":"/tmp","exit_code":0}"#,
+//!     )?;
+//!
+//!     let spans = rt.block_on(async {
+//!         find_spans_to_replay(trace.path(), SpanFilter::default()).await
+//!     })?;
+//!     assert_eq!(spans, vec!["spn_demo".to_string()]);
+//!
+//!     let mut config = ReplayConfig::default();
+//!     config.trace_file = trace.path().to_path_buf();
+//!     // Run a replay once a suitable backend is available:
+//!     // rt.block_on(async { substrate_replay::replay_span("spn_demo", &config).await })?;
+//!
+//!     Ok(())
+//! }
+//! ```
 
 pub mod compare;
 pub mod regression;

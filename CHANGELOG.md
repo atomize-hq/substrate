@@ -16,6 +16,13 @@ All notable changes to this project are tracked here. Dates use UTC.
   and the upcoming `substrate world enable` / `world deps` CLI. These sections
   now document how to run doctor commands inside temporary HOMEs, how to apply
   repair snippets safely, and where to find the manifest files.
+- Added replay crate module-level docs with a runnable selection example and
+  documented the `substrate-common::prelude` for shared types and helpers.
+
+### Changed
+
+- Split the `substrate-trace` and `world-windows-wsl` crates into focused
+  modules while preserving their public surfaces and platform guards.
 
 ## [0.2.0-beta.1] - 2025-10-30
 
