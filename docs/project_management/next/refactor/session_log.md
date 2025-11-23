@@ -199,3 +199,11 @@ Template (copy/paste and fill in):
 - Created worktree: pending (will create wt/cr-r4-polish-integ after docs commit)
 - Plan: create cr-r4-polish-integ branch/worktree; merge cr-r4-polish-code and cr-r4-polish-test; resolve conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-trace; cargo test -p world-windows-wsl; cargo test -p substrate-replay --all-targets; cargo test --doc -p substrate-replay; cargo test -p substrate-common --all-targets; capture outputs for END log
 - Blockers: none
+
+## [2025-11-23 19:37 UTC] Integration – R4-integ – END
+- Worktree commits: none (branches already aligned)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-trace; cargo test -p world-windows-wsl; cargo test -p substrate-replay --all-targets; cargo test --doc -p substrate-replay; cargo test -p substrate-common --all-targets
+- Results: fmt/clippy clean; trace/replay/common tests and replay doctests passed; world-windows-wsl built with 0 tests on non-Windows
+- Kickoff prompts created: n/a
+- Docs commit: pending (tasks/status + session log)
+- Next steps / blockers: merge cr-r4-polish-integ into feat/crate-refactor; remove worktree after final docs commit
