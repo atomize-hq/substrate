@@ -97,5 +97,5 @@ Template (copy/paste and fill in):
 - Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; ./tests/installers/install_smoke.sh (skipped: Linux-only harness)
 - Results: fmt clean; world_root/world_enable suites passed; installer smoke skipped per platform guard
 - Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R2-integ.md
-- Docs commit: pending
+- Docs commit: 82ff270 (tasks/status + session log + R2-integ prompt)
 - Next steps / blockers: ready for R2 integration; remove worktree after merge
