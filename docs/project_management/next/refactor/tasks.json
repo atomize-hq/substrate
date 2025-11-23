@@ -442,7 +442,7 @@
       "name": "Documentation & polish validation",
       "type": "test",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add tests/doctests/property tests to cover new module splits, replay docs, and ensure benchmarks/fixtures stay stable.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
