@@ -55,6 +55,7 @@ struct TelemetryEvent {
     error: Option<String>,
 }
 
+#[cfg_attr(target_os = "windows", allow(dead_code))]
 fn init_telemetry() {
     if let Err(err) = init_telemetry_inner() {
         eprintln!("[telemetry] initialization failed: {err}");

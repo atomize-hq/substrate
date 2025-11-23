@@ -1,7 +1,10 @@
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use substrate_common::FsDiff;
+
+#[cfg(test)]
+use std::path::PathBuf;
 
 pub fn to_wsl_path(project_path: &Path, path: &Path) -> Result<String> {
     if path.is_relative() {

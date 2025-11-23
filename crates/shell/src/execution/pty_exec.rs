@@ -490,8 +490,6 @@ fn get_terminal_size() -> Result<PtySize> {
 
 // 🔥 CRITICAL FIX: Windows global input forwarder with Condvar gating
 // Prevents stealing input when no PTY is active
-#[cfg(windows)]
-use std::sync::Condvar;
 
 #[cfg(windows)]
 fn wake_input_gate() {

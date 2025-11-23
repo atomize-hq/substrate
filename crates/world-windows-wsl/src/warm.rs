@@ -1,8 +1,10 @@
 use anyhow::{anyhow, Context, Result};
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::Arc;
 use tracing::info;
+
+#[cfg(test)]
+use std::sync::Arc;
 
 pub struct WarmCmd {
     pub(crate) distro: String,
