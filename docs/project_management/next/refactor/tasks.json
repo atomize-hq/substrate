@@ -5,7 +5,7 @@
       "name": "Remove library panics (critical crates)",
       "type": "code",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Replace .unwrap() panics with Result-based error handling in broker, world, telemetry-lib, and forwarder; add rich context and keep APIs stable.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
