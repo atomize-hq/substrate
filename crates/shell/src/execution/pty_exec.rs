@@ -20,6 +20,7 @@ struct PtyControl {
 }
 
 impl PtyControl {
+    #[cfg_attr(windows, allow(dead_code))]
     fn resize(&self, size: PtySize) {
         if let Err(err) = self.tx.send(PtyCommand::Resize(size)) {
             log::warn!("Failed to dispatch PTY resize: {err}");
@@ -38,6 +39,7 @@ impl PtyControl {
 }
 
 enum PtyCommand {
+    #[cfg_attr(windows, allow(dead_code))]
     Resize(PtySize),
     Write(Vec<u8>),
     Close,

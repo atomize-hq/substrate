@@ -10,7 +10,7 @@ use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use world_api::WorldSpec;
+use world_api::{ExecRequest, WorldBackend, WorldSpec};
 
 struct MockAgent {
     capabilities: Mutex<VecDeque<anyhow::Result<serde_json::Value>>>,
