@@ -223,7 +223,7 @@
       "name": "Integrate shell decomposition",
       "type": "integration",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge shell decomposition code/test branches, resolve conflicts, and ensure fmt/clippy/tests plus installer smoke scripts pass.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",

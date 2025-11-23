@@ -99,3 +99,11 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R2-integ.md
 - Docs commit: 82ff270 (tasks/status + session log + R2-integ prompt)
 - Next steps / blockers: ready for R2 integration; remove worktree after merge
+
+## [2025-11-23 15:06 UTC] Integration – R2-integ – START
+- Checked out feat/crate-refactor, pulled latest
+- Confirmed R2-code and R2-test completed
+- Updated tasks.json + session log (commit: pending)
+- Created worktree: pending (will create wt/cr-r2-shell-integ)
+- Plan: create integration branch/worktree; merge cr-r2-shell-code and cr-r2-shell-test; resolve conflicts in shell modules/tests; run cargo fmt, cargo clippy -p substrate-shell -- -D warnings, cargo test -p substrate-shell world_root/world_enable, ./tests/installers/install_smoke.sh; record outputs for END entry
+- Blockers: none
