@@ -49,7 +49,7 @@
       "name": "Panic guards for critical crates",
       "type": "test",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add panic-focused tests for broker, world, telemetry-lib, and forwarder to ensure poisoned locks and error paths return Result instead of panicking.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",

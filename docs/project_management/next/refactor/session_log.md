@@ -30,3 +30,10 @@ Template (copy/paste and fill in):
 - Created worktree: wt/cr-r1-panics-code
 - Plan: scan broker/world/telemetry-lib/forwarder for library unwraps; refactor to Result with anyhow::Context; ensure no new panics; run cargo fmt and cargo clippy --workspace --all-targets -- -D warnings; run targeted tests if needed
 - Blockers: none noted
+
+## [2025-11-23 02:40 UTC] Test – R1-test – START
+- Checked out feat/crate-refactor, pulled latest
+- Updated tasks.json + session log (commit: pending)
+- Created worktree: wt/cr-r1-panics-test
+- Plan: add panic-focused tests for broker/world/telemetry-lib/forwarder covering poisoned locks/error paths returning Result; keep fixtures test-only; run cargo fmt and targeted cargo test per crates; record results
+- Blockers: none
