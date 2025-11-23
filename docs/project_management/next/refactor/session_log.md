@@ -220,3 +220,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R5-code.md; docs/project_management/next/refactor/kickoff_prompts/R5-test.md; docs/project_management/next/refactor/kickoff_prompts/R5-integ.md; docs/project_management/next/refactor/kickoff_prompts/R6-code.md; docs/project_management/next/refactor/kickoff_prompts/R6-test.md; docs/project_management/next/refactor/kickoff_prompts/R6-integ.md; docs/project_management/next/refactor/kickoff_prompts/R7-code.md; docs/project_management/next/refactor/kickoff_prompts/R7-test.md; docs/project_management/next/refactor/kickoff_prompts/R7-integ.md
 - Docs commit: 5cad6a6a (docs: add R5-R7 decomposition tasks)
 - Next steps / blockers: commit docs update on feat/crate-refactor; proceed with R5 tasks
+
+## [2025-11-23 21:34 UTC] Code – R5-code – START
+- Checked out feat/crate-refactor, pulled latest
+- Updated tasks.json + session log (commit: pending)
+- Worktree: pending (will create wt/cr-r5-exec-code after docs commit)
+- Plan: set R5-code to in_progress; create cr-r5-exec-code branch/worktree; split execution/mod.rs into routing/invocation/platform modules; split pty_exec into control/data planes; extract settings/manager init helpers; run cargo fmt, cargo clippy --workspace --all-targets -- -D warnings, cargo test -p substrate-shell world_root/world_enable
+- Blockers: none
