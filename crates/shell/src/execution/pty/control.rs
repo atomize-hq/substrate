@@ -108,3 +108,57 @@ pub(crate) fn initialize_global_sigwinch_handler_impl() {
         });
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use portable_pty::PtySize;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    #[test]
+    fn active_control_dispatches_commands_and_clears_on_drop() {
+        let (tx, rx) = mpsc::channel();
+        let control = PtyControl { tx };
+        let expected_size = PtySize {
+            rows: 24,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        };
+
+        {
+            let _guard = ActivePtyGuard::register(control.clone());
+            let active = active_pty_control().expect("active PTY control is registered");
+
+            active.resize(expected_size);
+            active.write(b"payload".to_vec());
+            active.close();
+            assert!(
+                active_pty_control().is_some(),
+                "control remains active while guard is held"
+            );
+        }
+
+        let mut received = Vec::new();
+        while let Ok(cmd) = rx.recv_timeout(Duration::from_secs(1)) {
+            received.push(cmd);
+            if matches!(received.last(), Some(PtyCommand::Close)) {
+                break;
+            }
+        }
+
+        assert!(
+            active_pty_control().is_none(),
+            "control cleared after guard drop"
+        );
+        assert!(
+            matches!(received.get(0), Some(PtyCommand::Resize(size)) if size.rows == expected_size.rows && size.cols == expected_size.cols)
+        );
+        assert!(matches!(
+            received.get(1),
+            Some(PtyCommand::Write(bytes)) if bytes == b"payload"
+        ));
+        assert!(matches!(received.get(2), Some(PtyCommand::Close)));
+    }
+}
