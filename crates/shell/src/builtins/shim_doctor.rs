@@ -1,5 +1,5 @@
 use super::world_deps::{self, WorldDepGuestState, WorldDepsStatusReport};
-use crate::{
+use crate::execution::{
     current_platform,
     manager_init::{self, ManagerInitConfig, ManifestPaths},
     manager_manifest_base_path,

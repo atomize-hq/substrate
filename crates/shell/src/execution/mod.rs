@@ -1,7 +1,4 @@
 pub(crate) mod agent_events;
-pub(crate) mod async_repl;
-pub(crate) mod commands;
-mod editor;
 pub mod lock;
 pub mod manager_init;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -10,12 +7,15 @@ mod pty_exec;
 mod settings;
 pub mod shim_deploy; // Made public for integration tests
 
-use shim_deploy::{DeploymentStatus, ShimDeployer};
+use self::shim_deploy::{DeploymentStatus, ShimDeployer};
+use crate::builtins as commands;
+use crate::repl::async_repl;
+use crate::repl::editor;
+use crate::scripts::write_bash_preexec_script;
 
 use anyhow::{Context, Result};
 use chrono::Utc;
 use clap::{ArgAction, Parser, ValueEnum};
-use lazy_static::lazy_static;
 use serde_json::json;
 use std::collections::HashMap;
 use std::env;
@@ -29,7 +29,6 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Arc;
-use std::sync::Mutex;
 use substrate_broker::{detect_profile, evaluate, Decision};
 use substrate_common::{
     agent_events::{AgentEvent, AgentEventKind},
@@ -44,11 +43,11 @@ use uuid::Uuid;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use agent_api_client::AgentClient;
 
-use crate::agent_events::{
+use self::agent_events::{
     clear_agent_event_sender, format_event_line, init_event_channel, publish_agent_event,
     publish_command_completion, schedule_demo_burst, schedule_demo_events,
 };
-use crate::settings::{apply_world_root_env, resolve_world_root};
+use self::settings::{apply_world_root_env, resolve_world_root};
 
 // Reedline imports
 use reedline::Signal;
@@ -175,52 +174,15 @@ impl Drop for RawModeGuard {
 // Global flag to prevent double SIGINT handling - must be pub(crate) for pty_exec access
 pub(crate) static PTY_ACTIVE: AtomicBool = AtomicBool::new(false);
 
-// Type alias to simplify complex PTY type
-type CurrentPtyType = Arc<Mutex<Option<Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>>>>;
-
-// Global SIGWINCH handler state - must be pub(crate) for pty_exec access
-lazy_static! {
-    // Store the current PTY as a mutex-wrapped Box<dyn MasterPty + Send>
-    // Note: Using nested Mutex to satisfy Sync requirement for global static, since
-    // portable_pty::MasterPty is not Sync. The outer mutex protects Option swapping,
-    // the inner mutex protects the MasterPty itself. This could be simplified if
-    // portable_pty adds Sync to MasterPty trait in the future.
-    pub(crate) static ref CURRENT_PTY: CurrentPtyType = Arc::new(Mutex::new(None));
-}
-
 // Forward declaration for pty_exec module
 #[cfg(unix)]
 pub(crate) fn initialize_global_sigwinch_handler() {
     pty_exec::initialize_global_sigwinch_handler_impl();
 }
 
-const BASH_PREEXEC_SCRIPT: &str = r#"# Substrate PTY command logging
-substrate_manager_env="${SUBSTRATE_MANAGER_ENV:-$HOME/.substrate/manager_env.sh}"
-if [[ -n "$substrate_manager_env" && -f "$substrate_manager_env" ]]; then
-    # shellcheck disable=SC1090
-    source "$substrate_manager_env"
-fi
-
-# Source user's bashrc ONLY in interactive shells
-[[ $- == *i* ]] && [[ -f ~/.bashrc ]] && source ~/.bashrc
-
-if [[ "${SUBSTRATE_ENABLE_PREEXEC:-0}" == "1" ]]; then
-__substrate_preexec() {
-    [[ -z "$SHIM_TRACE_LOG" ]] && return 0
-    [[ "$BASH_COMMAND" == __substrate_preexec* ]] && return 0
-    [[ -n "$COMP_LINE" ]] && return 0
-    printf '{"ts":"%s","event_type":"builtin_command","command":%q,"session_id":%q,"component":"shell","pty":true}\n' \
-        "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" \
-        "$BASH_COMMAND" \
-        "${SHIM_SESSION_ID:-unknown}" >> "$SHIM_TRACE_LOG" 2>/dev/null || true
-}
-trap '__substrate_preexec' DEBUG
-fi
-"#;
-
 const SHELL_AGENT_ID: &str = "shell";
 
-fn is_shell_stream_event(event: &AgentEvent) -> bool {
+pub(crate) fn is_shell_stream_event(event: &AgentEvent) -> bool {
     event.agent_id == SHELL_AGENT_ID && matches!(event.kind, AgentEventKind::PtyData)
 }
 
@@ -1897,6 +1859,9 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
                 "failed to write manager_env.sh"
             );
         }
+        if let Some(parent) = config.bash_preexec_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
         match write_bash_preexec_script(&config.bash_preexec_path) {
             Ok(()) => config.preexec_available = true,
             Err(err) => {
@@ -3520,7 +3485,7 @@ fn is_pty_disabled() -> bool {
     std::env::var("SUBSTRATE_DISABLE_PTY").is_ok()
 }
 
-fn execute_command(
+pub(crate) fn execute_command(
     config: &ShellConfig,
     command: &str,
     cmd_id: &str,
@@ -4382,7 +4347,7 @@ where
                 limits: ResourceLimits::default(),
                 enable_preload: false,
                 allowed_domains: substrate_broker::allowed_domains(),
-                project_dir: crate::settings::world_root_from_env().path,
+                project_dir: settings::world_root_from_env().path,
                 always_isolate: false,
             };
             let backend = LinuxLocalBackend::new();
@@ -4751,9 +4716,9 @@ fn handle_builtin(
 }
 
 pub(crate) struct AgentStreamOutcome {
-    exit_code: i32,
-    scopes_used: Vec<String>,
-    fs_diff: Option<substrate_common::FsDiff>,
+    pub(crate) exit_code: i32,
+    pub(crate) scopes_used: Vec<String>,
+    pub(crate) fs_diff: Option<substrate_common::FsDiff>,
 }
 
 pub(crate) fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStreamOutcome> {
@@ -4937,8 +4902,8 @@ fn parse_demo_burst_command(input: &str) -> Option<(usize, usize, u64)> {
 
 #[cfg(test)]
 mod streaming_tests {
+    use super::agent_events::{clear_agent_event_sender, init_event_channel};
     use super::*;
-    use crate::agent_events::{clear_agent_event_sender, init_event_channel};
     use substrate_common::agent_events::AgentEventKind;
     use tokio::runtime::Runtime;
 
@@ -4954,7 +4919,7 @@ mod streaming_tests {
 
     #[test]
     fn consume_agent_stream_buffer_emits_agent_events() {
-        let _guard = crate::agent_events::acquire_event_test_guard();
+        let _guard = super::agent_events::acquire_event_test_guard();
         let rt = Runtime::new().expect("runtime");
         rt.block_on(async {
             let mut rx = init_event_channel();
@@ -5686,16 +5651,7 @@ fi
     manager_init::write_snippet(&config.manager_env_path, SCRIPT)
 }
 
-fn write_bash_preexec_script(path: &Path) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).ok();
-    }
-    fs::write(path, BASH_PREEXEC_SCRIPT)
-        .with_context(|| format!("failed to write bash preexec script at {}", path.display()))?;
-    Ok(())
-}
-
-trait CommandEnvAdapter {
+pub(crate) trait CommandEnvAdapter {
     fn set_env_var(&mut self, key: &str, value: &str);
     fn remove_env_var(&mut self, key: &str);
 }
@@ -6441,7 +6397,7 @@ managers:
 }
 
 // Helper function to setup signal handlers
-fn setup_signal_handlers(running_child_pid: Arc<AtomicI32>) -> Result<()> {
+pub(crate) fn setup_signal_handlers(running_child_pid: Arc<AtomicI32>) -> Result<()> {
     // Set up Ctrl-C handler with PTY awareness
     {
         let running = running_child_pid.clone();

@@ -1,7 +1,9 @@
+use crate::builtins::world_enable;
+use crate::execution::{
+    build_agent_client_and_request, stream_non_pty_via_agent, world_deps_manifest_base_path,
+};
 use crate::{
-    build_agent_client_and_request, commands::world_enable, stream_non_pty_via_agent,
-    world_deps_manifest_base_path, WorldDepsAction, WorldDepsCmd, WorldDepsInstallArgs,
-    WorldDepsStatusArgs, WorldDepsSyncArgs,
+    WorldDepsAction, WorldDepsCmd, WorldDepsInstallArgs, WorldDepsStatusArgs, WorldDepsSyncArgs,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use base64::engine::general_purpose::STANDARD as BASE64;

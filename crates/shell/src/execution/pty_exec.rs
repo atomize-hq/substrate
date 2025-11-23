@@ -4,12 +4,81 @@ use serde_json::json;
 use std::io::{self, Read, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::mpsc::{self, Sender};
+#[cfg(windows)]
+use std::sync::Condvar;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use crate::{
-    configure_child_shell_env, log_command_event, ShellConfig, ShellMode, CURRENT_PTY, PTY_ACTIVE,
-};
+use lazy_static::lazy_static;
+
+use super::{configure_child_shell_env, log_command_event, ShellConfig, ShellMode, PTY_ACTIVE};
+
+#[derive(Clone)]
+struct PtyControl {
+    tx: Sender<PtyCommand>,
+}
+
+impl PtyControl {
+    fn resize(&self, size: PtySize) {
+        if let Err(err) = self.tx.send(PtyCommand::Resize(size)) {
+            log::warn!("Failed to dispatch PTY resize: {err}");
+        }
+    }
+
+    fn write(&self, data: Vec<u8>) {
+        if let Err(err) = self.tx.send(PtyCommand::Write(data)) {
+            log::warn!("Failed to dispatch PTY write: {err}");
+        }
+    }
+
+    fn close(&self) {
+        let _ = self.tx.send(PtyCommand::Close);
+    }
+}
+
+enum PtyCommand {
+    Resize(PtySize),
+    Write(Vec<u8>),
+    Close,
+}
+
+lazy_static! {
+    static ref ACTIVE_PTY: Mutex<Option<PtyControl>> = Mutex::new(None);
+}
+
+#[cfg(windows)]
+lazy_static! {
+    static ref WIN_PTY_INPUT_GATE: Arc<(Mutex<bool>, Condvar)> =
+        Arc::new((Mutex::new(false), Condvar::new()));
+}
+
+struct ActivePtyGuard;
+
+impl ActivePtyGuard {
+    fn register(control: PtyControl) -> Self {
+        if let Ok(mut slot) = ACTIVE_PTY.lock() {
+            *slot = Some(control);
+        }
+        #[cfg(windows)]
+        wake_input_gate();
+        ActivePtyGuard
+    }
+}
+
+impl Drop for ActivePtyGuard {
+    fn drop(&mut self) {
+        if let Ok(mut slot) = ACTIVE_PTY.lock() {
+            *slot = None;
+        }
+        #[cfg(windows)]
+        sleep_input_gate();
+    }
+}
+
+fn active_pty_control() -> Option<PtyControl> {
+    ACTIVE_PTY.lock().ok().and_then(|slot| slot.clone())
+}
 
 #[cfg(unix)]
 pub(crate) fn initialize_global_sigwinch_handler_impl() {
@@ -28,21 +97,12 @@ pub(crate) fn initialize_global_sigwinch_handler_impl() {
             };
 
             for _ in signals.forever() {
-                // Resize current PTY if one is active
-                // NOTE: signal_hook runs this in a normal thread, not a signal handler
-                // Allocations and logging are safe here
-                if let Ok(pty_opt) = CURRENT_PTY.lock() {
-                    if let Some(ref pty) = *pty_opt {
-                        if let Ok(size) = get_terminal_size() {
-                            // ioctl + resize called from handler thread
-                            let _ = pty.lock().unwrap().resize(size);
+                if let Some(control) = active_pty_control() {
+                    if let Ok(size) = get_terminal_size() {
+                        control.resize(size);
 
-                            // Debug logging if requested (safe in normal thread)
-                            if std::env::var("SUBSTRATE_PTY_DEBUG").is_ok() {
-                                log::debug!("SIGWINCH: Resized PTY to {}x{}", size.cols, size.rows);
-                                // 🔥 PRODUCTION: Would emit terminal_resize telemetry here but
-                                // cannot access ShellConfig from SIGWINCH thread
-                            }
+                        if std::env::var("SUBSTRATE_PTY_DEBUG").is_ok() {
+                            log::debug!("SIGWINCH: Resized PTY to {}x{}", size.cols, size.rows);
                         }
                     }
                 }
@@ -107,6 +167,49 @@ impl PtyExitStatus {
     }
 }
 
+fn start_pty_manager(
+    master: Box<dyn portable_pty::MasterPty + Send>,
+) -> Result<(PtyControl, Box<dyn Read + Send>, thread::JoinHandle<()>)> {
+    let reader = master
+        .try_clone_reader()
+        .context("Failed to create PTY reader")?;
+    let writer = master
+        .take_writer()
+        .context("Failed to create PTY writer")?;
+    let (tx, rx) = mpsc::channel();
+    let control = PtyControl { tx };
+
+    let manager_handle = thread::spawn(move || run_pty_manager(master, writer, rx));
+
+    Ok((control, reader, manager_handle))
+}
+
+fn run_pty_manager(
+    master: Box<dyn portable_pty::MasterPty + Send>,
+    mut writer: Box<dyn Write + Send>,
+    rx: mpsc::Receiver<PtyCommand>,
+) {
+    for cmd in rx {
+        match cmd {
+            PtyCommand::Resize(size) => {
+                if let Err(e) = master.resize(size) {
+                    log::warn!("Failed to resize PTY: {e}");
+                }
+            }
+            PtyCommand::Write(data) => {
+                if let Err(e) = writer.write_all(&data) {
+                    log::warn!("Failed to write to PTY: {e}");
+                    break;
+                }
+                if let Err(e) = writer.flush() {
+                    log::warn!("Failed to flush PTY writer: {e}");
+                }
+            }
+            PtyCommand::Close => break,
+        }
+    }
+}
+
 /// Execute a command with full PTY support
 pub fn execute_with_pty(
     config: &ShellConfig,
@@ -116,7 +219,7 @@ pub fn execute_with_pty(
 ) -> Result<PtyExitStatus> {
     // Initialize global handlers once
     #[cfg(unix)]
-    crate::initialize_global_sigwinch_handler();
+    super::initialize_global_sigwinch_handler();
 
     #[cfg(windows)]
     initialize_windows_input_forwarder();
@@ -253,17 +356,10 @@ pub fn execute_with_pty(
         }
     }
 
-    // Set up PTY master for resize handling
-    // Wrap the Box in Arc<Mutex> for thread safety
-    let pty_master = Arc::new(Mutex::new(pair.master));
+    let (pty_control, reader, manager_handle) = start_pty_manager(pair.master)?;
+    let _active_pty_guard = ActivePtyGuard::register(pty_control.clone());
 
-    // Register this PTY for SIGWINCH handling with RAII guard
-    let _current_pty_guard = CurrentPtyGuard::register(Arc::clone(&pty_master));
-
-    // Handle I/O between terminal and PTY
-    let exit_status = handle_pty_io(pty_master, &mut child, cmd_id)?;
-
-    // PTY automatically unregistered by CurrentPtyGuard drop
+    let exit_status = handle_pty_io(pty_control, reader, &mut child, cmd_id, manager_handle)?;
 
     // Clear the running PID BEFORE logging completion
     running_child_pid.store(0, Ordering::SeqCst);
@@ -299,22 +395,6 @@ struct PtyActiveGuard;
 impl Drop for PtyActiveGuard {
     fn drop(&mut self) {
         PTY_ACTIVE.store(false, Ordering::SeqCst);
-    }
-}
-
-// RAII guard for CURRENT_PTY registration (panic-safe)
-struct CurrentPtyGuard;
-
-impl CurrentPtyGuard {
-    fn register(pty: Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>) -> Self {
-        *CURRENT_PTY.lock().unwrap() = Some(pty);
-        Self
-    }
-}
-
-impl Drop for CurrentPtyGuard {
-    fn drop(&mut self) {
-        *CURRENT_PTY.lock().unwrap() = None;
     }
 }
 
@@ -411,18 +491,20 @@ fn get_terminal_size() -> Result<PtySize> {
 // 🔥 CRITICAL FIX: Windows global input forwarder with Condvar gating
 // Prevents stealing input when no PTY is active
 #[cfg(windows)]
-use lazy_static::lazy_static;
-#[cfg(windows)]
 use std::sync::Condvar;
 
 #[cfg(windows)]
-lazy_static! {
-    static ref CURRENT_PTY_WRITER: Arc<Mutex<Option<Box<dyn Write + Send>>>> =
-        Arc::new(Mutex::new(None));
-    // Condvar to wake/sleep the forwarder thread
-    // 🔥 MUST-FIX: Renamed from PTY_ACTIVE to avoid collision with crate::PTY_ACTIVE
-    static ref WIN_PTY_INPUT_GATE: Arc<(Mutex<bool>, Condvar)> =
-        Arc::new((Mutex::new(false), Condvar::new()));
+fn wake_input_gate() {
+    let (lock, cvar) = &**WIN_PTY_INPUT_GATE;
+    let mut active = lock.lock().unwrap();
+    *active = true;
+    cvar.notify_all();
+}
+
+#[cfg(windows)]
+fn sleep_input_gate() {
+    let (lock, _) = &**WIN_PTY_INPUT_GATE;
+    *lock.lock().unwrap() = false;
 }
 
 #[cfg(windows)]
@@ -453,24 +535,13 @@ pub(crate) fn initialize_windows_input_forwarder() {
                         thread::sleep(std::time::Duration::from_millis(10));
                     }
                     Ok(n) => {
-                        // Forward to current PTY writer if still active
-                        if let Ok(mut writer_lock) = CURRENT_PTY_WRITER.lock() {
-                            if let Some(ref mut writer) = *writer_lock {
-                                let _ = writer.write_all(&buffer[..n]);
-                                let _ = writer.flush();
-                            } else {
-                                // PTY was cleared while we were reading, go back to waiting
-                                continue;
-                            }
+                        if let Some(control) = active_pty_control() {
+                            control.write(buffer[..n].to_vec());
                         }
                     }
                     Err(_) => {
-                        // Error reading stdin, check if PTY still active
-                        if let Ok(writer_lock) = CURRENT_PTY_WRITER.lock() {
-                            if writer_lock.is_none() {
-                                // PTY cleared, go back to waiting
-                                continue;
-                            }
+                        if active_pty_control().is_none() {
+                            continue;
                         }
                         thread::sleep(std::time::Duration::from_millis(10));
                     }
@@ -485,29 +556,17 @@ pub(crate) fn initialize_windows_input_forwarder() {
 }
 
 fn handle_pty_io(
-    pty_master: Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>,
+    control: PtyControl,
+    mut reader: Box<dyn Read + Send>,
     child: &mut Box<dyn portable_pty::Child + Send + Sync>,
     cmd_id: &str,
+    manager_handle: thread::JoinHandle<()>,
 ) -> Result<PtyExitStatus> {
     let done = Arc::new(AtomicBool::new(false));
 
-    // Platform-specific stdin handling
-    #[cfg(unix)]
-    let writer = {
-        let master = pty_master.lock().unwrap();
-        Arc::new(Mutex::new(Some(
-            master
-                .take_writer()
-                .context("Failed to create PTY writer")?,
-        )))
-    };
-
     #[cfg(unix)]
     let stdin_join: Option<thread::JoinHandle<()>> = {
-        // Clone for the stdin thread
-        let writer_for_thread = Arc::clone(&writer);
-        // Unix: Spawn thread to copy stdin to PTY (will be joined after child exits)
-        // CRITICAL FIX: Use non-blocking I/O to prevent stealing input after PTY exit
+        let control_clone = control.clone();
         let done_writer = Arc::clone(&done);
         let cmd_id_stdin = cmd_id.to_string();
         Some(thread::spawn(move || {
@@ -515,21 +574,6 @@ fn handle_pty_io(
             let mut buffer = vec![0u8; 4096];
 
             while !done_writer.load(Ordering::Relaxed) {
-                // Check if writer is still valid BEFORE reading stdin
-                let writer_guard = match writer_for_thread.try_lock() {
-                    Ok(guard) => guard,
-                    Err(_) => break, // Writer was dropped or is locked, exit thread
-                };
-
-                // If writer is None, exit immediately
-                if writer_guard.is_none() {
-                    break;
-                }
-
-                // Drop the guard before blocking read to avoid holding lock
-                drop(writer_guard);
-
-                // Set up a select/poll with timeout to avoid blocking forever
                 use nix::sys::select::{select, FdSet};
                 use nix::sys::time::TimeVal;
                 use std::os::unix::io::{AsFd, AsRawFd};
@@ -539,8 +583,7 @@ fn handle_pty_io(
                 let mut read_fds = FdSet::new();
                 read_fds.insert(stdin_borrowed);
 
-                // Wait up to 100ms for input
-                let mut timeout = TimeVal::new(0, 100_000); // 100ms = 100,000 microseconds
+                let mut timeout = TimeVal::new(0, 100_000);
                 let result = select(
                     stdin_fd + 1,
                     Some(&mut read_fds),
@@ -550,37 +593,18 @@ fn handle_pty_io(
                 );
 
                 match result {
-                    Ok(0) => {
-                        // Timeout - check done flag and continue
-                        continue;
-                    }
-                    Ok(_) if read_fds.contains(stdin_borrowed) => {
-                        // Data available, try to read
-                        match stdin.read(&mut buffer) {
-                            Ok(0) => break, // EOF
-                            Ok(n) => {
-                                // Re-acquire writer guard to write
-                                if let Ok(mut writer_guard) = writer_for_thread.try_lock() {
-                                    if let Some(ref mut writer) = *writer_guard {
-                                        if let Err(e) = writer.write_all(&buffer[..n]) {
-                                            if !done_writer.load(Ordering::Relaxed) {
-                                                log::warn!(
-                                                    "[{cmd_id_stdin}] Failed to write to PTY: {e}"
-                                                );
-                                            }
-                                            break;
-                                        }
-                                        let _ = writer.flush();
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                log::warn!("[{cmd_id_stdin}] Failed to read from stdin: {e}");
-                                break;
-                            }
+                    Ok(0) => continue,
+                    Ok(_) if read_fds.contains(stdin_borrowed) => match stdin.read(&mut buffer) {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            control_clone.write(buffer[..n].to_vec());
                         }
-                    }
-                    Ok(_) => continue, // Spurious wakeup
+                        Err(e) => {
+                            log::warn!("[{cmd_id_stdin}] Failed to read from stdin: {e}");
+                            break;
+                        }
+                    },
+                    Ok(_) => continue,
                     Err(e) => {
                         if e != nix::errno::Errno::EINTR {
                             log::warn!("[{cmd_id_stdin}] select() failed: {e}");
@@ -592,45 +616,23 @@ fn handle_pty_io(
         }))
     };
 
-    #[cfg(windows)]
-    {
-        // Windows: Use global input forwarder to avoid thread leak
-        // Set the current PTY writer and wake the forwarder thread
-        // TODO: Properly handle writer cloning on Windows
-        // For now, we'll skip PTY input forwarding on Windows as it needs
-        // a different approach than Unix
-
-        // Clear any existing writer
-        *CURRENT_PTY_WRITER.lock().unwrap() = None;
-
-        // Note: Windows PTY input handling needs to be reimplemented
-        // The try_clone_writer() method doesn't exist on trait objects
-    }
-
-    // Spawn thread to copy PTY output to stdout (using blocking I/O)
-    let mut reader = {
-        let master = pty_master.lock().unwrap();
-        master
-            .try_clone_reader()
-            .context("Failed to create PTY reader")?
-    };
+    #[cfg(not(unix))]
+    let stdin_join: Option<thread::JoinHandle<()>> = None;
 
     let done_reader = Arc::clone(&done);
     let cmd_id_output = cmd_id.to_string();
     let output_thread = thread::spawn(move || {
         let mut stdout = io::stdout();
-        // Use smaller buffer to prevent blocking on partial reads
         let mut buffer = vec![0u8; 4096];
 
         while !done_reader.load(Ordering::Relaxed) {
             match reader.read(&mut buffer) {
-                Ok(0) => break, // EOF - child process exited
+                Ok(0) => break,
                 Ok(n) => {
-                    // Handle partial writes properly to prevent blocking
                     let mut written = 0;
                     while written < n {
                         match stdout.write(&buffer[written..n]) {
-                            Ok(0) => break, // Can't write anymore
+                            Ok(0) => break,
                             Ok(bytes) => {
                                 written += bytes;
                             }
@@ -641,7 +643,6 @@ fn handle_pty_io(
                             }
                         }
                     }
-                    // Flush after processing the buffer
                     if let Err(e) = stdout.flush() {
                         log::warn!("[{cmd_id_output}] Failed to flush stdout: {e}");
                     }
@@ -655,51 +656,24 @@ fn handle_pty_io(
         }
     });
 
-    // Wait for child to exit (blocking wait, not polling - more efficient)
     let portable_status = child.wait()?;
 
-    // Signal threads to stop FIRST
     done.store(true, Ordering::Relaxed);
 
-    // CRITICAL FIX: Drop the writer to stop stdin thread from trying to write
-    #[cfg(unix)]
-    {
-        // Take the writer out of the Arc<Mutex> and drop it
-        // This causes the stdin thread to fail on its next write attempt
-        if let Ok(mut guard) = writer.lock() {
-            *guard = None; // Drop the writer
-        }
-    }
+    thread::sleep(std::time::Duration::from_millis(50));
 
-    // CRITICAL: Drain any remaining output before sending reset sequences
-    // This prevents race condition with TUI cleanup sequences
-    thread::sleep(std::time::Duration::from_millis(50)); // Give TUI time to send cleanup
-
-    // Wait for output thread (it will exit when PTY closes)
     let _ = output_thread.join();
 
-    // Platform-specific cleanup
-    #[cfg(unix)]
     if let Some(handle) = stdin_join {
-        // Unix: Join stdin thread (it should exit quickly now that writer is dropped)
         let _ = handle.join();
     }
 
     #[cfg(windows)]
     {
-        // Windows: Clear the current PTY writer and put forwarder to sleep
-        *CURRENT_PTY_WRITER.lock().unwrap() = None;
+        use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+        use windows_sys::Win32::System::Console::*;
 
-        // Put the forwarder thread back to sleep
-        let (lock, _cvar) = &**WIN_PTY_INPUT_GATE;
-        *lock.lock().unwrap() = false;
-
-        // Flush any straggler input to prevent swallowed keystrokes
-        // This prevents the next keystroke from waking the read() and getting discarded
-        // Only flush if there's actually pending input to avoid nuking legitimate keystrokes
         unsafe {
-            use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
-            use windows_sys::Win32::System::Console::*;
             let h = GetStdHandle(STD_INPUT_HANDLE);
             if h != INVALID_HANDLE_VALUE {
                 let mut n: u32 = 0;
@@ -710,11 +684,8 @@ fn handle_pty_io(
         }
     }
 
-    // Note: We've tried various approaches to make the prompt appear immediately:
-    // - TIOCSTI injection of newline/Ctrl+L - doesn't solve the blocking issue
-    // - Terminal state restoration - helps but prompt still doesn't appear
-    // - The core issue is that Reedline's read_line() blocks waiting for input
-    //   and we're not using the ExecuteHostCommand event system
+    control.close();
+    let _ = manager_handle.join();
 
     Ok(PtyExitStatus::from_portable_pty(portable_status))
 }
@@ -846,6 +817,7 @@ impl Drop for MinimalTerminalGuard {
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicBool, AtomicI32};
+    use std::sync::mpsc;
     use std::sync::{Arc, Mutex, OnceLock};
 
     static PTY_ENV_TEST_GUARD: OnceLock<Mutex<()>> = OnceLock::new();
@@ -980,18 +952,17 @@ mod tests {
     }
 
     #[test]
-    fn test_current_pty_guard_management() {
-        // Test CurrentPtyGuard registration and cleanup
-        // We can't easily test with real PTY objects, but we can test the guard logic
+    fn test_active_pty_guard_management() {
+        assert!(active_pty_control().is_none());
 
-        // Initially, no PTY should be registered
+        let (tx, rx) = mpsc::channel();
+        drop(rx);
+        let control = PtyControl { tx };
         {
-            let pty_lock = CURRENT_PTY.lock().unwrap();
-            assert!(pty_lock.is_none());
+            let _guard = ActivePtyGuard::register(control);
+            assert!(active_pty_control().is_some());
         }
-
-        // We can't easily create a mock PTY for this test due to trait object constraints,
-        // but we can test that the guard mechanism doesn't panic
+        assert!(active_pty_control().is_none());
     }
 
     #[test]

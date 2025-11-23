@@ -13,18 +13,18 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task;
 use uuid::Uuid;
 
-use super::is_shell_stream_event;
-use crate::agent_events::{
+use crate::execution::agent_events::{
     clear_agent_event_sender, format_event_line, init_event_channel, publish_command_completion,
     schedule_demo_burst, schedule_demo_events,
 };
-use crate::editor;
-use crate::ReplSessionTelemetry;
+use crate::execution::ReplSessionTelemetry;
+use crate::execution::{
+    execute_command, is_shell_stream_event, setup_signal_handlers, ShellConfig,
+};
+use crate::repl::editor;
 use substrate_common::agent_events::AgentEvent;
 
-use super::{execute_command, setup_signal_handlers, ShellConfig};
-
-pub(super) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
+pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
     println!("Substrate v{}", env!("CARGO_PKG_VERSION"));
     println!("Session ID: {}", config.session_id);
     println!("Logging to: {}", config.trace_log_file.display());
