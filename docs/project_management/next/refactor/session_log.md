@@ -137,3 +137,11 @@ Template (copy/paste and fill in):
 - Created worktree: pending (will create wt/cr-r3-boundaries-test)
 - Plan: set R3-test to in_progress; create cr-r3-boundaries-test branch/worktree; add broker/trace isolation tests and world-agent/host-proxy thin-binary harness coverage; run cargo fmt and targeted cargo test -p substrate-broker -p substrate-trace -p world-agent -p host-proxy; record results for END entry
 - Blockers: none
+
+## [2025-11-23 16:30 UTC] Test – R3-test – END
+- Worktree commits: bd5abe9
+- Commands: cargo fmt; cargo test -p substrate-broker; cargo test -p substrate-trace; cargo test -p world-agent (initial run hit CLI timeout; reran with extended timeout); cargo test -p host-proxy
+- Results: all commands passed; world-agent/host-proxy entrypoint harnesses validate delegation without server startup
+- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R3-integ.md
+- Docs commit: pending (updated tasks + session log)
+- Next steps / blockers: ready for R3 integration; remove worktree when done

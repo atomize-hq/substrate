@@ -309,7 +309,7 @@
       "name": "State isolation & binary harness tests",
       "type": "test",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add tests ensuring broker/trace contexts are isolated (no shared global state) and cover world-agent/host-proxy thin binary entrypoints.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
