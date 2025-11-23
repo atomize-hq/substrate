@@ -5656,10 +5656,15 @@ mod manager_init_wiring_tests {
     use tempfile::{tempdir, TempDir};
 
     fn test_shell_config(temp: &TempDir) -> ShellConfig {
+        let trace_log_file = temp.path().join("trace.jsonl");
+        env::set_var("SHIM_TRACE_LOG", &trace_log_file);
+        let _ = set_global_trace_context(TraceContext::default());
+        let _ = init_trace(Some(trace_log_file.clone()));
+
         ShellConfig {
             mode: ShellMode::Interactive { use_pty: false },
             session_id: "test-session".to_string(),
-            trace_log_file: temp.path().join("trace.jsonl"),
+            trace_log_file,
             original_path: env::var("PATH").unwrap_or_default(),
             shim_dir: temp.path().join("shims"),
             shell_path: if cfg!(windows) {
