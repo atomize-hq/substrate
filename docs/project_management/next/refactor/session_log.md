@@ -69,3 +69,10 @@ Template (copy/paste and fill in):
 - Created worktree: wt/cr-r1-panics-integ
 - Plan: merge cr-r1-panics-code and cr-r1-panics-test into integration branch; resolve conflicts; run cargo fmt, cargo clippy --workspace --all-targets -- -D warnings, cargo test -p broker/world/telemetry-lib/forwarder; log results
 - Blockers: none
+
+## [2025-11-23 13:11 UTC] Code – R2-code – START
+- Checked out feat/crate-refactor, pulled latest
+- Updated tasks.json + session log (commit: pending)
+- Created worktree: pending
+- Plan: set up cr-r2-shell-code worktree; split shell lib into execution/repl/builtins/scripts modules with ~200 line lib.rs surface; replace PTY Arc<Mutex> with channel-based manager; preserve CLI behavior; run cargo fmt, cargo clippy -p substrate-shell -- -D warnings, cargo test -p substrate-shell world_root/world_enable
+- Blockers: none
