@@ -241,3 +241,11 @@ Template (copy/paste and fill in):
 - Created worktree: pending (will create wt/cr-r5-exec-test after docs commit)
 - Plan: create cr-r5-exec-test branch/worktree; add execution routing/invocation + PTY control/data-plane tests and refresh fixtures; run cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
 - Blockers: none
+
+## [2025-11-23 23:19 UTC] Test – R5-test – END
+- Worktree commits: 45f87412
+- Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: fmt clean; world_root/world_enable suites passed
+- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R5-integ.md
+- Docs commit: pending (updated tasks + session log)
+- Next steps / blockers: ready for R5 integration; remove wt/cr-r5-exec-test after merge
