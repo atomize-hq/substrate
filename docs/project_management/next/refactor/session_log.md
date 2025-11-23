@@ -115,3 +115,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R3-code.md; docs/project_management/next/refactor/kickoff_prompts/R3-test.md
 - Docs commit: (docs: finish R2-integ – tasks/status + session log + R3 prompts)
 - Next steps / blockers: remove integration worktree after merge; R3 tasks ready to start
+
+## [2025-11-23 15:17 UTC] Code – R3-code – START
+- Checked out feat/crate-refactor, pulled latest
+- Updated tasks.json + session log (commit: pending)
+- Created worktree: pending (will create wt/cr-r3-boundaries-code)
+- Plan: set up cr-r3-boundaries-code branch/worktree; replace broker/trace global state with context-based handles while keeping public APIs stable; enforce thin binaries for world-agent and host-proxy delegating into lib constructors/run loops; update docs if surfaces change; run cargo fmt, cargo clippy --workspace --all-targets -- -D warnings, and targeted cargo test for broker/trace/world-agent/host-proxy; record outputs for END entry
+- Blockers: none

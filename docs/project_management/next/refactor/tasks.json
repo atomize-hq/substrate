@@ -264,7 +264,7 @@
       "name": "Global state & binary boundaries",
       "type": "code",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Remove broker/trace global singletons, enforce thin binaries for world-agent and host-proxy, and expose context-based constructors.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
