@@ -33,6 +33,11 @@ lazy_static! {
     static ref START_TIME: Instant = Instant::now();
     static ref TRACE_FILE: Mutex<Option<std::fs::File>> = Mutex::new(None);
 }
+#[cfg(test)]
+lazy_static! {
+    // Serialize tests that poison global locks to avoid cross-test deadlocks/hangs.
+    pub(crate) static ref TEST_GUARD: Mutex<()> = Mutex::new(());
+}
 
 #[derive(Debug, Serialize)]
 struct TelemetryEvent {
@@ -235,6 +240,7 @@ mod tests {
 
     #[test]
     fn log_syscall_handles_poisoned_trace_lock() {
+        let _guard = crate::TEST_GUARD.lock().unwrap();
         silence_panic_output();
         let dir = tempdir().unwrap();
         let trace_path = dir.path().join("trace.jsonl");
@@ -253,6 +259,7 @@ mod tests {
 
     #[test]
     fn log_syscall_handles_poisoned_init_lock() {
+        let _guard = crate::TEST_GUARD.lock().unwrap();
         silence_panic_output();
         let dir = tempdir().unwrap();
         let trace_path = dir.path().join("trace.jsonl");

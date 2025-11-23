@@ -195,6 +195,7 @@ fn test_builtin_cd_side_effects() {
 
     get_substrate_binary()
         .env("SUBSTRATE_CAGED", "0")
+        .arg("--uncaged")
         .arg("-c")
         .arg(&script)
         .assert()
@@ -452,6 +453,7 @@ fn test_cd_minus_behavior() {
     get_substrate_binary()
         .env("SHIM_TRACE_LOG", &log_file)
         .env("SUBSTRATE_CAGED", "0")
+        .arg("--uncaged")
         .arg("-c")
         .arg("cd /tmp && pwd")
         .assert()

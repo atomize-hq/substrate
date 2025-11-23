@@ -95,6 +95,7 @@ mod tests {
 
     #[test]
     fn get_session_info_handles_poisoned_lock() {
+        let _guard = crate::TEST_GUARD.lock().unwrap();
         silence_panic_output();
         poison_session_info();
 
