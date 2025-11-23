@@ -218,5 +218,5 @@ Template (copy/paste and fill in):
 - Commands: none (doc edits only)
 - Results: Added R5–R7 tracks to refactor_plan.md; created R5/R6/R7 tasks in tasks.json with worktrees/branches; authored kickoff prompts (code/test/integ) for R5–R7; session log updated
 - Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R5-code.md; docs/project_management/next/refactor/kickoff_prompts/R5-test.md; docs/project_management/next/refactor/kickoff_prompts/R5-integ.md; docs/project_management/next/refactor/kickoff_prompts/R6-code.md; docs/project_management/next/refactor/kickoff_prompts/R6-test.md; docs/project_management/next/refactor/kickoff_prompts/R6-integ.md; docs/project_management/next/refactor/kickoff_prompts/R7-code.md; docs/project_management/next/refactor/kickoff_prompts/R7-test.md; docs/project_management/next/refactor/kickoff_prompts/R7-integ.md
-- Docs commit: pending
+- Docs commit: 5cad6a6a (docs: add R5-R7 decomposition tasks)
 - Next steps / blockers: commit docs update on feat/crate-refactor; proceed with R5 tasks
