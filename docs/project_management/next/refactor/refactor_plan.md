@@ -19,6 +19,13 @@ traceable through every handoff.
    trace, world-agent, host-proxy) with doc coverage.
 4. Split remaining single-file crates (trace, world-windows-wsl), improve
    replay/common docs, and keep CHANGELOG/tests/benchmarks green.
+5. Decompose oversized shell execution modules (execution/mod.rs, pty_exec.rs,
+   settings, manager initialization) into focused units without altering CLI
+   behavior.
+6. Split bootstrap/builtin monoliths (manager_manifest, shim exec, shell
+   builtins) into testable modules while preserving outputs and logging.
+7. Slim down service modules (host-proxy/lib.rs, world/overlayfs.rs,
+   replay/replay.rs) with thin public surfaces and stable APIs.
 
 ## Baseline Standards & References
 
@@ -129,5 +136,17 @@ Additional rules:
 4. **R4 – Polish & Documentation**  
    Split remaining single-file crates (trace, world-windows-wsl), add replay and
    common prelude docs, refresh examples, and keep benches/tests stable.
+5. **R5 – Shell Execution Decomposition**  
+   Break `crates/shell/src/execution/mod.rs` (~7.5k lines) into routing,
+   invocation planning, and platform adapters; split `pty_exec.rs`, settings,
+   and manager initialization into focused modules with unchanged CLI behavior.
+6. **R6 – Bootstrap & Builtins Decomposition**  
+   Split `common/manager_manifest.rs`, `shim/src/exec.rs`, and the large shell
+   builtins (`shim_doctor`, `world_enable`, `world_deps`) into schema/resolver/
+   validator modules and per-command helpers with preserved outputs.
+7. **R7 – Service Module Slimming**  
+   Reduce `host-proxy/src/lib.rs`, `world/src/overlayfs.rs`, and
+   `replay/src/replay.rs` into thin public surfaces plus internal modules; keep
+   performance and APIs stable.
 
 Task details, dependencies, and worktree names live in `tasks.json`.

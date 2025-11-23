@@ -523,6 +523,387 @@
       "worktree": "wt/cr-r4-polish-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R4-integ.md"
+    },
+    {
+      "id": "R5-code",
+      "name": "Shell execution decomposition",
+      "type": "code",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Split shell execution stack into modules (routing, invocation planning, platform adapters) and break up pty_exec/settings/manager init without changing CLI behavior.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/shell/src/execution/mod.rs",
+        "crates/shell/src/execution/pty_exec.rs",
+        "crates/shell/src/execution/settings.rs",
+        "crates/shell/src/execution/manager_init.rs"
+      ],
+      "acceptance_criteria": [
+        "execution/mod.rs reduced to a thin public surface with routing/invocation/platform logic moved into submodules; no behavior or CLI flag changes.",
+        "pty_exec split into control/data-plane modules with clear traits and channel-based flow preserved; settings/manager initialization separated into focused files.",
+        "Tracing/logging, cfg-gates, and redaction remain intact; docs updated for new module layout as needed.",
+        "cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable all pass."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R5-code to in_progress, log START entry, commit docs update",
+        "Create task branch cr-r5-exec-code",
+        "Create worktree wt/cr-r5-exec-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests per prompt are green and recorded for END log",
+        "Commit worktree changes with descriptive message",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry and reference paired test prompt",
+        "Commit docs update on feat/crate-refactor"
+      ],
+      "depends_on": [
+        "R4-integ"
+      ],
+      "concurrent_with": [
+        "R5-test"
+      ],
+      "worktree": "wt/cr-r5-exec-code",
+      "integration_task": "R5-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R5-code.md"
+    },
+    {
+      "id": "R5-test",
+      "name": "Shell execution decomposition tests",
+      "type": "test",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Add/reshape tests for the split shell execution modules and PTY pipeline, ensuring routing, plan building, and resize/write flows remain correct.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/shell/src/execution",
+        "crates/shell/tests"
+      ],
+      "acceptance_criteria": [
+        "Tests cover routing/invocation seams of the new execution modules plus PTY control/data-plane interactions (resize/write/close) with channel assertions.",
+        "Fixtures updated to mirror module layout; no production code edits beyond test-only helpers.",
+        "cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable documented in session log (note platform skips if any).",
+        "Kickoff prompt for R5-integ created/referenced."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R5-test to in_progress, log START entry, commit docs update",
+        "Create task branch cr-r5-exec-test",
+        "Create worktree wt/cr-r5-exec-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests per prompt are green; capture outputs for END log",
+        "Commit worktree changes with descriptive message",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; reference integration prompt",
+        "Commit docs update on feat/crate-refactor"
+      ],
+      "depends_on": [
+        "R4-integ"
+      ],
+      "concurrent_with": [
+        "R5-code"
+      ],
+      "worktree": "wt/cr-r5-exec-test",
+      "integration_task": "R5-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R5-test.md"
+    },
+    {
+      "id": "R5-integ",
+      "name": "Integrate shell execution decomposition",
+      "type": "integration",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Merge shell execution code/test branches, resolve conflicts, and ensure fmt/clippy/tests stay green after the module split.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "crates/shell/src/execution"
+      ],
+      "acceptance_criteria": [
+        "wt/cr-r5-exec-integ merges R5 code+tests with clean fmt/clippy/test runs.",
+        "feat/crate-refactor updated with integration results and doc/task/log entries.",
+        "Kickoff prompts for R6 tasks captured before finishing."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Confirm R5-code/test completed",
+        "Set R5-integ to in_progress, update session_log.md, commit docs update",
+        "Create task branch cr-r5-exec-integ",
+        "Create worktree wt/cr-r5-exec-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration branch/worktree and resolve conflicts",
+        "Run required fmt/clippy/tests",
+        "Merge integration branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry",
+        "Push or hand off"
+      ],
+      "depends_on": [
+        "R5-code",
+        "R5-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cr-r5-exec-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R5-integ.md"
+    },
+    {
+      "id": "R6-code",
+      "name": "Bootstrap & builtins decomposition",
+      "type": "code",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Split manager_manifest, shim exec, and large shell builtins into focused modules with unchanged outputs and logging.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/common/src/manager_manifest.rs",
+        "crates/shim/src/exec.rs",
+        "crates/shell/src/builtins/shim_doctor.rs",
+        "crates/shell/src/builtins/world_enable.rs",
+        "crates/shell/src/builtins/world_deps.rs"
+      ],
+      "acceptance_criteria": [
+        "manager_manifest split into schema/resolver/validator modules with stable manifest semantics and serde behavior.",
+        "shim exec split into bootstrap/logging/policy pieces with thin entry surface; builtins decomposed per subcommand with shared helpers.",
+        "CLI outputs, logging/redaction, and cfg-gates preserved; docs updated for new module paths where referenced.",
+        "cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-common --all-targets; cargo test -p substrate-shim; cargo test -p substrate-shell world_root/world_enable pass (skips noted)."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R6-code to in_progress, log START entry, commit docs update",
+        "Create task branch cr-r6-bootstrap-code",
+        "Create worktree wt/cr-r6-bootstrap-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests per prompt are green; record outputs for END log",
+        "Commit worktree changes with descriptive message",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; reference paired test prompt",
+        "Commit docs update on feat/crate-refactor"
+      ],
+      "depends_on": [
+        "R5-integ"
+      ],
+      "concurrent_with": [
+        "R6-test"
+      ],
+      "worktree": "wt/cr-r6-bootstrap-code",
+      "integration_task": "R6-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R6-code.md"
+    },
+    {
+      "id": "R6-test",
+      "name": "Bootstrap & builtins tests",
+      "type": "test",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Add tests/fixtures for the split manager_manifest, shim exec, and builtin modules, validating outputs and validation paths.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/common/tests",
+        "crates/shim/tests",
+        "crates/shell/tests"
+      ],
+      "acceptance_criteria": [
+        "Tests cover manifest parsing/expansion/validation per new modules; shim exec bootstrap/logging flows; builtin command behaviors with fixtures matching new layouts.",
+        "Fixtures updated without altering production code beyond test-only helpers; logging/redaction expectations asserted where applicable.",
+        "cargo fmt; cargo test -p substrate-common --all-targets; cargo test -p substrate-shim; cargo test -p substrate-shell world_root/world_enable (skips noted) logged in session log.",
+        "Kickoff prompt for R6-integ produced/referenced."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R6-test to in_progress, log START entry, commit docs update",
+        "Create task branch cr-r6-bootstrap-test",
+        "Create worktree wt/cr-r6-bootstrap-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests per prompt are green; capture outputs for END log",
+        "Commit worktree changes with descriptive message",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; reference integration prompt",
+        "Commit docs update on feat/crate-refactor"
+      ],
+      "depends_on": [
+        "R5-integ"
+      ],
+      "concurrent_with": [
+        "R6-code"
+      ],
+      "worktree": "wt/cr-r6-bootstrap-test",
+      "integration_task": "R6-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R6-test.md"
+    },
+    {
+      "id": "R6-integ",
+      "name": "Integrate bootstrap & builtins decomposition",
+      "type": "integration",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Merge manager_manifest/shim/builtins code/test branches, resolve conflicts, and ensure fmt/clippy/tests are green.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "crates/common",
+        "crates/shim",
+        "crates/shell/src/builtins"
+      ],
+      "acceptance_criteria": [
+        "wt/cr-r6-bootstrap-integ merges R6 code+tests with clean fmt/clippy/test runs across common/shim/shell builtins.",
+        "feat/crate-refactor updated with integration results and doc/task/log entries committed.",
+        "Kickoff prompts for R7 tasks captured before ending session."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Confirm R6-code/test completed",
+        "Set R6-integ to in_progress, update session_log.md, commit docs update",
+        "Create task branch cr-r6-bootstrap-integ",
+        "Create worktree wt/cr-r6-bootstrap-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration branch/worktree and resolve conflicts",
+        "Run required fmt/clippy/tests",
+        "Merge integration branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry",
+        "Push or hand off"
+      ],
+      "depends_on": [
+        "R6-code",
+        "R6-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cr-r6-bootstrap-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R6-integ.md"
+    },
+    {
+      "id": "R7-code",
+      "name": "Service module slimming",
+      "type": "code",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Reduce host-proxy/lib.rs, world/overlayfs.rs, and replay/replay.rs into thin public surfaces with internal modules, keeping behavior and performance stable.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/host-proxy/src/lib.rs",
+        "crates/world/src/overlayfs.rs",
+        "crates/replay/src/replay.rs"
+      ],
+      "acceptance_criteria": [
+        "host-proxy/lib.rs split into library surface plus modules for config, transport, and runtime; thin binary pattern maintained.",
+        "world overlayfs logic separated into layering/utils modules with unchanged behavior and platform guards.",
+        "replay/replay.rs decomposed into planners/executors/helpers with same CLI/API semantics; docs updated if paths referenced.",
+        "cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p host-proxy; cargo test -p world; cargo test -p substrate-replay --all-targets pass (note skips)."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R7-code to in_progress, log START entry, commit docs update",
+        "Create task branch cr-r7-services-code",
+        "Create worktree wt/cr-r7-services-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests per prompt are green; capture outputs for END log",
+        "Commit worktree changes with descriptive message",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; reference paired test prompt",
+        "Commit docs update on feat/crate-refactor"
+      ],
+      "depends_on": [
+        "R6-integ"
+      ],
+      "concurrent_with": [
+        "R7-test"
+      ],
+      "worktree": "wt/cr-r7-services-code",
+      "integration_task": "R7-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R7-code.md"
+    },
+    {
+      "id": "R7-test",
+      "name": "Service module tests",
+      "type": "test",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Add tests/fixtures for slimmed host-proxy/overlayfs/replay modules, confirming semantics and performance-sensitive paths remain stable.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/host-proxy/tests",
+        "crates/world/tests",
+        "crates/replay/tests"
+      ],
+      "acceptance_criteria": [
+        "Tests cover host-proxy config/transport/runtime seams; overlayfs layering behavior; replay planner/executor equivalence including property cases where appropriate.",
+        "Fixtures reflect new module layout; no production code edits beyond test-only helpers; note any platform skips.",
+        "cargo fmt; cargo test -p host-proxy; cargo test -p world; cargo test -p substrate-replay --all-targets documented in session log.",
+        "Kickoff prompt for R7-integ produced/referenced."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R7-test to in_progress, log START entry, commit docs update",
+        "Create task branch cr-r7-services-test",
+        "Create worktree wt/cr-r7-services-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests per prompt are green; capture outputs for END log",
+        "Commit worktree changes with descriptive message",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; reference integration prompt",
+        "Commit docs update on feat/crate-refactor"
+      ],
+      "depends_on": [
+        "R6-integ"
+      ],
+      "concurrent_with": [
+        "R7-code"
+      ],
+      "worktree": "wt/cr-r7-services-test",
+      "integration_task": "R7-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R7-test.md"
+    },
+    {
+      "id": "R7-integ",
+      "name": "Integrate service module slimming",
+      "type": "integration",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Merge host-proxy/overlayfs/replay code/test branches, resolve conflicts, and ensure fmt/clippy/tests are green.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "crates/host-proxy",
+        "crates/world/src/overlayfs.rs",
+        "crates/replay/src/replay.rs"
+      ],
+      "acceptance_criteria": [
+        "wt/cr-r7-services-integ merges R7 code+tests with clean fmt/clippy/test runs.",
+        "feat/crate-refactor updated with integration results and doc/task/log entries.",
+        "Follow-up prompts/notes captured before ending session."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Confirm R7-code/test completed",
+        "Set R7-integ to in_progress, update session_log.md, commit docs update",
+        "Create task branch cr-r7-services-integ",
+        "Create worktree wt/cr-r7-services-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration branch/worktree and resolve conflicts",
+        "Run required fmt/clippy/tests",
+        "Merge integration branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry",
+        "Push or hand off"
+      ],
+      "depends_on": [
+        "R7-code",
+        "R7-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cr-r7-services-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R7-integ.md"
     }
   ]
 }
