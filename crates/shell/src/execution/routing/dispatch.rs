@@ -1685,6 +1685,7 @@ where
     }
 }
 
+#[cfg(target_os = "macos")]
 fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyhow::Result<i32> {
     use base64::engine::general_purpose::STANDARD;
     use base64::Engine;
