@@ -502,7 +502,9 @@ impl ShellConfig {
         // Determine shell to use
         #[cfg(target_os = "windows")]
         {
-            if let Err(e) = platform_world::windows::ensure_world_ready(&cli) {
+            use crate::execution::platform_world::windows;
+
+            if let Err(e) = windows::ensure_world_ready(&cli) {
                 eprintln!(
                     "substrate: warn: windows world initialization failed: {:#}",
                     e

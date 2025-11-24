@@ -1,8 +1,10 @@
 #[cfg(any(windows, test))]
 use super::control::active_pty_control;
-use super::control::{
-    initialize_global_sigwinch_handler_impl, ActivePtyGuard, PtyCommand, PtyControl,
-};
+#[cfg(unix)]
+use super::control::initialize_global_sigwinch_handler_impl;
+#[cfg(windows)]
+use super::control::WIN_PTY_INPUT_GATE;
+use super::control::{ActivePtyGuard, PtyCommand, PtyControl};
 use crate::execution::{
     configure_child_shell_env, log_command_event, ShellConfig, ShellMode, PTY_ACTIVE,
 };
@@ -397,7 +399,7 @@ pub(crate) fn get_terminal_size() -> Result<PtySize> {
 // Prevents stealing input when no PTY is active
 
 #[cfg(windows)]
-fn wake_input_gate() {
+pub(crate) fn wake_input_gate() {
     let (lock, cvar) = &**WIN_PTY_INPUT_GATE;
     let mut active = lock.lock().unwrap();
     *active = true;
@@ -405,7 +407,7 @@ fn wake_input_gate() {
 }
 
 #[cfg(windows)]
-fn sleep_input_gate() {
+pub(crate) fn sleep_input_gate() {
     let (lock, _) = &**WIN_PTY_INPUT_GATE;
     *lock.lock().unwrap() = false;
 }

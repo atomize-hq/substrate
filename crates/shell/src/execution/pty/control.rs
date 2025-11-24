@@ -9,6 +9,8 @@ use std::thread;
 use lazy_static::lazy_static;
 
 use super::io::get_terminal_size;
+#[cfg(windows)]
+use super::io::{sleep_input_gate, wake_input_gate};
 
 #[derive(Clone)]
 pub(crate) struct PtyControl {
@@ -47,7 +49,7 @@ lazy_static! {
 
 #[cfg(windows)]
 lazy_static! {
-    static ref WIN_PTY_INPUT_GATE: Arc<(Mutex<bool>, Condvar)> =
+    pub(crate) static ref WIN_PTY_INPUT_GATE: Arc<(Mutex<bool>, Condvar)> =
         Arc::new((Mutex::new(false), Condvar::new()));
 }
 
