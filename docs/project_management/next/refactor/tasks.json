@@ -869,7 +869,7 @@
       "name": "Integrate service module slimming",
       "type": "integration",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge host-proxy/overlayfs/replay code/test branches, resolve conflicts, and ensure fmt/clippy/tests are green.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",

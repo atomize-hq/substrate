@@ -349,3 +349,11 @@ Template (copy/paste and fill in):
 - Set R7-integ to in_progress in tasks.json; session log update pending commit
 - Plan: create cr-r7-services-integ branch/worktree (wt/cr-r7-services-integ); merge code/test branches, resolve service module conflicts; run cargo fmt, cargo clippy --workspace --all-targets -- -D warnings, cargo test -p host-proxy, cargo test -p world, cargo test -p substrate-replay --all-targets
 - Blockers: none
+
+## [2025-11-24 04:03 UTC] Integration – R7-integ – END
+- Worktree commits: 6857eeab (cr-r7-services-integ)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p host-proxy; cargo test -p world; cargo test -p substrate-replay --all-targets
+- Results: fmt/clippy clean; host-proxy/world/replay suites passed (world tests emit existing cp warnings while copying fixtures)
+- Kickoff prompts created: n/a
+- Docs commit: pending (update tasks + session log)
+- Next steps / blockers: remove wt/cr-r7-services-integ after cleanup
