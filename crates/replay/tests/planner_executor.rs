@@ -2,14 +2,14 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use tokio::sync::Mutex;
 
 use substrate_replay::replay::{
     execute_direct, execute_in_world, parse_command, replay_sequence, world_isolation_available,
     ExecutionResult, ExecutionState,
 };
 
-static ENV_LOCK: Mutex<()> = Mutex::new(());
+static ENV_LOCK: Mutex<()> = Mutex::const_new(());
 
 struct EnvGuard {
     previous: Vec<(String, Option<std::ffi::OsString>)>,
@@ -77,7 +77,7 @@ async fn execute_direct_streams_stdin() {
 
 #[tokio::test]
 async fn execute_in_world_respects_disable_env() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let _guard = EnvGuard::set(&[
         ("SUBSTRATE_WORLD", Some("disabled")),
         ("SUBSTRATE_WORLD_ENABLED", Some("0")),
@@ -112,7 +112,7 @@ async fn replay_sequence_collects_success_and_failure() {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn world_isolation_available_honors_disable_switch() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.blocking_lock();
     let _guard = EnvGuard::set(&[
         ("SUBSTRATE_WORLD", Some("disabled")),
         ("SUBSTRATE_WORLD_ENABLED", Some("0")),
