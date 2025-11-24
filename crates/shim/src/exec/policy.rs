@@ -108,3 +108,41 @@ fn deny_with_span(
 
     PolicyResult::Deny(126)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+    use std::path::Path;
+    use substrate_broker::{set_global_broker, set_observe_only, BrokerHandle};
+
+    #[test]
+    #[serial]
+    fn evaluate_policy_allows_when_command_not_denied() {
+        let _ = set_global_broker(BrokerHandle::new());
+        set_observe_only(true);
+        let _ = substrate_trace::set_global_trace_context(substrate_trace::TraceContext::default());
+
+        let argv = vec!["echo".to_string(), "ok".to_string()];
+        let result = evaluate_policy("echo ok", Path::new("."), &argv)
+            .expect("policy evaluation should succeed");
+        assert!(matches!(result, PolicyResult::Proceed(_)));
+    }
+
+    #[test]
+    #[serial]
+    fn evaluate_policy_denies_blocked_command_when_enforced() {
+        let _ = set_global_broker(BrokerHandle::new());
+        set_observe_only(false);
+
+        let argv = vec!["rm".to_string(), "-rf".to_string(), "/tmp".to_string()];
+        match evaluate_policy("rm -rf /tmp", Path::new("/tmp"), &argv)
+            .expect("policy evaluation should succeed")
+        {
+            PolicyResult::Deny(code) => assert_eq!(code, 126),
+            PolicyResult::Proceed(_) => panic!("expected deny result"),
+        }
+
+        set_observe_only(true);
+    }
+}

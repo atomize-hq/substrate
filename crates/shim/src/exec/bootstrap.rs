@@ -301,3 +301,99 @@ pub(crate) fn is_executable(path: &Path) -> bool {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::{ShimContext, ORIGINAL_PATH_VAR};
+    use serial_test::serial;
+    use std::env;
+    use std::ffi::OsString;
+    use std::fs;
+    use tempfile::TempDir;
+
+    struct EnvGuard {
+        key: &'static str,
+        previous: Option<String>,
+    }
+
+    impl EnvGuard {
+        fn new(key: &'static str) -> Self {
+            let previous = env::var(key).ok();
+            env::remove_var(key);
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            if let Some(value) = self.previous.take() {
+                env::set_var(self.key, value);
+            } else {
+                env::remove_var(self.key);
+            }
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn persist_original_path_sets_value_once() {
+        let _guard = EnvGuard::new(ORIGINAL_PATH_VAR);
+        let temp = TempDir::new().unwrap();
+        let paths = vec![temp.path().join("one"), temp.path().join("two")];
+        let ctx = ShimContext {
+            command_name: "demo".to_string(),
+            shim_dir: temp.path().join("shims"),
+            search_paths: paths.clone(),
+            log_file: None,
+            session_id: "session".to_string(),
+            depth: 0,
+        };
+
+        persist_original_path(&ctx);
+        let stored = env::var(ORIGINAL_PATH_VAR).expect("original path to be set");
+        assert!(
+            stored.contains(&paths[0].display().to_string())
+                && stored.contains(&paths[1].display().to_string()),
+            "persisted PATH should include search paths: {stored}"
+        );
+
+        env::set_var(ORIGINAL_PATH_VAR, "custom-value");
+        persist_original_path(&ctx);
+        assert_eq!(
+            env::var(ORIGINAL_PATH_VAR).as_deref(),
+            Ok("custom-value"),
+            "existing SHIM_ORIGINAL_PATH should be preserved"
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn execute_command_captures_stderr_when_requested() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = TempDir::new().unwrap();
+        let script = temp.path().join("stderr.sh");
+        fs::write(
+            &script,
+            "#!/usr/bin/env bash\necho test-stdout\necho test-stderr >&2\n",
+        )
+        .unwrap();
+        let mut perms = fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script, perms).unwrap();
+
+        let args = [OsString::from("arg1")];
+        let captured = execute_command(&script, &args, "stderr.sh", true).unwrap();
+        assert!(captured.status.success());
+        let stderr = String::from_utf8(captured.captured_stderr.unwrap()).unwrap();
+        assert!(
+            stderr.contains("test-stderr"),
+            "captured stderr should include child stderr output: {stderr}"
+        );
+
+        let without_capture = execute_command(&script, &args, "stderr.sh", false).unwrap();
+        assert!(without_capture.status.success());
+        assert!(without_capture.captured_stderr.is_none());
+    }
+}

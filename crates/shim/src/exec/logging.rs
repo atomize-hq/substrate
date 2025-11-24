@@ -234,3 +234,151 @@ fn current_platform() -> Platform {
         Platform::Linux
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::{ShimContext, TRACE_LOG_VAR};
+    use serial_test::serial;
+    use std::time::SystemTime;
+    use std::{env, fs};
+    use tempfile::TempDir;
+
+    struct EnvGuard {
+        key: &'static str,
+        previous: Option<String>,
+    }
+
+    impl EnvGuard {
+        fn set(key: &'static str, value: impl Into<String>) -> Self {
+            let previous = env::var(key).ok();
+            env::set_var(key, value.into());
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            if let Some(value) = self.previous.take() {
+                env::set_var(self.key, value);
+            } else {
+                env::remove_var(self.key);
+            }
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn manager_hint_engine_matches_once_and_dedupes() {
+        let temp = TempDir::new().unwrap();
+        let manifest_path = temp.path().join("manager_hooks.yaml");
+        fs::write(
+            &manifest_path,
+            r#"version: 1
+managers:
+  - name: Tool
+    detect: {}
+    init: {}
+    errors:
+      - "tool: command not found"
+    repair_hint: "install tool"
+"#,
+        )
+        .unwrap();
+
+        let _manifest_guard = EnvGuard::set(
+            "SUBSTRATE_MANAGER_MANIFEST",
+            manifest_path.to_string_lossy(),
+        );
+        let _world_guard = EnvGuard::set("SUBSTRATE_WORLD", "enabled");
+        let _hints_guard = EnvGuard::set("SUBSTRATE_SHIM_HINTS", "1");
+
+        let mut engine = ManagerHintEngine::new().expect("hint engine should load");
+        assert!(engine.is_active());
+
+        let first = engine
+            .evaluate(b"tool: command not found")
+            .expect("first match should emit hint");
+        assert_eq!(first.pattern, "tool: command not found");
+        assert!(engine.evaluate(b"tool: command not found").is_none());
+    }
+
+    #[test]
+    #[serial]
+    fn manager_hint_engine_respects_disable_flag() {
+        let temp = TempDir::new().unwrap();
+        let manifest_path = temp.path().join("manager_hooks.yaml");
+        fs::write(
+            &manifest_path,
+            r#"version: 1
+managers:
+  - name: Disabled
+    detect: {}
+    init: {}
+    errors:
+      - "disabled: command not found"
+    repair_hint: "noop"
+"#,
+        )
+        .unwrap();
+
+        let _manifest_guard = EnvGuard::set(
+            "SUBSTRATE_MANAGER_MANIFEST",
+            manifest_path.to_string_lossy(),
+        );
+        let _world_guard = EnvGuard::set("SUBSTRATE_WORLD", "enabled");
+        let _hints_guard = EnvGuard::set("SUBSTRATE_SHIM_HINTS", "0");
+
+        assert!(ManagerHintEngine::new().is_none());
+    }
+
+    #[test]
+    #[serial]
+    fn spawn_failures_emit_log_entries() {
+        let temp = TempDir::new().unwrap();
+        let trace_path = temp.path().join("trace.jsonl");
+        fs::create_dir_all(trace_path.parent().unwrap()).unwrap();
+
+        let _trace_guard = EnvGuard::set(TRACE_LOG_VAR, trace_path.to_string_lossy());
+        let ctx = ShimContext {
+            command_name: "missing".to_string(),
+            shim_dir: temp.path().to_path_buf(),
+            search_paths: Vec::new(),
+            log_file: Some(trace_path.clone()),
+            session_id: "session".to_string(),
+            depth: 3,
+        };
+
+        let io_err = std::io::Error::from(std::io::ErrorKind::NotFound);
+        let errno = io_err.raw_os_error();
+        let log_error: anyhow::Error = io_err.into();
+        log_spawn_failure(
+            &ctx,
+            Path::new("/tmp/missing"),
+            SystemTime::now(),
+            &log_error,
+        );
+
+        let contents = fs::read_to_string(&trace_path).expect("trace log should be created");
+        let last_line = contents.lines().last().expect("log entry missing");
+        let value: serde_json::Value = serde_json::from_str(last_line).expect("valid json log");
+
+        assert_eq!(
+            value.get("error").and_then(|v| v.as_str()),
+            Some("spawn_failed")
+        );
+        assert_eq!(
+            value.get("command").and_then(|v| v.as_str()),
+            Some("missing")
+        );
+        assert_eq!(
+            value.get("spawn_error_kind").and_then(|v| v.as_str()),
+            Some("NotFound")
+        );
+        assert_eq!(
+            value.get("spawn_errno").and_then(|v| v.as_i64()),
+            errno.map(|code| code as i64)
+        );
+        assert_eq!(value.get("depth").and_then(|v| v.as_u64()), Some(3));
+    }
+}

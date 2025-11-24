@@ -516,3 +516,53 @@ managers:
         "running repair twice should not duplicate the snippet"
     );
 }
+
+#[test]
+fn shim_doctor_marks_world_deps_skipped_when_no_world_requested() {
+    let manifest = r#"version: 1
+managers:
+  - name: SkipWorld
+    priority: 1
+    detect:
+      script: "exit 0"
+    init:
+      shell: "echo skip"
+    repair_hint: "skip"
+"#;
+    let fixture = DoctorFixture::new(manifest);
+    let world_deps_fixture = fixture.health_dir().join("world_deps.json");
+    fs::remove_file(&world_deps_fixture).expect("fixture world_deps.json should exist");
+
+    let output = fixture
+        .command()
+        .arg("shim")
+        .arg("doctor")
+        .arg("--json")
+        .arg("--no-world")
+        .output()
+        .expect("failed to run shim doctor --json --no-world");
+
+    assert!(
+        output.status.success(),
+        "shim doctor --no-world should succeed: stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let report: Value =
+        serde_json::from_slice(&output.stdout).expect("doctor --json output should be valid JSON");
+    let deps = report["world_deps"]["report"]
+        .as_object()
+        .expect("world deps report missing");
+
+    assert_eq!(
+        deps.get("world_disabled_reason")
+            .and_then(|value| value.as_str()),
+        Some("--no-world flag is active")
+    );
+    assert_eq!(
+        deps.get("tools")
+            .and_then(|value| value.as_array())
+            .map(|tools| tools.len()),
+        Some(0)
+    );
+}

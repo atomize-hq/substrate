@@ -1,4 +1,9 @@
 use super::*;
+use crate::manager_manifest::schema::{
+    RawDetectSpec, RawGuestDetect, RawInitSpec, RawInstallSpec, RawManagerSpec,
+};
+use proptest::collection::hash_map;
+use proptest::prelude::*;
 use std::{env, fs, path::Path};
 use tempfile::tempdir;
 
@@ -586,4 +591,235 @@ managers:
         Some("asdf current nodejs")
     );
     assert!(asdf_node.repair_hint.as_ref().unwrap().contains("plugin"));
+}
+
+proptest! {
+    #[test]
+    fn raw_detect_merge_applies_overlay_precedence(
+        base_files in proptest::collection::vec(".{0,8}", 0..3),
+        overlay_files in proptest::collection::vec(".{0,8}", 0..3),
+        base_commands in proptest::collection::vec(".{0,8}", 0..3),
+        overlay_commands in proptest::collection::vec(".{0,8}", 0..3),
+        base_env in hash_map("[A-Z_][A-Z0-9_]{0,4}", ".{0,12}", 0..3),
+        overlay_env in hash_map("[A-Z_][A-Z0-9_]{0,4}", ".{0,12}", 0..3),
+        base_script in proptest::option::of(".{0,12}"),
+        overlay_script in proptest::option::of(".{0,12}")
+    ) {
+        let base_env_clone = base_env.clone();
+        let overlay_env_clone = overlay_env.clone();
+
+        let base_spec = RawDetectSpec {
+            files: base_files.clone(),
+            commands: base_commands.clone(),
+            env: base_env,
+            script: base_script.clone(),
+        };
+        let overlay_spec = RawDetectSpec {
+            files: overlay_files.clone(),
+            commands: overlay_commands.clone(),
+            env: overlay_env,
+            script: overlay_script.clone(),
+        };
+
+        let merged = base_spec.merge(overlay_spec);
+
+        let expected_files = if overlay_files.is_empty() {
+            base_files
+        } else {
+            overlay_files
+        };
+        let expected_commands = if overlay_commands.is_empty() {
+            base_commands
+        } else {
+            overlay_commands
+        };
+        let expected_env = if overlay_env_clone.is_empty() {
+            base_env_clone
+        } else {
+            let mut merged_env = base_env_clone;
+            for (key, value) in overlay_env_clone {
+                merged_env.insert(key, value);
+            }
+            merged_env
+        };
+
+        assert_eq!(merged.files, expected_files);
+        assert_eq!(merged.commands, expected_commands);
+        assert_eq!(merged.env, expected_env);
+        assert_eq!(merged.script, overlay_script.or(base_script));
+    }
+}
+
+fn install_from_opts(apt: &Option<String>, custom: &Option<String>) -> Option<RawInstallSpec> {
+    if apt.is_none() && custom.is_none() {
+        None
+    } else {
+        Some(RawInstallSpec {
+            apt: apt.clone(),
+            custom: custom.clone(),
+        })
+    }
+}
+
+proptest! {
+    #[test]
+    fn raw_manager_spec_merge_respects_overlay_rules(
+        base_priority in proptest::option::of(0u8..=100),
+        overlay_priority in proptest::option::of(0u8..=100),
+        base_errors in proptest::collection::vec(".{0,12}", 0..3),
+        overlay_errors in proptest::collection::vec(".{0,12}", 0..3),
+        base_repair_hint in proptest::option::of(".{0,16}"),
+        overlay_repair_hint in proptest::option::of(".{0,16}"),
+        base_guest_cmd in proptest::option::of(".{0,12}"),
+        overlay_guest_cmd in proptest::option::of(".{0,12}"),
+        base_install_apt in proptest::option::of(".{0,12}"),
+        base_install_custom in proptest::option::of(".{0,12}"),
+        overlay_install_apt in proptest::option::of(".{0,12}"),
+        overlay_install_custom in proptest::option::of(".{0,12}"),
+        base_detect_files in proptest::collection::vec(".{0,8}", 0..2),
+        overlay_detect_files in proptest::collection::vec(".{0,8}", 0..2),
+        base_detect_commands in proptest::collection::vec(".{0,8}", 0..2),
+        overlay_detect_commands in proptest::collection::vec(".{0,8}", 0..2),
+        base_detect_env in hash_map("[A-Z_][A-Z0-9_]{0,4}", ".{0,12}", 0..3),
+        overlay_detect_env in hash_map("[A-Z_][A-Z0-9_]{0,4}", ".{0,12}", 0..3),
+        base_shell in proptest::option::of(".{0,12}"),
+        overlay_shell in proptest::option::of(".{0,12}"),
+        base_powershell in proptest::option::of(".{0,12}"),
+        overlay_powershell in proptest::option::of(".{0,12}")
+    ) {
+        let base_spec = RawManagerSpec {
+            priority: base_priority,
+            detect: RawDetectSpec {
+                files: base_detect_files.clone(),
+                commands: base_detect_commands.clone(),
+                env: base_detect_env.clone(),
+                script: None,
+            },
+            init: RawInitSpec {
+                shell: base_shell.clone(),
+                powershell: base_powershell.clone(),
+            },
+            errors: base_errors.clone(),
+            repair_hint: base_repair_hint.clone(),
+            guest_detect: base_guest_cmd
+                .as_ref()
+                .map(|command| RawGuestDetect {
+                    command: Some(command.clone()),
+                }),
+            guest_install: install_from_opts(&base_install_apt, &base_install_custom),
+        };
+        let overlay_spec = RawManagerSpec {
+            priority: overlay_priority,
+            detect: RawDetectSpec {
+                files: overlay_detect_files.clone(),
+                commands: overlay_detect_commands.clone(),
+                env: overlay_detect_env.clone(),
+                script: None,
+            },
+            init: RawInitSpec {
+                shell: overlay_shell.clone(),
+                powershell: overlay_powershell.clone(),
+            },
+            errors: overlay_errors.clone(),
+            repair_hint: overlay_repair_hint.clone(),
+            guest_detect: overlay_guest_cmd
+                .as_ref()
+                .map(|command| RawGuestDetect {
+                    command: Some(command.clone()),
+                }),
+            guest_install: install_from_opts(&overlay_install_apt, &overlay_install_custom),
+        };
+
+        let merged = base_spec.merge(overlay_spec);
+
+        let expected_priority = overlay_priority.or(base_priority);
+        let expected_detect = RawDetectSpec {
+            files: base_detect_files.clone(),
+            commands: base_detect_commands.clone(),
+            env: base_detect_env.clone(),
+            script: None,
+        }
+        .merge(RawDetectSpec {
+            files: overlay_detect_files.clone(),
+            commands: overlay_detect_commands.clone(),
+            env: overlay_detect_env.clone(),
+            script: None,
+        });
+        let expected_init = RawInitSpec {
+            shell: base_shell.clone(),
+            powershell: base_powershell.clone(),
+        }
+        .merge(RawInitSpec {
+            shell: overlay_shell.clone(),
+            powershell: overlay_powershell.clone(),
+        });
+        let expected_errors = if overlay_errors.is_empty() {
+            base_errors
+        } else {
+            overlay_errors
+        };
+        let expected_repair = overlay_repair_hint.or(base_repair_hint);
+        let expected_guest_detect = match (
+            base_guest_cmd
+                .as_ref()
+                .map(|command| RawGuestDetect {
+                    command: Some(command.clone()),
+                }),
+            overlay_guest_cmd
+                .as_ref()
+                .map(|command| RawGuestDetect {
+                    command: Some(command.clone()),
+                }),
+        ) {
+            (Some(base), Some(next)) => Some(base.merge(next)),
+            (None, Some(next)) => Some(next),
+            (Some(base), None) => Some(base),
+            (None, None) => None,
+        };
+        let expected_guest_install = match (
+            install_from_opts(&base_install_apt, &base_install_custom),
+            install_from_opts(&overlay_install_apt, &overlay_install_custom),
+        ) {
+            (Some(base), Some(next)) => Some(base.merge(next)),
+            (None, Some(next)) => Some(next),
+            (Some(base), None) => Some(base),
+            (None, None) => None,
+        };
+        let expected_guest_install_apt = expected_guest_install
+            .as_ref()
+            .and_then(|spec| spec.apt.clone());
+        let expected_guest_install_custom = expected_guest_install
+            .as_ref()
+            .and_then(|spec| spec.custom.clone());
+
+        assert_eq!(merged.priority, expected_priority);
+        assert_eq!(merged.detect.files, expected_detect.files);
+        assert_eq!(merged.detect.commands, expected_detect.commands);
+        assert_eq!(merged.detect.env, expected_detect.env);
+        assert_eq!(merged.init.shell, expected_init.shell);
+        assert_eq!(merged.init.powershell, expected_init.powershell);
+        assert_eq!(merged.errors, expected_errors);
+        assert_eq!(merged.repair_hint, expected_repair);
+        assert_eq!(
+            merged
+                .guest_detect
+                .as_ref()
+                .and_then(|spec| spec.command.clone()),
+            expected_guest_detect.and_then(|spec| spec.command)
+        );
+        assert_eq!(
+            merged
+                .guest_install
+                .as_ref()
+                .and_then(|spec| spec.apt.clone()),
+            expected_guest_install_apt
+        );
+        assert_eq!(
+            merged
+                .guest_install
+                .as_ref()
+                .and_then(|spec| spec.custom.clone()),
+            expected_guest_install_custom
+        );
+    }
 }
