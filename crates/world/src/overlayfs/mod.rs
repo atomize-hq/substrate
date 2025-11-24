@@ -270,4 +270,34 @@ mod tests {
         assert!(!diff.writes.is_empty());
         assert!(!diff.truncated);
     }
+
+    #[test]
+    fn cleanup_removes_overlay_tree_when_unmounted() {
+        let temp_dir = TempDir::new().unwrap();
+        let overlay_dir = temp_dir.path().join("overlay");
+        let upper_dir = overlay_dir.join("upper");
+        let work_dir = overlay_dir.join("work");
+        let merged_dir = overlay_dir.join("merged");
+        std::fs::create_dir_all(&upper_dir).unwrap();
+        std::fs::write(upper_dir.join("file.txt"), b"data").unwrap();
+
+        let mut overlay = OverlayFs {
+            world_id: "cleanup".to_string(),
+            overlay_dir: overlay_dir.clone(),
+            upper_dir,
+            work_dir,
+            merged_dir,
+            lower_dir: None,
+            bind_lower_dir: None,
+            is_mounted: false,
+            using_fuse: false,
+            fuse_child: None,
+        };
+
+        overlay.cleanup().unwrap();
+        assert!(
+            !overlay_dir.exists(),
+            "cleanup should remove overlay directory even when not mounted"
+        );
+    }
 }

@@ -146,3 +146,70 @@ pub(crate) fn is_path_mounted(path: &Path) -> Result<Option<String>> {
     }
     Ok(None)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn compute_diff_detects_writes_mods_and_whiteouts() {
+        let temp = tempdir().unwrap();
+        let upper = temp.path().join("upper");
+        let lower = temp.path().join("lower");
+        std::fs::create_dir_all(&upper).unwrap();
+        std::fs::create_dir_all(&lower).unwrap();
+
+        // Existing file -> modification
+        std::fs::write(lower.join("existing.txt"), "old").unwrap();
+        std::fs::write(upper.join("existing.txt"), "new").unwrap();
+        // New file + directory
+        std::fs::write(upper.join("added.txt"), "fresh").unwrap();
+        std::fs::create_dir_all(upper.join("dir")).unwrap();
+        // Whiteout should translate into delete
+        std::fs::write(upper.join(".wh.removed.txt"), "").unwrap();
+
+        let diff = compute_diff(&upper, Some(&lower), 10, 10, 10 * 1024 * 1024).unwrap();
+        assert!(
+            diff.mods.contains(&PathBuf::from("existing.txt")),
+            "mods should include existing file touched in upper"
+        );
+        assert!(
+            diff.writes.contains(&PathBuf::from("added.txt")),
+            "writes should include brand new files"
+        );
+        assert!(
+            diff.deletes.contains(&PathBuf::from("removed.txt")),
+            "whiteouts should record delete entries"
+        );
+        assert!(
+            diff.writes.contains(&PathBuf::from("dir")),
+            "directories should be treated as writes when new"
+        );
+        assert!(!diff.truncated, "diff should not be truncated");
+    }
+
+    #[test]
+    fn compute_diff_truncates_when_limits_exceeded() {
+        let temp = tempdir().unwrap();
+        let upper = temp.path().join("upper");
+        std::fs::create_dir_all(&upper).unwrap();
+
+        for i in 0..5 {
+            let path = upper.join(format!("file-{i}.txt"));
+            std::fs::write(path, "data").unwrap();
+        }
+
+        // Force truncation after a small number of files.
+        let diff = compute_diff(&upper, None, 2, 10, 1024).unwrap();
+        assert!(diff.truncated, "diff should report truncation");
+        assert!(
+            diff.tree_hash.is_some(),
+            "tree hash should be present when truncated"
+        );
+        assert!(
+            diff.summary.as_ref().is_some(),
+            "truncation should include a summary"
+        );
+    }
+}

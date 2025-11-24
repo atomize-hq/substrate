@@ -139,3 +139,38 @@ pub struct AgentRateStats {
     pub requests_per_minute: u32,
     pub concurrent_executions: u32,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rate_limiter_enforces_limits_and_cleans_up() {
+        let config = RateLimitConfig {
+            requests_per_minute: 2,
+            max_concurrent: 1,
+            burst_enabled: false,
+            burst_multiplier: 1.0,
+        };
+        let mut limiter = RateLimiter::new(&config);
+
+        assert!(limiter.check_and_update("agent-1").is_ok());
+        assert!(
+            limiter.check_and_update("agent-1").is_err(),
+            "second in-flight request should exceed concurrency limit"
+        );
+
+        limiter.complete_execution("agent-1");
+        assert!(
+            limiter.check_and_update("agent-1").is_ok(),
+            "completing execution should free capacity"
+        );
+
+        // Simulate old requests falling out of the window to verify cleanup.
+        limiter.cleanup_inactive(Duration::from_secs(0));
+        assert!(
+            limiter.get_agent_stats("agent-1").is_none(),
+            "cleanup should drop inactive agent entries"
+        );
+    }
+}

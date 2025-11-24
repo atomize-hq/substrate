@@ -222,3 +222,77 @@ pub(crate) fn choose_base_dir() -> Result<PathBuf> {
         Ok(PathBuf::from("/tmp/substrate-overlay"))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(target_os = "linux")]
+    use std::sync::Mutex;
+    #[cfg(target_os = "linux")]
+    use tempfile::tempdir;
+
+    #[cfg(target_os = "linux")]
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[cfg(target_os = "linux")]
+    struct EnvGuard {
+        previous: Vec<(String, Option<std::ffi::OsString>)>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl EnvGuard {
+        fn set(vars: &[(&str, Option<&str>)]) -> Self {
+            let previous = vars
+                .iter()
+                .map(|(key, _)| (key.to_string(), std::env::var_os(key)))
+                .collect::<Vec<_>>();
+            for (key, value) in vars {
+                match value {
+                    Some(v) => std::env::set_var(key, v),
+                    None => std::env::remove_var(key),
+                }
+            }
+            Self { previous }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (key, value) in self.previous.drain(..) {
+                match value {
+                    Some(v) => std::env::set_var(&key, v),
+                    None => std::env::remove_var(&key),
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn choose_base_dir_prefers_xdg_runtime_dir() {
+        let temp = tempdir().unwrap();
+        let xdg = temp.path().join("xdg-run");
+        std::fs::create_dir_all(&xdg).unwrap();
+
+        let _lock = ENV_LOCK.lock().unwrap();
+        let _guard = EnvGuard::set(&[("XDG_RUNTIME_DIR", xdg.to_str()), ("HOME", None)]);
+
+        let base = choose_base_dir().expect("base dir");
+        assert!(
+            base.starts_with(&xdg),
+            "base dir should live under XDG runtime dir"
+        );
+        assert!(
+            base.ends_with("substrate/overlay"),
+            "base dir should include substrate overlay suffix"
+        );
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn choose_base_dir_defaults_to_tmp_on_non_linux() {
+        let base = choose_base_dir().expect("base dir");
+        assert_eq!(base, PathBuf::from("/tmp/substrate-overlay"));
+    }
+}
