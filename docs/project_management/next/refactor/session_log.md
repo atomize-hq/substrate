@@ -406,3 +406,10 @@ Template (copy/paste and fill in):
 - Results: fmt/clippy clean; world_root/world_enable suites passed
 - Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R9a-test.md
 - Next steps / blockers: none
+
+## [2025-11-24 22:09 UTC] Test – R9a-test – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, R9a-test prompt (CRATE_REFACTORING_ANALYSIS.md missing in repo)
+- Set R9a-test to in_progress in tasks.json; session log update pending commit
+- Plan: create cr-r9a-routing-test branch/worktree (wt/cr-r9a-routing-test); align routing dispatch/builtin tests/fixtures with new modules; run cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
+- Blockers: none

@@ -1078,7 +1078,7 @@
       "name": "Routing split tests: dispatch & builtins",
       "type": "test",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Align tests/fixtures with the routing dispatch/builtin module split; cover dispatch paths without changing production code.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
