@@ -1,4 +1,6 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(unix)]
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -14,8 +16,10 @@ use tracing::debug;
 
 use crate::auth::AuthService;
 use crate::config::ProxyConfig;
+#[cfg(unix)]
 use crate::middleware;
 use crate::rate_limit::RateLimiter;
+#[cfg(unix)]
 use crate::transport::{AgentTransportConfig, DEFAULT_AGENT_TCP_PORT};
 
 /// Host proxy service that forwards requests to world-agent.
@@ -275,6 +279,7 @@ pub async fn run_host_proxy() -> Result<()> {
     }
 }
 
+#[cfg_attr(not(unix), allow(dead_code))]
 #[cfg(not(unix))]
 pub async fn run_host_proxy() -> Result<()> {
     Err(anyhow::anyhow!(

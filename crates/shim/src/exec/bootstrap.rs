@@ -308,7 +308,9 @@ mod tests {
     use crate::context::{ShimContext, ORIGINAL_PATH_VAR};
     use serial_test::serial;
     use std::env;
+    #[cfg(unix)]
     use std::ffi::OsString;
+    #[cfg(unix)]
     use std::fs;
     use tempfile::TempDir;
 

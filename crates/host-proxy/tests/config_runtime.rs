@@ -1,17 +1,23 @@
-use std::path::PathBuf;
 use std::sync::Mutex;
 
 #[cfg(unix)]
 use host_proxy::load_config_from_env;
-use host_proxy::{cleanup_socket, ensure_socket_dir, AgentTransportConfig};
+#[cfg(unix)]
+use host_proxy::AgentTransportConfig;
+use host_proxy::{cleanup_socket, ensure_socket_dir};
+#[cfg(unix)]
+use std::path::PathBuf;
 use tempfile::tempdir;
 
+#[cfg(unix)]
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
+#[cfg(unix)]
 struct EnvGuard {
     previous: Vec<(String, Option<std::ffi::OsString>)>,
 }
 
+#[cfg(unix)]
 impl EnvGuard {
     fn set(vars: &[(&str, Option<&str>)]) -> Self {
         let previous = vars
@@ -30,6 +36,7 @@ impl EnvGuard {
     }
 }
 
+#[cfg(unix)]
 impl Drop for EnvGuard {
     fn drop(&mut self) {
         for (key, value) in self.previous.drain(..) {

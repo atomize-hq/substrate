@@ -4,10 +4,12 @@ use std::sync::mpsc::Sender;
 use std::sync::Mutex;
 #[cfg(windows)]
 use std::sync::{Arc, Condvar, Mutex};
+#[cfg(unix)]
 use std::thread;
 
 use lazy_static::lazy_static;
 
+#[cfg(unix)]
 use super::io::get_terminal_size;
 #[cfg(windows)]
 use super::io::{sleep_input_gate, wake_input_gate};
