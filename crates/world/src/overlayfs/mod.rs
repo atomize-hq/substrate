@@ -70,7 +70,7 @@ impl OverlayFs {
             self.lower_dir = Some(lower_dir.to_path_buf());
             layering::mount_linux(self, lower_dir)?;
             self.is_mounted = true;
-            return Ok(self.merged_dir.clone());
+            Ok(self.merged_dir.clone())
         }
 
         #[cfg(not(target_os = "linux"))]

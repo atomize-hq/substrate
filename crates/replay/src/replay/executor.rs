@@ -97,12 +97,12 @@ pub async fn execute_with_world_backends(
 
     #[cfg(target_os = "linux")]
     {
-        return execute_on_linux(state, verbose);
+        execute_on_linux(state, verbose)
     }
 
     #[cfg(not(target_os = "linux"))]
     {
-        return execute_direct(state, timeout_secs).await;
+        execute_direct(state, timeout_secs).await
     }
 }
 
