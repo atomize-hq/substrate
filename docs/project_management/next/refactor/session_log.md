@@ -413,3 +413,10 @@ Template (copy/paste and fill in):
 - Set R9a-test to in_progress in tasks.json; session log update pending commit
 - Plan: create cr-r9a-routing-test branch/worktree (wt/cr-r9a-routing-test); align routing dispatch/builtin tests/fixtures with new modules; run cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
 - Blockers: none
+
+## [2025-11-24 22:30 UTC] Test – R9a-test – END
+- Worktree commits: 59526758 (cr-r9a-routing-test)
+- Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: fmt clean; world_root/world_enable suites passed
+- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R9a-integ.md
+- Next steps / blockers: ready for integration; remove wt/cr-r9a-routing-test after merge
