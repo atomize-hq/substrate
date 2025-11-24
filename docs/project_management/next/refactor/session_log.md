@@ -286,3 +286,11 @@ Template (copy/paste and fill in):
 - Worktree: pending (will create wt/cr-r6-bootstrap-test)
 - Plan: create cr-r6-bootstrap-test branch/worktree; add manifest schema/resolver/validator tests including property cases for expansion/overlay merge; cover shim exec bootstrap/logging/policy flows; add shell builtin command coverage; run cargo fmt; cargo test -p substrate-common --all-targets; cargo test -p substrate-shim; cargo test -p substrate-shell world_root/world_enable
 - Blockers: none
+
+## [2025-11-24 02:20 UTC] Test – R6-test – END
+- Worktree commits: a6eb8e4f
+- Commands: cargo fmt; cargo test -p substrate-common --all-targets; cargo test -p substrate-shim; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: all commands passed (added property tests for manifest merges and shim exec coverage; fixed trace context init in shim policy test)
+- Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R6-integ.md
+- Docs commit: pending
+- Next steps / blockers: none
