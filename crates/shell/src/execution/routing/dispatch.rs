@@ -653,11 +653,6 @@ pub(crate) fn needs_pty(cmd: &str) -> bool {
             return false;
         }
 
-        // SSH with custom port: treat like non-interactive unless -t forces PTY
-        if tokens_lc.iter().any(|arg| arg == "-p") && !has_t {
-            return false;
-        }
-
         // If -t or -tt was present, force PTY
         if has_t {
             return true;
@@ -3113,8 +3108,8 @@ mod tests {
             assert!(needs_pty("ssh -t -W host:port jumphost"));
 
             // SSH with 2-arg options that could confuse host detection
-            assert!(!needs_pty("ssh -p 2222 host"));
-            assert!(!needs_pty("ssh -o StrictHostKeyChecking=no host"));
+            assert!(needs_pty("ssh -p 2222 host"));
+            assert!(needs_pty("ssh -o StrictHostKeyChecking=no host"));
             assert!(!needs_pty("ssh -p 2222 host echo ok"));
             assert!(needs_pty("ssh -J jumphost host"));
             assert!(!needs_pty("ssh -J jumphost host 'id'"));
