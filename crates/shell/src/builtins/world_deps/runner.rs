@@ -78,6 +78,14 @@ impl WorldDepsRunner {
         }
     }
 
+    fn manifest_info(&self) -> WorldDepsManifestInfo {
+        WorldDepsManifestInfo {
+            base: self.paths.base.clone(),
+            overlay: self.paths.overlay.clone(),
+            overlay_exists: self.paths.overlay_exists(),
+        }
+    }
+
     fn run_status(&self, args: &WorldDepsStatusArgs) -> Result<()> {
         let report = self.status_report(&args.tools)?;
         if args.json {
@@ -114,14 +122,18 @@ impl WorldDepsRunner {
     }
 
     fn status_report(&self, tool_names: &[String]) -> Result<WorldDepsStatusReport> {
+        if self.world.is_disabled() {
+            return Ok(WorldDepsStatusReport {
+                manifest: self.manifest_info(),
+                world_disabled_reason: self.world.reason(),
+                tools: Vec::new(),
+            });
+        }
+
         let tools = self.select_tools(tool_names)?;
         if tools.is_empty() {
             return Ok(WorldDepsStatusReport {
-                manifest: WorldDepsManifestInfo {
-                    base: self.paths.base.clone(),
-                    overlay: self.paths.overlay.clone(),
-                    overlay_exists: self.paths.overlay_exists(),
-                },
+                manifest: self.manifest_info(),
                 world_disabled_reason: self.world.reason(),
                 tools: Vec::new(),
             });
@@ -141,11 +153,7 @@ impl WorldDepsRunner {
         }
 
         Ok(WorldDepsStatusReport {
-            manifest: WorldDepsManifestInfo {
-                base: self.paths.base.clone(),
-                overlay: self.paths.overlay.clone(),
-                overlay_exists: self.paths.overlay_exists(),
-            },
+            manifest: self.manifest_info(),
             world_disabled_reason: self.world.reason(),
             tools: entries,
         })

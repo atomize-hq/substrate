@@ -128,11 +128,21 @@ pub struct Cli {
     pub world_root_path: Option<PathBuf>,
 
     /// Force world isolation for this run (overrides disabled install/config/env)
-    #[arg(long = "world", action = ArgAction::SetTrue, conflicts_with = "no_world")]
+    #[arg(
+        long = "world",
+        action = ArgAction::SetTrue,
+        conflicts_with = "no_world",
+        global = true
+    )]
     pub world: bool,
 
     /// Disable world isolation (host pass-through)
-    #[arg(long = "no-world", action = ArgAction::SetTrue, conflicts_with = "world")]
+    #[arg(
+        long = "no-world",
+        action = ArgAction::SetTrue,
+        conflicts_with = "world",
+        global = true
+    )]
     pub no_world: bool,
 
     /// Graph commands (ingest/status/what-changed)
