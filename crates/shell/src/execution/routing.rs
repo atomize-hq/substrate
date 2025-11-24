@@ -5,7 +5,8 @@ use super::invocation::{
     ShellMode,
 };
 use super::pty;
-use super::settings;
+mod builtin;
+mod path_env;
 use super::shim_deploy::{DeploymentStatus, ShimDeployer};
 use super::{
     configure_child_shell_env, configure_manager_init, log_manager_init_event,
@@ -59,11 +60,13 @@ use tokio_tungstenite as tungs;
 // use nu_ansi_term::{Color, Style}; // Unused for now
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use super::pw;
+pub(crate) use builtin::handle_builtin;
 #[cfg(target_os = "linux")]
 use nix::sys::termios::{
     self, ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices,
     Termios,
 };
+pub(crate) use path_env::{canonicalize_or, world_deps_manifest_base_path};
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 fn world_transport_to_meta(transport: &pw::WorldTransport) -> TransportMeta {
     match transport {
@@ -2358,7 +2361,7 @@ where
                 limits: ResourceLimits::default(),
                 enable_preload: false,
                 allowed_domains: substrate_broker::allowed_domains(),
-                project_dir: settings::world_root_from_env().path,
+                project_dir: crate::execution::settings::world_root_from_env().path,
                 always_isolate: false,
             };
             let backend = LinuxLocalBackend::new();
@@ -2553,177 +2556,6 @@ fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyhow::Result<i
     })?;
 
     Ok(code)
-}
-
-fn ok_status() -> Result<ExitStatus> {
-    if cfg!(windows) {
-        Command::new("cmd").arg("/C").arg("exit 0").status()
-    } else {
-        Command::new("true").status()
-    }
-    .context("Failed to create success status")
-}
-
-fn canonicalize_cd_target(current_dir: &Path, target: &str) -> Result<PathBuf> {
-    let requested = Path::new(target);
-    let absolute = if requested.is_absolute() {
-        requested.to_path_buf()
-    } else {
-        current_dir.join(requested)
-    };
-    fs::canonicalize(&absolute)
-        .with_context(|| format!("failed to resolve directory {}", absolute.display()))
-}
-
-fn enforce_caged_destination(
-    settings: &settings::WorldRootSettings,
-    current_dir: &Path,
-    requested: PathBuf,
-) -> (PathBuf, Option<String>) {
-    if !settings.caged || settings.mode == WorldRootMode::FollowCwd {
-        return (requested, None);
-    }
-
-    let anchor = settings.anchor_root(current_dir);
-    let anchor_clean = canonicalize_or(&anchor);
-    if path_within_root(&anchor_clean, &requested) {
-        (requested, None)
-    } else {
-        let message = format!(
-            "substrate: info: caged root guard: returning to {}",
-            anchor_clean.display()
-        );
-        (anchor_clean, Some(message))
-    }
-}
-
-fn canonicalize_or(path: &Path) -> PathBuf {
-    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
-}
-
-fn path_within_root(anchor: &Path, candidate: &Path) -> bool {
-    candidate == anchor || candidate.starts_with(anchor)
-}
-
-fn handle_builtin(
-    config: &ShellConfig,
-    command: &str,
-    parent_cmd_id: &str,
-) -> Result<Option<ExitStatus>> {
-    let parts: Vec<&str> = command.split_whitespace().collect();
-    if parts.is_empty() {
-        return Ok(None);
-    }
-
-    let builtin_result = match parts[0] {
-        "cd" => {
-            let target = match parts.get(1).copied() {
-                None => "~".to_string(),
-                Some("-") => {
-                    if let Ok(oldpwd) = env::var("OLDPWD") {
-                        println!("{oldpwd}");
-                        oldpwd
-                    } else {
-                        "~".to_string()
-                    }
-                }
-                Some(p) => p.to_string(),
-            };
-            let expanded = shellexpand::tilde(&target);
-            let prev = env::current_dir()?;
-            let requested = canonicalize_cd_target(&prev, expanded.as_ref())?;
-            let (destination, warning) =
-                enforce_caged_destination(&config.world_root, &prev, requested);
-            if let Some(message) = warning {
-                eprintln!("{message}");
-            }
-            env::set_current_dir(&destination)?;
-            env::set_var("OLDPWD", prev);
-            env::set_var("PWD", env::current_dir()?.display().to_string());
-            Some(ok_status()?)
-        }
-        "pwd" => {
-            println!("{}", env::current_dir()?.display());
-            Some(ok_status()?)
-        }
-        "unset" => {
-            for k in &parts[1..] {
-                env::remove_var(k);
-            }
-            Some(ok_status()?)
-        }
-        "export" => {
-            let mut handled = true;
-            for part in &parts[1..] {
-                if let Some((k, v)) = part.split_once('=') {
-                    // Reject quotes or variable refs to avoid wrong semantics
-                    if v.contains('"') || v.contains('\'') || v.contains('$') {
-                        handled = false;
-                        break;
-                    }
-                    env::set_var(k, v);
-                } else {
-                    handled = false;
-                    break;
-                }
-            }
-            if handled {
-                Some(ok_status()?)
-            } else {
-                // Defer complex cases to the external shell
-                None
-            }
-        }
-        _ => None,
-    };
-
-    // Log builtin command if we handled it
-    if builtin_result.is_some() {
-        let builtin_cmd_id = Uuid::now_v7().to_string();
-        let extra = json!({ "parent_cmd_id": parent_cmd_id });
-
-        // Apply redaction to builtin commands
-        let redacted_command = {
-            let tokens = shell_words::split(command).unwrap_or_else(|_| vec![command.to_string()]);
-            let mut out = Vec::new();
-            let mut i = 0;
-
-            while i < tokens.len() {
-                let t = &tokens[i];
-
-                // Check for environment variable exports with sensitive names
-                if tokens.len() > 1 && tokens[0] == "export" && t.contains('=') {
-                    if let Some((k, _)) = t.split_once('=') {
-                        let kl = k.to_lowercase();
-                        if kl.contains("token")
-                            || kl.contains("password")
-                            || kl.contains("secret")
-                            || kl.contains("apikey")
-                            || kl.contains("api_key")
-                        {
-                            out.push(format!("{k}=***"));
-                            i += 1;
-                            continue;
-                        }
-                    }
-                }
-
-                out.push(t.clone());
-                i += 1;
-            }
-            out.join(" ")
-        };
-
-        log_command_event(
-            config,
-            "builtin_command",
-            &redacted_command,
-            &builtin_cmd_id,
-            Some(extra),
-        )?;
-    }
-
-    Ok(builtin_result)
 }
 
 pub(crate) struct AgentStreamOutcome {
@@ -3508,26 +3340,10 @@ pub(crate) fn log_command_event(
     Ok(())
 }
 
-pub(crate) fn world_deps_manifest_base_path() -> PathBuf {
-    if let Ok(override_path) = env::var("SUBSTRATE_WORLD_DEPS_MANIFEST") {
-        return PathBuf::from(override_path);
-    }
-
-    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    crate_dir
-        .parent()
-        .and_then(|dir| dir.parent())
-        .map(|root| {
-            root.join("scripts")
-                .join("substrate")
-                .join("world-deps.yaml")
-        })
-        .unwrap_or_else(|| PathBuf::from("scripts/substrate/world-deps.yaml"))
-}
-
 #[cfg(test)]
 mod manager_init_wiring_tests {
     use super::*;
+    use crate::execution::routing::path_env::enforce_caged_destination;
     use serial_test::serial;
     #[cfg(unix)]
     use std::process::Command;
@@ -3555,7 +3371,7 @@ mod manager_init_wiring_tests {
             no_exit_on_error: false,
             skip_shims: false,
             no_world: false,
-            world_root: settings::WorldRootSettings {
+            world_root: crate::execution::settings::WorldRootSettings {
                 mode: WorldRootMode::Project,
                 path: temp.path().to_path_buf(),
                 caged: true,
@@ -3904,7 +3720,7 @@ mod manager_init_wiring_tests {
         let outside = temp.path().join("outside");
         fs::create_dir_all(&root).unwrap();
         fs::create_dir_all(&outside).unwrap();
-        let settings = settings::WorldRootSettings {
+        let settings = crate::execution::settings::WorldRootSettings {
             mode: WorldRootMode::Project,
             path: fs::canonicalize(&root).unwrap(),
             caged: true,
@@ -4120,36 +3936,6 @@ mod manager_init_wiring_tests {
         restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
         restore_env("PWD", prev_pwd);
         restore_env("OLDPWD", prev_oldpwd);
-    }
-
-    #[test]
-    #[serial]
-    fn world_deps_manifest_base_path_prefers_env_override() {
-        let temp = tempdir().unwrap();
-        let override_path = temp.path().join("deps.yaml");
-        let previous = set_env(
-            "SUBSTRATE_WORLD_DEPS_MANIFEST",
-            &override_path.display().to_string(),
-        );
-        let resolved = world_deps_manifest_base_path();
-        assert_eq!(resolved, override_path);
-        restore_env("SUBSTRATE_WORLD_DEPS_MANIFEST", previous);
-    }
-
-    #[test]
-    #[serial]
-    fn world_deps_manifest_base_path_defaults_to_repo_location() {
-        let previous = env::var("SUBSTRATE_WORLD_DEPS_MANIFEST").ok();
-        env::remove_var("SUBSTRATE_WORLD_DEPS_MANIFEST");
-        let resolved = world_deps_manifest_base_path();
-        assert!(
-            resolved
-                .components()
-                .any(|c| c.as_os_str() == "world-deps.yaml"),
-            "path should point to scripts/substrate/world-deps.yaml (found {})",
-            resolved.display()
-        );
-        restore_env("SUBSTRATE_WORLD_DEPS_MANIFEST", previous);
     }
 }
 
