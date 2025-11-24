@@ -341,3 +341,11 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R7-integ.md
 - Docs commit: pending (update tasks + session log)
 - Next steps / blockers: ready for integration; remove wt/cr-r7-services-test after merge
+
+## [2025-11-24 03:58 UTC] Integration – R7-integ – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, CRATE_REFACTORING_ANALYSIS.md, and R7-integ prompt
+- Confirmed R7-code and R7-test completed
+- Set R7-integ to in_progress in tasks.json; session log update pending commit
+- Plan: create cr-r7-services-integ branch/worktree (wt/cr-r7-services-integ); merge code/test branches, resolve service module conflicts; run cargo fmt, cargo clippy --workspace --all-targets -- -D warnings, cargo test -p host-proxy, cargo test -p world, cargo test -p substrate-replay --all-targets
+- Blockers: none
