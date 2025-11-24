@@ -279,3 +279,10 @@ Template (copy/paste and fill in):
 - Results: fmt/clippy clean; common/shim/shell world_root/world_enable suites passed
 - Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R6-test.md
 - Next steps / blockers: merge branch into feat/crate-refactor (done); remove wt/cr-r6-bootstrap-code after cleanup
+
+## [2025-11-24 01:57 UTC] Test – R6-test – START
+- Checked out feat/crate-refactor, pulled latest
+- Set R6-test to in_progress in tasks.json; session log update pending commit
+- Worktree: pending (will create wt/cr-r6-bootstrap-test)
+- Plan: create cr-r6-bootstrap-test branch/worktree; add manifest schema/resolver/validator tests including property cases for expansion/overlay merge; cover shim exec bootstrap/logging/policy flows; add shell builtin command coverage; run cargo fmt; cargo test -p substrate-common --all-targets; cargo test -p substrate-shim; cargo test -p substrate-shell world_root/world_enable
+- Blockers: none

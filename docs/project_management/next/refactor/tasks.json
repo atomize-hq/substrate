@@ -699,7 +699,7 @@
       "name": "Bootstrap & builtins tests",
       "type": "test",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add tests/fixtures for the split manager_manifest, shim exec, and builtin modules, validating outputs and validation paths.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
