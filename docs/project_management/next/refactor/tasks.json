@@ -742,7 +742,7 @@
       "name": "Integrate bootstrap & builtins decomposition",
       "type": "integration",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge manager_manifest/shim/builtins code/test branches, resolve conflicts, and ensure fmt/clippy/tests are green.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",

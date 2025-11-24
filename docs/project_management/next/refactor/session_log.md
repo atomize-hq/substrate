@@ -294,3 +294,12 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R6-integ.md
 - Docs commit: pending
 - Next steps / blockers: none
+
+## [2025-11-24 02:43 UTC] Integration – R6-integ – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, CRATE_REFACTORING_ANALYSIS.md, and R6-integ prompt
+- Confirmed R6-code and R6-test completed
+- Updated tasks.json + session log (commit: pending)
+- Created worktree: pending (will create wt/cr-r6-bootstrap-integ)
+- Plan: create cr-r6-bootstrap-integ branch/worktree; merge cr-r6-bootstrap-code and cr-r6-bootstrap-test branches; resolve conflicts across manager_manifest/shim/builtin splits; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-common --all-targets; cargo test -p substrate-shim; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Blockers: none
