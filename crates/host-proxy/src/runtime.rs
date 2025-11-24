@@ -19,8 +19,9 @@ use crate::config::ProxyConfig;
 #[cfg(unix)]
 use crate::middleware;
 use crate::rate_limit::RateLimiter;
+use crate::transport::AgentTransportConfig;
 #[cfg(unix)]
-use crate::transport::{AgentTransportConfig, DEFAULT_AGENT_TCP_PORT};
+use crate::transport::DEFAULT_AGENT_TCP_PORT;
 
 /// Host proxy service that forwards requests to world-agent.
 #[derive(Clone)]
