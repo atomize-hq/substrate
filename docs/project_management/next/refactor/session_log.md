@@ -399,3 +399,10 @@ Template (copy/paste and fill in):
 - Set R9a-code to in_progress in tasks.json; session log update pending commit
 - Plan: create cr-r9a-routing-code branch/worktree (wt/cr-r9a-routing-code); split routing dispatch/builtin logic into dispatch.rs/builtins.rs with re-exports; keep CLI/tracing/cfg behavior unchanged; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Blockers: none
+
+## [2025-11-24 22:06 UTC] Code – R9a-code – END
+- Worktree commits: 1d86b53f (refactor: split routing dispatch)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: fmt/clippy clean; world_root/world_enable suites passed
+- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R9a-test.md
+- Next steps / blockers: none

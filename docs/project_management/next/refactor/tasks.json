@@ -1037,7 +1037,7 @@
       "name": "Routing split: dispatch & builtins",
       "type": "code",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Split routing.rs by dispatch/builtin handling, keeping CLI semantics and logging unchanged; introduce focused modules and re-export a thin surface.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
