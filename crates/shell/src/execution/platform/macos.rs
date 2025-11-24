@@ -454,7 +454,7 @@ mod world_doctor_macos {
 
 #[cfg(test)]
 mod platform_tests {
-    use super::*;
+    use crate::execution::update_world_env;
     use std::env;
 
     fn snapshot(keys: &[&str]) -> Vec<Option<String>> {

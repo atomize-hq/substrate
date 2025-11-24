@@ -561,7 +561,7 @@ mod tests {
     impl Write for FailingWriter {
         fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
             self.attempts.fetch_add(1, Ordering::SeqCst);
-            Err(io::Error::new(io::ErrorKind::Other, "writer failure"))
+            Err(io::Error::other("writer failure"))
         }
 
         fn flush(&mut self) -> io::Result<()> {
