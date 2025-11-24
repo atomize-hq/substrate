@@ -272,3 +272,10 @@ Template (copy/paste and fill in):
 - Set R6-code to in_progress in tasks.json; session log update pending commit
 - Plan: create cr-r6-bootstrap-code branch/worktree (wt/cr-r6-bootstrap-code) and split manager_manifest, shim exec, and shell builtins per spec; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-common --all-targets; cargo test -p substrate-shim; cargo test -p substrate-shell world_root/world_enable
 - Blockers: none
+
+## [2025-11-24 01:45 UTC] Code – R6-code – END
+- Worktree commits: c0b64ab2 (refactor: decompose bootstrap and builtins)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-common --all-targets; cargo test -p substrate-shim; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: fmt/clippy clean; common/shim/shell world_root/world_enable suites passed
+- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R6-test.md
+- Next steps / blockers: merge branch into feat/crate-refactor (done); remove wt/cr-r6-bootstrap-code after cleanup
