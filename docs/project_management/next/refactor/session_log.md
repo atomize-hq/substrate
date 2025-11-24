@@ -303,3 +303,11 @@ Template (copy/paste and fill in):
 - Created worktree: pending (will create wt/cr-r6-bootstrap-integ)
 - Plan: create cr-r6-bootstrap-integ branch/worktree; merge cr-r6-bootstrap-code and cr-r6-bootstrap-test branches; resolve conflicts across manager_manifest/shim/builtin splits; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-common --all-targets; cargo test -p substrate-shim; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Blockers: none
+
+## [2025-11-24 02:47 UTC] Integration – R6-integ – END
+- Worktree commits: none (cr-r6-bootstrap-code/test already merged)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-common --all-targets; cargo test -p substrate-shim; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: fmt/clippy/tests all passed; no merge conflicts encountered
+- Kickoff prompts created: n/a (R7 prompts already present)
+- Docs commit: pending (update tasks/status + session log)
+- Next steps / blockers: merge integration branch to feat/crate-refactor; remove wt/cr-r6-bootstrap-integ after cleanup
