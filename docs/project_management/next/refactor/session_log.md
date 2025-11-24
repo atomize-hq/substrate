@@ -384,3 +384,11 @@ Template (copy/paste and fill in):
 - Updated tasks.json + session log (commit: pending)
 - Plan: commit docs start, create cr-r8-shell-slim-integ branch/worktree wt/cr-r8-shell-slim-integ; merge code/test branches; resolve conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing in repo
+
+## [2025-11-24 21:05 UTC] Integration – R8-integ – END
+- Worktree commits: e3d7ac39 (merge cr-r8-shell-slim-code), 50b88b8a (clippy/test fixes)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings (initial failure: missing update_world_env import and io::Error::other lint, reran clean); cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: fmt/clippy/tests passed; world_root/world_enable suites green
+- Kickoff prompts created: n/a
+- Docs commit: pending (update tasks + session log)
+- Next steps / blockers: merge to feat/crate-refactor completed; remove wt/cr-r8-shell-slim-integ when finished

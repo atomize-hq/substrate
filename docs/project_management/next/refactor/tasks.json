@@ -910,7 +910,7 @@
       "name": "Shell execution file slicing",
       "type": "code",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Further decompose oversized shell execution files (routing.rs, pty/io.rs, invocation.rs, settings.rs, platform.rs, manager_init.rs) into focused modules while keeping behavior stable.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
@@ -998,7 +998,7 @@
       "name": "Integrate shell execution slicing",
       "type": "integration",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge R8 code/test worktrees for the shell execution slicing, resolve conflicts, and ensure fmt/clippy/tests stay green after the splits.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
