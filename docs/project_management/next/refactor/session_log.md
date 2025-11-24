@@ -363,3 +363,9 @@ Template (copy/paste and fill in):
 - Set R8-code to in_progress in tasks.json; session log update pending commit
 - Plan: create cr-r8-shell-slim-code branch/worktree (wt/cr-r8-shell-slim-code); slice shell execution files (routing, pty/io, invocation, settings, platform, manager_init) into focused modules without behavior changes; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Blockers: none
+
+## [2025-11-24 20:40 UTC] Test – R8-test – START
+- Checked out feat/crate-refactor, pulled latest; read refactor_plan.md, tasks.json, session_log.md, R8-test prompt (CRATE_REFACTORING_ANALYSIS.md not present)
+- Set R8-test to in_progress in tasks.json; plan to commit doc update before branching
+- Plan: create cr-r8-shell-slim-test branch/worktree (wt/cr-r8-shell-slim-test); add/reshape shell execution tests for routing, PTY IO, invocation planning, settings, platform adapters, manager init; run cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Blockers: none
