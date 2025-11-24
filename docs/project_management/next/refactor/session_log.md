@@ -369,3 +369,11 @@ Template (copy/paste and fill in):
 - Set R8-test to in_progress in tasks.json; plan to commit doc update before branching
 - Plan: create cr-r8-shell-slim-test branch/worktree (wt/cr-r8-shell-slim-test); add/reshape shell execution tests for routing, PTY IO, invocation planning, settings, platform adapters, manager init; run cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Blockers: none
+
+## [2025-11-24 20:54 UTC] Test – R8-test – END
+- Worktree commits: f7826c9a (cr-r8-shell-slim-test)
+- Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: fmt clean; world_root/world_enable suites passed
+- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R8-integ.md
+- Docs commit: pending
+- Next steps / blockers: merge into feat/crate-refactor and remove wt/cr-r8-shell-slim-test after cleanup

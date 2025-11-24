@@ -956,7 +956,7 @@
       "name": "Shell execution slicing tests",
       "type": "test",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add/reshape tests to cover the new shell execution submodules (pty/io, invocation planning, settings, platform adapters, manager init) without altering production code.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
