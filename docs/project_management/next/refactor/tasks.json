@@ -826,7 +826,7 @@
       "name": "Service module tests",
       "type": "test",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add tests/fixtures for slimmed host-proxy/overlayfs/replay modules, confirming semantics and performance-sensitive paths remain stable.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
