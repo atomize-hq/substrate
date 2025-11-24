@@ -910,7 +910,7 @@
       "name": "Shell execution file slicing",
       "type": "code",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Further decompose oversized shell execution files (routing.rs, pty/io.rs, invocation.rs, settings.rs, platform.rs, manager_init.rs) into focused modules while keeping behavior stable.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",

@@ -357,3 +357,9 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: n/a
 - Docs commit: pending (update tasks + session log)
 - Next steps / blockers: remove wt/cr-r7-services-integ after cleanup
+
+## [2025-11-24 19:20 UTC] Code – R8-code – START
+- Checked out feat/crate-refactor, pulled latest; read refactor_plan.md, tasks.json, session_log.md, R8-code prompt (CRATE_REFACTORING_ANALYSIS.md not found in repo)
+- Set R8-code to in_progress in tasks.json; session log update pending commit
+- Plan: create cr-r8-shell-slim-code branch/worktree (wt/cr-r8-shell-slim-code); slice shell execution files (routing, pty/io, invocation, settings, platform, manager_init) into focused modules without behavior changes; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Blockers: none
