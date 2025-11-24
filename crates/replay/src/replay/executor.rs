@@ -88,7 +88,7 @@ pub async fn execute_direct(state: &ExecutionState, timeout_secs: u64) -> Result
 
 pub async fn execute_with_world_backends(
     state: &ExecutionState,
-    timeout_secs: u64,
+    #[cfg_attr(target_os = "linux", allow(unused_variables))] timeout_secs: u64,
 ) -> Result<ExecutionResult> {
     let verbose = replay_verbose();
     if let Some(result) = try_world_backend(state, verbose).await? {

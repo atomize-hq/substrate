@@ -4,7 +4,7 @@ use anyhow::Result;
 use serde_json::json;
 use std::env;
 #[cfg(target_os = "linux")]
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 #[cfg(target_os = "linux")]
 use std::process::Command;
 #[cfg(target_os = "linux")]
