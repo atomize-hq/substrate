@@ -62,14 +62,15 @@ where
 {
     let mut delay = config.initial_delay;
     let mut last_error = None;
+    let max_attempts = std::cmp::max(1, config.max_attempts);
 
-    for attempt in 1..=config.max_attempts {
+    for attempt in 1..=max_attempts {
         match operation().await {
             Ok(result) => return Ok(result),
             Err(error) => {
                 last_error = Some(error);
 
-                if attempt < config.max_attempts {
+                if attempt < max_attempts {
                     tracing::debug!("Attempt {} failed, retrying in {:?}", attempt, delay);
 
                     sleep(delay).await;
@@ -84,7 +85,10 @@ where
         }
     }
 
-    Err(last_error.unwrap())
+    match last_error {
+        Some(err) => Err(err),
+        None => unreachable!("retry_with_backoff executed without attempts"),
+    }
 }
 
 /// Determine if an error is retryable.

@@ -41,7 +41,8 @@ impl HostProxyService {
             AgentTransportConfig::Tcp { host, port } => AgentClient::tcp(host, *port),
             #[cfg(target_os = "windows")]
             AgentTransportConfig::NamedPipe { path } => AgentClient::named_pipe(path),
-        };
+        }
+        .context("Failed to create agent client")?;
         let client = Arc::new(client);
         let rate_limiter = Arc::new(RwLock::new(RateLimiter::new(&config.rate_limits)));
         let auth_service = Arc::new(AuthService::new(&config.auth)?);

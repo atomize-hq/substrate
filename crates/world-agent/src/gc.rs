@@ -1,10 +1,11 @@
 //! Network namespace garbage collection for orphaned substrate worlds.
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, SystemTime};
+use tokio::task;
 use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,6 +29,16 @@ pub struct GcError {
 
 const NETNS_PREFIX: &str = "substrate-";
 const WORLD_ID_PREFIX: &str = "wld_";
+
+async fn run_blocking<F, T>(f: F) -> Result<T>
+where
+    F: FnOnce() -> Result<T> + Send + 'static,
+    T: Send + 'static,
+{
+    task::spawn_blocking(f)
+        .await
+        .map_err(|e| anyhow!("Blocking task failed: {}", e))?
+}
 
 fn extract_world_id(ns_name: &str) -> Option<String> {
     if let Some(without_prefix) = ns_name.strip_prefix(NETNS_PREFIX) {
@@ -203,7 +214,7 @@ pub async fn sweep(ttl: Option<Duration>) -> Result<GcReport> {
 
     info!("Starting netns GC sweep");
 
-    let namespaces = match list_netns() {
+    let namespaces = match run_blocking(list_netns).await {
         Ok(ns) => ns,
         Err(e) => {
             warn!("Failed to list network namespaces: {}", e);
@@ -223,7 +234,12 @@ pub async fn sweep(ttl: Option<Duration>) -> Result<GcReport> {
         };
 
         if let Some(ttl_duration) = ttl {
-            match get_netns_mtime(&ns) {
+            match run_blocking({
+                let ns = ns.clone();
+                move || get_netns_mtime(&ns)
+            })
+            .await
+            {
                 Ok(mtime) => {
                     if let Ok(age) = SystemTime::now().duration_since(mtime) {
                         if age < ttl_duration {
@@ -242,7 +258,12 @@ pub async fn sweep(ttl: Option<Duration>) -> Result<GcReport> {
             }
         }
 
-        match netns_pids(&ns) {
+        match run_blocking({
+            let ns = ns.clone();
+            move || netns_pids(&ns)
+        })
+        .await
+        {
             Ok(pids) if !pids.is_empty() => {
                 debug!("Namespace {} has active PIDs: {:?}", ns, pids);
                 report.kept.push(Kept {
@@ -262,7 +283,12 @@ pub async fn sweep(ttl: Option<Duration>) -> Result<GcReport> {
             _ => {}
         }
 
-        match cgroup_procs(&world_id) {
+        match run_blocking({
+            let world_id = world_id.clone();
+            move || cgroup_procs(&world_id)
+        })
+        .await
+        {
             Ok(procs) if !procs.is_empty() => {
                 debug!(
                     "World {} has active cgroup processes: {:?}",
@@ -280,15 +306,31 @@ pub async fn sweep(ttl: Option<Duration>) -> Result<GcReport> {
             _ => {}
         }
 
-        if let Err(e) = delete_nft_table(&ns, &world_id) {
+        if let Err(e) = run_blocking({
+            let ns = ns.clone();
+            let world_id = world_id.clone();
+            move || delete_nft_table(&ns, &world_id)
+        })
+        .await
+        {
             debug!("Failed to delete nft table for {}: {}", ns, e);
         }
 
-        match delete_netns(&ns) {
+        match run_blocking({
+            let ns = ns.clone();
+            move || delete_netns(&ns)
+        })
+        .await
+        {
             Ok(_) => {
                 report.removed.push(ns.clone());
 
-                if let Err(e) = try_rmdir_cgroup(&world_id) {
+                if let Err(e) = run_blocking({
+                    let world_id = world_id.clone();
+                    move || try_rmdir_cgroup(&world_id)
+                })
+                .await
+                {
                     debug!("Failed to remove cgroup for {}: {}", world_id, e);
                 }
             }

@@ -3010,7 +3010,7 @@ fn build_agent_client_and_request_impl(
 
     ensure_world_agent_ready()?;
 
-    let client = AgentClient::unix_socket("/run/substrate.sock");
+    let client = AgentClient::unix_socket("/run/substrate.sock")?;
     let cwd = std::env::current_dir()
         .unwrap_or_else(|_| std::path::PathBuf::from("."))
         .display()
@@ -3085,7 +3085,7 @@ fn build_agent_client_and_request_impl(
         pw::WorldTransport::Unix(path) => AgentClient::unix_socket(path),
         pw::WorldTransport::Tcp { host, port } => AgentClient::tcp(host, *port),
         pw::WorldTransport::Vsock { port } => AgentClient::tcp("127.0.0.1", *port),
-    };
+    }?;
 
     let cwd = std::env::current_dir()
         .unwrap_or_else(|_| std::path::PathBuf::from("."))

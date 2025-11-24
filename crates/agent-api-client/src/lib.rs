@@ -25,17 +25,17 @@ pub struct AgentClient {
 
 impl AgentClient {
     /// Create a new client with the given transport.
-    pub fn new(transport: Transport) -> Self {
+    pub fn new(transport: Transport) -> Result<Self> {
         let connector = build_connector(&transport)
-            .unwrap_or_else(|err| panic!("Unsupported transport: {err}"));
-        Self {
+            .with_context(|| format!("Unsupported transport: {}", transport.description()))?;
+        Ok(Self {
             transport,
             connector: Arc::from(connector),
-        }
+        })
     }
 
     /// Create a client that connects to the default Unix socket.
-    pub fn unix_socket<P: AsRef<Path>>(socket_path: P) -> Self {
+    pub fn unix_socket<P: AsRef<Path>>(socket_path: P) -> Result<Self> {
         let transport = Transport::UnixSocket {
             path: socket_path.as_ref().to_path_buf(),
         };
@@ -43,7 +43,7 @@ impl AgentClient {
     }
 
     /// Create a client that connects via TCP.
-    pub fn tcp(host: &str, port: u16) -> Self {
+    pub fn tcp(host: &str, port: u16) -> Result<Self> {
         let transport = Transport::Tcp {
             host: host.to_string(),
             port,
@@ -53,7 +53,7 @@ impl AgentClient {
 
     #[cfg(target_os = "windows")]
     /// Create a client that connects via a Windows named pipe.
-    pub fn named_pipe<P: AsRef<Path>>(pipe_path: P) -> Self {
+    pub fn named_pipe<P: AsRef<Path>>(pipe_path: P) -> Result<Self> {
         let transport = Transport::NamedPipe {
             path: pipe_path.as_ref().to_path_buf(),
         };
@@ -227,20 +227,18 @@ impl AgentClient {
         }
     }
 
-    #[cfg(all(test, unix))]
-    fn build_uri_for_test(&self, path: &str) -> Result<hyper::Uri> {
-        self.connector.build_uri(path)
-    }
-}
-
-impl Default for AgentClient {
-    fn default() -> Self {
-        // Default to Unix socket at standard location
+    /// Construct a client using the default Unix socket location when available.
+    pub fn try_default() -> Result<Self> {
         let socket_path = dirs::home_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("."))
             .join(".substrate/sock/agent.sock");
 
         Self::unix_socket(socket_path)
+    }
+
+    #[cfg(all(test, unix))]
+    fn build_uri_for_test(&self, path: &str) -> Result<hyper::Uri> {
+        self.connector.build_uri(path)
     }
 }
 
@@ -251,7 +249,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn test_client_creation() {
-        let client = AgentClient::unix_socket("/tmp/test.sock");
+        let client = AgentClient::unix_socket("/tmp/test.sock").unwrap();
 
         match client.transport() {
             Transport::UnixSocket { ref path } => {
@@ -264,7 +262,7 @@ mod tests {
 
     #[test]
     fn test_tcp_client_creation() {
-        let client = AgentClient::tcp("localhost", 8080);
+        let client = AgentClient::tcp("localhost", 8080).unwrap();
 
         match client.transport() {
             Transport::Tcp { ref host, port } => {
@@ -279,7 +277,7 @@ mod tests {
     #[cfg(target_os = "windows")]
     #[test]
     fn test_named_pipe_client_creation() {
-        let client = AgentClient::named_pipe(r"\\.\pipe\substrate-agent");
+        let client = AgentClient::named_pipe(r"\\.\pipe\substrate-agent").unwrap();
 
         match client.transport() {
             Transport::NamedPipe { ref path } => {
@@ -293,7 +291,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn test_default_client() {
-        let client = AgentClient::default();
+        let client = AgentClient::try_default().unwrap();
 
         match client.transport() {
             Transport::UnixSocket { ref path } => {
@@ -308,13 +306,13 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn test_uri_building() {
-        let client = AgentClient::unix_socket("/tmp/test.sock");
+        let client = AgentClient::unix_socket("/tmp/test.sock").unwrap();
         let uri = client.build_uri_for_test("/v1/execute").unwrap();
 
         // hyperlocal URIs have a specific format
         assert!(uri.to_string().contains("/v1/execute"));
 
-        let tcp_client = AgentClient::tcp("localhost", 8080);
+        let tcp_client = AgentClient::tcp("localhost", 8080).unwrap();
         let tcp_uri = tcp_client.build_uri_for_test("/v1/execute").unwrap();
         assert_eq!(tcp_uri.to_string(), "http://localhost:8080/v1/execute");
     }

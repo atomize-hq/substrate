@@ -279,7 +279,7 @@ impl MacLimaBackend {
     /// Build an AgentClient based on current forwarding.
     fn build_agent_client(&self) -> Result<AgentClient> {
         let transport = self.get_agent_endpoint()?;
-        Ok(AgentClient::new(transport))
+        AgentClient::new(transport)
     }
 }
 

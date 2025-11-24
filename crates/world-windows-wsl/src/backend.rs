@@ -114,7 +114,7 @@ impl WindowsWslBackend {
         }
     }
 
-    pub fn build_agent_client(&self) -> AgentClient {
+    pub fn build_agent_client(&self) -> Result<AgentClient> {
         AgentClient::new(self.agent_transport())
     }
 
@@ -124,7 +124,7 @@ impl WindowsWslBackend {
             return mock.capabilities();
         }
 
-        let client = AgentClient::new(self.agent_transport());
+        let client = AgentClient::new(self.agent_transport())?;
         self.block_on(async { client.capabilities().await })
     }
 
@@ -134,7 +134,7 @@ impl WindowsWslBackend {
             return mock.execute(request);
         }
 
-        let client = AgentClient::new(self.agent_transport());
+        let client = AgentClient::new(self.agent_transport())?;
         self.block_on(async move { client.execute(request).await })
     }
 
@@ -144,7 +144,7 @@ impl WindowsWslBackend {
             return mock.get_trace(span_id);
         }
 
-        let client = AgentClient::new(self.agent_transport());
+        let client = AgentClient::new(self.agent_transport())?;
         self.block_on(async move { client.get_trace(span_id).await })
     }
 
