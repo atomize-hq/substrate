@@ -122,7 +122,7 @@ impl WorldDepsRunner {
     }
 
     fn status_report(&self, tool_names: &[String]) -> Result<WorldDepsStatusReport> {
-        if self.world.is_disabled() {
+        if self.world.cli_disabled() {
             return Ok(WorldDepsStatusReport {
                 manifest: self.manifest_info(),
                 world_disabled_reason: self.world.reason(),

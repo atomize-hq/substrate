@@ -28,6 +28,10 @@ impl WorldState {
         })
     }
 
+    pub(crate) fn cli_disabled(&self) -> bool {
+        self.cli_disabled
+    }
+
     pub(crate) fn is_disabled(&self) -> bool {
         if self.cli_force_world {
             return false;
