@@ -9,70 +9,23 @@ use crate::execution::{
     configure_child_shell_env, log_command_event, ShellConfig, ShellMode, PTY_ACTIVE,
 };
 use anyhow::{Context, Result};
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+mod state;
+#[cfg(test)]
+use portable_pty::PtySize;
+use portable_pty::{native_pty_system, CommandBuilder};
 use serde_json::json;
+#[cfg(windows)]
+pub(crate) use state::windows_console_size;
+pub use state::PtyExitStatus;
+pub(crate) use state::{
+    get_terminal_size, verify_process_group, MinimalTerminalGuard, PtyActiveGuard,
+};
 use std::io::{self, Read, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
-
-/// Custom exit status for PTY commands
-#[derive(Debug, Clone)]
-pub struct PtyExitStatus {
-    pub code: Option<i32>,
-    pub signal: Option<i32>,
-}
-
-impl PtyExitStatus {
-    fn from_portable_pty(status: portable_pty::ExitStatus) -> Self {
-        #[cfg(unix)]
-        {
-            let raw = status.exit_code() as i32;
-            if raw > 128 {
-                // Terminated by signal (128 + signal number)
-                // Note: We intentionally don't set the core dump bit (0x80) since
-                // portable_pty doesn't expose whether a core dump occurred
-                PtyExitStatus {
-                    code: None,
-                    signal: Some(raw - 128),
-                }
-            } else {
-                PtyExitStatus {
-                    code: Some(raw),
-                    signal: None,
-                }
-            }
-        }
-
-        #[cfg(not(unix))]
-        {
-            PtyExitStatus {
-                code: Some(status.exit_code() as i32),
-                signal: None,
-            }
-        }
-    }
-
-    pub fn success(&self) -> bool {
-        self.code == Some(0)
-    }
-
-    pub fn code(&self) -> Option<i32> {
-        self.code
-    }
-
-    #[cfg(unix)]
-    pub fn signal(&self) -> Option<i32> {
-        self.signal
-    }
-
-    #[cfg(not(unix))]
-    pub fn signal(&self) -> Option<i32> {
-        None
-    }
-}
 
 fn start_pty_manager(
     master: Box<dyn portable_pty::MasterPty + Send>,
@@ -296,105 +249,6 @@ pub fn execute_with_pty(
     Ok(exit_status)
 }
 
-// RAII guard to ensure PTY_ACTIVE flag is cleared even on panic
-struct PtyActiveGuard;
-
-impl Drop for PtyActiveGuard {
-    fn drop(&mut self) {
-        PTY_ACTIVE.store(false, Ordering::SeqCst);
-    }
-}
-
-#[cfg(windows)]
-fn windows_console_size() -> Option<PtySize> {
-    use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
-    use windows_sys::Win32::System::Console::*;
-    unsafe {
-        let h = GetStdHandle(STD_OUTPUT_HANDLE);
-        if h == INVALID_HANDLE_VALUE {
-            return None;
-        }
-        let mut info = std::mem::MaybeUninit::<CONSOLE_SCREEN_BUFFER_INFO>::uninit();
-        if GetConsoleScreenBufferInfo(h, info.as_mut_ptr()) != 0 {
-            let info = info.assume_init();
-            let cols = (info.srWindow.Right - info.srWindow.Left + 1) as u16;
-            let rows = (info.srWindow.Bottom - info.srWindow.Top + 1) as u16;
-            if rows > 0 && cols > 0 {
-                return Some(PtySize {
-                    rows,
-                    cols,
-                    pixel_width: 0,
-                    pixel_height: 0,
-                });
-            }
-        }
-        None
-    }
-}
-
-pub(crate) fn get_terminal_size() -> Result<PtySize> {
-    #[cfg(windows)]
-    if let Some(sz) = windows_console_size() {
-        return Ok(sz);
-    }
-
-    #[cfg(unix)]
-    {
-        use libc::{ioctl, winsize, TIOCGWINSZ};
-        use std::mem;
-
-        // CRITICAL: Try /dev/tty first - this always refers to the controlling terminal
-        // This ensures we get the real size even when stdin/stdout are redirected
-        if let Ok(tty) = std::fs::File::open("/dev/tty") {
-            use std::os::unix::io::AsRawFd;
-            let fd = tty.as_raw_fd();
-            unsafe {
-                let mut size: winsize = mem::zeroed();
-                if ioctl(fd, TIOCGWINSZ, &mut size) == 0 && size.ws_row > 0 && size.ws_col > 0 {
-                    return Ok(PtySize {
-                        rows: size.ws_row,
-                        cols: size.ws_col,
-                        pixel_width: size.ws_xpixel,
-                        pixel_height: size.ws_ypixel,
-                    });
-                }
-            }
-        }
-
-        // Fallback: Try stdin, stdout, stderr in order (handles redirects)
-        for fd in [libc::STDIN_FILENO, libc::STDOUT_FILENO, libc::STDERR_FILENO] {
-            unsafe {
-                let mut size: winsize = mem::zeroed();
-                if ioctl(fd, TIOCGWINSZ, &mut size) == 0 && size.ws_row > 0 && size.ws_col > 0 {
-                    return Ok(PtySize {
-                        rows: size.ws_row,
-                        cols: size.ws_col,
-                        pixel_width: size.ws_xpixel,
-                        pixel_height: size.ws_ypixel,
-                    });
-                }
-            }
-        }
-    }
-
-    // Fallback to environment or MODERN defaults (not 1970s terminals!)
-    let rows = std::env::var("LINES")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(50); // Modern default: 50 rows
-    let cols = std::env::var("COLUMNS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(120); // Modern default: 120 columns
-
-    Ok(PtySize {
-        rows,
-        cols,
-        pixel_width: 0,
-        pixel_height: 0,
-    })
-}
-
 // 🔥 CRITICAL FIX: Windows global input forwarder with Condvar gating
 // Prevents stealing input when no PTY is active
 
@@ -593,129 +447,6 @@ fn handle_pty_io(
     let _ = manager_handle.join();
 
     Ok(PtyExitStatus::from_portable_pty(portable_status))
-}
-
-#[cfg(unix)]
-fn verify_process_group(pid: Option<u32>) {
-    // Verify child is session leader with controlling terminal
-    if let Some(pid) = pid {
-        // This is for debugging/verification only
-        use std::process::Command;
-        if let Ok(output) = Command::new("ps")
-            .args(["-o", "pid,pgid,tpgid,stat", "-p", &pid.to_string()])
-            .output()
-        {
-            let output_str = String::from_utf8_lossy(&output.stdout);
-            log::debug!("Process group info for {pid}: {output_str}");
-            // We want pid==pgid==tpgid for proper session leader
-        }
-    }
-}
-
-#[cfg(not(unix))]
-#[cfg_attr(not(test), allow(dead_code))]
-fn verify_process_group(_pid: Option<u32>) {
-    // No-op on non-Unix platforms
-}
-
-// Minimal terminal guard - ONLY sets stdin to raw mode for input forwarding
-// Does NOT touch stdout to avoid display corruption
-struct MinimalTerminalGuard {
-    #[cfg(unix)]
-    saved_termios: Option<nix::sys::termios::Termios>,
-    #[cfg(windows)]
-    saved_stdin_mode: Option<u32>,
-}
-
-impl MinimalTerminalGuard {
-    fn new() -> Result<Self> {
-        #[cfg(unix)]
-        {
-            use nix::sys::termios::{cfmakeraw, tcgetattr, tcsetattr, SetArg};
-            use std::os::unix::io::{AsRawFd, BorrowedFd};
-
-            let raw_fd = io::stdin().as_raw_fd();
-            let fd = unsafe { BorrowedFd::borrow_raw(raw_fd) };
-            let saved_termios = tcgetattr(fd).ok();
-
-            // Set raw mode on stdin ONLY for proper input forwarding
-            if let Some(ref orig) = saved_termios {
-                let mut raw = orig.clone();
-                cfmakeraw(&mut raw);
-
-                // Ensure immediate input without buffering
-                raw.control_chars[nix::sys::termios::SpecialCharacterIndices::VMIN as usize] = 1;
-                raw.control_chars[nix::sys::termios::SpecialCharacterIndices::VTIME as usize] = 0;
-
-                let fd = unsafe { BorrowedFd::borrow_raw(raw_fd) };
-                let _ = tcsetattr(fd, SetArg::TCSANOW, &raw);
-            }
-
-            Ok(Self { saved_termios })
-        }
-
-        #[cfg(windows)]
-        {
-            use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
-            use windows_sys::Win32::System::Console::*;
-
-            let mut saved_stdin_mode = None;
-
-            unsafe {
-                // Save and modify stdin console mode ONLY
-                let h_stdin = GetStdHandle(STD_INPUT_HANDLE);
-                if h_stdin != INVALID_HANDLE_VALUE {
-                    let mut mode = 0;
-                    if GetConsoleMode(h_stdin, &mut mode) != 0 {
-                        saved_stdin_mode = Some(mode);
-
-                        // Clear: ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT
-                        // Set: ENABLE_VIRTUAL_TERMINAL_INPUT
-                        let new_mode = (mode
-                            & !(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT))
-                            | ENABLE_VIRTUAL_TERMINAL_INPUT;
-                        SetConsoleMode(h_stdin, new_mode);
-                    }
-                }
-            }
-
-            Ok(Self { saved_stdin_mode })
-        }
-
-        #[cfg(not(any(unix, windows)))]
-        Ok(Self {})
-    }
-}
-
-impl Drop for MinimalTerminalGuard {
-    fn drop(&mut self) {
-        #[cfg(unix)]
-        {
-            use nix::sys::termios::{tcsetattr, SetArg};
-            use std::os::unix::io::{AsRawFd, BorrowedFd};
-
-            if let Some(ref termios) = self.saved_termios {
-                let raw_fd = io::stdin().as_raw_fd();
-                let fd = unsafe { BorrowedFd::borrow_raw(raw_fd) };
-                let _ = tcsetattr(fd, SetArg::TCSANOW, termios);
-            }
-        }
-
-        #[cfg(windows)]
-        {
-            use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
-            use windows_sys::Win32::System::Console::*;
-
-            unsafe {
-                if let Some(mode) = self.saved_stdin_mode {
-                    let h_stdin = GetStdHandle(STD_INPUT_HANDLE);
-                    if h_stdin != INVALID_HANDLE_VALUE {
-                        SetConsoleMode(h_stdin, mode);
-                    }
-                }
-            }
-        }
-    }
 }
 
 #[cfg(test)]
