@@ -5,6 +5,8 @@ use super::invocation::{
 mod builtin;
 mod dispatch;
 mod path_env;
+#[cfg(test)]
+mod test_utils;
 use super::shim_deploy::{DeploymentStatus, ShimDeployer};
 use super::{configure_manager_init, log_manager_init_event, write_manager_env_script};
 use crate::builtins as commands;
