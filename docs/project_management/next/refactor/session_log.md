@@ -377,3 +377,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R8-integ.md
 - Docs commit: pending
 - Next steps / blockers: merge into feat/crate-refactor and remove wt/cr-r8-shell-slim-test after cleanup
+
+## [2025-11-24 20:58 UTC] Integration – R8-integ – START
+- Checked out feat/crate-refactor, pulled latest
+- Confirmed R8-test merged (cr-r8-shell-slim-test on feat/crate-refactor); R8-code branch cr-r8-shell-slim-code pending integration
+- Updated tasks.json + session log (commit: pending)
+- Plan: commit docs start, create cr-r8-shell-slim-integ branch/worktree wt/cr-r8-shell-slim-integ; merge code/test branches; resolve conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Blockers: CRATE_REFACTORING_ANALYSIS.md missing in repo
