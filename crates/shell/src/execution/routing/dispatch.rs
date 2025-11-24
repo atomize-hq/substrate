@@ -653,6 +653,11 @@ pub(crate) fn needs_pty(cmd: &str) -> bool {
             return false;
         }
 
+        // SSH with custom port: treat like non-interactive unless -t forces PTY
+        if tokens_lc.iter().any(|arg| arg == "-p") && !has_t {
+            return false;
+        }
+
         // If -t or -tt was present, force PTY
         if has_t {
             return true;
