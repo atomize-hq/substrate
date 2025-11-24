@@ -14,12 +14,10 @@ mod state;
 use portable_pty::PtySize;
 use portable_pty::{native_pty_system, CommandBuilder};
 use serde_json::json;
-#[cfg(windows)]
-pub(crate) use state::windows_console_size;
+#[cfg(any(unix, test))]
+use state::verify_process_group;
 pub use state::PtyExitStatus;
-pub(crate) use state::{
-    get_terminal_size, verify_process_group, MinimalTerminalGuard, PtyActiveGuard,
-};
+pub(crate) use state::{get_terminal_size, MinimalTerminalGuard, PtyActiveGuard};
 use std::io::{self, Read, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
@@ -974,7 +972,7 @@ mod tests {
     fn test_windows_console_size_detection() {
         // Test Windows console size detection logic
         // This mainly ensures the code compiles and doesn't panic
-        let _size = windows_console_size();
+        let _size = state::windows_console_size();
         // Function may return None in test environment, which is expected
     }
 

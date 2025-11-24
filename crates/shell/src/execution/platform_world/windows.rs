@@ -128,7 +128,8 @@ pub fn detect() -> Result<PlatformWorldContext> {
 
 pub fn build_agent_client() -> Result<AgentClient> {
     let ctx = context()?;
-    Ok(ctx.backend.build_agent_client())
+    let client = ctx.backend.build_agent_client()?;
+    Ok(client)
 }
 
 /// Convert a host Windows path to the corresponding WSL path string using the active backend.

@@ -2,8 +2,8 @@
 
 use crate::execution::PTY_ACTIVE;
 use anyhow::Result;
-use log;
 use portable_pty::PtySize;
+#[cfg(unix)]
 use std::io;
 use std::sync::atomic::Ordering;
 
