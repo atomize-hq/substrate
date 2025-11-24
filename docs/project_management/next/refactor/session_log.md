@@ -311,3 +311,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: n/a (R7 prompts already present)
 - Docs commit: pending (update tasks/status + session log)
 - Next steps / blockers: merge integration branch to feat/crate-refactor; remove wt/cr-r6-bootstrap-integ after cleanup
+
+## [2025-11-24 02:55 UTC] Code – R7-code – START
+- Checked out feat/crate-refactor, pulled latest
+- Updated tasks.json + session log (commit: pending)
+- Created worktree: pending (will create wt/cr-r7-services-code)
+- Plan: set up cr-r7-services-code branch/worktree; split host-proxy/lib.rs into public surface plus config/transport/runtime modules; break world/overlayfs.rs into layering/utils while keeping cfgs intact; decompose replay/replay.rs into planners/executors/helpers without behavior changes; run cargo fmt, cargo clippy --workspace --all-targets -- -D warnings, cargo test -p host-proxy, cargo test -p world, cargo test -p substrate-replay --all-targets
+- Blockers: none
