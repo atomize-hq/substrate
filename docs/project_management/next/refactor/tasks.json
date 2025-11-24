@@ -1031,6 +1031,494 @@
       "worktree": "wt/cr-r8-shell-slim-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R8-integ.md"
+    },
+    {
+      "id": "R9a-code",
+      "name": "Routing split: dispatch & builtins",
+      "type": "code",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Split routing.rs by dispatch/builtin handling, keeping CLI semantics and logging unchanged; introduce focused modules and re-export a thin surface.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/shell/src/execution/routing.rs"
+      ],
+      "acceptance_criteria": [
+        "routing dispatch/builtin logic extracted into dedicated modules (e.g., dispatch.rs, builtins.rs) with a thin public surface and stable call sites via re-exports.",
+        "Path/cwd/env helpers untouched in this wave; no CLI/config behavior changes; tracing/redaction/cfg gates preserved.",
+        "rustdoc headers describe module roles; public API remains stable.",
+        "cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable pass (skips noted)."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R9a-code to in_progress, update session_log.md with START entry, commit docs update (`git commit -am \"docs: start R9a-code\"`)",
+        "Create task branch cr-r9a-routing-code",
+        "Create worktree wt/cr-r9a-routing-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/lint/tests per prompt are green; capture outputs for END log entry",
+        "Commit worktree changes with descriptive message",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; reference paired test prompt",
+        "Commit docs update on feat/crate-refactor (`git commit -am \"docs: finish R9a-code\"`)"
+      ],
+      "depends_on": [
+        "R8-integ"
+      ],
+      "concurrent_with": [
+        "R9a-test"
+      ],
+      "worktree": "wt/cr-r9a-routing-code",
+      "integration_task": "R9a-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R9a-code.md"
+    },
+    {
+      "id": "R9a-test",
+      "name": "Routing split tests: dispatch & builtins",
+      "type": "test",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Align tests/fixtures with the routing dispatch/builtin module split; cover dispatch paths without changing production code.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/shell/tests",
+        "crates/shell/src/execution/routing.rs"
+      ],
+      "acceptance_criteria": [
+        "Tests updated to new module paths; coverage for dispatch/builtin routing preserved (world enable/disable flows, builtin selection).",
+        "No production code changes beyond test-only helpers; logging/redaction expectations maintained.",
+        "cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable (skips noted) logged in session log.",
+        "Integration prompt referenced in END log."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R9a-test to in_progress, update session_log.md with START entry, commit docs update (`git commit -am \"docs: start R9a-test\"`)",
+        "Create task branch cr-r9a-routing-test",
+        "Create worktree wt/cr-r9a-routing-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure required tests are green; capture outputs for END log",
+        "Commit worktree changes with descriptive message",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; reference integration prompt",
+        "Commit docs update on feat/crate-refactor (`git commit -am \"docs: finish R9a-test\"`)"
+      ],
+      "depends_on": [
+        "R8-integ"
+      ],
+      "concurrent_with": [
+        "R9a-code"
+      ],
+      "worktree": "wt/cr-r9a-routing-test",
+      "integration_task": "R9a-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R9a-test.md"
+    },
+    {
+      "id": "R9a-integ",
+      "name": "Integrate routing split: dispatch & builtins",
+      "type": "integration",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Merge R9a code/test routing split for dispatch/builtins, resolve conflicts, ensure fmt/clippy/tests are green.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "crates/shell/src/execution/routing.rs",
+        "crates/shell/tests"
+      ],
+      "acceptance_criteria": [
+        "wt/cr-r9a-routing-integ merges R9a code+tests with clean fmt/clippy/test runs for substrate-shell (world_root/world_enable).",
+        "feat/crate-refactor updated with integration results and doc/task/log entries.",
+        "Follow-up prompts/notes captured before closing the session."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Confirm R9a-code/test completed",
+        "Set R9a-integ to in_progress, update session_log.md with START entry, commit docs update (`git commit -am \"docs: start R9a-integ\"`)",
+        "Create task branch cr-r9a-routing-integ",
+        "Create worktree wt/cr-r9a-routing-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration branch/worktree and resolve conflicts",
+        "Run required fmt/clippy/tests noted in prompts",
+        "Merge integration branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; push or hand off"
+      ],
+      "depends_on": [
+        "R9a-code",
+        "R9a-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cr-r9a-routing-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R9a-integ.md"
+    },
+    {
+      "id": "R9b-code",
+      "name": "Routing split: path/env/cwd helpers",
+      "type": "code",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Extract path/cwd/env/world-env helpers from routing.rs into focused modules; keep behavior and logging unchanged.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/shell/src/execution/routing.rs"
+      ],
+      "acceptance_criteria": [
+        "Path/cwd/env/world-env helpers moved to dedicated modules with a thin re-exported surface; routing.rs shrinks accordingly.",
+        "No behavior changes for path resolution, cwd handling, or env munging; tracing/redaction and cfg gates preserved.",
+        "rustdoc headers on new modules; public API preserved via re-exports.",
+        "cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable pass (skips noted)."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R9b-code to in_progress, update session_log.md with START entry, commit docs update (`git commit -am \"docs: start R9b-code\"`)",
+        "Create task branch cr-r9b-routing-code",
+        "Create worktree wt/cr-r9b-routing-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/lint/tests per prompt are green; capture outputs for END log entry",
+        "Commit worktree changes with descriptive message",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; reference paired test prompt",
+        "Commit docs update on feat/crate-refactor (`git commit -am \"docs: finish R9b-code\"`)"
+      ],
+      "depends_on": [
+        "R9a-integ"
+      ],
+      "concurrent_with": [
+        "R9b-test"
+      ],
+      "worktree": "wt/cr-r9b-routing-code",
+      "integration_task": "R9b-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R9b-code.md"
+    },
+    {
+      "id": "R9b-test",
+      "name": "Routing split tests: path/env/cwd helpers",
+      "type": "test",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Update tests/fixtures for routing path/cwd/env helper extraction; keep assertions intact.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/shell/tests",
+        "crates/shell/src/execution/routing.rs"
+      ],
+      "acceptance_criteria": [
+        "Tests target new helper modules (path normalization, cwd transitions, env filtering) with behavior preserved.",
+        "No production code changes beyond test-only helpers; platform-gated cases and redaction expectations intact.",
+        "cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable (skips noted) logged in session log.",
+        "Integration prompt referenced in END log."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R9b-test to in_progress, update session_log.md with START entry, commit docs update (`git commit -am \"docs: start R9b-test\"`)",
+        "Create task branch cr-r9b-routing-test",
+        "Create worktree wt/cr-r9b-routing-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure required tests are green; capture outputs for END log",
+        "Commit worktree changes with descriptive message",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; reference integration prompt",
+        "Commit docs update on feat/crate-refactor (`git commit -am \"docs: finish R9b-test\"`)"
+      ],
+      "depends_on": [
+        "R9a-integ"
+      ],
+      "concurrent_with": [
+        "R9b-code"
+      ],
+      "worktree": "wt/cr-r9b-routing-test",
+      "integration_task": "R9b-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R9b-test.md"
+    },
+    {
+      "id": "R9b-integ",
+      "name": "Integrate routing split: path/env/cwd helpers",
+      "type": "integration",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Merge R9b code/test routing split for path/cwd/env helpers, resolve conflicts, ensure fmt/clippy/tests are green.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "crates/shell/src/execution/routing.rs",
+        "crates/shell/tests"
+      ],
+      "acceptance_criteria": [
+        "wt/cr-r9b-routing-integ merges R9b code+tests with clean fmt/clippy/test runs for substrate-shell (world_root/world_enable).",
+        "feat/crate-refactor updated with integration results and doc/task/log entries.",
+        "Follow-up prompts/notes captured before closing the session."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Confirm R9b-code/test completed",
+        "Set R9b-integ to in_progress, update session_log.md with START entry, commit docs update (`git commit -am \"docs: start R9b-integ\"`)",
+        "Create task branch cr-r9b-routing-integ",
+        "Create worktree wt/cr-r9b-routing-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration branch/worktree and resolve conflicts",
+        "Run required fmt/clippy/tests noted in prompts",
+        "Merge integration branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; push or hand off"
+      ],
+      "depends_on": [
+        "R9b-code",
+        "R9b-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cr-r9b-routing-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R9b-integ.md"
+    },
+    {
+      "id": "R9c-code",
+      "name": "Routing split: world/agent flows",
+      "type": "code",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Extract world enable/disable, agent client wiring, and platform bridging logic from routing.rs into focused modules; preserve CLI behavior.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/shell/src/execution/routing.rs"
+      ],
+      "acceptance_criteria": [
+        "World toggle, agent client setup, and platform-bridge helpers moved to dedicated modules with thin re-exported surfaces.",
+        "Behavior unchanged for world enable/disable flows and agent invocation; tracing/redaction/cfg gates preserved.",
+        "rustdoc headers on new modules; public API preserved via re-exports.",
+        "cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable pass (skips noted)."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R9c-code to in_progress, update session_log.md with START entry, commit docs update (`git commit -am \"docs: start R9c-code\"`)",
+        "Create task branch cr-r9c-routing-code",
+        "Create worktree wt/cr-r9c-routing-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/lint/tests per prompt are green; capture outputs for END log entry",
+        "Commit worktree changes with descriptive message",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; reference paired test prompt",
+        "Commit docs update on feat/crate-refactor (`git commit -am \"docs: finish R9c-code\"`)"
+      ],
+      "depends_on": [
+        "R9b-integ"
+      ],
+      "concurrent_with": [
+        "R9c-test"
+      ],
+      "worktree": "wt/cr-r9c-routing-code",
+      "integration_task": "R9c-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R9c-code.md"
+    },
+    {
+      "id": "R9c-test",
+      "name": "Routing split tests: world/agent flows",
+      "type": "test",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Update tests/fixtures for world enable/disable and agent client flows after routing split; preserve behavior assertions.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/shell/tests",
+        "crates/shell/src/execution/routing.rs"
+      ],
+      "acceptance_criteria": [
+        "Tests cover world toggle/agent client routes with new module paths; behavior unchanged.",
+        "No production code changes beyond test-only helpers; platform skips documented.",
+        "cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable (skips noted) logged in session log.",
+        "Integration prompt referenced in END log."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R9c-test to in_progress, update session_log.md with START entry, commit docs update (`git commit -am \"docs: start R9c-test\"`)",
+        "Create task branch cr-r9c-routing-test",
+        "Create worktree wt/cr-r9c-routing-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure required tests are green; capture outputs for END log",
+        "Commit worktree changes with descriptive message",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; reference integration prompt",
+        "Commit docs update on feat/crate-refactor (`git commit -am \"docs: finish R9c-test\"`)"
+      ],
+      "depends_on": [
+        "R9b-integ"
+      ],
+      "concurrent_with": [
+        "R9c-code"
+      ],
+      "worktree": "wt/cr-r9c-routing-test",
+      "integration_task": "R9c-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R9c-test.md"
+    },
+    {
+      "id": "R9c-integ",
+      "name": "Integrate routing split: world/agent flows",
+      "type": "integration",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Merge R9c code/test routing split for world/agent flows, resolve conflicts, ensure fmt/clippy/tests are green.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "crates/shell/src/execution/routing.rs",
+        "crates/shell/tests"
+      ],
+      "acceptance_criteria": [
+        "wt/cr-r9c-routing-integ merges R9c code+tests with clean fmt/clippy/test runs for substrate-shell (world_root/world_enable).",
+        "feat/crate-refactor updated with integration results and doc/task/log entries.",
+        "Follow-up prompts/notes captured before closing the session."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Confirm R9c-code/test completed",
+        "Set R9c-integ to in_progress, update session_log.md with START entry, commit docs update (`git commit -am \"docs: start R9c-integ\"`)",
+        "Create task branch cr-r9c-routing-integ",
+        "Create worktree wt/cr-r9c-routing-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration branch/worktree and resolve conflicts",
+        "Run required fmt/clippy/tests noted in prompts",
+        "Merge integration branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; push or hand off"
+      ],
+      "depends_on": [
+        "R9c-code",
+        "R9c-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cr-r9c-routing-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R9c-integ.md"
+    },
+    {
+      "id": "R10-code",
+      "name": "PTY IO module slicing",
+      "type": "code",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Split execution/pty/io/mod.rs into focused modules (traits/state vs readers/writers) while preserving channel semantics and logging.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/shell/src/execution/pty/io/mod.rs"
+      ],
+      "acceptance_criteria": [
+        "pty/io/mod.rs decomposed into small modules (types/traits, reader path, writer path, tests) with re-exports to keep API stable.",
+        "Channel/resize/write/close behavior unchanged; tracing/redaction and platform gates preserved.",
+        "rustdoc headers added to new modules; public API preserved via re-exports.",
+        "cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable pass (skips noted)."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R10-code to in_progress, update session_log.md with START entry, commit docs update (`git commit -am \"docs: start R10-code\"`)",
+        "Create task branch cr-r10-pty-code",
+        "Create worktree wt/cr-r10-pty-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/lint/tests per prompt are green; capture outputs for END log entry",
+        "Commit worktree changes with descriptive message",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; reference paired test prompt",
+        "Commit docs update on feat/crate-refactor (`git commit -am \"docs: finish R10-code\"`)"
+      ],
+      "depends_on": [
+        "R9c-integ"
+      ],
+      "concurrent_with": [
+        "R10-test"
+      ],
+      "worktree": "wt/cr-r10-pty-code",
+      "integration_task": "R10-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R10-code.md"
+    },
+    {
+      "id": "R10-test",
+      "name": "PTY IO module tests",
+      "type": "test",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Update/add tests to mirror the pty/io module split; assert resize/write/close/channel flows remain correct.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/shell/tests",
+        "crates/shell/src/execution/pty/io/mod.rs"
+      ],
+      "acceptance_criteria": [
+        "Tests/fixtures updated to new pty/io module layout; behavior (resize/write/close) assertions intact.",
+        "No production code changes beyond test-only helpers; platform skips documented.",
+        "cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable (skips noted) logged in session log.",
+        "Integration prompt referenced in END log."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R10-test to in_progress, update session_log.md with START entry, commit docs update (`git commit -am \"docs: start R10-test\"`)",
+        "Create task branch cr-r10-pty-test",
+        "Create worktree wt/cr-r10-pty-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure required tests are green; capture outputs for END log",
+        "Commit worktree changes with descriptive message",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; reference integration prompt",
+        "Commit docs update on feat/crate-refactor (`git commit -am \"docs: finish R10-test\"`)"
+      ],
+      "depends_on": [
+        "R9c-integ"
+      ],
+      "concurrent_with": [
+        "R10-code"
+      ],
+      "worktree": "wt/cr-r10-pty-test",
+      "integration_task": "R10-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R10-test.md"
+    },
+    {
+      "id": "R10-integ",
+      "name": "Integrate PTY IO module slicing",
+      "type": "integration",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Merge R10 code/test pty/io splits, resolve conflicts, ensure fmt/clippy/tests are green.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "crates/shell/src/execution/pty/io/mod.rs",
+        "crates/shell/tests"
+      ],
+      "acceptance_criteria": [
+        "wt/cr-r10-pty-integ merges R10 code+tests with clean fmt/clippy/test runs for substrate-shell (world_root/world_enable).",
+        "feat/crate-refactor updated with integration results and doc/task/log entries.",
+        "Follow-up prompts/notes captured before closing the session."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Confirm R10-code/test completed",
+        "Set R10-integ to in_progress, update session_log.md with START entry, commit docs update (`git commit -am \"docs: start R10-integ\"`)",
+        "Create task branch cr-r10-pty-integ",
+        "Create worktree wt/cr-r10-pty-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration branch/worktree and resolve conflicts",
+        "Run required fmt/clippy/tests noted in prompts",
+        "Merge integration branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; push or hand off"
+      ],
+      "depends_on": [
+        "R10-code",
+        "R10-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cr-r10-pty-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R10-integ.md"
     }
   ]
 }

@@ -29,6 +29,10 @@ traceable through every handoff.
 8. Finish shell execution file slicing (routing, pty/io, invocation, settings,
    platform, manager_init) to keep modules small and maintainable without
    changing behavior.
+9. Routing decomposition follow-ups (dispatch/builtins; path/env/cwd helpers;
+   world/agent flows) with preserved CLI behavior and logging.
+10. PTY IO module slimming into focused reader/writer/traits modules while
+    keeping channel semantics intact.
 
 ## Baseline Standards & References
 
@@ -158,13 +162,9 @@ Additional rules:
 
 Task details, dependencies, and worktree names live in `tasks.json`.
 
-## Outstanding Hotspots (post-R7)
+## Outstanding Hotspots (post-R8)
 
-- `crates/shell/src/execution/routing.rs` ~5,287 LOC
-- `crates/shell/src/execution/pty/io.rs` ~1,328 LOC
-- `crates/shell/src/execution/invocation.rs` ~1,080 LOC
-- `crates/shell/src/execution/settings.rs` ~763 LOC
-- `crates/shell/src/execution/platform.rs` ~721 LOC
-- `crates/shell/src/execution/manager_init.rs` ~668 LOC
+- `crates/shell/src/execution/routing.rs` ~5,123 LOC
+- `crates/shell/src/execution/pty/io/mod.rs` ~1,104 LOC
 - (Large fixtures accepted: `shim/tests/integration.rs` ~959 LOC,
   `shell/tests/integration.rs` ~745 LOC)
