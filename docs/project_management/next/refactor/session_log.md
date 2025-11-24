@@ -420,3 +420,10 @@ Template (copy/paste and fill in):
 - Results: fmt clean; world_root/world_enable suites passed
 - Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R9a-integ.md
 - Next steps / blockers: ready for integration; remove wt/cr-r9a-routing-test after merge
+
+## [2025-11-24 22:35 UTC] Integration – R9a-integ – START
+- Checked out feat/crate-refactor, pulled latest
+- Confirmed R9a-code and R9a-test completed
+- Updated tasks.json + session log (commit: pending)
+- Plan: create cr-r9a-routing-integ branch/worktree (wt/cr-r9a-routing-integ); merge cr-r9a-routing-code and cr-r9a-routing-test; resolve dispatch/builtin conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
+- Blockers: CRATE_REFACTORING_ANALYSIS.md missing in repo (known from prior sessions)
