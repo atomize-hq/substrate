@@ -210,6 +210,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn ensure_world_ready_sets_env_on_success() {
         std::env::remove_var("SUBSTRATE_WORLD");
         std::env::remove_var("SUBSTRATE_WORLD_ID");
@@ -229,6 +230,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn ensure_world_ready_ignores_disabled_env_when_forced() {
         std::env::set_var("SUBSTRATE_WORLD", "disabled");
         std::env::remove_var("SUBSTRATE_WORLD_ID");
@@ -248,6 +250,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn ensure_world_ready_respects_no_world_flag() {
         std::env::remove_var("SUBSTRATE_WORLD");
         std::env::remove_var("SUBSTRATE_WORLD_ID");
