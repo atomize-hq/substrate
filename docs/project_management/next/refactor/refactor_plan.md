@@ -26,9 +26,9 @@ traceable through every handoff.
    builtins) into testable modules while preserving outputs and logging.
 7. Slim down service modules (host-proxy/lib.rs, world/overlayfs.rs,
    replay/replay.rs) with thin public surfaces and stable APIs.
-8. Finish shell execution file slicing (pty/io, invocation, settings, platform,
-   manager_init) to keep modules small and maintainable without changing
-   behavior.
+8. Finish shell execution file slicing (routing, pty/io, invocation, settings,
+   platform, manager_init) to keep modules small and maintainable without
+   changing behavior.
 
 ## Baseline Standards & References
 
@@ -160,6 +160,7 @@ Task details, dependencies, and worktree names live in `tasks.json`.
 
 ## Outstanding Hotspots (post-R7)
 
+- `crates/shell/src/execution/routing.rs` ~5,287 LOC
 - `crates/shell/src/execution/pty/io.rs` ~1,328 LOC
 - `crates/shell/src/execution/invocation.rs` ~1,080 LOC
 - `crates/shell/src/execution/settings.rs` ~763 LOC

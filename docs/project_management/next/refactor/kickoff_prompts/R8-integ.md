@@ -16,7 +16,7 @@
    Do not edit docs/tasks/session logs from the worktree.
 
 ## Spec
-- Merge the R8 code and test branches for shell execution slicing (pty/io, invocation, settings, platform, manager_init splits).
+- Merge the R8 code and test branches for shell execution slicing (routing, pty/io, invocation, settings, platform, manager_init splits).
 - Resolve conflicts, ensure module paths/exports align, and keep CLI/behavior unchanged.
 - Run required fmt/lint/tests and document results.
 

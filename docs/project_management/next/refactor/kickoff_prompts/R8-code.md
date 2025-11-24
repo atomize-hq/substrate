@@ -17,6 +17,7 @@
 ## Spec (shared with R8-test)
 - Crate: `crates/shell` (execution stack follow-up).
 - Split oversized files into focused modules while preserving behavior:
+  - `execution/routing.rs` (~5,287 LOC): separate dispatch/builtin handling from path/cwd/env utilities; keep CLI semantics and tracing intact.
   - `execution/pty/io.rs` (~1,328 LOC): separate IO traits/state from sinks/sources; keep channel-based PTY flow intact.
   - `execution/invocation.rs` (~1,080 LOC): isolate invocation planning vs env/PATH/cwd prep; maintain CLI/env semantics.
   - `execution/settings.rs` (~763 LOC) and `execution/manager_init.rs` (~668 LOC): extract builders/validation vs runtime helpers with thin surfaces.

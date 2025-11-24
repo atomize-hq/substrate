@@ -911,10 +911,11 @@
       "type": "code",
       "phase": "Crate Refactor",
       "status": "pending",
-      "description": "Further decompose oversized shell execution files (pty/io.rs, invocation.rs, settings.rs, platform.rs, manager_init.rs) into focused modules while keeping behavior stable.",
+      "description": "Further decompose oversized shell execution files (routing.rs, pty/io.rs, invocation.rs, settings.rs, platform.rs, manager_init.rs) into focused modules while keeping behavior stable.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
         "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/shell/src/execution/routing.rs",
         "crates/shell/src/execution/pty/io.rs",
         "crates/shell/src/execution/invocation.rs",
         "crates/shell/src/execution/settings.rs",
@@ -922,7 +923,7 @@
         "crates/shell/src/execution/manager_init.rs"
       ],
       "acceptance_criteria": [
-        "Each target file is split into domain-specific modules (e.g., io traits/state vs sinks/sources; invocation planning vs env/cwd prep; settings/builders; platform adapters; manager initialization) with a thin public surface.",
+        "Each target file is split into domain-specific modules (e.g., routing split into dispatch/path/cwd/env helpers; io traits/state vs sinks/sources; invocation planning vs env/cwd prep; settings/builders; platform adapters; manager initialization) with a thin public surface.",
         "No CLI/config behavior changes; tracing/logging, redaction, and cfg-gates remain intact, and the PTY/channel flow stays unchanged.",
         "New modules documented with brief rustdoc headers; public APIs remain stable or are re-exported to preserve call sites.",
         "cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable pass (skips noted in logs)."

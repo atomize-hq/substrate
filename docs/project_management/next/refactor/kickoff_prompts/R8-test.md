@@ -17,6 +17,7 @@
 ## Spec (shared with R8-code)
 - Crate: `crates/shell` (execution stack follow-up).
 - Add/reshape tests to mirror the new module layout after splitting:
+  - Routing: builtin dispatch/path/cwd/env handling, world-enable/disable flows.
   - PTY IO modules: resize/write/close/channel flows and error cases.
   - Invocation planning/env/PATH/cwd resolution.
   - Settings builder/validation and manager initialization helpers.
