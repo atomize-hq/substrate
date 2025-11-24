@@ -146,11 +146,24 @@ pub fn detect() -> Result<PlatformWorldContext> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     #[test]
     fn vsock_variant_displays_port() {
         let transport = WorldTransport::Vsock { port: 17788 };
         assert_eq!(transport.to_string(), "vsock:17788");
+    }
+
+    #[test]
+    fn unix_and_tcp_transports_format_endpoints() {
+        let unix = WorldTransport::Unix(PathBuf::from("/tmp/substrate.sock"));
+        assert_eq!(unix.to_string(), "unix:/tmp/substrate.sock");
+
+        let tcp = WorldTransport::Tcp {
+            host: "127.0.0.1".into(),
+            port: 9001,
+        };
+        assert_eq!(tcp.to_string(), "tcp:127.0.0.1:9001");
     }
 }

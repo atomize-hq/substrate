@@ -817,6 +817,27 @@ mod tests {
         }
     }
 
+    struct FailingWriter {
+        attempts: Arc<AtomicUsize>,
+    }
+
+    impl FailingWriter {
+        fn new(attempts: Arc<AtomicUsize>) -> Self {
+            Self { attempts }
+        }
+    }
+
+    impl Write for FailingWriter {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            self.attempts.fetch_add(1, Ordering::SeqCst);
+            Err(io::Error::new(io::ErrorKind::Other, "writer failure"))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
     // Mock implementations for testing PTY operations without actual PTY allocation
     #[test]
     fn pty_manager_processes_channel_commands() {
@@ -868,6 +889,30 @@ mod tests {
         manager
             .join()
             .expect("pty manager thread panicked on channel close");
+    }
+
+    #[test]
+    fn pty_manager_stops_on_write_error() {
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let sizes = Arc::new(Mutex::new(Vec::new()));
+        let writes = Arc::new(Mutex::new(Vec::new()));
+        let flushes = Arc::new(AtomicUsize::new(0));
+
+        let master = MockMasterPty::new(sizes, writes, flushes);
+        let writer = FailingWriter::new(attempts.clone());
+
+        let (tx, rx) = mpsc::channel();
+        let manager =
+            thread::spawn(move || run_pty_manager(Box::new(master), Box::new(writer), rx));
+
+        let control = PtyControl { tx };
+        control.write(b"should-fail".to_vec());
+        drop(control);
+
+        manager
+            .join()
+            .expect("pty manager thread panicked after writer error");
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
     }
 
     #[test]

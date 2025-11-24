@@ -1077,4 +1077,87 @@ mod tests {
         restore_env("USERPROFILE", prev_userprofile);
         restore_env("HOME", prev_home);
     }
+
+    #[test]
+    #[serial]
+    fn shimmed_path_prefers_original_path_env() {
+        let temp = tempdir().unwrap();
+        let home = temp.path().join("home");
+        let substrate_home = home.join(".substrate");
+        fs::create_dir_all(substrate_home.join("shims")).unwrap();
+        fs::write(
+            substrate_home.join("config.toml"),
+            "[install]\nworld_enabled = true\n",
+        )
+        .unwrap();
+
+        let home_str = home.display().to_string();
+        let substrate_home_str = substrate_home.display().to_string();
+        let prev_home = set_env("HOME", &home_str);
+        let prev_userprofile = set_env("USERPROFILE", &home_str);
+        let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home_str);
+        let prev_path = set_env("PATH", "/bin:/usr/bin");
+        let prev_original = set_env("SHIM_ORIGINAL_PATH", "/opt/shims");
+        let prev_world = std::env::var("SUBSTRATE_WORLD").ok();
+        let prev_world_enabled = std::env::var("SUBSTRATE_WORLD_ENABLED").ok();
+
+        let cli = Cli::parse_from(["substrate", "-c", "echo hi"]);
+        let config = ShellConfig::from_cli(cli).expect("build config with shimmed path");
+
+        let sep = if cfg!(windows) { ';' } else { ':' };
+        let expected = substrate_common::dedupe_path(&format!(
+            "{}{}{}",
+            config.shim_dir.display(),
+            sep,
+            "/opt/shims"
+        ));
+        assert_eq!(config.original_path, "/opt/shims");
+        assert_eq!(config.shimmed_path.as_deref(), Some(expected.as_str()));
+
+        restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
+        restore_env("SUBSTRATE_WORLD", prev_world);
+        restore_env("SHIM_ORIGINAL_PATH", prev_original);
+        restore_env("PATH", prev_path);
+        restore_env("SUBSTRATE_HOME", prev_substrate_home);
+        restore_env("USERPROFILE", prev_userprofile);
+        restore_env("HOME", prev_home);
+    }
+
+    #[test]
+    #[serial]
+    fn shim_skip_disables_shimmed_path_without_disabling_world() {
+        let temp = tempdir().unwrap();
+        let home = temp.path().join("home");
+        let substrate_home = home.join(".substrate");
+        fs::create_dir_all(substrate_home.join("shims")).unwrap();
+        fs::write(
+            substrate_home.join("config.toml"),
+            "[install]\nworld_enabled = true\n",
+        )
+        .unwrap();
+
+        let home_str = home.display().to_string();
+        let substrate_home_str = substrate_home.display().to_string();
+        let prev_home = set_env("HOME", &home_str);
+        let prev_userprofile = set_env("USERPROFILE", &home_str);
+        let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home_str);
+        let prev_world = std::env::var("SUBSTRATE_WORLD").ok();
+        let prev_world_enabled = std::env::var("SUBSTRATE_WORLD_ENABLED").ok();
+        let prev_no_shims = set_env("SUBSTRATE_NO_SHIMS", "1");
+
+        let cli = Cli::parse_from(["substrate", "--shim-skip", "-c", "echo hi"]);
+        let config = ShellConfig::from_cli(cli).expect("build config with shim skip");
+
+        assert!(config.skip_shims);
+        assert!(config.shimmed_path.is_none());
+        assert_eq!(std::env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
+        assert_eq!(std::env::var("SUBSTRATE_WORLD_ENABLED").unwrap(), "1");
+
+        restore_env("SUBSTRATE_NO_SHIMS", prev_no_shims);
+        restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
+        restore_env("SUBSTRATE_WORLD", prev_world);
+        restore_env("SUBSTRATE_HOME", prev_substrate_home);
+        restore_env("USERPROFILE", prev_userprofile);
+        restore_env("HOME", prev_home);
+    }
 }

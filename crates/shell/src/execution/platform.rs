@@ -719,3 +719,48 @@ mod world_doctor_macos {
         }
     }
 }
+
+#[cfg(test)]
+mod platform_tests {
+    use super::*;
+    use std::env;
+
+    fn snapshot(keys: &[&str]) -> Vec<Option<String>> {
+        keys.iter().map(|key| env::var(key).ok()).collect()
+    }
+
+    fn restore(keys: &[&str], values: Vec<Option<String>>) {
+        for (key, value) in keys.iter().zip(values.into_iter()) {
+            match value {
+                Some(v) => env::set_var(key, v),
+                None => env::remove_var(key),
+            }
+        }
+    }
+
+    #[test]
+    fn update_world_env_sets_enabled_flags() {
+        let keys = ["SUBSTRATE_WORLD", "SUBSTRATE_WORLD_ENABLED"];
+        let prev = snapshot(&keys);
+
+        update_world_env(false);
+
+        assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
+        assert_eq!(env::var("SUBSTRATE_WORLD_ENABLED").unwrap(), "1");
+
+        restore(&keys, prev);
+    }
+
+    #[test]
+    fn update_world_env_sets_disabled_flags() {
+        let keys = ["SUBSTRATE_WORLD", "SUBSTRATE_WORLD_ENABLED"];
+        let prev = snapshot(&keys);
+
+        update_world_env(true);
+
+        assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "disabled");
+        assert_eq!(env::var("SUBSTRATE_WORLD_ENABLED").unwrap(), "0");
+
+        restore(&keys, prev);
+    }
+}

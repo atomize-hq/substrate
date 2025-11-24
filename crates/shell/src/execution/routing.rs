@@ -3604,6 +3604,56 @@ mod manager_init_wiring_tests {
 
     #[test]
     #[serial]
+    fn export_builtin_sets_plain_pairs() {
+        let temp = tempdir().unwrap();
+        let config = test_shell_config(&temp);
+
+        let prev_token = set_env("API_TOKEN", "old");
+        let prev_plain = set_env("PLAIN_VALUE", "unset");
+
+        let status = handle_builtin(
+            &config,
+            "export API_TOKEN=new-secret PLAIN_VALUE=fresh",
+            "parent",
+        )
+        .expect("builtin export should succeed");
+        assert!(status.is_some());
+        assert_eq!(env::var("API_TOKEN").unwrap(), "new-secret");
+        assert_eq!(env::var("PLAIN_VALUE").unwrap(), "fresh");
+
+        restore_env("PLAIN_VALUE", prev_plain);
+        restore_env("API_TOKEN", prev_token);
+    }
+
+    #[test]
+    #[serial]
+    fn export_builtin_defers_when_value_needs_shell() {
+        let temp = tempdir().unwrap();
+        let config = test_shell_config(&temp);
+
+        env::remove_var("EXPORT_COMPLEX");
+        let status =
+            handle_builtin(&config, "export EXPORT_COMPLEX=\"$SHOULD_SKIP\"", "parent").unwrap();
+        assert!(status.is_none());
+        assert!(env::var("EXPORT_COMPLEX").is_err());
+    }
+
+    #[test]
+    #[serial]
+    fn unset_builtin_clears_variables() {
+        let temp = tempdir().unwrap();
+        let config = test_shell_config(&temp);
+
+        let prev = set_env("UNSET_ME", "present");
+        let status = handle_builtin(&config, "unset UNSET_ME", "parent").unwrap();
+        assert!(status.is_some());
+        assert!(env::var("UNSET_ME").is_err());
+
+        restore_env("UNSET_ME", prev);
+    }
+
+    #[test]
+    #[serial]
     fn world_flag_overrides_disabled_config_and_env() {
         let temp = tempdir().unwrap();
         let home = temp.path().join("home");
