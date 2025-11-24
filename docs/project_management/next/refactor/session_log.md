@@ -392,3 +392,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: n/a
 - Docs commit: pending (update tasks + session log)
 - Next steps / blockers: merge to feat/crate-refactor completed; remove wt/cr-r8-shell-slim-integ when finished
+
+## [2025-11-24 21:34 UTC] Code – R9a-code – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, R9a-code prompt (CRATE_REFACTORING_ANALYSIS.md missing in repo)
+- Set R9a-code to in_progress in tasks.json; session log update pending commit
+- Plan: create cr-r9a-routing-code branch/worktree (wt/cr-r9a-routing-code); split routing dispatch/builtin logic into dispatch.rs/builtins.rs with re-exports; keep CLI/tracing/cfg behavior unchanged; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Blockers: none
