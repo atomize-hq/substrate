@@ -333,3 +333,11 @@ Template (copy/paste and fill in):
 - Worktree: pending (will create wt/cr-r7-services-test after docs commit)
 - Plan: create cr-r7-services-test branch/worktree; add tests/fixtures for host-proxy config/transport/runtime seams, world overlayfs layering/cleanup (table/property cases), and replay planner/executor semantics; run cargo fmt, cargo test -p host-proxy, cargo test -p world, cargo test -p substrate-replay --all-targets
 - Blockers: none
+
+## [2025-11-24 03:43 UTC] Test – R7-test – END
+- Worktree commits: 5462efe8
+- Commands: cargo fmt; cargo test -p host-proxy; cargo test -p world; cargo test -p substrate-replay --all-targets
+- Results: fmt clean; host-proxy/world/replay suites passed (world tests emit existing cp warnings while copying fixtures)
+- Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R7-integ.md
+- Docs commit: pending (update tasks + session log)
+- Next steps / blockers: ready for integration; remove wt/cr-r7-services-test after merge
