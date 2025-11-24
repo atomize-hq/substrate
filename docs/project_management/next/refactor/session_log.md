@@ -427,3 +427,11 @@ Template (copy/paste and fill in):
 - Updated tasks.json + session log (commit: pending)
 - Plan: create cr-r9a-routing-integ branch/worktree (wt/cr-r9a-routing-integ); merge cr-r9a-routing-code and cr-r9a-routing-test; resolve dispatch/builtin conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing in repo (known from prior sessions)
+
+## [2025-11-24 22:38 UTC] Integration – R9a-integ – END
+- Worktree commits: none (cr-r9a-routing-code/test already aligned)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: all commands passed; no merge conflicts between code/test branches
+- Kickoff prompts created: n/a
+- Docs commit: pending (update tasks + session log)
+- Next steps / blockers: remove wt/cr-r9a-routing-integ after final merge/push; proceed to R9b tasks

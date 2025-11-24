@@ -1120,7 +1120,7 @@
       "name": "Integrate routing split: dispatch & builtins",
       "type": "integration",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge R9a code/test routing split for dispatch/builtins, resolve conflicts, ensure fmt/clippy/tests are green.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
