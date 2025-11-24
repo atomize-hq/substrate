@@ -265,3 +265,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: n/a
 - Docs commit: pending (update tasks/status + session log)
 - Next steps / blockers: remove wt/cr-r5-exec-integ after cleanup; proceed to R6 tasks
+
+## [2025-11-24 01:10 UTC] Code – R6-code – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, CRATE_REFACTORING_ANALYSIS.md, and R6-code prompt
+- Set R6-code to in_progress in tasks.json; session log update pending commit
+- Plan: create cr-r6-bootstrap-code branch/worktree (wt/cr-r6-bootstrap-code) and split manager_manifest, shim exec, and shell builtins per spec; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-common --all-targets; cargo test -p substrate-shim; cargo test -p substrate-shell world_root/world_enable
+- Blockers: none
