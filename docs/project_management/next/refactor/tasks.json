@@ -783,7 +783,7 @@
       "name": "Service module slimming",
       "type": "code",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Reduce host-proxy/lib.rs, world/overlayfs.rs, and replay/replay.rs into thin public surfaces with internal modules, keeping behavior and performance stable.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
