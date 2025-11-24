@@ -110,7 +110,7 @@ M2: PID fidelity across strategies
 - Ensure spawn + attach PID uniformly; preserve output semantics.
 
 M3: Docs & validation
-- Update COMPLETE_FIXES_PHASE4_PRE45.md and DEV_PODMAN_LINUX_TESTING.md with netns defaults and checks.
+- Update COMPLETE_FIXES_PHASE4_PRE45.md  with netns defaults and checks.
 - Add a small GC/diagnostic note for netns/rules if teardown fails.
 
 M4: Optional enhancements

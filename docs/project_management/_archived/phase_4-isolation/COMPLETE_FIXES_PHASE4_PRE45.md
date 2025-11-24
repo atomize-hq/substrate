@@ -210,9 +210,6 @@ Acceptance Criteria (must all pass)
 - “Doctor” or verbose replay prints capability checks and explicit degradation messages when features are unavailable.
 - Shims deploy/remove reliably; shim execution path resolves correctly during substrate -c.
 
-Environment (reference)
-- Container: Debian 13 (trixie) based Rust image, privileged, with: build-essential, nftables, conntrack, libseccomp-dev, jq, ripgrep, curl, iproute2, etc.
-- VM: Podman rootful Fedora CoreOS, userns clone + overlay module + cgroup v2 enabled. Guide: docs/DEV_PODMAN_LINUX_TESTING.md.
 
 Summary of Current Failures (from Codex report)
 - Replay errors on quoted/redirection commands; fs_diff is null for write spans.
@@ -446,10 +443,9 @@ Tests (add under appropriate crates; skip/require root)
 - shell::test_replay_quoting (unit): various commands render via bash -lc and succeed.
 
 Operational Validation (scripted)
-1) Build & run in Podman container (see DEV_PODMAN_LINUX_TESTING.md).
-2) Run world tests: `RUST_LOG=info cargo test -p world -- --nocapture`.
-3) Run Codex prompt in docs/CODEX_PROMPT_PHASE4_VALIDATION.md and capture artifacts.
-4) Verify:
+1) Run world tests: `RUST_LOG=info cargo test -p world -- --nocapture`.
+2) Run Codex prompt in docs/CODEX_PROMPT_PHASE4_VALIDATION.md and capture artifacts.
+3) Verify:
    - fs_diff present for write spans
    - nft LOG lines in dmesg on blocked curl
    - per‑world cgroups directory and cgroup.procs shows PIDs

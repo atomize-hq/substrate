@@ -30,7 +30,7 @@ Keep concise, actionable, and security-focused.
 
 - **Follow-up – Replay isolation polish**
   - Most of the Phase 4.5 isolation plan shipped (per-replay netns + nft scoping), but optional
-    enhancements remain: nft cgroup matching fallback, documentation updates (DEV_PODMAN_LINUX_TESTING.md,
+    enhancements remain: nft cgroup matching fallback, documentation updates (
     COMPLETE_FIXES_PHASE4_PRE45.md), and diagnostic tooling for leftover netns/rules.
 
 - ~~Auto-start world-agent on shell startup (Linux)~~ **(Done)**

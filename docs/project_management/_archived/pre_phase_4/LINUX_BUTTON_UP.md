@@ -28,7 +28,7 @@ High-Level Plan (order of execution)
 2) fs_diff returned via agent HTTP (/v1/execute) and consumed by shell
 3) Replay verbose: print scopes_used
 4) Warning message clarity (shell vs replay)
-5) Docs updates (WORLD.md, REPLAY.md, DEV_PODMAN_LINUX_TESTING.md)
+5) Docs updates (WORLD.md, REPLAY.md)
 6) Tests and CI updates
 7) Optional: heavy isolation wiring (capability-gated)
 
@@ -231,9 +231,6 @@ Acceptance
     ```
     [replay] scopes: tcp:github.com:443,tcp:registry.npmjs.org:443
     ```
-
-- `docs/DEV_PODMAN_LINUX_TESTING.md`
-  - Simplify replay steps (default world on) and add a quick fs_diff check on agent HTTP route.
 
 Acceptance
 - Docs reflect current behavior exactly; commands copy/paste clean.
