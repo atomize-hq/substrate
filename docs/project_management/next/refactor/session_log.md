@@ -449,3 +449,10 @@ Template (copy/paste and fill in):
 - Results: fmt/clippy clean; world_root/world_enable suites passed
 - Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R9b-test.md
 - Next steps / blockers: none; ready for integration and worktree removal when finished
+
+## [2025-11-25 01:34 UTC] Test – R9b-test – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, R9b-test prompt (CRATE_REFACTORING_ANALYSIS.md missing in repo)
+- Set R9b-test to in_progress in tasks.json
+- Plan: commit docs start, create cr-r9b-routing-test branch/worktree wt/cr-r9b-routing-test; align routing path/cwd/env helper tests with new modules; run cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
+- Blockers: none (analysis doc still missing)

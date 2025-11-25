@@ -1200,7 +1200,7 @@
       "name": "Routing split tests: path/env/cwd helpers",
       "type": "test",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Update tests/fixtures for routing path/cwd/env helper extraction; keep assertions intact.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
