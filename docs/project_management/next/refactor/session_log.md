@@ -679,3 +679,11 @@ Template (copy/paste and fill in):
 - Set R13-test to in_progress in tasks.json
 - Plan: commit docs start, create cr-r13-broker-test branch/worktree (wt/cr-r13-broker-test); update/move broker tests/fixtures to match lib split (profiles/policy load/watch) with unchanged behavior/logging; run cargo fmt; cargo test -p broker; capture outputs for END entry
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing
+
+## [2025-11-25 15:31 UTC] Integration – R13-integ – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, R13-integ prompt (CRATE_REFACTORING_ANALYSIS.md missing in repo)
+- Confirmed R13-code and R13-test completed
+- Set R13-integ to in_progress in tasks.json
+- Plan: commit docs start; create cr-r13-broker-integ branch/worktree (wt/cr-r13-broker-integ); merge code/test branches, resolve conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p broker; update docs/logs on feat/crate-refactor
+- Blockers: CRATE_REFACTORING_ANALYSIS.md missing
