@@ -694,3 +694,10 @@ Template (copy/paste and fill in):
 - Results: fmt/clippy clean; substrate-broker tests passed (20 tests)
 - Merges: none required (branches already aligned on feat/crate-refactor)
 - Next steps / blockers: remove wt/cr-r13-broker-integ after cleanup; CRATE_REFACTORING_ANALYSIS.md still missing
+
+## [2025-11-25 15:57 UTC] Code – R14-code – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, R14-code prompt (CRATE_REFACTORING_ANALYSIS.md missing)
+- Set R14-code to in_progress in tasks.json
+- Plan: commit docs start, create cr-r14-routing-dispatch-code branch/worktree (wt/cr-r14-routing-dispatch-code); trim dispatch/mod.rs into submodules with re-exports; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
+- Blockers: CRATE_REFACTORING_ANALYSIS.md missing
