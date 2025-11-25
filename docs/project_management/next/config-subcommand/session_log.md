@@ -50,3 +50,11 @@ Template:
 - Updated tasks.json (C1-integ → in_progress); session log entry pending commit
 - Plan: create cs-c1-config-integ branch/worktree, merge code/test branches, resolve conflicts per spec, run `cargo fmt`, `cargo clippy -p substrate-shell -- -D warnings`, `cargo test -p substrate-shell world_root`, and `./tests/installers/install_smoke.sh`, validate docs/help text, update hints for missing config, and close out docs/tasks/logs with kickoff prompts for C2-code/test
 - Blockers: upstream tracking absent for feat/config-subcommand; need to verify installer smoke compatibility on this platform
+
+## [2025-11-25 19:29 UTC] Integration – C1-integ – END
+- Worktree commits: f17dc27 (chore: integrate config init code+tests)
+- Commands: `cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell world_root`; `./tests/installers/install_smoke.sh`; `cargo run -p substrate --bin substrate -- config --help`
+- Results: fmt/clippy/tests passed; installer smoke initially failed because the script never mentioned `substrate config init`, added an unconditional hint in both macOS/Linux post-install logs and reran successfully; `cargo run ... config --help` spot-check confirmed the new subcommand is documented
+- Kickoff prompts created: docs/project_management/next/config-subcommand/kickoff_prompts/C2-code.md, docs/project_management/next/config-subcommand/kickoff_prompts/C2-test.md (already present; revalidated for next agents)
+- Docs commit: (pending – will land as `docs: finish C1-integ`)
+- Next steps / blockers: feat/config-subcommand now fast-forwarded with merged code+tests; tasks still list C1-test as `in_progress`, consider reconciling status in a follow-up if needed
