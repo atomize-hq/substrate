@@ -2016,7 +2016,7 @@
       "name": "Shell integration test split",
       "type": "code",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Split shell/tests/integration.rs into logical suites (e.g., world enable/disable, shim deployment, logging/rotation, env inheritance) with shared fixtures to reduce monolith size.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",

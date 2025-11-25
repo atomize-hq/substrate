@@ -739,3 +739,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: n/a
 - Docs commit: pending (tasks/status + session log)
 - Next steps / blockers: remove wt/cr-r14-routing-dispatch-integ when finished; CRATE_REFACTORING_ANALYSIS.md still missing
+
+## [2025-11-25 16:27 UTC] Code – R15-code – START
+- Checked out feat/crate-refactor, pulled latest
+- Updated tasks.json + session log (commit: pending)
+- Created worktree: pending (will create wt/cr-r15-shell-integration-code)
+- Plan: set R15-code to in_progress; create cr-r15-shell-integration-code branch/worktree; split crates/shell/tests/integration.rs into domain suites with shared support module; keep assertions/fixtures unchanged; run cargo fmt and cargo test -p substrate-shell world_root/world_enable; capture outputs for END entry
+- Blockers: CRATE_REFACTORING_ANALYSIS.md missing from repo
