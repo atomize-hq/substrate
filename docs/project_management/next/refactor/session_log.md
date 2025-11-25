@@ -659,6 +659,13 @@ Template (copy/paste and fill in):
 - Plan: commit docs start, create cr-r13-broker-code branch/worktree (wt/cr-r13-broker-code); split broker/lib.rs into profiles/loaders/watch/api modules with re-exports and preserved behavior/logging/cfg gates; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p broker
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing
 
+## [2025-11-25 15:29 UTC] Test – R13-test – END
+- Worktree commits: ffb45f3e (cr-r13-broker-test rebased on feat/crate-refactor)
+- Commands: cargo fmt; cargo test -p substrate-broker
+- Results: fmt clean; substrate-broker tests passed (20 tests)
+- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R13-integ.md
+- Notes: rebased branch to pick up broker module split; moved tests into module-aligned files
+
 ## [2025-11-25 15:19 UTC] Code – R13-code – END
 - Worktree commits: 0b7a3919 (refactor: split broker lib)
 - Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-broker
