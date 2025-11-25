@@ -1772,7 +1772,7 @@
       "name": "Broker/lib slimming & cleanup",
       "type": "code",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Shrink broker/src/lib.rs by extracting modules for profile detection, policy loading, and watch plumbing; keep public API and behavior stable.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",

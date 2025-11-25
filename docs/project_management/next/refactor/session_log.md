@@ -651,3 +651,10 @@ Template (copy/paste and fill in):
 - Results: all commands passed; no merge conflicts between code/test branches
 - Merges: feat/crate-refactor already contained cr-r12-routing-builtin-integ; no additional commits to pull forward
 - Next steps / blockers: remove wt/cr-r12-routing-builtin-integ when finished; CRATE_REFACTORING_ANALYSIS.md still missing
+
+## [2025-11-25 15:08 UTC] Code – R13-code – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, R13-code prompt (CRATE_REFACTORING_ANALYSIS.md missing in repo)
+- Set R13-code to in_progress in tasks.json
+- Plan: commit docs start, create cr-r13-broker-code branch/worktree (wt/cr-r13-broker-code); split broker/lib.rs into profiles/loaders/watch/api modules with re-exports and preserved behavior/logging/cfg gates; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p broker
+- Blockers: CRATE_REFACTORING_ANALYSIS.md missing
