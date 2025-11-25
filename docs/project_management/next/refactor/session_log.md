@@ -594,3 +594,11 @@ Template (copy/paste and fill in):
 - Set R11-test to in_progress in tasks.json
 - Plan: commit docs start, create cr-r11-routing-test branch/worktree (wt/cr-r11-routing-test); align routing dispatch tests/fixtures with new registry/category modules; run cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing
+
+## [2025-11-25 13:58 UTC] Integration – R11-integ – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, R11-integ prompt (CRATE_REFACTORING_ANALYSIS.md missing in repo)
+- Confirmed R11-code/test completed
+- Set R11-integ to in_progress in tasks.json
+- Plan: commit docs start, create cr-r11-routing-integ branch/worktree (wt/cr-r11-routing-integ); merge cr-r11-routing-code + cr-r11-routing-test; resolve routing dispatch conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Blockers: CRATE_REFACTORING_ANALYSIS.md missing

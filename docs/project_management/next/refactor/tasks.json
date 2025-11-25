@@ -1608,7 +1608,7 @@
       "name": "Integrate routing dispatch modularization",
       "type": "integration",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge R11 code/test routing modularization, resolve conflicts, ensure fmt/clippy/tests are green.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
