@@ -33,6 +33,9 @@ traceable through every handoff.
    world/agent flows) with preserved CLI behavior and logging.
 10. PTY IO module slimming into focused reader/writer/traits modules while
     keeping channel semantics intact.
+11. Final routing cleanup to shrink dispatch into smaller registries and slim
+    builtins/world runner modules without altering behavior.
+12. Broker/lib.rs cleanup into focused modules while keeping API/behavior stable.
 
 ## Baseline Standards & References
 
@@ -162,9 +165,12 @@ Additional rules:
 
 Task details, dependencies, and worktree names live in `tasks.json`.
 
-## Outstanding Hotspots (post-R8)
+## Outstanding Hotspots (post-R10)
 
-- `crates/shell/src/execution/routing.rs` ~5,123 LOC
-- `crates/shell/src/execution/pty/io/mod.rs` ~1,104 LOC
+- `crates/shell/src/execution/routing/dispatch.rs` ~3,525 LOC
+- `crates/shell/src/execution/routing/builtin.rs` ~643 LOC
+- `crates/broker/src/lib.rs` ~584 LOC
+- `crates/shell/src/builtins/world_enable/runner.rs` ~579 LOC
+- `crates/shell/src/execution/invocation/plan.rs` ~570 LOC
 - (Large fixtures accepted: `shim/tests/integration.rs` ~959 LOC,
   `shell/tests/integration.rs` ~745 LOC)
