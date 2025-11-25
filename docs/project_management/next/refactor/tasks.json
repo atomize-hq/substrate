@@ -1403,7 +1403,7 @@
       "name": "PTY IO module slicing",
       "type": "code",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Split execution/pty/io/mod.rs into focused modules (traits/state vs readers/writers) while preserving channel semantics and logging.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",

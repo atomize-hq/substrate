@@ -530,3 +530,10 @@ Template (copy/paste and fill in):
 - Set R10-code to in_progress in tasks.json
 - Plan: commit docs start, create cr-r10-pty-code branch/worktree (wt/cr-r10-pty-code); split execution/pty/io/mod.rs into focused modules (types/traits, reader path, writer path, test utilities) with thin re-exports; preserve behavior/logging/cfg gates; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Blockers: analysis doc still missing
+
+## [2025-11-25 03:27 UTC] Code – R10-code – END
+- Worktree commits: 750330bc (refactor: split pty io modules)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: fmt/clippy clean; world_root/world_enable suites passed
+- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R10-test.md
+- Next steps / blockers: none (CRATE_REFACTORING_ANALYSIS.md still missing)
