@@ -48,6 +48,7 @@ pub(crate) use path_env::world_deps_manifest_base_path;
 pub(crate) use replay::{handle_replay_command, handle_trace_command};
 #[cfg(target_os = "linux")]
 use std::os::unix::io::AsRawFd;
+#[allow(unused_imports)]
 pub(crate) use telemetry::{
     is_shell_stream_event, log_command_event, ReplSessionTelemetry, SHELL_AGENT_ID,
 };
