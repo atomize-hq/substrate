@@ -515,3 +515,11 @@ Template (copy/paste and fill in):
 - Created worktree: pending (will create wt/cr-r9c-routing-integ)
 - Plan: create integration branch/worktree; merge cr-r9c-routing-code and cr-r9c-routing-test; resolve routing world/agent conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing in repo (known)
+
+## [2025-11-25 02:57 UTC] Integration – R9c-integ – END
+- Worktree commits: none (cr-r9c-routing-code/test already aligned)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: all commands passed; no merge conflicts between code/test branches
+- Kickoff prompts created: n/a
+- Docs commit: pending (tasks/status + session log)
+- Next steps / blockers: remove wt/cr-r9c-routing-integ after cleanup; CRATE_REFACTORING_ANALYSIS.md still missing
