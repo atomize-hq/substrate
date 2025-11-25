@@ -302,12 +302,9 @@ fn config_set_reports_applied_changes_as_json() {
         .expect("changes array present in JSON payload");
 
     let find_change = |key: &str| {
-        changes.iter().find(|change| {
-            change
-                .get("key")
-                .and_then(|value| value.as_str())
-                .map_or(false, |candidate| candidate == key)
-        })
+        changes
+            .iter()
+            .find(|change| change.get("key").and_then(|value| value.as_str()) == Some(key))
     };
 
     let anchor_mode =
@@ -428,14 +425,14 @@ fn cli_flags_still_override_config_after_config_set() {
     );
 }
 
-fn world_table<'a>(config: &'a TomlValue) -> &'a TomlTable {
+fn world_table(config: &TomlValue) -> &TomlTable {
     config
         .get("world")
         .and_then(|value| value.as_table())
         .expect("world table present")
 }
 
-fn install_table<'a>(config: &'a TomlValue) -> &'a TomlTable {
+fn install_table(config: &TomlValue) -> &TomlTable {
     config
         .get("install")
         .and_then(|value| value.as_table())
