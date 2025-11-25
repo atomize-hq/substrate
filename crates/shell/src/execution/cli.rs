@@ -196,6 +196,8 @@ pub enum ConfigAction {
     Init(ConfigInitArgs),
     /// Print the global config (TOML by default, JSON with --json)
     Show(ConfigShowArgs),
+    /// Update config keys via dotted key=value assignments
+    Set(ConfigSetArgs),
 }
 
 #[derive(Args, Debug)]
@@ -210,6 +212,16 @@ pub struct ConfigShowArgs {
     /// Emit JSON instead of TOML
     #[arg(long)]
     pub json: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct ConfigSetArgs {
+    /// Emit JSON summary instead of the human-readable diff
+    #[arg(long)]
+    pub json: bool,
+    /// One or more dotted key assignments (key=value)
+    #[arg(value_name = "key=value", required = true)]
+    pub updates: Vec<String>,
 }
 
 #[derive(Subcommand, Debug)]

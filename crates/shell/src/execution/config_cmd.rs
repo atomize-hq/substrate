@@ -1,9 +1,14 @@
-use crate::execution::cli::{ConfigAction, ConfigCmd, ConfigInitArgs, ConfigShowArgs};
+use crate::execution::cli::{
+    ConfigAction, ConfigCmd, ConfigInitArgs, ConfigSetArgs, ConfigShowArgs,
+};
+use crate::execution::settings::parse_bool_flag;
 use anyhow::{anyhow, bail, Context, Result};
+use serde::Serialize;
+use serde_json::Value as JsonValue;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
-use substrate_common::paths as substrate_paths;
+use substrate_common::{paths as substrate_paths, WorldRootMode};
 use tempfile::NamedTempFile;
 use toml::value::{Table as TomlTable, Value as TomlValue};
 
@@ -11,6 +16,7 @@ pub(crate) fn handle_config_command(cmd: &ConfigCmd) -> Result<()> {
     match &cmd.action {
         ConfigAction::Init(args) => run_config_init(args),
         ConfigAction::Show(args) => run_config_show(args),
+        ConfigAction::Set(args) => run_config_set(args),
     }
 }
 
@@ -67,7 +73,68 @@ fn run_config_show(args: &ConfigShowArgs) -> Result<()> {
     Ok(())
 }
 
+fn run_config_set(args: &ConfigSetArgs) -> Result<()> {
+    let config_path = substrate_paths::config_file()?;
+    let contents = read_config_contents(&config_path)?;
+    let mut document: TomlTable = toml::from_str(&contents)
+        .with_context(|| format!("invalid TOML in {}", config_path.display()))?;
+
+    let updates = parse_config_updates(&args.updates)?;
+    let mut all_changes = Vec::new();
+    for update in updates {
+        all_changes.extend(apply_config_update(&mut document, &update)?);
+    }
+
+    let applied_changes: Vec<ConfigChange> = all_changes
+        .into_iter()
+        .filter(|change| change.changed())
+        .collect();
+
+    if applied_changes.is_empty() {
+        if args.json {
+            let summary = ConfigSetSummary::from_changes(&config_path, &[]);
+            let payload = serde_json::to_string_pretty(&summary)
+                .context("failed to serialize config set summary")?;
+            println!("{payload}");
+        } else {
+            println!(
+                "substrate: config already up to date at {}",
+                config_path.display()
+            );
+        }
+        return Ok(());
+    }
+
+    write_config_table(&config_path, &document)?;
+
+    if args.json {
+        let summary = ConfigSetSummary::from_changes(&config_path, &applied_changes);
+        let payload = serde_json::to_string_pretty(&summary)
+            .context("failed to serialize config set summary")?;
+        println!("{payload}");
+    } else {
+        println!("substrate: updated config at {}", config_path.display());
+        for change in &applied_changes {
+            let alias_note = if change.is_alias { " (alias)" } else { "" };
+            println!(
+                "  - {}{}: {} -> {}",
+                change.key,
+                alias_note,
+                format_optional_value(change.old_value.as_ref()),
+                format_value(&change.new_value)
+            );
+        }
+    }
+
+    Ok(())
+}
+
 fn write_default_config(path: &Path) -> Result<()> {
+    let defaults = default_config_tables();
+    write_config_table(path, &defaults).context("failed to write default config")
+}
+
+fn write_config_table(path: &Path, table: &TomlTable) -> Result<()> {
     let parent = path
         .parent()
         .ok_or_else(|| anyhow!("config path {} has no parent", path.display()))?;
@@ -75,10 +142,10 @@ fn write_default_config(path: &Path) -> Result<()> {
 
     let mut tmp = NamedTempFile::new_in(parent)
         .with_context(|| format!("failed to create temp file near {}", path.display()))?;
-    let body = toml::to_string_pretty(&TomlValue::Table(default_config_tables()))
-        .context("failed to serialize default config")?;
+    let body = toml::to_string_pretty(table)
+        .with_context(|| format!("failed to serialize config at {}", path.display()))?;
     tmp.write_all(body.as_bytes())
-        .with_context(|| format!("failed to write defaults to {}", path.display()))?;
+        .with_context(|| format!("failed to write {}", path.display()))?;
     tmp.flush()?;
     tmp.persist(path).map_err(|err| {
         anyhow!(
@@ -112,6 +179,271 @@ fn default_config_tables() -> TomlTable {
     doc.insert("world".to_string(), TomlValue::Table(root));
     doc
 }
+
+fn parse_config_updates(inputs: &[String]) -> Result<Vec<ConfigUpdate>> {
+    let mut updates = Vec::with_capacity(inputs.len());
+    for raw in inputs {
+        let (raw_key, raw_value) = raw.split_once('=').ok_or_else(|| {
+            anyhow!(
+                "invalid assignment '{}'; expected key=value (e.g., world.anchor_mode=follow-cwd)",
+                raw
+            )
+        })?;
+        let key = raw_key.trim();
+        if key.is_empty() {
+            bail!("invalid assignment '{}'; missing key before '='", raw);
+        }
+
+        let spec = lookup_field_spec(key).ok_or_else(|| {
+            anyhow!(
+                "unsupported config key '{}'; supported keys: {}",
+                key,
+                SUPPORTED_CONFIG_KEYS.join(", ")
+            )
+        })?;
+
+        let value = raw_value.trim();
+        let parsed_value = parse_config_value(spec.kind, value, key)?;
+        updates.push(ConfigUpdate {
+            spec,
+            requested_key: key.to_string(),
+            value: parsed_value,
+        });
+    }
+    Ok(updates)
+}
+
+fn parse_config_value(kind: ConfigValueKind, raw: &str, key: &str) -> Result<ConfigValue> {
+    match kind {
+        ConfigValueKind::Boolean => parse_bool_flag(raw)
+            .map(ConfigValue::Boolean)
+            .ok_or_else(|| anyhow!("{} must be true/false/1/0/yes/no (found {})", key, raw)),
+        ConfigValueKind::Mode => {
+            if raw.is_empty() {
+                bail!("{} requires a value (project, follow-cwd, or custom)", key);
+            }
+            WorldRootMode::parse(raw)
+                .map(ConfigValue::Mode)
+                .ok_or_else(|| {
+                    anyhow!(
+                        "{} must be one of project, follow-cwd, or custom (found {})",
+                        key,
+                        raw
+                    )
+                })
+        }
+        ConfigValueKind::String => Ok(ConfigValue::String(raw.to_string())),
+    }
+}
+
+fn apply_config_update(
+    document: &mut TomlTable,
+    update: &ConfigUpdate,
+) -> Result<Vec<ConfigChange>> {
+    let mut paths: Vec<&'static str> = update.spec.paths.to_vec();
+    if let Some(index) = paths
+        .iter()
+        .position(|candidate| *candidate == update.requested_key)
+    {
+        paths.swap(0, index);
+    }
+
+    let mut changes = Vec::with_capacity(paths.len());
+    for path in paths {
+        let new_value = update.value.to_toml();
+        let previous = set_toml_path(document, path, new_value.clone())?;
+        changes.push(ConfigChange {
+            key: path.to_string(),
+            is_alias: path != update.requested_key,
+            old_value: previous,
+            new_value,
+        });
+    }
+
+    Ok(changes)
+}
+
+fn set_toml_path(
+    document: &mut TomlTable,
+    dotted: &str,
+    value: TomlValue,
+) -> Result<Option<TomlValue>> {
+    let segments: Vec<&str> = dotted.split('.').collect();
+    if segments.is_empty() {
+        bail!("invalid config key '{}'", dotted);
+    }
+    if segments.iter().any(|segment| segment.is_empty()) {
+        bail!("invalid config key '{}': empty path segment", dotted);
+    }
+
+    let mut cursor = document;
+    for (index, segment) in segments.iter().enumerate() {
+        if index == segments.len() - 1 {
+            return Ok(cursor.insert((*segment).to_string(), value));
+        }
+
+        let entry = cursor
+            .entry((*segment).to_string())
+            .or_insert_with(|| TomlValue::Table(TomlTable::new()));
+        match entry {
+            TomlValue::Table(table) => {
+                cursor = table;
+            }
+            _ => {
+                let prefix = segments[..=index].join(".");
+                bail!("{} must be a table to set {}", prefix, dotted);
+            }
+        }
+    }
+
+    unreachable!("config key split yielded at least one segment");
+}
+
+fn lookup_field_spec(key: &str) -> Option<&'static ConfigFieldSpec> {
+    match key {
+        "install.world_enabled" => Some(&INSTALL_WORLD_ENABLED_SPEC),
+        "world.anchor_mode" | "world.root_mode" => Some(&WORLD_ANCHOR_MODE_SPEC),
+        "world.anchor_path" | "world.root_path" => Some(&WORLD_ANCHOR_PATH_SPEC),
+        "world.caged" => Some(&WORLD_CAGED_SPEC),
+        _ => None,
+    }
+}
+
+fn format_optional_value(value: Option<&TomlValue>) -> String {
+    value
+        .map(format_value)
+        .unwrap_or_else(|| "(unset)".to_string())
+}
+
+fn format_value(value: &TomlValue) -> String {
+    match value {
+        TomlValue::String(s) => format!("{:?}", s),
+        TomlValue::Boolean(flag) => flag.to_string(),
+        TomlValue::Integer(num) => num.to_string(),
+        TomlValue::Float(num) => num.to_string(),
+        TomlValue::Datetime(dt) => dt.to_string(),
+        TomlValue::Array(_) | TomlValue::Table(_) => value.to_string(),
+    }
+}
+
+fn toml_to_json_value(value: &TomlValue) -> JsonValue {
+    serde_json::to_value(value).unwrap_or_else(|_| JsonValue::String(value.to_string()))
+}
+
+struct ConfigUpdate {
+    spec: &'static ConfigFieldSpec,
+    requested_key: String,
+    value: ConfigValue,
+}
+
+#[derive(Clone, Copy)]
+struct ConfigFieldSpec {
+    kind: ConfigValueKind,
+    paths: &'static [&'static str],
+}
+
+#[derive(Clone, Copy)]
+enum ConfigValueKind {
+    Boolean,
+    Mode,
+    String,
+}
+
+enum ConfigValue {
+    Boolean(bool),
+    Mode(WorldRootMode),
+    String(String),
+}
+
+impl ConfigValue {
+    fn to_toml(&self) -> TomlValue {
+        match self {
+            ConfigValue::Boolean(flag) => TomlValue::Boolean(*flag),
+            ConfigValue::Mode(mode) => TomlValue::String(mode.to_string()),
+            ConfigValue::String(value) => TomlValue::String(value.clone()),
+        }
+    }
+}
+
+struct ConfigChange {
+    key: String,
+    is_alias: bool,
+    old_value: Option<TomlValue>,
+    new_value: TomlValue,
+}
+
+impl ConfigChange {
+    fn changed(&self) -> bool {
+        match &self.old_value {
+            Some(old) => old != &self.new_value,
+            None => true,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct ConfigSetSummary {
+    config_path: String,
+    changed: bool,
+    changes: Vec<ConfigChangeSummary>,
+}
+
+impl ConfigSetSummary {
+    fn from_changes(path: &Path, changes: &[ConfigChange]) -> Self {
+        let converted = changes
+            .iter()
+            .map(|change| ConfigChangeSummary {
+                key: change.key.clone(),
+                alias: change.is_alias,
+                old_value: change.old_value.as_ref().map(toml_to_json_value),
+                new_value: toml_to_json_value(&change.new_value),
+            })
+            .collect();
+        Self {
+            config_path: path.display().to_string(),
+            changed: !changes.is_empty(),
+            changes: converted,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct ConfigChangeSummary {
+    key: String,
+    alias: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    old_value: Option<JsonValue>,
+    new_value: JsonValue,
+}
+
+const INSTALL_WORLD_ENABLED_SPEC: ConfigFieldSpec = ConfigFieldSpec {
+    kind: ConfigValueKind::Boolean,
+    paths: &["install.world_enabled"],
+};
+
+const WORLD_ANCHOR_MODE_SPEC: ConfigFieldSpec = ConfigFieldSpec {
+    kind: ConfigValueKind::Mode,
+    paths: &["world.anchor_mode", "world.root_mode"],
+};
+
+const WORLD_ANCHOR_PATH_SPEC: ConfigFieldSpec = ConfigFieldSpec {
+    kind: ConfigValueKind::String,
+    paths: &["world.anchor_path", "world.root_path"],
+};
+
+const WORLD_CAGED_SPEC: ConfigFieldSpec = ConfigFieldSpec {
+    kind: ConfigValueKind::Boolean,
+    paths: &["world.caged"],
+};
+
+const SUPPORTED_CONFIG_KEYS: &[&str] = &[
+    "install.world_enabled",
+    "world.anchor_mode",
+    "world.root_mode",
+    "world.anchor_path",
+    "world.root_path",
+    "world.caged",
+];
 
 fn read_config_contents(path: &Path) -> Result<String> {
     match fs::read_to_string(path) {
