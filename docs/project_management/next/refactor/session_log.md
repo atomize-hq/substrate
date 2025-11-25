@@ -558,3 +558,10 @@ Template (copy/paste and fill in):
 - Set R10-integ to in_progress in tasks.json
 - Plan: commit docs start, create cr-r10-pty-integ branch/worktree (wt/cr-r10-pty-integ); merge R10 code+test branches; resolve PTY IO module split conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing in repo
+
+## [2025-11-25 03:48 UTC] Integration – R10-integ – END
+- Worktree commits: none (cr-r10-pty-code/test already aligned)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: all commands passed (world_root/world_enable green)
+- Kickoff prompts created: n/a
+- Next steps / blockers: remove wt/cr-r10-pty-integ after cleanup; CRATE_REFACTORING_ANALYSIS.md still missing
