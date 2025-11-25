@@ -435,3 +435,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: n/a
 - Docs commit: pending (update tasks + session log)
 - Next steps / blockers: remove wt/cr-r9a-routing-integ after final merge/push; proceed to R9b tasks
+
+## [2025-11-25 00:46 UTC] Code – R9b-code – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, kickoff prompt (CRATE_REFACTORING_ANALYSIS.md missing in repo)
+- Set R9b-code to in_progress in tasks.json; session log update pending commit
+- Plan: create cr-r9b-routing-code branch/worktree (wt/cr-r9b-routing-code); extract routing path/cwd/env/world-env helpers into focused modules with re-exports; preserve behavior/logging/cfg gates; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Blockers: none

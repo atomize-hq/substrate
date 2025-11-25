@@ -1159,7 +1159,7 @@
       "name": "Routing split: path/env/cwd helpers",
       "type": "code",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Extract path/cwd/env/world-env helpers from routing.rs into focused modules; keep behavior and logging unchanged.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
