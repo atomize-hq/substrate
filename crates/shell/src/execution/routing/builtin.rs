@@ -130,6 +130,7 @@ pub(crate) fn handle_builtin(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use super::super::dispatch::wrap_with_anchor_guard;
     use super::super::test_utils::{restore_env, set_env, test_shell_config, DirGuard};
     use super::*;
@@ -137,7 +138,9 @@ mod tests {
     use crate::execution::settings::WorldRootSettings;
     use clap::Parser;
     use serial_test::serial;
-    use std::{env, fs, path::PathBuf, process::Command};
+    #[cfg(unix)]
+    use std::process::Command;
+    use std::{env, fs, path::PathBuf};
     use substrate_common::WorldRootMode;
     use tempfile::tempdir;
 

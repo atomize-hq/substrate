@@ -63,7 +63,7 @@ pub(crate) use dispatch::{
 pub(crate) use dispatch::{
     consume_agent_stream_buffer, container_wants_pty, git_wants_pty, has_top_level_shell_meta,
     is_force_pty_command, is_interactive_shell, is_pty_disabled, looks_like_repl, needs_pty,
-    peel_wrappers, sudo_wants_pty, wants_debugger_pty, wrap_with_anchor_guard,
+    peel_wrappers, sudo_wants_pty, wants_debugger_pty,
 };
 #[cfg(all(test, target_os = "linux"))]
 pub(crate) use dispatch::{init_linux_world_with_probe, LinuxWorldInit};
@@ -1500,6 +1500,8 @@ mod manager_init_wiring_tests {
     #[serial]
     #[cfg(unix)]
     fn anchor_guard_bounces_chained_cd_when_world_disabled() {
+        #[allow(unused_imports)]
+        use crate::execution::routing::dispatch::wrap_with_anchor_guard;
         let temp = tempdir().unwrap();
         let root = temp.path().join("root");
         let inside = root.join("inside");
@@ -1546,6 +1548,8 @@ mod manager_init_wiring_tests {
     #[serial]
     #[cfg(unix)]
     fn anchor_guard_bounces_chained_cd_when_world_enabled() {
+        #[allow(unused_imports)]
+        use crate::execution::routing::dispatch::wrap_with_anchor_guard;
         let temp = tempdir().unwrap();
         let root = temp.path().join("root");
         let inside = root.join("inside");

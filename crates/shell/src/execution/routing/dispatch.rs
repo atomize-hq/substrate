@@ -14,6 +14,7 @@ use crate::execution::agent_events::publish_agent_event;
 use crate::execution::pty;
 #[cfg(target_os = "linux")]
 use crate::execution::routing::get_term_size;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use agent_api_client::AgentClient;
 use agent_api_types::{ExecuteRequest, ExecuteStreamFrame};
 use anyhow::{Context, Result};
