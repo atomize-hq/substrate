@@ -142,3 +142,103 @@ fn normalize_path(path: &Path) -> PathBuf {
     }
     normalized
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+    use std::env;
+    use tempfile::tempdir;
+
+    fn set_env(key: &str, value: &Path) -> Option<std::ffi::OsString> {
+        let previous = env::var_os(key);
+        env::set_var(key, value);
+        previous
+    }
+
+    fn restore_env(key: &str, value: Option<std::ffi::OsString>) {
+        if let Some(val) = value {
+            env::set_var(key, val);
+        } else {
+            env::remove_var(key);
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_prefix_prefers_explicit_then_env_then_home() {
+        let temp = tempdir().unwrap();
+        let explicit = temp.path().join("explicit");
+        let env_prefix = temp.path().join("from-env");
+        let home = temp.path().join("home").join(".substrate");
+
+        let prev_prefix = set_env("SUBSTRATE_PREFIX", &env_prefix);
+        let prev_home = set_env("SUBSTRATE_HOME", &home);
+
+        assert_eq!(resolve_prefix(Some(explicit.as_ref())).unwrap(), explicit);
+
+        assert_eq!(resolve_prefix(None).unwrap(), env_prefix);
+
+        env::remove_var("SUBSTRATE_PREFIX");
+        assert_eq!(resolve_prefix(None).unwrap(), home);
+
+        restore_env("SUBSTRATE_PREFIX", prev_prefix);
+        restore_env("SUBSTRATE_HOME", prev_home);
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_manager_env_path_uses_env_or_home() {
+        let temp = tempdir().unwrap();
+        let custom = temp.path().join("custom/env.sh");
+        let prev_manager_env = set_env("SUBSTRATE_MANAGER_ENV", &custom);
+        let prev_home = set_env("SUBSTRATE_HOME", temp.path());
+
+        assert_eq!(resolve_manager_env_path().unwrap(), custom);
+
+        restore_env("SUBSTRATE_MANAGER_ENV", prev_manager_env);
+        let expected_default = temp.path().join("manager_env.sh");
+        assert_eq!(resolve_manager_env_path().unwrap(), expected_default);
+
+        restore_env("SUBSTRATE_HOME", prev_home);
+    }
+
+    #[test]
+    fn next_log_path_is_namespaced_under_logs_dir() {
+        let temp = tempdir().unwrap();
+        let log_path = next_log_path(temp.path()).unwrap();
+        assert!(log_path.starts_with(temp.path().join("logs")));
+        let file_name = log_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default();
+        assert!(file_name.starts_with("world-enable-"));
+        assert!(file_name.ends_with(".log"));
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_world_socket_path_normalizes_relative_components() {
+        let temp = tempdir().unwrap();
+        let raw = temp.path().join("socket").join("..").join("sock");
+        let prev_socket = set_env("SUBSTRATE_WORLD_SOCKET", &raw);
+
+        let normalized = resolve_world_socket_path().unwrap();
+        assert_eq!(normalized, temp.path().join("sock"));
+
+        restore_env("SUBSTRATE_WORLD_SOCKET", prev_socket);
+    }
+
+    #[test]
+    fn locate_helper_script_prefers_version_dir() {
+        let temp = tempdir().unwrap();
+        let version_dir = temp.path().join("version");
+        let script = version_dir.join("scripts/substrate/world-enable.sh");
+        std::fs::create_dir_all(script.parent().unwrap()).unwrap();
+        std::fs::write(&script, "#!/bin/sh\necho helper").unwrap();
+
+        let resolved =
+            locate_helper_script(temp.path(), Some(version_dir.as_ref()), None).expect("script");
+        assert_eq!(resolved, script);
+    }
+}

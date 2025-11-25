@@ -52,3 +52,30 @@ pub(super) fn update_manager_env_exports(path: &Path, enabled: bool) -> Result<(
         .with_context(|| format!("failed to update manager env at {}", path.display()))?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn update_manager_env_exports_preserves_shebang_and_existing_lines() {
+        let temp = tempdir().unwrap();
+        let manager_env = temp.path().join("env/manager_env.sh");
+        fs::create_dir_all(manager_env.parent().unwrap()).unwrap();
+        fs::write(&manager_env, "#!/usr/bin/env bash\nexport OTHER_VAR=1\n").unwrap();
+
+        update_manager_env_exports(&manager_env, true).unwrap();
+        let contents = fs::read_to_string(&manager_env).unwrap();
+        assert!(contents.starts_with(
+            "#!/usr/bin/env bash\n# Managed by `substrate world enable`\nexport SUBSTRATE_WORLD=enabled\nexport SUBSTRATE_WORLD_ENABLED=1\n"
+        ));
+        assert!(contents.contains("export OTHER_VAR=1"));
+
+        update_manager_env_exports(&manager_env, false).unwrap();
+        let updated = fs::read_to_string(&manager_env).unwrap();
+        assert!(updated.contains("export SUBSTRATE_WORLD=disabled"));
+        assert!(updated.contains("export SUBSTRATE_WORLD_ENABLED=0"));
+        assert!(updated.contains("export OTHER_VAR=1"));
+    }
+}
