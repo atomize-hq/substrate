@@ -64,3 +64,9 @@ Template:
 - Updated tasks.json (C2-code → in_progress) and session log for this entry; commit pending per checklist
 - Plan: branch/worktree for cs-c2-show-code, implement `config show` TOML/JSON output with redaction hook, refresh docs, run fmt/clippy/tests, then merge back and update tasks/logs
 - Blockers: none beyond missing upstream; local toolchain ready
+
+## [2025-11-25 20:05 UTC] Test – C2-test – START
+- Checked out feat/config-subcommand; `git pull --ff-only` failed (branch has no upstream remote configured)
+- Updated tasks.json (C2-test → in_progress); this session log entry staged for the same doc commit
+- Plan: create cs-c2-show-test branch/worktree, add hermetic tests for `substrate config show` covering TOML vs `--json`, missing-config hints, and redaction hook; run `cargo fmt` + `cargo test -p substrate-shell world_root`; document any skipped installer smoke scripts
+- Blockers: upstream missing; installer smoke may be skipped if unrelated to tests

@@ -182,7 +182,7 @@
       "name": "Config show tests",
       "type": "test",
       "phase": "Config Subcommand",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add tests validating `substrate config show` output in both human and JSON modes, including redaction hooks and missing-file errors.",
       "references": [
         "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
