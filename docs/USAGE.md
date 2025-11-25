@@ -198,6 +198,7 @@ manager and point `BASH_ENV` at `~/.substrate_bashenv` explicitly.
 - `substrate --no-world ...` – run commands directly on the host (no isolation)
 - `substrate --world ...` – force world isolation for a single invocation even
   when install/config/env disables it (metadata remains unchanged)
+
 - `substrate world enable` – provision the backend later if `--no-world` was
   used at install time
 - `substrate world deps status|install|sync` – inspect and copy host toolchains
@@ -216,6 +217,27 @@ The installer and `substrate world enable` keep `~/.substrate/config.toml`
 (`[install].world_enabled = true/false`) and rewrite `~/.substrate/manager_env.sh`
 so `SUBSTRATE_WORLD`/`SUBSTRATE_WORLD_ENABLED` reflect the latest state without
 needing to source dotfiles manually.
+
+## Configuration CLI
+
+Before the REPL starts, Substrate exposes a `config` command group for managing
+`~/.substrate/config.toml` (or `%USERPROFILE%\.substrate\config.toml` on
+Windows). The first verb shipped is `config init`, which scaffolds the default
+install/world tables and creates missing parent directories:
+
+```bash
+# Create ~/.substrate/config.toml if it does not exist
+substrate config init
+
+# Regenerate the file even if it exists already
+substrate config init --force
+```
+
+The command honors `SUBSTRATE_HOME`, making it safe to run from tests or
+sandboxes. Shell startup and the installer scripts will emit a warning pointing
+to `substrate config init` whenever the global config is absent, so re-running
+the command is the supported remediation when the metadata is missing or
+corrupted.
 
 Use `SUBSTRATE_WORLD_ENABLED=0` to force pass-through mode temporarily and
 `SUBSTRATE_WORLD_DEPS_MANIFEST` to point world-deps at a custom definition file.

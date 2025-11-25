@@ -154,6 +154,7 @@ pub struct Cli {
 pub enum SubCommands {
     Graph(GraphCmd),
     World(WorldCmd),
+    Config(ConfigCmd),
     Shim(ShimCmd),
     Health(HealthCmd),
 }
@@ -181,6 +182,25 @@ pub enum GraphAction {
 pub struct WorldCmd {
     #[command(subcommand)]
     pub action: WorldAction,
+}
+
+#[derive(Args, Debug)]
+pub struct ConfigCmd {
+    #[command(subcommand)]
+    pub action: ConfigAction,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ConfigAction {
+    /// Initialize or regenerate ~/.substrate/config.toml
+    Init(ConfigInitArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct ConfigInitArgs {
+    /// Overwrite the config even if it already exists
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Subcommand, Debug)]

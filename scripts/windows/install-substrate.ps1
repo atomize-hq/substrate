@@ -375,6 +375,11 @@ if (Test-Path '$profileScript') {
         }
     }
 
+    $configPath = Join-Path $Prefix 'config.toml'
+    if (-not (Test-Path $configPath)) {
+        Write-Warn "Config metadata missing at $configPath. Run 'substrate config init' after installation to create defaults."
+    }
+
     if ($dry) {
         Write-Log "Installation complete (dry run). Open a new PowerShell session or run '. $profileScript' when performing a real install."
     } elseif ($NoAutoSource.IsPresent) {

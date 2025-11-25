@@ -132,6 +132,17 @@ Unknown keys and extra tables are preserved for future expansion.
 - Directory configs live at `.substrate/settings.toml` under the launch
   directory and only carry the `[world]` table shown above.
 
+### Bootstrapping the config file
+
+Use `substrate config init` whenever `~/.substrate/config.toml` is missing (or
+after manually deleting/corrupting it). The command scaffolds the default
+`[install]` and `[world]` tables, respects `SUBSTRATE_HOME`, and is available
+before the shell/REPL starts. Pass `--force` to regenerate the file even if it
+already exists. On Windows the same path lives under
+`%USERPROFILE%\.substrate\config.toml`. Shell startup and the install scripts
+emit a warning that points to this command whenever the file is absent, so
+running `substrate config init` is the supported fix.
+
 ## CLI Flags
 
 ### Shim Management

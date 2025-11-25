@@ -1239,7 +1239,11 @@ install_macos() {
   log "manager_init placeholder: ${MANAGER_INIT_PATH}"
   log "manager_env script: ${MANAGER_ENV_PATH}"
   log "config manifests: ${version_dir}/config"
-  log "install metadata: ${INSTALL_CONFIG_PATH}"
+  if [[ -f "${INSTALL_CONFIG_PATH}" ]]; then
+    log "install metadata: ${INSTALL_CONFIG_PATH}"
+  else
+    warn "install metadata missing at ${INSTALL_CONFIG_PATH}; run 'substrate config init' after installing to create defaults."
+  fi
 
   if [[ "${world_enabled}" -eq 1 ]]; then
     log "World backend enabled; run '${bin_dir}/substrate world doctor --json' or '${bin_dir}/substrate world deps sync --all' as needed."
@@ -1313,7 +1317,11 @@ install_linux() {
   log "manager_init placeholder: ${MANAGER_INIT_PATH}"
   log "manager_env script: ${MANAGER_ENV_PATH}"
   log "config manifests: ${version_dir}/config"
-  log "install metadata: ${INSTALL_CONFIG_PATH}"
+  if [[ -f "${INSTALL_CONFIG_PATH}" ]]; then
+    log "install metadata: ${INSTALL_CONFIG_PATH}"
+  else
+    warn "install metadata missing at ${INSTALL_CONFIG_PATH}; run 'substrate config init' after installing to create defaults."
+  fi
 
   if [[ "${world_enabled}" -eq 1 ]]; then
     log "World backend enabled; run '${bin_dir}/substrate world doctor --json' for diagnostics or '${bin_dir}/substrate world deps sync --all' to mirror host tools."
