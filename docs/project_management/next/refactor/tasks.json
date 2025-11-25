@@ -1647,7 +1647,7 @@
       "name": "Routing builtin/world runner slimming",
       "type": "code",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Reduce routing builtin modules and world_enable runner into smaller units, keeping outputs and logging stable.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
