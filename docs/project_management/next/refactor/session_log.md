@@ -777,3 +777,11 @@ Template (copy/paste and fill in):
 - Updated tasks.json + session log (commit: pending)
 - Plan: create cr-r15-shell-integration-integ branch/worktree; merge R15 code/test branches; resolve conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing
+
+## [2025-11-25 16:50 UTC] Integration – R15-integ – END
+- Worktree commits: none (code/test branches already aligned on feat/crate-refactor)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: fmt/clippy/tests passed; no merge conflicts between branches
+- Kickoff prompts created: n/a
+- Docs commit: pending (update tasks + session log)
+- Next steps / blockers: remove wt/cr-r15-shell-integration-integ after final docs commit; CRATE_REFACTORING_ANALYSIS.md still missing

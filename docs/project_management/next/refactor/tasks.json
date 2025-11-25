@@ -2098,7 +2098,7 @@
       "name": "Integrate shell integration test split",
       "type": "integration",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge R15 code/test splits for shell integration tests, resolve conflicts, ensure fmt/clippy/tests are green.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
