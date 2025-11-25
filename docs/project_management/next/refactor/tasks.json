@@ -2056,7 +2056,7 @@
       "name": "Shell integration test split fixtures",
       "type": "test",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Refactor shell integration test fixtures/utilities to match the split suites and keep behavior coverage intact.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
