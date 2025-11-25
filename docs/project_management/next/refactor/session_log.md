@@ -471,3 +471,10 @@ Template (copy/paste and fill in):
 - Set R9b-integ to in_progress in tasks.json; session log update pending commit
 - Plan: create cr-r9b-routing-integ branch/worktree (wt/cr-r9b-routing-integ); merge cr-r9b-routing-code and cr-r9b-routing-test; resolve path/env/cwd helper conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Blockers: none (analysis doc still missing)
+
+## [2025-11-25 02:06 UTC] Integration – R9b-integ – END
+- Worktree commits: none (cr-r9b-routing-code/test already aligned)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: all commands passed; no merge conflicts between code/test branches
+- Merges: cr-r9b-routing-code + cr-r9b-routing-test already aligned on cr-r9b-routing-integ
+- Next steps / blockers: remove wt/cr-r9b-routing-integ after final merge/push; proceed to R9c tasks when ready (analysis doc still missing)
