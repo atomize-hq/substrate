@@ -1935,7 +1935,7 @@
       "name": "Routing dispatch module trimming tests",
       "type": "test",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Align tests/fixtures with the trimmed dispatch modules; ensure coverage remains intact after helper extraction.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",

@@ -715,3 +715,11 @@ Template (copy/paste and fill in):
 - Set R14-test to in_progress in tasks.json
 - Plan: commit docs start, create cr-r14-routing-dispatch-test branch/worktree (wt/cr-r14-routing-dispatch-test); reorganize dispatch/tests fixtures into support modules without changing assertions; run cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing
+
+## [2025-11-25 16:12 UTC] Test – R14-test – END
+- Worktree commits: 36eff980 (test: split routing dispatch tests)
+- Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: fmt clean; substrate-shell world_root/world_enable suites passed
+- Merges: fast-forwarded cr-r14-routing-dispatch-test into feat/crate-refactor after rebasing on latest
+- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R14-integ.md
+- Blockers: CRATE_REFACTORING_ANALYSIS.md missing
