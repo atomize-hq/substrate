@@ -774,7 +774,7 @@ Template (copy/paste and fill in):
 - Checked out feat/crate-refactor, pulled latest
 - Read refactor_plan.md, tasks.json, session_log.md, R15-integ prompt (CRATE_REFACTORING_ANALYSIS.md missing in repo)
 - Confirmed R15-code and R15-test completed
-- Updated tasks.json + session log (commit: pending)
+- Updated tasks.json + session log (commit: 26d74cb2)
 - Plan: create cr-r15-shell-integration-integ branch/worktree; merge R15 code/test branches; resolve conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing
 
@@ -783,5 +783,5 @@ Template (copy/paste and fill in):
 - Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Results: fmt/clippy/tests passed; no merge conflicts between branches
 - Kickoff prompts created: n/a
-- Docs commit: pending (update tasks + session log)
+- Docs commits: 953f1751 (finish R15-integ); follow-up log tweak in this entry
 - Next steps / blockers: remove wt/cr-r15-shell-integration-integ after final docs commit; CRATE_REFACTORING_ANALYSIS.md still missing
