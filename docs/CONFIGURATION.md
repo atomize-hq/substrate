@@ -183,6 +183,68 @@ $ substrate config show --json
 Sensitive fields will be replaced with `*** redacted ***` once such values are
 stored in the config.
 
+### Updating the config file
+
+`substrate config set key=value [...]` edits `config.toml` without opening a
+text editor. Each dotted key is validated (anchor modes must be
+`project`/`follow-cwd`/`custom`, boolean toggles accept `true/false/1/0`), and
+all updates are applied atomically. Combine multiple assignments to keep related
+fields in sync:
+
+```bash
+$ substrate config set install.world_enabled=false world.caged=false
+substrate: updated config at /Users/alice/.substrate/config.toml
+  - install.world_enabled: true -> false
+  - world.caged: true -> false
+```
+
+Anchor overrides update the legacy aliases automatically so the `[world]` table
+remains consistent:
+
+```bash
+$ substrate config set world.anchor_mode=custom world.anchor_path=/workspaces/substrate
+substrate: updated config at /Users/alice/.substrate/config.toml
+  - world.anchor_mode: "project" -> "custom"
+  - world.root_mode (alias): "project" -> "custom"
+  - world.anchor_path: "" -> "/workspaces/substrate"
+  - world.root_path (alias): "" -> "/workspaces/substrate"
+```
+
+Pass `--json` for automation—the response lists every changed key with its old
+and new values:
+
+```bash
+$ substrate config set --json world.anchor_mode=follow-cwd
+{
+  "config_path": "/Users/alice/.substrate/config.toml",
+  "changed": true,
+  "changes": [
+    {
+      "key": "world.anchor_mode",
+      "alias": false,
+      "old_value": "project",
+      "new_value": "follow-cwd"
+    },
+    {
+      "key": "world.root_mode",
+      "alias": true,
+      "old_value": "project",
+      "new_value": "follow-cwd"
+    }
+  ]
+}
+```
+
+PowerShell users can wrap each assignment in quotes to preserve backslashes:
+
+```powershell
+PS> substrate config set "world.anchor_mode=custom" "world.anchor_path=C:\Work" "world.caged=false"
+```
+
+Invalid keys or values abort the run without touching the file. As with the
+other `config` verbs, `SUBSTRATE_HOME` / `%USERPROFILE%` controls where the file
+lives so tests can redirect writes safely.
+
 ## CLI Flags
 
 ### Shim Management
