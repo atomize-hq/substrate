@@ -492,3 +492,10 @@ Template (copy/paste and fill in):
 - Results: fmt/clippy clean; world_root/world_enable suites passed
 - Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R9c-test.md
 - Next steps / blockers: none (analysis doc still missing)
+
+## [2025-11-25 02:40 UTC] Test – R9c-test – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, R9c-test prompt (CRATE_REFACTORING_ANALYSIS.md missing)
+- Set R9c-test to in_progress; session log update pending commit
+- Plan: create cr-r9c-routing-test branch/worktree wt/cr-r9c-routing-test; align routing world/agent tests/fixtures to new modules; run cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
+- Blockers: CRATE_REFACTORING_ANALYSIS.md missing in repo
