@@ -5,7 +5,7 @@
       "name": "Config CLI foundation & init",
       "type": "code",
       "phase": "Config Subcommand",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Introduce the `config` subcommand to Clap, implement `substrate config init` with `--force`, and update shell/install diagnostics to point users at the command whenever the global config is missing.",
       "references": [
         "docs/project_management/next/config-subcommand/config_subcommand_plan.md",

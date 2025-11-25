@@ -35,3 +35,11 @@ Template:
 - Updated tasks.json (C1-test → in_progress); session log entry pending commit
 - Created plan: add shell driver tests for `config init` + `--force`, cover missing-config hint, and extend installer smoke harness; run fmt + targeted tests, document installer script skip if needed
 - Blockers: git branch lacks upstream; otherwise none
+
+## [2025-11-25 19:06 UTC] Code – C1-code – END
+- Worktree commits: 43abc73 (feat: add substrate config init command)
+- Commands: `cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell world_root`
+- Results: all passed; config CLI builds cleanly and existing world root tests continue to succeed
+- Kickoff prompts created: n/a
+- Docs commit: (pending – will land as `docs: finish C1-code`)
+- Next steps / blockers: Ready for C1-test to cover CLI behavior; integration can follow once tests land
