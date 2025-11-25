@@ -128,3 +128,10 @@ Template:
 - Kickoff prompts created: n/a (`docs/project_management/next/config-subcommand/kickoff_prompts/C3-integ.md` already present)
 - Docs commit: pending (`docs: finish C3-test`)
 - Next steps / blockers: ready for C3-integ to merge code+tests once config-set implementation lands
+
+## [2025-11-25 20:11 UTC] Integration – C3-integ – START
+- Checked out feat/config-subcommand; `git pull --ff-only` failed because the branch has no upstream tracking branch
+- Confirmed C3-code and C3-test marked completed in tasks.json and reviewed their session log entries
+- Updated tasks.json (C3-integ → in_progress); this log entry will be part of the same doc commit
+- Plan: create cs-c3-set-integ branch/worktree, merge cs-c3-set-code + cs-c3-set-test, resolve conflicts, run `cargo fmt`, `cargo clippy -p substrate-shell -- -D warnings`, `cargo test -p substrate-shell world_root`, `cargo test -p substrate-shell world_enable`, and `./tests/installers/install_smoke.sh`, then update docs/tasks/logs and confirm CLI UX acceptance criteria
+- Blockers: feat/config-subcommand still lacks upstream tracking; installer smoke may require elevated permissions depending on environment
