@@ -1732,7 +1732,7 @@
       "name": "Integrate routing builtin/world runner slimming",
       "type": "integration",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge R12 code/test splits for routing builtins and world runner, resolve conflicts, ensure fmt/clippy/tests are green.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
