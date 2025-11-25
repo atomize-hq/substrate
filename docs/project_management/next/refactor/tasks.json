@@ -1812,7 +1812,7 @@
       "name": "Broker/lib slimming tests",
       "type": "test",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Update tests/fixtures to match broker/lib.rs split; ensure policy/profile/watch behavior remains intact.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
