@@ -747,6 +747,14 @@ Template (copy/paste and fill in):
 - Plan: set R15-code to in_progress; create cr-r15-shell-integration-code branch/worktree; split crates/shell/tests/integration.rs into domain suites with shared support module; keep assertions/fixtures unchanged; run cargo fmt and cargo test -p substrate-shell world_root/world_enable; capture outputs for END entry
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing from repo
 
+## [2025-11-25 16:43 UTC] Code – R15-code – END
+- Worktree commits: 966dbe11
+- Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: fmt clean; world_root/world_enable suites passed after moving shared support into tests/support
+- Kickoff prompts created: docs/project_management/next/refactor/kickoff_prompts/R15-test.md
+- Docs commit: pending (updated tasks + session log)
+- Next steps / blockers: none
+
 ## [2025-11-25 16:40 UTC] Test – R15-test – END
 - Worktree commits: 80bf6d03 (test: refactor shell integration fixtures)
 - Commands: cargo fmt; cargo fmt --all -- crates/shell/tests/integration.rs crates/shell/tests/integration/support.rs; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
