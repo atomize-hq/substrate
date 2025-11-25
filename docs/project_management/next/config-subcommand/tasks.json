@@ -224,7 +224,7 @@
       "name": "Integrate config show",
       "type": "integration",
       "phase": "Config Subcommand",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge the config-show code/test branches, ensure fmt/clippy/tests pass, and stage the next kickoff prompts.",
       "references": [
         "docs/project_management/next/config-subcommand/config_subcommand_plan.md",

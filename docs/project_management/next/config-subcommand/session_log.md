@@ -92,3 +92,11 @@ Template:
 - Updated tasks.json (C2-integ → in_progress); this session log entry staged for the same doc commit
 - Created plan: branch/worktree cs-c2-show-integ, merge cs-c2-show-code + cs-c2-show-test, resolve conflicts, run fmt/clippy/world_root/world_enable tests, verify CLI/docs, update tasks/logs + kickoff prompts
 - Blockers: upstream tracking absent; otherwise none
+
+## [2025-11-25 19:45 UTC] Integration – C2-integ – END
+- Worktree commits: n/a (cs-c2-show-code/test already merged; integration branch introduced no new changes)
+- Commands: `cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell world_root`; `cargo test -p substrate-shell world_enable`; `cargo run -p substrate --bin substrate -- config --help`
+- Results: fmt/clippy/tests all passed; CLI help confirms `config show` verb listed with TOML/JSON description; docs already highlight usage so no updates needed
+- Kickoff prompts created: docs/project_management/next/config-subcommand/kickoff_prompts/C3-code.md, docs/project_management/next/config-subcommand/kickoff_prompts/C3-test.md (revalidated contents for next agents)
+- Docs commit: pending (`docs: finish C2-integ`) to record tasks/session updates
+- Next steps / blockers: ready for C3-code/test to implement `config set`; no outstanding conflicts
