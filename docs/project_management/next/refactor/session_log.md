@@ -630,3 +630,10 @@ Template (copy/paste and fill in):
 - Results: fmt/clippy clean; world_root/world_enable suites passed
 - Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R12-test.md
 - Next steps / blockers: none; CRATE_REFACTORING_ANALYSIS.md still missing
+
+## [2025-11-25 14:45 UTC] Test – R12-test – END
+- Worktree commits: 4ec817b2 (test: align routing builtin coverage)
+- Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: fmt clean; world_root/world_enable suites passed
+- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R12-integ.md
+- Next steps / blockers: branch rebased onto feat/crate-refactor and merged; CRATE_REFACTORING_ANALYSIS.md still missing

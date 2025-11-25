@@ -1689,7 +1689,7 @@
       "name": "Routing builtin/world runner tests",
       "type": "test",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Update/move tests to match builtin/world runner splits; ensure behavior and outputs remain stable.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
