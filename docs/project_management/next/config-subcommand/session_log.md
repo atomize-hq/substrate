@@ -86,3 +86,9 @@ Template:
 - Kickoff prompts created: n/a (docs/project_management/next/config-subcommand/kickoff_prompts/C2-integ.md already present)
 - Docs commit: pending (`docs: finish C2-test`) after merging branch/status/log updates
 - Next steps / blockers: ready for integration once code + tests merged; config_show coverage enables TOML/JSON/redaction verification as soon as CLI lands
+
+## [2025-11-25 19:43 UTC] Integration – C2-integ – START
+- Checked out feat/config-subcommand; `git pull --ff-only` failed (branch lacks upstream tracking)
+- Updated tasks.json (C2-integ → in_progress); this session log entry staged for the same doc commit
+- Created plan: branch/worktree cs-c2-show-integ, merge cs-c2-show-code + cs-c2-show-test, resolve conflicts, run fmt/clippy/world_root/world_enable tests, verify CLI/docs, update tasks/logs + kickoff prompts
+- Blockers: upstream tracking absent; otherwise none
