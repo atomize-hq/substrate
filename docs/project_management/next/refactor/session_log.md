@@ -463,3 +463,11 @@ Template (copy/paste and fill in):
 - Results: fmt clean; world_root/world_enable suites passed without warnings
 - Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R9b-integ.md
 - Next steps / blockers: ready for integration; remove wt/cr-r9b-routing-test after merge
+
+## [2025-11-25 02:04 UTC] Integration – R9b-integ – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, R9b-integ prompt (CRATE_REFACTORING_ANALYSIS.md missing in repo)
+- Confirmed R9b-code and R9b-test completed
+- Set R9b-integ to in_progress in tasks.json; session log update pending commit
+- Plan: create cr-r9b-routing-integ branch/worktree (wt/cr-r9b-routing-integ); merge cr-r9b-routing-code and cr-r9b-routing-test; resolve path/env/cwd helper conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Blockers: none (analysis doc still missing)

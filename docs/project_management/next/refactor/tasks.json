@@ -1242,7 +1242,7 @@
       "name": "Integrate routing split: path/env/cwd helpers",
       "type": "integration",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge R9b code/test routing split for path/cwd/env helpers, resolve conflicts, ensure fmt/clippy/tests are green.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
