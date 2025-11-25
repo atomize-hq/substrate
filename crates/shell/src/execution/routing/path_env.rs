@@ -97,6 +97,29 @@ mod tests {
 
     #[test]
     #[serial]
+    fn enforce_caged_destination_bounces_outside_anchor() {
+        let temp = tempdir().unwrap();
+        let root = temp.path().join("root");
+        let outside = temp.path().join("outside");
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        let settings = settings::WorldRootSettings {
+            mode: WorldRootMode::Project,
+            path: fs::canonicalize(&root).unwrap(),
+            caged: true,
+        };
+        let requested = fs::canonicalize(&outside).unwrap();
+
+        let (destination, warning) =
+            enforce_caged_destination(&settings, &settings.path, requested);
+        assert_eq!(destination, settings.path);
+        let message = warning.expect("expected caged warning");
+        assert!(message.contains("caged root guard"));
+        assert!(message.contains(settings.path.to_str().unwrap()));
+    }
+
+    #[test]
+    #[serial]
     fn world_deps_manifest_base_path_prefers_env_override() {
         let temp = tempdir().unwrap();
         let override_path = temp.path().join("deps.yaml");

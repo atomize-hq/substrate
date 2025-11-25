@@ -3376,14 +3376,4 @@ mod tests {
             assert!(!needs_pty("git commit --edit --no-edit"));
         });
     }
-
-    #[cfg(target_os = "windows")]
-    #[test]
-    fn transport_meta_named_pipe_mode() {
-        let meta = world_transport_to_meta(&pw::WorldTransport::NamedPipe(PathBuf::from(
-            r"\\.\pipe\substrate-agent",
-        )));
-        assert_eq!(meta.mode, "named_pipe");
-        assert_eq!(meta.endpoint.as_deref(), Some(r"\\.\pipe\substrate-agent"));
-    }
 }

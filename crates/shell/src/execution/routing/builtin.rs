@@ -135,7 +135,6 @@ mod tests {
     use super::super::test_utils::{restore_env, set_env, test_shell_config, DirGuard};
     use super::*;
     use crate::execution::cli::Cli;
-    use crate::execution::settings::WorldRootSettings;
     use clap::Parser;
     use serial_test::serial;
     #[cfg(unix)]
@@ -437,28 +436,6 @@ mod tests {
         restore_env("SUBSTRATE_HOME", prev_substrate_home);
         restore_env("USERPROFILE", prev_userprofile);
         restore_env("HOME", prev_home);
-    }
-
-    #[test]
-    fn enforce_caged_destination_bounces_outside_anchor() {
-        let temp = tempdir().unwrap();
-        let root = temp.path().join("root");
-        let outside = temp.path().join("outside");
-        fs::create_dir_all(&root).unwrap();
-        fs::create_dir_all(&outside).unwrap();
-        let settings = WorldRootSettings {
-            mode: WorldRootMode::Project,
-            path: fs::canonicalize(&root).unwrap(),
-            caged: true,
-        };
-        let requested = fs::canonicalize(&outside).unwrap();
-
-        let (destination, warning) =
-            enforce_caged_destination(&settings, &settings.path, requested);
-        assert_eq!(destination, settings.path);
-        let message = warning.expect("expected caged warning");
-        assert!(message.contains("caged root guard"));
-        assert!(message.contains(settings.path.to_str().unwrap()));
     }
 
     #[test]

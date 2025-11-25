@@ -25,3 +25,18 @@ pub(crate) fn world_transport_to_meta(transport: &pw::WorldTransport) -> Transpo
         },
     }
 }
+
+#[cfg(all(test, target_os = "windows"))]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn transport_meta_named_pipe_mode() {
+        let meta = world_transport_to_meta(&pw::WorldTransport::NamedPipe(PathBuf::from(
+            r"\\.\pipe\substrate-agent",
+        )));
+        assert_eq!(meta.mode, "named_pipe");
+        assert_eq!(meta.endpoint.as_deref(), Some(r"\\.\pipe\substrate-agent"));
+    }
+}
