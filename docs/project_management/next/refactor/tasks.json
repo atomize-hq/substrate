@@ -1525,7 +1525,7 @@
       "name": "Routing dispatch modularization",
       "type": "code",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Break routing/dispatch.rs into focused modules and a registry-style router to shrink the remaining god file without changing CLI behavior.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
