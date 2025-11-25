@@ -310,8 +310,8 @@ fn config_set_reports_applied_changes_as_json() {
         })
     };
 
-    let anchor_mode = find_change("world.anchor_mode")
-        .expect("world.anchor_mode change present in JSON payload");
+    let anchor_mode =
+        find_change("world.anchor_mode").expect("world.anchor_mode change present in JSON payload");
     assert_eq!(
         anchor_mode
             .get("new_value")
@@ -320,8 +320,8 @@ fn config_set_reports_applied_changes_as_json() {
         "json payload should describe updated anchor_mode",
     );
 
-    let anchor_path = find_change("world.anchor_path")
-        .expect("world.anchor_path change present in JSON payload");
+    let anchor_path =
+        find_change("world.anchor_path").expect("world.anchor_path change present in JSON payload");
     assert_eq!(
         anchor_path
             .get("new_value")
