@@ -701,3 +701,10 @@ Template (copy/paste and fill in):
 - Set R14-code to in_progress in tasks.json
 - Plan: commit docs start, create cr-r14-routing-dispatch-code branch/worktree (wt/cr-r14-routing-dispatch-code); trim dispatch/mod.rs into submodules with re-exports; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing
+
+## [2025-11-25 16:03 UTC] Test – R14-test – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, R14-test prompt (CRATE_REFACTORING_ANALYSIS.md missing)
+- Set R14-test to in_progress in tasks.json
+- Plan: commit docs start, create cr-r14-routing-dispatch-test branch/worktree (wt/cr-r14-routing-dispatch-test); reorganize dispatch/tests fixtures into support modules without changing assertions; run cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
+- Blockers: CRATE_REFACTORING_ANALYSIS.md missing
