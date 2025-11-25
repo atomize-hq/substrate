@@ -1364,7 +1364,7 @@
       "name": "Integrate routing split: world/agent flows",
       "type": "integration",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge R9c code/test routing split for world/agent flows, resolve conflicts, ensure fmt/clippy/tests are green.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",

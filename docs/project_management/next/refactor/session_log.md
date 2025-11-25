@@ -507,3 +507,11 @@ Template (copy/paste and fill in):
 - Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R9c-integ.md
 - Docs commit: pending (tasks/status + session log)
 - Next steps / blockers: ready for integration; remove wt/cr-r9c-routing-test after merge; CRATE_REFACTORING_ANALYSIS.md still missing
+
+## [2025-11-25 02:54 UTC] Integration – R9c-integ – START
+- Checked out feat/crate-refactor, pulled latest
+- Confirmed R9c-code/test completed
+- Set R9c-integ to in_progress in tasks.json; session log update pending commit
+- Created worktree: pending (will create wt/cr-r9c-routing-integ)
+- Plan: create integration branch/worktree; merge cr-r9c-routing-code and cr-r9c-routing-test; resolve routing world/agent conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Blockers: CRATE_REFACTORING_ANALYSIS.md missing in repo (known)
