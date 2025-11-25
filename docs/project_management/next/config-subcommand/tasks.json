@@ -52,7 +52,7 @@
       "name": "Config init tests",
       "type": "test",
       "phase": "Config Subcommand",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Author integration/unit tests that cover `substrate config init`, missing-config diagnostics, and installer/script scaffolding without touching production code beyond test helpers.",
       "references": [
         "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
