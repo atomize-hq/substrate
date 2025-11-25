@@ -2354,12 +2354,10 @@ fn first_command_path(cmd: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(target_os = "windows")]
-    use super::super::pw;
+    
     use super::*;
     use std::env;
-    #[cfg(target_os = "windows")]
-    use std::path::PathBuf;
+    
     use std::sync::Mutex;
 
     // Global mutex to ensure tests that modify environment run sequentially
