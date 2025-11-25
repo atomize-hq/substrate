@@ -551,3 +551,10 @@ Template (copy/paste and fill in):
 - Results: fmt clean; world_root/world_enable suites passed
 - Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R10-integ.md
 - Next steps / blockers: none
+
+## [2025-11-25 03:46 UTC] Integration – R10-integ – START
+- Checked out feat/crate-refactor, pulled latest; read refactor_plan.md, tasks.json, session_log.md, R10-integ prompt (CRATE_REFACTORING_ANALYSIS.md missing in repo)
+- Confirmed R10-code and R10-test completed
+- Set R10-integ to in_progress in tasks.json
+- Plan: commit docs start, create cr-r10-pty-integ branch/worktree (wt/cr-r10-pty-integ); merge R10 code+test branches; resolve PTY IO module split conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Blockers: CRATE_REFACTORING_ANALYSIS.md missing in repo
