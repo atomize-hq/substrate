@@ -1,0 +1,395 @@
+{
+  "tasks": [
+    {
+      "id": "C1-code",
+      "name": "Config CLI foundation & init",
+      "type": "code",
+      "phase": "Config Subcommand",
+      "status": "pending",
+      "description": "Introduce the `config` subcommand to Clap, implement `substrate config init` with `--force`, and update shell/install diagnostics to point users at the command whenever the global config is missing.",
+      "references": [
+        "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
+        "docs/BACKLOG.md",
+        "crates/shell/src/execution/cli.rs",
+        "crates/shell/src/execution/invocation.rs",
+        "crates/shell/src/execution/settings.rs",
+        "crates/common/src/paths.rs",
+        "scripts/substrate/install-substrate.sh",
+        "docs/CONFIGURATION.md",
+        "docs/USAGE.md"
+      ],
+      "acceptance_criteria": [
+        "`config` subcommand group added with `init` verb wired before REPL/command execution; Clap help updated.",
+        "`substrate config init` creates `~/.substrate/config.toml` plus parent directories, writes default [install] and [world] tables, and supports `--force` regeneration.",
+        Shell/installer error paths detect a missing config and log actionable hints referencing `substrate config init`.",
+        Docs mention the command in configuration/install sections.",
+        `cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; targeted smoke test (`cargo test -p substrate-shell world_root`) documented in session log."
+      ],
+      "start_checklist": [
+        "Checkout feat/config-subcommand, pull latest",
+        "Set C1-code to in_progress, log START entry, commit docs update",
+        "Create task branch cs-c1-config-code",
+        "Create worktree wt/cs-c1-config-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure required fmt/lint/tests per prompt are green",
+        "Commit worktree changes",
+        "Merge task branch back to feat/config-subcommand",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts as required",
+        "Commit docs update on feat/config-subcommand"
+      ],
+      "depends_on": [],
+      "concurrent_with": [
+        "C1-test"
+      ],
+      "worktree": "wt/cs-c1-config-code",
+      "integration_task": "C1-integ",
+      "kickoff_prompt": "docs/project_management/next/config-subcommand/kickoff_prompts/C1-code.md"
+    },
+    {
+      "id": "C1-test",
+      "name": "Config init tests",
+      "type": "test",
+      "phase": "Config Subcommand",
+      "status": "pending",
+      "description": "Author integration/unit tests that cover `substrate config init`, missing-config diagnostics, and installer/script scaffolding without touching production code beyond test helpers.",
+      "references": [
+        "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
+        "docs/BACKLOG.md",
+        "crates/shell/tests",
+        "tests/installers/install_smoke.sh",
+        "docs/CONFIGURATION.md"
+      ],
+      "acceptance_criteria": [
+        "Integration tests invoke `substrate config init` via the shell driver, asserting files are created with default tables and `--force` rewrites.",
+        "Tests cover the missing-config warning path (shell launches emit hint to run `substrate config init`).",
+        "Installer harness verifies the script creates config.toml or surfaces the same hint when stubbed.",
+        "`cargo fmt`; targeted suites (`cargo test -p substrate-shell world_root`, `./tests/installers/install_smoke.sh` when platform allows) logged in session_log.md.",
+        "Kickoff prompt for C1-integ authored at end of session."
+      ],
+      "start_checklist": [
+        "Checkout feat/config-subcommand, pull latest",
+        "Set C1-test to in_progress, log START entry, commit docs update",
+        "Create task branch cs-c1-config-test",
+        "Create worktree wt/cs-c1-config-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests per prompt are green (note skips with justification)",
+        "Commit worktree changes",
+        "Merge task branch back to feat/config-subcommand",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts as required",
+        "Commit docs update on feat/config-subcommand"
+      ],
+      "depends_on": [],
+      "concurrent_with": [
+        "C1-code"
+      ],
+      "worktree": "wt/cs-c1-config-test",
+      "integration_task": "C1-integ",
+      "kickoff_prompt": "docs/project_management/next/config-subcommand/kickoff_prompts/C1-test.md"
+    },
+    {
+      "id": "C1-integ",
+      "name": "Integrate config init",
+      "type": "integration",
+      "phase": "Config Subcommand",
+      "status": "pending",
+      "description": "Merge the C1 code/test worktrees, resolve conflicts, and ensure fmt/clippy/tests pass before updating docs/tasks/session log on feat/config-subcommand.",
+      "references": [
+        "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
+        "crates/shell",
+        "tests/installers"
+      ],
+      "acceptance_criteria": [
+        "wt/cs-c1-config-integ merges cs-c1-config-code and cs-c1-config-test with no outstanding conflicts.",
+        "`cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell world_root`; `./tests/installers/install_smoke.sh` (or documented skip) executed and logged.",
+        "feat/config-subcommand updated with merged changes plus session/task/log commits.",
+        "Kickoff prompts for C2-code and C2-test recorded."
+      ],
+      "start_checklist": [
+        "Checkout feat/config-subcommand, pull latest",
+        "Confirm C1-code and C1-test completed",
+        "Set C1-integ to in_progress, log START entry, commit docs update",
+        "Create task branch cs-c1-config-integ",
+        "Create worktree wt/cs-c1-config-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration worktree and resolve conflicts",
+        "Run required fmt/clippy/tests/scripts per prompt",
+        "Merge integration branch back to feat/config-subcommand",
+        "Update tasks.json + session_log.md with END entry",
+        "Push or hand off per instructions"
+      ],
+      "depends_on": [
+        "C1-code",
+        "C1-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cs-c1-config-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/config-subcommand/kickoff_prompts/C1-integ.md"
+    },
+    {
+      "id": "C2-code",
+      "name": "Config show command",
+      "type": "code",
+      "phase": "Config Subcommand",
+      "status": "pending",
+      "description": "Implement `substrate config show` with human-readable output and `--json`, including redaction of sensitive values and helpful exit codes.",
+      "references": [
+        "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
+        "crates/shell/src/execution/cli.rs",
+        "crates/shell/src/execution/invocation.rs",
+        "crates/shell/src/execution/settings.rs",
+        "docs/CONFIGURATION.md",
+        "docs/USAGE.md"
+      ],
+      "acceptance_criteria": [
+        "`config show` subcommand prints the global config in TOML form to stdout, exits 0 on success, and honors `--json` for machine-readable output.",
+        "Redaction applied for future sensitive fields (design hook implemented even if no current secrets).",
+        "Graceful error when config missing (mirrors init guidance).",
+        "Docs updated with examples for both text and JSON flows.",
+        "`cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; targeted tests (`cargo test -p substrate-shell world_root`, new unit tests for serialization helpers) logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/config-subcommand, pull latest",
+        "Set C2-code to in_progress, log START entry, commit docs update",
+        "Create task branch cs-c2-show-code",
+        "Create worktree wt/cs-c2-show-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure required fmt/lint/tests per prompt are green",
+        "Commit worktree changes",
+        "Merge task branch back to feat/config-subcommand",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts as required",
+        "Commit docs update on feat/config-subcommand"
+      ],
+      "depends_on": [
+        "C1-integ"
+      ],
+      "concurrent_with": [
+        "C2-test"
+      ],
+      "worktree": "wt/cs-c2-show-code",
+      "integration_task": "C2-integ",
+      "kickoff_prompt": "docs/project_management/next/config-subcommand/kickoff_prompts/C2-code.md"
+    },
+    {
+      "id": "C2-test",
+      "name": "Config show tests",
+      "type": "test",
+      "phase": "Config Subcommand",
+      "status": "pending",
+      "description": "Add tests validating `substrate config show` output in both human and JSON modes, including redaction hooks and missing-file errors.",
+      "references": [
+        "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
+        "crates/shell/tests",
+        "docs/CONFIGURATION.md"
+      ],
+      "acceptance_criteria": [
+        "Tests run the CLI via the shell driver asserting TOML output equals the on-disk config and `--json` produces parseable JSON.",
+        "Redaction helper covered even if current fields are non-sensitive (e.g., stub a fake key).",
+        "Missing config case prompts instructions to run `config init`.",
+        "`cargo fmt`; `cargo test -p substrate-shell world_root`; document any skipped installer smoke tests."
+      ],
+      "start_checklist": [
+        "Checkout feat/config-subcommand, pull latest",
+        "Set C2-test to in_progress, log START entry, commit docs update",
+        "Create task branch cs-c2-show-test",
+        "Create worktree wt/cs-c2-show-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests per prompt are green (record skips/justifications)",
+        "Commit worktree changes",
+        "Merge task branch back to feat/config-subcommand",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts as required",
+        "Commit docs update on feat/config-subcommand"
+      ],
+      "depends_on": [
+        "C1-integ"
+      ],
+      "concurrent_with": [
+        "C2-code"
+      ],
+      "worktree": "wt/cs-c2-show-test",
+      "integration_task": "C2-integ",
+      "kickoff_prompt": "docs/project_management/next/config-subcommand/kickoff_prompts/C2-test.md"
+    },
+    {
+      "id": "C2-integ",
+      "name": "Integrate config show",
+      "type": "integration",
+      "phase": "Config Subcommand",
+      "status": "pending",
+      "description": "Merge the config-show code/test branches, ensure fmt/clippy/tests pass, and stage the next kickoff prompts.",
+      "references": [
+        "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
+        "crates/shell",
+        "docs/CONFIGURATION.md"
+      ],
+      "acceptance_criteria": [
+        "wt/cs-c2-show-integ merges code/test branches with conflicts resolved.",
+        "`cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell world_root`; `cargo test -p substrate-shell world_enable` run and logged.",
+        "Docs/tasks/session log updated on feat/config-subcommand; kickoff prompts for C3-code/test created."
+      ],
+      "start_checklist": [
+        "Checkout feat/config-subcommand, pull latest",
+        "Confirm C2-code and C2-test completed",
+        "Set C2-integ to in_progress, log START entry, commit docs update",
+        "Create task branch cs-c2-show-integ",
+        "Create worktree wt/cs-c2-show-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration worktree and resolve conflicts",
+        "Run required fmt/clippy/tests/scripts per prompt",
+        "Merge integration branch back to feat/config-subcommand",
+        "Update tasks.json + session_log.md with END entry",
+        "Push or hand off per instructions"
+      ],
+      "depends_on": [
+        "C2-code",
+        "C2-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cs-c2-show-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/config-subcommand/kickoff_prompts/C2-integ.md"
+    },
+    {
+      "id": "C3-code",
+      "name": "Config set command",
+      "type": "code",
+      "phase": "Config Subcommand",
+      "status": "pending",
+      "description": "Implement `substrate config set key=value ...` with dotted key paths, schema-aware validation, multi-key support, atomic writes, and JSON-capable responses.",
+      "references": [
+        "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
+        "crates/shell/src/execution/cli.rs",
+        "crates/shell/src/execution/invocation.rs",
+        "crates/shell/src/execution/settings.rs",
+        "crates/shell/src/builtins/world_enable/config.rs",
+        "docs/CONFIGURATION.md"
+      ],
+      "acceptance_criteria": [
+        "`config set` accepts one or more `key=value` arguments (dotted keys) and validates values: enums for modes, booleans for toggles, strings for paths.",
+        "Multiple updates apply in a single run and persist atomically (write temp file + rename).",
+        "Command returns human summary plus optional `--json` payload describing the applied diff.",
+        "Unexpected keys preserved; invalid keys/values produce clear errors without mutating the file.",
+        "Docs updated with examples and mention multi-key behavior.",
+        "`cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; targeted tests (existing + new unit helpers) run."
+      ],
+      "start_checklist": [
+        "Checkout feat/config-subcommand, pull latest",
+        "Set C3-code to in_progress, log START entry, commit docs update",
+        "Create task branch cs-c3-set-code",
+        "Create worktree wt/cs-c3-set-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure required fmt/lint/tests per prompt are green",
+        "Commit worktree changes",
+        "Merge task branch back to feat/config-subcommand",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts as required",
+        "Commit docs update on feat/config-subcommand"
+      ],
+      "depends_on": [
+        "C2-integ"
+      ],
+      "concurrent_with": [
+        "C3-test"
+      ],
+      "worktree": "wt/cs-c3-set-code",
+      "integration_task": "C3-integ",
+      "kickoff_prompt": "docs/project_management/next/config-subcommand/kickoff_prompts/C3-code.md"
+    },
+    {
+      "id": "C3-test",
+      "name": "Config set tests",
+      "type": "test",
+      "phase": "Config Subcommand",
+      "status": "pending",
+      "description": "Add tests for `substrate config set` covering multi-key updates, validation errors, JSON output, and atomic persistence.",
+      "references": [
+        "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
+        "crates/shell/tests",
+        "docs/CONFIGURATION.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover single and multi-key updates (anchor_mode/path, install.world_enabled, caged) and assert the file changes atomically.",
+        "Invalid keys/values produce non-zero exit codes without modifying files.",
+        "`--json` output parsed and validated in at least one test.",
+        "Precedence stack unaffected (flag/env overrides still win).",
+        "`cargo fmt`; `cargo test -p substrate-shell world_root`; document any installer smoke coverage."
+      ],
+      "start_checklist": [
+        "Checkout feat/config-subcommand, pull latest",
+        "Set C3-test to in_progress, log START entry, commit docs update",
+        "Create task branch cs-c3-set-test",
+        "Create worktree wt/cs-c3-set-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests per prompt are green (record skips/justifications)",
+        "Commit worktree changes",
+        "Merge task branch back to feat/config-subcommand",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts as required",
+        "Commit docs update on feat/config-subcommand"
+      ],
+      "depends_on": [
+        "C2-integ"
+      ],
+      "concurrent_with": [
+        "C3-code"
+      ],
+      "worktree": "wt/cs-c3-set-test",
+      "integration_task": "C3-integ",
+      "kickoff_prompt": "docs/project_management/next/config-subcommand/kickoff_prompts/C3-test.md"
+    },
+    {
+      "id": "C3-integ",
+      "name": "Integrate config set",
+      "type": "integration",
+      "phase": "Config Subcommand",
+      "status": "pending",
+      "description": "Merge the config-set code/test branches, verify fmt/clippy/tests, and close out the program with documentation/status updates.",
+      "references": [
+        "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
+        "crates/shell",
+        "docs/CONFIGURATION.md",
+        "docs/USAGE.md"
+      ],
+      "acceptance_criteria": [
+        "wt/cs-c3-set-integ merges cs-c3-set-code/test, resolves conflicts, and records commands in session log.",
+        "`cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell world_root`; `cargo test -p substrate-shell world_enable`; `./tests/installers/install_smoke.sh` (or documented skip) executed.",
+        "Docs/tasks/session log updated; backlog item marked covered in follow-up (note if additional work remains).",
+        "Any follow-up prompts (if needed) recorded before ending session."
+      ],
+      "start_checklist": [
+        "Checkout feat/config-subcommand, pull latest",
+        "Confirm C3-code and C3-test completed",
+        "Set C3-integ to in_progress, log START entry, commit docs update",
+        "Create task branch cs-c3-set-integ",
+        "Create worktree wt/cs-c3-set-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration worktree and resolve conflicts",
+        "Run required fmt/clippy/tests/scripts per prompt",
+        "Merge integration branch back to feat/config-subcommand",
+        "Update tasks.json + session_log.md with END entry",
+        "Push or hand off per instructions"
+      ],
+      "depends_on": [
+        "C3-code",
+        "C3-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cs-c3-set-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/config-subcommand/kickoff_prompts/C3-integ.md"
+    }
+  ]
+}
