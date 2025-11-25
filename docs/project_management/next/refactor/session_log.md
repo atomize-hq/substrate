@@ -565,3 +565,10 @@ Template (copy/paste and fill in):
 - Results: all commands passed (world_root/world_enable green)
 - Kickoff prompts created: n/a
 - Next steps / blockers: remove wt/cr-r10-pty-integ after cleanup; CRATE_REFACTORING_ANALYSIS.md still missing
+
+## [2025-11-25 13:11 UTC] Code – R11-code – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, R11-code prompt (CRATE_REFACTORING_ANALYSIS.md missing in repo)
+- Set R11-code to in_progress in tasks.json; session log update pending commit
+- Plan: commit docs update; create cr-r11-routing-code branch/worktree (wt/cr-r11-routing-code); modularize routing/dispatch into registry and category modules with re-exports; preserve CLI/tracing/cfg gates; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Blockers: CRATE_REFACTORING_ANALYSIS.md missing
