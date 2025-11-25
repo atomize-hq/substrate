@@ -1566,7 +1566,7 @@
       "name": "Routing dispatch modularization tests",
       "type": "test",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Update/move tests to match the dispatch modularization and ensure routing behavior stays intact.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
