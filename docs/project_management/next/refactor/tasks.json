@@ -1281,7 +1281,7 @@
       "name": "Routing split: world/agent flows",
       "type": "code",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Extract world enable/disable, agent client wiring, and platform bridging logic from routing.rs into focused modules; preserve CLI behavior.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",

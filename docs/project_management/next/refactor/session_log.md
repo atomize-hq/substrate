@@ -478,3 +478,10 @@ Template (copy/paste and fill in):
 - Results: all commands passed; no merge conflicts between code/test branches
 - Merges: cr-r9b-routing-code + cr-r9b-routing-test already aligned on cr-r9b-routing-integ
 - Next steps / blockers: remove wt/cr-r9b-routing-integ after final merge/push; proceed to R9c tasks when ready (analysis doc still missing)
+
+## [2025-11-25 02:16 UTC] Code – R9c-code – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, R9c-code prompt (CRATE_REFACTORING_ANALYSIS.md missing in repo)
+- Set R9c-code to in_progress in tasks.json
+- Plan: commit docs start, create cr-r9c-routing-code branch/worktree (wt/cr-r9c-routing-code); extract routing world enable/disable, agent client wiring, and platform bridging into focused modules with re-exports; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Blockers: analysis doc missing
