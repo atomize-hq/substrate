@@ -442,3 +442,10 @@ Template (copy/paste and fill in):
 - Set R9b-code to in_progress in tasks.json; session log update pending commit
 - Plan: create cr-r9b-routing-code branch/worktree (wt/cr-r9b-routing-code); extract routing path/cwd/env/world-env helpers into focused modules with re-exports; preserve behavior/logging/cfg gates; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Blockers: none
+
+## [2025-11-25 01:08 UTC] Code – R9b-code – END
+- Worktree commits: b096b160 (refactor: split routing env helpers)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: fmt/clippy clean; world_root/world_enable suites passed
+- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R9b-test.md
+- Next steps / blockers: none; ready for integration and worktree removal when finished
