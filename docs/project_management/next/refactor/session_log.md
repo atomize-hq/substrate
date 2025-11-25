@@ -616,3 +616,10 @@ Template (copy/paste and fill in):
 - Set R12-code to in_progress in tasks.json
 - Plan: commit docs start, create cr-r12-routing-builtin-code branch/worktree (wt/cr-r12-routing-builtin-code); split routing builtin into category modules and slim world_enable runner with re-exports while preserving behavior/logging/cfg gates; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing in repo
+
+## [2025-11-25 14:17 UTC] Test – R12-test – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, R12-test prompt (CRATE_REFACTORING_ANALYSIS.md missing in repo)
+- Set R12-test to in_progress in tasks.json
+- Plan: commit docs start, create cr-r12-routing-builtin-test branch/worktree (wt/cr-r12-routing-builtin-test); align routing builtin/world_enable runner tests and fixtures to new module splits; run cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
+- Blockers: CRATE_REFACTORING_ANALYSIS.md missing
