@@ -125,7 +125,7 @@ impl MinimalTerminalGuard {
                 }
             }
 
-            return Ok(Self { saved_stdin_mode });
+            Ok(Self { saved_stdin_mode })
         }
 
         #[cfg(not(any(unix, windows)))]
