@@ -573,6 +573,13 @@ Template (copy/paste and fill in):
 - Plan: commit docs update; create cr-r11-routing-code branch/worktree (wt/cr-r11-routing-code); modularize routing/dispatch into registry and category modules with re-exports; preserve CLI/tracing/cfg gates; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing
 
+## [2025-11-25 13:44 UTC] Test – R11-test – END
+- Worktree commits: 7733111b (cr-r11-routing-test)
+- Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: fmt clean; world_root/world_enable suites passed
+- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R11-integ.md
+- Next steps / blockers: ready for integration; remove wt/cr-r11-routing-test after merge; CRATE_REFACTORING_ANALYSIS.md still missing
+
 ## [2025-11-25 13:30 UTC] Test – R11-test – START
 - Checked out feat/crate-refactor, pulled latest
 - Read refactor_plan.md, tasks.json, session_log.md, R11-test prompt (CRATE_REFACTORING_ANALYSIS.md missing in repo)
