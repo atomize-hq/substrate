@@ -130,6 +130,12 @@ pub struct MultiPolicyWatcher {
     watchers: Vec<PolicyWatcher>,
 }
 
+impl Default for MultiPolicyWatcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MultiPolicyWatcher {
     #[allow(dead_code)]
     pub fn new() -> Self {
