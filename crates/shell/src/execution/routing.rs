@@ -35,8 +35,6 @@ use tracing::warn;
 use std::thread;
 // use nu_ansi_term::{Color, Style}; // Unused for now
 pub(crate) use self::world::initialize_world;
-#[cfg(target_os = "linux")]
-pub(crate) use dispatch::init_linux_world;
 pub(crate) use dispatch::{
     build_agent_client_and_request, execute_command, parse_demo_burst_command,
     stream_non_pty_via_agent,
