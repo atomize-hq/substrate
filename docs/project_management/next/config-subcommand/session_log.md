@@ -106,3 +106,9 @@ Template:
 - Updated tasks.json (C3-code → in_progress); session log entry recorded here prior to committing
 - Plan: branch/worktree cs-c3-set-code, implement `substrate config set` with dotted keys, validation, atomic writes, and `--json`; update docs; run `cargo fmt`, `cargo clippy -p substrate-shell -- -D warnings`, `cargo test -p substrate-shell world_root`, `cargo test -p substrate-shell world_enable`
 - Blockers: upstream remote missing; otherwise none
+
+## [2025-11-25 19:48 UTC] Test – C3-test – START
+- Checked out feat/config-subcommand; `git pull --ff-only` still blocked because the branch lacks an upstream remote
+- Updated tasks.json (C3-test → in_progress) and recorded this entry ahead of the start commit
+- Plan: branch/worktree cs-c3-set-test, add hermetic config-set tests covering single/multi-key updates, validation failures, JSON output, atomic writes, and precedence overrides; run `cargo fmt`, `cargo test -p substrate-shell world_root`, `cargo test -p substrate-shell world_enable`, document installer smoke status
+- Blockers: upstream missing; dependent on C3-code branch for CLI implementation visibility

@@ -311,7 +311,7 @@
       "name": "Config set tests",
       "type": "test",
       "phase": "Config Subcommand",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add tests for `substrate config set` covering multi-key updates, validation errors, JSON output, and atomic persistence.",
       "references": [
         "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
