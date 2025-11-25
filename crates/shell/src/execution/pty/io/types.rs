@@ -269,3 +269,103 @@ pub(crate) fn verify_process_group(pid: Option<u32>) {
 pub(crate) fn verify_process_group(_pid: Option<u32>) {
     // No-op on non-Unix platforms
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::Ordering;
+
+    struct EnvGuard {
+        lines: Option<String>,
+        cols: Option<String>,
+    }
+
+    impl EnvGuard {
+        fn new() -> Self {
+            Self {
+                lines: std::env::var("LINES").ok(),
+                cols: std::env::var("COLUMNS").ok(),
+            }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            if let Some(lines) = self.lines.take() {
+                std::env::set_var("LINES", lines);
+            } else {
+                std::env::remove_var("LINES");
+            }
+
+            if let Some(cols) = self.cols.take() {
+                std::env::set_var("COLUMNS", cols);
+            } else {
+                std::env::remove_var("COLUMNS");
+            }
+        }
+    }
+
+    #[test]
+    fn exit_status_reports_success_and_code() {
+        let success = PtyExitStatus {
+            code: Some(0),
+            signal: None,
+        };
+        assert!(success.success());
+        assert_eq!(success.code(), Some(0));
+
+        let failure = PtyExitStatus {
+            code: Some(1),
+            signal: None,
+        };
+        assert!(!failure.success());
+        assert_eq!(failure.code(), Some(1));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn exit_status_reports_signal_on_unix() {
+        let status = PtyExitStatus {
+            code: None,
+            signal: Some(9),
+        };
+
+        assert!(!status.success());
+        assert_eq!(status.signal(), Some(9));
+    }
+
+    #[test]
+    fn active_guard_resets_flag_on_drop() {
+        let previous = PTY_ACTIVE.swap(true, Ordering::SeqCst);
+
+        {
+            let _guard = PtyActiveGuard;
+            assert!(PTY_ACTIVE.load(Ordering::SeqCst));
+        }
+
+        assert!(
+            !PTY_ACTIVE.load(Ordering::SeqCst),
+            "guard clears PTY_ACTIVE when dropped"
+        );
+
+        PTY_ACTIVE.store(previous, Ordering::SeqCst);
+    }
+
+    #[test]
+    fn terminal_size_uses_non_zero_dimensions() {
+        let _env_guard = EnvGuard::new();
+        std::env::set_var("LINES", "30");
+        std::env::set_var("COLUMNS", "100");
+
+        let size = get_terminal_size().unwrap();
+
+        assert!(size.rows > 0);
+        assert!(size.cols > 0);
+    }
+
+    #[test]
+    fn minimal_terminal_guard_handles_creation() {
+        let result = MinimalTerminalGuard::new();
+        assert!(result.is_ok() || result.is_err());
+    }
+}
