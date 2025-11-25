@@ -194,6 +194,8 @@ pub struct ConfigCmd {
 pub enum ConfigAction {
     /// Initialize or regenerate ~/.substrate/config.toml
     Init(ConfigInitArgs),
+    /// Print the global config (TOML by default, JSON with --json)
+    Show(ConfigShowArgs),
 }
 
 #[derive(Args, Debug)]
@@ -201,6 +203,13 @@ pub struct ConfigInitArgs {
     /// Overwrite the config even if it already exists
     #[arg(long)]
     pub force: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct ConfigShowArgs {
+    /// Emit JSON instead of TOML
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Subcommand, Debug)]

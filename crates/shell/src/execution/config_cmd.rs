@@ -1,7 +1,7 @@
-use crate::execution::cli::{ConfigAction, ConfigCmd, ConfigInitArgs};
-use anyhow::{anyhow, Context, Result};
+use crate::execution::cli::{ConfigAction, ConfigCmd, ConfigInitArgs, ConfigShowArgs};
+use anyhow::{anyhow, bail, Context, Result};
 use std::fs;
-use std::io::Write;
+use std::io::{self, Write};
 use std::path::Path;
 use substrate_common::paths as substrate_paths;
 use tempfile::NamedTempFile;
@@ -10,6 +10,7 @@ use toml::value::{Table as TomlTable, Value as TomlValue};
 pub(crate) fn handle_config_command(cmd: &ConfigCmd) -> Result<()> {
     match &cmd.action {
         ConfigAction::Init(args) => run_config_init(args),
+        ConfigAction::Show(args) => run_config_show(args),
     }
 }
 
@@ -42,6 +43,27 @@ fn run_config_init(args: &ConfigInitArgs) -> Result<()> {
             config_path.display()
         );
     }
+    Ok(())
+}
+
+fn run_config_show(args: &ConfigShowArgs) -> Result<()> {
+    let config_path = substrate_paths::config_file()?;
+    let contents = read_config_contents(&config_path)?;
+    let mut value: TomlValue = toml::from_str(&contents)
+        .with_context(|| format!("invalid TOML in {}", config_path.display()))?;
+
+    redact_config_value("", &mut value);
+
+    if args.json {
+        let json =
+            serde_json::to_string_pretty(&value).context("failed to serialize config as JSON")?;
+        println!("{json}");
+    } else {
+        let formatted =
+            toml::to_string_pretty(&value).context("failed to serialize config as TOML")?;
+        println!("{formatted}");
+    }
+
     Ok(())
 }
 
@@ -90,3 +112,59 @@ fn default_config_tables() -> TomlTable {
     doc.insert("world".to_string(), TomlValue::Table(root));
     doc
 }
+
+fn read_config_contents(path: &Path) -> Result<String> {
+    match fs::read_to_string(path) {
+        Ok(contents) => Ok(contents),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => bail!(
+            "substrate: config file missing at {}; run `substrate config init` to create defaults",
+            path.display()
+        ),
+        Err(err) => Err(anyhow!("failed to read {}: {err}", path.display())),
+    }
+}
+
+fn redact_config_value(current_path: &str, value: &mut TomlValue) {
+    match value {
+        TomlValue::Table(table) => {
+            for (key, entry) in table.iter_mut() {
+                let next_path = if current_path.is_empty() {
+                    key.clone()
+                } else {
+                    format!("{current_path}.{key}")
+                };
+
+                if is_sensitive_path(&next_path) {
+                    *entry = TomlValue::String(REDACTED_PLACEHOLDER.to_string());
+                } else {
+                    redact_config_value(&next_path, entry);
+                }
+            }
+        }
+        TomlValue::Array(items) => {
+            for (index, item) in items.iter_mut().enumerate() {
+                let next_path = if current_path.is_empty() {
+                    format!("[{index}]")
+                } else {
+                    format!("{current_path}[{index}]")
+                };
+                redact_config_value(&next_path, item);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn is_sensitive_path(path: &str) -> bool {
+    const SENSITIVE_PATHS: &[&str] = &[
+        "install.api_token",
+        "install.auth_token",
+        "install.access_token",
+        "world.api_token",
+    ];
+    SENSITIVE_PATHS
+        .iter()
+        .any(|candidate| candidate.eq_ignore_ascii_case(path))
+}
+
+const REDACTED_PLACEHOLDER: &str = "*** redacted ***";

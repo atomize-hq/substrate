@@ -222,8 +222,8 @@ needing to source dotfiles manually.
 
 Before the REPL starts, Substrate exposes a `config` command group for managing
 `~/.substrate/config.toml` (or `%USERPROFILE%\.substrate\config.toml` on
-Windows). The first verb shipped is `config init`, which scaffolds the default
-install/world tables and creates missing parent directories:
+Windows). The current verbs are `config init`, which scaffolds/regenerates the
+file, and `config show`, which prints it in TOML (or JSON) form:
 
 ```bash
 # Create ~/.substrate/config.toml if it does not exist
@@ -238,6 +238,53 @@ sandboxes. Shell startup and the installer scripts will emit a warning pointing
 to `substrate config init` whenever the global config is absent, so re-running
 the command is the supported remediation when the metadata is missing or
 corrupted.
+
+After the file exists, `substrate config show` prints the full contents with
+redaction hooks for any future sensitive values. TOML is the default view:
+
+```bash
+$ substrate config show
+[install]
+world_enabled = true
+
+[world]
+anchor_mode = "project"
+anchor_path = ""
+root_mode = "project"
+root_path = ""
+caged = true
+```
+
+Use `--json` for automation (the same flag works on macOS/Linux and respects
+`SUBSTRATE_HOME` overrides). Pipe to `jq` or the equivalent for readability:
+
+```bash
+$ substrate config show --json | jq '.'
+{
+  "install": {
+    "world_enabled": true
+  },
+  "world": {
+    "anchor_mode": "project",
+    "anchor_path": "",
+    "root_mode": "project",
+    "root_path": "",
+    "caged": true
+  }
+}
+```
+
+PowerShell users can call the same command and feed it through `ConvertFrom-Json`
+to inspect the object:
+
+```powershell
+PS> substrate config show --json | ConvertFrom-Json | Format-List
+install : @{world_enabled=True}
+world   : @{anchor_mode=project; anchor_path=; root_mode=project; root_path=; caged=True}
+```
+
+When the file is missing the command exits non-zero with a reminder to run
+`substrate config init`, matching the shell/install warnings.
 
 Use `SUBSTRATE_WORLD_ENABLED=0` to force pass-through mode temporarily and
 `SUBSTRATE_WORLD_DEPS_MANIFEST` to point world-deps at a custom definition file.

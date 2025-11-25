@@ -143,6 +143,46 @@ already exists. On Windows the same path lives under
 emit a warning that points to this command whenever the file is absent, so
 running `substrate config init` is the supported fix.
 
+### Inspecting the config file
+
+`substrate config show` prints the current global config in a stable, redacted
+format. TOML is emitted by default for humans, while `--json` produces a
+machine-friendly payload for automation. Both commands honor
+`SUBSTRATE_HOME`/`%USERPROFILE%` overrides and exit non-zero with a reminder to
+run `substrate config init` if the file is missing.
+
+```bash
+$ substrate config show
+[install]
+world_enabled = true
+
+[world]
+anchor_mode = "project"
+anchor_path = ""
+root_mode = "project"
+root_path = ""
+caged = true
+```
+
+```bash
+$ substrate config show --json
+{
+  "install": {
+    "world_enabled": true
+  },
+  "world": {
+    "anchor_mode": "project",
+    "anchor_path": "",
+    "root_mode": "project",
+    "root_path": "",
+    "caged": true
+  }
+}
+```
+
+Sensitive fields will be replaced with `*** redacted ***` once such values are
+stored in the config.
+
 ## CLI Flags
 
 ### Shim Management
