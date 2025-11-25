@@ -644,3 +644,10 @@ Template (copy/paste and fill in):
 - Confirmed R12-code and R12-test completed
 - Set R12-integ to in_progress in tasks.json
 - Plan: commit docs start, create cr-r12-routing-builtin-integ branch/worktree (wt/cr-r12-routing-builtin-integ); merge R12 code/test branches and resolve conflicts; run cargo fmt, cargo clippy --workspace --all-targets -- -D warnings, cargo test -p substrate-shell world_root, cargo test -p substrate-shell world_enable; update docs/logs on feat/crate-refactor and clean up worktree
+
+## [2025-11-25 14:58 UTC] Integration – R12-integ – END
+- Worktree commits: none (cr-r12-routing-builtin-code/test already aligned on feat/crate-refactor)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: all commands passed; no merge conflicts between code/test branches
+- Merges: feat/crate-refactor already contained cr-r12-routing-builtin-integ; no additional commits to pull forward
+- Next steps / blockers: remove wt/cr-r12-routing-builtin-integ when finished; CRATE_REFACTORING_ANALYSIS.md still missing
