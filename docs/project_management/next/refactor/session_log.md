@@ -687,3 +687,10 @@ Template (copy/paste and fill in):
 - Set R13-integ to in_progress in tasks.json
 - Plan: commit docs start; create cr-r13-broker-integ branch/worktree (wt/cr-r13-broker-integ); merge code/test branches, resolve conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p broker; update docs/logs on feat/crate-refactor
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing
+
+## [2025-11-25 15:34 UTC] Integration – R13-integ – END
+- Worktree commits: none (cr-r13-broker-code/test already aligned)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p broker (fails: package ID not found); cargo test -p substrate-broker
+- Results: fmt/clippy clean; substrate-broker tests passed (20 tests)
+- Merges: none required (branches already aligned on feat/crate-refactor)
+- Next steps / blockers: remove wt/cr-r13-broker-integ after cleanup; CRATE_REFACTORING_ANALYSIS.md still missing
