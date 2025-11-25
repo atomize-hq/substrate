@@ -136,7 +136,7 @@
       "name": "Config show command",
       "type": "code",
       "phase": "Config Subcommand",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Implement `substrate config show` with human-readable output and `--json`, including redaction of sensitive values and helpful exit codes.",
       "references": [
         "docs/project_management/next/config-subcommand/config_subcommand_plan.md",

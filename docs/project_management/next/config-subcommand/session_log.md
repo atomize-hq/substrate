@@ -65,6 +65,14 @@ Template:
 - Plan: branch/worktree for cs-c2-show-code, implement `config show` TOML/JSON output with redaction hook, refresh docs, run fmt/clippy/tests, then merge back and update tasks/logs
 - Blockers: none beyond missing upstream; local toolchain ready
 
+## [2025-11-25 19:37 UTC] Code – C2-code – END
+- Worktree commits: 014a2b5 (feat: add substrate config show command)
+- Commands: `cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell world_root`
+- Results: all commands passed; show command prints TOML by default, `--json` emits machine-readable output, missing-config path returns a hint to run `config init`
+- Kickoff prompts created: n/a
+- Docs commit: (pending – will land as `docs: finish C2-code`)
+- Next steps / blockers: ready for C2-test + integration; worktree removal queued after final docs commit
+
 ## [2025-11-25 20:05 UTC] Test – C2-test – START
 - Checked out feat/config-subcommand; `git pull --ff-only` failed (branch has no upstream remote configured)
 - Updated tasks.json (C2-test → in_progress); this session log entry staged for the same doc commit
