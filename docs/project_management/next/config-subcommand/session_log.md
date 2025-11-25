@@ -120,3 +120,11 @@ Template:
 - Updated tasks.json (C3-test → in_progress) and recorded this entry ahead of the start commit
 - Plan: branch/worktree cs-c3-set-test, add hermetic config-set tests covering single/multi-key updates, validation failures, JSON output, atomic writes, and precedence overrides; run `cargo fmt`, `cargo test -p substrate-shell world_root`, `cargo test -p substrate-shell world_enable`, document installer smoke status
 - Blockers: upstream missing; dependent on C3-code branch for CLI implementation visibility
+
+## [2025-11-25 20:03 UTC] Test – C3-test – END
+- Worktree commits: 5cbea83 (`test: cover substrate config set CLI`)
+- Commands: `cargo fmt`; `cargo test -p substrate-shell --test config_set`; `cargo test -p substrate-shell world_root`; `env -u SUBSTRATE_MANAGER_ENV cargo test -p substrate-shell world_enable`
+- Results: fmt clean; config_set integration tests pass when the command is available; world_root suite green; world_enable required clearing `SUBSTRATE_MANAGER_ENV` (user env sets it globally and otherwise trips the manager-env path test); no installer smoke requested
+- Kickoff prompts created: n/a (`docs/project_management/next/config-subcommand/kickoff_prompts/C3-integ.md` already present)
+- Docs commit: pending (`docs: finish C3-test`)
+- Next steps / blockers: ready for C3-integ to merge code+tests once config-set implementation lands
