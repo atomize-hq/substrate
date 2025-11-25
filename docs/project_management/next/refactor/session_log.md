@@ -544,3 +544,10 @@ Template (copy/paste and fill in):
 - Set R10-test to in_progress in tasks.json
 - Plan: commit docs start, create cr-r10-pty-test branch/worktree (wt/cr-r10-pty-test); update pty/io tests to new modules; run cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Blockers: CRATE_REFACTORING_ANALYSIS.md still missing
+
+## [2025-11-25 03:40 UTC] Test – R10-test – END
+- Worktree commits: b5767a4a (test: cover pty io split)
+- Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: fmt clean; world_root/world_enable suites passed
+- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R10-integ.md
+- Next steps / blockers: none
