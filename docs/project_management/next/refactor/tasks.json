@@ -1887,6 +1887,249 @@
       "worktree": "wt/cr-r13-broker-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R13-integ.md"
+    },
+    {
+      "id": "R14-code",
+      "name": "Routing dispatch module trimming",
+      "type": "code",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Further slim routing/dispatch modules (mod.rs + tests.rs) by extracting common helpers/fixtures and shrinking top-level orchestration without behavior changes.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/shell/src/execution/routing/dispatch/mod.rs",
+        "crates/shell/src/execution/routing/dispatch/tests.rs"
+      ],
+      "acceptance_criteria": [
+        "dispatch/mod.rs reduced by moving shared helpers/state/types into submodules; top-level file becomes a thin orchestrator with re-exports to keep API stable.",
+        "dispatch/tests.rs split so heavy fixtures/helpers move to dedicated support modules; individual test modules focus on specific categories.",
+        "CLI/config behavior unchanged; tracing/logging/redaction and cfg gates preserved.",
+        "cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable pass (skips noted)."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R14-code to in_progress, update session_log.md with START entry, commit docs update (`git commit -am \"docs: start R14-code\"`)",
+        "Create task branch cr-r14-routing-dispatch-code",
+        "Create worktree wt/cr-r14-routing-dispatch-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/lint/tests per prompt are green; capture outputs for END log entry",
+        "Commit worktree changes with descriptive message",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; reference paired test prompt",
+        "Commit docs update on feat/crate-refactor (`git commit -am \"docs: finish R14-code\"`)"
+      ],
+      "depends_on": [
+        "R13-integ"
+      ],
+      "concurrent_with": [
+        "R14-test"
+      ],
+      "worktree": "wt/cr-r14-routing-dispatch-code",
+      "integration_task": "R14-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R14-code.md"
+    },
+    {
+      "id": "R14-test",
+      "name": "Routing dispatch module trimming tests",
+      "type": "test",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Align tests/fixtures with the trimmed dispatch modules; ensure coverage remains intact after helper extraction.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/shell/src/execution/routing/dispatch/tests.rs",
+        "crates/shell/tests"
+      ],
+      "acceptance_criteria": [
+        "dispatch tests reorganized by category with shared fixtures moved to support modules; behavior assertions unchanged.",
+        "No production code changes beyond test-only helpers; logging/redaction expectations maintained.",
+        "cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable (skips noted) logged in session log.",
+        "Integration prompt referenced in END log."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R14-test to in_progress, update session_log.md with START entry, commit docs update (`git commit -am \"docs: start R14-test\"`)",
+        "Create task branch cr-r14-routing-dispatch-test",
+        "Create worktree wt/cr-r14-routing-dispatch-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure required tests are green; capture outputs for END log",
+        "Commit worktree changes with descriptive message",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; reference integration prompt",
+        "Commit docs update on feat/crate-refactor (`git commit -am \"docs: finish R14-test\"`)"
+      ],
+      "depends_on": [
+        "R13-integ"
+      ],
+      "concurrent_with": [
+        "R14-code"
+      ],
+      "worktree": "wt/cr-r14-routing-dispatch-test",
+      "integration_task": "R14-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R14-test.md"
+    },
+    {
+      "id": "R14-integ",
+      "name": "Integrate routing dispatch module trimming",
+      "type": "integration",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Merge R14 dispatch code/test splits, resolve conflicts, ensure fmt/clippy/tests are green.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "crates/shell/src/execution/routing/dispatch",
+        "crates/shell/tests"
+      ],
+      "acceptance_criteria": [
+        "wt/cr-r14-routing-dispatch-integ merges R14 code+tests with clean fmt/clippy/test runs for substrate-shell (world_root/world_enable).",
+        "feat/crate-refactor updated with integration results and doc/task/log entries.",
+        "Follow-up prompts/notes captured before closing the session."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Confirm R14-code/test completed",
+        "Set R14-integ to in_progress, update session_log.md with START entry, commit docs update (`git commit -am \"docs: start R14-integ\"`)",
+        "Create task branch cr-r14-routing-dispatch-integ",
+        "Create worktree wt/cr-r14-routing-dispatch-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration branch/worktree and resolve conflicts",
+        "Run required fmt/clippy/tests noted in prompts",
+        "Merge integration branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; push or hand off"
+      ],
+      "depends_on": [
+        "R14-code",
+        "R14-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cr-r14-routing-dispatch-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R14-integ.md"
+    },
+    {
+      "id": "R15-code",
+      "name": "Shell integration test split",
+      "type": "code",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Split shell/tests/integration.rs into logical suites (e.g., world enable/disable, shim deployment, logging/rotation, env inheritance) with shared fixtures to reduce monolith size.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/shell/tests/integration.rs"
+      ],
+      "acceptance_criteria": [
+        "integration.rs divided into multiple files by domain with a small common support module; behavior assertions unchanged and fixtures deduplicated.",
+        "Logging/redaction expectations preserved; platform skips documented.",
+        "cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable pass (skips noted)."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R15-code to in_progress, update session_log.md with START entry, commit docs update (`git commit -am \"docs: start R15-code\"`)",
+        "Create task branch cr-r15-shell-integration-code",
+        "Create worktree wt/cr-r15-shell-integration-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/lint/tests per prompt are green; capture outputs for END log entry",
+        "Commit worktree changes with descriptive message",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; reference paired test prompt",
+        "Commit docs update on feat/crate-refactor (`git commit -am \"docs: finish R15-code\"`)"
+      ],
+      "depends_on": [
+        "R14-integ"
+      ],
+      "concurrent_with": [
+        "R15-test"
+      ],
+      "worktree": "wt/cr-r15-shell-integration-code",
+      "integration_task": "R15-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R15-code.md"
+    },
+    {
+      "id": "R15-test",
+      "name": "Shell integration test split fixtures",
+      "type": "test",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Refactor shell integration test fixtures/utilities to match the split suites and keep behavior coverage intact.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "docs/project_management/analysis/CRATE_REFACTORING_ANALYSIS.md",
+        "crates/shell/tests/integration.rs",
+        "crates/shell/tests"
+      ],
+      "acceptance_criteria": [
+        "Fixtures/helpers consolidated in a support module; split integration suites reference shared utilities; assertions unchanged.",
+        "No production code changes beyond test-only helpers; platform skips documented.",
+        "cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable (skips noted) logged in session log.",
+        "Integration prompt referenced in END log."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Set R15-test to in_progress, update session_log.md with START entry, commit docs update (`git commit -am \"docs: start R15-test\"`)",
+        "Create task branch cr-r15-shell-integration-test",
+        "Create worktree wt/cr-r15-shell-integration-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure required tests are green; capture outputs for END log",
+        "Commit worktree changes with descriptive message",
+        "Merge task branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; reference integration prompt",
+        "Commit docs update on feat/crate-refactor (`git commit -am \"docs: finish R15-test\"`)"
+      ],
+      "depends_on": [
+        "R14-integ"
+      ],
+      "concurrent_with": [
+        "R15-code"
+      ],
+      "worktree": "wt/cr-r15-shell-integration-test",
+      "integration_task": "R15-integ",
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R15-test.md"
+    },
+    {
+      "id": "R15-integ",
+      "name": "Integrate shell integration test split",
+      "type": "integration",
+      "phase": "Crate Refactor",
+      "status": "pending",
+      "description": "Merge R15 code/test splits for shell integration tests, resolve conflicts, ensure fmt/clippy/tests are green.",
+      "references": [
+        "docs/project_management/next/refactor/refactor_plan.md",
+        "crates/shell/tests"
+      ],
+      "acceptance_criteria": [
+        "wt/cr-r15-shell-integration-integ merges R15 code+tests with clean fmt/clippy/test runs for substrate-shell (world_root/world_enable).",
+        "feat/crate-refactor updated with integration results and doc/task/log entries.",
+        "Follow-up prompts/notes captured before closing the session."
+      ],
+      "start_checklist": [
+        "Checkout feat/crate-refactor, pull latest",
+        "Confirm R15-code/test completed",
+        "Set R15-integ to in_progress, update session_log.md with START entry, commit docs update (`git commit -am \"docs: start R15-integ\"`)",
+        "Create task branch cr-r15-shell-integration-integ",
+        "Create worktree wt/cr-r15-shell-integration-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration branch/worktree and resolve conflicts",
+        "Run required fmt/clippy/tests noted in prompts",
+        "Merge integration branch back to feat/crate-refactor",
+        "Update tasks.json + session_log.md with END entry; push or hand off"
+      ],
+      "depends_on": [
+        "R15-code",
+        "R15-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cr-r15-shell-integration-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/refactor/kickoff_prompts/R15-integ.md"
     }
   ]
 }

@@ -36,6 +36,8 @@ traceable through every handoff.
 11. Final routing cleanup to shrink dispatch into smaller registries and slim
     builtins/world runner modules without altering behavior.
 12. Broker/lib.rs cleanup into focused modules while keeping API/behavior stable.
+13. Dispatch/test fixture trimming and shell integration test splitting to keep
+    suites maintainable without losing coverage.
 
 ## Baseline Standards & References
 
@@ -165,12 +167,14 @@ Additional rules:
 
 Task details, dependencies, and worktree names live in `tasks.json`.
 
-## Outstanding Hotspots (post-R10)
+## Outstanding Hotspots (post-R13)
 
-- `crates/shell/src/execution/routing/dispatch.rs` ~3,525 LOC
-- `crates/shell/src/execution/routing/builtin.rs` ~643 LOC
-- `crates/broker/src/lib.rs` ~584 LOC
-- `crates/shell/src/builtins/world_enable/runner.rs` ~579 LOC
+- `crates/shell/src/execution/routing/dispatch/mod.rs` ~1,197 LOC
+- `crates/shell/src/execution/routing/dispatch/tests.rs` ~1,174 LOC
+- `crates/shell/src/execution/routing/dispatch/world_ops.rs` ~836 LOC
+- `crates/shell/src/execution/routing/dispatch/registry.rs` ~743 LOC
+- `crates/shell/src/execution/routing/dispatch/exec.rs` ~729 LOC
+- `crates/common/src/manager_manifest/tests.rs` ~825 LOC
+- `crates/shell/tests/integration.rs` ~745 LOC
 - `crates/shell/src/execution/invocation/plan.rs` ~570 LOC
-- (Large fixtures accepted: `shim/tests/integration.rs` ~959 LOC,
-  `shell/tests/integration.rs` ~745 LOC)
+- (Large fixtures accepted: `shim/tests/integration.rs` ~959 LOC)
