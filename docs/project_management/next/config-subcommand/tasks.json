@@ -354,7 +354,7 @@
       "name": "Integrate config set",
       "type": "integration",
       "phase": "Config Subcommand",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge the config-set code/test branches, verify fmt/clippy/tests, and close out the program with documentation/status updates.",
       "references": [
         "docs/project_management/next/config-subcommand/config_subcommand_plan.md",

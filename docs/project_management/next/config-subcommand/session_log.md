@@ -135,3 +135,11 @@ Template:
 - Updated tasks.json (C3-integ → in_progress); this log entry will be part of the same doc commit
 - Plan: create cs-c3-set-integ branch/worktree, merge cs-c3-set-code + cs-c3-set-test, resolve conflicts, run `cargo fmt`, `cargo clippy -p substrate-shell -- -D warnings`, `cargo test -p substrate-shell world_root`, `cargo test -p substrate-shell world_enable`, and `./tests/installers/install_smoke.sh`, then update docs/tasks/logs and confirm CLI UX acceptance criteria
 - Blockers: feat/config-subcommand still lacks upstream tracking; installer smoke may require elevated permissions depending on environment
+
+## [2025-11-25 20:14 UTC] Integration – C3-integ – END
+- Worktree commits: n/a (cs-c3-set-code/test already merged; cs-c3-set-integ validated current HEAD)
+- Commands: `cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell world_root`; `cargo test -p substrate-shell world_enable`; `./tests/installers/install_smoke.sh`
+- Results: all commands passed; installer smoke confirmed the `substrate config init` hint appears in the log; config set/show/init behavior matches spec with multi-key updates and JSON output verified via tests
+- Kickoff prompts created: n/a (final track in this program)
+- Docs commit: pending (`docs: finish C3-integ`)
+- Next steps / blockers: Updated docs/BACKLOG.md to mark the Global configuration UX item complete; no open blockers
