@@ -609,3 +609,10 @@ Template (copy/paste and fill in):
 - Results: all commands passed; no merge conflicts between branches
 - Merges: none required (feat/crate-refactor already contained cr-r11-routing-code/test)
 - Next steps / blockers: remove wt/cr-r11-routing-integ after cleanup; ready for R12 kickoff; CRATE_REFACTORING_ANALYSIS.md still missing
+
+## [2025-11-25 14:10 UTC] Code – R12-code – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, R12-code prompt (CRATE_REFACTORING_ANALYSIS.md missing in repo)
+- Set R12-code to in_progress in tasks.json
+- Plan: commit docs start, create cr-r12-routing-builtin-code branch/worktree (wt/cr-r12-routing-builtin-code); split routing builtin into category modules and slim world_enable runner with re-exports while preserving behavior/logging/cfg gates; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Blockers: CRATE_REFACTORING_ANALYSIS.md missing in repo
