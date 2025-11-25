@@ -12,4 +12,4 @@ pub use types::PtyExitStatus;
 pub(crate) use types::{get_terminal_size, MinimalTerminalGuard, PtyActiveGuard};
 
 #[cfg(windows)]
-pub(crate) use manager::{initialize_windows_input_forwarder, sleep_input_gate, wake_input_gate};
+pub(crate) use manager::{sleep_input_gate, wake_input_gate};
