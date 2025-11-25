@@ -15,6 +15,12 @@ use uuid::Uuid;
 
 const BLOCK_START_PREFIX: &str = "# >>> substrate repair:";
 const BLOCK_END_PREFIX: &str = "# <<< substrate repair:";
+const BASHENV_GUARD: &str = r#"if [ -n "${SUBSTRATE_BASHENV_ACTIVE:-}" ]; then
+  return 0
+fi
+export SUBSTRATE_BASHENV_ACTIVE=1
+
+"#;
 
 #[derive(Debug)]
 pub enum RepairOutcome {
@@ -68,6 +74,7 @@ pub(crate) fn run_repair(manager: &str, auto_confirm: bool) -> Result<RepairOutc
     let existing = fs::read_to_string(&bashenv_path).ok();
     let block = build_manager_block(&spec.name, &snippet);
     let merged = upsert_block(existing.as_deref().unwrap_or(""), &spec.name, &block);
+    let guarded = ensure_guard(&merged);
 
     if let Some(parent) = bashenv_path.parent() {
         fs::create_dir_all(parent).with_context(|| {
@@ -81,7 +88,7 @@ pub(crate) fn run_repair(manager: &str, auto_confirm: bool) -> Result<RepairOutc
         None
     };
 
-    write_atomic(&bashenv_path, &merged)?;
+    write_atomic(&bashenv_path, &guarded)?;
     log_repair_event(&spec.name, &bashenv_path, backup_path.as_deref(), &block);
 
     Ok(RepairOutcome::Applied {
@@ -156,6 +163,14 @@ fn write_atomic(path: &Path, contents: &str) -> Result<()> {
     temp.flush()?;
     temp.persist(path)?;
     Ok(())
+}
+
+fn ensure_guard(contents: &str) -> String {
+    if contents.contains("SUBSTRATE_BASHENV_ACTIVE") {
+        contents.to_string()
+    } else {
+        format!("{BASHENV_GUARD}{contents}")
+    }
 }
 
 fn prompt_for_repair(

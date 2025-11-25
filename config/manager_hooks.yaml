@@ -28,14 +28,11 @@ managers:
       - "nvm:.*command not found"
       - "node:.*command not found"
     repair_hint: |
-      cat <<'EOF' >> ~/.substrate_bashenv
       export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
       if [ -d "$NVM_DIR" ]; then
         [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
         [ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"
       fi
-      EOF
-      source ~/.substrate_bashenv
     guest_detect:
       command: "bash -lc '[ -s \"$HOME/.nvm/nvm.sh\" ]'"
     guest_install:
@@ -65,14 +62,11 @@ managers:
     errors:
       - "pyenv:.*command not found"
     repair_hint: |
-      cat <<'EOF' >> ~/.substrate_bashenv
       export PYENV_ROOT="${PYENV_ROOT:-$HOME/.pyenv}"
       if [ -d "$PYENV_ROOT" ]; then
         export PATH="$PYENV_ROOT/bin:$PATH"
         eval "$(pyenv init -)"
       fi
-      EOF
-      source ~/.substrate_bashenv
     guest_detect:
       command: "pyenv --version"
     guest_install:
@@ -103,12 +97,9 @@ managers:
     errors:
       - "direnv:.*command not found"
     repair_hint: |
-      cat <<'EOF' >> ~/.substrate_bashenv
       if command -v direnv >/dev/null 2>&1; then
         eval "$(direnv hook bash)"
       fi
-      EOF
-      source ~/.substrate_bashenv
     guest_detect:
       command: "direnv version"
     guest_install:
@@ -139,7 +130,6 @@ managers:
     errors:
       - "asdf:.*command not found"
     repair_hint: |
-      cat <<'EOF' >> ~/.substrate_bashenv
       export ASDF_DIR="${ASDF_DIR:-$HOME/.asdf}"
       export ASDF_DATA_DIR="${ASDF_DATA_DIR:-$ASDF_DIR}"
       if [ -s "$ASDF_DIR/asdf.sh" ]; then
@@ -148,8 +138,6 @@ managers:
       if [ -s "$ASDF_DIR/completions/asdf.bash" ]; then
         . "$ASDF_DIR/completions/asdf.bash"
       fi
-      EOF
-      source ~/.substrate_bashenv
     guest_detect:
       command: "asdf --version"
     guest_install:
@@ -187,7 +175,6 @@ managers:
     errors:
       - "conda:.*command not found"
     repair_hint: |
-      cat <<'EOF' >> ~/.substrate_bashenv
       if [ -z "${CONDA_ROOT:-}" ]; then
         if [ -d "$HOME/miniconda3" ]; then
           export CONDA_ROOT="$HOME/miniconda3"
@@ -198,8 +185,6 @@ managers:
       if [ -n "${CONDA_ROOT:-}" ] && [ -s "$CONDA_ROOT/etc/profile.d/conda.sh" ]; then
         . "$CONDA_ROOT/etc/profile.d/conda.sh"
       fi
-      EOF
-      source ~/.substrate_bashenv
     guest_detect:
       command: "conda --version"
     guest_install:
@@ -236,14 +221,11 @@ managers:
       - "mise:.*command not found"
       - "rtx:.*command not found"
     repair_hint: |
-      cat <<'EOF' >> ~/.substrate_bashenv
       if command -v mise >/dev/null 2>&1; then
         eval "$(mise activate bash)"
       elif command -v rtx >/dev/null 2>&1; then
         eval "$(rtx activate bash)"
       fi
-      EOF
-      source ~/.substrate_bashenv
     guest_detect:
       command: "mise --version"
     guest_install:
@@ -275,14 +257,11 @@ managers:
       - "rbenv:.*command not found"
       - "ruby:.*command not found"
     repair_hint: |
-      cat <<'EOF' >> ~/.substrate_bashenv
       export RBENV_ROOT="${RBENV_ROOT:-$HOME/.rbenv}"
       if [ -d "$RBENV_ROOT" ]; then
         export PATH="$RBENV_ROOT/bin:$PATH"
         eval "$(rbenv init -)"
       fi
-      EOF
-      source ~/.substrate_bashenv
     guest_detect:
       command: "rbenv --version"
     guest_install:
@@ -315,13 +294,10 @@ managers:
     errors:
       - "sdk:.*command not found"
     repair_hint: |
-      cat <<'EOF' >> ~/.substrate_bashenv
       export SDKMAN_DIR="${SDKMAN_DIR:-$HOME/.sdkman}"
       if [ -s "$SDKMAN_DIR/bin/sdkman-init.sh" ]; then
         . "$SDKMAN_DIR/bin/sdkman-init.sh"
       fi
-      EOF
-      source ~/.substrate_bashenv
     guest_detect:
       command: "bash -lc 'source \"$HOME/.sdkman/bin/sdkman-init.sh\" >/dev/null 2>&1 && sdk version'"
     guest_install:
@@ -349,13 +325,10 @@ managers:
     errors:
       - "bun:.*command not found"
     repair_hint: |
-      cat <<'EOF' >> ~/.substrate_bashenv
       export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
       if [ -d "$BUN_INSTALL/bin" ]; then
         export PATH="$BUN_INSTALL/bin:$PATH"
       fi
-      EOF
-      source ~/.substrate_bashenv
     guest_detect:
       command: "bun --version"
     guest_install:
@@ -384,13 +357,10 @@ managers:
     errors:
       - "volta:.*command not found"
     repair_hint: |
-      cat <<'EOF' >> ~/.substrate_bashenv
       export VOLTA_HOME="${VOLTA_HOME:-$HOME/.volta}"
       if [ -d "$VOLTA_HOME/bin" ]; then
         export PATH="$VOLTA_HOME/bin:$PATH"
       fi
-      EOF
-      source ~/.substrate_bashenv
     guest_detect:
       command: "volta --version"
     guest_install:
@@ -421,14 +391,11 @@ managers:
       - "goenv:.*command not found"
       - "go:.*command not found"
     repair_hint: |
-      cat <<'EOF' >> ~/.substrate_bashenv
       export GOENV_ROOT="${GOENV_ROOT:-$HOME/.goenv}"
       if [ -d "$GOENV_ROOT" ]; then
         export PATH="$GOENV_ROOT/bin:$PATH"
         eval "$(goenv init -)"
       fi
-      EOF
-      source ~/.substrate_bashenv
     guest_detect:
       command: "goenv --version"
     guest_install:
@@ -461,7 +428,6 @@ managers:
     errors:
       - "node:.*command not found"
     repair_hint: |
-      cat <<'EOF' >> ~/.substrate_bashenv
       export ASDF_DIR="${ASDF_DIR:-$HOME/.asdf}"
       if [ -s "$ASDF_DIR/asdf.sh" ]; then
         . "$ASDF_DIR/asdf.sh"
@@ -469,8 +435,6 @@ managers:
         asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git >/dev/null 2>&1 || true
         asdf install nodejs latest >/dev/null 2>&1 || true
       fi
-      EOF
-      source ~/.substrate_bashenv
     guest_detect:
       command: "bash -lc 'ASDF_DIR=${ASDF_DIR:-$HOME/.asdf} && \"$ASDF_DIR/bin/asdf\" list nodejs'"
     guest_install:
@@ -490,4 +454,3 @@ managers:
         fi
         "$ASDF_BIN" install nodejs latest
         "$ASDF_BIN" global nodejs latest
-

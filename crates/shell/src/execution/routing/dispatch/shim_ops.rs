@@ -48,7 +48,11 @@ pub(crate) fn wrap_with_anchor_guard(command: &str, config: &ShellConfig) -> Str
     let anchor = canonicalize_or(&config.world_root.anchor_root(&current_dir));
     let anchor_escaped = shell_escape_for_shell(&anchor);
     let mut guarded = format!(
-        "__substrate_anchor_root={anchor}; substrate_anchor_cd() {{ command cd \"$@\" || return $?; dest=$(pwd -P); case \"$dest\" in \"$__substrate_anchor_root\"|\"$__substrate_anchor_root\"/*) ;; *) printf 'substrate: info: caged root guard: returning to %s\\n' \"$__substrate_anchor_root\" >&2; command cd \"$__substrate_anchor_root\" || return $?;; esac; unset dest; }}; cd() {{ substrate_anchor_cd \"$@\"; }}; substrate_anchor_cd .; ",
+        "__substrate_anchor_root={anchor}; \
+         substrate_anchor_builtin_cd() {{ if builtin cd \"$@\" 2>/dev/null; then :; else command cd \"$@\"; fi; }}; \
+         substrate_anchor_cd() {{ substrate_anchor_builtin_cd \"$@\" || return $?; dest=$(pwd -P); case \"$dest\" in \"$__substrate_anchor_root\"|\"$__substrate_anchor_root\"/*) ;; *) printf 'substrate: info: caged root guard: returning to %s\\n' \"$__substrate_anchor_root\" >&2; substrate_anchor_builtin_cd \"$__substrate_anchor_root\" || return $?;; esac; unset dest; }}; \
+         cd() {{ substrate_anchor_cd \"$@\"; }}; \
+         substrate_anchor_cd .; ",
         anchor = anchor_escaped,
     );
     guarded.push_str(command);

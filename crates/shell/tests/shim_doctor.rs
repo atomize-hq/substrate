@@ -491,6 +491,10 @@ managers:
         content.matches("REPAIR_MANAGER=1").count() == 1,
         "repair snippet should only be appended once per run: {content}"
     );
+    assert!(
+        content.contains("SUBSTRATE_BASHENV_ACTIVE"),
+        "bashenv guard missing after repair: {content}"
+    );
 
     assert!(
         backup_path.exists(),
