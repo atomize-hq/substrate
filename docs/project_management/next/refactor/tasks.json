@@ -60,7 +60,7 @@
         "crates/forwarder/tests"
       ],
       "acceptance_criteria": [
-        "Tests cover poisoned lock scenarios and failure modes for each crate’s public API, asserting non-panicking behavior.",
+        "Tests cover poisoned lock scenarios and failure modes for each crate\u2019s public API, asserting non-panicking behavior.",
         "Any new test fixtures or helpers are isolated to test modules; production code remains untouched.",
         "cargo fmt && targeted cargo test suites for the four crates pass and are logged in session_log.md.",
         "Kickoff prompts for R1-integ and R2-code/test are authored as required."
@@ -1281,7 +1281,7 @@
       "name": "Routing split: world/agent flows",
       "type": "code",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Extract world enable/disable, agent client wiring, and platform bridging logic from routing.rs into focused modules; preserve CLI behavior.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",

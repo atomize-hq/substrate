@@ -485,3 +485,10 @@ Template (copy/paste and fill in):
 - Set R9c-code to in_progress in tasks.json
 - Plan: commit docs start, create cr-r9c-routing-code branch/worktree (wt/cr-r9c-routing-code); extract routing world enable/disable, agent client wiring, and platform bridging into focused modules with re-exports; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
 - Blockers: analysis doc missing
+
+## [2025-11-25 02:33 UTC] Code – R9c-code – END
+- Worktree commits: e6285217 (refactor: split routing world flows)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: fmt/clippy clean; world_root/world_enable suites passed
+- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R9c-test.md
+- Next steps / blockers: none (analysis doc still missing)
