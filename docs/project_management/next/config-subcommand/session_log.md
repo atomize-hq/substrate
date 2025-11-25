@@ -23,3 +23,9 @@ Template:
 - Docs commit: <hash> (tasks/session log updates)
 - Next steps / blockers: <notes for next agent>
 ```
+
+## [2025-11-25 18:55 UTC] Code – C1-code – START
+- Checked out feat/config-subcommand; `git pull --ff-only` unavailable (branch has no upstream yet)
+- Updated tasks.json (C1-code → in_progress); session log entry pending commit
+- Plan: add config CLI group + init verb, update installer/shell hints, refresh docs, run fmt/clippy/tests, merge branch
+- Blockers: none
