@@ -1977,7 +1977,7 @@
       "name": "Integrate routing dispatch module trimming",
       "type": "integration",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge R14 dispatch code/test splits, resolve conflicts, ensure fmt/clippy/tests are green.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",

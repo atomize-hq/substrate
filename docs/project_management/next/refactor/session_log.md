@@ -723,3 +723,11 @@ Template (copy/paste and fill in):
 - Merges: fast-forwarded cr-r14-routing-dispatch-test into feat/crate-refactor after rebasing on latest
 - Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R14-integ.md
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing
+
+## [2025-11-25 16:16 UTC] Integration – R14-integ – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, R14-integ prompt (CRATE_REFACTORING_ANALYSIS.md missing)
+- Confirmed R14-code and R14-test completed
+- Set R14-integ to in_progress in tasks.json
+- Plan: commit docs start; create cr-r14-routing-dispatch-integ branch/worktree (wt/cr-r14-routing-dispatch-integ); merge R14 code/test branches and resolve routing dispatch conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
+- Blockers: CRATE_REFACTORING_ANALYSIS.md missing
