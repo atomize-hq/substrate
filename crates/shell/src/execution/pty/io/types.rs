@@ -265,7 +265,7 @@ pub(crate) fn verify_process_group(pid: Option<u32>) {
 }
 
 #[cfg(not(unix))]
-#[cfg_attr(not(test), allow(dead_code))]
+#[allow(dead_code)]
 pub(crate) fn verify_process_group(_pid: Option<u32>) {
     // No-op on non-Unix platforms
 }
