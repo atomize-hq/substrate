@@ -1,7 +1,6 @@
 use super::*;
 use anyhow::anyhow;
 use serial_test::serial;
-use std::env;
 
 // Linux world initialization paths
 #[cfg(target_os = "linux")]
