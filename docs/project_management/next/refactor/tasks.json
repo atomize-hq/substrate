@@ -1322,7 +1322,7 @@
       "name": "Routing split tests: world/agent flows",
       "type": "test",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Update tests/fixtures for world enable/disable and agent client flows after routing split; preserve behavior assertions.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",

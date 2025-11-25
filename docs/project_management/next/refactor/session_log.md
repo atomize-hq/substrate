@@ -499,3 +499,11 @@ Template (copy/paste and fill in):
 - Set R9c-test to in_progress; session log update pending commit
 - Plan: create cr-r9c-routing-test branch/worktree wt/cr-r9c-routing-test; align routing world/agent tests/fixtures to new modules; run cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing in repo
+
+## [2025-11-25 02:50 UTC] Test – R9c-test – END
+- Worktree commits: 41eacc8a
+- Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: all commands passed
+- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R9c-integ.md
+- Docs commit: pending (tasks/status + session log)
+- Next steps / blockers: ready for integration; remove wt/cr-r9c-routing-test after merge; CRATE_REFACTORING_ANALYSIS.md still missing
