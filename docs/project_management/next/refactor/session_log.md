@@ -746,3 +746,10 @@ Template (copy/paste and fill in):
 - Created worktree: pending (will create wt/cr-r15-shell-integration-code)
 - Plan: set R15-code to in_progress; create cr-r15-shell-integration-code branch/worktree; split crates/shell/tests/integration.rs into domain suites with shared support module; keep assertions/fixtures unchanged; run cargo fmt and cargo test -p substrate-shell world_root/world_enable; capture outputs for END entry
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing from repo
+
+## [2025-11-25 16:29 UTC] Test – R15-test – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, R15-test prompt (CRATE_REFACTORING_ANALYSIS.md missing)
+- Set R15-test to in_progress in tasks.json
+- Plan: commit docs start; create cr-r15-shell-integration-test branch/worktree (wt/cr-r15-shell-integration-test); refactor shell integration fixtures into shared support module with unchanged assertions; run cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
+- Blockers: CRATE_REFACTORING_ANALYSIS.md missing
