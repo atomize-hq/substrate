@@ -702,6 +702,13 @@ Template (copy/paste and fill in):
 - Plan: commit docs start, create cr-r14-routing-dispatch-code branch/worktree (wt/cr-r14-routing-dispatch-code); trim dispatch/mod.rs into submodules with re-exports; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing
 
+## [2025-11-25 16:08 UTC] Code – R14-code – END
+- Worktree commits: c8c7af4c (refactor: slim routing dispatch mod)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: fmt/clippy clean; world_root/world_enable suites passed
+- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R14-test.md
+- Next steps / blockers: none noted (CRATE_REFACTORING_ANALYSIS.md still absent)
+
 ## [2025-11-25 16:03 UTC] Test – R14-test – START
 - Checked out feat/crate-refactor, pulled latest
 - Read refactor_plan.md, tasks.json, session_log.md, R14-test prompt (CRATE_REFACTORING_ANALYSIS.md missing)

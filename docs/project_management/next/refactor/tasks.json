@@ -1893,7 +1893,7 @@
       "name": "Routing dispatch module trimming",
       "type": "code",
       "phase": "Crate Refactor",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Further slim routing/dispatch modules (mod.rs + tests.rs) by extracting common helpers/fixtures and shrinking top-level orchestration without behavior changes.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
