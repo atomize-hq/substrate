@@ -1244,6 +1244,7 @@ install_macos() {
   else
     warn "install metadata missing at ${INSTALL_CONFIG_PATH}; run 'substrate config init' after installing to create defaults."
   fi
+  log "If the global config is missing or needs regeneration, run 'substrate config init' after installing."
 
   if [[ "${world_enabled}" -eq 1 ]]; then
     log "World backend enabled; run '${bin_dir}/substrate world doctor --json' or '${bin_dir}/substrate world deps sync --all' as needed."
@@ -1322,6 +1323,7 @@ install_linux() {
   else
     warn "install metadata missing at ${INSTALL_CONFIG_PATH}; run 'substrate config init' after installing to create defaults."
   fi
+  log "If the global config is missing or needs regeneration, run 'substrate config init' after installing."
 
   if [[ "${world_enabled}" -eq 1 ]]; then
     log "World backend enabled; run '${bin_dir}/substrate world doctor --json' for diagnostics or '${bin_dir}/substrate world deps sync --all' to mirror host tools."
