@@ -10,4 +10,3 @@ fn parse_demo_burst_command_defaults() {
     );
     assert!(parse_demo_burst_command(":other").is_none());
 }
-

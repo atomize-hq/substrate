@@ -92,4 +92,3 @@ fn parse_fs_diff_from_agent_json() {
     assert!(diff.deletes.is_empty());
     assert!(!diff.truncated);
 }
-

@@ -1,5 +1,5 @@
-use super::*;
 use super::with_test_mode;
+use super::*;
 use std::env;
 
 // PTY heuristics and wrappers
@@ -997,4 +997,3 @@ fn test_git_commit_edit_flag() {
         assert!(!needs_pty("git commit --edit --no-edit"));
     });
 }
-
