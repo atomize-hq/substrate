@@ -58,3 +58,9 @@ Template:
 - Kickoff prompts created: docs/project_management/next/config-subcommand/kickoff_prompts/C2-code.md, docs/project_management/next/config-subcommand/kickoff_prompts/C2-test.md (already present; revalidated for next agents)
 - Docs commit: (pending – will land as `docs: finish C1-integ`)
 - Next steps / blockers: feat/config-subcommand now fast-forwarded with merged code+tests; tasks still list C1-test as `in_progress`, consider reconciling status in a follow-up if needed
+
+## [2025-11-25 19:31 UTC] Code – C2-code – START
+- Checked out feat/config-subcommand; `git pull --ff-only` still blocked because the branch lacks an upstream remote
+- Updated tasks.json (C2-code → in_progress) and session log for this entry; commit pending per checklist
+- Plan: branch/worktree for cs-c2-show-code, implement `config show` TOML/JSON output with redaction hook, refresh docs, run fmt/clippy/tests, then merge back and update tasks/logs
+- Blockers: none beyond missing upstream; local toolchain ready
