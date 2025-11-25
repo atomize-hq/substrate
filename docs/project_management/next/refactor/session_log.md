@@ -523,3 +523,10 @@ Template (copy/paste and fill in):
 - Kickoff prompts created: n/a
 - Docs commit: pending (tasks/status + session log)
 - Next steps / blockers: remove wt/cr-r9c-routing-integ after cleanup; CRATE_REFACTORING_ANALYSIS.md still missing
+
+## [2025-11-25 03:14 UTC] Code – R10-code – START
+- Checked out feat/crate-refactor, pulled latest
+- Read refactor_plan.md, tasks.json, session_log.md, R10-code prompt (CRATE_REFACTORING_ANALYSIS.md missing in repo)
+- Set R10-code to in_progress in tasks.json
+- Plan: commit docs start, create cr-r10-pty-code branch/worktree (wt/cr-r10-pty-code); split execution/pty/io/mod.rs into focused modules (types/traits, reader path, writer path, test utilities) with thin re-exports; preserve behavior/logging/cfg gates; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Blockers: analysis doc still missing
