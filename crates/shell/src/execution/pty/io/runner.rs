@@ -5,6 +5,8 @@ use super::super::control::ActivePtyGuard;
 use super::manager::initialize_windows_input_forwarder;
 use super::manager::start_pty_manager;
 use super::reader::handle_pty_io;
+#[cfg(unix)]
+use super::types::verify_process_group;
 use super::types::{get_terminal_size, MinimalTerminalGuard, PtyActiveGuard, PtyExitStatus};
 use crate::execution::{
     configure_child_shell_env, log_command_event, ShellConfig, ShellMode, PTY_ACTIVE,
