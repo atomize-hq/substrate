@@ -456,3 +456,10 @@ Template (copy/paste and fill in):
 - Set R9b-test to in_progress in tasks.json
 - Plan: commit docs start, create cr-r9b-routing-test branch/worktree wt/cr-r9b-routing-test; align routing path/cwd/env helper tests with new modules; run cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
 - Blockers: none (analysis doc still missing)
+
+## [2025-11-25 01:53 UTC] Test – R9b-test – END
+- Worktree commits: 2d372aa1 (cr-r9b-routing-test)
+- Commands: cargo fmt; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: fmt clean; world_root/world_enable suites passed without warnings
+- Kickoff prompts referenced: docs/project_management/next/refactor/kickoff_prompts/R9b-integ.md
+- Next steps / blockers: ready for integration; remove wt/cr-r9b-routing-test after merge
