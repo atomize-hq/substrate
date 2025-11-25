@@ -5,13 +5,15 @@ use super::super::pw;
 use super::super::{configure_child_shell_env, needs_shell, ShellConfig, ShellMode};
 use super::builtin::handle_builtin;
 use super::path_env::canonicalize_or;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use super::world_transport_to_meta;
 #[cfg(target_os = "linux")]
 use super::RawModeGuard;
-use super::{log_command_event, world_transport_to_meta, SHELL_AGENT_ID};
+use super::{log_command_event, SHELL_AGENT_ID};
 use crate::execution::agent_events::publish_agent_event;
 use crate::execution::pty;
 #[cfg(target_os = "linux")]
-use crate::execution::shim_deploy::{DeploymentStatus, ShimDeployer};
+use crate::execution::routing::get_term_size;
 use agent_api_client::AgentClient;
 use agent_api_types::{ExecuteRequest, ExecuteStreamFrame};
 use anyhow::{Context, Result};
@@ -36,6 +38,8 @@ use substrate_trace::{create_span_builder, PolicyDecision};
 use std::os::unix::process::ExitStatusExt;
 #[cfg(unix)]
 use tokio::net::UnixStream;
+#[cfg(target_os = "linux")]
+use tokio::signal::unix::{signal, SignalKind};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use tokio_tungstenite as tungs;
 

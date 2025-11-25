@@ -39,9 +39,9 @@ use substrate_common::{
     agent_events::{AgentEvent, AgentEventKind},
     log_schema,
 };
-use substrate_trace::{
-    append_to_trace, init_trace, set_global_trace_context, TraceContext, TransportMeta,
-};
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use substrate_trace::TransportMeta;
+use substrate_trace::{append_to_trace, init_trace, set_global_trace_context, TraceContext};
 use tracing::{info, warn};
 use uuid::Uuid;
 
