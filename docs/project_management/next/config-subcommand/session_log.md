@@ -43,3 +43,10 @@ Template:
 - Kickoff prompts created: n/a
 - Docs commit: (pending – will land as `docs: finish C1-code`)
 - Next steps / blockers: Ready for C1-test to cover CLI behavior; integration can follow once tests land
+
+## [2025-11-25 19:22 UTC] Integration – C1-integ – START
+- Checked out feat/config-subcommand; `git pull --ff-only` unavailable (branch has no upstream)
+- Confirmed C1-code status `completed`; C1-test still marked `in_progress` in tasks.json though branch `cs-c1-config-test` includes commit ed4f2e6 – proceeding after noting mismatch
+- Updated tasks.json (C1-integ → in_progress); session log entry pending commit
+- Plan: create cs-c1-config-integ branch/worktree, merge code/test branches, resolve conflicts per spec, run `cargo fmt`, `cargo clippy -p substrate-shell -- -D warnings`, `cargo test -p substrate-shell world_root`, and `./tests/installers/install_smoke.sh`, validate docs/help text, update hints for missing config, and close out docs/tasks/logs with kickoff prompts for C2-code/test
+- Blockers: upstream tracking absent for feat/config-subcommand; need to verify installer smoke compatibility on this platform

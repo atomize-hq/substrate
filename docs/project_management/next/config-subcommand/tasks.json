@@ -95,7 +95,7 @@
       "name": "Integrate config init",
       "type": "integration",
       "phase": "Config Subcommand",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge the C1 code/test worktrees, resolve conflicts, and ensure fmt/clippy/tests pass before updating docs/tasks/session log on feat/config-subcommand.",
       "references": [
         "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
