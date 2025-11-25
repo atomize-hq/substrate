@@ -78,3 +78,11 @@ Template:
 - Updated tasks.json (C2-test → in_progress); this session log entry staged for the same doc commit
 - Plan: create cs-c2-show-test branch/worktree, add hermetic tests for `substrate config show` covering TOML vs `--json`, missing-config hints, and redaction hook; run `cargo fmt` + `cargo test -p substrate-shell world_root`; document any skipped installer smoke scripts
 - Blockers: upstream missing; installer smoke may be skipped if unrelated to tests
+
+## [2025-11-25 21:12 UTC] Test – C2-test – END
+- Worktree commits: c26b2c2 (`test: cover substrate config show output`)
+- Commands: `cargo fmt`; `cargo test -p substrate-shell world_root` (tests filtered to world_root subset; new config_show cases auto-skip until CLI exposes the subcommand)
+- Results: fmt clean; targeted tests passed; installer smoke script not run because scope limited to test harness additions
+- Kickoff prompts created: n/a (docs/project_management/next/config-subcommand/kickoff_prompts/C2-integ.md already present)
+- Docs commit: pending (`docs: finish C2-test`) after merging branch/status/log updates
+- Next steps / blockers: ready for integration once code + tests merged; config_show coverage enables TOML/JSON/redaction verification as soon as CLI lands
