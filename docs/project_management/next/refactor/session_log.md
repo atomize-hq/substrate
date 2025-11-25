@@ -731,3 +731,11 @@ Template (copy/paste and fill in):
 - Set R14-integ to in_progress in tasks.json
 - Plan: commit docs start; create cr-r14-routing-dispatch-integ branch/worktree (wt/cr-r14-routing-dispatch-integ); merge R14 code/test branches and resolve routing dispatch conflicts; run cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable; capture outputs for END entry
 - Blockers: CRATE_REFACTORING_ANALYSIS.md missing
+
+## [2025-11-25 16:22 UTC] Integration – R14-integ – END
+- Worktree commits: none (code/test branches already aligned)
+- Commands: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; cargo test -p substrate-shell world_root; cargo test -p substrate-shell world_enable
+- Results: all commands passed
+- Kickoff prompts created: n/a
+- Docs commit: pending (tasks/status + session log)
+- Next steps / blockers: remove wt/cr-r14-routing-dispatch-integ when finished; CRATE_REFACTORING_ANALYSIS.md still missing
