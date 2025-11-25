@@ -154,6 +154,7 @@ pub struct Cli {
 pub enum SubCommands {
     Graph(GraphCmd),
     World(WorldCmd),
+    Config(ConfigCmd),
     Shim(ShimCmd),
     Health(HealthCmd),
 }
@@ -181,6 +182,46 @@ pub enum GraphAction {
 pub struct WorldCmd {
     #[command(subcommand)]
     pub action: WorldAction,
+}
+
+#[derive(Args, Debug)]
+pub struct ConfigCmd {
+    #[command(subcommand)]
+    pub action: ConfigAction,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ConfigAction {
+    /// Initialize or regenerate ~/.substrate/config.toml
+    Init(ConfigInitArgs),
+    /// Print the global config (TOML by default, JSON with --json)
+    Show(ConfigShowArgs),
+    /// Update config keys via dotted key=value assignments
+    Set(ConfigSetArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct ConfigInitArgs {
+    /// Overwrite the config even if it already exists
+    #[arg(long)]
+    pub force: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct ConfigShowArgs {
+    /// Emit JSON instead of TOML
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct ConfigSetArgs {
+    /// Emit JSON summary instead of the human-readable diff
+    #[arg(long)]
+    pub json: bool,
+    /// One or more dotted key assignments (key=value)
+    #[arg(value_name = "key=value", required = true)]
+    pub updates: Vec<String>,
 }
 
 #[derive(Subcommand, Debug)]

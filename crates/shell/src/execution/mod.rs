@@ -1,5 +1,6 @@
 pub mod agent_events;
 mod cli;
+mod config_cmd;
 mod invocation;
 pub mod lock;
 mod manager;
@@ -13,6 +14,7 @@ mod settings;
 pub mod shim_deploy; // Made public for integration tests
 
 pub use cli::*;
+pub(crate) use config_cmd::handle_config_command;
 pub use invocation::{needs_shell, ShellConfig, ShellMode};
 pub use routing::*;
 

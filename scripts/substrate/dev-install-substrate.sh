@@ -254,4 +254,8 @@ MSG
 log "Substrate dev install complete."
 log "manager_init placeholder: ${MANAGER_INIT_PATH}"
 log "manager_env script: ${MANAGER_ENV_PATH}"
-log "install metadata: ${INSTALL_CONFIG_PATH}"
+if [[ -f "${INSTALL_CONFIG_PATH}" ]]; then
+  log "install metadata: ${INSTALL_CONFIG_PATH}"
+else
+  warn "install metadata missing at ${INSTALL_CONFIG_PATH}; run 'substrate config init' after installing to create defaults."
+fi

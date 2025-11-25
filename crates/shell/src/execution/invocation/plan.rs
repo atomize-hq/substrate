@@ -5,8 +5,8 @@ use crate::execution::cli::*;
 use crate::execution::settings::{self, apply_world_root_env, resolve_world_root};
 use crate::execution::shim_deploy::{DeploymentStatus, ShimDeployer};
 use crate::execution::{
-    handle_graph_command, handle_health_command, handle_replay_command, handle_shim_command,
-    handle_trace_command, handle_world_command, update_world_env,
+    handle_config_command, handle_graph_command, handle_health_command, handle_replay_command,
+    handle_shim_command, handle_trace_command, handle_world_command, update_world_env,
 };
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -414,6 +414,10 @@ impl ShellConfig {
                     handle_world_command(world_cmd, &cli)?;
                     std::process::exit(0);
                 }
+                SubCommands::Config(config_cmd) => {
+                    handle_config_command(config_cmd)?;
+                    std::process::exit(0);
+                }
                 SubCommands::Shim(shim_cmd) => {
                     handle_shim_command(shim_cmd, &cli);
                 }
@@ -456,8 +460,14 @@ impl ShellConfig {
 
         let shim_dir = substrate_common::paths::shims_dir()?;
         let substrate_home = substrate_paths::substrate_home()?;
-        let install_config =
-            commands::world_enable::load_install_config(&substrate_paths::config_file()?)?;
+        let config_path = substrate_paths::config_file()?;
+        let install_config = commands::world_enable::load_install_config(&config_path)?;
+        if !install_config.exists() {
+            eprintln!(
+                "substrate: info: no config file at {}; run `substrate config init` to create defaults",
+                config_path.display()
+            );
+        }
         let config_disables_world = !install_config.world_enabled;
         let env_disables_world = env::var("SUBSTRATE_WORLD")
             .map(|value| value.eq_ignore_ascii_case("disabled"))

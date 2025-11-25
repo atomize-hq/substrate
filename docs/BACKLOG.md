@@ -5,12 +5,9 @@ Keep concise, actionable, and security-focused.
 
 ## Near-Term (Next 1–2 sprints)
 
-- **Top Priority – Global configuration UX**
-  - Introduce `~/.substrate/config.toml` for persistent defaults (world behavior,
-    broker enforcement toggle, default profiles).
-  - Provide CLI commands to scaffold (`substrate config init`) and edit the
-    config.
-  - Ensure CLI flags/env vars still override file settings.
+- ~~Top Priority – Global configuration UX~~ **(Done)**
+  - Implementation: `substrate config init` scaffolds `~/.substrate/config.toml`, `config show` renders TOML/JSON with redaction hooks, and `config set` applies multi-key updates atomically with schema validation.
+  - Docs/installer output highlight the new subcommands across Linux/macOS/Windows, and the precedence stack (flags → directory config → global config → env) remains unchanged.
 
 - **High Priority – Interactive configuration commands**
   - Add shell built-ins/commands (`:config`, `:profile load`, `:world status`,

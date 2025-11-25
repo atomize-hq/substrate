@@ -1,0 +1,749 @@
+{
+  "tasks": [
+    {
+      "id": "J1-code",
+      "name": "Structured mode scaffold",
+      "type": "code",
+      "phase": "JSON Mode",
+      "status": "pending",
+      "description": "Introduce global structured-mode flags, the JSON response envelope, and baseline plumbing in the root CLI (excluding interactive REPL).",
+      "references": [
+        "docs/project_management/next/json-mode/json_mode_plan.md",
+        "crates/shell/src/execution/cli.rs",
+        "crates/shell/src/execution/invocation.rs",
+        "crates/shell/src/execution/routing.rs",
+        "docs/USAGE.md"
+      ],
+      "acceptance_criteria": [
+        "Root CLI accepts `--json` (output) and `--json-input`/`--json-payload` options; conflicts documented for interactive REPL.",
+        "Shared JSON envelope struct defined (status/message/data) and used for top-level success/error responses.",
+        "Interactive REPL rejects structured mode with a descriptive error; non-REPL commands receive structured context.",
+        "Docs mention new flags, conflict behavior, and envelope schema.",
+        "`cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell world_root` logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/json-mode, pull latest",
+        "Set J1-code to in_progress, update session_log.md, commit docs",
+        "Create branch cs-j1-structured-code",
+        "Create worktree wt/cs-j1-structured-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/lint/tests per prompt are green",
+        "Commit worktree changes",
+        "Merge branch back to feat/json-mode",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts",
+        "Commit docs update on feat/json-mode"
+      ],
+      "depends_on": [],
+      "concurrent_with": [
+        "J1-test"
+      ],
+      "worktree": "wt/cs-j1-structured-code",
+      "integration_task": "J1-integ",
+      "kickoff_prompt": "docs/project_management/next/json-mode/kickoff_prompts/J1-code.md"
+    },
+    {
+      "id": "J1-test",
+      "name": "Structured mode scaffold tests",
+      "type": "test",
+      "phase": "JSON Mode",
+      "status": "pending",
+      "description": "Add tests covering the new `--json`/`--json-input` flags, envelope serialization, and REPL exclusion.",
+      "references": [
+        "docs/project_management/next/json-mode/json_mode_plan.md",
+        "crates/shell/tests",
+        "docs/USAGE.md"
+      ],
+      "acceptance_criteria": [
+        "Integration tests (via substrate shell driver) assert envelope output on success/failure for non-interactive runs.",
+        "Tests verify interactive REPL rejects structured mode with a clear error.",
+        "`--json-input` handling tested with sample payloads (dummy command).",
+        "`cargo fmt`; `cargo test -p substrate-shell world_root`; record any additional scripts/skips.",
+        "Kickoff prompt for J1-integ authored."
+      ],
+      "start_checklist": [
+        "Checkout feat/json-mode, pull latest",
+        "Set J1-test to in_progress, update session_log.md, commit docs",
+        "Create branch cs-j1-structured-test",
+        "Create worktree wt/cs-j1-structured-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests per prompt are green; document skips",
+        "Commit worktree changes",
+        "Merge branch back to feat/json-mode",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts",
+        "Commit docs update on feat/json-mode"
+      ],
+      "depends_on": [],
+      "concurrent_with": [
+        "J1-code"
+      ],
+      "worktree": "wt/cs-j1-structured-test",
+      "integration_task": "J1-integ",
+      "kickoff_prompt": "docs/project_management/next/json-mode/kickoff_prompts/J1-test.md"
+    },
+    {
+      "id": "J1-integ",
+      "name": "Integrate structured mode scaffold",
+      "type": "integration",
+      "phase": "JSON Mode",
+      "status": "pending",
+      "description": "Merge the J1 code/test worktrees, resolve conflicts, and ensure fmt/clippy/tests pass before updating docs/logs.",
+      "references": [
+        "docs/project_management/next/json-mode/json_mode_plan.md",
+        "crates/shell"
+      ],
+      "acceptance_criteria": [
+        "wt/cs-j1-structured-integ merges cs-j1-structured-code/test; conflicts resolved.",
+        "`cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell world_root`; `cargo test -p substrate-shell world_enable` executed/logged.",
+        "Docs/tasks/session log updated on feat/json-mode; kickoff prompts for J2a tasks created."
+      ],
+      "start_checklist": [
+        "Checkout feat/json-mode, pull latest",
+        "Confirm J1-code/test completed",
+        "Set J1-integ to in_progress, update session_log.md, commit docs",
+        "Create branch cs-j1-structured-integ",
+        "Create worktree wt/cs-j1-structured-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration worktree",
+        "Run required fmt/clippy/tests",
+        "Merge integration branch back to feat/json-mode",
+        "Update tasks.json + session_log.md with END entry",
+        "Push/hand off per instructions"
+      ],
+      "depends_on": [
+        "J1-code",
+        "J1-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cs-j1-structured-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/json-mode/kickoff_prompts/J1-integ.md"
+    },
+    {
+      "id": "J2a-code",
+      "name": "Structured output – core commands",
+      "type": "code",
+      "phase": "JSON Mode",
+      "status": "pending",
+      "description": "Adopt structured envelopes for core/root commands (version, shim status, shim deploy/remove, trace/replay, health, global error paths).",
+      "references": [
+        "docs/project_management/next/json-mode/json_mode_plan.md",
+        "crates/shell/src/execution/invocation.rs",
+        "crates/shell/src/execution/routing.rs",
+        "docs/USAGE.md"
+      ],
+      "acceptance_criteria": [
+        "`--version-json`, `--shim-status[ -json]`, trace/replay, replay errors, and `health` emit envelope responses when `--json` is active (success + errors).",
+        "Legacy JSON flags map to the global flag with backward-compatible aliases.",
+        "Docs updated with schemas for these commands.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-shell world_root` logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/json-mode, pull latest",
+        "Set J2a-code to in_progress, update session_log.md, commit docs",
+        "Create branch cs-j2a-coverage-code",
+        "Create worktree wt/cs-j2a-coverage-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/lint/tests per prompt are green",
+        "Commit worktree changes",
+        "Merge branch back to feat/json-mode",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts",
+        "Commit docs update on feat/json-mode"
+      ],
+      "depends_on": [
+        "J1-integ"
+      ],
+      "concurrent_with": [
+        "J2a-test"
+      ],
+      "worktree": "wt/cs-j2a-coverage-code",
+      "integration_task": "J2a-integ",
+      "kickoff_prompt": "docs/project_management/next/json-mode/kickoff_prompts/J2a-code.md"
+    },
+    {
+      "id": "J2a-test",
+      "name": "Structured output tests – core commands",
+      "type": "test",
+      "phase": "JSON Mode",
+      "status": "pending",
+      "description": "Validate JSON envelopes for version, shim status, trace/replay, and health commands.",
+      "references": [
+        "docs/project_management/next/json-mode/json_mode_plan.md",
+        "crates/shell/tests",
+        "docs/USAGE.md"
+      ],
+      "acceptance_criteria": [
+        "Tests assert envelope structure + payload for version, shim status, shim deploy/remove, trace/replay success/failure, and health commands.",
+        "Legacy JSON flags verified to map to the new behavior.",
+        "`cargo fmt`; `cargo test -p substrate-shell world_root`; record skips.",
+        "Kickoff prompt for J2a-integ authored."
+      ],
+      "start_checklist": [
+        "Checkout feat/json-mode, pull latest",
+        "Set J2a-test to in_progress, update session_log.md, commit docs",
+        "Create branch cs-j2a-coverage-test",
+        "Create worktree wt/cs-j2a-coverage-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests per prompt are green; document skips",
+        "Commit worktree changes",
+        "Merge branch back to feat/json-mode",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts",
+        "Commit docs update on feat/json-mode"
+      ],
+      "depends_on": [
+        "J1-integ"
+      ],
+      "concurrent_with": [
+        "J2a-code"
+      ],
+      "worktree": "wt/cs-j2a-coverage-test",
+      "integration_task": "J2a-integ",
+      "kickoff_prompt": "docs/project_management/next/json-mode/kickoff_prompts/J2a-test.md"
+    },
+    {
+      "id": "J2a-integ",
+      "name": "Integrate structured output – core commands",
+      "type": "integration",
+      "phase": "JSON Mode",
+      "status": "pending",
+      "description": "Merge J2a code/test branches for core command coverage.",
+      "references": [
+        "docs/project_management/next/json-mode/json_mode_plan.md",
+        "crates/shell"
+      ],
+      "acceptance_criteria": [
+        "wt/cs-j2a-coverage-integ merges cs-j2a-coverage-code/test; fmt/clippy/tests run cleanly.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-shell world_root`; `cargo test -p substrate-shell world_enable` executed/logged.",
+        "Docs/tasks/session log updated; kickoff prompts for J2b tasks created."
+      ],
+      "start_checklist": [
+        "Checkout feat/json-mode, pull latest",
+        "Confirm J2a-code/test completed",
+        "Set J2a-integ to in_progress, update session_log.md, commit docs",
+        "Create branch cs-j2a-coverage-integ",
+        "Create worktree wt/cs-j2a-coverage-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration worktree",
+        "Run required fmt/clippy/tests",
+        "Merge integration branch back to feat/json-mode",
+        "Update tasks.json + session_log.md with END entry",
+        "Push/hand off per instructions"
+      ],
+      "depends_on": [
+        "J2a-code",
+        "J2a-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cs-j2a-coverage-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/json-mode/kickoff_prompts/J2a-integ.md"
+    },
+    {
+      "id": "J2b-code",
+      "name": "Structured output – world & shim commands",
+      "type": "code",
+      "phase": "JSON Mode",
+      "status": "pending",
+      "description": "Adopt structured envelopes for `world` (doctor/enable/deps) and `shim` (doctor/repair) subcommands plus `health` aggregation.",
+      "references": [
+        "docs/project_management/next/json-mode/json_mode_plan.md",
+        "crates/shell/src/builtins/world_deps",
+        "crates/shell/src/builtins/world_enable",
+        "crates/shell/src/builtins/shim_doctor.rs",
+        "docs/USAGE.md"
+      ],
+      "acceptance_criteria": [
+        "`substrate world doctor/enable/deps`, `substrate shim doctor/repair`, and `substrate health` produce structured envelopes for success/failure.",
+        "World doctor JSON matches schema across Linux/macOS/Windows adapters.",
+        "Docs updated with payload descriptions for each command.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; targeted tests (`cargo test -p substrate-shell world_root`, `cargo test -p substrate-shell world_enable`) logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/json-mode, pull latest",
+        "Set J2b-code to in_progress, update session_log.md, commit docs",
+        "Create branch cs-j2b-coverage-code",
+        "Create worktree wt/cs-j2b-coverage-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/lint/tests per prompt are green",
+        "Commit worktree changes",
+        "Merge branch back to feat/json-mode",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts",
+        "Commit docs update on feat/json-mode"
+      ],
+      "depends_on": [
+        "J2a-integ"
+      ],
+      "concurrent_with": [
+        "J2b-test"
+      ],
+      "worktree": "wt/cs-j2b-coverage-code",
+      "integration_task": "J2b-integ",
+      "kickoff_prompt": "docs/project_management/next/json-mode/kickoff_prompts/J2b-code.md"
+    },
+    {
+      "id": "J2b-test",
+      "name": "Structured output tests – world & shim commands",
+      "type": "test",
+      "phase": "JSON Mode",
+      "status": "pending",
+      "description": "Add coverage for `world` and `shim` subcommands plus `health` aggregator under structured mode.",
+      "references": [
+        "docs/project_management/next/json-mode/json_mode_plan.md",
+        "crates/shell/tests",
+        "docs/USAGE.md"
+      ],
+      "acceptance_criteria": [
+        "Tests assert envelope outputs for `world doctor --json`, `world enable`, `world deps status/install/sync`, `shim doctor/repair`, and `health --json` (text vs JSON).",
+        "Failure scenarios (manifest missing, repair denied) covered.",
+        "`cargo fmt`; `cargo test -p substrate-shell world_root`; `cargo test -p substrate-shell world_enable`; record installer smoke or skip.",
+        "Kickoff prompt for J2b-integ authored."
+      ],
+      "start_checklist": [
+        "Checkout feat/json-mode, pull latest",
+        "Set J2b-test to in_progress, update session_log.md, commit docs",
+        "Create branch cs-j2b-coverage-test",
+        "Create worktree wt/cs-j2b-coverage-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests per prompt are green; document skips",
+        "Commit worktree changes",
+        "Merge branch back to feat/json-mode",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts",
+        "Commit docs update on feat/json-mode"
+      ],
+      "depends_on": [
+        "J2a-integ"
+      ],
+      "concurrent_with": [
+        "J2b-code"
+      ],
+      "worktree": "wt/cs-j2b-coverage-test",
+      "integration_task": "J2b-integ",
+      "kickoff_prompt": "docs/project_management/next/json-mode/kickoff_prompts/J2b-test.md"
+    },
+    {
+      "id": "J2b-integ",
+      "name": "Integrate structured output – world & shim",
+      "type": "integration",
+      "phase": "JSON Mode",
+      "status": "pending",
+      "description": "Merge J2b code/test branches covering world/shim commands.",
+      "references": [
+        "docs/project_management/next/json-mode/json_mode_plan.md",
+        "crates/shell"
+      ],
+      "acceptance_criteria": [
+        "wt/cs-j2b-coverage-integ merges cs-j2b-coverage-code/test; fmt/clippy/tests (world_root/world_enable) run.",
+        "Installer smoke script executed or skip documented.",
+        "Docs/tasks/session log updated; kickoff prompts for J2c tasks created."
+      ],
+      "start_checklist": [
+        "Checkout feat/json-mode, pull latest",
+        "Confirm J2b-code/test completed",
+        "Set J2b-integ to in_progress, update session_log.md, commit docs",
+        "Create branch cs-j2b-coverage-integ",
+        "Create worktree wt/cs-j2b-coverage-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration worktree",
+        "Run required fmt/clippy/tests/scripts",
+        "Merge integration branch back to feat/json-mode",
+        "Update tasks.json + session_log.md with END entry",
+        "Push/hand off per instructions"
+      ],
+      "depends_on": [
+        "J2b-code",
+        "J2b-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cs-j2b-coverage-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/json-mode/kickoff_prompts/J2b-integ.md"
+    },
+    {
+      "id": "J2c-code",
+      "name": "Structured output – graph & advanced commands",
+      "type": "code",
+      "phase": "JSON Mode",
+      "status": "pending",
+      "description": "Complete structured output coverage for graph CLI, world-deps install/sync, shim repair/install helpers, and future config commands.",
+      "references": [
+        "docs/project_management/next/json-mode/json_mode_plan.md",
+        "crates/shell/src/builtins/world_deps",
+        "crates/shell/src/builtins/shim_doctor.rs",
+        "crates/shell/src/execution/invocation.rs",
+        "docs/USAGE.md"
+      ],
+      "acceptance_criteria": [
+        "`substrate graph ingest/status/what-changed`, `world deps install/sync`, `shim repair`, and installer/helper commands emit envelopes with documented payloads.",
+        "Any config/installer commands introduced during parallel efforts hook into the same schema.",
+        "Docs updated for these advanced commands.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; targeted tests logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/json-mode, pull latest",
+        "Set J2c-code to in_progress, update session_log.md, commit docs",
+        "Create branch cs-j2c-coverage-code",
+        "Create worktree wt/cs-j2c-coverage-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/lint/tests per prompt are green",
+        "Commit worktree changes",
+        "Merge branch back to feat/json-mode",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts",
+        "Commit docs update on feat/json-mode"
+      ],
+      "depends_on": [
+        "J2b-integ"
+      ],
+      "concurrent_with": [
+        "J2c-test"
+      ],
+      "worktree": "wt/cs-j2c-coverage-code",
+      "integration_task": "J2c-integ",
+      "kickoff_prompt": "docs/project_management/next/json-mode/kickoff_prompts/J2c-code.md"
+    },
+    {
+      "id": "J2c-test",
+      "name": "Structured output tests – graph & advanced commands",
+      "type": "test",
+      "phase": "JSON Mode",
+      "status": "pending",
+      "description": "Test JSON outputs for graph CLI, world-deps install/sync, shim repair, and other advanced commands.",
+      "references": [
+        "docs/project_management/next/json-mode/json_mode_plan.md",
+        "crates/shell/tests",
+        "docs/USAGE.md"
+      ],
+      "acceptance_criteria": [
+        "Tests validate envelopes/payloads for graph ingest/status/what-changed, world-deps install/sync (success + failure), shim repair automation, and installer/config helpers.",
+        "Error cases (missing manifest, invalid span IDs, repair denial) produce structured responses.",
+        "`cargo fmt`; `cargo test -p substrate-shell world_root`; record additional scripts/skips.",
+        "Kickoff prompt for J2c-integ authored."
+      ],
+      "start_checklist": [
+        "Checkout feat/json-mode, pull latest",
+        "Set J2c-test to in_progress, update session_log.md, commit docs",
+        "Create branch cs-j2c-coverage-test",
+        "Create worktree wt/cs-j2c-coverage-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests per prompt are green; document skips",
+        "Commit worktree changes",
+        "Merge branch back to feat/json-mode",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts",
+        "Commit docs update on feat/json-mode"
+      ],
+      "depends_on": [
+        "J2b-integ"
+      ],
+      "concurrent_with": [
+        "J2c-code"
+      ],
+      "worktree": "wt/cs-j2c-coverage-test",
+      "integration_task": "J2c-integ",
+      "kickoff_prompt": "docs/project_management/next/json-mode/kickoff_prompts/J2c-test.md"
+    },
+    {
+      "id": "J2c-integ",
+      "name": "Integrate structured output – advanced commands",
+      "type": "integration",
+      "phase": "JSON Mode",
+      "status": "pending",
+      "description": "Merge J2c code/test branches to finish structured output coverage.",
+      "references": [
+        "docs/project_management/next/json-mode/json_mode_plan.md",
+        "crates/shell",
+        "docs/USAGE.md"
+      ],
+      "acceptance_criteria": [
+        "wt/cs-j2c-coverage-integ merges cs-j2c-coverage-code/test; fmt/clippy/tests/installer smoke executed or skips logged.",
+        "Docs/tasks/session log updated; kickoff prompts for J3a tasks created."
+      ],
+      "start_checklist": [
+        "Checkout feat/json-mode, pull latest",
+        "Confirm J2c-code/test completed",
+        "Set J2c-integ to in_progress, update session_log.md, commit docs",
+        "Create branch cs-j2c-coverage-integ",
+        "Create worktree wt/cs-j2c-coverage-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration worktree",
+        "Run required fmt/clippy/tests/scripts",
+        "Merge integration branch back to feat/json-mode",
+        "Update tasks.json + session_log.md with END entry",
+        "Push/hand off per instructions"
+      ],
+      "depends_on": [
+        "J2c-code",
+        "J2c-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cs-j2c-coverage-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/json-mode/kickoff_prompts/J2c-integ.md"
+    },
+    {
+      "id": "J3a-code",
+      "name": "JSON input plumbing – simple commands",
+      "type": "code",
+      "phase": "JSON Mode",
+      "status": "pending",
+      "description": "Implement JSON input parsing/merging and adopt it in simple payload consumers (graph ingest, shim repair, other single-action commands).",
+      "references": [
+        "docs/project_management/next/json-mode/json_mode_plan.md",
+        "crates/shell/src/execution/invocation.rs",
+        "crates/shell/src/builtins",
+        "docs/USAGE.md"
+      ],
+      "acceptance_criteria": [
+        "Global JSON input loader handles file/stdin/inline payloads and merges them with CLI flags (flags win).",
+        "Graph ingest, shim repair, and at least one additional simple command consume payload fields.",
+        "Invalid payloads return structured errors without side effects.",
+        "Docs updated with payload schemas/examples.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-shell world_root` logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/json-mode, pull latest",
+        "Set J3a-code to in_progress, update session_log.md, commit docs",
+        "Create branch cs-j3a-input-code",
+        "Create worktree wt/cs-j3a-input-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/lint/tests per prompt are green",
+        "Commit worktree changes",
+        "Merge branch back to feat/json-mode",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts",
+        "Commit docs update on feat/json-mode"
+      ],
+      "depends_on": [
+        "J2c-integ"
+      ],
+      "concurrent_with": [
+        "J3a-test"
+      ],
+      "worktree": "wt/cs-j3a-input-code",
+      "integration_task": "J3a-integ",
+      "kickoff_prompt": "docs/project_management/next/json-mode/kickoff_prompts/J3a-code.md"
+    },
+    {
+      "id": "J3a-test",
+      "name": "JSON input tests – simple commands",
+      "type": "test",
+      "phase": "JSON Mode",
+      "status": "pending",
+      "description": "Test JSON input ingestion/merging for graph ingest, shim repair, and other simple commands.",
+      "references": [
+        "docs/project_management/next/json-mode/json_mode_plan.md",
+        "crates/shell/tests",
+        "docs/USAGE.md"
+      ],
+      "acceptance_criteria": [
+        "Tests feed payloads via file/stdin/inline string and ensure CLI overrides take precedence.",
+        "Failure cases (malformed JSON, missing keys) emit structured errors without side effects.",
+        "`cargo fmt`; `cargo test -p substrate-shell world_root`; record additional suites/skips.",
+        "Kickoff prompt for J3a-integ authored."
+      ],
+      "start_checklist": [
+        "Checkout feat/json-mode, pull latest",
+        "Set J3a-test to in_progress, update session_log.md, commit docs",
+        "Create branch cs-j3a-input-test",
+        "Create worktree wt/cs-j3a-input-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests per prompt are green; document skips",
+        "Commit worktree changes",
+        "Merge branch back to feat/json-mode",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts",
+        "Commit docs update on feat/json-mode"
+      ],
+      "depends_on": [
+        "J2c-integ"
+      ],
+      "concurrent_with": [
+        "J3a-code"
+      ],
+      "worktree": "wt/cs-j3a-input-test",
+      "integration_task": "J3a-integ",
+      "kickoff_prompt": "docs/project_management/next/json-mode/kickoff_prompts/J3a-test.md"
+    },
+    {
+      "id": "J3a-integ",
+      "name": "Integrate JSON input – simple commands",
+      "type": "integration",
+      "phase": "JSON Mode",
+      "status": "pending",
+      "description": "Merge J3a code/test branches covering JSON input plumbing for simple commands.",
+      "references": [
+        "docs/project_management/next/json-mode/json_mode_plan.md",
+        "crates/shell"
+      ],
+      "acceptance_criteria": [
+        "wt/cs-j3a-input-integ merges cs-j3a-input-code/test; fmt/clippy/tests run cleanly.",
+        "Docs/tasks/session log updated; kickoff prompts for J3b tasks created."
+      ],
+      "start_checklist": [
+        "Checkout feat/json-mode, pull latest",
+        "Confirm J3a-code/test completed",
+        "Set J3a-integ to in_progress, update session_log.md, commit docs",
+        "Create branch cs-j3a-input-integ",
+        "Create worktree wt/cs-j3a-input-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration worktree",
+        "Run required fmt/clippy/tests/scripts",
+        "Merge integration branch back to feat/json-mode",
+        "Update tasks.json + session_log.md with END entry",
+        "Push/hand off per instructions"
+      ],
+      "depends_on": [
+        "J3a-code",
+        "J3a-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cs-j3a-input-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/json-mode/kickoff_prompts/J3a-integ.md"
+    },
+    {
+      "id": "J3b-code",
+      "name": "JSON input support – complex workflows",
+      "type": "code",
+      "phase": "JSON Mode",
+      "status": "pending",
+      "description": "Extend JSON input handling to complex commands (world deps install/sync, installer/config commands) with full validation and backward compatibility.",
+      "references": [
+        "docs/project_management/next/json-mode/json_mode_plan.md",
+        "crates/shell/src/builtins/world_deps",
+        "crates/shell/src/execution/invocation.rs",
+        "docs/USAGE.md"
+      ],
+      "acceptance_criteria": [
+        "`world deps install/sync`, installer helpers, and emerging config commands accept JSON payloads describing multiple actions/tools.",
+        "CLI flags can override/augment payload fields with deterministic precedence.",
+        "Docs updated with complex payload schemas and examples.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; targeted tests logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/json-mode, pull latest",
+        "Set J3b-code to in_progress, update session_log.md, commit docs",
+        "Create branch cs-j3b-input-code",
+        "Create worktree wt/cs-j3b-input-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/lint/tests per prompt are green",
+        "Commit worktree changes",
+        "Merge branch back to feat/json-mode",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts",
+        "Commit docs update on feat/json-mode"
+      ],
+      "depends_on": [
+        "J3a-integ"
+      ],
+      "concurrent_with": [
+        "J3b-test"
+      ],
+      "worktree": "wt/cs-j3b-input-code",
+      "integration_task": "J3b-integ",
+      "kickoff_prompt": "docs/project_management/next/json-mode/kickoff_prompts/J3b-code.md"
+    },
+    {
+      "id": "J3b-test",
+      "name": "JSON input tests – complex workflows",
+      "type": "test",
+      "phase": "JSON Mode",
+      "status": "pending",
+      "description": "Test JSON input payloads for world deps install/sync, installer helpers, and config commands.",
+      "references": [
+        "docs/project_management/next/json-mode/json_mode_plan.md",
+        "crates/shell/tests",
+        "docs/USAGE.md"
+      ],
+      "acceptance_criteria": [
+        "Tests feed complex payloads (multi-tool installs, batch actions) to `world deps install/sync`, installer helpers, and config commands, verifying results and overrides.",
+        "Invalid payloads (missing tools, conflicting settings) produce structured errors without modifications.",
+        "`cargo fmt`; `cargo test -p substrate-shell world_root`; `cargo test -p substrate-shell world_enable`; record installer smoke or skip.",
+        "Kickoff prompt for J3b-integ authored."
+      ],
+      "start_checklist": [
+        "Checkout feat/json-mode, pull latest",
+        "Set J3b-test to in_progress, update session_log.md, commit docs",
+        "Create branch cs-j3b-input-test",
+        "Create worktree wt/cs-j3b-input-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests per prompt are green; document skips",
+        "Commit worktree changes",
+        "Merge branch back to feat/json-mode",
+        "Update tasks.json + session_log.md with END entry",
+        "Create/confirm next kickoff prompts",
+        "Commit docs update on feat/json-mode"
+      ],
+      "depends_on": [
+        "J3a-integ"
+      ],
+      "concurrent_with": [
+        "J3b-code"
+      ],
+      "worktree": "wt/cs-j3b-input-test",
+      "integration_task": "J3b-integ",
+      "kickoff_prompt": "docs/project_management/next/json-mode/kickoff_prompts/J3b-test.md"
+    },
+    {
+      "id": "J3b-integ",
+      "name": "Integrate JSON input – complex workflows",
+      "type": "integration",
+      "phase": "JSON Mode",
+      "status": "pending",
+      "description": "Merge the final JSON input code/test workstreams and close out the structured-mode program.",
+      "references": [
+        "docs/project_management/next/json-mode/json_mode_plan.md",
+        "crates/shell",
+        "docs/USAGE.md"
+      ],
+      "acceptance_criteria": [
+        "wt/cs-j3b-input-integ merges cs-j3b-input-code/test; fmt/clippy/tests plus installer smoke executed/logged.",
+        "Docs/tasks/session log updated; backlog entry about structured CLI marked addressed or follow-ups recorded."
+      ],
+      "start_checklist": [
+        "Checkout feat/json-mode, pull latest",
+        "Confirm J3b-code/test completed",
+        "Set J3b-integ to in_progress, update session_log.md, commit docs",
+        "Create branch cs-j3b-input-integ",
+        "Create worktree wt/cs-j3b-input-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches into integration worktree",
+        "Run required fmt/clippy/tests/scripts",
+        "Merge integration branch back to feat/json-mode",
+        "Update tasks.json + session_log.md with END entry",
+        "Push/hand off per instructions"
+      ],
+      "depends_on": [
+        "J3b-code",
+        "J3b-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/cs-j3b-input-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/json-mode/kickoff_prompts/J3b-integ.md"
+    }
+  ]
+}

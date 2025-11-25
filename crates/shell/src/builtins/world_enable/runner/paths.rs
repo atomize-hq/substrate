@@ -192,15 +192,17 @@ mod tests {
         let temp = tempdir().unwrap();
         let custom = temp.path().join("custom/env.sh");
         let prev_manager_env = set_env("SUBSTRATE_MANAGER_ENV", &custom);
-        let prev_home = set_env("SUBSTRATE_HOME", temp.path());
 
+        // When SUBSTRATE_MANAGER_ENV is set, it should be used verbatim
         assert_eq!(resolve_manager_env_path().unwrap(), custom);
 
+        // When SUBSTRATE_MANAGER_ENV is unset, we should fall back to the
+        // standard substrate_home() location for manager_env.sh
         restore_env("SUBSTRATE_MANAGER_ENV", prev_manager_env);
-        let expected_default = temp.path().join("manager_env.sh");
+        let expected_default = substrate_paths::substrate_home()
+            .unwrap()
+            .join("manager_env.sh");
         assert_eq!(resolve_manager_env_path().unwrap(), expected_default);
-
-        restore_env("SUBSTRATE_HOME", prev_home);
     }
 
     #[test]

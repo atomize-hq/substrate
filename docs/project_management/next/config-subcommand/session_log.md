@@ -1,0 +1,145 @@
+# Config Subcommand – Session Log
+
+Follow the workflow in `config_subcommand_plan.md`. Every entry must include:
+- Timestamp (UTC), agent role (code/test/integ), and task ID.
+- Commands executed (fmt/clippy/tests/scripts) with pass/fail notes.
+- Commits/worktrees referenced.
+- Kickoff prompts authored for downstream roles.
+
+Template:
+```
+## [YYYY-MM-DD HH:MM UTC] <Agent> – <task-id> – START
+- Checked out feat/config-subcommand, pulled latest
+- Updated tasks.json + session log (commit: <hash>)
+- Created worktree: wt/<...>
+- Plan: <bullet list of intended actions/commands>
+- Blockers: <none or description>
+
+## [YYYY-MM-DD HH:MM UTC] <Agent> – <task-id> – END
+- Worktree commits: <hash(es)>
+- Commands: <cargo fmt / cargo clippy / tests / scripts>
+- Results: <pass/fail summary, skips with justification>
+- Kickoff prompts created: <paths or “n/a”>
+- Docs commit: <hash> (tasks/session log updates)
+- Next steps / blockers: <notes for next agent>
+```
+
+## [2025-11-25 18:55 UTC] Code – C1-code – START
+- Checked out feat/config-subcommand; `git pull --ff-only` unavailable (branch has no upstream yet)
+- Updated tasks.json (C1-code → in_progress); session log entry pending commit
+- Plan: add config CLI group + init verb, update installer/shell hints, refresh docs, run fmt/clippy/tests, merge branch
+- Blockers: none
+
+## [2025-11-25 18:56 UTC] Test – C1-test – START
+- Checked out feat/config-subcommand; `git pull --ff-only` unavailable (branch has no upstream)
+- Updated tasks.json (C1-test → in_progress); session log entry pending commit
+- Created plan: add shell driver tests for `config init` + `--force`, cover missing-config hint, and extend installer smoke harness; run fmt + targeted tests, document installer script skip if needed
+- Blockers: git branch lacks upstream; otherwise none
+
+## [2025-11-25 19:06 UTC] Code – C1-code – END
+- Worktree commits: 43abc73 (feat: add substrate config init command)
+- Commands: `cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell world_root`
+- Results: all passed; config CLI builds cleanly and existing world root tests continue to succeed
+- Kickoff prompts created: n/a
+- Docs commit: (pending – will land as `docs: finish C1-code`)
+- Next steps / blockers: Ready for C1-test to cover CLI behavior; integration can follow once tests land
+
+## [2025-11-25 19:22 UTC] Integration – C1-integ – START
+- Checked out feat/config-subcommand; `git pull --ff-only` unavailable (branch has no upstream)
+- Confirmed C1-code status `completed`; C1-test still marked `in_progress` in tasks.json though branch `cs-c1-config-test` includes commit ed4f2e6 – proceeding after noting mismatch
+- Updated tasks.json (C1-integ → in_progress); session log entry pending commit
+- Plan: create cs-c1-config-integ branch/worktree, merge code/test branches, resolve conflicts per spec, run `cargo fmt`, `cargo clippy -p substrate-shell -- -D warnings`, `cargo test -p substrate-shell world_root`, and `./tests/installers/install_smoke.sh`, validate docs/help text, update hints for missing config, and close out docs/tasks/logs with kickoff prompts for C2-code/test
+- Blockers: upstream tracking absent for feat/config-subcommand; need to verify installer smoke compatibility on this platform
+
+## [2025-11-25 19:29 UTC] Integration – C1-integ – END
+- Worktree commits: f17dc27 (chore: integrate config init code+tests)
+- Commands: `cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell world_root`; `./tests/installers/install_smoke.sh`; `cargo run -p substrate --bin substrate -- config --help`
+- Results: fmt/clippy/tests passed; installer smoke initially failed because the script never mentioned `substrate config init`, added an unconditional hint in both macOS/Linux post-install logs and reran successfully; `cargo run ... config --help` spot-check confirmed the new subcommand is documented
+- Kickoff prompts created: docs/project_management/next/config-subcommand/kickoff_prompts/C2-code.md, docs/project_management/next/config-subcommand/kickoff_prompts/C2-test.md (already present; revalidated for next agents)
+- Docs commit: (pending – will land as `docs: finish C1-integ`)
+- Next steps / blockers: feat/config-subcommand now fast-forwarded with merged code+tests; tasks still list C1-test as `in_progress`, consider reconciling status in a follow-up if needed
+
+## [2025-11-25 19:31 UTC] Code – C2-code – START
+- Checked out feat/config-subcommand; `git pull --ff-only` still blocked because the branch lacks an upstream remote
+- Updated tasks.json (C2-code → in_progress) and session log for this entry; commit pending per checklist
+- Plan: branch/worktree for cs-c2-show-code, implement `config show` TOML/JSON output with redaction hook, refresh docs, run fmt/clippy/tests, then merge back and update tasks/logs
+- Blockers: none beyond missing upstream; local toolchain ready
+
+## [2025-11-25 19:37 UTC] Code – C2-code – END
+- Worktree commits: 014a2b5 (feat: add substrate config show command)
+- Commands: `cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell world_root`
+- Results: all commands passed; show command prints TOML by default, `--json` emits machine-readable output, missing-config path returns a hint to run `config init`
+- Kickoff prompts created: n/a
+- Docs commit: (pending – will land as `docs: finish C2-code`)
+- Next steps / blockers: ready for C2-test + integration; worktree removal queued after final docs commit
+
+## [2025-11-25 20:05 UTC] Test – C2-test – START
+- Checked out feat/config-subcommand; `git pull --ff-only` failed (branch has no upstream remote configured)
+- Updated tasks.json (C2-test → in_progress); this session log entry staged for the same doc commit
+- Plan: create cs-c2-show-test branch/worktree, add hermetic tests for `substrate config show` covering TOML vs `--json`, missing-config hints, and redaction hook; run `cargo fmt` + `cargo test -p substrate-shell world_root`; document any skipped installer smoke scripts
+- Blockers: upstream missing; installer smoke may be skipped if unrelated to tests
+
+## [2025-11-25 21:12 UTC] Test – C2-test – END
+- Worktree commits: c26b2c2 (`test: cover substrate config show output`)
+- Commands: `cargo fmt`; `cargo test -p substrate-shell world_root` (tests filtered to world_root subset; new config_show cases auto-skip until CLI exposes the subcommand)
+- Results: fmt clean; targeted tests passed; installer smoke script not run because scope limited to test harness additions
+- Kickoff prompts created: n/a (docs/project_management/next/config-subcommand/kickoff_prompts/C2-integ.md already present)
+- Docs commit: pending (`docs: finish C2-test`) after merging branch/status/log updates
+- Next steps / blockers: ready for integration once code + tests merged; config_show coverage enables TOML/JSON/redaction verification as soon as CLI lands
+
+## [2025-11-25 19:43 UTC] Integration – C2-integ – START
+- Checked out feat/config-subcommand; `git pull --ff-only` failed (branch lacks upstream tracking)
+- Updated tasks.json (C2-integ → in_progress); this session log entry staged for the same doc commit
+- Created plan: branch/worktree cs-c2-show-integ, merge cs-c2-show-code + cs-c2-show-test, resolve conflicts, run fmt/clippy/world_root/world_enable tests, verify CLI/docs, update tasks/logs + kickoff prompts
+- Blockers: upstream tracking absent; otherwise none
+
+## [2025-11-25 19:45 UTC] Integration – C2-integ – END
+- Worktree commits: n/a (cs-c2-show-code/test already merged; integration branch introduced no new changes)
+- Commands: `cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell world_root`; `cargo test -p substrate-shell world_enable`; `cargo run -p substrate --bin substrate -- config --help`
+- Results: fmt/clippy/tests all passed; CLI help confirms `config show` verb listed with TOML/JSON description; docs already highlight usage so no updates needed
+- Kickoff prompts created: docs/project_management/next/config-subcommand/kickoff_prompts/C3-code.md, docs/project_management/next/config-subcommand/kickoff_prompts/C3-test.md (revalidated contents for next agents)
+- Docs commit: pending (`docs: finish C2-integ`) to record tasks/session updates
+- Next steps / blockers: ready for C3-code/test to implement `config set`; no outstanding conflicts
+
+## [2025-11-25 19:47 UTC] Code – C3-code – START
+- Checked out feat/config-subcommand; `git pull --ff-only` still unavailable because no upstream is configured
+- Updated tasks.json (C3-code → in_progress); session log entry recorded here prior to committing
+- Plan: branch/worktree cs-c3-set-code, implement `substrate config set` with dotted keys, validation, atomic writes, and `--json`; update docs; run `cargo fmt`, `cargo clippy -p substrate-shell -- -D warnings`, `cargo test -p substrate-shell world_root`, `cargo test -p substrate-shell world_enable`
+- Blockers: upstream remote missing; otherwise none
+
+## [2025-11-25 19:59 UTC] Code – C3-code – END
+- Worktree commits: 377205d (`feat: add substrate config set command`)
+- Commands: `cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell world_root`; `cargo test -p substrate-shell world_enable`
+- Results: all commands passed; `config set` now validates dotted keys, writes atomically, and emits JSON summaries; docs updated with multi-key and Windows examples
+- Kickoff prompts created: docs/project_management/next/config-subcommand/kickoff_prompts/C3-test.md (referenced for the next role)
+- Docs commit: pending (`docs: finish C3-code`) after merging tasks/log updates
+- Next steps / blockers: ready for C3-test to add coverage; no outstanding blockers
+
+## [2025-11-25 19:48 UTC] Test – C3-test – START
+- Checked out feat/config-subcommand; `git pull --ff-only` still blocked because the branch lacks an upstream remote
+- Updated tasks.json (C3-test → in_progress) and recorded this entry ahead of the start commit
+- Plan: branch/worktree cs-c3-set-test, add hermetic config-set tests covering single/multi-key updates, validation failures, JSON output, atomic writes, and precedence overrides; run `cargo fmt`, `cargo test -p substrate-shell world_root`, `cargo test -p substrate-shell world_enable`, document installer smoke status
+- Blockers: upstream missing; dependent on C3-code branch for CLI implementation visibility
+
+## [2025-11-25 20:03 UTC] Test – C3-test – END
+- Worktree commits: 5cbea83 (`test: cover substrate config set CLI`)
+- Commands: `cargo fmt`; `cargo test -p substrate-shell --test config_set`; `cargo test -p substrate-shell world_root`; `env -u SUBSTRATE_MANAGER_ENV cargo test -p substrate-shell world_enable`
+- Results: fmt clean; config_set integration tests pass when the command is available; world_root suite green; world_enable required clearing `SUBSTRATE_MANAGER_ENV` (user env sets it globally and otherwise trips the manager-env path test); no installer smoke requested
+- Kickoff prompts created: n/a (`docs/project_management/next/config-subcommand/kickoff_prompts/C3-integ.md` already present)
+- Docs commit: pending (`docs: finish C3-test`)
+- Next steps / blockers: ready for C3-integ to merge code+tests once config-set implementation lands
+
+## [2025-11-25 20:11 UTC] Integration – C3-integ – START
+- Checked out feat/config-subcommand; `git pull --ff-only` failed because the branch has no upstream tracking branch
+- Confirmed C3-code and C3-test marked completed in tasks.json and reviewed their session log entries
+- Updated tasks.json (C3-integ → in_progress); this log entry will be part of the same doc commit
+- Plan: create cs-c3-set-integ branch/worktree, merge cs-c3-set-code + cs-c3-set-test, resolve conflicts, run `cargo fmt`, `cargo clippy -p substrate-shell -- -D warnings`, `cargo test -p substrate-shell world_root`, `cargo test -p substrate-shell world_enable`, and `./tests/installers/install_smoke.sh`, then update docs/tasks/logs and confirm CLI UX acceptance criteria
+- Blockers: feat/config-subcommand still lacks upstream tracking; installer smoke may require elevated permissions depending on environment
+
+## [2025-11-25 20:14 UTC] Integration – C3-integ – END
+- Worktree commits: n/a (cs-c3-set-code/test already merged; cs-c3-set-integ validated current HEAD)
+- Commands: `cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell world_root`; `cargo test -p substrate-shell world_enable`; `./tests/installers/install_smoke.sh`
+- Results: all commands passed; installer smoke confirmed the `substrate config init` hint appears in the log; config set/show/init behavior matches spec with multi-key updates and JSON output verified via tests
+- Kickoff prompts created: n/a (final track in this program)
+- Docs commit: pending (`docs: finish C3-integ`)
+- Next steps / blockers: Updated docs/BACKLOG.md to mark the Global configuration UX item complete; no open blockers

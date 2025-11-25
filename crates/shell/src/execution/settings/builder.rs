@@ -237,7 +237,7 @@ fn parse_bool_env(key: &str, raw: &str) -> Result<bool> {
     })
 }
 
-pub(super) fn parse_bool_flag(raw: &str) -> Option<bool> {
+pub(crate) fn parse_bool_flag(raw: &str) -> Option<bool> {
     match raw.trim().to_ascii_lowercase().as_str() {
         "1" | "true" | "yes" | "on" => Some(true),
         "0" | "false" | "no" | "off" => Some(false),

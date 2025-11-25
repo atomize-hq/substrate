@@ -97,3 +97,7 @@ finally {
 }
 
 Write-Log 'Substrate dev install complete.'
+$configPath = Join-Path $Prefix 'config.toml'
+if (-not (Test-Path $configPath)) {
+    Write-Warn "Config metadata missing at $configPath. Run 'substrate config init' to create defaults."
+}

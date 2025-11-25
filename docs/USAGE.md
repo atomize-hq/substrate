@@ -198,6 +198,7 @@ manager and point `BASH_ENV` at `~/.substrate_bashenv` explicitly.
 - `substrate --no-world ...` – run commands directly on the host (no isolation)
 - `substrate --world ...` – force world isolation for a single invocation even
   when install/config/env disables it (metadata remains unchanged)
+
 - `substrate world enable` – provision the backend later if `--no-world` was
   used at install time
 - `substrate world deps status|install|sync` – inspect and copy host toolchains
@@ -216,6 +217,111 @@ The installer and `substrate world enable` keep `~/.substrate/config.toml`
 (`[install].world_enabled = true/false`) and rewrite `~/.substrate/manager_env.sh`
 so `SUBSTRATE_WORLD`/`SUBSTRATE_WORLD_ENABLED` reflect the latest state without
 needing to source dotfiles manually.
+
+## Configuration CLI
+
+Before the REPL starts, Substrate exposes a `config` command group for managing
+`~/.substrate/config.toml` (or `%USERPROFILE%\.substrate\config.toml` on
+Windows). The current verbs are `config init`, which scaffolds/regenerates the
+file, `config show`, which prints it in TOML (or JSON) form, and `config set`,
+which edits dotted keys without opening an editor:
+
+```bash
+# Create ~/.substrate/config.toml if it does not exist
+substrate config init
+
+# Regenerate the file even if it exists already
+substrate config init --force
+```
+
+The command honors `SUBSTRATE_HOME`, making it safe to run from tests or
+sandboxes. Shell startup and the installer scripts will emit a warning pointing
+to `substrate config init` whenever the global config is absent, so re-running
+the command is the supported remediation when the metadata is missing or
+corrupted.
+
+After the file exists, `substrate config show` prints the full contents with
+redaction hooks for any future sensitive values. TOML is the default view:
+
+```bash
+$ substrate config show
+[install]
+world_enabled = true
+
+[world]
+anchor_mode = "project"
+anchor_path = ""
+root_mode = "project"
+root_path = ""
+caged = true
+```
+
+Use `--json` for automation (the same flag works on macOS/Linux and respects
+`SUBSTRATE_HOME` overrides). Pipe to `jq` or the equivalent for readability:
+
+```bash
+$ substrate config show --json | jq '.'
+{
+  "install": {
+    "world_enabled": true
+  },
+  "world": {
+    "anchor_mode": "project",
+    "anchor_path": "",
+    "root_mode": "project",
+    "root_path": "",
+    "caged": true
+  }
+}
+```
+
+PowerShell users can call the same command and feed it through `ConvertFrom-Json`
+to inspect the object:
+
+```powershell
+PS> substrate config show --json | ConvertFrom-Json | Format-List
+install : @{world_enabled=True}
+world   : @{anchor_mode=project; anchor_path=; root_mode=project; root_path=; caged=True}
+```
+
+When the file is missing the command exits non-zero with a reminder to run
+`substrate config init`, matching the shell/install warnings.
+
+`substrate config set key=value [...]` updates the same file with type-aware
+validation and atomic writes. Provide one or more dotted keys to change several
+fields at once:
+
+```bash
+$ substrate config set world.anchor_mode=follow-cwd world.caged=false
+substrate: updated config at /Users/alice/.substrate/config.toml
+  - world.anchor_mode: "project" -> "follow-cwd"
+  - world.root_mode (alias): "project" -> "follow-cwd"
+  - world.caged: true -> false
+```
+
+Pass `--json` for automation; the payload summarizes every field that changed:
+
+```bash
+$ substrate config set --json install.world_enabled=false
+{
+  "config_path": "/Users/alice/.substrate/config.toml",
+  "changed": true,
+  "changes": [
+    {
+      "key": "install.world_enabled",
+      "alias": false,
+      "old_value": true,
+      "new_value": false
+    }
+  ]
+}
+```
+
+On Windows, wrap each assignment in quotes so PowerShell keeps the backslashes:
+
+```powershell
+PS> substrate config set "world.anchor_mode=custom" "world.anchor_path=C:\Workspaces\repo" "world.caged=true"
+```
 
 Use `SUBSTRATE_WORLD_ENABLED=0` to force pass-through mode temporarily and
 `SUBSTRATE_WORLD_DEPS_MANIFEST` to point world-deps at a custom definition file.

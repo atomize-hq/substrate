@@ -132,6 +132,119 @@ Unknown keys and extra tables are preserved for future expansion.
 - Directory configs live at `.substrate/settings.toml` under the launch
   directory and only carry the `[world]` table shown above.
 
+### Bootstrapping the config file
+
+Use `substrate config init` whenever `~/.substrate/config.toml` is missing (or
+after manually deleting/corrupting it). The command scaffolds the default
+`[install]` and `[world]` tables, respects `SUBSTRATE_HOME`, and is available
+before the shell/REPL starts. Pass `--force` to regenerate the file even if it
+already exists. On Windows the same path lives under
+`%USERPROFILE%\.substrate\config.toml`. Shell startup and the install scripts
+emit a warning that points to this command whenever the file is absent, so
+running `substrate config init` is the supported fix.
+
+### Inspecting the config file
+
+`substrate config show` prints the current global config in a stable, redacted
+format. TOML is emitted by default for humans, while `--json` produces a
+machine-friendly payload for automation. Both commands honor
+`SUBSTRATE_HOME`/`%USERPROFILE%` overrides and exit non-zero with a reminder to
+run `substrate config init` if the file is missing.
+
+```bash
+$ substrate config show
+[install]
+world_enabled = true
+
+[world]
+anchor_mode = "project"
+anchor_path = ""
+root_mode = "project"
+root_path = ""
+caged = true
+```
+
+```bash
+$ substrate config show --json
+{
+  "install": {
+    "world_enabled": true
+  },
+  "world": {
+    "anchor_mode": "project",
+    "anchor_path": "",
+    "root_mode": "project",
+    "root_path": "",
+    "caged": true
+  }
+}
+```
+
+Sensitive fields will be replaced with `*** redacted ***` once such values are
+stored in the config.
+
+### Updating the config file
+
+`substrate config set key=value [...]` edits `config.toml` without opening a
+text editor. Each dotted key is validated (anchor modes must be
+`project`/`follow-cwd`/`custom`, boolean toggles accept `true/false/1/0`), and
+all updates are applied atomically. Combine multiple assignments to keep related
+fields in sync:
+
+```bash
+$ substrate config set install.world_enabled=false world.caged=false
+substrate: updated config at /Users/alice/.substrate/config.toml
+  - install.world_enabled: true -> false
+  - world.caged: true -> false
+```
+
+Anchor overrides update the legacy aliases automatically so the `[world]` table
+remains consistent:
+
+```bash
+$ substrate config set world.anchor_mode=custom world.anchor_path=/workspaces/substrate
+substrate: updated config at /Users/alice/.substrate/config.toml
+  - world.anchor_mode: "project" -> "custom"
+  - world.root_mode (alias): "project" -> "custom"
+  - world.anchor_path: "" -> "/workspaces/substrate"
+  - world.root_path (alias): "" -> "/workspaces/substrate"
+```
+
+Pass `--json` for automation—the response lists every changed key with its old
+and new values:
+
+```bash
+$ substrate config set --json world.anchor_mode=follow-cwd
+{
+  "config_path": "/Users/alice/.substrate/config.toml",
+  "changed": true,
+  "changes": [
+    {
+      "key": "world.anchor_mode",
+      "alias": false,
+      "old_value": "project",
+      "new_value": "follow-cwd"
+    },
+    {
+      "key": "world.root_mode",
+      "alias": true,
+      "old_value": "project",
+      "new_value": "follow-cwd"
+    }
+  ]
+}
+```
+
+PowerShell users can wrap each assignment in quotes to preserve backslashes:
+
+```powershell
+PS> substrate config set "world.anchor_mode=custom" "world.anchor_path=C:\Work" "world.caged=false"
+```
+
+Invalid keys or values abort the run without touching the file. As with the
+other `config` verbs, `SUBSTRATE_HOME` / `%USERPROFILE%` controls where the file
+lives so tests can redirect writes safely.
+
 ## CLI Flags
 
 ### Shim Management
