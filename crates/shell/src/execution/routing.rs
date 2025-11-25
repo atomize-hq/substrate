@@ -9,6 +9,7 @@ mod replay;
 mod telemetry;
 #[cfg(test)]
 mod test_utils;
+mod world;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod world_env;
 use super::shim_deploy::{DeploymentStatus, ShimDeployer};
@@ -39,8 +40,7 @@ use tracing::warn;
 #[cfg_attr(target_os = "windows", allow(unused_imports))]
 use std::thread;
 // use nu_ansi_term::{Color, Style}; // Unused for now
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-use super::pw;
+pub(crate) use self::world::initialize_world;
 #[cfg(target_os = "linux")]
 pub(crate) use dispatch::init_linux_world;
 pub(crate) use dispatch::{
@@ -307,86 +307,7 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
         env::set_var("SUBSTRATE_MANAGER_ENV", &config.manager_env_path);
     }
 
-    // Default-on world initialization (Linux only)
-    #[cfg(target_os = "windows")]
-    {
-        let world_disabled = env::var("SUBSTRATE_WORLD")
-            .map(|v| v == "disabled")
-            .unwrap_or(false)
-            || config.no_world;
-        if !world_disabled {
-            match pw::detect() {
-                Ok(ctx) => {
-                    if let Err(e) = (ctx.ensure_ready)() {
-                        eprintln!("substrate: windows world ensure_ready failed: {:#}", e);
-                    } else {
-                        std::env::set_var("SUBSTRATE_WORLD", "enabled");
-                        if let Ok(handle) = ctx.backend.ensure_session(&pw::windows::world_spec()) {
-                            std::env::set_var("SUBSTRATE_WORLD_ID", handle.id);
-                        }
-                    }
-                    pw::store_context_globally(ctx);
-                }
-                Err(e) => {
-                    eprintln!("substrate: windows world detection failed: {}", e);
-                }
-            }
-        }
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        // Default ON (parity with Linux); allow disabling via env/CLI
-        let world_disabled = env::var("SUBSTRATE_WORLD")
-            .map(|v| v == "disabled")
-            .unwrap_or(false)
-            || config.no_world;
-        if !world_disabled {
-            // Auto-detect mac world context and ensure readiness
-            match pw::detect() {
-                Ok(ctx) => {
-                    if let Err(e) = (ctx.ensure_ready)() {
-                        // Degrade silently if ensure_ready fails
-                        eprintln!("substrate: mac world ensure_ready failed: {}", e);
-                    } else {
-                        // Set parity with Linux: world enabled + ID only
-                        std::env::set_var("SUBSTRATE_WORLD", "enabled");
-
-                        // Attempt to retrieve world id
-                        use world_api::{ResourceLimits, WorldSpec};
-                        let spec = WorldSpec {
-                            reuse_session: true,
-                            isolate_network: true,
-                            limits: ResourceLimits::default(),
-                            enable_preload: false,
-                            allowed_domains: substrate_broker::allowed_domains(),
-                            project_dir: config.world_root.effective_root(),
-                            always_isolate: false,
-                        };
-                        if let Ok(handle) = ctx.backend.ensure_session(&spec) {
-                            std::env::set_var("SUBSTRATE_WORLD_ID", handle.id);
-                        }
-                    }
-                    pw::store_context_globally(ctx);
-                }
-                Err(e) => {
-                    // Degrade silently on mac as well
-                    eprintln!("substrate: mac world detection failed: {}", e);
-                }
-            }
-        }
-    }
-
-    // Default-on world initialization (Linux only)
-    #[cfg(target_os = "linux")]
-    {
-        let world_disabled = env::var("SUBSTRATE_WORLD")
-            .map(|v| v == "disabled")
-            .unwrap_or(false)
-            || config.no_world;
-
-        let _ = init_linux_world(world_disabled);
-    }
+    initialize_world(&config);
 
     // Deploy shims if needed (non-blocking, continues on error)
     // Skip if either the CLI flag is set or the environment variable is set
