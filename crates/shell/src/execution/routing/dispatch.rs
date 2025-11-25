@@ -2354,11 +2354,22 @@ fn first_command_path(cmd: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    
     use super::*;
+    use crate::execution::agent_events::{self, clear_agent_event_sender, init_event_channel};
+    use agent_api_types::ExecuteStreamFrame;
+    use base64::engine::general_purpose::STANDARD as BASE64;
+    use base64::Engine;
+    use serde_json::Value as JsonValue;
     use std::env;
-    
     use std::sync::Mutex;
+    use substrate_common::agent_events::AgentEventKind;
+    use substrate_common::FsDiff;
+    use tokio::runtime::Runtime;
+
+    #[cfg(target_os = "linux")]
+    use anyhow::anyhow;
+    #[cfg(target_os = "linux")]
+    use serial_test::serial;
 
     // Global mutex to ensure tests that modify environment run sequentially
     static TEST_ENV_MUTEX: Mutex<()> = Mutex::new(());
@@ -3373,5 +3384,142 @@ mod tests {
             assert!(!needs_pty("git commit -e --no-edit"));
             assert!(!needs_pty("git commit --edit --no-edit"));
         });
+    }
+
+    #[test]
+    fn parse_demo_burst_command_defaults() {
+        assert_eq!(parse_demo_burst_command(":demo-burst"), Some((4, 400, 0)));
+        assert_eq!(
+            parse_demo_burst_command(":demo-burst 3 10 5"),
+            Some((3, 10, 5))
+        );
+        assert!(parse_demo_burst_command(":other").is_none());
+    }
+
+    #[test]
+    fn consume_agent_stream_buffer_emits_agent_events() {
+        let _guard = agent_events::acquire_event_test_guard();
+        let rt = Runtime::new().expect("runtime");
+        rt.block_on(async {
+            let mut rx = init_event_channel();
+
+            let frames = [
+                ExecuteStreamFrame::Stdout {
+                    chunk_b64: BASE64.encode("hello"),
+                },
+                ExecuteStreamFrame::Stderr {
+                    chunk_b64: BASE64.encode("oops"),
+                },
+                ExecuteStreamFrame::Exit {
+                    exit: 0,
+                    span_id: "spn_test".into(),
+                    scopes_used: vec!["scope:a".into()],
+                    fs_diff: None,
+                },
+            ];
+
+            let mut buffer = Vec::new();
+            for frame in frames {
+                let mut line = serde_json::to_vec(&frame).expect("serialize frame");
+                line.push(b'\n');
+                buffer.extend(line);
+            }
+
+            let mut exit_code = None;
+            let mut scopes_used = Vec::new();
+            let mut fs_diff = None;
+
+            consume_agent_stream_buffer(
+                "tester",
+                &mut buffer,
+                &mut exit_code,
+                &mut scopes_used,
+                &mut fs_diff,
+            )
+            .expect("consume stream");
+
+            let stdout_event = rx.recv().await.expect("stdout event");
+            assert_eq!(stdout_event.kind, AgentEventKind::PtyData);
+            assert_eq!(stdout_event.data["chunk"], "hello");
+            assert_eq!(stdout_event.data["stream"], "stdout");
+
+            let stderr_event = rx.recv().await.expect("stderr event");
+            assert_eq!(stderr_event.kind, AgentEventKind::PtyData);
+            assert_eq!(stderr_event.data["chunk"], "oops");
+            assert_eq!(stderr_event.data["stream"], "stderr");
+
+            assert_eq!(exit_code, Some(0));
+            assert_eq!(scopes_used, vec!["scope:a".to_string()]);
+            assert!(fs_diff.is_none());
+        });
+        clear_agent_event_sender();
+    }
+
+    #[test]
+    fn parse_fs_diff_from_agent_json() {
+        let sample = r#"{
+            "exit":0,
+            "span_id":"spn_x",
+            "stdout_b64":"",
+            "stderr_b64":"",
+            "scopes_used":["tcp:example.com:443"],
+            "fs_diff":{
+                "writes":["/tmp/t/a.txt"],
+                "mods":[],
+                "deletes":[],
+                "truncated":false
+            }
+        }"#;
+        let v: JsonValue = serde_json::from_str(sample).unwrap();
+        let fd_val = v.get("fs_diff").cloned().unwrap();
+        let diff: FsDiff = serde_json::from_value(fd_val).unwrap();
+        assert_eq!(diff.writes.len(), 1);
+        assert_eq!(diff.writes[0], std::path::PathBuf::from("/tmp/t/a.txt"));
+        assert!(diff.mods.is_empty());
+        assert!(diff.deletes.is_empty());
+        assert!(!diff.truncated);
+    }
+
+    #[cfg(target_os = "linux")]
+    mod linux_world_tests {
+        use super::*;
+        use std::env;
+
+        fn clear_env() {
+            env::remove_var("SUBSTRATE_WORLD");
+            env::remove_var("SUBSTRATE_WORLD_ID");
+            env::remove_var("SUBSTRATE_TEST_LOCAL_WORLD_ID");
+        }
+
+        #[test]
+        #[serial]
+        fn agent_probe_enables_world() {
+            clear_env();
+            let outcome = init_linux_world_with_probe(false, || Ok(()));
+            assert_eq!(outcome, LinuxWorldInit::Agent);
+            assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
+            assert!(env::var("SUBSTRATE_WORLD_ID").is_err());
+        }
+
+        #[test]
+        #[serial]
+        fn fallback_uses_local_backend_stub() {
+            clear_env();
+            env::set_var("SUBSTRATE_TEST_LOCAL_WORLD_ID", "wld_test_stub");
+            let outcome = init_linux_world_with_probe(false, || Err(anyhow!("no agent")));
+            assert_eq!(outcome, LinuxWorldInit::LocalBackend);
+            assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
+            assert_eq!(env::var("SUBSTRATE_WORLD_ID").unwrap(), "wld_test_stub");
+        }
+
+        #[test]
+        #[serial]
+        fn disabled_skips_initialization() {
+            clear_env();
+            let outcome = init_linux_world_with_probe(true, || Ok(()));
+            assert_eq!(outcome, LinuxWorldInit::Disabled);
+            assert!(env::var("SUBSTRATE_WORLD").is_err());
+            assert!(env::var("SUBSTRATE_WORLD_ID").is_err());
+        }
     }
 }

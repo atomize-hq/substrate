@@ -26,11 +26,31 @@ pub(crate) fn world_transport_to_meta(transport: &pw::WorldTransport) -> Transpo
     }
 }
 
-#[cfg(all(test, target_os = "windows"))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
 
+    #[test]
+    fn transport_meta_includes_mode_and_endpoint() {
+        let unix_meta =
+            world_transport_to_meta(&pw::WorldTransport::Unix(PathBuf::from("/tmp/agent.sock")));
+        assert_eq!(unix_meta.mode, "unix");
+        assert_eq!(unix_meta.endpoint.as_deref(), Some("/tmp/agent.sock"));
+
+        let tcp_meta = world_transport_to_meta(&pw::WorldTransport::Tcp {
+            host: "127.0.0.1".to_string(),
+            port: 1234,
+        });
+        assert_eq!(tcp_meta.mode, "tcp");
+        assert_eq!(tcp_meta.endpoint.as_deref(), Some("127.0.0.1:1234"));
+
+        let vsock_meta = world_transport_to_meta(&pw::WorldTransport::Vsock { port: 17788 });
+        assert_eq!(vsock_meta.mode, "vsock");
+        assert_eq!(vsock_meta.endpoint.as_deref(), Some("17788"));
+    }
+
+    #[cfg(target_os = "windows")]
     #[test]
     fn transport_meta_named_pipe_mode() {
         let meta = world_transport_to_meta(&pw::WorldTransport::NamedPipe(PathBuf::from(
