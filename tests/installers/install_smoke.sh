@@ -68,6 +68,7 @@ ARTIFACT_DIR="${WORK_ROOT}/artifacts"
 FAKE_ROOT="${WORK_ROOT}/fakeroot"
 STUB_BIN="${WORK_ROOT}/stub-bin"
 HOME_DIR="${WORK_ROOT}/home"
+INSTALL_LOG="${WORK_ROOT}/install.log"
 mkdir -p "${PREFIX}" "${ARTIFACT_DIR}" "${FAKE_ROOT}" "${STUB_BIN}" "${HOME_DIR}"
 
 cleanup() {
@@ -377,16 +378,34 @@ run_install() {
   if [[ "${SCENARIO}" == "no-world" ]]; then
     args+=("--no-world")
   fi
+  local harness_path="${STUB_BIN}:${PATH}"
 
-  HOME="${HOME_DIR}" \
-  PATH="${STUB_BIN}:${PATH}" \
-  FAKE_ROOT="${FAKE_ROOT}" \
-  "${REPO_ROOT}/scripts/substrate/install-substrate.sh" "${args[@]}"
+  if ! HOME="${HOME_DIR}" \
+    PATH="${harness_path}" \
+    SHIM_ORIGINAL_PATH="${harness_path}" \
+    FAKE_ROOT="${FAKE_ROOT}" \
+    "${REPO_ROOT}/scripts/substrate/install-substrate.sh" "${args[@]}" \
+    >"${INSTALL_LOG}" 2>&1; then
+    cat "${INSTALL_LOG}" >&2
+    fatal "Install script failed; see ${INSTALL_LOG}"
+  fi
+  cat "${INSTALL_LOG}"
+}
+
+assert_config_init_hint_logged() {
+  if [[ ! -f "${INSTALL_LOG}" ]]; then
+    fatal "Installer output log missing; expected ${INSTALL_LOG}"
+  fi
+  if ! grep -Fq "substrate config init" "${INSTALL_LOG}"; then
+    fatal "Installer output missing 'substrate config init' hint (see ${INSTALL_LOG})"
+  fi
+  log "Installer output references substrate config init hint (${INSTALL_LOG})"
 }
 
 prepare_stub_bin
 build_fake_release
 run_install
+assert_config_init_hint_logged
 assert_install_config
 assert_manifest_present
 run_health_smoke
