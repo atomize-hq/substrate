@@ -264,7 +264,7 @@
       "name": "Config set command",
       "type": "code",
       "phase": "Config Subcommand",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Implement `substrate config set key=value ...` with dotted key paths, schema-aware validation, multi-key support, atomic writes, and JSON-capable responses.",
       "references": [
         "docs/project_management/next/config-subcommand/config_subcommand_plan.md",
