@@ -78,12 +78,12 @@ impl ShimDeployer {
             }
         }
 
-        // Perform deployment
-        println!("Setting up command tracing (one-time setup)...");
+        // Perform deployment (status messages go to stderr to keep stdout clean)
+        eprintln!("Setting up command tracing (one-time setup)...");
         match self.deploy_shims() {
             Ok(()) => {
                 self.write_version_file()?;
-                println!("Command tracing setup complete.");
+                eprintln!("Command tracing setup complete.");
                 Ok(DeploymentStatus::Deployed)
             }
             Err(e) => {

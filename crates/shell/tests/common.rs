@@ -64,9 +64,18 @@ pub fn binary_path() -> String {
     };
 
     if let Ok(workspace_dir) = std::env::var("CARGO_WORKSPACE_DIR") {
-        format!("{workspace_dir}/target/debug/{binary_name}")
+        std::path::PathBuf::from(workspace_dir)
+            .join("target")
+            .join("debug")
+            .join(binary_name)
+            .to_string_lossy()
+            .into_owned()
     } else {
-        format!("../../target/debug/{binary_name}")
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/debug")
+            .join(binary_name)
+            .to_string_lossy()
+            .into_owned()
     }
 }
 

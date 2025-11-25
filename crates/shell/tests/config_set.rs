@@ -289,30 +289,55 @@ fn config_set_reports_applied_changes_as_json() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let payload: JsonValue =
         serde_json::from_str(&stdout).expect("config set --json output to parse");
-    let applied = payload
-        .get("applied")
-        .and_then(|value| value.as_object())
-        .expect("applied map present in JSON payload");
+
     assert_eq!(
-        applied
-            .get("world.anchor_mode")
+        payload.get("changed").and_then(|value| value.as_bool()),
+        Some(true),
+        "json payload should report that changes were applied",
+    );
+
+    let changes = payload
+        .get("changes")
+        .and_then(|value| value.as_array())
+        .expect("changes array present in JSON payload");
+
+    let find_change = |key: &str| {
+        changes.iter().find(|change| {
+            change
+                .get("key")
+                .and_then(|value| value.as_str())
+                .map_or(false, |candidate| candidate == key)
+        })
+    };
+
+    let anchor_mode = find_change("world.anchor_mode")
+        .expect("world.anchor_mode change present in JSON payload");
+    assert_eq!(
+        anchor_mode
+            .get("new_value")
             .and_then(|value| value.as_str()),
         Some("custom"),
-        "json payload should describe updated anchor_mode"
+        "json payload should describe updated anchor_mode",
     );
+
+    let anchor_path = find_change("world.anchor_path")
+        .expect("world.anchor_path change present in JSON payload");
     assert_eq!(
-        applied
-            .get("world.anchor_path")
+        anchor_path
+            .get("new_value")
             .and_then(|value| value.as_str()),
         Some("/tmp/json-anchor"),
-        "json payload should describe updated anchor_path"
+        "json payload should describe updated anchor_path",
     );
+
+    let world_enabled = find_change("install.world_enabled")
+        .expect("install.world_enabled change present in JSON payload");
     assert_eq!(
-        applied
-            .get("install.world_enabled")
+        world_enabled
+            .get("new_value")
             .and_then(|value| value.as_bool()),
         Some(false),
-        "json payload should report boolean keys faithfully"
+        "json payload should report boolean keys faithfully",
     );
 }
 
@@ -390,12 +415,16 @@ fn cli_flags_still_override_config_after_config_set() {
     assert_eq!(
         parts.next(),
         Some("follow-cwd"),
-        "CLI --anchor-mode should override config file values"
+        "CLI --anchor-mode should override config file values",
     );
+
+    let expected_anchor = project_dir
+        .canonicalize()
+        .unwrap_or_else(|_| project_dir.clone());
     assert_eq!(
         parts.next(),
-        Some(project_dir.to_string_lossy().as_ref()),
-        "follow-cwd should anchor to the current working directory"
+        Some(expected_anchor.to_string_lossy().as_ref()),
+        "follow-cwd should anchor to the current working directory",
     );
 }
 
