@@ -1444,7 +1444,7 @@
       "name": "PTY IO module tests",
       "type": "test",
       "phase": "Crate Refactor",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Update/add tests to mirror the pty/io module split; assert resize/write/close/channel flows remain correct.",
       "references": [
         "docs/project_management/next/refactor/refactor_plan.md",
