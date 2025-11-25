@@ -2,10 +2,11 @@
 
 use super::shim_ops::build_world_env_map;
 use crate::execution::agent_events::publish_agent_event;
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(target_os = "macos")]
 use crate::execution::pw;
 #[cfg(target_os = "linux")]
 use crate::execution::routing::{get_term_size, RawModeGuard};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use agent_api_client::AgentClient;
 use agent_api_types::{ExecuteRequest, ExecuteStreamFrame};
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -43,9 +44,6 @@ pub(super) fn collect_world_telemetry(
     // Create world backend and collect telemetry
     #[cfg(target_os = "linux")]
     {
-        use world::LinuxLocalBackend;
-        use world_api::WorldBackend;
-
         let backend = LinuxLocalBackend::new();
         let handle = world_api::WorldHandle {
             id: world_id.clone(),
@@ -388,9 +386,6 @@ pub(crate) fn init_linux_world_with_probe<F>(world_disabled: bool, agent_probe: 
 where
     F: Fn() -> anyhow::Result<()>,
 {
-    use world::LinuxLocalBackend;
-    use world_api::{ResourceLimits, WorldBackend, WorldSpec};
-
     if world_disabled {
         return LinuxWorldInit::Disabled;
     }

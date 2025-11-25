@@ -14,13 +14,15 @@ pub(crate) use registry::{
 };
 #[allow(unused_imports)]
 pub(crate) use shim_ops::wrap_with_anchor_guard;
+#[cfg(target_os = "linux")]
+pub(crate) use world_ops::init_linux_world;
 #[allow(unused_imports)]
 pub(crate) use world_ops::{
     build_agent_client_and_request, consume_agent_stream_buffer, stream_non_pty_via_agent,
     AgentStreamOutcome,
 };
-#[cfg(target_os = "linux")]
-pub(crate) use world_ops::{init_linux_world, init_linux_world_with_probe, LinuxWorldInit};
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) use world_ops::{init_linux_world_with_probe, LinuxWorldInit};
 
 #[cfg(test)]
 mod tests {
