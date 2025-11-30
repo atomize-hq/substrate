@@ -91,6 +91,21 @@ Keep concise, actionable, and security-focused.
 - Low Priority – macOS installer dependency automation
   - Enhance `scripts/substrate/install-substrate.sh` to auto-install required macOS tools (e.g., `envsubst` via Homebrew `gettext`) when missing, falling back to clear guidance if no supported package manager is detected.
   - Acceptance: Fresh macOS host without gettext can run the installer end-to-end without manual prerequisite setup.
+- Backlog – Consolidate world enable toggle under `[world]`
+  - Today the on/off switch for world isolation lives under `[install]` as `install.world_enabled`. That placement dates back to the installer metadata phase, but it creates a split experience: all other runtime knobs (`anchor_mode`, `caged`, etc.) live under `[world]` while the most important one sits elsewhere. As we expand world configuration, the ergonomics would be cleaner if users could manage every world option via `world.*` keys.
+  - Proposed direction: introduce `world.enable` (boolean) as the canonical key, treat `install.world_enabled` as a compatibility alias, and update docs/installers to write/read the new location. That aligns the schema semantically (all world behavior in one table) and makes `substrate config show/set` more intuitive (`world.enable=false` instead of `install.world_enabled=false`).
+  - Migration considerations: loaders should prefer `world.enable` when present but still honor the old key, `substrate config set` needs to write both until we formally deprecate the installer key, and docs/tooling (install scripts, doctor output) must call out the new name plus the legacy alias so existing installs don’t break.
+- Backlog – Document `--uncaged` as a diagnostics-only escape when worlds are enabled
+  - Users occasionally expect `--uncaged` to grant broader filesystem access inside the world backend, but in reality it just removes the anchor guard; the process remains confined to the world’s overlay. We should update docs (`docs/CONFIGURATION.md`, `docs/USAGE.md`, `docs/WORLD.md`) and CLI help to clearly state that `--uncaged` inside a world is intended for Substrate troubleshooting (inspecting overlay internals, diff dirs, etc.) and shouldn’t be used for normal workflows.
+  - Acceptance: CLI help text and documentation call out that uncaging a world session doesn’t break isolation and is mainly for debugging; examples show `--uncaged` as a dev tool rather than a standard option.
+- Backlog – Investigate scoped/named worlds (project/user/global)
+  - Idea: today every world session anchors to the launch directory and gets its own ephemeral overlay (`world.anchor_mode=project`). Consider adding explicit scopes such as “user world” or “global world” so multiple commands can share a long-lived overlay (faster warm-up, persistent tooling state) while still staying isolated from the host.
+  - Considerations:
+    - **Isolation & policy:** reusing a user/global world mixes state between repos. We’d need opt-in plus policy controls to avoid leaking data between unrelated projects.
+    - **Lifecycle:** define commands to create/reset/destroy scoped worlds (`substrate world reset --scope=user`?) and document how cleanup works.
+    - **CLI/Config UI:** extend config/flags (e.g., `world.scope = project|user|global`) and expose how this interacts with existing `anchor_mode`/`anchor_path`. For experimentation we could leverage `world.anchor_mode=custom` pointing at a shared directory to simulate the behavior.
+    - **Backend changes:** the Linux backend would need to cache overlays keyed by scope instead of always generating new `wld_*` directories.
+  - Not a priority now, but worth capturing so we can explore the UX/security balance later; any prototype should highlight how to emulate it today via `world.anchor_mode=custom` before adding official scopes.
 
 ## Hardening / Quality
 

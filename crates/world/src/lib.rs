@@ -11,6 +11,7 @@ pub mod copydiff;
 pub mod diff;
 pub mod dns;
 pub mod exec;
+pub mod guard;
 pub mod isolation;
 pub mod netfilter;
 pub mod netns;
