@@ -145,6 +145,10 @@ Keep concise, actionable, and security-focused.
     - Clearly separate “host missing manager” vs. “host has manager, world missing it”.
     - Consider a concise summary view with optional `--verbose` output for the full details.
   - Goal: make the doctor/health commands feel like a coherent report where users can quickly identify what needs fixing.
+- Backlog – Shell env regression tests should force `SUBSTRATE_HOME`
+  - Pain: the `shell_env_*` integration tests only override `HOME`, so a user who has `SUBSTRATE_HOME` exported (e.g., after running the dev installer) leaks their real `~/.substrate` into the test harness. That causes false failures (`PATH` not shimmed, overlay snippets missing) whenever host metadata differs from the fixture expectations.
+  - Fix: update `ShellEnvFixture`/`substrate_command_for_home` to set `SUBSTRATE_HOME` to the temporary home it creates (and pre-create config directories). The tests then stay hermetic even if the developer’s environment has custom prefixes.
+  - Scope: treat as maintenance/reliability work—no product changes, just test harness hardening. Add a quick note in `DEVELOPMENT.md` once fixed so contributors know the tests are self-contained.
 
 - **High Priority – Health command manager mismatch bug**
   - `substrate health` currently reports “attention required” whenever optional manager detection hooks (direnv, asdf, conda, etc.) aren’t found on the host, even though the host never had them. We only care when the world and host detection disagree (host has a manager, world doesn’t), not when both sides are missing a manager entirely.
