@@ -163,7 +163,10 @@ pub async fn handle_ws_pty(
     };
 
     let (cmd, cwd, env, _span_id, cols, rows) = start_msg;
+    #[cfg(target_os = "linux")]
     let mut command_to_run = cmd.clone();
+    #[cfg(not(target_os = "linux"))]
+    let command_to_run = cmd.clone();
 
     // Prepare in-world session context (best-effort)
     #[cfg(target_os = "linux")]
