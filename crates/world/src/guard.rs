@@ -102,8 +102,9 @@ mod tests {
         let temp = tempdir().unwrap();
         let command = "pwd && cd ..";
         let wrapped = wrap_with_anchor_guard(command, temp.path());
+        let expected_anchor = shell_escape_for_sh(&canonicalize_or(temp.path()));
         assert!(
-            wrapped.contains(temp.path().to_str().unwrap()),
+            wrapped.contains(&expected_anchor),
             "wrapped command missing anchor path: {wrapped}"
         );
         assert!(wrapped.ends_with(command));
