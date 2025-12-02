@@ -366,3 +366,11 @@ Template:
 - Created worktree: pending (will branch `ps-r1c-coverage-code` after doc-only commit per checklist)
 - Plan: expose replay world toggles + env overrides in CLI harness, document flag/env interactions + verbose logging expectations, add manual smoke command notes, then run fmt/clippy/tests/`substrate --replay` commands before merging back
 - Blockers: branch lacks upstream tracking; no provisioned world socket on this dev host (manual replays rely on stored spans)
+
+## [2025-12-02 18:58 UTC] Test Agent – R1c-test – START
+- Checked out feat/p0-platform-stability; `git pull --ff-only` failed because the branch has no upstream tracking ref (documented)
+- Read `p0_platform_stability_plan.md`, `docs/project_management/next/p0-platform-stability/tasks.json`, `docs/project_management/next/p0-platform-stability/session_log.md`, R1c-code scope, and this prompt for alignment
+- Updated tasks.json (`R1c-test` → `in_progress`) and appended this START entry; docs commit pending per checklist
+- Created branch/worktree: pending (ps-r1c-coverage-test → wt/ps-r1c-coverage-test after doc commit)
+- Plan: expand replay integration tests for default world/`--no-world`/env opt-out, assert verbose scope + warning prefixes, refresh fixtures, run `cargo fmt`, `cargo test -p substrate-replay -- --nocapture`, `cargo test -p substrate-shell replay_world`, capture manual `substrate --replay` runs as needed
+- Blockers: branch lacks upstream remote; host lacks provisioned world-agent socket so CLI runs will rely on mocked spans/environment toggles
