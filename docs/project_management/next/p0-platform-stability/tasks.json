@@ -683,7 +683,7 @@
       "name": "Replay world coverage (code)",
       "type": "code",
       "phase": "R1c – Replay World Coverage",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add CLI/config plumbing to expose default world-on, `--no-world`, and env opt-out toggles to the test harness plus docs about their interactions.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",

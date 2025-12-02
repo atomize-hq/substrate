@@ -358,3 +358,11 @@ Template:
 - Kickoff prompts created: updated `docs/project_management/next/p0-platform-stability/kickoff_prompts/R1c-code.md` + `R1c-test.md` to reference the new verbose scopes/warning behavior.
 - Docs commit: pending (`docs: finish R1b-integ` will capture tasks/session log updates after merging back to feat/p0-platform-stability).
 - Next steps / blockers: fast-forward feat/p0-platform-stability to ps-r1b-verbosity-integ, update tasks.json/status log, remove worktree once doc commit pushed.
+
+## [2025-12-02 18:56 UTC] Code Agent – R1c-code – START
+- Checked out feat/p0-platform-stability; `git pull --ff-only origin feat/p0-platform-stability` failed (remote ref missing, continuing with local branch)
+- Reviewed `p0_platform_stability_plan.md`, `tasks.json`, `session_log.md`, R1b outputs, and the R1c-code prompt for scope alignment
+- Updated tasks.json (`R1c-code` → `in_progress`) and appended this session log entry (docs commit pending)
+- Created worktree: pending (will branch `ps-r1c-coverage-code` after doc-only commit per checklist)
+- Plan: expose replay world toggles + env overrides in CLI harness, document flag/env interactions + verbose logging expectations, add manual smoke command notes, then run fmt/clippy/tests/`substrate --replay` commands before merging back
+- Blockers: branch lacks upstream tracking; no provisioned world socket on this dev host (manual replays rely on stored spans)
