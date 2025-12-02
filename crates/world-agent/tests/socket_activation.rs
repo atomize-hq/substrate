@@ -1,13 +1,12 @@
 #![cfg(unix)]
 
 use once_cell::sync::Lazy;
-use std::io::{Read, Write};
-use std::os::fd::IntoRawFd;
-use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
+use std::os::fd::RawFd;
+use std::os::unix::io::AsRawFd;
 use std::os::unix::net::UnixStream;
-use std::process;
 use std::sync::Mutex;
-use world_agent::socket_activation::{SocketActivationMode, SocketActivationState};
+use tokio::runtime::Runtime;
+use world_agent::socket_activation_test_support;
 
 const ACTIVATION_ENV_VARS: &[&str] = &[
     "LISTEN_FDS",
@@ -20,106 +19,94 @@ static ENV_GUARD: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 #[test]
 fn direct_bind_mode_when_listen_fds_unset() {
-    let state = with_activation_env(&[], || SocketActivationState::detect());
-    assert!(matches!(state.mode(), SocketActivationMode::DirectBind));
-    let telemetry = state.telemetry();
-    assert_eq!(telemetry.mode, "direct_bind");
-    assert_eq!(telemetry.fd_count, None);
+    let summary = with_activation_env(&[], || {
+        socket_activation_test_support::collect_summary().unwrap()
+    });
+    assert!(summary.is_none());
 }
 
 #[test]
-fn socket_activation_mode_exposes_inherited_fds() {
-    let pid = process::id().to_string();
-    let inherited_start = 200;
+fn socket_activation_mode_exposes_inherited_unix_sockets() {
+    let pid = std::process::id().to_string();
+    let base_fd = 200;
     with_activation_env(
         &[
             ("LISTEN_FDS", "2"),
             ("LISTEN_PID", &pid),
-            ("LISTEN_FDNAMES", "uds:tcp"),
-            ("LISTEN_FD_START", &inherited_start.to_string()),
+            ("LISTEN_FDNAMES", "uds:metrics"),
+            ("LISTEN_FD_START", &base_fd.to_string()),
         ],
         || {
-            let mut inherited_fds = setup_inherited_fds(inherited_start as RawFd, 2);
-            let state = SocketActivationState::detect();
+            let mut inherited = setup_inherited_fds(base_fd as RawFd, 2);
+            let summary = socket_activation_test_support::collect_summary()
+                .expect("collect summary")
+                .expect("expected socket activation");
+            inherited.mark_consumed();
 
-            let duplicates = state
-                .duplicate_inherited_fds()
-                .expect("duplicating inherited descriptors");
-            assert_eq!(duplicates.len(), 2);
-
-            // Convert OwnedFd into UnixStream so we can exchange bytes with the peers.
-            let mut paired_streams: Vec<UnixStream> = duplicates
-                .into_iter()
-                .map(|fd| unsafe { UnixStream::from_raw_fd(fd.into_raw_fd()) })
-                .collect();
-
-            for ((socket, peer), name) in paired_streams
-                .iter_mut()
-                .zip(inherited_fds.peers.iter_mut())
-                .zip(["uds", "tcp"])
-            {
-                socket
-                    .write_all(name.as_bytes())
-                    .expect("write through inherited fd");
-                let mut buf = vec![0_u8; name.len()];
-                peer.read_exact(&mut buf).expect("read from peer");
-                assert_eq!(buf, name.as_bytes());
-            }
-
-            let telemetry = state.telemetry();
-            assert_eq!(telemetry.mode, "socket_activation");
-            assert_eq!(telemetry.fd_count, Some(2));
-            assert_eq!(telemetry.fd_start, Some(inherited_start as RawFd));
+            assert_eq!(summary.total_fds, 2);
+            assert_eq!(summary.unix_listeners.len(), 2);
+            assert!(summary.tcp_listeners.is_empty());
             assert_eq!(
-                telemetry.fd_names,
-                vec!["uds".to_string(), "tcp".to_string()]
+                summary
+                    .unix_listeners
+                    .iter()
+                    .map(|meta| meta.fd)
+                    .collect::<Vec<_>>(),
+                vec![base_fd, base_fd + 1]
             );
-
-            drop(inherited_fds);
+            assert_eq!(summary.unix_listeners[0].name.as_deref(), Some("uds"));
+            assert_eq!(summary.unix_listeners[1].name.as_deref(), Some("metrics"));
         },
     );
 }
 
 #[test]
 fn honors_custom_fd_start_offsets() {
-    let pid = process::id().to_string();
-    let custom_start = 9;
+    let pid = std::process::id().to_string();
+    let base_fd = 280;
     with_activation_env(
         &[
             ("LISTEN_FDS", "3"),
             ("LISTEN_PID", &pid),
-            ("LISTEN_FD_START", &custom_start.to_string()),
+            ("LISTEN_FD_START", &base_fd.to_string()),
         ],
         || {
-            let inherited_fds = setup_inherited_fds(custom_start, 3);
-            let state = SocketActivationState::detect();
+            let mut inherited = setup_inherited_fds(base_fd as RawFd, 3);
+            let summary = socket_activation_test_support::collect_summary()
+                .expect("collect summary")
+                .expect("expected socket activation");
+            inherited.mark_consumed();
 
-            match state.mode() {
-                SocketActivationMode::SocketActivated(details) => {
-                    assert_eq!(details.fd_start, custom_start);
-                    assert_eq!(
-                        details.inherited_fds,
-                        vec![custom_start, custom_start + 1, custom_start + 2]
-                    );
-                }
-                _ => panic!("expected socket activation mode"),
-            }
-
-            drop(inherited_fds);
+            assert_eq!(
+                summary
+                    .unix_listeners
+                    .iter()
+                    .map(|meta| meta.fd)
+                    .collect::<Vec<_>>(),
+                vec![base_fd, base_fd + 1, base_fd + 2]
+            );
         },
     );
 }
 
 struct InheritedFdSet {
     targets: Vec<RawFd>,
-    peers: Vec<UnixStream>,
+    should_close: bool,
+}
+
+impl InheritedFdSet {
+    fn mark_consumed(&mut self) {
+        self.should_close = false;
+    }
 }
 
 impl Drop for InheritedFdSet {
     fn drop(&mut self) {
-        for fd in &self.targets {
-            unsafe {
-                libc::close(*fd);
+        if self.should_close {
+            for fd in &self.targets {
+                unsafe {
+                    libc::close(*fd);
+                }
             }
         }
     }
@@ -127,23 +114,22 @@ impl Drop for InheritedFdSet {
 
 fn setup_inherited_fds(fd_start: RawFd, count: usize) -> InheritedFdSet {
     let mut targets = Vec::with_capacity(count);
-    let mut peers = Vec::with_capacity(count);
-
     for offset in 0..count {
         let desired = fd_start + offset as RawFd;
-        let (left, right) = UnixStream::pair().expect("create unix stream pair");
+        let (left, _) = UnixStream::pair().expect("create unix stream pair");
         unsafe {
             assert!(
                 libc::dup2(left.as_raw_fd(), desired) >= 0,
                 "dup2 into LISTEN_FD slot"
             );
         }
-
         targets.push(desired);
-        peers.push(right);
     }
 
-    InheritedFdSet { targets, peers }
+    InheritedFdSet {
+        targets,
+        should_close: true,
+    }
 }
 
 fn with_activation_env<T>(vars: &[(&str, &str)], f: impl FnOnce() -> T) -> T {
@@ -161,7 +147,7 @@ fn with_activation_env<T>(vars: &[(&str, &str)], f: impl FnOnce() -> T) -> T {
         std::env::set_var(key, value);
     }
 
-    let output = f();
+    let output = with_runtime(f);
 
     for (key, value) in snapshot {
         if let Some(val) = value {
@@ -172,4 +158,13 @@ fn with_activation_env<T>(vars: &[(&str, &str)], f: impl FnOnce() -> T) -> T {
     }
 
     output
+}
+
+fn with_runtime<T>(f: impl FnOnce() -> T) -> T {
+    let runtime = Runtime::new().expect("create Tokio runtime");
+    let guard = runtime.enter();
+    let result = f();
+    drop(guard);
+    runtime.shutdown_background();
+    result
 }
