@@ -11,6 +11,8 @@ use tempfile::TempDir;
 
 pub use common::{binary_path, ensure_substrate_built, substrate_shell_driver, temp_dir};
 pub use substrate_common::dedupe_path;
+mod socket;
+pub use socket::{AgentSocket, SocketResponse};
 
 pub const PAYLOAD_MARKER: &str = "__SUBSTRATE_PAYLOAD__";
 
