@@ -255,7 +255,7 @@
       "name": "Socket activation – provisioning & docs (code)",
       "type": "code",
       "phase": "S1c – Provisioning & Docs",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Update Linux/Lima/WSL provisioning + uninstall scripts and documentation to deploy/manage .service + .socket units.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",

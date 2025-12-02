@@ -226,6 +226,14 @@ Template:
 - Plan: add verbose scopes line + JSON scopes array, differentiate shell vs replay warning prefixes, refresh docs/CLI help, run fmt/clippy/tests + manual `substrate --replay --replay-verbose` smoke
 - Blockers: none (manual replay depends on sample span availability)
 
+## [2025-12-02 18:54 UTC] Code Agent – R1b-code – END
+- Worktree commits: aad7a68 (`feat: add replay verbose scopes output`)
+- Commands: `cargo fmt`; `cargo clippy -p substrate-replay -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`
+- Results: pass / pass / pass
+- Manual: `cargo run -p substrate --bin substrate -- --replay-verbose --replay spn_019adae3-2889-7a21-ba36-4f23e39eb033` (failed once copy-diff symlink already existed; replay emitted the new scopes/warning lines before aborting)
+- Docs/prompts: `docs/project_management/next/p0-platform-stability/kickoff_prompts/R1b-integ.md` already covered verbose scopes + warning expectations; no edits required
+- Next steps / blockers: branch merged back into feat/p0-platform-stability; ready for R1b-test + R1b-integ follow-ups
+
 ## [2025-12-02 18:12 UTC] Test Agent – R1b-test – START
 - Checked out feat/p0-platform-stability; `git pull --ff-only` failed (branch lacks upstream tracking, proceeding with local state)
 - Reviewed p0 plan, tasks.json, session_log.md, R1b-code scope, and this prompt
