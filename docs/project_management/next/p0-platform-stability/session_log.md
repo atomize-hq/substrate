@@ -198,3 +198,10 @@ Template:
 - Worktree setup pending (`ps-s1b-shell-integ` → `wt/ps-s1b-shell-integ`)
 - Plan: merge ps-s1b-shell-code/test, run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-shell world_enable`, `substrate world doctor --json`, then update docs/tasks and prep S1c prompts
 - Blockers: `substrate world doctor --json` requires provisioned socket-activated agent; expect to log skip if service unavailable here
+
+## [2025-12-02 18:05 UTC] Code Agent – R1b-code – START
+- Checked out feat/p0-platform-stability; `git pull --ff-only` failed (no upstream branch)
+- Reviewed p0 plan, tasks.json, session log, R1a outputs, and R1b-code prompt
+- Updated tasks.json (`R1b-code` → `in_progress`) and session_log.md (this entry); commit pending
+- Plan: add verbose scopes line + JSON scopes array, differentiate shell vs replay warning prefixes, refresh docs/CLI help, run fmt/clippy/tests + manual `substrate --replay --replay-verbose` smoke
+- Blockers: none (manual replay depends on sample span availability)

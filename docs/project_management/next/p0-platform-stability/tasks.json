@@ -255,7 +255,7 @@
       "name": "Socket activation – provisioning & docs (code)",
       "type": "code",
       "phase": "S1c – Provisioning & Docs",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Update Linux/Lima/WSL provisioning + uninstall scripts and documentation to deploy/manage .service + .socket units.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
@@ -857,7 +857,7 @@
       "name": "Health manager parity – aggregation logic (integration)",
       "type": "integration",
       "phase": "H1a – Detection & Aggregation",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge H1a code/test branches, rerun fmt/lint/tests, and prep for the CLI/doc UX phase.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
