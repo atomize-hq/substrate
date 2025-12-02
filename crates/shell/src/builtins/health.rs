@@ -132,13 +132,6 @@ impl HealthSummary {
                 }
             }
         }
-        if !missing_guest_tools.is_empty() {
-            failures.push(format!(
-                "guest missing tools: {}",
-                missing_guest_tools.join(", ")
-            ));
-        }
-
         let ok = failures.is_empty();
 
         Self {
