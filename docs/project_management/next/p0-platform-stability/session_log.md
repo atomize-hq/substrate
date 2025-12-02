@@ -233,3 +233,18 @@ Template:
 - Created worktree: pending (ps-r1b-verbosity-test next per checklist)
 - Plan: extend replay CLI tests for verbose scopes + warning prefixes, refresh JSON/PowerShell fixtures, run required fmt + replay/shell test suites, note any manual verbose runs
 - Blockers: branch has no remote tracking; otherwise none
+
+## [2025-12-02 17:59 UTC] Test Agent – S1c-test – START
+- Checked out feat/p0-platform-stability; `git pull --ff-only` failed (branch lacks upstream tracking, working from local state)
+- Reviewed p0 plan, tasks.json, session_log.md, S1c-code scope, and this prompt
+- Updated tasks.json (`S1c-test` → `in_progress`) + session log (this entry); doc commit pending
+- Worktree setup pending (`ps-s1c-provision-test` → `wt/ps-s1c-provision-test` per checklist)
+- Plan: extend installer/uninstaller harnesses for `.socket` coverage, update world doctor/health integration tests + fixtures, mirror S1b telemetry assertions, run required commands (`cargo fmt`, installer smoke, linux/mac/windows provisioner dry-runs) and capture skips/output
+- Blockers: upstream remote missing; macOS Lima + Windows WSL hosts unavailable locally (will rely on dry-run/WhatIf invocations and document results)
+
+## [2025-12-02 17:59 UTC] Code Agent – S1c-code – START
+- Checked out feat/p0-platform-stability; `git pull --ff-only origin feat/p0-platform-stability` failed (remote ref missing, working from local branch)
+- Reviewed p0 plan, tasks.json, session_log.md, prior S1 logs, and this S1c-code prompt
+- Verified `tasks.json` already marked S1c-code as `in_progress`; appended this START entry (commit pending)
+- Plan: update Linux/macOS/WSL provision/uninstall scripts for `.service` + `.socket`, thread socket_activation messaging through docs, and prep dry-run command captures before coding in the worktree
+- Blockers: remote branch absent; provisioning commands may require sudo on real hosts (document skips)

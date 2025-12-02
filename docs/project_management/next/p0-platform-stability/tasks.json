@@ -301,7 +301,7 @@
       "name": "Socket activation – provisioning & docs (test)",
       "type": "test",
       "phase": "S1c – Provisioning & Docs",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Author harness coverage/dry-run verification for Linux/Lima/WSL installers/uninstallers plus world doctor scripts under socket activation.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
