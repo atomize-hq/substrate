@@ -115,6 +115,14 @@ Template:
 - Plan: implement nft cgroup fallback + diagnostics in replay/world backends, add cleanup helper + docs updates, run fmt/clippy/test per spec, merge branch + update tasks/logs
 - Blockers: branch lacks upstream remote; local sync acceptable
 
+## [2025-12-02 17:16 UTC] Code Agent – R1a-code – END
+- Worktree commits: a4c8633 (feat: add replay nft fallback + diagnostics)
+- Commands: `cargo fmt`; `cargo clippy -p substrate-replay -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`
+- Results: pass / pass / pass
+- Manual cleanup scripts: not run (helper added as opt-in CLI)
+- Merge: pending due to pre-existing uncommitted files on feat/p0-platform-stability (handing off to integration agent)
+- Docs commit pending (will capture tasks/log updates separately)
+
 ## [2025-12-02 16:34 UTC] Code Agent – S1b-code – START
 - Checked out feat/p0-platform-stability, `git pull --ff-only` failed (remote ref feat/p0-platform-stability missing; proceeding with local branch)
 - Reviewed p0 plan, tasks.json, session log, and S1a outputs (session entries + merged code) along with this prompt
