@@ -15,12 +15,15 @@
 - Merge `ps-s1c-provision-code` + `ps-s1c-provision-test`, resolve conflicts, and fast-forward back to `feat/p0-platform-stability`.
 - Re-run fmt/lint/tests plus representative provisioning dry-runs to validate combined changes.
 - Update docs/tasks/session log and publish the R1a prompts.
+- Double-check that the merged provisioning flows still drive the S1b shell signals: `substrate world doctor --json` should report the expected `world_socket` block and `substrate --shim-status` should surface the socket-activation summary called out in the docs.
 
 ## Required Commands
 ```
 cargo fmt
 cargo clippy --workspace --all-targets -- -D warnings
 ./tests/installers/install_smoke.sh   # or record skip
+./target/debug/substrate world doctor --json   # skip ok if world agent unavailable, record result
+./target/debug/substrate --shim-status-json    # ensures socket_activation details survive integration
 scripts/linux/world-provision.sh --profile dev --dry-run
 scripts/mac/lima-warm.sh --check-only   # skip ok w/notes
 pwsh -File scripts/windows/wsl-warm.ps1 -WhatIf   # skip ok w/notes

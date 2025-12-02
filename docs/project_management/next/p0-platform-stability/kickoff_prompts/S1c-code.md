@@ -15,11 +15,13 @@
 - Update platform installers/uninstallers (Linux `world-provision.sh`, macOS `lima-warm.sh`, Windows `wsl-warm.ps1`, plus helper scripts like `scripts/substrate/world-enable.sh`) to deploy/manage both `.service` and `.socket` units.
 - Ensure idempotent reruns and uninstall flows clean up both unit types; document sudo/permissions guidance.
 - Refresh docs (`docs/WORLD.md`, `docs/INSTALLATION.md`, platform runbooks) with socket-activation instructions and manual verification commands.
+- Thread the S1b shell readiness outputs through docs: highlight the new `world_socket` block from `substrate world doctor --json` and the socket-activation summary in `substrate --shim-status` so operators know what to expect after provisioning.
 
 ## Scope & Guardrails
 - Production scripts + documentation only; test harness updates belong to S1c-test.
 - Keep platform-specific instructions accurate—note when commands require sudo/PowerShell elevation.
 - Provide sample systemd unit content or link to the existing templates; avoid hard-coding host paths where not portable.
+- Cross-check references against the S1b shell changes (`ensure_world_agent_ready`, doctor/shim outputs) instead of re-implementing readiness logic; docs should call out `SUBSTRATE_WORLD_SOCKET`/`socket_activation` terminology verbatim so later tests can assert them.
 
 ## Required Commands
 ```

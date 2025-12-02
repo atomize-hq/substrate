@@ -15,11 +15,13 @@
 - Extend installer/uninstaller harnesses (shell + PowerShell) to exercise the new `.socket` deployment/removal paths. Dry-run output is acceptable when sudo access is unavailable, but capture logs.
 - Update world doctor/health integration tests (where feasible) to verify they report both `.service` and `.socket` states after provisioning/uninstall.
 - Refresh any fixtures or docs describing the harness outputs.
+- Mirror the S1b telemetry contract by asserting the `world_socket` JSON fields (`mode`, `path`, `socket_activation`) and shim status summaries emitted by the refreshed shell binaries.
 
 ## Scope & Guardrails
 - Focus on automated tests/fixtures/scripts; do not modify production provisioning scripts except for helper hooks reviewed with S1c-code.
 - Clearly annotate platform skips in session log (e.g., “macOS Lima unavailable on this host, skip recorded”).
 - Ensure tests stay hermetic by pointing to temporary directories or mock systemctl invocations when possible.
+- Pull expectations directly from the merged S1b shell suites when validating doctor/shim outputs so that behaviors stay consistent across code/test/provisioning phases.
 
 ## Required Commands
 ```
