@@ -5,7 +5,7 @@
       "name": "Socket activation – agent plumbing (code)",
       "type": "code",
       "phase": "S1a – Agent Socket Activation",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Teach world-agent to consume LISTEN_FDS sockets, emit telemetry about inherited listeners, and preserve the direct-bind fallback path.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
