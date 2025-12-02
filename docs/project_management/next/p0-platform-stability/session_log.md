@@ -367,6 +367,13 @@ Template:
 - Plan: expose replay world toggles + env overrides in CLI harness, document flag/env interactions + verbose logging expectations, add manual smoke command notes, then run fmt/clippy/tests/`substrate --replay` commands before merging back
 - Blockers: branch lacks upstream tracking; no provisioned world socket on this dev host (manual replays rely on stored spans)
 
+## [2025-12-02 19:07 UTC] Code Agent – R1c-code – END
+- Worktree commits: 6eecae9 (`feat: expose replay world toggles to CLI`)
+- Commands: `cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell replay_world`; `cargo build -p substrate` (to refresh the CLI binary); manual `./target/debug/substrate --replay-verbose --replay span_r1c_world` (temp HOME + SHIM_TRACE_LOG fixture, defaults to world-on even when `SUBSTRATE_WORLD=disabled`); manual `./target/debug/substrate --replay-verbose --replay span_r1c_no_world --no-world` (same fixture, flag path)
+- Results: fmt/clippy/tests/build all pass; manual default run printed `[replay] world toggle: enabled (default)` plus copy-diff fallback warnings on this unprivileged host, while the `--no-world` run emitted `[replay] world toggle: disabled (--no-world flag)` and `[replay] warn: running without world isolation (--no-world flag)` with `scopes: []`
+- Docs/tasks: `tasks.json` now marks R1c-code as `completed`; session log captures START/END; R1c-integ prompt already referenced these toggles so no edits were required (confirmed)
+- Next steps / blockers: none — branch merged back into feat/p0-platform-stability and worktree will be removed after doc commit
+
 ## [2025-12-02 18:58 UTC] Test Agent – R1c-test – START
 - Checked out feat/p0-platform-stability; `git pull --ff-only` failed because the branch has no upstream tracking ref (documented)
 - Read `p0_platform_stability_plan.md`, `docs/project_management/next/p0-platform-stability/tasks.json`, `docs/project_management/next/p0-platform-stability/session_log.md`, R1c-code scope, and this prompt for alignment
