@@ -1,3 +1,4 @@
+use crate::execution::socket_activation;
 use serde_json::json;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -89,6 +90,8 @@ pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
         PathBuf::from(format!("/tmp/substrate-{}-copydiff", uid))
     }
 
+    let activation_report = socket_activation::socket_activation_report();
+
     // overlay
     let mut overlay_ok = overlay_present();
     if !json_mode {
@@ -158,8 +161,65 @@ pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
         println!("INFO  | dmesg_restrict={}", dmsg);
         println!("INFO  | overlay_root: {}", o_root.display());
         println!("INFO  | copydiff_root: {}", c_root.display());
+        if activation_report.is_socket_activated() {
+            pass(&format!(
+                "agent socket: systemd-managed ({} {})",
+                activation_report
+                    .socket_unit
+                    .as_ref()
+                    .map(|u| u.name)
+                    .unwrap_or("substrate-world-agent.socket"),
+                activation_report
+                    .socket_unit
+                    .as_ref()
+                    .map(|u| u.active_state.as_str())
+                    .unwrap_or("unknown")
+            ));
+        } else if activation_report.socket_unit.is_some() {
+            warn(&format!(
+                "agent socket: {} detected but inactive (state: {})",
+                activation_report
+                    .socket_unit
+                    .as_ref()
+                    .map(|u| u.name)
+                    .unwrap_or("substrate-world-agent.socket"),
+                activation_report
+                    .socket_unit
+                    .as_ref()
+                    .map(|u| u.active_state.as_str())
+                    .unwrap_or("unknown")
+            ));
+        } else if activation_report.socket_exists {
+            pass(&format!(
+                "agent socket: manual listener present at {}",
+                activation_report.socket_path
+            ));
+        } else {
+            warn(&format!(
+                "agent socket: listener missing at {}; run `substrate world enable`",
+                activation_report.socket_path
+            ));
+        }
     } else {
         let ok = overlay_ok || (fuse_dev && fuse_bin);
+        let socket_json = json!({
+            "mode": activation_report.mode.as_str(),
+            "socket_path": activation_report.socket_path,
+            "socket_exists": activation_report.socket_exists,
+            "systemd_error": activation_report.systemd_error,
+            "systemd_socket": activation_report.socket_unit.as_ref().map(|unit| json!({
+                "name": unit.name,
+                "active_state": unit.active_state,
+                "unit_file_state": unit.unit_file_state,
+                "listens": unit.listens,
+            })),
+            "systemd_service": activation_report.service_unit.as_ref().map(|unit| json!({
+                "name": unit.name,
+                "active_state": unit.active_state,
+                "unit_file_state": unit.unit_file_state,
+                "listens": unit.listens,
+            })),
+        });
         let out = json!({
             "platform": std::env::consts::OS,
             "overlay_present": overlay_ok,
@@ -169,6 +229,7 @@ pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
             "dmesg_restrict": dmsg,
             "overlay_root": o_root,
             "copydiff_root": c_root,
+            "agent_socket": socket_json,
             "ok": ok,
         });
         println!("{}", serde_json::to_string_pretty(&out).unwrap());

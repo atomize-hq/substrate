@@ -11,7 +11,9 @@ pub(crate) mod platform_world;
 mod pty;
 mod routing;
 mod settings;
-pub mod shim_deploy; // Made public for integration tests
+pub mod shim_deploy;
+#[cfg(target_os = "linux")]
+pub(crate) mod socket_activation; // Made public for integration tests
 
 pub use cli::*;
 pub(crate) use config_cmd::handle_config_command;

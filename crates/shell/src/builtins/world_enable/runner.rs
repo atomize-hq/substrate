@@ -1,4 +1,6 @@
 use super::config::{load_install_config, save_install_config, InstallConfig};
+#[cfg(target_os = "linux")]
+use crate::execution::socket_activation;
 use crate::WorldEnableArgs;
 use anyhow::{bail, Result};
 use std::env;
@@ -101,6 +103,43 @@ pub fn run_enable(args: &WorldEnableArgs) -> Result<()> {
         args.verbose,
         socket_override.as_deref(),
     )?;
+
+    #[cfg(target_os = "linux")]
+    {
+        let activation_report = socket_activation::refresh_socket_activation_report();
+        if activation_report.is_socket_activated() {
+            append_log_line(
+                &log_path,
+                &format!(
+                    "socket activation detected: {} (active_state={}, unit_file_state={})",
+                    activation_report
+                        .socket_unit
+                        .as_ref()
+                        .map(|u| u.name)
+                        .unwrap_or("substrate-world-agent.socket"),
+                    activation_report
+                        .socket_unit
+                        .as_ref()
+                        .map(|u| u.active_state.as_str())
+                        .unwrap_or("unknown"),
+                    activation_report
+                        .socket_unit
+                        .as_ref()
+                        .map(|u| u.unit_file_state.as_str())
+                        .unwrap_or("unknown")
+                ),
+            )?;
+            println!(
+                "Socket activation: systemd is listening on {} ({}).",
+                activation_report.socket_path,
+                activation_report
+                    .socket_unit
+                    .as_ref()
+                    .map(|u| u.active_state.as_str())
+                    .unwrap_or("unknown")
+            );
+        }
+    }
 
     config.set_world_enabled(true);
     save_install_config(&config_path, &config)?;
