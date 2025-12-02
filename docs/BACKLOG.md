@@ -5,6 +5,13 @@ Keep concise, actionable, and security-focused.
 
 ## Near-Term (Next 1–2 sprints)
 
+- **Top Priority – Record `world_id` for REPL/local exec spans**
+  - Today `trace.jsonl` only contains `world_id` when a command is routed through the world agent (non-PTY/PTY). Interactive REPL commands and other local exec paths still run in the world but log `world_id: null`, making it impossible to audit isolation from the trace alone.
+  - Fix: when the shell initializes a world session, capture the active world ID (if any) and populate it on every span regardless of execution path. Both the shim and shell telemetry should include the field so every `command_start` / `command_complete` record reflects whether the command was isolated.
+  - Considerations:
+    - Plumb the world ID through `ShellConfig`/`WorldRootSettings` so it’s available to logging even when we execute locally.
+    - Update tests to assert the field is set when worlds are enabled, and document the behavior change in the tracing docs so operators know how to interpret the new data.
+
 - ~~Top Priority – Global configuration UX~~ **(Done)**
   - Implementation: `substrate config init` scaffolds `~/.substrate/config.toml`, `config show` renders TOML/JSON with redaction hooks, and `config set` applies multi-key updates atomically with schema validation.
   - Docs/installer output highlight the new subcommands across Linux/macOS/Windows, and the precedence stack (flags → directory config → global config → env) remains unchanged.
@@ -91,6 +98,61 @@ Keep concise, actionable, and security-focused.
 - Low Priority – macOS installer dependency automation
   - Enhance `scripts/substrate/install-substrate.sh` to auto-install required macOS tools (e.g., `envsubst` via Homebrew `gettext`) when missing, falling back to clear guidance if no supported package manager is detected.
   - Acceptance: Fresh macOS host without gettext can run the installer end-to-end without manual prerequisite setup.
+- Backlog – Consolidate world enable toggle under `[world]`
+  - Today the on/off switch for world isolation lives under `[install]` as `install.world_enabled`. That placement dates back to the installer metadata phase, but it creates a split experience: all other runtime knobs (`anchor_mode`, `caged`, etc.) live under `[world]` while the most important one sits elsewhere. As we expand world configuration, the ergonomics would be cleaner if users could manage every world option via `world.*` keys.
+  - Proposed direction: introduce `world.enable` (boolean) as the canonical key, treat `install.world_enabled` as a compatibility alias, and update docs/installers to write/read the new location. That aligns the schema semantically (all world behavior in one table) and makes `substrate config show/set` more intuitive (`world.enable=false` instead of `install.world_enabled=false`).
+  - Migration considerations: loaders should prefer `world.enable` when present but still honor the old key, `substrate config set` needs to write both until we formally deprecate the installer key, and docs/tooling (install scripts, doctor output) must call out the new name plus the legacy alias so existing installs don’t break.
+- Backlog – Document `--uncaged` as a diagnostics-only escape when worlds are enabled
+  - Users occasionally expect `--uncaged` to grant broader filesystem access inside the world backend, but in reality it just removes the anchor guard; the process remains confined to the world’s overlay. We should update docs (`docs/CONFIGURATION.md`, `docs/USAGE.md`, `docs/WORLD.md`) and CLI help to clearly state that `--uncaged` inside a world is intended for Substrate troubleshooting (inspecting overlay internals, diff dirs, etc.) and shouldn’t be used for normal workflows.
+  - Acceptance: CLI help text and documentation call out that uncaging a world session doesn’t break isolation and is mainly for debugging; examples show `--uncaged` as a dev tool rather than a standard option.
+- Backlog – Investigate scoped/named worlds (project/user/global)
+  - Idea: today every world session anchors to the launch directory and gets its own ephemeral overlay (`world.anchor_mode=project`). Consider adding explicit scopes such as “user world” or “global world” so multiple commands can share a long-lived overlay (faster warm-up, persistent tooling state) while still staying isolated from the host.
+  - Considerations:
+    - **Isolation & policy:** reusing a user/global world mixes state between repos. We’d need opt-in plus policy controls to avoid leaking data between unrelated projects.
+    - **Lifecycle:** define commands to create/reset/destroy scoped worlds (`substrate world reset --scope=user`?) and document how cleanup works.
+    - **CLI/Config UI:** extend config/flags (e.g., `world.scope = project|user|global`) and expose how this interacts with existing `anchor_mode`/`anchor_path`. For experimentation we could leverage `world.anchor_mode=custom` pointing at a shared directory to simulate the behavior.
+    - **Backend changes:** the Linux backend would need to cache overlays keyed by scope instead of always generating new `wld_*` directories.
+  - Not a priority now, but worth capturing so we can explore the UX/security balance later; any prototype should highlight how to emulate it today via `world.anchor_mode=custom` before adding official scopes.
+- Backlog – Session listing/resume UX
+  - Pain: Each `substrate` invocation mints a fresh session ID recorded in `trace.jsonl`. Users who want to resume a previous REPL session or correlate spans currently have to parse that file manually or export `SHIM_SESSION_ID` themselves.
+  - Idea:
+    - `substrate sessions list` (or similar) to show recent session IDs, timestamps, and last known working directories by parsing `trace.jsonl`.
+    - `substrate sessions resume <session_id>` (or a `--resume` flag) that sets `SHIM_SESSION_ID` before launching the shell so new spans append to that session. Replay remains per-span, but this improves DX for continuing a workflow.
+  - Considerations:
+    - The trace log can grow; listing needs to be efficient (maybe keep an index or show the last N sessions).
+    - Handle missing/invalid directories gracefully when resuming and document what context is restored (only tracing metadata, not the world state).
+    - Update docs to explain session IDs vs. span IDs and the new resume workflow.
+- Backlog – Record `world_id` for REPL/local exec spans
+  - Today `trace.jsonl` only shows `world_id` when we route a command through the world agent (non-PTY/PTY). Interactive REPL commands and other local exec paths still run in the world but log `world_id: null`, which makes auditing isolation harder.
+  - Work: when the shell initializes a world session, capture the active world ID (if any) and populate it in the span metadata even for local/REPL commands. Ensure both shim and shell telemetry include it so every span reflects whether it executed in a world.
+  - Considerations:
+    - Plumb the ID through `ShellConfig`/`WorldRootSettings` so the logging layer can access it regardless of execution path.
+    - Update tests to assert the field is set when worlds are enabled, and note the behavior change in tracing docs so operators know how to interpret the new data.
+- Backlog – Interactive install/setup walkthrough
+  - New users currently have to manually edit configs or run individual commands to understand world/caged/anchor/policy settings. An interactive setup wizard (e.g., `substrate setup`) could walk them through enabling/disabling worlds, picking anchor modes/paths, choosing caged vs uncaged behavior, configuring manager snippets, and reviewing policy defaults.
+  - Considerations: support non-interactive modes (`--defaults`, `--profile`), validate paths, respect existing configs (idempotent), and clearly document the choices made.
+- Backlog – World deps install UX cleanup
+  - `substrate world deps install` only works for the curated tools listed in `scripts/substrate/world-deps.yaml` (rustup, go, pyenv, uv, etc.). Users who try to install language-level packages (pip/npm) or tools missing from the manifest get confusing errors, especially on dev installs where `$HOME` is read-only inside the world.
+  - Improvements:
+    - Document exactly what the manifest covers and how to install unsupported packages safely (e.g., virtualenv/pip --target).
+    - Consider adding backends for common package managers so commands like `substrate world deps install pip:package` can proxy installations into the writable anchor.
+    - Ensure dev-install paths and env detection work inside the world so the helper can locate binaries/scripts.
+  - Goal: make `world deps` a predictable way to provision world tooling or gracefully direct users to the correct workflow when an item isn’t supported yet.
+- Backlog – Doctor/health output UX
+  - The current `substrate world doctor`, `substrate shim doctor`, and `substrate health` outputs are verbose but not well structured: actionable issues are buried in large sections (e.g., listing every missing manager even when the host never had them), and the ordering makes it hard to see what needs attention.
+  - Improvements:
+    - Reorganize sections so failures/warnings surface first, followed by informational details.
+    - Clearly separate “host missing manager” vs. “host has manager, world missing it”.
+    - Consider a concise summary view with optional `--verbose` output for the full details.
+  - Goal: make the doctor/health commands feel like a coherent report where users can quickly identify what needs fixing.
+- Backlog – Shell env regression tests should force `SUBSTRATE_HOME`
+  - Pain: the `shell_env_*` integration tests only override `HOME`, so a user who has `SUBSTRATE_HOME` exported (e.g., after running the dev installer) leaks their real `~/.substrate` into the test harness. That causes false failures (`PATH` not shimmed, overlay snippets missing) whenever host metadata differs from the fixture expectations.
+  - Fix: update `ShellEnvFixture`/`substrate_command_for_home` to set `SUBSTRATE_HOME` to the temporary home it creates (and pre-create config directories). The tests then stay hermetic even if the developer’s environment has custom prefixes.
+  - Scope: treat as maintenance/reliability work—no product changes, just test harness hardening. Add a quick note in `DEVELOPMENT.md` once fixed so contributors know the tests are self-contained.
+
+- **High Priority – Health command manager mismatch bug**
+  - `substrate health` currently reports “attention required” whenever optional manager detection hooks (direnv, asdf, conda, etc.) aren’t found on the host, even though the host never had them. We only care when the world and host detection disagree (host has a manager, world doesn’t), not when both sides are missing a manager entirely.
+  - Fix: adjust health summary logic to only flag mismatches when the host reports a manager and the world fails to mirror it. Missing managers that the host doesn’t have should not trigger an “attention required” status.
 
 ## Hardening / Quality
 
@@ -204,3 +266,12 @@ Risks / considerations
   mitigate via clear warnings and a deprecation window.
 - Some admin workflows may prefer a machine‑wide pipe; document how to force
   the legacy name alongside hardening advice (service account, SDDL, audit).
+- Backlog – Stateful replay & session branching
+  - Today replay simply re-runs a single span’s command in the current working tree; it doesn’t restore prior state or let you walk an entire session. To make replay genuinely useful for “time travel” debugging, we need:
+    - The ability to list/replay a contiguous range of spans (e.g., “replay spans 3–7 of session X in order”).
+    - Snapshot/rollback support so you can restore the filesystem/environment to how it looked at a given span before replaying or branching.
+    - Branching semantics (fork a “what-if” timeline from a session and track it as a branch of the original session).
+  - Considerations:
+    - Requires capturing enough state (e.g., snapshots, artifacts, or overlays) to restore the workspace reliably.
+    - Needs a UX for selecting span ranges, stepping through spans, and labeling branches.
+    - Coordination with world backend: snapshots might leverage overlayfs layers or copy-diff artifacts.

@@ -16,6 +16,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{error, info};
 // no atomic imports needed here
+#[cfg(target_os = "linux")]
+use world::guard::{should_guard_anchor, wrap_with_anchor_guard};
 
 #[cfg(unix)]
 fn parse_signal(sig: &str) -> Option<i32> {
@@ -161,6 +163,10 @@ pub async fn handle_ws_pty(
     };
 
     let (cmd, cwd, env, _span_id, cols, rows) = start_msg;
+    #[cfg(target_os = "linux")]
+    let mut command_to_run = cmd.clone();
+    #[cfg(not(target_os = "linux"))]
+    let command_to_run = cmd.clone();
 
     // Prepare in-world session context (best-effort)
     #[cfg(target_os = "linux")]
@@ -204,9 +210,13 @@ pub async fn handle_ws_pty(
             limits: ResourceLimits::default(),
             enable_preload: false,
             allowed_domains: substrate_broker::allowed_domains(),
-            project_dir,
+            project_dir: project_dir.clone(),
             always_isolate: false, // Default: use heuristic-based isolation
         };
+        if should_guard_anchor(&env) {
+            command_to_run = wrap_with_anchor_guard(&command_to_run, &project_dir);
+        }
+
         if let Ok(world) = service.ensure_session_world(&spec) {
             world_id_for_logs = world.id.clone();
             let ns_name = format!("substrate-{}", world.id);
@@ -246,13 +256,13 @@ pub async fn handle_ws_pty(
     #[cfg(target_os = "linux")]
     if let Some(ref ns_name) = ns_name_opt {
         cmd_builder = CommandBuilder::new("ip");
-        cmd_builder.args(["netns", "exec", ns_name, "sh", "-lc", &cmd]);
+        cmd_builder.args(["netns", "exec", ns_name, "sh", "-lc", &command_to_run]);
     } else {
-        cmd_builder.args(["-lc", &cmd]);
+        cmd_builder.args(["-lc", &command_to_run]);
     }
     #[cfg(not(target_os = "linux"))]
     {
-        cmd_builder.args(["-lc", &cmd]);
+        cmd_builder.args(["-lc", &command_to_run]);
     }
     cmd_builder.cwd(cwd);
     for (key, value) in env {

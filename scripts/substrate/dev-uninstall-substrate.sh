@@ -22,6 +22,7 @@ Options:
   --profile <name>       Cargo profile whose binary should be used for shim removal
   --bin <path>           Explicit path to substrate binary to invoke for shim removal
   --version-label <name> Version directory label used during dev install (default: dev)
+  --remove-world-service Remove the Linux world-agent systemd service (requires sudo)
   --help                 Show this message
 
 If neither --profile nor --bin is provided the script will look for
@@ -33,6 +34,7 @@ PREFIX="${HOME}/.substrate"
 PROFILE=""
 SUBSTRATE_BIN=""
 VERSION_LABEL="dev"
+REMOVE_WORLD_SERVICE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -56,6 +58,10 @@ while [[ $# -gt 0 ]]; do
       VERSION_LABEL="$2"
       shift 2
       ;;
+    --remove-world-service)
+      REMOVE_WORLD_SERVICE=1
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -68,11 +74,13 @@ done
 
 BIN_DIR="${PREFIX%/}/bin"
 VERSION_DIR="${PREFIX%/}/versions/${VERSION_LABEL}"
+VERSIONS_ROOT="${PREFIX%/}/versions"
 MANAGER_ENV_PATH="${PREFIX%/}/manager_env.sh"
 MANAGER_INIT_PATH="${PREFIX%/}/manager_init.sh"
 INSTALL_CONFIG_PATH="${PREFIX%/}/config.toml"
 SHIMS_DIR="${PREFIX%/}/shims"
 ENV_FILE="${PREFIX%/}/dev-shim-env.sh"
+TRACE_LOG_PATH="${PREFIX%/}/trace.jsonl"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 if [[ -z "${SUBSTRATE_BIN}" ]]; then
@@ -140,9 +148,14 @@ if [[ -f "${MANAGER_INIT_PATH}" ]]; then
   rm -f "${MANAGER_INIT_PATH}"
 fi
 
+if [[ -f "${TRACE_LOG_PATH}" ]]; then
+  log "Removing ${TRACE_LOG_PATH}"
+  rm -f "${TRACE_LOG_PATH}"
+fi
+
 if [[ -d "${BIN_DIR}" ]]; then
   log "Cleaning dev symlinks in ${BIN_DIR}"
-  for binary in substrate substrate-shim substrate-forwarder host-proxy world-agent; do
+  for binary in substrate substrate-shim substrate-forwarder host-proxy world-agent substrate-world-agent; do
     for candidate in "${binary}" "${binary}.exe"; do
       target_path="${BIN_DIR}/${candidate}"
       if [[ -L "${target_path}" ]]; then
@@ -154,6 +167,30 @@ if [[ -d "${BIN_DIR}" ]]; then
     done
   done
   rmdir "${BIN_DIR}" 2>/dev/null || true
+fi
+
+if [[ -d "${VERSIONS_ROOT}" ]]; then
+  rmdir "${VERSIONS_ROOT}" 2>/dev/null || true
+fi
+
+if [[ -d "${PREFIX}" ]]; then
+  rmdir "${PREFIX}" 2>/dev/null && log "Removed empty prefix ${PREFIX}"
+fi
+
+if [[ "${REMOVE_WORLD_SERVICE}" -eq 1 && "$(uname -s)" == "Linux" ]]; then
+  log "Attempting to remove substrate-world-agent service (sudo may prompt)"
+  if ! command -v sudo >/dev/null 2>&1; then
+    warn "sudo not available; cannot modify substrate-world-agent service."
+  else
+    if sudo systemctl is-enabled substrate-world-agent.service >/dev/null 2>&1 || sudo systemctl is-active substrate-world-agent.service >/dev/null 2>&1; then
+      sudo systemctl disable --now substrate-world-agent.service || warn "Failed to disable substrate-world-agent.service"
+    fi
+    sudo rm -f /etc/systemd/system/substrate-world-agent.service || true
+    sudo systemctl daemon-reload || true
+    sudo rm -f /usr/local/bin/substrate-world-agent || true
+    sudo rm -rf /var/lib/substrate || true
+    sudo rm -rf /run/substrate || true
+  fi
 fi
 
 cat <<'MSG'

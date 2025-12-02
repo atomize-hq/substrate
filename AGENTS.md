@@ -19,9 +19,9 @@ Substrate is the secure execution layer that sits between AI agents and a develo
 ## Execution Architecture
 1. Shell loads policy via the broker (`substrate_broker::evaluate`), ensures shims are deployed (`ShimDeployer`), and initializes tracing (`substrate_trace::init_trace`).
 2. The shim intercepts PATH lookups, writes structured execution events (via `logger::log_execution`), performs fast policy checks, and forwards invocation metadata to trace spans.
-3. The shell consults the world backend selected by `world-backend-factory`, issuing `/v1/execute` for non-PTY runs or upgrading to `/v1/stream` for interactive workloads.
+3. The shell consults the world backend selected by `world-backend-factory`, issuing `/v1/execute` for non-PTY runs or upgrading to `/v1/stream` for interactive workloads. On Linux/macOS this depends on the `substrate-world-agent` service (systemd on Linux, Lima guest on macOS); provisioning scripts install and start that service.
 4. `world-agent` executes inside a per-session world: Linux uses cgroup v2 + netns + overlayfs; macOS proxies into a Lima VM via VSock/SSH; Windows calls into WSL using named pipes or a TCP forwarder.
-5. Results, filesystem diffs, and policy decisions are recorded by `crates/trace`, producing JSONL spans in `~/.substrate/trace.jsonl` (or `SHIM_TRACE_LOG`). Optional replay (`crates/replay`) can rebuild environments from those spans.
+5. Results, filesystem diffs, and policy decisions are recorded by `crates/trace`, producing JSONL spans in `~/.substrate/trace.jsonl` (or `SHIM_TRACE_LOG`). Replay (`crates/replay`) re-runs spans through the same world backend (Linux replays require CAP_SYS_ADMIN for namespaces/overlay; use `--no-world` / `SUBSTRATE_REPLAY_USE_WORLD=disabled` only if you want to opt out).
 
 ## Local Environment & Core Tools
 - Rust 1.89+ (MSRV enforced in `Cargo.toml`). Install `rustup component add rustfmt clippy`.
@@ -52,10 +52,10 @@ cargo bench                                 # exercise hotspots when touching pe
 - `crates/trace` is the canonical span writer; it manages file rotation (`TRACE_LOG_MAX_MB`, `TRACE_LOG_KEEP`) and ensures legacy compatibility fields (`command`).
 - `telemetry-lib` augments spans with system metrics; integrate via existing hooks rather than new logging formats.
 - Inspect spans via `tail -f ~/.substrate/trace.jsonl | jq '.'`; filter denies with `jq 'select(.policy_decision.action == "deny")'`.
-- Replay and diff analysis live in `docs/REPLAY.md` and `docs/TRACE.md`; update those docs when schema changes.
+- Replay and diff analysis live in `docs/REPLAY.md` and `docs/TRACE.md`; update those docs when schema changes. See `docs/REPLAY.md` for privileged requirements (`SUBSTRATE_REPLAY_USE_WORLD`) and how to use `--no-world` when isolation isn’t available.
 
 ## Platform Worlds & Provisioning
-- **Linux**: Run `scripts/linux/world-provision.sh --profile release` to install `world-agent` as a systemd service and create `/run/substrate.sock`. Validate with `systemctl status substrate-world-agent` and `substrate world doctor --json`.
+- **Linux**: Run `scripts/linux/world-provision.sh --profile release` to install `world-agent` as a systemd service and create `/run/substrate.sock`. Dev installs invoke this script automatically (sudo prompts expected). Validate with `systemctl status substrate-world-agent` and `substrate world doctor --json`.
 - **macOS**: `scripts/mac/lima-warm.sh` provisions the `substrate` Lima VM, installs dependencies, and ensures forwarding. `scripts/mac/lima-doctor.sh` and `scripts/mac/smoke.sh` validate PTY, REST, and replay flows.
 - **Windows**: Warm the WSL backend via `pwsh -File scripts/windows/wsl-warm.ps1 -DistroName substrate-wsl -ProjectPath (Resolve-Path .)`; verify with `scripts/windows/wsl-smoke.ps1`. The backend prefers named-pipe transport but can fall back to TCP (`SUBSTRATE_FORWARDER_PORT`).
 - Always capture doctor/smoke output in PRs touching `world-*`, `forwarder`, or `host-proxy` crates.
@@ -63,6 +63,7 @@ cargo bench                                 # exercise hotspots when touching pe
 ## Testing & Validation Expectations
 - Unit tests live alongside sources (`#[cfg(test)] mod tests`); integration suites sit in `crates/*/tests/` (e.g., `crates/shell/tests/integration.rs`, `crates/replay/tests/`). Use `test_<behavior>` naming.
 - Run `cargo test -p world-agent`, `cargo test -p substrate-shim`, and targeted `cargo test --test shim_deployment` when editing those components.
+- When touching shell/world/shim logic, capture `substrate world doctor --json`, `substrate shim doctor --json`, and `substrate health --json` output in the PR.
 - Privileged checks (netns, nftables, cgroups) require `docs/HOWTO_PRIVILEGED_TESTS.md`; document platform coverage in PR descriptions.
 - Validate shim lifecycle on every OS touched: `substrate --shim-status`, `substrate --shim-deploy`, `substrate --shim-remove`.
 - When altering replay or trace schema, run regression tests in `crates/replay` and update fixtures in `docs/TRACE.md`.
@@ -78,7 +79,7 @@ cargo bench                                 # exercise hotspots when touching pe
 2. Follow Conventional Commit prefixes (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`) limited to 72 characters.
 3. Before pushing, run formatting, clippy (with `-D warnings`), full workspace tests, and the relevant doctor/smoke/provision scripts for touched platforms.
 4. PR description must include summary, motivation, testing commands + platforms, linked issues, and screenshots/logs for UX changes.
-5. Squash merge is the default. Coordinate release tagging when shipping binaries or policy schema changes.
+5. Squash merge is the default. Coordinate release tagging when shipping binaries or policy schema changes. Include relevant doctor/health output for world/shim changes.
 
 ## Reference Docs & Useful Scripts
 - `docs/WORLD.md`: isolation model, transport matrix, API reference.
@@ -88,4 +89,5 @@ cargo bench                                 # exercise hotspots when touching pe
 - `docs/cross-platform/wsl_world_setup.md`: deep Windows instructions.
 - `scripts/check-host-prereqs.sh`, `scripts/check-container-prereqs.sh`: CI parity for host/container readiness.
 - `scripts/dev-entrypoint.sh`: reproducible dev container bootstrap.
+- `docs/BACKLOG.md`: living backlog for DX improvements/bugs.
 - Update these guides when behavior changes; stale docs are treated as regressions.

@@ -341,6 +341,7 @@ fn ensure_world_agent_ready() -> anyhow::Result<()> {
         which::which("substrate-world-agent")
             .ok()
             .map(|p| p.display().to_string()),
+        Some("target/release/world-agent".to_string()),
         Some("target/debug/world-agent".to_string()),
     ];
     let bin = candidate_bins

@@ -3,6 +3,7 @@
 //! This module provides overlayfs-based filesystem isolation and diff tracking
 //! for commands that need to be executed in an isolated environment.
 
+use crate::guard::{should_guard_anchor, wrap_with_anchor_guard};
 use std::path::{Path, PathBuf};
 use std::process::Child;
 
@@ -182,7 +183,11 @@ pub fn execute_with_overlay(
         rel = PathBuf::from(".");
     }
     let target_dir = merged_dir.join(&rel);
-    let output = crate::exec::execute_shell_command(cmd, &target_dir, env, true)
+    let mut command_to_run = cmd.to_string();
+    if should_guard_anchor(env) {
+        command_to_run = wrap_with_anchor_guard(cmd, &merged_dir);
+    }
+    let output = crate::exec::execute_shell_command(&command_to_run, &target_dir, env, true)
         .context("Failed to execute command in overlay")?;
 
     let diff = overlay.compute_diff()?;
