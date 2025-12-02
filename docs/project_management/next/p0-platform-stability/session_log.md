@@ -256,3 +256,10 @@ Template:
 - Verified `tasks.json` already marked S1c-code as `in_progress`; appended this START entry (commit pending)
 - Plan: update Linux/macOS/WSL provision/uninstall scripts for `.service` + `.socket`, thread socket_activation messaging through docs, and prep dry-run command captures before coding in the worktree
 - Blockers: remote branch absent; provisioning commands may require sudo on real hosts (document skips)
+
+## [2025-12-02 18:02 UTC] Code Agent – S1c-code – START
+- Reconfirmed feat/p0-platform-stability checkout (`git pull --ff-only origin feat/p0-platform-stability` still fails – remote ref missing)
+- Read plan/tasks/session_log + S1a/S1b outputs plus this prompt to align scope
+- Tasks already `in_progress`; logging this new START for the resumed coding pass (docs update pending)
+- Plan: follow S1c-code spec—update installer/uninstaller scripts for `.service` + `.socket`, refresh docs with socket_activation examples, record required dry-run command output—then branch/worktree for code edits
+- Blockers: remote branch absent; some provisioning commands require sudo/host OS access (document skips/dry-runs)
