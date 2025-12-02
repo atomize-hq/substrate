@@ -419,3 +419,11 @@ Template:
 - Worktree setup pending (`ps-h1b-healthux-integ` → `wt/ps-h1b-healthux-integ`) once the doc-only commit lands.
 - Plan: commit the parity-focused H1b-code changes, merge `ps-h1b-healthux-code` + `ps-h1b-healthux-test` into an integration branch, rerun `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-shell health`, and `substrate health --json`, then update docs/tasks/session log to close out H1b/P0.
 - Blockers: this host lacks a provisioned world backend (health examples rely on fixtures) and the base branch still has no upstream tracking ref, so all pulls stay local.
+
+## [2025-12-02 19:35 UTC] Integration Agent – H1b-integ – END
+- Worktree commits: 3c901f2 (merge `ps-h1b-healthux-code`) + 6347059 (merge `ps-h1b-healthux-test`), bringing over 9d2d698 (`feat: highlight manager parity in health output`) and 454629b (`test: verify refined health manager UX`).
+- Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-shell health`; `./target/debug/substrate health --json`.
+- Results: fmt/clippy/tests all pass; the health CLI now emits the parity summary (host-only/world-only/absent buckets) and JSON exposes `manager_states[].parity` + optional `recommendation`; manual `substrate health --json` succeeded with the expected warning about the missing world backend on this host.
+- Artifacts: recorded the manual JSON output in the session log above; no additional scripts were required for this integration pass.
+- Docs commit: pending (`docs: finish H1b-integ`) to mark `H1b-integ` complete, update tasks, and close out the P0 program.
+- Next steps / blockers: fast-forward `feat/p0-platform-stability` to this integration branch, remove `wt/ps-h1b-healthux-integ`, and note that a real world-agent run is still a follow-up when a provisioned host is available.
