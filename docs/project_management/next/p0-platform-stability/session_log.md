@@ -113,3 +113,11 @@ Template:
 - Created worktree: pending (ps-s1b-shell-test next)
 - Plan: expand shell/world doctor + shim status tests for socket-activation detection, simulate pre-bound sockets in fixtures, assert telemetry spans/logs, run `cargo fmt`, `cargo test -p substrate-shell world_enable`, `cargo test -p substrate-shell world_root`, capture manual doctor/shim-status notes
 - Blockers: upstream remote missing; no additional blockers
+
+## [2025-12-02 16:35 UTC] Test Agent – R1a-test – START
+- Checked out feat/p0-platform-stability, `git pull --ff-only` failed (remote ref feat/p0-platform-stability missing; proceeding with local state)
+- Reviewed p0 plan, tasks.json, session log, R1a-code scope, and this prompt
+- Updated tasks.json + session_log.md (commit pending)
+- Created worktree: pending (ps-r1a-isolation-test next)
+- Plan: add replay tests covering nft unavailable fallback, cleanup helper detection, and regression path when nft succeeds; run `cargo fmt`, `cargo test -p substrate-replay -- --nocapture`, `cargo test -p substrate-shell replay_world` (note skips if needed)
+- Blockers: branch lacks upstream remote; otherwise none
