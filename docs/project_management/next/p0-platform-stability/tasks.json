@@ -387,7 +387,7 @@
       "name": "Replay isolation fallback (code)",
       "type": "code",
       "phase": "R1a – Isolation Fallback & Diagnostics",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Implement nft cgroup fallback, cleanup tooling for leftover netns/rules, and tie diagnostics into replay logs/docs.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",

@@ -90,3 +90,10 @@ Template:
 - Kickoff prompts created: refreshed `docs/project_management/next/p0-platform-stability/kickoff_prompts/S1b-code.md` + `S1b-test.md` to reference socket-activated world-agent behavior
 - Docs commit: pending (`docs: finish S1a-integ`)
 - Next steps / blockers: fast-forward ps-s1a-agent-integ onto feat/p0-platform-stability, drop worktree
+
+## [2025-12-02 16:33 UTC] Code Agent – R1a-code – START
+- Checked out feat/p0-platform-stability, `git pull --ff-only` failed (no upstream tracking)
+- Updated tasks.json + session_log.md (commit pending)
+- Created worktree: pending (ps-r1a-isolation-code next)
+- Plan: implement nft cgroup fallback + diagnostics in replay/world backends, add cleanup helper + docs updates, run fmt/clippy/test per spec, merge branch + update tasks/logs
+- Blockers: branch lacks upstream remote; local sync acceptable
