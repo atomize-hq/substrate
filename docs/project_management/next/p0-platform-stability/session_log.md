@@ -381,3 +381,11 @@ Template:
 - Created branch/worktree: pending (ps-r1c-coverage-test → wt/ps-r1c-coverage-test after doc commit)
 - Plan: expand replay integration tests for default world/`--no-world`/env opt-out, assert verbose scope + warning prefixes, refresh fixtures, run `cargo fmt`, `cargo test -p substrate-replay -- --nocapture`, `cargo test -p substrate-shell replay_world`, capture manual `substrate --replay` runs as needed
 - Blockers: branch lacks upstream remote; host lacks provisioned world-agent socket so CLI runs will rely on mocked spans/environment toggles
+
+## [2025-12-02 19:08 UTC] Test Agent – R1c-test – END
+- Worktree commits: 4b08394 (`test: cover replay world toggles`)
+- Commands: `cargo fmt` (pass); `cargo test -p substrate-replay -- --nocapture` (pass); `cargo test -p substrate-shell replay_world` (pass, filter matched 0 tests per cargo’s behavior); `cargo test -p substrate-shell --test replay_world -- --nocapture` (pass, exercised new coverage)
+- Manual commands: `python - <<'PY' ...` helper invoking `target/debug/substrate --replay <span> --replay-verbose` for default, `--no-world`, and `SUBSTRATE_REPLAY_USE_WORLD=disabled` modes to capture warning/scope expectations (all exited 0 with the expected `[replay]` prefixes noted in the code review)
+- Results: CLI tests now assert `[replay] scopes: []` plus world-strategy/warning differences for default vs opt-out runs; env + flag toggles skip nft warnings as intended
+- R1c-integ prompt (`docs/project_management/next/p0-platform-stability/kickoff_prompts/R1c-integ.md`) already covers the merged scope, so no edits required
+- Next steps / blockers: none; merged `ps-r1c-coverage-test` into `feat/p0-platform-stability` and removed the worktree after doc updates

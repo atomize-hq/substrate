@@ -727,7 +727,7 @@
       "name": "Replay world coverage (test)",
       "type": "test",
       "phase": "R1c – Replay World Coverage",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Expand integration suites covering default world-on, `--no-world`, and env opt-out toggles plus verbose scope output expectations.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
