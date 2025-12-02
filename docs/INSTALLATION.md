@@ -226,6 +226,13 @@ tooling.
   `substrate -c 'which git'` vs `which git`. If only the host shell is missing a
   manager snippet, run `substrate shim repair --manager <name> --yes` to update
   `~/.substrate_bashenv`.
+- **Manager parity mismatch (Linux/macOS)**: run `substrate health` to see the
+  new parity block plus `substrate health --json | jq '.summary | {attention_required_managers, world_only_managers}'`
+  whenever a world sync looks stale. `attention_required_managers` maps directly
+  to the host-only list and `world_only_managers` surfaces tools that only exist
+  in the guest. Follow the printed recommendations (run `substrate world deps sync --all`
+  for host-only entries, `substrate shim repair --manager <name> --yes` for
+  world-only entries) before re-running doctor.
 - **Doctor failures**: capture `substrate shim doctor --json` and
   `substrate world doctor --json`; attach both to bug reports so we can spot
   PATH vs kernel/virtualization gaps quickly.

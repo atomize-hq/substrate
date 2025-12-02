@@ -423,6 +423,22 @@ substrate health --json > artifacts/substrate_health.json
 substrate world doctor --json > artifacts/world_doctor.json
 ```
 
+Surface the new parity signals when archiving these artifacts:
+
+- `summary.attention_required_managers` lists host-only managers that require a world sync.
+- `summary.world_only_managers` lists tools present in the guest but missing locally.
+- `summary.manager_states[].{name, parity, recommendation}` provides per-manager status plus the suggested remediation.
+
+Example (macOS Sonoma / zsh, temp HOME):
+
+```bash
+TMP=$PWD/target/tests-tmp/macos-health
+mkdir -p "$TMP/.substrate"
+HOME=$TMP SUBSTRATE_MANAGER_MANIFEST=$TMP/manager_hooks.yaml \
+  substrate health --json \
+  | jq '.summary | {\n      attention_required_managers,\n      world_only_managers,\n      manager_states: [.manager_states[] | {name, parity, recommendation}]\n    }'
+```
+
 Need a legacy pipeline to inject snippets automatically? Run `substrate shim repair`
 first, then export `BASH_ENV="$HOME/.substrate_bashenv"` explicitly for that job.
 
