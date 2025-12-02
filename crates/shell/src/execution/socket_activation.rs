@@ -1,5 +1,6 @@
 //! Socket activation detection helpers for Linux world-agent integration.
 
+use std::env;
 use std::path::Path;
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
@@ -84,6 +85,22 @@ pub(crate) fn refresh_socket_activation_report() -> SocketActivationReport {
 }
 
 fn gather_report() -> SocketActivationReport {
+    if let Ok(force_mode) = env::var("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE") {
+        let mode = match force_mode.as_str() {
+            "socket_activation" => SocketActivationMode::SocketActivation,
+            "manual" => SocketActivationMode::Manual,
+            _ => SocketActivationMode::Unknown,
+        };
+        return SocketActivationReport {
+            socket_path: SOCKET_PATH,
+            socket_exists: Path::new(SOCKET_PATH).exists(),
+            mode,
+            socket_unit: None,
+            service_unit: None,
+            systemd_error: Some("overridden via SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE".into()),
+        };
+    }
+
     let socket_exists = Path::new(SOCKET_PATH).exists();
     let mut systemd_error: Option<String> = None;
 

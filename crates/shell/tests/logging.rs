@@ -209,6 +209,7 @@ fn command_logs_include_socket_activation_flag() {
         .env("SUBSTRATE_WORLD", "enabled")
         .env("SUBSTRATE_WORLD_ENABLED", "1")
         .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "socket_activation")
         .arg("-c")
         .arg("true")
         .assert()

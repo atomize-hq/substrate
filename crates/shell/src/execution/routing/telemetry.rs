@@ -1,6 +1,8 @@
 //! Telemetry helpers for routing, including REPL metrics and command logging.
 
 use super::super::{ShellConfig, ShellMode};
+#[cfg(target_os = "linux")]
+use crate::execution::socket_activation;
 use anyhow::Result;
 use chrono::Utc;
 use serde_json::json;
@@ -155,6 +157,12 @@ pub(crate) fn log_command_event(
 
     if matches!(&config.mode, ShellMode::Interactive { .. }) {
         log_entry["repl_mode"] = json!(if config.async_repl { "async" } else { "sync" });
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        log_entry["socket_activation"] =
+            json!(socket_activation::socket_activation_report().is_socket_activated());
     }
 
     // Add build version if available
