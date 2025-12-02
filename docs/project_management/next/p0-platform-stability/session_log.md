@@ -191,6 +191,16 @@ Template:
 - Plan: merge ps-h1a-health-code/test commits, run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-shell health`, `substrate health --json`, then update docs/tasks and prep H1b prompts
 - Blockers: upstream branch missing (documented); otherwise none
 
+## [2025-12-02 17:44 UTC] Integration Agent – H1a-integ – END
+- Worktree commits: n/a (ps-h1a-health-code/test already merged into feat/p0-platform-stability; validation-only branch)
+- Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-shell health`; `./target/debug/substrate health --json`
+- Results: pass / pass / pass / pass (CLI emitted warning about missing world-agent binary but produced JSON)
+- Scripts executed: n/a
+- Merge: verified no additional ps-h1a-health-code/test refs exist; `ps-h1a-health-integ` fast-forwarded back onto feat/p0-platform-stability
+- Kickoff prompts created: reviewed `docs/project_management/next/p0-platform-stability/kickoff_prompts/H1b-code.md` + `H1b-test.md`; both already reflect manager_states assumptions, no edits
+- Docs commit: pending (`docs: finish H1a-integ`)
+- Next steps / blockers: remove `wt/ps-h1a-health-integ`, prep H1b-code/test handoff
+
 ## [2025-12-02 17:43 UTC] Integration Agent – S1b-integ – START
 - Checked out feat/p0-platform-stability; `git pull --ff-only` failed (remote ref missing, working from local branch)
 - Confirmed S1b-code/test merged and marked completed in tasks.json
@@ -205,3 +215,11 @@ Template:
 - Updated tasks.json (`R1b-code` → `in_progress`) and session_log.md (this entry); commit pending
 - Plan: add verbose scopes line + JSON scopes array, differentiate shell vs replay warning prefixes, refresh docs/CLI help, run fmt/clippy/tests + manual `substrate --replay --replay-verbose` smoke
 - Blockers: none (manual replay depends on sample span availability)
+
+## [2025-12-02 18:12 UTC] Test Agent – R1b-test – START
+- Checked out feat/p0-platform-stability; `git pull --ff-only` failed (branch lacks upstream tracking, proceeding with local state)
+- Reviewed p0 plan, tasks.json, session_log.md, R1b-code scope, and this prompt
+- Updated tasks.json (`R1b-test` → `in_progress`) and session_log.md (this entry); commit pending
+- Created worktree: pending (ps-r1b-verbosity-test next per checklist)
+- Plan: extend replay CLI tests for verbose scopes + warning prefixes, refresh JSON/PowerShell fixtures, run required fmt + replay/shell test suites, note any manual verbose runs
+- Blockers: branch has no remote tracking; otherwise none
