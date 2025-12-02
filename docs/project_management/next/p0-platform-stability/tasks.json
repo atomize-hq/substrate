@@ -419,7 +419,7 @@
       "concurrent_with": [],
       "worktree": null,
       "integration_task": null,
-      "kickoff_prompt": null
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1c-windows-dry-run.md"
     },
     {
       "id": "R1a-code",

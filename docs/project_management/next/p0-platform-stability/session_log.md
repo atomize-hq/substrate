@@ -334,4 +334,5 @@ Template:
 ## [2025-12-02 18:37 UTC] Integration Agent – S1c-windows-dry-run – TASK ADDED
 - Added follow-up task `S1c-windows-dry-run` to `tasks.json` so a Windows operator can rerun `pwsh -File scripts/windows/wsl-warm.ps1 -WhatIf` with PowerShell 7 and capture the missing WhatIf output.
 - Task details include prerequisites (Windows host + pwsh 7), acceptance criteria (log file saved under `artifacts/windows/`, session log updates, remediation notes), and start/end checklists so the remote operator can self-serve.
+- Authored kickoff prompt `docs/project_management/next/p0-platform-stability/kickoff_prompts/S1c-windows-dry-run.md` summarizing prerequisites, required commands (including the `Tee-Object` log capture), and deliverables for the Windows run.
 - References point at the warm script, WSL setup doc, Windows install docs, and this session log for context.
