@@ -165,3 +165,11 @@ Template:
 - Kickoff prompts: confirmed `docs/project_management/next/p0-platform-stability/kickoff_prompts/S1b-integ.md` remains accurate (no edits)
 - Docs commit: pending (`docs: finish S1b-code`)
 - Next steps / blockers: none
+
+## [2025-12-02 17:33 UTC] Integration Agent – R1a-integ – START
+- Checked out feat/p0-platform-stability; `git pull --ff-only` failed (branch lacks upstream remote)
+- Confirmed R1a-code/test completed and inherited dirty repo state from previous agent (`git status -sb` recorded before start per instructions)
+- Updated tasks.json + session_log.md; doc commit pending until start checklist satisfied
+- Created branch/worktree setup pending (ps-r1a-isolation-integ → wt/ps-r1a-isolation-integ)
+- Plan: merge replay isolation code/test changes, resolve conflicts across replay/shell/world/docs, run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-replay -- --nocapture`, log any manual cleanup helpers/replay commands, fast-forward back to feat/p0-platform-stability, update docs/tasks/session log, prep R1b prompts
+- Blockers: inherited dirty files must remain untouched outside integration scope; no additional blockers
