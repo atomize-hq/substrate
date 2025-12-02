@@ -225,6 +225,7 @@ pub async fn run_world_agent() -> Result<()> {
     result
 }
 
+#[cfg(unix)]
 fn prepare_socket_path(path: &Path) -> Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).context("Failed to create socket directory")?;
