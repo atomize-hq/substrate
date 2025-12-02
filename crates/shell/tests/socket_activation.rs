@@ -68,7 +68,7 @@ impl ActivationFixture {
     }
 }
 
-fn socket_field<'a>(payload: &'a Value) -> &'a Value {
+fn socket_field(payload: &Value) -> &Value {
     payload
         .get("world_socket")
         .or_else(|| payload.get("agent_socket"))
