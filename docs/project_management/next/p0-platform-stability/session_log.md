@@ -24,3 +24,10 @@ Template:
 - Docs commit: <hash>
 - Next steps / blockers: <handoff notes>
 ```
+
+## [2025-12-02 15:30 UTC] Code Agent – S1a-code – START
+- Checked out feat/p0-platform-stability, `git pull --ff-only` failed (no upstream tracking)
+- Updated tasks.json + session_log.md (commit pending)
+- Created worktree: pending (will follow start checklist)
+- Plan: add LISTEN_FDS/FD_START handling, emit telemetry for activation vs manual bind, keep fallback path, run fmt/clippy/test, merge branch + update docs/logs
+- Blockers: branch lacks upstream remote; proceeding with local state
