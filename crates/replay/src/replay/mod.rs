@@ -1,5 +1,6 @@
 //! Replay engine for re-executing traced commands
 
+pub mod diagnostics;
 mod executor;
 mod helpers;
 mod planner;

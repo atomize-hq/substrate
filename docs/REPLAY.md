@@ -49,6 +49,21 @@ To disable world isolation (not recommended for security reasons):
 
 On macOS and Linux, replay uses the world backend (Lima on macOS, local namespaces on Linux) to collect `fs_diff` and scopes. Other platforms fall back to direct execution without isolation or `fs_diff`.
 
+### Isolation fallback & cleanup
+
+- Linux replays attempt to install nftables policy inside a per-replay netns. When `ip netns add` fails (missing CAP_NET_ADMIN, stale namespaces, etc.), `--replay-verbose` prints a warning and falls back to socket cgroup matching. The fallback scopes nft rules to `/sys/fs/cgroup/substrate/<WORLD_ID>`, keeping host traffic untouched even though rules run in the host namespace.
+- If both netns and writable cgroups are unavailable, replay disables nft scoping entirely and emits `[replay] warn: nft fallback unavailable (no netns/cgroup)` so you can remediate before rerunning.
+- Use the cleanup helper to diagnose and purge leftover resources:
+  ```
+  # Inspect namespaces/cgroups/nft tables (no deletion)
+  substrate world cleanup
+
+  # Delete idle namespaces/cgroups/tables (Linux host)
+  sudo substrate world cleanup --purge
+  ```
+- macOS + Lima: run the cleanup command inside the guest (`limactl shell substrate sudo substrate world cleanup --purge`). WSL users can do the same via `wsl -d substrate-wsl -- sudo substrate world cleanup --purge`.
+- When cleanup needs to happen manually, follow the instructions printed by the helper (e.g., `sudo ip netns delete substrate-<WORLD_ID>`, `sudo nft delete table inet substrate_<WORLD_ID>`, `sudo rm -rf /sys/fs/cgroup/substrate/<WORLD_ID>`).
+
 ## Tips
 
 - If the replayed command modifies files (e.g., `npm install`), run on a disposable project copy or in a clean world.

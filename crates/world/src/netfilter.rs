@@ -9,6 +9,8 @@ use anyhow::Result;
 use std::collections::HashSet;
 use std::net::IpAddr;
 #[cfg(target_os = "linux")]
+use std::path::Path;
+#[cfg(target_os = "linux")]
 use std::process::Command;
 
 /// Network scope tracking for command execution.
@@ -38,6 +40,15 @@ pub struct NetFilter {
     is_active: bool,
     /// Optional network namespace name to scope nft commands
     ns_name: Option<String>,
+    #[cfg(target_os = "linux")]
+    cgroup_match: Option<Vec<CgroupMatch>>,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug)]
+struct CgroupMatch {
+    level: u32,
+    value: String,
 }
 
 impl NetFilter {
@@ -55,12 +66,45 @@ impl NetFilter {
             scopes_used: Vec::new(),
             is_active: false,
             ns_name: None,
+            #[cfg(target_os = "linux")]
+            cgroup_match: None,
         })
     }
 
     /// Scope nft calls to the given named netns.
     pub fn set_namespace(&mut self, ns: Option<String>) {
         self.ns_name = ns;
+        #[cfg(target_os = "linux")]
+        {
+            if self.ns_name.is_some() {
+                self.cgroup_match = None;
+            }
+        }
+    }
+
+    /// Scope nft calls to a socket cgroup path (host namespace fallback).
+    #[cfg(target_os = "linux")]
+    pub fn set_cgroup_path(&mut self, path: &Path) {
+        self.ns_name = None;
+        let base = Path::new("/sys/fs/cgroup");
+        let rel = path.strip_prefix(base).unwrap_or(path);
+        let mut entries = Vec::new();
+        for (idx, component) in rel
+            .iter()
+            .filter_map(|c| c.to_str())
+            .filter(|c| !c.is_empty())
+            .enumerate()
+        {
+            entries.push(CgroupMatch {
+                level: (idx as u32) + 1,
+                value: component.to_string(),
+            });
+        }
+        if entries.is_empty() {
+            self.cgroup_match = None;
+        } else {
+            self.cgroup_match = Some(entries);
+        }
     }
 
     /// Resolve allowed domains to IP addresses.
@@ -123,24 +167,15 @@ impl NetFilter {
         let _ = self.run_nft(&["add", &set_v6]);
 
         // Allow loopback traffic
-        let allow_loopback = format!(
-            "rule inet {} {} oif lo accept",
-            self.table_name, self.chain_name
-        );
+        let allow_loopback = self.format_rule("oif lo accept");
         self.run_nft(&["add", &allow_loopback])?;
 
         // Allow established connections
-        let allow_established = format!(
-            "rule inet {} {} ct state established,related accept",
-            self.table_name, self.chain_name
-        );
+        let allow_established = self.format_rule("ct state established,related accept");
         self.run_nft(&["add", &allow_established])?;
 
         // Allow DNS queries
-        let allow_dns = format!(
-            "rule inet {} {} udp dport 53 accept",
-            self.table_name, self.chain_name
-        );
+        let allow_dns = self.format_rule("udp dport 53 accept");
         self.run_nft(&["add", &allow_dns])?;
 
         // Populate sets with allowed IPs
@@ -160,31 +195,45 @@ impl NetFilter {
         }
 
         // Allow traffic to addresses in sets
-        let allow_v4 = format!(
-            "rule inet {} {} ip daddr @allowed4 accept",
-            self.table_name, self.chain_name
-        );
-        let allow_v6 = format!(
-            "rule inet {} {} ip6 daddr @allowed6 accept",
-            self.table_name, self.chain_name
-        );
+        let allow_v4 = self.format_rule("ip daddr @allowed4 accept");
+        let allow_v6 = self.format_rule("ip6 daddr @allowed6 accept");
         self.run_nft(&["add", &allow_v4])?;
         self.run_nft(&["add", &allow_v6])?;
 
         // Log dropped packets for tracking
         // Rate-limited LOG + drop for everything else
-        let log_dropped = format!(
-            "rule inet {} {} limit rate 10/second log prefix \"substrate-dropped-{}:\"",
-            self.table_name, self.chain_name, self.world_id
-        );
-        let drop_rule = format!(
-            "rule inet {} {} counter drop",
-            self.table_name, self.chain_name
-        );
+        let log_dropped = self.format_rule(&format!(
+            "limit rate 10/second log prefix \"substrate-dropped-{}:\"",
+            self.world_id
+        ));
+        let drop_rule = self.format_rule("counter drop");
         self.run_nft(&["add", &log_dropped])?;
         self.run_nft(&["add", &drop_rule])?;
 
         Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    fn cgroup_clause(&self) -> Option<String> {
+        self.cgroup_match.as_ref().map(|entries| {
+            entries
+                .iter()
+                .map(|entry| format!("socket cgroupv2 level {} \"{}\"", entry.level, entry.value))
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+    }
+
+    #[cfg(target_os = "linux")]
+    fn format_rule(&self, body: &str) -> String {
+        if let Some(clause) = self.cgroup_clause() {
+            format!(
+                "rule inet {} {} {} {}",
+                self.table_name, self.chain_name, clause, body
+            )
+        } else {
+            format!("rule inet {} {} {}", self.table_name, self.chain_name, body)
+        }
     }
 
     #[cfg(target_os = "linux")]

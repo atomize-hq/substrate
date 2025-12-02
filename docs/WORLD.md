@@ -243,7 +243,7 @@ Goal: Safely garbage‑collect orphaned `substrate-<WORLD_ID>` netns and best‑
 
 Implemented features:
 - Triggers
-  - Startup sweep (once), periodic sweep (default every 10 minutes; configurable), and `POST /v1/gc` endpoint for on‑demand GC.
+  - Startup sweep (once), periodic sweep (default every 10 minutes; configurable), and `POST /v1/gc` endpoint for on-demand GC.
 - Conservative delete criteria
   - Name matches `substrate-wld_`
   - `ip netns pids <ns>` has no PIDs
@@ -256,6 +256,21 @@ Implemented features:
 - Reporting & logs
   - JSON report: `{ removed: [..], kept: [{name,reason}], errors: [{name,message}] }`
   - INFO summary per sweep; DEBUG reasons per namespace
+
+### Host cleanup helper
+
+- The host CLI exposes the same inventory via `substrate world cleanup`. Without flags it reports idle/active namespaces, cgroups, and host-level nft tables plus the exact manual commands needed to purge them.
+- Add `--purge` (and run as root/CAP_NET_ADMIN) to delete idle `substrate-<WORLD_ID>` netns entries, their nft tables, and matching `/sys/fs/cgroup/substrate/<WORLD_ID>` directories.
+- macOS + Lima: run the helper inside the guest (`limactl shell substrate sudo substrate world cleanup --purge`). WSL follows the same pattern (`wsl -d substrate-wsl -- sudo substrate world cleanup --purge`).
+- When purge isn't available, follow the printed instructions (`sudo ip netns exec ... nft delete table inet substrate_<WORLD_ID>`, `sudo ip netns delete ...`, `sudo rm -rf /sys/fs/cgroup/substrate/<WORLD_ID>`).
+
+### Isolation fallback diagnostics
+
+- World/replay components now log which network-scoping strategy is active:
+  - Primary path installs nft rules inside the dedicated netns.
+  - If the host refuses `ip netns add`, the code falls back to socket cgroup matching and scopes nft rules to `/sys/fs/cgroup/substrate/<WORLD_ID>` so host processes are not impacted.
+  - When neither netns nor writable cgroups are available, nft scoping is disabled and warnings point to `substrate world cleanup --purge` to remove leftovers before retrying.
+- These logs surface in `--replay-verbose` output (`[replay] warn: using socket cgroup fallback...`) and in world-agent traces (`[agent] netns ... unavailable`).
 
 ---
 
