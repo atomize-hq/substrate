@@ -45,16 +45,15 @@ fn configure_nft_stub(fixture: &ShellEnvFixture, script: &str) -> String {
     }
 }
 
-#[test]
-fn replay_warns_when_nft_unavailable() {
-    let fixture = ShellEnvFixture::new();
-    let cwd = fixture.home().join("workspace");
-    fs::create_dir_all(&cwd).expect("failed to create replay cwd");
-    let span_id = "span-nft-missing";
-    let trace = write_trace(&fixture, span_id, "printf fallback-nft > replay.log", &cwd);
-    let path_override = configure_nft_stub(&fixture, "#!/bin/sh\nexit 1\n");
-
-    let mut cmd = substrate_command_for_home(&fixture);
+fn replay_command(
+    fixture: &ShellEnvFixture,
+    span_id: &str,
+    command: &str,
+    cwd: &Path,
+    path_override: &str,
+) -> assert_cmd::Command {
+    let trace = write_trace(fixture, span_id, command, cwd);
+    let mut cmd = substrate_command_for_home(fixture);
     cmd.arg("--replay")
         .arg(span_id)
         .arg("--replay-verbose")
@@ -64,12 +63,35 @@ fn replay_warns_when_nft_unavailable() {
         .env("SUBSTRATE_WORLD", "enabled")
         .env("SUBSTRATE_WORLD_ENABLED", "1")
         .env("PATH", path_override);
+    cmd
+}
+
+#[test]
+fn replay_warns_when_nft_unavailable() {
+    let fixture = ShellEnvFixture::new();
+    let cwd = fixture.home().join("workspace");
+    fs::create_dir_all(&cwd).expect("failed to create replay cwd");
+    let span_id = "span-nft-missing";
+    let path_override = configure_nft_stub(&fixture, "#!/bin/sh\nexit 1\n");
+
+    let mut cmd = replay_command(
+        &fixture,
+        span_id,
+        "printf fallback-nft > replay.log",
+        &cwd,
+        &path_override,
+    );
 
     let assert = cmd.assert().success();
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
     assert!(
         stderr.contains("[replay] warn: nft not available; netfilter scoping/logging disabled"),
         "expected nft fallback warning in stderr, got:\n{}",
+        stderr
+    );
+    assert!(
+        stderr.contains("[replay] scopes: []"),
+        "scopes line missing when nft unavailable, stderr:\n{}",
         stderr
     );
 }
@@ -80,25 +102,98 @@ fn replay_keeps_standard_path_when_nft_succeeds() {
     let cwd = fixture.home().join("workspace-ok");
     fs::create_dir_all(&cwd).expect("failed to create replay cwd");
     let span_id = "span-nft-ok";
-    let trace = write_trace(&fixture, span_id, "printf nft-ok > replay.log", &cwd);
     let path_override = configure_nft_stub(&fixture, "#!/bin/sh\necho \"nft (test) v1\"\nexit 0\n");
 
-    let mut cmd = substrate_command_for_home(&fixture);
-    cmd.arg("--replay")
-        .arg(span_id)
-        .arg("--replay-verbose")
-        .env("SHIM_TRACE_LOG", &trace)
-        .env("SUBSTRATE_REPLAY_VERBOSE", "1")
-        .env("SUBSTRATE_REPLAY_USE_WORLD", "1")
-        .env("SUBSTRATE_WORLD", "enabled")
-        .env("SUBSTRATE_WORLD_ENABLED", "1")
-        .env("PATH", path_override);
+    let mut cmd = replay_command(
+        &fixture,
+        span_id,
+        "printf nft-ok > replay.log",
+        &cwd,
+        &path_override,
+    );
 
     let assert = cmd.assert().success();
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
     assert!(
         !stderr.contains("[replay] warn: nft not available; netfilter scoping/logging disabled"),
         "nft available case should not warn, stderr:\n{}",
+        stderr
+    );
+    assert!(
+        stderr.contains("[replay] scopes: []"),
+        "scopes line missing when nft succeeds, stderr:\n{}",
+        stderr
+    );
+}
+
+#[test]
+fn replay_no_world_flag_skips_world_warnings() {
+    let fixture = ShellEnvFixture::new();
+    let cwd = fixture.home().join("workspace-no-world-flag");
+    fs::create_dir_all(&cwd).expect("failed to create replay cwd");
+    let span_id = "span-no-world-flag";
+    let path_override = configure_nft_stub(&fixture, "#!/bin/sh\nexit 1\n");
+
+    let mut cmd = replay_command(
+        &fixture,
+        span_id,
+        "printf flag-mode > replay-no-world.log",
+        &cwd,
+        &path_override,
+    );
+    cmd.arg("--no-world");
+
+    let assert = cmd.assert().success();
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    assert!(
+        !stderr.contains("[replay] warn:"),
+        "no-world flag should suppress replay warnings, stderr:\n{}",
+        stderr
+    );
+    assert!(
+        !stderr.contains("[replay] world strategy:"),
+        "no-world flag should skip world strategy line, stderr:\n{}",
+        stderr
+    );
+    assert!(
+        stderr.contains("[replay] scopes: []"),
+        "scopes line missing for no-world flag run, stderr:\n{}",
+        stderr
+    );
+}
+
+#[test]
+fn replay_env_override_disables_world_execution() {
+    let fixture = ShellEnvFixture::new();
+    let cwd = fixture.home().join("workspace-no-world-env");
+    fs::create_dir_all(&cwd).expect("failed to create replay cwd");
+    let span_id = "span-no-world-env";
+    let path_override = configure_nft_stub(&fixture, "#!/bin/sh\nexit 1\n");
+
+    let mut cmd = replay_command(
+        &fixture,
+        span_id,
+        "printf env-mode > replay-env.log",
+        &cwd,
+        &path_override,
+    );
+    cmd.env("SUBSTRATE_REPLAY_USE_WORLD", "disabled");
+
+    let assert = cmd.assert().success();
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    assert!(
+        !stderr.contains("[replay] warn:"),
+        "env disable should suppress replay warnings, stderr:\n{}",
+        stderr
+    );
+    assert!(
+        !stderr.contains("[replay] world strategy:"),
+        "env disable should skip world strategy line, stderr:\n{}",
+        stderr
+    );
+    assert!(
+        stderr.contains("[replay] scopes: []"),
+        "scopes line missing when env disables world, stderr:\n{}",
         stderr
     );
 }
