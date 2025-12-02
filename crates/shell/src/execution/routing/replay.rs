@@ -1,11 +1,91 @@
 //! Trace and replay helpers for routing.
 
+use crate::execution::cli::Cli;
 use anyhow::Result;
 use std::collections::HashMap;
 use std::env;
 use std::path::PathBuf;
 use std::process::Stdio;
 use uuid::Uuid;
+
+#[derive(Debug)]
+enum ReplayWorldSource {
+    Default,
+    ForceWorldFlag,
+    NoWorldFlag,
+    EnvDisabled { raw: String },
+}
+
+impl ReplayWorldSource {
+    fn summary(&self, use_world: bool) -> String {
+        let state = if use_world { "enabled" } else { "disabled" };
+        let reason = match self {
+            ReplayWorldSource::Default => "default",
+            ReplayWorldSource::ForceWorldFlag => "--world flag",
+            ReplayWorldSource::NoWorldFlag => "--no-world flag",
+            ReplayWorldSource::EnvDisabled { .. } => "SUBSTRATE_REPLAY_USE_WORLD override",
+        };
+        format!("[replay] world toggle: {state} ({reason})")
+    }
+
+    fn warn_reason(&self) -> Option<String> {
+        match self {
+            ReplayWorldSource::NoWorldFlag => Some("--no-world flag".to_string()),
+            ReplayWorldSource::EnvDisabled { raw } => {
+                Some(format!("SUBSTRATE_REPLAY_USE_WORLD={raw}"))
+            }
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ReplayWorldMode {
+    use_world: bool,
+    source: ReplayWorldSource,
+}
+
+impl ReplayWorldMode {
+    fn from_cli(cli: &Cli) -> Self {
+        if cli.world {
+            return Self {
+                use_world: true,
+                source: ReplayWorldSource::ForceWorldFlag,
+            };
+        }
+        if cli.no_world {
+            return Self {
+                use_world: false,
+                source: ReplayWorldSource::NoWorldFlag,
+            };
+        }
+        if let Ok(raw) = env::var("SUBSTRATE_REPLAY_USE_WORLD") {
+            let lowered = raw.to_ascii_lowercase();
+            if lowered == "0" || lowered == "disabled" || lowered == "false" {
+                return Self {
+                    use_world: false,
+                    source: ReplayWorldSource::EnvDisabled { raw },
+                };
+            }
+        }
+        Self {
+            use_world: true,
+            source: ReplayWorldSource::Default,
+        }
+    }
+
+    fn apply_env(&self) {
+        if self.use_world {
+            env::set_var("SUBSTRATE_WORLD", "enabled");
+            env::set_var("SUBSTRATE_WORLD_ENABLED", "1");
+            env::remove_var("SUBSTRATE_REPLAY_USE_WORLD");
+        } else {
+            env::set_var("SUBSTRATE_WORLD", "disabled");
+            env::set_var("SUBSTRATE_WORLD_ENABLED", "0");
+            env::set_var("SUBSTRATE_REPLAY_USE_WORLD", "disabled");
+        }
+    }
+}
 
 pub(crate) fn handle_trace_command(span_id: &str) -> Result<()> {
     use std::fs::File;
@@ -66,7 +146,7 @@ pub(crate) fn handle_trace_command(span_id: &str) -> Result<()> {
 }
 
 /// Handle replay command - replay a traced command by span ID
-pub(crate) fn handle_replay_command(span_id: &str) -> Result<()> {
+pub(crate) fn handle_replay_command(span_id: &str, cli: &Cli) -> Result<()> {
     use std::fs::File;
     use std::io::{BufRead, BufReader};
 
@@ -122,10 +202,11 @@ pub(crate) fn handle_replay_command(span_id: &str) -> Result<()> {
         .map(String::from)
         .unwrap_or_else(|| Uuid::now_v7().to_string());
 
+    let verbose_requested =
+        env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1" || cli.replay_verbose;
+
     // Verbose header
-    if env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1"
-        || env::args().any(|a| a == "--replay-verbose")
-    {
+    if verbose_requested {
         eprintln!("[replay] span_id: {}", span_id);
         eprintln!("[replay] command: {}", command);
         eprintln!("[replay] cwd: {}", cwd.display());
@@ -157,16 +238,27 @@ pub(crate) fn handle_replay_command(span_id: &str) -> Result<()> {
 
     // Execute with replay (choose world isolation; default enabled, allow opt-out)
     let runtime = tokio::runtime::Runtime::new()?;
-    // Respect --no-world flag, then environment variable override, else default enabled
-    let no_world_flag = env::args().any(|a| a == "--no-world");
-    let use_world = if no_world_flag {
-        false
-    } else {
-        match env::var("SUBSTRATE_REPLAY_USE_WORLD") {
-            Ok(val) => val != "0" && val != "disabled",
-            Err(_) => true,
+    // Respect replay toggle precedence: --world > --no-world > SUBSTRATE_REPLAY_USE_WORLD
+    let replay_world_mode = ReplayWorldMode::from_cli(cli);
+    replay_world_mode.apply_env();
+
+    if verbose_requested {
+        eprintln!(
+            "{}",
+            replay_world_mode
+                .source
+                .summary(replay_world_mode.use_world)
+        );
+    }
+    if !replay_world_mode.use_world && verbose_requested {
+        if let Some(reason) = replay_world_mode.source.warn_reason() {
+            eprintln!("[replay] warn: running without world isolation ({reason})");
+        } else {
+            eprintln!("[replay] warn: running without world isolation");
         }
-    };
+    }
+
+    let use_world = replay_world_mode.use_world;
     // Best-effort capability warnings when world isolation requested but not available
     if cfg!(target_os = "linux") && use_world {
         // cgroup v2

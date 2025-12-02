@@ -405,11 +405,11 @@ impl ShellConfig {
         }
 
         // Handle --replay flag
-        if let Some(span_id) = cli.replay {
+        if let Some(span_id) = cli.replay.clone() {
             if cli.replay_verbose {
                 env::set_var("SUBSTRATE_REPLAY_VERBOSE", "1");
             }
-            handle_replay_command(&span_id)?;
+            handle_replay_command(&span_id, &cli)?;
             std::process::exit(0);
         }
 
