@@ -14,6 +14,7 @@
 ## Spec
 - Expose replay world toggles (default on, `--no-world`, `SUBSTRATE_REPLAY_USE_WORLD=disabled`) to the CLI harness/tests without editing global configs.
 - Ensure CLI help/docs explain how these toggles interact and log new fields when verbose mode enabled.
+- Keep the new `scopes: [...]` line and `[replay] warn` prefixes accurate for each toggle combination (document any delta vs R1b samples).
 - Capture manual smoke commands demonstrating world-on vs no-world runs.
 
 ## Scope & Guardrails

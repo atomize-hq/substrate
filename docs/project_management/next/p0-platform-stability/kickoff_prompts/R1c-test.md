@@ -13,7 +13,7 @@
 
 ## Spec
 - Expand replay integration tests to run spans under three configurations: default world-on, `--no-world`, and `SUBSTRATE_REPLAY_USE_WORLD=disabled`.
-- Assert warnings/verbose scope output align with each mode (e.g., `[replay] world disabled via flag`).
+- Assert warnings/verbose scope output (including the `scopes: [...]` line and shell vs replay prefixes) align with each mode (e.g., `[replay] world disabled via flag`).
 - Update fixtures for JSON/text outputs touched by these toggles.
 
 ## Scope & Guardrails
