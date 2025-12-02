@@ -51,23 +51,41 @@ Windows currently degrades to host execution with a friendly notice.
 ### Native Linux provisioning helper
 
 - Run `scripts/linux/world-provision.sh` from the repository root (without `sudo`) to install the
-  world-agent under `/usr/local/bin`, write the systemd unit, and enable the
-  service. The script uses `sudo` for filesystem and systemd operations and
+  world-agent under `/usr/local/bin`, write the `.service` **and** `.socket` units,
+  and enable socket activation. The script uses `sudo` for filesystem and systemd operations and
   will prompt if elevated credentials are required.
-- After provisioning, verify the socket and capabilities:
+- After provisioning, verify the listener, units, and capabilities:
   ```bash
-  systemctl status substrate-world-agent --no-pager
+  systemctl status substrate-world-agent.socket --no-pager
+  systemctl status substrate-world-agent.service --no-pager
   sudo ls -l /run/substrate.sock
   sudo curl --unix-socket /run/substrate.sock http://localhost/v1/capabilities | jq .
+  substrate world doctor --json | jq '.world_socket'
+  substrate --shim-status | grep 'World socket'
   ```
+  The doctor JSON now surfaces a `world_socket` block:
+  ```json
+  {
+    "mode": "socket_activation",
+    "socket_path": "/run/substrate.sock",
+    "systemd_socket": {
+      "name": "substrate-world-agent.socket",
+      "active_state": "listening",
+      "unit_file_state": "enabled"
+    },
+    "systemd_service": {
+      "name": "substrate-world-agent.service",
+      "active_state": "active",
+      "unit_file_state": "enabled"
+    }
+  }
+  ```
+  `substrate --shim-status[ --json]` prints the same detection so operators immediately know
+  when socket activation is managing the transport instead of a manual bind.
 - Provisioning is idempotent; rerun the helper whenever the agent binary
-  changes or the service needs to be repaired.
-
-`substrate world doctor` and `substrate --shim-status[ --json]` will now call out
-socket activation explicitly on Linux, highlighting whether
-`substrate-world-agent.socket` is listening on `/run/substrate.sock` or if the
-CLI fell back to a manual listener. This makes it easier to tell when systemd is
-managing the transport versus a legacy bind.
+  changes or the units need to be repaired. Set `SUBSTRATE_WORLD_SOCKET` to
+  override the default `/run/substrate.sock` path if your deployment uses a
+  non-standard location.
 
 ---
 

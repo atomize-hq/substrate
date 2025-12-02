@@ -182,10 +182,9 @@ if [[ "${REMOVE_WORLD_SERVICE}" -eq 1 && "$(uname -s)" == "Linux" ]]; then
   if ! command -v sudo >/dev/null 2>&1; then
     warn "sudo not available; cannot modify substrate-world-agent service."
   else
-    if sudo systemctl is-enabled substrate-world-agent.service >/dev/null 2>&1 || sudo systemctl is-active substrate-world-agent.service >/dev/null 2>&1; then
-      sudo systemctl disable --now substrate-world-agent.service || warn "Failed to disable substrate-world-agent.service"
-    fi
+    sudo systemctl disable --now substrate-world-agent.socket substrate-world-agent.service >/dev/null 2>&1 || warn "Failed to disable substrate-world-agent socket/service units"
     sudo rm -f /etc/systemd/system/substrate-world-agent.service || true
+    sudo rm -f /etc/systemd/system/substrate-world-agent.socket || true
     sudo systemctl daemon-reload || true
     sudo rm -f /usr/local/bin/substrate-world-agent || true
     sudo rm -rf /var/lib/substrate || true

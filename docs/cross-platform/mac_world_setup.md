@@ -105,12 +105,15 @@ limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
 1. **Enable and start the systemd service**:
    ```sh
    limactl shell substrate sudo systemctl daemon-reload
-   limactl shell substrate sudo systemctl enable --now substrate-world-agent
+   limactl shell substrate sudo systemctl enable substrate-world-agent.service
+   limactl shell substrate sudo systemctl enable --now substrate-world-agent.socket
+   limactl shell substrate sudo systemctl restart substrate-world-agent.service
    ```
 
 2. **Verify service is running**:
    ```sh
-   limactl shell substrate systemctl status substrate-world-agent
+   limactl shell substrate systemctl status substrate-world-agent.socket
+   limactl shell substrate systemctl status substrate-world-agent.service
    ```
 
 3. **Test the agent API**:
@@ -181,7 +184,7 @@ The macOS report verifies host prerequisites (limactl, virtualization, optional 
 | Virtualization not available | `sysctl kern.hv_support` returns 0 | Enable virtualization in System Settings → Privacy & Security → Developer Tools |
 | Lima VM fails to start | Check `limactl start substrate` output | Ensure sufficient disk space; check `~/Library/Logs/lima/` for detailed logs |
 | SSH connection fails | `limactl shell substrate` fails | Run `limactl shell substrate` once to accept host key |
-| Agent not responding | `curl` to socket times out | Check service: `limactl shell substrate systemctl status substrate-world-agent` |
+| Agent not responding | `curl` to socket times out | Check systemd: `limactl shell substrate systemctl status substrate-world-agent.socket` and `.service`, then inspect `substrate world doctor --json | jq '.world_socket'` inside the VM |
 | Agent binary missing | Service fails to start | Rebuild and copy binary as shown in Step 2 |
 | Permission errors | Socket operations fail | Ensure directories exist with correct permissions: `/run/substrate` (0750) |
 | DNS resolution issues | Network operations fail in VM | Check dnsmasq: `limactl shell substrate systemctl status dnsmasq` |

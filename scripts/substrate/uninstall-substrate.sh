@@ -64,10 +64,13 @@ PY
 if command -v systemctl >/dev/null 2>&1; then
     log "Stopping substrate-world-agent service..."
     maybe_sudo systemctl stop substrate-world-agent.service 2>/dev/null || true
+    maybe_sudo systemctl stop substrate-world-agent.socket 2>/dev/null || true
     maybe_sudo systemctl disable substrate-world-agent.service 2>/dev/null || true
+    maybe_sudo systemctl disable substrate-world-agent.socket 2>/dev/null || true
 
     log "Removing systemd unit + runtime directories..."
     maybe_sudo rm -f /etc/systemd/system/substrate-world-agent.service || true
+    maybe_sudo rm -f /etc/systemd/system/substrate-world-agent.socket || true
     maybe_sudo rm -rf /var/lib/substrate || true
     maybe_sudo rm -rf /run/substrate || true
     maybe_sudo systemctl daemon-reload 2>/dev/null || true

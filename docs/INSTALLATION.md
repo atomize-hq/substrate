@@ -8,7 +8,8 @@ GitHub Releases (`https://github.com/atomize-hq/substrate/releases`).
 ## Supported Platforms
 
 - **Linux**: systemd-based distributions with `sudo`, `curl`, `tar`, and `jq`
-  available. The world backend runs as a systemd service (`substrate-world-agent`).
+  available. The world backend runs via the `substrate-world-agent.service` +
+  `substrate-world-agent.socket` units.
 - **Windows 11 / 10 (22H2+) with WSL2 + systemd**: install via the bundled PowerShell script (`scripts/windows/install-substrate.ps1`), which provisions the `substrate-wsl` distro after enabling systemd in `/etc/wsl.conf`. The WSL backend is functional but experimental—expect ongoing updates.
 - **macOS 14+ (arm64)**: requires Apple Virtualization Framework and Lima (the
   installer verifies both).
@@ -43,7 +44,7 @@ The installer will:
    metadata is consumed by `substrate world enable` and shims/CLI commands that
    need to detect pass-through mode.
 7. Install `substrate-world-agent` under `/usr/local/bin` and manage the
-   systemd service (`/etc/systemd/system/substrate-world-agent.service`)
+   systemd `.service` + `.socket` units (`/etc/systemd/system/substrate-world-agent.{service,socket}`)
 8. Run `substrate world doctor --json` for a final readiness report
 
 Add `~/.substrate/bin` (or your custom `--prefix` bin directory) to PATH—or
@@ -66,9 +67,9 @@ During installation the script:
 - Deploys fresh shims but leaves `.bashrc`, `.zshrc`, `BASH_ENV`, and PowerShell
   profiles alone—runtime helpers source the generated manager snippets only when
   `substrate` is executed.
-- Installs `substrate-world-agent` as a systemd service and runs
-  `substrate world doctor --json` without adding the shim directory to PATH to
-  avoid self-referential lookups.
+- Installs `substrate-world-agent` as a systemd service plus socket and runs
+  `substrate world doctor --json` (inspect the `world_socket` block) without
+  adding the shim directory to PATH to avoid self-referential lookups.
 
 ### Offline install
 
@@ -230,8 +231,10 @@ tooling.
   `substrate world doctor --json`; attach both to bug reports so we can spot
   PATH vs kernel/virtualization gaps quickly.
 - **World agent inactive (Linux/WSL)**: confirm `systemctl status
-  substrate-world-agent` reports `active (running)` and that `/run/substrate.sock`
-  exists (`sudo ls -l /run/substrate.sock`).
+  substrate-world-agent.socket` reports `listening`, `systemctl status
+  substrate-world-agent.service` reports `active` (or restarts cleanly), and that `/run/substrate.sock`
+  exists (`sudo ls -l /run/substrate.sock`). `substrate world doctor --json | jq '.world_socket'`
+  and `substrate --shim-status` both spell out whether socket activation is healthy.
 - **WSL systemd disabled**: edit `/etc/wsl.conf`, set `[boot]
 systemd=true`, run
   `wsl --shutdown`, and reopen the distribution.

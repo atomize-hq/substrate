@@ -169,11 +169,11 @@ sudo install -m755 target/release/world-agent /usr/local/bin/substrate-world-age
         }
     }
 
-    # Restart service
-    Write-Info "Restarting substrate-world-agent service"
-    & wsl -d $DistroName -- bash -lc "sudo systemctl restart substrate-world-agent.service"
+    # Ensure systemd units are enabled
+    Write-Info "Ensuring substrate-world-agent service and socket are enabled"
+    & wsl -d $DistroName -- bash -lc "sudo systemctl daemon-reload && sudo systemctl enable substrate-world-agent.service && sudo systemctl enable --now substrate-world-agent.socket && sudo systemctl restart substrate-world-agent.service"
     if ($LASTEXITCODE -ne 0) {
-        Write-ErrorAndExit "Failed to restart agent service"
+        Write-ErrorAndExit "Failed to enable/restart agent units"
     }
 } else {
     Write-Info "Agent reports HTTP 200; skipping provision/build/restart"
