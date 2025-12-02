@@ -270,3 +270,10 @@ Template:
 - Updated tasks.json (`H1b-code` → `in_progress`) + session log (this entry); docs commit pending
 - Plan: branch/worktree setup, adjust `substrate health` text/JSON + doctor summaries for manager severity labels, ensure manager_states/attention summaries populated, refresh docs (USAGE/CONFIGURATION/troubleshooting) with Linux/macOS/WSL + POSIX/PowerShell examples, then run `cargo fmt`, `cargo clippy -p substrate-shell -- -D warnings`, `cargo test -p substrate-shell health`, and `substrate health --json`
 - Blockers: no world-agent/systemd socket on this host, so health/doctor examples will rely on host-only execution (documented as needed)
+
+## [2025-12-02 18:05 UTC] Test Agent – H1b-test – START
+- Checked out feat/p0-platform-stability; `git pull --ff-only` failed (branch lacks upstream tracking) and `git pull --ff-only origin feat/p0-platform-stability` reports missing remote ref – proceeding with local state
+- Reviewed `p0_platform_stability_plan.md`, `tasks.json`, `session_log.md`, H1b-code kickoff scope, and this H1b-test prompt for alignment
+- Updated tasks.json (`H1b-test` → `in_progress`) and appended this START entry (docs commit pending once checklist satisfied)
+- Plan: create ps-h1b-healthux-test branch/worktree, refresh CLI/PowerShell/macOS fixtures to assert host-only / world-only / both-missing severities, ensure JSON fixtures cover `manager_states`, `attention_required_managers`, `world_only_managers`, validate doctor summary text, then run `cargo fmt`, `cargo test -p substrate-shell health`, and capture/record a `substrate health --json` comparison (or documented skip)
+- Blockers: no provisioned world-agent socket on this dev host (health command will run host-only); manual CLI run depends on building substrate locally
