@@ -43,9 +43,6 @@ agent-api-types = { path = "../agent-api-types" }
 world-api = { path = "../world-api" }
 substrate-broker = { path = "../broker" }
 
-[target.'cfg(unix)'.dependencies]
-hyperlocal = "0.8"
-
 # Local dependencies moved into main [dependencies] for cross-platform builds
 
 # Platform-specific world backends
