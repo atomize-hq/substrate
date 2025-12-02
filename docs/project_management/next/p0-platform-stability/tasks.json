@@ -1019,7 +1019,7 @@
       "name": "Health manager parity – UX & docs (integration)",
       "type": "integration",
       "phase": "H1b – CLI/Doctor UX & Docs",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge H1b code/test branches, re-run fmt/lint/tests, and close the P0 program with updated docs/logs/tasks.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",

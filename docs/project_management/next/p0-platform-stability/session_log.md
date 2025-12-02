@@ -404,3 +404,11 @@ Template:
 - Replay smoke: created local fixtures under `tmp/r1c-integ-replay/` and ran `SHIM_TRACE_LOG=... ./target/debug/substrate --replay span_r1c_world --replay-verbose` (default world-on, emitted copy-diff fallback warnings due to missing cgroup/netns privileges), `... --replay span_r1c_no_world --replay-verbose --no-world`, and `SUBSTRATE_REPLAY_USE_WORLD=disabled ... --replay span_r1c_env_disabled --replay-verbose` (both host-mode runs logged the `[replay] world toggle` + opt-out warnings as expected).
 - Tests/docs: Updated `crates/shell/tests/replay_world.rs` so the new world toggle summary + warning lines are asserted explicitly for the flag/env opt-out cases; updated `docs/project_management/next/p0-platform-stability/kickoff_prompts/H1a-code.md` and `H1a-test.md` to call out the R1c replay world assumptions.
 - Status tracking: `tasks.json` now marks `R1c-integ` as `completed`; this session log captures START/END plus command outputs. Branch still lacks remote tracking (git pull skip documented).
+
+## [2025-12-02 19:20 UTC] Integration Agent – H1b-integ – START
+- Checked out `feat/p0-platform-stability`; `git pull --ff-only origin feat/p0-platform-stability` still fails because the branch has no upstream tracking ref, so continuing from the local tip.
+- Verified `H1b-test` completion (commit 454629b + END log) and inspected the `ps-h1b-healthux-code` worktree where the manager-parity CLI/docs changes live as pending edits ready for commit/merge.
+- Updated `tasks.json` (`H1b-integ` → `in_progress`) and captured this START entry; doc commit pending per checklist before branching.
+- Worktree setup pending (`ps-h1b-healthux-integ` → `wt/ps-h1b-healthux-integ`) once the doc-only commit lands.
+- Plan: commit the parity-focused H1b-code changes, merge `ps-h1b-healthux-code` + `ps-h1b-healthux-test` into an integration branch, rerun `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-shell health`, and `substrate health --json`, then update docs/tasks/session log to close out H1b/P0.
+- Blockers: this host lacks a provisioned world backend (health examples rely on fixtures) and the base branch still has no upstream tracking ref, so all pulls stay local.
