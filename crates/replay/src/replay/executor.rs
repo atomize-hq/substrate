@@ -80,9 +80,7 @@ pub async fn execute_direct(state: &ExecutionState, timeout_secs: u64) -> Result
         scopes_used: Vec::new(),
         duration_ms,
     };
-    if replay_verbose() && !out.scopes_used.is_empty() {
-        eprintln!("[replay] scopes: {}", out.scopes_used.join(","));
-    }
+    emit_scopes_line(replay_verbose(), &out.scopes_used);
     Ok(out)
 }
 
@@ -145,9 +143,7 @@ async fn try_world_backend(
                             scopes_used: res.scopes_used,
                             duration_ms,
                         };
-                        if verbose && !out.scopes_used.is_empty() {
-                            eprintln!("[replay] scopes: {}", out.scopes_used.join(","));
-                        }
+                        emit_scopes_line(verbose, &out.scopes_used);
                         return Ok(Some(out));
                     }
                     Err(e) => {
@@ -428,9 +424,7 @@ pub fn execute_on_linux(state: &ExecutionState, verbose: bool) -> Result<Executi
             scopes_used: Vec::new(),
             duration_ms,
         };
-        if verbose && !out.scopes_used.is_empty() {
-            eprintln!("[replay] scopes: {}", out.scopes_used.join(","));
-        }
+        emit_scopes_line(verbose, &out.scopes_used);
         return Ok(out);
     }
 
@@ -475,9 +469,7 @@ pub fn execute_on_linux(state: &ExecutionState, verbose: bool) -> Result<Executi
                 scopes_used: Vec::new(),
                 duration_ms,
             };
-            if verbose && !out.scopes_used.is_empty() {
-                eprintln!("[replay] scopes: {}", out.scopes_used.join(","));
-            }
+            emit_scopes_line(verbose, &out.scopes_used);
             return Ok(out);
         }
     }
@@ -508,8 +500,16 @@ pub fn execute_on_linux(state: &ExecutionState, verbose: bool) -> Result<Executi
         scopes_used: Vec::new(),
         duration_ms,
     };
-    if verbose && !out.scopes_used.is_empty() {
-        eprintln!("[replay] scopes: {}", out.scopes_used.join(","));
-    }
+    emit_scopes_line(verbose, &out.scopes_used);
     Ok(out)
+}
+fn emit_scopes_line(verbose: bool, scopes: &[String]) {
+    if !verbose {
+        return;
+    }
+    if scopes.is_empty() {
+        eprintln!("[replay] scopes: []");
+    } else {
+        eprintln!("[replay] scopes: [{}]", scopes.join(", "));
+    }
 }

@@ -82,6 +82,12 @@ jq 'select(.policy_decision.action == "deny")' ~/.substrate/trace.jsonl
 }
 ```
 
+Verbose replay outputs (`--replay-verbose` or JSON mode) print `[replay] scopes: [...]` adjacent
+to the world strategy line so the CLI summary mirrors the `scopes_used` array above. When the
+shell falls back to host execution it now prefixes warnings with `shell world-agent path (...)`
+to keep them distinct from `[replay] warn: ...` diagnostics emitted by the replay runtime.
+
+
 - Windows adds an optional `fs_diff.display_path` map that pairs canonical paths (e.g., `/mnt/c/...`) with native Windows representations; Linux and macOS omit this field. The map is populated by the `world-windows-wsl` backend and available whenever a diff is returned.
 - `transport.mode` reflects the active connector: `unix` for native Linux and Lima guests, `named_pipe` when routed through the Windows forwarder, and `tcp` only when an explicit fallback is selected.
 - `transport.socket_activation` is emitted on Linux when the world-agent socket originated from systemd socket activation (`true`) versus direct/manual binds (`false`). Non-Linux transports omit this field.

@@ -26,7 +26,7 @@ substrate --replay <SPAN_ID>
 substrate --replay-verbose --replay <SPAN_ID>
 # Example lines when verbose:
 # [replay] world strategy: overlay
-# [replay] scopes: tcp:github.com:443,tcp:registry.npmjs.org:443
+# [replay] scopes: [tcp:github.com:443, tcp:registry.npmjs.org:443]
 
 # Disable world isolation if needed (not recommended)
 # Option 1: CLI flag (applies only to this invocation)
@@ -36,6 +36,10 @@ substrate --no-world --replay <SPAN_ID>
 export SUBSTRATE_REPLAY_USE_WORLD=disabled
 substrate --replay <SPAN_ID>
 ```
+
+Shell-side fallbacks emit `substrate: warn: shell world-agent path (<endpoint>) ...` so you can
+distinguish them from `[replay] warn: ...` messages that come from the replay runtime.
+
 
 By default on Linux, replay will:
 - Use the world-api backend (LinuxLocalBackend) for secure execution

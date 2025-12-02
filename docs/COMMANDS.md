@@ -13,7 +13,7 @@ This document mirrors the mental model of the CLI parser in `crates/shell/src/ex
 | Version metadata | `--version-json` | `--world`, `--no-world`, `--shim-skip` | `-c`, `-f`, shim mgmt, trace/replay | Information-only request (`cli.rs:62`). |
 | Trace inspect | `--trace <SPAN>` | `--world`, `--no-world`, anchor/caging flags | `-c`, `-f`, shim mgmt, `--replay` | Pull span metadata (`cli.rs:94`). |
 | Replay | `--replay <SPAN>` | `--replay-verbose`, world + anchor toggles | `-c`, `-f`, `--trace`, shim mgmt | Deterministic replay (`cli.rs:98`). |
-| Replay verbose | `--replay <SPAN> --replay-verbose` | Same as replay | Requires `--replay` | Adds cwd/mode diagnostics (`cli.rs:102`). |
+| Replay verbose | `--replay <SPAN> --replay-verbose` | Same as replay | Requires `--replay` | Adds command/cwd/mode diagnostics and world strategy + scopes summary (shell warnings label the `shell world-agent path`). |
 
 ## Root Command: Order-Independent Flags
 
