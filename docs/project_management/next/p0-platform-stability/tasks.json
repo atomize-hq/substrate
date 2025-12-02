@@ -816,7 +816,7 @@
       "name": "Health manager parity – aggregation logic (test)",
       "type": "test",
       "phase": "H1a – Detection & Aggregation",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add targeted tests for the refined health aggregator covering host/world presence combinations and telemetry serialization.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
