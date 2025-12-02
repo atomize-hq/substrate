@@ -16,6 +16,8 @@ use crate::execution::routing::builtin::handle_builtin;
 use crate::execution::routing::telemetry::{log_command_event, SHELL_AGENT_ID};
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use crate::execution::routing::world_transport_to_meta;
+#[cfg(target_os = "linux")]
+use crate::execution::socket_activation;
 use crate::execution::{configure_child_shell_env, needs_shell, ShellConfig, ShellMode};
 use anyhow::{Context, Result};
 use serde_json::json;
@@ -219,6 +221,9 @@ pub(crate) fn execute_command(
                     active_span.set_transport(TransportMeta {
                         mode: "unix".to_string(),
                         endpoint: Some("/run/substrate.sock".to_string()),
+                        socket_activation: Some(
+                            socket_activation::socket_activation_report().is_socket_activated(),
+                        ),
                     });
                 }
                 let span_id_for_ws = span
@@ -449,6 +454,9 @@ pub(crate) fn execute_command(
                 active_span.set_transport(TransportMeta {
                     mode: "unix".to_string(),
                     endpoint: Some("/run/substrate.sock".to_string()),
+                    socket_activation: Some(
+                        socket_activation::socket_activation_report().is_socket_activated(),
+                    ),
                 });
             }
             match stream_non_pty_via_agent(trimmed) {

@@ -63,6 +63,12 @@ Windows currently degrades to host execution with a friendly notice.
 - Provisioning is idempotent; rerun the helper whenever the agent binary
   changes or the service needs to be repaired.
 
+`substrate world doctor` and `substrate --shim-status[ --json]` will now call out
+socket activation explicitly on Linux, highlighting whether
+`substrate-world-agent.socket` is listening on `/run/substrate.sock` or if the
+CLI fell back to a manual listener. This makes it easier to tell when systemd is
+managing the transport versus a legacy bind.
+
 ---
 
 ## 3) macOS Architecture (Lima)

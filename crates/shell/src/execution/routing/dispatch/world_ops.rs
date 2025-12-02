@@ -5,7 +5,10 @@ use crate::execution::agent_events::publish_agent_event;
 #[cfg(target_os = "macos")]
 use crate::execution::pw;
 #[cfg(target_os = "linux")]
-use crate::execution::routing::{get_term_size, RawModeGuard};
+use crate::execution::{
+    routing::{get_term_size, RawModeGuard},
+    socket_activation,
+};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use agent_api_client::AgentClient;
 use agent_api_types::{ExecuteRequest, ExecuteStreamFrame};
@@ -300,7 +303,10 @@ pub(super) fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Res
 #[cfg(target_os = "linux")]
 fn ensure_world_agent_ready() -> anyhow::Result<()> {
     use std::path::Path;
+    use std::thread;
+    use std::time::{Duration, Instant};
     const SOCK: &str = "/run/substrate.sock";
+    const ACTIVATION_WAIT_MS: u64 = 2_000;
 
     // Helper: quick readiness probe via HTTP-over-UDS
     fn probe_caps() -> bool {
@@ -330,8 +336,24 @@ fn ensure_world_agent_ready() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    let activation_report = socket_activation::socket_activation_report();
+
+    if activation_report.is_socket_activated() {
+        let deadline = Instant::now() + Duration::from_millis(ACTIVATION_WAIT_MS);
+        while Instant::now() < deadline {
+            if probe_caps() {
+                return Ok(());
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+        anyhow::bail!(
+            "world-agent socket activation detected but /run/substrate.sock did not respond. \
+             Run 'systemctl status substrate-world-agent.socket' for details."
+        );
+    }
+
     // Clean up stale socket if present (no responding server)
-    if Path::new(SOCK).exists() {
+    if !activation_report.is_socket_activated() && Path::new(SOCK).exists() {
         let _ = std::fs::remove_file(SOCK);
     }
 

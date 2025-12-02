@@ -38,6 +38,8 @@ pub struct TransportMeta {
     pub mode: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub endpoint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub socket_activation: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

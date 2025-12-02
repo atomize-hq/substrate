@@ -98,6 +98,11 @@ substrate --shim-remove   # delete ~/.substrate/shims
 SUBSTRATE_NO_SHIMS=1 substrate   # skip deployment for this invocation
 ```
 
+On Linux, `substrate --shim-status[ --json]` also reports whether the world-agent
+socket is managed by systemd socket activation (`substrate-world-agent.socket`)
+or a manual listener, making it easier to distinguish provisioned services from
+legacy bindings.
+
 ### PATH Isolation & Legacy Hosts
 
 Compare the host vs Substrate PATH at any time:

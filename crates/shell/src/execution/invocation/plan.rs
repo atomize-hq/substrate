@@ -4,6 +4,8 @@ use crate::builtins as commands;
 use crate::execution::cli::*;
 use crate::execution::settings::{self, apply_world_root_env, resolve_world_root};
 use crate::execution::shim_deploy::{DeploymentStatus, ShimDeployer};
+#[cfg(target_os = "linux")]
+use crate::execution::socket_activation;
 use crate::execution::{
     handle_config_command, handle_graph_command, handle_health_command, handle_replay_command,
     handle_shim_command, handle_trace_command, handle_world_command, update_world_env,
@@ -130,6 +132,7 @@ impl ShellConfig {
                     "missing": [],
                     "path_ok": serde_json::Value::Null,
                     "path_first": serde_json::Value::Null,
+                    "agent_socket": shim_status_socket_json(),
                     "exit": 0
                 });
                 println!("{}", serde_json::to_string_pretty(&out)?);
@@ -150,6 +153,7 @@ impl ShellConfig {
                     "missing": [],
                     "path_ok": serde_json::Value::Null,
                     "path_first": env::var("PATH").ok().and_then(|p| p.split(if cfg!(windows){';'} else {':'}).next().map(|s| s.to_string())),
+                    "agent_socket": shim_status_socket_json(),
                     "exit": 1
                 });
                 println!("{}", serde_json::to_string_pretty(&out)?);
@@ -216,6 +220,7 @@ impl ShellConfig {
                     "missing": missing_list,
                     "path_ok": path_ok,
                     "path_first": first_path,
+                    "agent_socket": shim_status_socket_json(),
                     "exit": exit_code
                 });
                 println!("{}", serde_json::to_string_pretty(&out)?);
@@ -232,6 +237,7 @@ impl ShellConfig {
                     "missing": [],
                     "path_ok": path_ok,
                     "path_first": first_path,
+                    "agent_socket": shim_status_socket_json(),
                     "exit": 1
                 });
                 println!("{}", serde_json::to_string_pretty(&out)?);
@@ -244,6 +250,7 @@ impl ShellConfig {
             // Respect explicit disable
             if env::var("SUBSTRATE_NO_SHIMS").is_ok() {
                 println!("Shims: Deployment disabled (SUBSTRATE_NO_SHIMS=1)");
+                print_socket_activation_summary();
                 println!("Status: Skipped");
                 std::process::exit(0);
             }
@@ -253,6 +260,7 @@ impl ShellConfig {
 
             if !shims_dir.exists() {
                 println!("Shims: Not deployed");
+                print_socket_activation_summary();
                 println!("Suggestion: run `substrate` once or `substrate --shim-deploy`");
                 std::process::exit(1);
             }
@@ -343,6 +351,7 @@ impl ShellConfig {
                         }
                     }
                 }
+                print_socket_activation_summary();
 
                 // Status line
                 if missing_any {
@@ -383,6 +392,7 @@ impl ShellConfig {
                         }
                     }
                 }
+                print_socket_activation_summary();
                 println!("Status: Needs redeploy (version file missing)");
                 std::process::exit(1);
             }
@@ -578,3 +588,78 @@ pub fn needs_shell(cmd: &str) -> bool {
         || t.chars().any(|c| "<>|&".contains(c)) && t.len() > 1 // e.g. 1>/dev/null
     })
 }
+
+#[cfg(target_os = "linux")]
+fn shim_status_socket_json() -> serde_json::Value {
+    let report = socket_activation::socket_activation_report();
+    json!({
+        "mode": report.mode.as_str(),
+        "socket_path": report.socket_path,
+        "socket_exists": report.socket_exists,
+        "systemd_error": report.systemd_error,
+        "systemd_socket": report.socket_unit.as_ref().map(|unit| json!({
+            "name": unit.name,
+            "active_state": unit.active_state,
+            "unit_file_state": unit.unit_file_state,
+            "listens": unit.listens,
+        })),
+        "systemd_service": report.service_unit.as_ref().map(|unit| json!({
+            "name": unit.name,
+            "active_state": unit.active_state,
+            "unit_file_state": unit.unit_file_state,
+            "listens": unit.listens,
+        })),
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn shim_status_socket_json() -> serde_json::Value {
+    serde_json::Value::Null
+}
+
+#[cfg(target_os = "linux")]
+fn print_socket_activation_summary() {
+    let report = socket_activation::socket_activation_report();
+    if report.is_socket_activated() {
+        println!(
+            "Socket activation: systemd-managed ({} {})",
+            report
+                .socket_unit
+                .as_ref()
+                .map(|u| u.name)
+                .unwrap_or("substrate-world-agent.socket"),
+            report
+                .socket_unit
+                .as_ref()
+                .map(|u| u.active_state.as_str())
+                .unwrap_or("unknown")
+        );
+    } else if report.socket_unit.is_some() {
+        println!(
+            "Socket activation: {} inactive (state: {})",
+            report
+                .socket_unit
+                .as_ref()
+                .map(|u| u.name)
+                .unwrap_or("substrate-world-agent.socket"),
+            report
+                .socket_unit
+                .as_ref()
+                .map(|u| u.active_state.as_str())
+                .unwrap_or("unknown")
+        );
+    } else if report.socket_exists {
+        println!(
+            "Socket activation: manual listener present at {}",
+            report.socket_path
+        );
+    } else {
+        println!(
+            "Socket activation: listener missing at {}; run `substrate world enable`",
+            report.socket_path
+        );
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn print_socket_activation_summary() {}
