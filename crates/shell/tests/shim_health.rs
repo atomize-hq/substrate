@@ -32,6 +32,34 @@ managers:
 "#
 }
 
+fn parity_manifest() -> &'static str {
+    r#"version: 1
+managers:
+  - name: HostOnly
+    priority: 10
+    detect:
+      script: "exit 0"
+    init:
+      shell: |
+        export HOST_ONLY_MANAGER=1
+  - name: WorldOnly
+    priority: 10
+    detect:
+      files:
+        - "/nonexistent/world-only"
+    init:
+      shell: |
+        export WORLD_ONLY_MANAGER=1
+  - name: Matched
+    priority: 10
+    detect:
+      script: "exit 0"
+    init:
+      shell: |
+        export MATCHED_MANAGER=1
+"#
+}
+
 #[test]
 fn health_json_reports_summary_details() {
     let fixture = DoctorFixture::new(sample_manifest());
@@ -76,6 +104,15 @@ fn health_json_reports_summary_details() {
     assert_eq!(summary["ok"], json!(false));
     let failures = summary["failures"].as_array().expect("failures array");
     assert!(!failures.is_empty(), "expected at least one failure entry");
+    let manager_states = summary["manager_states"]
+        .as_array()
+        .expect("manager state summaries missing");
+    assert!(
+        manager_states
+            .iter()
+            .any(|entry| entry["name"] == "HealthyManager" && entry["host_present"] == json!(true)),
+        "host presence summary missing HealthyManager: {manager_states:?}"
+    );
 
     let shim = payload.get("shim").expect("shim report missing");
     assert!(
@@ -137,8 +174,8 @@ fn health_human_summary_highlights_failures() {
         "overall status missing"
     );
     assert!(
-        stdout.contains("guest missing tools"),
-        "failure bullet missing: {stdout}"
+        stdout.contains("world backend"),
+        "world backend failure missing: {stdout}"
     );
 }
 
@@ -188,11 +225,15 @@ fn health_json_marks_skip_manager_init_and_world_disabled_reason() {
         "failures missing manager init skip message: {failures:?}"
     );
     assert!(
-        failures.iter().any(|value| value
+        !failures.iter().any(|value| value
             .as_str()
-            .map(|line| line.contains("managers missing detection"))
+            .map(|line| line.contains("managers require world sync"))
             .unwrap_or(false)),
-        "failures missing missing-managers summary: {failures:?}"
+        "parity failures should not be emitted when world checks are disabled: {failures:?}"
+    );
+    assert!(
+        summary.get("attention_required_managers").is_none(),
+        "skip env should not mark managers for attention"
     );
 }
 
@@ -213,8 +254,8 @@ fn health_json_reports_world_backend_error_and_guest_missing_tools() {
         "world_disabled_reason": null,
         "tools": [
             {
-                "name": "mise",
-                "host_detected": false,
+                "name": "HealthyManager",
+                "host_detected": true,
                 "provider": "custom",
                 "guest": {
                     "status": "missing",
@@ -236,7 +277,11 @@ fn health_json_reports_world_backend_error_and_guest_missing_tools() {
     let summary = payload
         .get("summary")
         .expect("summary missing from health payload");
-    assert_eq!(summary["missing_guest_tools"], json!(["mise"]));
+    assert_eq!(summary["missing_guest_tools"], json!(["HealthyManager"]));
+    assert_eq!(
+        summary["attention_required_managers"],
+        json!(["HealthyManager"])
+    );
     let world_error = summary
         .get("world_error")
         .and_then(Value::as_str)
@@ -260,9 +305,9 @@ fn health_json_reports_world_backend_error_and_guest_missing_tools() {
     assert!(
         failures.iter().any(|value| value
             .as_str()
-            .map(|line| line.contains("guest missing tools"))
+            .map(|line| line.contains("managers require world sync"))
             .unwrap_or(false)),
-        "expected failure mentioning guest sync issues: {failures:?}"
+        "expected failure mentioning manager parity issues: {failures:?}"
     );
 }
 
@@ -293,5 +338,102 @@ fn health_human_summary_reports_world_deps_error() {
     assert!(
         stdout.contains("Overall status: attention required"),
         "overall summary should highlight failure when fixtures are invalid: {stdout}"
+    );
+}
+
+#[test]
+fn health_summary_classifies_manager_parity_states() {
+    let fixture = DoctorFixture::new(parity_manifest());
+    fixture.write_world_deps_fixture(json!({
+        "manifest": {
+            "base": fixture.home().join(".substrate/world-deps.yaml"),
+            "overlay": null,
+            "overlay_exists": false
+        },
+        "world_disabled_reason": null,
+        "tools": [
+            {
+                "name": "HostOnly",
+                "host_detected": true,
+                "provider": "custom",
+                "guest": {
+                    "status": "missing",
+                    "reason": "not synced"
+                }
+            },
+            {
+                "name": "WorldOnly",
+                "host_detected": false,
+                "provider": "custom",
+                "guest": {
+                    "status": "present"
+                }
+            },
+            {
+                "name": "Matched",
+                "host_detected": true,
+                "provider": "custom",
+                "guest": {
+                    "status": "present"
+                }
+            }
+        ]
+    }));
+
+    let output = fixture
+        .command()
+        .arg("health")
+        .arg("--json")
+        .output()
+        .expect("failed to run substrate health --json");
+    assert!(output.status.success(), "health --json should succeed");
+
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("valid JSON payload");
+    let summary = payload
+        .get("summary")
+        .expect("summary missing from health payload");
+
+    assert_eq!(summary["missing_managers"], json!(["WorldOnly"]));
+    assert_eq!(summary["attention_required_managers"], json!(["HostOnly"]));
+    assert_eq!(summary["world_only_managers"], json!(["WorldOnly"]));
+
+    let states = summary["manager_states"]
+        .as_array()
+        .expect("manager states missing");
+    let host_only = states
+        .iter()
+        .find(|entry| entry["name"] == "HostOnly")
+        .expect("HostOnly entry missing");
+    assert_eq!(host_only["host_present"], json!(true));
+    assert_eq!(host_only["world"]["status"], json!("missing"));
+    assert_eq!(host_only["attention_required"], json!(true));
+
+    let world_only = states
+        .iter()
+        .find(|entry| entry["name"] == "WorldOnly")
+        .expect("WorldOnly entry missing");
+    assert_eq!(world_only["host_present"], json!(false));
+    assert_eq!(world_only["world"]["status"], json!("present"));
+    assert_eq!(world_only["world_only"], json!(true));
+
+    let matched = states
+        .iter()
+        .find(|entry| entry["name"] == "Matched")
+        .expect("Matched entry missing");
+    assert_eq!(matched["host_present"], json!(true));
+    assert_eq!(matched["world"]["status"], json!("present"));
+    assert_eq!(matched["attention_required"], json!(false));
+    assert_eq!(matched["world_only"], json!(false));
+
+    assert_eq!(summary["ok"], json!(false));
+    let failures = summary["failures"]
+        .as_array()
+        .expect("failures array missing");
+    assert!(
+        failures.iter().any(|value| value
+            .as_str()
+            .map(|line| line.contains("HostOnly"))
+            .unwrap_or(false)),
+        "failure summary should call out host-only managers: {failures:?}"
     );
 }
