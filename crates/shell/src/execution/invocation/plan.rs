@@ -594,7 +594,8 @@ fn shim_status_socket_json() -> serde_json::Value {
     let report = socket_activation::socket_activation_report();
     json!({
         "mode": report.mode.as_str(),
-        "socket_path": report.socket_path,
+        "path": report.socket_path.as_str(),
+        "socket_path": report.socket_path.as_str(),
         "socket_exists": report.socket_exists,
         "systemd_error": report.systemd_error,
         "systemd_socket": report.socket_unit.as_ref().map(|unit| json!({
@@ -622,7 +623,7 @@ fn print_socket_activation_summary() {
     let report = socket_activation::socket_activation_report();
     if report.is_socket_activated() {
         println!(
-            "Socket activation: systemd-managed ({} {})",
+            "World socket: socket activation ({} {})",
             report
                 .socket_unit
                 .as_ref()
@@ -636,7 +637,7 @@ fn print_socket_activation_summary() {
         );
     } else if report.socket_unit.is_some() {
         println!(
-            "Socket activation: {} inactive (state: {})",
+            "World socket: socket activation inactive ({} state: {})",
             report
                 .socket_unit
                 .as_ref()
@@ -650,15 +651,14 @@ fn print_socket_activation_summary() {
         );
     } else if report.socket_exists {
         println!(
-            "Socket activation: manual listener present at {}",
-            report.socket_path
+            "World socket: manual listener present"
         );
     } else {
         println!(
-            "Socket activation: listener missing at {}; run `substrate world enable`",
-            report.socket_path
+            "World socket: listener missing; run `substrate world enable`"
         );
     }
+    println!("Socket path: {}", report.socket_path);
 }
 
 #[cfg(not(target_os = "linux"))]

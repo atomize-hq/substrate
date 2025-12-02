@@ -5,6 +5,7 @@ mod support;
 use assert_cmd::Command;
 use serde_json::{json, Value};
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use support::{substrate_command_for_home, AgentSocket, ShellEnvFixture, SocketResponse};
 use tempfile::{Builder, TempDir};
@@ -48,6 +49,12 @@ impl ActivationFixture {
         cmd
     }
 
+    fn command_with_mode(&self, mode: &str) -> Command {
+        let mut cmd = self.base_command();
+        cmd.env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", mode);
+        cmd
+    }
+
     fn seed_shims(&self) {
         let shims_dir = self.shell.home().join(".substrate").join("shims");
         fs::create_dir_all(&shims_dir).expect("failed to create shims dir");
@@ -65,6 +72,13 @@ impl ActivationFixture {
             serde_json::to_string_pretty(&payload).unwrap(),
         )
         .expect("failed to write version file");
+        for cmd in ["git", "cargo"] {
+            let shim = shims_dir.join(cmd);
+            fs::write(&shim, "#!/usr/bin/env bash\nexit 0\n").expect("failed to write shim");
+            let mut perms = fs::metadata(&shim).expect("shim metadata").permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&shim, perms).expect("failed to set shim perms");
+        }
     }
 }
 
@@ -81,7 +95,7 @@ fn world_doctor_reports_socket_activation_in_json() {
     let _socket = AgentSocket::start(fixture.socket_path(), SocketResponse::Capabilities);
 
     let assert = fixture
-        .base_command()
+        .command_with_mode("socket_activation")
         .arg("world")
         .arg("doctor")
         .arg("--json")
@@ -107,7 +121,7 @@ fn world_doctor_fails_when_socket_activation_unresponsive() {
     let _socket = AgentSocket::start(fixture.socket_path(), SocketResponse::Silent);
 
     let assert = fixture
-        .base_command()
+        .command_with_mode("socket_activation")
         .arg("world")
         .arg("doctor")
         .arg("--json")
@@ -127,7 +141,7 @@ fn shim_status_text_includes_socket_activation_details() {
     let _socket = AgentSocket::start(fixture.socket_path(), SocketResponse::Capabilities);
 
     let assert = fixture
-        .base_command()
+        .command_with_mode("socket_activation")
         .arg("--shim-status")
         .assert()
         .success();
@@ -149,7 +163,7 @@ fn shim_status_json_reports_socket_activation_mode() {
     let _socket = AgentSocket::start(fixture.socket_path(), SocketResponse::Capabilities);
 
     let assert = fixture
-        .base_command()
+        .command_with_mode("socket_activation")
         .arg("--shim-status-json")
         .assert()
         .success();
@@ -173,7 +187,7 @@ fn shim_status_json_marks_manual_mode_when_socket_absent() {
     let fixture = ActivationFixture::new();
     fixture.seed_shims();
     let assert = fixture
-        .base_command()
+        .command_with_mode("manual")
         .arg("--shim-status-json")
         .assert()
         .success();

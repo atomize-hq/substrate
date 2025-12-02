@@ -38,7 +38,7 @@ pub(crate) struct SystemdUnitStatus {
 
 #[derive(Clone, Debug)]
 pub(crate) struct SocketActivationReport {
-    pub socket_path: &'static str,
+    pub socket_path: String,
     pub socket_exists: bool,
     pub mode: SocketActivationMode,
     pub socket_unit: Option<SystemdUnitStatus>,
@@ -54,9 +54,11 @@ impl SocketActivationReport {
 
 impl Default for SocketActivationReport {
     fn default() -> Self {
+        let socket_path = resolved_socket_path();
+        let socket_exists = Path::new(&socket_path).exists();
         Self {
-            socket_path: SOCKET_PATH,
-            socket_exists: Path::new(SOCKET_PATH).exists(),
+            socket_path,
+            socket_exists,
             mode: SocketActivationMode::Manual,
             socket_unit: None,
             service_unit: None,
@@ -85,6 +87,8 @@ pub(crate) fn refresh_socket_activation_report() -> SocketActivationReport {
 }
 
 fn gather_report() -> SocketActivationReport {
+    let socket_path = resolved_socket_path();
+    let socket_exists = Path::new(&socket_path).exists();
     if let Ok(force_mode) = env::var("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE") {
         let mode = match force_mode.as_str() {
             "socket_activation" => SocketActivationMode::SocketActivation,
@@ -92,8 +96,8 @@ fn gather_report() -> SocketActivationReport {
             _ => SocketActivationMode::Unknown,
         };
         return SocketActivationReport {
-            socket_path: SOCKET_PATH,
-            socket_exists: Path::new(SOCKET_PATH).exists(),
+            socket_path,
+            socket_exists,
             mode,
             socket_unit: None,
             service_unit: None,
@@ -101,7 +105,6 @@ fn gather_report() -> SocketActivationReport {
         };
     }
 
-    let socket_exists = Path::new(SOCKET_PATH).exists();
     let mut systemd_error: Option<String> = None;
 
     let socket_unit = match read_unit(SOCKET_UNIT) {
@@ -133,13 +136,17 @@ fn gather_report() -> SocketActivationReport {
     }
 
     SocketActivationReport {
-        socket_path: SOCKET_PATH,
+        socket_path,
         socket_exists,
         mode,
         socket_unit,
         service_unit,
         systemd_error,
     }
+}
+
+fn resolved_socket_path() -> String {
+    env::var("SUBSTRATE_WORLD_SOCKET").unwrap_or_else(|_| SOCKET_PATH.to_string())
 }
 
 fn is_socket_active(unit: &SystemdUnitStatus) -> bool {

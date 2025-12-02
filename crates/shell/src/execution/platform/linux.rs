@@ -1,7 +1,10 @@
 use crate::execution::socket_activation;
 use serde_json::json;
+use std::io::{self, Read, Write};
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::Duration;
 use which::which;
 
 pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
@@ -94,6 +97,23 @@ pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
 
     // overlay
     let mut overlay_ok = overlay_present();
+    let mut socket_probe_ok = true;
+    let mut socket_probe_error: Option<String> = None;
+    let mut socket_probe_message: Option<String> = None;
+    if activation_report.is_socket_activated() && activation_report.socket_exists {
+        match probe_world_socket(&activation_report.socket_path) {
+            Ok(_) => {}
+            Err(err) => {
+                socket_probe_ok = false;
+                socket_probe_error = Some(err.to_string());
+                socket_probe_message = Some(format!(
+                    "substrate world doctor: socket activation probe failed for {} ({})",
+                    activation_report.socket_path, err
+                ));
+            }
+        }
+    }
+
     if !json_mode {
         println!("== substrate world doctor ==");
         if overlay_ok {
@@ -200,11 +220,24 @@ pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
                 activation_report.socket_path
             ));
         }
+        if activation_report.is_socket_activated() && activation_report.socket_exists {
+            if socket_probe_ok {
+                pass("agent socket: responded to /v1/capabilities");
+            } else if let Some(err) = &socket_probe_error {
+                warn(&format!(
+                    "agent socket: capabilities probe failed ({err}); inspect systemd logs"
+                ));
+            }
+        }
     } else {
-        let ok = overlay_ok || (fuse_dev && fuse_bin);
+        let mut ok = overlay_ok || (fuse_dev && fuse_bin);
+        if activation_report.is_socket_activated() && !socket_probe_ok {
+            ok = false;
+        }
         let socket_json = json!({
             "mode": activation_report.mode.as_str(),
-            "socket_path": activation_report.socket_path,
+            "path": activation_report.socket_path.as_str(),
+            "socket_path": activation_report.socket_path.as_str(),
             "socket_exists": activation_report.socket_exists,
             "systemd_error": activation_report.systemd_error,
             "systemd_socket": activation_report.socket_unit.as_ref().map(|unit| json!({
@@ -219,6 +252,8 @@ pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
                 "unit_file_state": unit.unit_file_state,
                 "listens": unit.listens,
             })),
+            "probe_ok": socket_probe_ok,
+            "probe_error": socket_probe_error,
         });
         let out = json!({
             "platform": std::env::consts::OS,
@@ -229,16 +264,42 @@ pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
             "dmesg_restrict": dmsg,
             "overlay_root": o_root,
             "copydiff_root": c_root,
-            "agent_socket": socket_json,
+            "agent_socket": socket_json.clone(),
+            "world_socket": socket_json,
             "ok": ok,
         });
         println!("{}", serde_json::to_string_pretty(&out).unwrap());
     }
 
+    if let Some(msg) = &socket_probe_message {
+        eprintln!("{msg}");
+    }
+
     // Exit code policy
-    if overlay_ok || (fuse_dev && fuse_bin) {
+    let mut exit_ok = overlay_ok || (fuse_dev && fuse_bin);
+    if activation_report.is_socket_activated() && !socket_probe_ok {
+        exit_ok = false;
+    }
+    if exit_ok {
         0
     } else {
         2
     }
+}
+
+fn probe_world_socket(path: &str) -> io::Result<()> {
+    let mut stream = UnixStream::connect(path)?;
+    stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(2)))?;
+    let request = b"GET /v1/capabilities HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+    stream.write_all(request)?;
+    let mut buf = [0u8; 512];
+    let read = stream.read(&mut buf)?;
+    if read == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "socket returned no data",
+        ));
+    }
+    Ok(())
 }
