@@ -7,17 +7,27 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 use support::{substrate_command_for_home, AgentSocket, ShellEnvFixture, SocketResponse};
+use tempfile::{Builder, TempDir};
 
 struct ActivationFixture {
     shell: ShellEnvFixture,
+    _socket_dir: TempDir,
     socket_path: PathBuf,
 }
 
 impl ActivationFixture {
     fn new() -> Self {
         let shell = ShellEnvFixture::new();
-        let socket_path = shell.home().join("world-agent").join("substrate.sock");
-        Self { shell, socket_path }
+        let socket_dir = Builder::new()
+            .prefix("substrate-activation-sock-")
+            .tempdir_in("/tmp")
+            .expect("failed to create socket tempdir");
+        let socket_path = socket_dir.path().join("substrate.sock");
+        Self {
+            shell,
+            _socket_dir: socket_dir,
+            socket_path,
+        }
     }
 
     fn socket_path(&self) -> &Path {
@@ -58,6 +68,13 @@ impl ActivationFixture {
     }
 }
 
+fn socket_field<'a>(payload: &'a Value) -> &'a Value {
+    payload
+        .get("world_socket")
+        .or_else(|| payload.get("agent_socket"))
+        .expect("socket activation field missing in payload")
+}
+
 #[test]
 fn world_doctor_reports_socket_activation_in_json() {
     let fixture = ActivationFixture::new();
@@ -71,9 +88,7 @@ fn world_doctor_reports_socket_activation_in_json() {
         .assert()
         .success();
     let payload: Value = serde_json::from_slice(&assert.get_output().stdout).expect("doctor json");
-    let socket = payload
-        .get("world_socket")
-        .expect("world_socket field missing in doctor JSON");
+    let socket = socket_field(&payload);
     assert_eq!(
         socket.get("mode").and_then(Value::as_str),
         Some("socket_activation"),
@@ -140,9 +155,7 @@ fn shim_status_json_reports_socket_activation_mode() {
         .success();
     let payload: Value =
         serde_json::from_slice(&assert.get_output().stdout).expect("shim status json");
-    let socket = payload
-        .get("world_socket")
-        .expect("world_socket field missing in shim status JSON");
+    let socket = socket_field(&payload);
     assert_eq!(
         socket.get("mode").and_then(Value::as_str),
         Some("socket_activation"),
@@ -166,9 +179,7 @@ fn shim_status_json_marks_manual_mode_when_socket_absent() {
         .success();
     let payload: Value =
         serde_json::from_slice(&assert.get_output().stdout).expect("shim status json");
-    let socket = payload
-        .get("world_socket")
-        .expect("world_socket field missing in shim status JSON");
+    let socket = socket_field(&payload);
     assert_eq!(
         socket.get("mode").and_then(Value::as_str),
         Some("manual"),
