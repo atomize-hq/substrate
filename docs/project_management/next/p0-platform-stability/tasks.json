@@ -1,0 +1,1020 @@
+{
+  "tasks": [
+    {
+      "id": "S1a-code",
+      "name": "Socket activation – agent plumbing (code)",
+      "type": "code",
+      "phase": "S1a – Agent Socket Activation",
+      "status": "pending",
+      "description": "Teach world-agent to consume LISTEN_FDS sockets, emit telemetry about inherited listeners, and preserve the direct-bind fallback path.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/BACKLOG.md",
+        "crates/world-agent",
+        "crates/world-linux",
+        "crates/world-mac-lima",
+        "crates/world-windows-wsl",
+        "docs/WORLD.md"
+      ],
+      "acceptance_criteria": [
+        "world-agent detects LISTEN_FDS/FD_START using systemd conventions and skips binding when sockets are provided.",
+        "Inherited sockets produce structured telemetry/logs noting socket activation vs manual bind.",
+        "Direct-bind behavior remains unchanged for non-systemd hosts.",
+        "`cargo fmt`; `cargo clippy -p world-agent -- -D warnings`; `cargo test -p world-agent` executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Set S1a-code to in_progress, log START entry, commit docs update",
+        "Create branch ps-s1a-agent-code",
+        "Create worktree wt/ps-s1a-agent-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests completed (note skips)",
+        "Commit worktree changes",
+        "Merge ps-s1a-agent-code into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm S1a-integ prompt reference",
+        "Commit docs update on feat/p0-platform-stability"
+      ],
+      "depends_on": [],
+      "concurrent_with": [
+        "S1a-test"
+      ],
+      "worktree": "wt/ps-s1a-agent-code",
+      "integration_task": "S1a-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1a-code.md"
+    },
+    {
+      "id": "S1a-test",
+      "name": "Socket activation – agent plumbing (test)",
+      "type": "test",
+      "phase": "S1a – Agent Socket Activation",
+      "status": "pending",
+      "description": "Add unit/integration tests that simulate LISTEN_FDS activation, verify telemetry, and guard the direct-bind fallback.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/BACKLOG.md",
+        "crates/world-agent",
+        "crates/world/tests"
+      ],
+      "acceptance_criteria": [
+        "Tests cover LISTEN_FDS env detection plus FD numbering edge cases (single + multiple sockets).",
+        "Integration tests validate the fallback path when LISTEN_FDS unset.",
+        "Telemetry assertions ensure activation metadata appears in spans/logs.",
+        "`cargo fmt`; `cargo test -p world-agent`; LISTEN_FDS harness executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Set S1a-test to in_progress, log START entry, commit docs update",
+        "Create branch ps-s1a-agent-test",
+        "Create worktree wt/ps-s1a-agent-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests completed (note skips)",
+        "Commit worktree changes",
+        "Merge ps-s1a-agent-test into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm S1a-integ prompt accuracy",
+        "Commit docs update on feat/p0-platform-stability"
+      ],
+      "depends_on": [],
+      "concurrent_with": [
+        "S1a-code"
+      ],
+      "worktree": "wt/ps-s1a-agent-test",
+      "integration_task": "S1a-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1a-test.md"
+    },
+    {
+      "id": "S1a-integ",
+      "name": "Socket activation – agent plumbing (integration)",
+      "type": "integration",
+      "phase": "S1a – Agent Socket Activation",
+      "status": "pending",
+      "description": "Merge the S1a code/test branches, re-run fmt/lint/tests, and update docs/logs before unlocking shell work.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/world-agent"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-s1a-agent-integ merges ps-s1a-agent-code/test with no conflicts and syncs to feat/p0-platform-stability.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p world-agent` executed/logged.",
+        "Docs/tasks/session log updated; kickoff prompts for S1b-code/S1b-test referenced."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Confirm S1a-code/test completed",
+        "Set S1a-integ to in_progress, log START entry, commit docs update",
+        "Create branch ps-s1a-agent-integ",
+        "Create worktree wt/ps-s1a-agent-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches, resolve conflicts",
+        "Run required fmt/lint/tests",
+        "Fast-forward merge into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Publish/confirm S1b prompts"
+      ],
+      "depends_on": [
+        "S1a-code",
+        "S1a-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-s1a-agent-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1a-integ.md"
+    },
+    {
+      "id": "S1b-code",
+      "name": "Socket activation – shell readiness (code)",
+      "type": "code",
+      "phase": "S1b – Shell Readiness & Telemetry",
+      "status": "pending",
+      "description": "Update shell/world orchestration (ensure_world_agent_ready, world_enable, shim status) to tolerate pre-bound sockets and emit socket-activation telemetry.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/shell/src/world/ensure_world_agent_ready.rs",
+        "crates/shell/src/world",
+        "crates/shell/src/builtins",
+        "crates/common/src/log_schema.rs"
+      ],
+      "acceptance_criteria": [
+        "Shell readiness checks detect when `/run/substrate.sock` already exists and avoid double-binding while still surfacing status.",
+        "`substrate world enable`, `substrate world doctor --json`, and `substrate --shim-status` emit clear messaging for socket-activated installs.",
+        "Trace/telemetry identifies socket activation vs manual mode for shell-originated commands.",
+        "`cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; targeted tests (`cargo test -p substrate-shell world_enable`) executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Set S1b-code to in_progress, log START entry, commit docs update",
+        "Create branch ps-s1b-shell-code",
+        "Create worktree wt/ps-s1b-shell-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests completed",
+        "Commit worktree changes",
+        "Merge ps-s1b-shell-code into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm S1b-integ prompt",
+        "Commit docs update on feat/p0-platform-stability"
+      ],
+      "depends_on": [
+        "S1a-integ"
+      ],
+      "concurrent_with": [
+        "S1b-test"
+      ],
+      "worktree": "wt/ps-s1b-shell-code",
+      "integration_task": "S1b-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1b-code.md"
+    },
+    {
+      "id": "S1b-test",
+      "name": "Socket activation – shell readiness (test)",
+      "type": "test",
+      "phase": "S1b – Shell Readiness & Telemetry",
+      "status": "pending",
+      "description": "Extend shell/world doctor tests to cover socket-activated readiness, telemetry output, and shim status flows.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/shell/tests",
+        "crates/world/tests",
+        "docs/WORLD.md"
+      ],
+      "acceptance_criteria": [
+        "Tests simulate pre-existing sockets and assert `ensure_world_agent_ready` succeeds only when service responds.",
+        "World doctor + shim status integration suites capture socket-activation metadata in JSON/text outputs.",
+        "Warnings/errors when sockets missing remain unchanged (regression coverage).",
+        "`cargo fmt`; `cargo test -p substrate-shell world_enable`; `cargo test -p substrate-shell world_root` executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Set S1b-test to in_progress, log START entry, commit docs update",
+        "Create branch ps-s1b-shell-test",
+        "Create worktree wt/ps-s1b-shell-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests completed (note skips)",
+        "Commit worktree changes",
+        "Merge ps-s1b-shell-test into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm S1b-integ prompt contents",
+        "Commit docs update on feat/p0-platform-stability"
+      ],
+      "depends_on": [
+        "S1a-integ"
+      ],
+      "concurrent_with": [
+        "S1b-code"
+      ],
+      "worktree": "wt/ps-s1b-shell-test",
+      "integration_task": "S1b-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1b-test.md"
+    },
+    {
+      "id": "S1b-integ",
+      "name": "Socket activation – shell readiness (integration)",
+      "type": "integration",
+      "phase": "S1b – Shell Readiness & Telemetry",
+      "status": "pending",
+      "description": "Merge S1b code/test worktrees, re-run fmt/lint/tests, and update docs/logs before provisioning changes begin.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/shell"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-s1b-shell-integ merges ps-s1b-shell-code/test into feat/p0-platform-stability without conflicts.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-shell world_enable`; `substrate world doctor --json` smoke (or logged skip).",
+        "Docs/tasks/session log updated; kickoff prompts for S1c-code/S1c-test linked."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Confirm S1b-code/test completed",
+        "Set S1b-integ to in_progress, log START entry, commit docs update",
+        "Create branch ps-s1b-shell-integ",
+        "Create worktree wt/ps-s1b-shell-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches, resolve conflicts",
+        "Run required fmt/lint/tests",
+        "Fast-forward merge into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Publish S1c prompts"
+      ],
+      "depends_on": [
+        "S1b-code",
+        "S1b-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-s1b-shell-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1b-integ.md"
+    },
+    {
+      "id": "S1c-code",
+      "name": "Socket activation – provisioning & docs (code)",
+      "type": "code",
+      "phase": "S1c – Provisioning & Docs",
+      "status": "pending",
+      "description": "Update Linux/Lima/WSL provisioning + uninstall scripts and documentation to deploy/manage .service + .socket units.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "scripts/linux/world-provision.sh",
+        "scripts/mac/lima-warm.sh",
+        "scripts/windows/wsl-warm.ps1",
+        "scripts/substrate/world-enable.sh",
+        "docs/WORLD.md",
+        "docs/INSTALLATION.md"
+      ],
+      "acceptance_criteria": [
+        "Installers deploy matching `.service`/`.socket` units across Linux/Lima/WSL with idempotent reruns and sudo guidance.",
+        "Uninstall/doctor helpers clean up both units and report their presence accurately.",
+        "Docs detail socket activation behavior, troubleshooting, and manual verification commands per platform.",
+        "`cargo fmt`; provisioning scripts linted (`shellcheck`/`pwsh -Command {}` as applicable) or skips logged; dry-run outputs captured."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Set S1c-code to in_progress, log START entry, commit docs update",
+        "Create branch ps-s1c-provision-code",
+        "Create worktree wt/ps-s1c-provision-code from that branch"
+      ],
+      "end_checklist": [
+        "Verify script/doc updates + recorded runs",
+        "Commit worktree changes",
+        "Merge ps-s1c-provision-code into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm S1c-integ prompt",
+        "Commit docs update on feat/p0-platform-stability"
+      ],
+      "depends_on": [
+        "S1b-integ"
+      ],
+      "concurrent_with": [
+        "S1c-test"
+      ],
+      "worktree": "wt/ps-s1c-provision-code",
+      "integration_task": "S1c-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1c-code.md"
+    },
+    {
+      "id": "S1c-test",
+      "name": "Socket activation – provisioning & docs (test)",
+      "type": "test",
+      "phase": "S1c – Provisioning & Docs",
+      "status": "pending",
+      "description": "Author harness coverage/dry-run verification for Linux/Lima/WSL installers/uninstallers plus world doctor scripts under socket activation.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "scripts/linux",
+        "scripts/mac",
+        "scripts/windows",
+        "tests/installers"
+      ],
+      "acceptance_criteria": [
+        "Provisioning harness exercises `.socket` deployment paths (dry-run allowed) and asserts expected files/units.",
+        "Integration tests ensure `substrate world doctor --json` reflects installer output after provisioning/uninstall flows.",
+        "Docs/tests capture platform-specific skip notes if automation unavailable.",
+        "`cargo fmt`; targeted installer tests (`./tests/installers/install_smoke.sh` etc.) executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Set S1c-test to in_progress, log START entry, commit docs update",
+        "Create branch ps-s1c-provision-test",
+        "Create worktree wt/ps-s1c-provision-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests/scripts completed (document skips)",
+        "Commit worktree changes",
+        "Merge ps-s1c-provision-test into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm S1c-integ prompt accuracy",
+        "Commit docs update on feat/p0-platform-stability"
+      ],
+      "depends_on": [
+        "S1b-integ"
+      ],
+      "concurrent_with": [
+        "S1c-code"
+      ],
+      "worktree": "wt/ps-s1c-provision-test",
+      "integration_task": "S1c-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1c-test.md"
+    },
+    {
+      "id": "S1c-integ",
+      "name": "Socket activation – provisioning & docs (integration)",
+      "type": "integration",
+      "phase": "S1c – Provisioning & Docs",
+      "status": "pending",
+      "description": "Merge S1c code/test branches, verify fmt/lint/tests, and close out the socket activation program before replay work proceeds.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "scripts/linux",
+        "scripts/mac",
+        "scripts/windows",
+        "docs/WORLD.md"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-s1c-provision-integ merges ps-s1c-provision-code/test cleanly with feat/p0-platform-stability.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; installer harness/dry-run commands executed/logged (or justified skips).",
+        "Docs/tasks/session log updated; kickoff prompts for R1a-code/R1a-test linked."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Confirm S1c-code/test completed",
+        "Set S1c-integ to in_progress, log START entry, commit docs update",
+        "Create branch ps-s1c-provision-integ",
+        "Create worktree wt/ps-s1c-provision-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches, resolve conflicts",
+        "Run required fmt/lint/tests/scripts",
+        "Fast-forward merge into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Publish R1a prompts"
+      ],
+      "depends_on": [
+        "S1c-code",
+        "S1c-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-s1c-provision-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1c-integ.md"
+    },
+    {
+      "id": "R1a-code",
+      "name": "Replay isolation fallback (code)",
+      "type": "code",
+      "phase": "R1a – Isolation Fallback & Diagnostics",
+      "status": "pending",
+      "description": "Implement nft cgroup fallback, cleanup tooling for leftover netns/rules, and tie diagnostics into replay logs/docs.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/BACKLOG.md",
+        "crates/world-linux",
+        "crates/replay",
+        "crates/trace",
+        "docs/REPLAY.md",
+        "docs/WORLD.md"
+      ],
+      "acceptance_criteria": [
+        "Replay isolation attempts nft cgroup match first, falls back gracefully with telemetry when unavailable.",
+        "Cleanup helpers surface residual netns/nft rules and provide CLI hooks to reset state.",
+        "Docs call out fallback + cleanup flow for Linux/macOS/WSL (when applicable).",
+        "`cargo fmt`; `cargo clippy -p substrate-replay -- -D warnings`; `cargo test -p substrate-replay -- --nocapture` executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Set R1a-code to in_progress, log START entry, commit docs update",
+        "Create branch ps-r1a-isolation-code",
+        "Create worktree wt/ps-r1a-isolation-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests completed",
+        "Commit worktree changes",
+        "Merge ps-r1a-isolation-code into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm R1a-integ prompt",
+        "Commit docs update on feat/p0-platform-stability"
+      ],
+      "depends_on": [
+        "S1c-integ"
+      ],
+      "concurrent_with": [
+        "R1a-test"
+      ],
+      "worktree": "wt/ps-r1a-isolation-code",
+      "integration_task": "R1a-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R1a-code.md"
+    },
+    {
+      "id": "R1a-test",
+      "name": "Replay isolation fallback (test)",
+      "type": "test",
+      "phase": "R1a – Isolation Fallback & Diagnostics",
+      "status": "pending",
+      "description": "Add replay/world tests covering nft cgroup fallback paths, cleanup diagnostics, and regression coverage for existing isolation behavior.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/replay/tests",
+        "crates/shell/tests",
+        "docs/REPLAY.md"
+      ],
+      "acceptance_criteria": [
+        "Tests exercise fallback when nft unsupported and assert telemetry/log strings.",
+        "Cleanup helper tests verify detection/reporting of leftover namespaces/rules.",
+        "Regression tests ensure standard path unaffected when nft available.",
+        "`cargo fmt`; `cargo test -p substrate-replay -- --nocapture`; targeted shell integration suites executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Set R1a-test to in_progress, log START entry, commit docs update",
+        "Create branch ps-r1a-isolation-test",
+        "Create worktree wt/ps-r1a-isolation-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests completed (note skips)",
+        "Commit worktree changes",
+        "Merge ps-r1a-isolation-test into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm R1a-integ prompt accuracy",
+        "Commit docs update on feat/p0-platform-stability"
+      ],
+      "depends_on": [
+        "S1c-integ"
+      ],
+      "concurrent_with": [
+        "R1a-code"
+      ],
+      "worktree": "wt/ps-r1a-isolation-test",
+      "integration_task": "R1a-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R1a-test.md"
+    },
+    {
+      "id": "R1a-integ",
+      "name": "Replay isolation fallback (integration)",
+      "type": "integration",
+      "phase": "R1a – Isolation Fallback & Diagnostics",
+      "status": "pending",
+      "description": "Merge R1a code/test branches, re-run fmt/lint/tests, and document readiness for verbose scope work.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/replay",
+        "docs/REPLAY.md"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-r1a-isolation-integ merges ps-r1a-isolation-code/test with feat/p0-platform-stability.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-replay`; cleanup helper scripts executed/logged.",
+        "Docs/tasks/session log updated; kickoff prompts for R1b-code/R1b-test linked."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Confirm R1a-code/test completed",
+        "Set R1a-integ to in_progress, log START entry, commit docs update",
+        "Create branch ps-r1a-isolation-integ",
+        "Create worktree wt/ps-r1a-isolation-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge branches, resolve conflicts",
+        "Run required fmt/lint/tests",
+        "Merge into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Publish R1b prompts"
+      ],
+      "depends_on": [
+        "R1a-code",
+        "R1a-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-r1a-isolation-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R1a-integ.md"
+    },
+    {
+      "id": "R1b-code",
+      "name": "Replay verbose scopes & warnings (code)",
+      "type": "code",
+      "phase": "R1b – Verbose Scopes & Warning Clarity",
+      "status": "pending",
+      "description": "Implement the `scopes: [...]` verbose output, differentiate shell vs replay warnings, and update docs/help text.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/replay",
+        "crates/shell/src/execution/replay.rs",
+        "docs/REPLAY.md",
+        "docs/TRACE.md"
+      ],
+      "acceptance_criteria": [
+        "`substrate --replay --replay-verbose` prints scope arrays adjacent to world strategy output (text + JSON).",
+        "Warnings referencing shell transport explicitly say “shell world-agent path”; replay warnings retain `[replay]` prefix.",
+        "Docs/help text mention verbose scopes and warning semantics across POSIX + PowerShell examples.",
+        "`cargo fmt`; `cargo clippy -p substrate-replay -- -D warnings`; targeted CLI smoke recorded."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Set R1b-code to in_progress, log START entry, commit docs update",
+        "Create branch ps-r1b-verbosity-code",
+        "Create worktree wt/ps-r1b-verbosity-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests/manual commands complete",
+        "Commit worktree changes",
+        "Merge ps-r1b-verbosity-code into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm R1b-integ prompt",
+        "Commit docs update on feat/p0-platform-stability"
+      ],
+      "depends_on": [
+        "R1a-integ"
+      ],
+      "concurrent_with": [
+        "R1b-test"
+      ],
+      "worktree": "wt/ps-r1b-verbosity-code",
+      "integration_task": "R1b-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R1b-code.md"
+    },
+    {
+      "id": "R1b-test",
+      "name": "Replay verbose scopes & warnings (test)",
+      "type": "test",
+      "phase": "R1b – Verbose Scopes & Warning Clarity",
+      "status": "pending",
+      "description": "Add replay CLI tests verifying verbose scope output, absence when flag disabled, and warning prefixes for shell vs replay contexts.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/replay/tests",
+        "crates/shell/tests",
+        "docs/TRACE.md"
+      ],
+      "acceptance_criteria": [
+        "Tests assert `scopes: [...]` line content under `--replay-verbose` and confirm it is omitted otherwise.",
+        "Warning prefix assertions cover shell vs replay commands.",
+        "JSON outputs updated fixtures to include verbose scopes when relevant.",
+        "`cargo fmt`; `cargo test -p substrate-replay`; targeted shell tests executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Set R1b-test to in_progress, log START entry, commit docs update",
+        "Create branch ps-r1b-verbosity-test",
+        "Create worktree wt/ps-r1b-verbosity-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests complete",
+        "Commit worktree changes",
+        "Merge ps-r1b-verbosity-test into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm R1b-integ prompt",
+        "Commit docs update on feat/p0-platform-stability"
+      ],
+      "depends_on": [
+        "R1a-integ"
+      ],
+      "concurrent_with": [
+        "R1b-code"
+      ],
+      "worktree": "wt/ps-r1b-verbosity-test",
+      "integration_task": "R1b-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R1b-test.md"
+    },
+    {
+      "id": "R1b-integ",
+      "name": "Replay verbose scopes & warnings (integration)",
+      "type": "integration",
+      "phase": "R1b – Verbose Scopes & Warning Clarity",
+      "status": "pending",
+      "description": "Merge R1b code/test branches, rerun fmt/lint/tests, and prepare for the replay coverage phase.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/replay",
+        "docs/REPLAY.md",
+        "docs/TRACE.md"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-r1b-verbosity-integ merges ps-r1b-verbosity-code/test cleanly.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-replay`; CLI verbose smoke run logged.",
+        "Docs/tasks/session log updated; kickoff prompts for R1c-code/R1c-test linked."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Confirm R1b-code/test completed",
+        "Set R1b-integ to in_progress, log START entry, commit docs update",
+        "Create branch ps-r1b-verbosity-integ",
+        "Create worktree wt/ps-r1b-verbosity-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches, resolve conflicts",
+        "Run required fmt/lint/tests",
+        "Merge into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Publish R1c prompts"
+      ],
+      "depends_on": [
+        "R1b-code",
+        "R1b-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-r1b-verbosity-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R1b-integ.md"
+    },
+    {
+      "id": "R1c-code",
+      "name": "Replay world coverage (code)",
+      "type": "code",
+      "phase": "R1c – Replay World Coverage",
+      "status": "pending",
+      "description": "Add CLI/config plumbing to expose default world-on, `--no-world`, and env opt-out toggles to the test harness plus docs about their interactions.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/shell/src/execution/replay.rs",
+        "crates/shell/src/execution/settings.rs",
+        "docs/REPLAY.md",
+        "docs/TRACE.md"
+      ],
+      "acceptance_criteria": [
+        "Replay CLI exposes switches/environment override surfaces to the harness without requiring global config edits.",
+        "Doc updates describe default-to-world behavior, `--no-world`, and `SUBSTRATE_REPLAY_USE_WORLD=disabled` flows.",
+        "Smoke commands recorded for world-on vs no-world runs.",
+        "`cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; targeted replay tests invoked."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Set R1c-code to in_progress, log START entry, commit docs update",
+        "Create branch ps-r1c-coverage-code",
+        "Create worktree wt/ps-r1c-coverage-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests/manual commands run",
+        "Commit worktree changes",
+        "Merge ps-r1c-coverage-code into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm R1c-integ prompt",
+        "Commit docs update on feat/p0-platform-stability"
+      ],
+      "depends_on": [
+        "R1b-integ"
+      ],
+      "concurrent_with": [
+        "R1c-test"
+      ],
+      "worktree": "wt/ps-r1c-coverage-code",
+      "integration_task": "R1c-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R1c-code.md"
+    },
+    {
+      "id": "R1c-test",
+      "name": "Replay world coverage (test)",
+      "type": "test",
+      "phase": "R1c – Replay World Coverage",
+      "status": "pending",
+      "description": "Expand integration suites covering default world-on, `--no-world`, and env opt-out toggles plus verbose scope output expectations.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/replay/tests",
+        "crates/shell/tests",
+        "docs/REPLAY.md"
+      ],
+      "acceptance_criteria": [
+        "Tests run replays with worlds enabled (default), `--no-world`, and `SUBSTRATE_REPLAY_USE_WORLD=disabled`, asserting proper warnings + scope output.",
+        "Fixtures updated for JSON/text outputs referencing world state toggles.",
+        "Manual/smoke commands recorded when required capabilities absent (document skip).",
+        "`cargo fmt`; `cargo test -p substrate-replay -- --nocapture`; targeted shell integration suites executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Set R1c-test to in_progress, log START entry, commit docs update",
+        "Create branch ps-r1c-coverage-test",
+        "Create worktree wt/ps-r1c-coverage-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests completed",
+        "Commit worktree changes",
+        "Merge ps-r1c-coverage-test into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm R1c-integ prompt",
+        "Commit docs update on feat/p0-platform-stability"
+      ],
+      "depends_on": [
+        "R1b-integ"
+      ],
+      "concurrent_with": [
+        "R1c-code"
+      ],
+      "worktree": "wt/ps-r1c-coverage-test",
+      "integration_task": "R1c-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R1c-test.md"
+    },
+    {
+      "id": "R1c-integ",
+      "name": "Replay world coverage (integration)",
+      "type": "integration",
+      "phase": "R1c – Replay World Coverage",
+      "status": "pending",
+      "description": "Merge R1c code/test branches, re-run fmt/lint/tests, and document readiness for the health manager fixes.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/replay",
+        "crates/shell",
+        "docs/REPLAY.md"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-r1c-coverage-integ merges ps-r1c-coverage-code/test with feat/p0-platform-stability.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-replay`; `cargo test -p substrate-shell replay_world` executed/logged.",
+        "Docs/tasks/session log updated; kickoff prompts for H1a-code/H1a-test linked."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Confirm R1c-code/test completed",
+        "Set R1c-integ to in_progress, log START entry, commit docs update",
+        "Create branch ps-r1c-coverage-integ",
+        "Create worktree wt/ps-r1c-coverage-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge branches, resolve conflicts",
+        "Run required fmt/lint/tests",
+        "Merge into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Publish H1a prompts"
+      ],
+      "depends_on": [
+        "R1c-code",
+        "R1c-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-r1c-coverage-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R1c-integ.md"
+    },
+    {
+      "id": "H1a-code",
+      "name": "Health manager parity – aggregation logic (code)",
+      "type": "code",
+      "phase": "H1a – Detection & Aggregation",
+      "status": "pending",
+      "description": "Refine manager detection data structures and health aggregator logic so only host-present/world-missing managers trigger attention, with structured telemetry output.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/BACKLOG.md",
+        "crates/shell/src/builtins/health.rs",
+        "crates/shell/src/manager_detection.rs",
+        "docs/CONFIGURATION.md"
+      ],
+      "acceptance_criteria": [
+        "Health aggregator exposes explicit enums for host/world status per manager and computes severity accordingly.",
+        "Telemetry/log schema highlights which manager mismatched (host-only/world-only/both-missing).",
+        "Existing JSON outputs continue working with new fields documented.",
+        "`cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; targeted health unit tests executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Set H1a-code to in_progress, log START entry, commit docs update",
+        "Create branch ps-h1a-health-code",
+        "Create worktree wt/ps-h1a-health-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests run",
+        "Commit worktree changes",
+        "Merge ps-h1a-health-code into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm H1a-integ prompt",
+        "Commit docs update on feat/p0-platform-stability"
+      ],
+      "depends_on": [
+        "R1c-integ"
+      ],
+      "concurrent_with": [
+        "H1a-test"
+      ],
+      "worktree": "wt/ps-h1a-health-code",
+      "integration_task": "H1a-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/H1a-code.md"
+    },
+    {
+      "id": "H1a-test",
+      "name": "Health manager parity – aggregation logic (test)",
+      "type": "test",
+      "phase": "H1a – Detection & Aggregation",
+      "status": "pending",
+      "description": "Add targeted tests for the refined health aggregator covering host/world presence combinations and telemetry serialization.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/shell/tests",
+        "docs/CONFIGURATION.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover host+world missing (OK), host present/world missing (attention), world present/host missing (degrade) across manager types (direnv/asdf/conda/pyenv).",
+        "JSON fixture assertions updated for new telemetry fields.",
+        "`cargo fmt`; `cargo test -p substrate-shell health`; targeted integration suite executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Set H1a-test to in_progress, log START entry, commit docs update",
+        "Create branch ps-h1a-health-test",
+        "Create worktree wt/ps-h1a-health-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests completed",
+        "Commit worktree changes",
+        "Merge ps-h1a-health-test into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm H1a-integ prompt",
+        "Commit docs update on feat/p0-platform-stability"
+      ],
+      "depends_on": [
+        "R1c-integ"
+      ],
+      "concurrent_with": [
+        "H1a-code"
+      ],
+      "worktree": "wt/ps-h1a-health-test",
+      "integration_task": "H1a-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/H1a-test.md"
+    },
+    {
+      "id": "H1a-integ",
+      "name": "Health manager parity – aggregation logic (integration)",
+      "type": "integration",
+      "phase": "H1a – Detection & Aggregation",
+      "status": "pending",
+      "description": "Merge H1a code/test branches, rerun fmt/lint/tests, and prep for the CLI/doc UX phase.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/shell"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-h1a-health-integ merges ps-h1a-health-code/test into feat/p0-platform-stability.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-shell health` executed/logged.",
+        "Docs/tasks/session log updated; kickoff prompts for H1b-code/H1b-test linked."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Confirm H1a-code/test completed",
+        "Set H1a-integ to in_progress, log START entry, commit docs update",
+        "Create branch ps-h1a-health-integ",
+        "Create worktree wt/ps-h1a-health-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge branches, resolve conflicts",
+        "Run required fmt/lint/tests",
+        "Merge into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Publish H1b prompts"
+      ],
+      "depends_on": [
+        "H1a-code",
+        "H1a-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-h1a-health-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/H1a-integ.md"
+    },
+    {
+      "id": "H1b-code",
+      "name": "Health manager parity – UX & docs (code)",
+      "type": "code",
+      "phase": "H1b – CLI/Doctor UX & Docs",
+      "status": "pending",
+      "description": "Polish CLI/JSON output, doctor summaries, and documentation so the refined manager logic is visible and actionable across platforms.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/USAGE.md",
+        "docs/CONFIGURATION.md",
+        "crates/shell/src/builtins/health.rs"
+      ],
+      "acceptance_criteria": [
+        "`substrate health` text + JSON clearly distinguish host-only, world-only, and absent managers with severity guidance.",
+        "Doctor/health docs include updated examples for Linux/macOS/WSL plus manager coverage tables.",
+        "Telemetry/tracing snippets sanitized for manager names while conveying mismatches.",
+        "`cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; manual `substrate health --json` run recorded."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Set H1b-code to in_progress, log START entry, commit docs update",
+        "Create branch ps-h1b-healthux-code",
+        "Create worktree wt/ps-h1b-healthux-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests/manual commands done",
+        "Commit worktree changes",
+        "Merge ps-h1b-healthux-code into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm H1b-integ prompt",
+        "Commit docs update on feat/p0-platform-stability"
+      ],
+      "depends_on": [
+        "H1a-integ"
+      ],
+      "concurrent_with": [
+        "H1b-test"
+      ],
+      "worktree": "wt/ps-h1b-healthux-code",
+      "integration_task": "H1b-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/H1b-code.md"
+    },
+    {
+      "id": "H1b-test",
+      "name": "Health manager parity – UX & docs (test)",
+      "type": "test",
+      "phase": "H1b – CLI/Doctor UX & Docs",
+      "status": "pending",
+      "description": "Add CLI/integration tests ensuring doctor + health commands emit the refined messages in both text and JSON modes across mocked manager scenarios.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/shell/tests",
+        "docs/USAGE.md"
+      ],
+      "acceptance_criteria": [
+        "Tests assert text + JSON outputs for host-only, world-only, both-missing cases with severity alignment.",
+        "PowerShell/macOS fixtures updated where necessary.",
+        "`cargo fmt`; `cargo test -p substrate-shell health`; `substrate health --json` harness invocation logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Set H1b-test to in_progress, log START entry, commit docs update",
+        "Create branch ps-h1b-healthux-test",
+        "Create worktree wt/ps-h1b-healthux-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests/manual commands recorded",
+        "Commit worktree changes",
+        "Merge ps-h1b-healthux-test into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm H1b-integ prompt",
+        "Commit docs update on feat/p0-platform-stability"
+      ],
+      "depends_on": [
+        "H1a-integ"
+      ],
+      "concurrent_with": [
+        "H1b-code"
+      ],
+      "worktree": "wt/ps-h1b-healthux-test",
+      "integration_task": "H1b-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/H1b-test.md"
+    },
+    {
+      "id": "H1b-integ",
+      "name": "Health manager parity – UX & docs (integration)",
+      "type": "integration",
+      "phase": "H1b – CLI/Doctor UX & Docs",
+      "status": "pending",
+      "description": "Merge H1b code/test branches, re-run fmt/lint/tests, and close the P0 program with updated docs/logs/tasks.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/shell",
+        "docs/USAGE.md",
+        "docs/CONFIGURATION.md"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-h1b-healthux-integ merges ps-h1b-healthux-code/test and syncs with feat/p0-platform-stability.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-shell health`; manual `substrate health --json` recorded.",
+        "Docs/tasks/session log updated noting closure of the P0 backlog items or follow-ups."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Confirm H1b-code/test completed",
+        "Set H1b-integ to in_progress, log START entry, commit docs update",
+        "Create branch ps-h1b-healthux-integ",
+        "Create worktree wt/ps-h1b-healthux-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches, resolve conflicts",
+        "Run required fmt/lint/tests",
+        "Merge into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Document closure/hand-off"
+      ],
+      "depends_on": [
+        "H1b-code",
+        "H1b-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-h1b-healthux-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/H1b-integ.md"
+    }
+  ]
+}
