@@ -516,7 +516,7 @@
       "name": "Replay verbose scopes & warnings (code)",
       "type": "code",
       "phase": "R1b – Verbose Scopes & Warning Clarity",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Implement the `scopes: [...]` verbose output, differentiate shell vs replay warnings, and update docs/help text.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
