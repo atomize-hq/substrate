@@ -935,7 +935,7 @@
       "name": "Health manager parity – UX & docs (code)",
       "type": "code",
       "phase": "H1b – CLI/Doctor UX & Docs",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Polish CLI/JSON output, doctor summaries, and documentation so the refined manager logic is visible and actionable across platforms.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
