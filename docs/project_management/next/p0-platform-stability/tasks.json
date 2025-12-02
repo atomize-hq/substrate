@@ -642,7 +642,7 @@
       "name": "Replay verbose scopes & warnings (integration)",
       "type": "integration",
       "phase": "R1b – Verbose Scopes & Warning Clarity",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge R1b code/test branches, rerun fmt/lint/tests, and prepare for the replay coverage phase.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",

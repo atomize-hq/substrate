@@ -349,3 +349,12 @@ Template:
 - Worktree creation pending (`ps-r1b-verbosity-integ` → `wt/ps-r1b-verbosity-integ`) after branch setup.
 - Plan: merge ps-r1b-verbosity-code/test into the integration branch, resolve any replay/shell conflicts, run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-replay -- --nocapture`, capture `substrate --replay --replay-verbose` output (or log skip), then update docs/tasks/session log and prep R1c prompts.
 - Blockers: none beyond missing upstream + potential replay fixture churn; world-agent socket absent so replay samples rely on stored spans.
+
+## [2025-12-02 18:51 UTC] Integration Agent – R1b-integ – END
+- Worktree commits: 096f9be (`docs: highlight verbose scopes in R1c prompts`) on ps-r1b-verbosity-integ.
+- Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo build -p substrate --bin substrate`; `SHIM_TRACE_LOG=$PWD/tmp/r1b-integ-replay/trace.jsonl ./target/debug/substrate --replay spn_r1b_integ_sample --replay-verbose`.
+- Results: fmt/clippy/tests/build all pass; replay sample succeeded with expected warnings about missing world agent privileges (netns/cgroup/nft fallback) and printed `scopes: []` plus filesystem diff summary while executing `printf 'R1b-integ sample' > replay.log`.
+- Scripts executed: n/a (only CLI/builder invocations above).
+- Kickoff prompts created: updated `docs/project_management/next/p0-platform-stability/kickoff_prompts/R1c-code.md` + `R1c-test.md` to reference the new verbose scopes/warning behavior.
+- Docs commit: pending (`docs: finish R1b-integ` will capture tasks/session log updates after merging back to feat/p0-platform-stability).
+- Next steps / blockers: fast-forward feat/p0-platform-stability to ps-r1b-verbosity-integ, update tasks.json/status log, remove worktree once doc commit pushed.
