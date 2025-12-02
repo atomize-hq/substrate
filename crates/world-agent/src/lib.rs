@@ -6,6 +6,8 @@ pub mod pty;
 pub mod service;
 #[cfg(unix)]
 mod socket_activation;
+#[cfg(unix)]
+pub use crate::socket_activation::test_support as socket_activation_test_support;
 
 pub use service::WorldAgentService;
 
@@ -565,5 +567,115 @@ mod tests {
         let err = read_tcp_port().unwrap_err();
         assert!(err.to_string().contains("Failed to parse"));
         reset_env();
+    }
+
+    #[cfg(unix)]
+    mod listener_mode {
+        use super::super::{log_listener_mode, socket_activation::SocketActivation};
+        use std::collections::BTreeMap;
+        use std::fmt;
+        use std::sync::{Arc, Mutex};
+        use tracing::dispatcher::{with_default, Dispatch};
+        use tracing::field::{Field, Visit};
+        use tracing::span::{Attributes, Id, Record};
+        use tracing::{Metadata, Subscriber};
+
+        #[test]
+        fn logs_direct_bind_mode() {
+            let subscriber = RecordingSubscriber::default();
+            let dispatch = Dispatch::new(subscriber.clone());
+            with_default(&dispatch, || {
+                log_listener_mode(None);
+            });
+            let events = subscriber.take_events();
+            assert_eq!(events.len(), 1);
+            assert_eq!(
+                events[0].get("mode").map(|s| s.as_str()),
+                Some("direct_bind")
+            );
+        }
+
+        #[test]
+        fn logs_socket_activation_mode() {
+            let subscriber = RecordingSubscriber::default();
+            let dispatch = Dispatch::new(subscriber.clone());
+            let activation = SocketActivation {
+                total_fds: 2,
+                unix_listeners: Vec::new(),
+                tcp_listeners: Vec::new(),
+            };
+            with_default(&dispatch, || {
+                log_listener_mode(Some(&activation));
+            });
+            let events = subscriber.take_events();
+            assert_eq!(events.len(), 1);
+            assert_eq!(
+                events[0].get("mode").map(|s| s.as_str()),
+                Some("socket_activation")
+            );
+            assert_eq!(events[0].get("listen_fds").map(|s| s.as_str()), Some("2"));
+        }
+
+        #[derive(Clone, Default)]
+        struct RecordingSubscriber {
+            events: Arc<Mutex<Vec<BTreeMap<String, String>>>>,
+        }
+
+        impl RecordingSubscriber {
+            fn take_events(&self) -> Vec<BTreeMap<String, String>> {
+                self.events.lock().unwrap().clone()
+            }
+        }
+
+        impl Subscriber for RecordingSubscriber {
+            fn enabled(&self, _: &Metadata<'_>) -> bool {
+                true
+            }
+
+            fn new_span(&self, _: &Attributes<'_>) -> Id {
+                Id::from_u64(1)
+            }
+
+            fn record(&self, _: &Id, _: &Record<'_>) {}
+
+            fn event(&self, event: &tracing::Event<'_>) {
+                let mut visitor = FieldRecorder::default();
+                event.record(&mut visitor);
+                self.events.lock().unwrap().push(visitor.fields);
+            }
+
+            fn record_follows_from(&self, _: &Id, _: &Id) {}
+
+            fn enter(&self, _: &Id) {}
+
+            fn exit(&self, _: &Id) {}
+        }
+
+        #[derive(Default)]
+        struct FieldRecorder {
+            fields: BTreeMap<String, String>,
+        }
+
+        impl Visit for FieldRecorder {
+            fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
+                self.fields
+                    .insert(field.name().to_string(), format!("{value:?}"));
+            }
+
+            fn record_str(&mut self, field: &Field, value: &str) {
+                self.fields
+                    .insert(field.name().to_string(), value.to_string());
+            }
+
+            fn record_u64(&mut self, field: &Field, value: u64) {
+                self.fields
+                    .insert(field.name().to_string(), value.to_string());
+            }
+
+            fn record_i64(&mut self, field: &Field, value: i64) {
+                self.fields
+                    .insert(field.name().to_string(), value.to_string());
+            }
+        }
     }
 }

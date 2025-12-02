@@ -285,3 +285,74 @@ fn parse_fd_names(value: String) -> Vec<Option<String>> {
     });
     names
 }
+
+#[cfg(test)]
+mod tests {
+    use super::parse_fd_names;
+
+    #[test]
+    fn parse_fd_names_handles_escapes() {
+        let parsed = parse_fd_names("uds\\:sock:tcp\\:9000".to_string());
+        assert_eq!(
+            parsed,
+            vec![Some("uds:sock".to_string()), Some("tcp:9000".to_string())]
+        );
+    }
+
+    #[test]
+    fn parse_fd_names_emits_none_for_empty_segments() {
+        let parsed = parse_fd_names("one::two:".to_string());
+        assert_eq!(
+            parsed,
+            vec![Some("one".to_string()), None, Some("two".to_string()), None]
+        );
+    }
+}
+
+#[cfg(unix)]
+pub mod test_support {
+    use super::{collect_socket_activation, SocketActivation};
+    use anyhow::Result;
+    use std::os::unix::io::RawFd;
+
+    #[derive(Debug, Clone)]
+    pub struct SocketActivationSummary {
+        pub total_fds: usize,
+        pub unix_listeners: Vec<ListenerMeta>,
+        pub tcp_listeners: Vec<ListenerMeta>,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ListenerMeta {
+        pub fd: RawFd,
+        pub name: Option<String>,
+    }
+
+    impl From<SocketActivation> for SocketActivationSummary {
+        fn from(activation: SocketActivation) -> Self {
+            Self {
+                total_fds: activation.total_fds,
+                unix_listeners: activation
+                    .unix_listeners
+                    .into_iter()
+                    .map(|listener| ListenerMeta {
+                        fd: listener.fd,
+                        name: listener.name,
+                    })
+                    .collect(),
+                tcp_listeners: activation
+                    .tcp_listeners
+                    .into_iter()
+                    .map(|listener| ListenerMeta {
+                        fd: listener.fd,
+                        name: listener.name,
+                    })
+                    .collect(),
+            }
+        }
+    }
+
+    pub fn collect_summary() -> Result<Option<SocketActivationSummary>> {
+        collect_socket_activation().map(|activation| activation.map(SocketActivationSummary::from))
+    }
+}
