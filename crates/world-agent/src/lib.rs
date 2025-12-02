@@ -4,6 +4,7 @@ pub mod gc;
 pub mod handlers;
 pub mod pty;
 pub mod service;
+pub mod socket_activation;
 
 pub use service::WorldAgentService;
 
