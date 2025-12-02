@@ -147,3 +147,13 @@ Template:
 - Kickoff prompts created: n/a
 - Docs commit: pending (`docs: finish R1a-test`)
 - Next steps / blockers: merge ps-r1a-isolation-test when ready and remove worktree
+
+## [2025-12-02 16:53 UTC] Code Agent – S1b-code – END
+- Worktree commits: 9a336be (feat: handle socket-activated world readiness)
+- Commands: `cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell world_enable`
+- Results: pass / pass / pass
+- Manual commands: `substrate world doctor --json` (skipped – requires provisioned systemd agent); `substrate --shim-status` (skipped – host install not available)
+- Merge: ps-s1b-shell-code → feat/p0-platform-stability
+- Kickoff prompts: confirmed `docs/project_management/next/p0-platform-stability/kickoff_prompts/S1b-integ.md` remains accurate (no edits)
+- Docs commit: pending (`docs: finish S1b-code`)
+- Next steps / blockers: none
