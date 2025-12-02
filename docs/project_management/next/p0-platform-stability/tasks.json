@@ -345,7 +345,7 @@
       "name": "Socket activation – provisioning & docs (integration)",
       "type": "integration",
       "phase": "S1c – Provisioning & Docs",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge S1c code/test branches, verify fmt/lint/tests, and close out the socket activation program before replay work proceeds.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
