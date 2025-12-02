@@ -263,3 +263,10 @@ Template:
 - Tasks already `in_progress`; logging this new START for the resumed coding pass (docs update pending)
 - Plan: follow S1c-code spec—update installer/uninstaller scripts for `.service` + `.socket`, refresh docs with socket_activation examples, record required dry-run command output—then branch/worktree for code edits
 - Blockers: remote branch absent; some provisioning commands require sudo/host OS access (document skips/dry-runs)
+
+## [2025-12-02 18:05 UTC] Code Agent – H1b-code – START
+- Checked out feat/p0-platform-stability; `git pull --ff-only` still fails because branch lacks upstream tracking (documented)
+- Reviewed p0 plan, tasks.json, session_log entries (incl. H1a outputs), and kickoff prompt for H1b-code
+- Updated tasks.json (`H1b-code` → `in_progress`) + session log (this entry); docs commit pending
+- Plan: branch/worktree setup, adjust `substrate health` text/JSON + doctor summaries for manager severity labels, ensure manager_states/attention summaries populated, refresh docs (USAGE/CONFIGURATION/troubleshooting) with Linux/macOS/WSL + POSIX/PowerShell examples, then run `cargo fmt`, `cargo clippy -p substrate-shell -- -D warnings`, `cargo test -p substrate-shell health`, and `substrate health --json`
+- Blockers: no world-agent/systemd socket on this host, so health/doctor examples will rely on host-only execution (documented as needed)

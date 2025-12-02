@@ -345,7 +345,7 @@
       "name": "Socket activation – provisioning & docs (integration)",
       "type": "integration",
       "phase": "S1c – Provisioning & Docs",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge S1c code/test branches, verify fmt/lint/tests, and close out the socket activation program before replay work proceeds.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
@@ -896,7 +896,7 @@
       "name": "Health manager parity – UX & docs (code)",
       "type": "code",
       "phase": "H1b – CLI/Doctor UX & Docs",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Polish CLI/JSON output, doctor summaries, and documentation so the refined manager logic is visible and actionable across platforms.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
