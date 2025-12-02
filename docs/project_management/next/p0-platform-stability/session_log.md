@@ -337,6 +337,11 @@ Template:
 - Authored kickoff prompt `docs/project_management/next/p0-platform-stability/kickoff_prompts/S1c-windows-dry-run.md` summarizing prerequisites, required commands (including the `Tee-Object` log capture), and deliverables for the Windows run.
 - References point at the warm script, WSL setup doc, Windows install docs, and this session log for context.
 
+## [2025-12-02 18:47 UTC] Integration Agent – S1c-integ – Linux socket harness
+- Added `scripts/linux/world-socket-verify.sh`, a sudo-enabled helper that provisions the world-agent socket, captures `world doctor` + `shim-status` JSON, logs `systemctl` state, and optionally runs the uninstall script so operators can document real socket-activation runs.
+- Authored `docs/manual_verification/linux_world_socket.md` with requirements, usage, and artifact descriptions; `docs/WORLD.md` now references the helper near the existing manual verification steps.
+- Harness defaults to storing logs under `artifacts/linux/world-socket-verify-<timestamp>` so future session log entries or PRs can attach the raw JSON for the `world_socket` block.
+
 ## [2025-12-02 18:46 UTC] Integration Agent – R1b-integ – START
 - Checked out feat/p0-platform-stability; `git pull --ff-only` still fails because the branch has no upstream tracking ref (documented for this effort).
 - Verified `R1b-code` and `R1b-test` completion via session log entries (commits aad7a68 + replay test fixtures) and updated `tasks.json` so both tasks read `completed` while `R1b-integ` is now `in_progress`.
