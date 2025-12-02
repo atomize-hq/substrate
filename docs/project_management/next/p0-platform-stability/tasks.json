@@ -555,7 +555,7 @@
       "name": "Replay verbose scopes & warnings (code)",
       "type": "code",
       "phase": "R1b – Verbose Scopes & Warning Clarity",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Implement the `scopes: [...]` verbose output, differentiate shell vs replay warnings, and update docs/help text.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
@@ -599,7 +599,7 @@
       "name": "Replay verbose scopes & warnings (test)",
       "type": "test",
       "phase": "R1b – Verbose Scopes & Warning Clarity",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add replay CLI tests verifying verbose scope output, absence when flag disabled, and warning prefixes for shell vs replay contexts.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
@@ -642,7 +642,7 @@
       "name": "Replay verbose scopes & warnings (integration)",
       "type": "integration",
       "phase": "R1b – Verbose Scopes & Warning Clarity",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge R1b code/test branches, rerun fmt/lint/tests, and prepare for the replay coverage phase.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
