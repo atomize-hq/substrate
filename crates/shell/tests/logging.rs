@@ -6,6 +6,7 @@ use predicates::prelude::*;
 use serde_json::Value;
 use std::fs;
 use support::{get_substrate_binary, temp_dir, AgentSocket, SocketResponse};
+use tempfile::Builder;
 
 #[test]
 fn test_command_start_finish_json_roundtrip() {
@@ -196,7 +197,11 @@ fn test_process_group_signal_handling() {
 fn command_logs_include_socket_activation_flag() {
     let temp = temp_dir("substrate-test-");
     let log_file = temp.path().join("trace.jsonl");
-    let socket_path = temp.path().join("activation.sock");
+    let socket_temp = Builder::new()
+        .prefix("substrate-activation-")
+        .tempdir_in("/tmp")
+        .expect("failed to create socket tempdir");
+    let socket_path = socket_temp.path().join("activation.sock");
     let _socket = AgentSocket::start(&socket_path, SocketResponse::Capabilities);
 
     get_substrate_binary()
