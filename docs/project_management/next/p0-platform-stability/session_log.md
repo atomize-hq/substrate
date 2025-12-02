@@ -195,6 +195,7 @@ Template:
 - Worktree commits: n/a (ps-h1a-health-code/test already merged into feat/p0-platform-stability; validation-only branch)
 - Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-shell health`; `./target/debug/substrate health --json`
 - Results: pass / pass / pass / pass (CLI emitted warning about missing world-agent binary but produced JSON)
+- Health JSON notes: host-only managers limited to nvm/pyenv; remaining managers absent on host; world doctor fell back to host execution because `/run/substrate.sock` + systemd units are unavailable here
 - Scripts executed: n/a
 - Merge: verified no additional ps-h1a-health-code/test refs exist; `ps-h1a-health-integ` fast-forwarded back onto feat/p0-platform-stability
 - Kickoff prompts created: reviewed `docs/project_management/next/p0-platform-stability/kickoff_prompts/H1b-code.md` + `H1b-test.md`; both already reflect manager_states assumptions, no edits
