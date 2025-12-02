@@ -49,7 +49,7 @@
       "name": "Socket activation – agent plumbing (test)",
       "type": "test",
       "phase": "S1a – Agent Socket Activation",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add unit/integration tests that simulate LISTEN_FDS activation, verify telemetry, and guard the direct-bind fallback.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
