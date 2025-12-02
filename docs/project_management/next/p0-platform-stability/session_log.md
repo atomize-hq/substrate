@@ -138,3 +138,12 @@ Template:
 - Created worktree: pending (ps-r1a-isolation-test next)
 - Plan: add replay tests covering nft unavailable fallback, cleanup helper detection, and regression path when nft succeeds; run `cargo fmt`, `cargo test -p substrate-replay -- --nocapture`, `cargo test -p substrate-shell replay_world` (note skips if needed)
 - Blockers: branch lacks upstream remote; otherwise none
+
+## [2025-12-02 16:51 UTC] Test Agent – R1a-test – END
+- Worktree commits: f832d5d (test: add replay nft fallback coverage)
+- Commands: `cargo fmt`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world`
+- Results: pass / pass / pass
+- Scripts executed: n/a
+- Kickoff prompts created: n/a
+- Docs commit: pending (`docs: finish R1a-test`)
+- Next steps / blockers: merge ps-r1a-isolation-test when ready and remove worktree

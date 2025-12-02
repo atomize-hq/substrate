@@ -173,7 +173,7 @@
       "name": "Socket activation – shell readiness (test)",
       "type": "test",
       "phase": "S1b – Shell Readiness & Telemetry",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Extend shell/world doctor tests to cover socket-activated readiness, telemetry output, and shim status flows.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
