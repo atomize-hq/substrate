@@ -64,3 +64,12 @@ Template:
 - Worktree setup pending (ps-h1a-health-integ)
 - Plan: merge/implement code+test deltas, run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-shell health`, `substrate health --json`, update docs/tasks, prep H1b prompts
 - Blockers: prereq branches unavailable; expect to resolve by recreating commits locally
+
+## [2025-12-02 16:08 UTC] Integration Agent – H1a-integ – END
+- Worktree commits: 92bead8 (feat: refine health manager aggregation telemetry)
+- Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-shell health`; `substrate health --json`
+- Results: pass / pass / pass / pass (JSON captured for records)
+- Scripts executed: n/a
+- Kickoff prompts created: updated `docs/project_management/next/p0-platform-stability/kickoff_prompts/H1b-code.md` and `H1b-test.md` for new telemetry fields
+- Docs commit: pending (`docs: finish H1a-integ`)
+- Next steps / blockers: H1b-code/test may build on new manager_states summaries

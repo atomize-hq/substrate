@@ -13,6 +13,7 @@
 
 ## Spec
 - Update CLI/integration tests verifying `substrate health` text + JSON outputs for host-only/world-only/both-missing scenarios, ensuring severities align with the new rules.
+- Cover the `manager_states`, `attention_required_managers`, and `world_only_managers` fields in JSON fixtures so telemetry regressions are caught.
 - Cover PowerShell/macOS fixtures if they include sample outputs.
 - Validate doctor summary tests pick up the new phrasing and do not regress older behavior.
 

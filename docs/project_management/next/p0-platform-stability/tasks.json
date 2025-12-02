@@ -772,7 +772,7 @@
       "name": "Health manager parity – aggregation logic (code)",
       "type": "code",
       "phase": "H1a – Detection & Aggregation",
-      "status": "pending",
+      "status": "completed",
       "description": "Refine manager detection data structures and health aggregator logic so only host-present/world-missing managers trigger attention, with structured telemetry output.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
@@ -816,7 +816,7 @@
       "name": "Health manager parity – aggregation logic (test)",
       "type": "test",
       "phase": "H1a – Detection & Aggregation",
-      "status": "pending",
+      "status": "completed",
       "description": "Add targeted tests for the refined health aggregator covering host/world presence combinations and telemetry serialization.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
@@ -857,7 +857,7 @@
       "name": "Health manager parity – aggregation logic (integration)",
       "type": "integration",
       "phase": "H1a – Detection & Aggregation",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge H1a code/test branches, rerun fmt/lint/tests, and prep for the CLI/doc UX phase.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",

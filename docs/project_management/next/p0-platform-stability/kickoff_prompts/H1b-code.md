@@ -13,6 +13,7 @@
 
 ## Spec
 - Update `substrate health` text + JSON output so severity labels convey host-only/world-only/both-missing manager states, with actionable next steps.
+- Ensure the new `manager_states`, `attention_required_managers`, and `world_only_managers` JSON summary fields stay populated and documented for telemetry consumers.
 - Ensure doctor summary sections (and any aggregated outputs) highlight mismatches without flagging missing managers that the host lacks.
 - Refresh docs (`docs/USAGE.md`, `docs/CONFIGURATION.md`, troubleshooting guides) with new examples (Linux/macOS/WSL, POSIX + PowerShell) describing the refined behavior.
 
