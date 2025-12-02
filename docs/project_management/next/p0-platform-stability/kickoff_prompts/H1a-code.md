@@ -20,6 +20,7 @@
 - Production code/docs only; tests handled in H1a-test.
 - Avoid removing existing detection hooks; extend them to report structured state.
 - Ensure null-handling remains safe when managers unsupported on a platform.
+- R1c locked down replay world toggles + verbose `[replay] warn:` output—keep those CLI behaviors intact while updating health telemetry/docs and reference them when explaining world-vs-host assumptions.
 
 ## Required Commands
 ```

@@ -20,6 +20,7 @@
 - Tests/fixtures only; keep detections mocked so real host tooling isn’t required.
 - Use hermetic temp directories/environment overrides to mimic manager presence.
 - Document any manual `substrate health` runs used for sample output.
+- Preserve the R1c replay world coverage assumptions: the CLI already emits `[replay] world toggle` + warning lines when worlds are disabled, so your tests should avoid mutating those toggles outside of targeted health scenarios and keep fixtures aligned with the new verbose output.
 
 ## Required Commands
 ```
