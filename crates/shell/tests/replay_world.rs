@@ -127,7 +127,7 @@ fn replay_keeps_standard_path_when_nft_succeeds() {
 }
 
 #[test]
-fn replay_no_world_flag_skips_world_warnings() {
+fn replay_no_world_flag_reports_world_toggle() {
     let fixture = ShellEnvFixture::new();
     let cwd = fixture.home().join("workspace-no-world-flag");
     fs::create_dir_all(&cwd).expect("failed to create replay cwd");
@@ -146,8 +146,13 @@ fn replay_no_world_flag_skips_world_warnings() {
     let assert = cmd.assert().success();
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
     assert!(
-        !stderr.contains("[replay] warn:"),
-        "no-world flag should suppress replay warnings, stderr:\n{}",
+        stderr.contains("[replay] world toggle: disabled (--no-world flag)"),
+        "no-world flag should emit a world toggle summary, stderr:\n{}",
+        stderr
+    );
+    assert!(
+        stderr.contains("[replay] warn: running without world isolation (--no-world flag)"),
+        "no-world flag should document the opt-out reason, stderr:\n{}",
         stderr
     );
     assert!(
@@ -163,7 +168,7 @@ fn replay_no_world_flag_skips_world_warnings() {
 }
 
 #[test]
-fn replay_env_override_disables_world_execution() {
+fn replay_env_override_reports_world_toggle() {
     let fixture = ShellEnvFixture::new();
     let cwd = fixture.home().join("workspace-no-world-env");
     fs::create_dir_all(&cwd).expect("failed to create replay cwd");
@@ -182,8 +187,15 @@ fn replay_env_override_disables_world_execution() {
     let assert = cmd.assert().success();
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
     assert!(
-        !stderr.contains("[replay] warn:"),
-        "env disable should suppress replay warnings, stderr:\n{}",
+        stderr.contains("[replay] world toggle: disabled (SUBSTRATE_REPLAY_USE_WORLD override)"),
+        "env disable should emit the world toggle summary, stderr:\n{}",
+        stderr
+    );
+    assert!(
+        stderr.contains(
+            "[replay] warn: running without world isolation (SUBSTRATE_REPLAY_USE_WORLD=disabled)"
+        ),
+        "env disable should document the opt-out reason, stderr:\n{}",
         stderr
     );
     assert!(
