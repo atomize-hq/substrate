@@ -81,3 +81,12 @@ Template:
 - Created worktree: pending (creating ps-s1a-agent-integ next)
 - Plan: merge ps-s1a-agent-code/test, run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p world-agent`, update docs/tasks, prep S1b prompts
 - Blockers: branch lacks upstream remote; local-only branch acceptable for integration
+
+## [2025-12-02 16:29 UTC] Integration Agent – S1a-integ – END
+- Worktree commits: 6e20e18 (feat: add LISTEN_FDS support to world-agent); 5da8386, 4fb045a (test: LISTEN_FDS harness coverage); docs merge only
+- Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p world-agent`
+- Results: pass / pass / pass
+- Scripts executed: n/a
+- Kickoff prompts created: refreshed `docs/project_management/next/p0-platform-stability/kickoff_prompts/S1b-code.md` + `S1b-test.md` to reference socket-activated world-agent behavior
+- Docs commit: pending (`docs: finish S1a-integ`)
+- Next steps / blockers: fast-forward ps-s1a-agent-integ onto feat/p0-platform-stability, drop worktree

@@ -12,6 +12,7 @@
    ```
 
 ## Spec
+- Leverage the S1a agent plumbing (LISTEN_FDS-aware world-agent with activation telemetry) when crafting fixtures to assert shell components surface the inherited socket mode.
 - Extend shell/world doctor integration tests to simulate socket activation (pre-created UDS) and confirm readiness succeeds only when the agent responds.
 - Update shim status tests to expect the new socket-activation messaging (text + JSON).
 - Add telemetry assertions verifying spans/log entries capture the activation flag.

@@ -12,6 +12,7 @@
    ```
 
 ## Spec
+- Build on the S1a agent changes (world-agent now consumes LISTEN_FDS/FD_START and emits socket-activation telemetry) so shell binaries respect the inherited sockets.
 - Update `ensure_world_agent_ready`, `world_enable`, shim status, and related telemetry so the shell tolerates pre-existing sockets created by systemd.
 - When `substrate world doctor --json` or `substrate --shim-status` detect socket activation, emit explicit messaging (text + JSON) describing the mode.
 - Propagate a socket-activation flag through spans so CLI completions can differentiate the transport.
