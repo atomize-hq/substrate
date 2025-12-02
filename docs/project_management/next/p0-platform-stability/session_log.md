@@ -389,3 +389,11 @@ Template:
 - Results: CLI tests now assert `[replay] scopes: []` plus world-strategy/warning differences for default vs opt-out runs; env + flag toggles skip nft warnings as intended
 - R1c-integ prompt (`docs/project_management/next/p0-platform-stability/kickoff_prompts/R1c-integ.md`) already covers the merged scope, so no edits required
 - Next steps / blockers: none; merged `ps-r1c-coverage-test` into `feat/p0-platform-stability` and removed the worktree after doc updates
+
+## [2025-12-02 19:10 UTC] Integration Agent – R1c-integ – START
+- Checked out feat/p0-platform-stability; `git pull --ff-only` still fails because the branch has no tracking ref on origin (documented for this effort, proceeding with local tip).
+- Verified R1c-code/test are marked `completed` in `tasks.json` and reviewed their session log entries/commits (`6eecae9`, `4b08394`) plus `p0_platform_stability_plan.md` + kickoff prompts for alignment.
+- Updated `tasks.json` (`R1c-integ` → `in_progress`) and added this START entry; docs commit pending until the start checklist wraps.
+- Worktree creation pending (`ps-r1c-coverage-integ` → `wt/ps-r1c-coverage-integ`) once the doc-only commit lands.
+- Plan: branch ps-r1c-coverage-integ, merge ps-r1c-coverage-code/test, resolve conflicts, run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-replay -- --nocapture`, `cargo test -p substrate-shell replay_world`, and capture the required `substrate --replay` smoke with/without worlds (documenting skips if isolation is unavailable).
+- Blockers: upstream branch missing on origin (can't `git pull --ff-only`), no provisioned world-agent socket so CLI runs rely on stored spans; will note these contexts around replay commands.

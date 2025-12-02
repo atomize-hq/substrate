@@ -770,7 +770,7 @@
       "name": "Replay world coverage (integration)",
       "type": "integration",
       "phase": "R1c – Replay World Coverage",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge R1c code/test branches, re-run fmt/lint/tests, and document readiness for the health manager fixes.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
