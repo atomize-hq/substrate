@@ -97,3 +97,11 @@ Template:
 - Created worktree: pending (ps-r1a-isolation-code next)
 - Plan: implement nft cgroup fallback + diagnostics in replay/world backends, add cleanup helper + docs updates, run fmt/clippy/test per spec, merge branch + update tasks/logs
 - Blockers: branch lacks upstream remote; local sync acceptable
+
+## [2025-12-02 16:34 UTC] Code Agent – S1b-code – START
+- Checked out feat/p0-platform-stability, `git pull --ff-only` failed (remote ref feat/p0-platform-stability missing; proceeding with local branch)
+- Reviewed p0 plan, tasks.json, session log, and S1a outputs (session entries + merged code) along with this prompt
+- Updated tasks.json + session_log.md (commit pending)
+- Created worktree: pending (ps-s1b-shell-code next)
+- Plan: add socket-activation awareness across ensure_world_agent_ready/world_enable/shim status, thread telemetry flag into spans + doctor JSON/text, run fmt/clippy/test + manual doctor/shim checks, merge branch, update docs/logs
+- Blockers: none beyond missing remote tracking (documented)

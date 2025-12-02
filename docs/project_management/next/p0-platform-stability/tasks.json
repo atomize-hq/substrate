@@ -129,7 +129,7 @@
       "name": "Socket activation – shell readiness (code)",
       "type": "code",
       "phase": "S1b – Shell Readiness & Telemetry",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Update shell/world orchestration (ensure_world_agent_ready, world_enable, shim status) to tolerate pre-bound sockets and emit socket-activation telemetry.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
