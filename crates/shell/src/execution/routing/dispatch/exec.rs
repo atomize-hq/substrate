@@ -372,12 +372,14 @@ pub(crate) fn execute_command(
     #[cfg(target_os = "macos")]
     {
         let world_enabled = std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
-        let uds_exists = pw::get_context()
+        let context = pw::get_context();
+        let uds_exists = context
+            .as_ref()
             .map(|c| matches!(&c.transport, pw::WorldTransport::Unix(path) if path.exists()))
             .unwrap_or(false);
         if world_enabled || uds_exists {
             if let Some(active_span) = span.as_mut() {
-                if let Some(ctx) = pw::get_context() {
+                if let Some(ctx) = context.clone() {
                     active_span.set_transport(world_transport_to_meta(&ctx.transport));
                 }
             }
@@ -396,10 +398,16 @@ pub(crate) fn execute_command(
                 Ok(outcome) => agent_result = Some(outcome),
                 Err(e) => {
                     static WARN_ONCE: std::sync::Once = std::sync::Once::new();
-                    WARN_ONCE.call_once(|| {
+                    let path_hint = context
+                        .as_ref()
+                        .map(|ctx| ctx.transport.to_string())
+                        .unwrap_or_else(|| "mac context unavailable".to_string());
+                    let err_msg = e.to_string();
+                    WARN_ONCE.call_once(move || {
                         eprintln!(
-                            "substrate: warn: mac world-agent exec failed, running direct: {}",
-                            e
+                            "substrate: warn: shell world-agent path ({}) exec failed, running direct: {}",
+                            path_hint,
+                            err_msg
                         );
                     });
                 }
@@ -432,10 +440,16 @@ pub(crate) fn execute_command(
                 Ok(outcome) => agent_result = Some(outcome),
                 Err(e) => {
                     static WARN_ONCE: std::sync::Once = std::sync::Once::new();
-                    WARN_ONCE.call_once(|| {
+                    let path_hint = context
+                        .as_ref()
+                        .map(|ctx| ctx.transport.to_string())
+                        .unwrap_or_else(|| "windows context unavailable".to_string());
+                    let err_msg = e.to_string();
+                    WARN_ONCE.call_once(move || {
                         eprintln!(
-                            "substrate: warn: windows world-agent exec failed, running direct: {}",
-                            e
+                            "substrate: warn: shell world-agent path ({}) exec failed, running direct: {}",
+                            path_hint,
+                            err_msg
                         );
                     });
                 }
@@ -463,7 +477,7 @@ pub(crate) fn execute_command(
                 Ok(outcome) => agent_result = Some(outcome),
                 Err(e) => {
                     eprintln!(
-                        "substrate: warn: shell world-agent exec failed, running direct: {}",
+                        "substrate: warn: shell world-agent path (/run/substrate.sock) exec failed, running direct: {}",
                         e
                     );
                 }

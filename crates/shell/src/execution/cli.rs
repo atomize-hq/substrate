@@ -99,7 +99,7 @@ pub struct Cli {
     #[arg(long = "replay", value_name = "SPAN_ID", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status", "shim_remove", "trace"])]
     pub replay: Option<String>,
 
-    /// Verbose output during replay (prints command, cwd, mode, and capability warnings)
+    /// Verbose replay diagnostics (command/cwd/mode, capability warnings, world strategy + scopes)
     #[arg(long = "replay-verbose", requires = "replay")]
     pub replay_verbose: bool,
 
