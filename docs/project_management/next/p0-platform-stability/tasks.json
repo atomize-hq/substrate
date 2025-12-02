@@ -476,7 +476,7 @@
       "name": "Replay isolation fallback (integration)",
       "type": "integration",
       "phase": "R1a – Isolation Fallback & Diagnostics",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge R1a code/test branches, re-run fmt/lint/tests, and document readiness for verbose scope work.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",

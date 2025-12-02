@@ -173,3 +173,12 @@ Template:
 - Created branch/worktree setup pending (ps-r1a-isolation-integ → wt/ps-r1a-isolation-integ)
 - Plan: merge replay isolation code/test changes, resolve conflicts across replay/shell/world/docs, run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-replay -- --nocapture`, log any manual cleanup helpers/replay commands, fast-forward back to feat/p0-platform-stability, update docs/tasks/session log, prep R1b prompts
 - Blockers: inherited dirty files must remain untouched outside integration scope; no additional blockers
+
+## [2025-12-02 17:39 UTC] Integration Agent – R1a-integ – END
+- Worktree commits: 9218ff8 (feat: integrate replay isolation fallback) merged into feat/p0-platform-stability
+- Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world -- --nocapture`
+- Results: pass / pass / pass / pass (Linux host). No manual `substrate --replay` or `substrate world cleanup` runs beyond the new automated coverage.
+- Dirty-state handling: captured initial `git status -sb`, stashed the inherited files, reapplied within `wt/ps-r1a-isolation-integ`, and staged only the whitelist of replay/shell/world/docs paths before committing.
+- Kickoff prompts: reviewed `R1b-code` + `R1b-test`; specs already mention verbose scopes/warning expectations and the replay-world suite, so no edits needed.
+- Docs commit: pending (`docs: finish R1a-integ` – will capture tasks/session log update + prompt confirmation)
+- Next steps / blockers: ready for R1b scope; remove worktree after doc commit.
