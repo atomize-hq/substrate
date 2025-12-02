@@ -255,7 +255,7 @@
       "name": "Socket activation – provisioning & docs (code)",
       "type": "code",
       "phase": "S1c – Provisioning & Docs",
-      "status": "completed",
+      "status": "pending",
       "description": "Update Linux/Lima/WSL provisioning + uninstall scripts and documentation to deploy/manage .service + .socket units.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
@@ -433,7 +433,7 @@
       "name": "Replay isolation fallback (test)",
       "type": "test",
       "phase": "R1a – Isolation Fallback & Diagnostics",
-      "status": "pending",
+      "status": "completed",
       "description": "Add replay/world tests covering nft cgroup fallback paths, cleanup diagnostics, and regression coverage for existing isolation behavior.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
