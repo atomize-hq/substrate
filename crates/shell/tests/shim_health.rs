@@ -68,6 +68,53 @@ managers:
 "#
 }
 
+fn parity_world_deps_report(fixture: &DoctorFixture) -> Value {
+    json!({
+        "manifest": {
+            "base": fixture.home().join(".substrate/world-deps.yaml"),
+            "overlay": null,
+            "overlay_exists": false
+        },
+        "world_disabled_reason": null,
+        "tools": [
+            {
+                "name": "direnv",
+                "host_detected": false,
+                "provider": "custom",
+                "guest": {
+                    "status": "missing",
+                    "reason": "not installed in world"
+                }
+            },
+            {
+                "name": "asdf",
+                "host_detected": true,
+                "provider": "custom",
+                "guest": {
+                    "status": "missing",
+                    "reason": "sync pending"
+                }
+            },
+            {
+                "name": "conda",
+                "host_detected": false,
+                "provider": "custom",
+                "guest": {
+                    "status": "present"
+                }
+            },
+            {
+                "name": "pyenv",
+                "host_detected": true,
+                "provider": "custom",
+                "guest": {
+                    "status": "present"
+                }
+            }
+        ]
+    })
+}
+
 #[test]
 fn health_json_reports_summary_details() {
     let fixture = DoctorFixture::new(sample_manifest());
@@ -352,50 +399,7 @@ fn health_human_summary_reports_world_deps_error() {
 #[test]
 fn health_summary_classifies_manager_parity_states() {
     let fixture = DoctorFixture::new(parity_manifest());
-    fixture.write_world_deps_fixture(json!({
-        "manifest": {
-            "base": fixture.home().join(".substrate/world-deps.yaml"),
-            "overlay": null,
-            "overlay_exists": false
-        },
-        "world_disabled_reason": null,
-        "tools": [
-            {
-                "name": "direnv",
-                "host_detected": false,
-                "provider": "custom",
-                "guest": {
-                    "status": "missing",
-                    "reason": "not installed in world"
-                }
-            },
-            {
-                "name": "asdf",
-                "host_detected": true,
-                "provider": "custom",
-                "guest": {
-                    "status": "missing",
-                    "reason": "sync pending"
-                }
-            },
-            {
-                "name": "conda",
-                "host_detected": false,
-                "provider": "custom",
-                "guest": {
-                    "status": "present"
-                }
-            },
-            {
-                "name": "pyenv",
-                "host_detected": true,
-                "provider": "custom",
-                "guest": {
-                    "status": "present"
-                }
-            }
-        ]
-    }));
+    fixture.write_world_deps_fixture(parity_world_deps_report(&fixture));
 
     let output = fixture
         .command()
@@ -488,5 +492,47 @@ fn health_summary_classifies_manager_parity_states() {
             .map(|line| !line.contains("direnv"))
             .unwrap_or(true)),
         "direnv should not be flagged for attention when missing on host and world: {failures:?}"
+    );
+}
+
+#[test]
+fn health_human_summary_respects_manager_parity_states() {
+    let fixture = DoctorFixture::new(parity_manifest());
+    fixture.write_world_deps_fixture(parity_world_deps_report(&fixture));
+
+    let output = fixture
+        .command()
+        .arg("health")
+        .output()
+        .expect("failed to run substrate health");
+    assert!(
+        output.status.success(),
+        "health command should succeed for parity summary scenario"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Managers detected: 2/4"),
+        "manager detection summary missing: {stdout}"
+    );
+    assert!(
+        stdout.contains("Guest tool sync: missing 2 (direnv, asdf)"),
+        "guest sync summary missing parity counts: {stdout}"
+    );
+    assert!(
+        stdout.contains("managers require world sync: asdf"),
+        "host-only manager should be flagged for world sync attention: {stdout}"
+    );
+    assert!(
+        !stdout.contains("managers require world sync: direnv"),
+        "both-missing manager should not be flagged for attention: {stdout}"
+    );
+    assert!(
+        !stdout.contains("managers require world sync: conda"),
+        "world-only manager should not be flagged for attention: {stdout}"
+    );
+    assert!(
+        stdout.contains("Overall status: attention required"),
+        "overall attention summary missing: {stdout}"
     );
 }
