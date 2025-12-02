@@ -35,28 +35,36 @@ managers:
 fn parity_manifest() -> &'static str {
     r#"version: 1
 managers:
-  - name: HostOnly
-    priority: 10
-    detect:
-      script: "exit 0"
-    init:
-      shell: |
-        export HOST_ONLY_MANAGER=1
-  - name: WorldOnly
+  - name: direnv
     priority: 10
     detect:
       files:
-        - "/nonexistent/world-only"
+        - "/nonexistent/direnv"
     init:
       shell: |
-        export WORLD_ONLY_MANAGER=1
-  - name: Matched
+        export DIRENV_MANAGER=1
+  - name: asdf
     priority: 10
     detect:
       script: "exit 0"
     init:
       shell: |
-        export MATCHED_MANAGER=1
+        export ASDF_MANAGER=1
+  - name: conda
+    priority: 10
+    detect:
+      files:
+        - "/nonexistent/conda"
+    init:
+      shell: |
+        export CONDA_MANAGER=1
+  - name: pyenv
+    priority: 10
+    detect:
+      script: "exit 0"
+    init:
+      shell: |
+        export PYENV_MANAGER=1
 "#
 }
 
@@ -353,16 +361,25 @@ fn health_summary_classifies_manager_parity_states() {
         "world_disabled_reason": null,
         "tools": [
             {
-                "name": "HostOnly",
+                "name": "direnv",
+                "host_detected": false,
+                "provider": "custom",
+                "guest": {
+                    "status": "missing",
+                    "reason": "not installed in world"
+                }
+            },
+            {
+                "name": "asdf",
                 "host_detected": true,
                 "provider": "custom",
                 "guest": {
                     "status": "missing",
-                    "reason": "not synced"
+                    "reason": "sync pending"
                 }
             },
             {
-                "name": "WorldOnly",
+                "name": "conda",
                 "host_detected": false,
                 "provider": "custom",
                 "guest": {
@@ -370,7 +387,7 @@ fn health_summary_classifies_manager_parity_states() {
                 }
             },
             {
-                "name": "Matched",
+                "name": "pyenv",
                 "host_detected": true,
                 "provider": "custom",
                 "guest": {
@@ -393,37 +410,66 @@ fn health_summary_classifies_manager_parity_states() {
         .get("summary")
         .expect("summary missing from health payload");
 
-    assert_eq!(summary["missing_managers"], json!(["WorldOnly"]));
-    assert_eq!(summary["attention_required_managers"], json!(["HostOnly"]));
-    assert_eq!(summary["world_only_managers"], json!(["WorldOnly"]));
+    let mut missing_managers: Vec<String> = summary
+        .get("missing_managers")
+        .and_then(Value::as_array)
+        .expect("missing_managers array missing")
+        .iter()
+        .map(|val| val.as_str().unwrap().to_string())
+        .collect();
+    missing_managers.sort();
+    assert_eq!(missing_managers, vec!["conda", "direnv"]);
+
+    let mut missing_guest_tools: Vec<String> = summary
+        .get("missing_guest_tools")
+        .and_then(Value::as_array)
+        .expect("missing_guest_tools array missing")
+        .iter()
+        .map(|val| val.as_str().unwrap().to_string())
+        .collect();
+    missing_guest_tools.sort();
+    assert_eq!(missing_guest_tools, vec!["asdf", "direnv"]);
+    assert_eq!(summary["attention_required_managers"], json!(["asdf"]));
+    assert_eq!(summary["world_only_managers"], json!(["conda"]));
 
     let states = summary["manager_states"]
         .as_array()
         .expect("manager states missing");
     let host_only = states
         .iter()
-        .find(|entry| entry["name"] == "HostOnly")
-        .expect("HostOnly entry missing");
-    assert_eq!(host_only["host_present"], json!(true));
+        .find(|entry| entry["name"] == "direnv")
+        .expect("direnv entry missing");
+    assert_eq!(host_only["host_present"], json!(false));
     assert_eq!(host_only["world"]["status"], json!("missing"));
-    assert_eq!(host_only["attention_required"], json!(true));
+    assert_eq!(host_only["attention_required"], json!(false));
+    assert_eq!(host_only["world_only"], json!(false));
 
     let world_only = states
         .iter()
-        .find(|entry| entry["name"] == "WorldOnly")
-        .expect("WorldOnly entry missing");
+        .find(|entry| entry["name"] == "conda")
+        .expect("conda entry missing");
     assert_eq!(world_only["host_present"], json!(false));
     assert_eq!(world_only["world"]["status"], json!("present"));
     assert_eq!(world_only["world_only"], json!(true));
+    assert_eq!(world_only["attention_required"], json!(false));
 
     let matched = states
         .iter()
-        .find(|entry| entry["name"] == "Matched")
-        .expect("Matched entry missing");
+        .find(|entry| entry["name"] == "asdf")
+        .expect("asdf entry missing");
     assert_eq!(matched["host_present"], json!(true));
-    assert_eq!(matched["world"]["status"], json!("present"));
-    assert_eq!(matched["attention_required"], json!(false));
+    assert_eq!(matched["world"]["status"], json!("missing"));
+    assert_eq!(matched["attention_required"], json!(true));
     assert_eq!(matched["world_only"], json!(false));
+
+    let pyenv_state = states
+        .iter()
+        .find(|entry| entry["name"] == "pyenv")
+        .expect("pyenv entry missing");
+    assert_eq!(pyenv_state["host_present"], json!(true));
+    assert_eq!(pyenv_state["world"]["status"], json!("present"));
+    assert_eq!(pyenv_state["attention_required"], json!(false));
+    assert_eq!(pyenv_state["world_only"], json!(false));
 
     assert_eq!(summary["ok"], json!(false));
     let failures = summary["failures"]
@@ -432,8 +478,15 @@ fn health_summary_classifies_manager_parity_states() {
     assert!(
         failures.iter().any(|value| value
             .as_str()
-            .map(|line| line.contains("HostOnly"))
+            .map(|line| line.contains("asdf"))
             .unwrap_or(false)),
-        "failure summary should call out host-only managers: {failures:?}"
+        "failure summary should call out asdf attention requirements: {failures:?}"
+    );
+    assert!(
+        failures.iter().all(|value| value
+            .as_str()
+            .map(|line| !line.contains("direnv"))
+            .unwrap_or(true)),
+        "direnv should not be flagged for attention when missing on host and world: {failures:?}"
     );
 }
