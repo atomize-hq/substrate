@@ -216,7 +216,7 @@
       "name": "Socket activation – shell readiness (integration)",
       "type": "integration",
       "phase": "S1b – Shell Readiness & Telemetry",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge S1b code/test worktrees, re-run fmt/lint/tests, and update docs/logs before provisioning changes begin.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",

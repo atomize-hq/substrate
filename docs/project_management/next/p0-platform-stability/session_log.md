@@ -209,6 +209,15 @@ Template:
 - Plan: merge ps-s1b-shell-code/test, run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-shell world_enable`, `substrate world doctor --json`, then update docs/tasks and prep S1c prompts
 - Blockers: `substrate world doctor --json` requires provisioned socket-activated agent; expect to log skip if service unavailable here
 
+## [2025-12-02 17:45 UTC] Integration Agent – S1b-integ – END
+- Worktree commits: ccaa26a (merge ps-s1b-shell-test into ps-s1b-shell-integ)
+- Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-shell world_enable`; `./target/debug/substrate world doctor --json`
+- Results: pass / pass / pass / pass (doctor reported inactive `.socket`/`.service` but overall `ok: true`)
+- Scripts executed: `substrate world doctor --json` (Linux host; socket absent as expected in dev env)
+- Kickoff prompts created: reviewed `S1c-code` + `S1c-test`; no edits needed (already reference socket activation/provisioning focus)
+- Docs commit: pending (`docs: finish S1b-integ`)
+- Next steps / blockers: fast-forward feat/p0-platform-stability with ccaa26a, remove worktree post-doc update
+
 ## [2025-12-02 18:05 UTC] Code Agent – R1b-code – START
 - Checked out feat/p0-platform-stability; `git pull --ff-only` failed (no upstream branch)
 - Reviewed p0 plan, tasks.json, session log, R1a outputs, and R1b-code prompt
