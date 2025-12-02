@@ -69,7 +69,14 @@ FAKE_ROOT="${WORK_ROOT}/fakeroot"
 STUB_BIN="${WORK_ROOT}/stub-bin"
 HOME_DIR="${WORK_ROOT}/home"
 INSTALL_LOG="${WORK_ROOT}/install.log"
+UNINSTALL_LOG="${WORK_ROOT}/uninstall.log"
+SYSTEMCTL_LOG="${WORK_ROOT}/systemctl.current.log"
+EXPECT_SOCKET_UNITS="${SUBSTRATE_INSTALLER_EXPECT_SOCKET:-0}"
+if [[ "${EXPECT_SOCKET_UNITS}" -eq 1 ]]; then
+  log "Socket unit enforcement enabled (SUBSTRATE_INSTALLER_EXPECT_SOCKET=1)."
+fi
 mkdir -p "${PREFIX}" "${ARTIFACT_DIR}" "${FAKE_ROOT}" "${STUB_BIN}" "${HOME_DIR}"
+: > "${SYSTEMCTL_LOG}"
 
 cleanup() {
   if [[ "${KEEP_ROOT}" -eq 0 ]]; then
@@ -79,6 +86,44 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+reset_systemctl_log() {
+  : > "${SYSTEMCTL_LOG}"
+}
+
+capture_systemctl_log() {
+  local phase="$1"
+  local target="${WORK_ROOT}/systemctl-${phase}.log"
+  if [[ -s "${SYSTEMCTL_LOG}" ]]; then
+    cp "${SYSTEMCTL_LOG}" "${target}"
+  else
+    : > "${target}"
+  fi
+  reset_systemctl_log
+  log "Captured systemctl log for ${phase}: ${target}"
+  printf '%s\n' "${target}"
+}
+
+assert_systemctl_log() {
+  local phase="$1"
+  local log_path="$2"
+  local require_activity="${3:-1}"
+  if [[ ! -s "${log_path}" ]]; then
+    if [[ "${require_activity}" -eq 0 ]]; then
+      log "No systemctl activity recorded for ${phase} (allowed for this scenario)."
+      return
+    fi
+    fatal "Expected systemctl activity during ${phase}, but log is empty: ${log_path}"
+  fi
+  local total
+  total="$(wc -l < "${log_path}")"
+  local socket_hits
+  socket_hits="$(grep -c 'substrate-world-agent\.socket' "${log_path}" || true)"
+  log "[${phase}] systemctl calls: ${total}; socket entries: ${socket_hits}"
+  if [[ "${EXPECT_SOCKET_UNITS}" -eq 1 && "${socket_hits}" -eq 0 ]]; then
+    fatal "[${phase}] expected socket unit commands (SUBSTRATE_INSTALLER_EXPECT_SOCKET=1), but none recorded. See ${log_path}."
+  fi
+}
 
 compute_sha256() {
   local path="$1"
@@ -115,13 +160,21 @@ write_stub_sudo() {
 #!/usr/bin/env bash
 set -euo pipefail
 FAKE_ROOT="${FAKE_ROOT:-}"
+SYSTEMCTL_LOG="${SUBSTRATE_TEST_SYSTEMCTL_LOG:-}"
 if [[ $# -lt 1 ]]; then
   exit 0
 fi
 cmd="$1"
 shift || true
+while [[ "${cmd}" == -* && $# -gt 0 ]]; do
+  cmd="$1"
+  shift || true
+done
+if [[ "${cmd}" == -* ]]; then
+  exit 0
+fi
 
-rewrite_dest_args() {
+rewrite_dest_arg() {
   local -n src_args=$1
   local rewritten=()
   local last_index=$((${#src_args[@]} - 1))
@@ -136,14 +189,40 @@ rewrite_dest_args() {
   src_args=("${rewritten[@]}")
 }
 
+rewrite_all_paths() {
+  local -n src_args=$1
+  local rewritten=()
+  for val in "${src_args[@]}"; do
+    if [[ "${val}" == /* && -n "${FAKE_ROOT}" ]]; then
+      rewritten+=("${FAKE_ROOT}${val}")
+    else
+      rewritten+=("${val}")
+    fi
+  done
+  src_args=("${rewritten[@]}")
+}
+
+log_systemctl() {
+  if [[ -z "${SYSTEMCTL_LOG}" ]]; then
+    return
+  fi
+  printf 'systemctl %s\n' "$*" >>"${SYSTEMCTL_LOG}"
+}
+
 case "${cmd}" in
   systemctl)
+    log_systemctl "$@"
     exit 0
     ;;
-  install)
+  install|cp|mv|ln)
     args=("$@")
-    rewrite_dest_args args
-    exec install "${args[@]}"
+    rewrite_dest_arg args
+    exec "${cmd}" "${args[@]}"
+    ;;
+  rm|mkdir|chmod|chown)
+    args=("$@")
+    rewrite_all_paths args
+    exec "${cmd}" "${args[@]}"
     ;;
   *)
     args=("$@")
@@ -157,7 +236,7 @@ EOF
 prepare_stub_bin() {
   write_stub_sudo
   write_stub_jq
-  for cmd in curl fusermount fuse-overlayfs ip nft systemctl limactl; do
+  for cmd in curl fusermount fuse-overlayfs ip nft systemctl limactl pkill pgrep; do
     write_stub_command "${cmd}"
   done
 }
@@ -384,12 +463,28 @@ run_install() {
     PATH="${harness_path}" \
     SHIM_ORIGINAL_PATH="${harness_path}" \
     FAKE_ROOT="${FAKE_ROOT}" \
+    SUBSTRATE_TEST_SYSTEMCTL_LOG="${SYSTEMCTL_LOG}" \
     "${REPO_ROOT}/scripts/substrate/install-substrate.sh" "${args[@]}" \
     >"${INSTALL_LOG}" 2>&1; then
     cat "${INSTALL_LOG}" >&2
     fatal "Install script failed; see ${INSTALL_LOG}"
   fi
   cat "${INSTALL_LOG}"
+}
+
+run_uninstall() {
+  local harness_path="${STUB_BIN}:${PATH}"
+  if ! HOME="${HOME_DIR}" \
+    PATH="${harness_path}" \
+    SHIM_ORIGINAL_PATH="${harness_path}" \
+    FAKE_ROOT="${FAKE_ROOT}" \
+    SUBSTRATE_TEST_SYSTEMCTL_LOG="${SYSTEMCTL_LOG}" \
+    "${REPO_ROOT}/scripts/substrate/uninstall-substrate.sh" \
+    >"${UNINSTALL_LOG}" 2>&1; then
+    cat "${UNINSTALL_LOG}" >&2
+    fatal "Uninstall script failed; see ${UNINSTALL_LOG}"
+  fi
+  cat "${UNINSTALL_LOG}"
 }
 
 assert_config_init_hint_logged() {
@@ -403,12 +498,22 @@ assert_config_init_hint_logged() {
 }
 
 prepare_stub_bin
+reset_systemctl_log
 build_fake_release
 run_install
+install_systemctl_log="$(capture_systemctl_log install)"
 assert_config_init_hint_logged
 assert_install_config
 assert_manifest_present
 run_health_smoke
+if [[ "${SCENARIO}" == "default" ]]; then
+  assert_systemctl_log "install" "${install_systemctl_log}" 1
+else
+  assert_systemctl_log "install" "${install_systemctl_log}" 0
+fi
+run_uninstall
+uninstall_systemctl_log="$(capture_systemctl_log uninstall)"
+assert_systemctl_log "uninstall" "${uninstall_systemctl_log}" 1
 
 log "Scenario ${SCENARIO} completed using PREFIX=${PREFIX}"
 log "Temp root: ${WORK_ROOT}"
