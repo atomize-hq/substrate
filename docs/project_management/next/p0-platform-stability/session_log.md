@@ -190,3 +190,11 @@ Template:
 - Worktree setup pending (`ps-h1a-health-integ` → `wt/ps-h1a-health-integ`)
 - Plan: merge ps-h1a-health-code/test commits, run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-shell health`, `substrate health --json`, then update docs/tasks and prep H1b prompts
 - Blockers: upstream branch missing (documented); otherwise none
+
+## [2025-12-02 17:43 UTC] Integration Agent – S1b-integ – START
+- Checked out feat/p0-platform-stability; `git pull --ff-only` failed (remote ref missing, working from local branch)
+- Confirmed S1b-code/test merged and marked completed in tasks.json
+- Updated tasks.json + session_log.md (current entry; doc commit pending)
+- Worktree setup pending (`ps-s1b-shell-integ` → `wt/ps-s1b-shell-integ`)
+- Plan: merge ps-s1b-shell-code/test, run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-shell world_enable`, `substrate world doctor --json`, then update docs/tasks and prep S1c prompts
+- Blockers: `substrate world doctor --json` requires provisioned socket-activated agent; expect to log skip if service unavailable here
