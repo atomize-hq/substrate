@@ -1051,7 +1051,10 @@ provision_macos_world() {
   run_cmd limactl copy "${linux_agent}" substrate:/tmp/world-agent
   run_cmd limactl shell substrate sudo mv /tmp/world-agent /usr/local/bin/substrate-world-agent
   run_cmd limactl shell substrate sudo chmod 755 /usr/local/bin/substrate-world-agent
-  run_cmd limactl shell substrate sudo systemctl enable --now substrate-world-agent
+  run_cmd limactl shell substrate sudo systemctl daemon-reload
+  run_cmd limactl shell substrate sudo systemctl enable substrate-world-agent.service
+  run_cmd limactl shell substrate sudo systemctl enable --now substrate-world-agent.socket
+  run_cmd limactl shell substrate sudo systemctl restart substrate-world-agent.service
 }
 
 provision_linux_world() {
@@ -1116,6 +1119,7 @@ Restart=always
 RestartSec=5
 Environment=RUST_LOG=info
 Environment=SUBSTRATE_AGENT_TCP_PORT=61337
+Environment=SUBSTRATE_WORLD_SOCKET=/run/substrate.sock
 RuntimeDirectory=substrate
 RuntimeDirectoryMode=0750
 StateDirectory=substrate
@@ -1134,11 +1138,34 @@ AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHR
 WantedBy=multi-user.target
 UNIT
 
+  local socket_unit
+  socket_unit="${TMPDIR}/substrate-world-agent.socket"
+  cat > "${socket_unit}" <<UNIT
+[Unit]
+Description=Substrate World Agent Socket
+PartOf=substrate-world-agent.service
+
+[Socket]
+ListenStream=/run/substrate.sock
+SocketMode=0660
+SocketUser=root
+SocketGroup=root
+DirectoryMode=0750
+RemoveOnStop=yes
+Service=substrate-world-agent.service
+
+[Install]
+WantedBy=sockets.target
+UNIT
+
   run_cmd sudo install -Dm0644 "${unit_file}" "${service_path}"
+  run_cmd sudo install -Dm0644 "${socket_unit}" /etc/systemd/system/substrate-world-agent.socket
   run_cmd sudo systemctl daemon-reload
-  run_cmd sudo systemctl enable --now substrate-world-agent
-  run_cmd sudo systemctl restart substrate-world-agent
-  run_cmd sudo systemctl status substrate-world-agent --no-pager --lines=10 || true
+  run_cmd sudo systemctl enable substrate-world-agent.service
+  run_cmd sudo systemctl enable --now substrate-world-agent.socket
+  run_cmd sudo systemctl restart substrate-world-agent.service
+  run_cmd sudo systemctl status substrate-world-agent.socket --no-pager --lines=10 || true
+  run_cmd sudo systemctl status substrate-world-agent.service --no-pager --lines=10 || true
 }
 
 run_world_checks() {

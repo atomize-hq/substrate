@@ -5,7 +5,8 @@ mod support;
 use predicates::prelude::*;
 use serde_json::Value;
 use std::fs;
-use support::{get_substrate_binary, temp_dir};
+use support::{get_substrate_binary, temp_dir, AgentSocket, SocketResponse};
+use tempfile::Builder;
 
 #[test]
 fn test_command_start_finish_json_roundtrip() {
@@ -189,4 +190,72 @@ fn test_process_group_signal_handling() {
 
     let log_content = fs::read_to_string(&log_file).unwrap();
     assert!(log_content.contains("command_complete"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn command_logs_include_socket_activation_flag() {
+    let temp = temp_dir("substrate-test-");
+    let log_file = temp.path().join("trace.jsonl");
+    let socket_temp = Builder::new()
+        .prefix("substrate-activation-")
+        .tempdir_in("/tmp")
+        .expect("failed to create socket tempdir");
+    let socket_path = socket_temp.path().join("activation.sock");
+    let _socket = AgentSocket::start(&socket_path, SocketResponse::Capabilities);
+
+    get_substrate_binary()
+        .env("SHIM_TRACE_LOG", &log_file)
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "socket_activation")
+        .arg("-c")
+        .arg("true")
+        .assert()
+        .success();
+
+    let log_content = fs::read_to_string(&log_file).unwrap();
+    let events: Vec<Value> = log_content
+        .lines()
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect();
+    let start = events
+        .iter()
+        .find(|event| event["event_type"] == "command_start" && event["component"] == "shell")
+        .expect("missing shell command_start event");
+    assert_eq!(
+        start.get("socket_activation"),
+        Some(&Value::Bool(true)),
+        "expected socket_activation flag in telemetry event: {start:?}"
+    );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn command_logs_mark_manual_mode_without_socket_activation() {
+    let temp = temp_dir("substrate-test-");
+    let log_file = temp.path().join("trace.jsonl");
+
+    get_substrate_binary()
+        .env("SHIM_TRACE_LOG", &log_file)
+        .arg("-c")
+        .arg("true")
+        .assert()
+        .success();
+
+    let log_content = fs::read_to_string(&log_file).unwrap();
+    let events: Vec<Value> = log_content
+        .lines()
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect();
+    let start = events
+        .iter()
+        .find(|event| event["event_type"] == "command_start" && event["component"] == "shell")
+        .expect("missing shell command_start event");
+    assert_eq!(
+        start.get("socket_activation"),
+        Some(&Value::Bool(false)),
+        "manual runs should report socket_activation=false: {start:?}"
+    );
 }

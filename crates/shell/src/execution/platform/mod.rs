@@ -79,6 +79,9 @@ pub(crate) fn handle_world_command(cmd: &WorldCmd, cli: &Cli) -> Result<()> {
         WorldAction::Deps(opts) => {
             commands::world_deps::run(opts, cli.no_world, cli.world)?;
         }
+        WorldAction::Cleanup(opts) => {
+            commands::world_cleanup::run(opts)?;
+        }
     }
     Ok(())
 }

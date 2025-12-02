@@ -4,7 +4,7 @@ mod report;
 
 pub use repair::RepairOutcome;
 pub(crate) use report::collect_report;
-pub use report::ShimDoctorReport;
+pub use report::{ManagerDoctorState, ShimDoctorReport};
 
 use anyhow::Result;
 use serde_json::to_string_pretty;

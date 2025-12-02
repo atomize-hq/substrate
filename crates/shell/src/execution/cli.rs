@@ -95,11 +95,11 @@ pub struct Cli {
     #[arg(long = "trace", value_name = "SPAN_ID", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status", "shim_remove", "replay"])]
     pub trace: Option<String>,
 
-    /// Replay a traced command by span ID
+    /// Replay a traced command by span ID (world isolation defaults on unless --no-world or SUBSTRATE_REPLAY_USE_WORLD=disabled)
     #[arg(long = "replay", value_name = "SPAN_ID", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status", "shim_remove", "trace"])]
     pub replay: Option<String>,
 
-    /// Verbose output during replay (prints command, cwd, mode, and capability warnings)
+    /// Verbose replay diagnostics (command/cwd/mode, world toggles, capability warnings, world strategy + scopes)
     #[arg(long = "replay-verbose", requires = "replay")]
     pub replay_verbose: bool,
 
@@ -233,6 +233,7 @@ pub enum WorldAction {
     },
     Enable(WorldEnableArgs),
     Deps(WorldDepsCmd),
+    Cleanup(WorldCleanupArgs),
 }
 
 #[derive(Args, Debug, Clone)]
@@ -255,6 +256,13 @@ pub struct WorldEnableArgs {
     /// Seconds to wait for the world socket/doctor health checks
     #[arg(long = "timeout", value_name = "SECONDS", default_value_t = 120)]
     pub timeout: u64,
+}
+
+#[derive(Args, Debug)]
+pub struct WorldCleanupArgs {
+    /// Attempt to delete detected namespaces/nft tables/cgroups
+    #[arg(long, help = "Apply cleanup actions instead of just reporting")]
+    pub purge: bool,
 }
 
 #[derive(Args, Debug)]

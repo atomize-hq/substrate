@@ -4,22 +4,34 @@ pub mod gc;
 pub mod handlers;
 pub mod pty;
 pub mod service;
+#[cfg(unix)]
+mod socket_activation;
+#[cfg(unix)]
+pub use crate::socket_activation::test_support as socket_activation_test_support;
 
 pub use service::WorldAgentService;
 
+#[cfg(unix)]
+use crate::socket_activation::{
+    collect_socket_activation, InheritedUnixListener, SocketActivation,
+};
 use anyhow::{Context, Result};
 use axum::routing::{get, post};
 use axum::Router;
+use futures_util::future::{try_join_all, BoxFuture};
+use futures_util::FutureExt;
 use hyper::server::accept::from_stream;
-#[cfg(unix)]
-use hyperlocal::UnixServerExt;
 use std::net::SocketAddr;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use substrate_broker::{set_global_broker, BrokerHandle};
 use tokio::net::TcpListener;
+#[cfg(unix)]
+use tokio::net::UnixListener;
 use tokio_stream::wrappers::TcpListenerStream;
+#[cfg(unix)]
+use tokio_stream::wrappers::UnixListenerStream;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 use tracing_subscriber::{fmt, EnvFilter};
@@ -35,7 +47,46 @@ pub async fn run_world_agent() -> Result<()> {
     info!("Starting Substrate World Agent");
 
     let socket_path = PathBuf::from(SOCKET_PATH);
-    prepare_socket_path(&socket_path)?;
+    #[cfg(unix)]
+    let mut socket_activation = collect_socket_activation()?;
+    #[cfg(unix)]
+    log_listener_mode(socket_activation.as_ref());
+    #[cfg(not(unix))]
+    info!(
+        component = "world-agent",
+        event = "listener_state",
+        mode = "direct_bind",
+        listen_fds = 0,
+        uds_inherited = 0,
+        tcp_inherited = 0,
+        "Socket activation is unavailable; binding listeners directly"
+    );
+
+    #[cfg(unix)]
+    let inherited_uds = socket_activation
+        .as_mut()
+        .and_then(|activation| activation.unix_listeners.pop());
+    #[cfg(unix)]
+    {
+        if let Some(ref mut activation) = socket_activation {
+            if !activation.unix_listeners.is_empty() && inherited_uds.is_some() {
+                warn!(
+                    remaining = activation.unix_listeners.len(),
+                    "Multiple inherited Unix sockets detected; only the first will be consumed"
+                );
+            }
+        }
+    }
+    #[cfg(unix)]
+    let uds_cleanup_required = inherited_uds.is_none();
+    #[cfg(unix)]
+    if socket_activation.is_some() && inherited_uds.is_none() {
+        warn!("LISTEN_FDS was set but no Unix stream sockets were provided; falling back to direct bind");
+    }
+    #[cfg(unix)]
+    if uds_cleanup_required {
+        prepare_socket_path(&socket_path)?;
+    }
 
     info!("Running initial netns GC sweep");
     let ttl = get_env_u64("SUBSTRATE_NETNS_GC_TTL_SECS", 0)
@@ -72,26 +123,100 @@ pub async fn run_world_agent() -> Result<()> {
         info!("Periodic GC sweep disabled");
     }
 
+    let mut tcp_handles: Vec<TcpListenerHandle> = Vec::new();
+    #[cfg(unix)]
+    if let Some(ref mut activation) = socket_activation {
+        for listener in activation.tcp_listeners.drain(..) {
+            tcp_handles.push(TcpListenerHandle {
+                listener: listener.listener,
+                source: TcpListenerSource::SocketActivation {
+                    fd: listener.fd,
+                    name: listener.name,
+                },
+            });
+        }
+    }
+
     let tcp_port = read_tcp_port()?;
     if let Some(port) = tcp_port {
-        info!(tcp_port = port, "Loopback TCP listener enabled");
+        if tcp_handles.is_empty() {
+            let addr = SocketAddr::from(([127, 0, 0, 1], port));
+            let listener = TcpListener::bind(addr)
+                .await
+                .with_context(|| format!("Failed to bind TCP listener on {addr}"))?;
+            info!(
+                component = "world-agent",
+                event = "listener_state",
+                listener_kind = "tcp",
+                listener_mode = "direct_bind",
+                tcp_port = port,
+                "Loopback TCP listener enabled via environment configuration"
+            );
+            tcp_handles.push(TcpListenerHandle {
+                listener,
+                source: TcpListenerSource::Manual,
+            });
+        } else {
+            info!(
+                component = "world-agent",
+                event = "listener_state",
+                listener_kind = "tcp",
+                listener_mode = "socket_activation",
+                tcp_listeners = tcp_handles.len(),
+                env_override = port,
+                "SUBSTRATE_AGENT_TCP_PORT ignored because TCP listeners were inherited"
+            );
+        }
+    } else if tcp_handles.is_empty() {
+        info!(
+            component = "world-agent",
+            event = "listener_state",
+            listener_kind = "tcp",
+            listener_mode = "disabled",
+            "Loopback TCP listener disabled"
+        );
     } else {
-        info!("Loopback TCP listener disabled");
+        info!(
+            component = "world-agent",
+            event = "listener_state",
+            listener_kind = "tcp",
+            listener_mode = "socket_activation",
+            tcp_listeners = tcp_handles.len(),
+            "Loopback TCP listener(s) provided via socket activation"
+        );
     }
 
     let shutdown = CancellationToken::new();
     tokio::spawn(watch_for_shutdown(shutdown.clone()));
 
-    let uds_task = run_uds_server(router.clone(), socket_path.clone(), shutdown.clone());
-    let result = if let Some(port) = tcp_port {
-        let tcp_task = run_tcp_server(router, port, shutdown.clone());
-        tokio::try_join!(uds_task, tcp_task).map(|_| ())
-    } else {
-        uds_task.await
-    };
+    let mut server_tasks: Vec<BoxFuture<'static, Result<()>>> = Vec::new();
+    #[cfg(unix)]
+    {
+        let uds_future = run_uds_server(
+            router.clone(),
+            socket_path.clone(),
+            inherited_uds,
+            shutdown.clone(),
+        );
+        server_tasks.push(uds_future.boxed());
+    }
+    #[cfg(not(unix))]
+    {
+        server_tasks
+            .push(run_uds_server(router.clone(), socket_path.clone(), shutdown.clone()).boxed());
+    }
+
+    for handle in tcp_handles {
+        let router_clone = router.clone();
+        let shutdown_clone = shutdown.clone();
+        server_tasks.push(run_tcp_server(router_clone, handle, shutdown_clone).boxed());
+    }
+
+    let result = try_join_all(server_tasks).await.map(|_| ());
 
     shutdown.cancel();
-    if socket_path.exists() {
+    #[cfg(unix)]
+    if uds_cleanup_required && socket_path.exists() {
         if let Err(err) = std::fs::remove_file(&socket_path) {
             warn!(error = %err, "Failed to remove socket on shutdown");
         }
@@ -125,30 +250,76 @@ fn build_router(service: WorldAgentService) -> Router {
 }
 
 #[cfg(unix)]
+fn log_listener_mode(activation: Option<&SocketActivation>) {
+    if let Some(activation) = activation {
+        info!(
+            component = "world-agent",
+            event = "listener_state",
+            mode = "socket_activation",
+            listen_fds = activation.total_fds,
+            uds_inherited = activation.unix_listeners.len(),
+            tcp_inherited = activation.tcp_listeners.len(),
+            "Using inherited listeners via LISTEN_FDS"
+        );
+    } else {
+        info!(
+            component = "world-agent",
+            event = "listener_state",
+            mode = "direct_bind",
+            listen_fds = 0,
+            uds_inherited = 0,
+            tcp_inherited = 0,
+            "No inherited listeners detected; binding sockets directly"
+        );
+    }
+}
+
+#[cfg(unix)]
 async fn run_uds_server(
     router: Router,
     socket_path: PathBuf,
+    inherited: Option<InheritedUnixListener>,
     shutdown: CancellationToken,
 ) -> Result<()> {
-    let make_service = router.into_make_service();
-    let server = hyper::Server::bind_unix(&socket_path)
-        .context("Failed to bind Unix socket listener")?
-        .serve(make_service)
+    let (listener, mode, fd, name) = match inherited {
+        Some(inherited) => (
+            inherited.listener,
+            "socket_activation",
+            Some(inherited.fd),
+            inherited.name,
+        ),
+        None => {
+            let uds = UnixListener::bind(&socket_path)
+                .with_context(|| format!("Failed to bind Unix socket {}", socket_path.display()))?;
+            if let Ok(meta) = std::fs::metadata(&socket_path) {
+                let mut perms = meta.permissions();
+                perms.set_mode(0o666);
+                let _ = std::fs::set_permissions(&socket_path, perms);
+            }
+            (uds, "direct_bind", None, None)
+        }
+    };
+
+    let stream = UnixListenerStream::new(listener);
+    let inherited_name = name.as_deref().unwrap_or("");
+    info!(
+        component = "world-agent",
+        event = "listener_ready",
+        listener_kind = "uds",
+        listener_mode = mode,
+        inherited_fd = fd,
+        inherited_name,
+        socket = %socket_path.display(),
+        "World agent listening on Unix socket"
+    );
+
+    hyper::Server::builder(from_stream(stream))
+        .serve(router.into_make_service())
         .with_graceful_shutdown(async move {
             shutdown.cancelled().await;
-        });
-
-    #[cfg(unix)]
-    {
-        if let Ok(meta) = std::fs::metadata(&socket_path) {
-            let mut perms = meta.permissions();
-            perms.set_mode(0o666);
-            let _ = std::fs::set_permissions(&socket_path, perms);
-        }
-    }
-
-    info!(socket = %socket_path.display(), "World agent listening on Unix socket");
-    server.await.context("Unix socket server failed")
+        })
+        .await
+        .context("Unix socket server failed")
 }
 
 #[cfg(not(unix))]
@@ -161,12 +332,79 @@ async fn run_uds_server(
     Ok(())
 }
 
-async fn run_tcp_server(router: Router, port: u16, shutdown: CancellationToken) -> Result<()> {
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let listener = TcpListener::bind(addr)
-        .await
-        .with_context(|| format!("Failed to bind TCP listener on {addr}"))?;
-    info!(address = %addr, "World agent listening on loopback TCP");
+struct TcpListenerHandle {
+    listener: TcpListener,
+    source: TcpListenerSource,
+}
+
+enum TcpListenerSource {
+    Manual,
+    #[cfg(unix)]
+    SocketActivation {
+        fd: i32,
+        name: Option<String>,
+    },
+}
+
+impl TcpListenerSource {
+    fn mode(&self) -> &'static str {
+        match self {
+            TcpListenerSource::Manual => "direct_bind",
+            #[cfg(unix)]
+            TcpListenerSource::SocketActivation { .. } => "socket_activation",
+        }
+    }
+
+    #[cfg(unix)]
+    fn fd(&self) -> Option<i32> {
+        match self {
+            TcpListenerSource::Manual => None,
+            TcpListenerSource::SocketActivation { fd, .. } => Some(*fd),
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn fd(&self) -> Option<i32> {
+        let _ = self;
+        None
+    }
+
+    #[cfg(unix)]
+    fn name(&self) -> Option<&str> {
+        match self {
+            TcpListenerSource::Manual => None,
+            TcpListenerSource::SocketActivation { name, .. } => name.as_deref(),
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn name(&self) -> Option<&str> {
+        let _ = self;
+        None
+    }
+}
+
+async fn run_tcp_server(
+    router: Router,
+    handle: TcpListenerHandle,
+    shutdown: CancellationToken,
+) -> Result<()> {
+    let TcpListenerHandle { listener, source } = handle;
+    let addr = listener
+        .local_addr()
+        .context("Failed to read TCP listener address")?;
+    let inherited_fd = source.fd();
+    let inherited_name = source.name().unwrap_or("");
+    info!(
+        component = "world-agent",
+        event = "listener_ready",
+        listener_kind = "tcp",
+        listener_mode = source.mode(),
+        tcp_port = addr.port(),
+        inherited_fd,
+        inherited_name,
+        "World agent listening on loopback TCP"
+    );
 
     let stream = TcpListenerStream::new(listener);
     hyper::Server::builder(from_stream(stream))
@@ -329,5 +567,115 @@ mod tests {
         let err = read_tcp_port().unwrap_err();
         assert!(err.to_string().contains("Failed to parse"));
         reset_env();
+    }
+
+    #[cfg(unix)]
+    mod listener_mode {
+        use super::super::{log_listener_mode, socket_activation::SocketActivation};
+        use std::collections::BTreeMap;
+        use std::fmt;
+        use std::sync::{Arc, Mutex};
+        use tracing::dispatcher::{with_default, Dispatch};
+        use tracing::field::{Field, Visit};
+        use tracing::span::{Attributes, Id, Record};
+        use tracing::{Metadata, Subscriber};
+
+        #[test]
+        fn logs_direct_bind_mode() {
+            let subscriber = RecordingSubscriber::default();
+            let dispatch = Dispatch::new(subscriber.clone());
+            with_default(&dispatch, || {
+                log_listener_mode(None);
+            });
+            let events = subscriber.take_events();
+            assert_eq!(events.len(), 1);
+            assert_eq!(
+                events[0].get("mode").map(|s| s.as_str()),
+                Some("direct_bind")
+            );
+        }
+
+        #[test]
+        fn logs_socket_activation_mode() {
+            let subscriber = RecordingSubscriber::default();
+            let dispatch = Dispatch::new(subscriber.clone());
+            let activation = SocketActivation {
+                total_fds: 2,
+                unix_listeners: Vec::new(),
+                tcp_listeners: Vec::new(),
+            };
+            with_default(&dispatch, || {
+                log_listener_mode(Some(&activation));
+            });
+            let events = subscriber.take_events();
+            assert_eq!(events.len(), 1);
+            assert_eq!(
+                events[0].get("mode").map(|s| s.as_str()),
+                Some("socket_activation")
+            );
+            assert_eq!(events[0].get("listen_fds").map(|s| s.as_str()), Some("2"));
+        }
+
+        #[derive(Clone, Default)]
+        struct RecordingSubscriber {
+            events: Arc<Mutex<Vec<BTreeMap<String, String>>>>,
+        }
+
+        impl RecordingSubscriber {
+            fn take_events(&self) -> Vec<BTreeMap<String, String>> {
+                self.events.lock().unwrap().clone()
+            }
+        }
+
+        impl Subscriber for RecordingSubscriber {
+            fn enabled(&self, _: &Metadata<'_>) -> bool {
+                true
+            }
+
+            fn new_span(&self, _: &Attributes<'_>) -> Id {
+                Id::from_u64(1)
+            }
+
+            fn record(&self, _: &Id, _: &Record<'_>) {}
+
+            fn event(&self, event: &tracing::Event<'_>) {
+                let mut visitor = FieldRecorder::default();
+                event.record(&mut visitor);
+                self.events.lock().unwrap().push(visitor.fields);
+            }
+
+            fn record_follows_from(&self, _: &Id, _: &Id) {}
+
+            fn enter(&self, _: &Id) {}
+
+            fn exit(&self, _: &Id) {}
+        }
+
+        #[derive(Default)]
+        struct FieldRecorder {
+            fields: BTreeMap<String, String>,
+        }
+
+        impl Visit for FieldRecorder {
+            fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
+                self.fields
+                    .insert(field.name().to_string(), format!("{value:?}"));
+            }
+
+            fn record_str(&mut self, field: &Field, value: &str) {
+                self.fields
+                    .insert(field.name().to_string(), value.to_string());
+            }
+
+            fn record_u64(&mut self, field: &Field, value: u64) {
+                self.fields
+                    .insert(field.name().to_string(), value.to_string());
+            }
+
+            fn record_i64(&mut self, field: &Field, value: i64) {
+                self.fields
+                    .insert(field.name().to_string(), value.to_string());
+            }
+        }
     }
 }

@@ -12,8 +12,8 @@ This document mirrors the mental model of the CLI parser in `crates/shell/src/ex
 | Script execution | `-f/--file <SCRIPT>` | Same add-ons as `-c` | `-c`, `--version-json`, shim mgmt, trace/replay | Invokes REPL state preservation per `cli.rs:37`. |
 | Version metadata | `--version-json` | `--world`, `--no-world`, `--shim-skip` | `-c`, `-f`, shim mgmt, trace/replay | Information-only request (`cli.rs:62`). |
 | Trace inspect | `--trace <SPAN>` | `--world`, `--no-world`, anchor/caging flags | `-c`, `-f`, shim mgmt, `--replay` | Pull span metadata (`cli.rs:94`). |
-| Replay | `--replay <SPAN>` | `--replay-verbose`, world + anchor toggles | `-c`, `-f`, `--trace`, shim mgmt | Deterministic replay (`cli.rs:98`). |
-| Replay verbose | `--replay <SPAN> --replay-verbose` | Same as replay | Requires `--replay` | Adds cwd/mode diagnostics (`cli.rs:102`). |
+| Replay | `--replay <SPAN>` | `--replay-verbose`, world + anchor toggles | `-c`, `-f`, `--trace`, shim mgmt | Deterministic replay (`cli.rs:98`). Defaults to world isolation even when the rest of the CLI is host-only; use `--no-world` or `SUBSTRATE_REPLAY_USE_WORLD=disabled` for host pass-through. |
+| Replay verbose | `--replay <SPAN> --replay-verbose` | Same as replay | Requires `--replay` | Adds command/cwd/mode diagnostics, the active world toggle summary, capability warnings, and the `scopes: [...]` line. Shell warnings continue to use the `shell world-agent path` prefix so they can be distinguished from `[replay] warn:` entries. |
 
 ## Root Command: Order-Independent Flags
 

@@ -32,6 +32,89 @@ managers:
 "#
 }
 
+fn parity_manifest() -> &'static str {
+    r#"version: 1
+managers:
+  - name: direnv
+    priority: 10
+    detect:
+      files:
+        - "/nonexistent/direnv"
+    init:
+      shell: |
+        export DIRENV_MANAGER=1
+  - name: asdf
+    priority: 10
+    detect:
+      script: "exit 0"
+    init:
+      shell: |
+        export ASDF_MANAGER=1
+  - name: conda
+    priority: 10
+    detect:
+      files:
+        - "/nonexistent/conda"
+    init:
+      shell: |
+        export CONDA_MANAGER=1
+  - name: pyenv
+    priority: 10
+    detect:
+      script: "exit 0"
+    init:
+      shell: |
+        export PYENV_MANAGER=1
+"#
+}
+
+fn parity_world_deps_report(fixture: &DoctorFixture) -> Value {
+    json!({
+        "manifest": {
+            "base": fixture.home().join(".substrate/world-deps.yaml"),
+            "overlay": null,
+            "overlay_exists": false
+        },
+        "world_disabled_reason": null,
+        "tools": [
+            {
+                "name": "direnv",
+                "host_detected": false,
+                "provider": "custom",
+                "guest": {
+                    "status": "missing",
+                    "reason": "not installed in world"
+                }
+            },
+            {
+                "name": "asdf",
+                "host_detected": true,
+                "provider": "custom",
+                "guest": {
+                    "status": "missing",
+                    "reason": "sync pending"
+                }
+            },
+            {
+                "name": "conda",
+                "host_detected": false,
+                "provider": "custom",
+                "guest": {
+                    "status": "present"
+                }
+            },
+            {
+                "name": "pyenv",
+                "host_detected": true,
+                "provider": "custom",
+                "guest": {
+                    "status": "present"
+                }
+            }
+        ]
+    })
+}
+
 #[test]
 fn health_json_reports_summary_details() {
     let fixture = DoctorFixture::new(sample_manifest());
@@ -76,6 +159,15 @@ fn health_json_reports_summary_details() {
     assert_eq!(summary["ok"], json!(false));
     let failures = summary["failures"].as_array().expect("failures array");
     assert!(!failures.is_empty(), "expected at least one failure entry");
+    let manager_states = summary["manager_states"]
+        .as_array()
+        .expect("manager state summaries missing");
+    assert!(
+        manager_states
+            .iter()
+            .any(|entry| entry["name"] == "HealthyManager" && entry["host_present"] == json!(true)),
+        "host presence summary missing HealthyManager: {manager_states:?}"
+    );
 
     let shim = payload.get("shim").expect("shim report missing");
     assert!(
@@ -137,8 +229,8 @@ fn health_human_summary_highlights_failures() {
         "overall status missing"
     );
     assert!(
-        stdout.contains("guest missing tools"),
-        "failure bullet missing: {stdout}"
+        stdout.contains("world backend"),
+        "world backend failure missing: {stdout}"
     );
 }
 
@@ -188,11 +280,15 @@ fn health_json_marks_skip_manager_init_and_world_disabled_reason() {
         "failures missing manager init skip message: {failures:?}"
     );
     assert!(
-        failures.iter().any(|value| value
+        !failures.iter().any(|value| value
             .as_str()
-            .map(|line| line.contains("managers missing detection"))
+            .map(|line| line.contains("managers require world sync"))
             .unwrap_or(false)),
-        "failures missing missing-managers summary: {failures:?}"
+        "parity failures should not be emitted when world checks are disabled: {failures:?}"
+    );
+    assert!(
+        summary.get("attention_required_managers").is_none(),
+        "skip env should not mark managers for attention"
     );
 }
 
@@ -213,8 +309,8 @@ fn health_json_reports_world_backend_error_and_guest_missing_tools() {
         "world_disabled_reason": null,
         "tools": [
             {
-                "name": "mise",
-                "host_detected": false,
+                "name": "HealthyManager",
+                "host_detected": true,
                 "provider": "custom",
                 "guest": {
                     "status": "missing",
@@ -236,7 +332,11 @@ fn health_json_reports_world_backend_error_and_guest_missing_tools() {
     let summary = payload
         .get("summary")
         .expect("summary missing from health payload");
-    assert_eq!(summary["missing_guest_tools"], json!(["mise"]));
+    assert_eq!(summary["missing_guest_tools"], json!(["HealthyManager"]));
+    assert_eq!(
+        summary["attention_required_managers"],
+        json!(["HealthyManager"])
+    );
     let world_error = summary
         .get("world_error")
         .and_then(Value::as_str)
@@ -260,9 +360,9 @@ fn health_json_reports_world_backend_error_and_guest_missing_tools() {
     assert!(
         failures.iter().any(|value| value
             .as_str()
-            .map(|line| line.contains("guest missing tools"))
+            .map(|line| line.contains("managers require world sync"))
             .unwrap_or(false)),
-        "expected failure mentioning guest sync issues: {failures:?}"
+        "expected failure mentioning manager parity issues: {failures:?}"
     );
 }
 
@@ -293,5 +393,146 @@ fn health_human_summary_reports_world_deps_error() {
     assert!(
         stdout.contains("Overall status: attention required"),
         "overall summary should highlight failure when fixtures are invalid: {stdout}"
+    );
+}
+
+#[test]
+fn health_summary_classifies_manager_parity_states() {
+    let fixture = DoctorFixture::new(parity_manifest());
+    fixture.write_world_deps_fixture(parity_world_deps_report(&fixture));
+
+    let output = fixture
+        .command()
+        .arg("health")
+        .arg("--json")
+        .output()
+        .expect("failed to run substrate health --json");
+    assert!(output.status.success(), "health --json should succeed");
+
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("valid JSON payload");
+    let summary = payload
+        .get("summary")
+        .expect("summary missing from health payload");
+
+    let mut missing_managers: Vec<String> = summary
+        .get("missing_managers")
+        .and_then(Value::as_array)
+        .expect("missing_managers array missing")
+        .iter()
+        .map(|val| val.as_str().unwrap().to_string())
+        .collect();
+    missing_managers.sort();
+    assert_eq!(missing_managers, vec!["conda", "direnv"]);
+
+    let mut missing_guest_tools: Vec<String> = summary
+        .get("missing_guest_tools")
+        .and_then(Value::as_array)
+        .expect("missing_guest_tools array missing")
+        .iter()
+        .map(|val| val.as_str().unwrap().to_string())
+        .collect();
+    missing_guest_tools.sort();
+    assert_eq!(missing_guest_tools, vec!["asdf", "direnv"]);
+    assert_eq!(summary["attention_required_managers"], json!(["asdf"]));
+    assert_eq!(summary["world_only_managers"], json!(["conda"]));
+
+    let states = summary["manager_states"]
+        .as_array()
+        .expect("manager states missing");
+    let host_only = states
+        .iter()
+        .find(|entry| entry["name"] == "direnv")
+        .expect("direnv entry missing");
+    assert_eq!(host_only["host_present"], json!(false));
+    assert_eq!(host_only["world"]["status"], json!("missing"));
+    assert_eq!(host_only["attention_required"], json!(false));
+    assert_eq!(host_only["world_only"], json!(false));
+
+    let world_only = states
+        .iter()
+        .find(|entry| entry["name"] == "conda")
+        .expect("conda entry missing");
+    assert_eq!(world_only["host_present"], json!(false));
+    assert_eq!(world_only["world"]["status"], json!("present"));
+    assert_eq!(world_only["world_only"], json!(true));
+    assert_eq!(world_only["attention_required"], json!(false));
+
+    let matched = states
+        .iter()
+        .find(|entry| entry["name"] == "asdf")
+        .expect("asdf entry missing");
+    assert_eq!(matched["host_present"], json!(true));
+    assert_eq!(matched["world"]["status"], json!("missing"));
+    assert_eq!(matched["attention_required"], json!(true));
+    assert_eq!(matched["world_only"], json!(false));
+
+    let pyenv_state = states
+        .iter()
+        .find(|entry| entry["name"] == "pyenv")
+        .expect("pyenv entry missing");
+    assert_eq!(pyenv_state["host_present"], json!(true));
+    assert_eq!(pyenv_state["world"]["status"], json!("present"));
+    assert_eq!(pyenv_state["attention_required"], json!(false));
+    assert_eq!(pyenv_state["world_only"], json!(false));
+
+    assert_eq!(summary["ok"], json!(false));
+    let failures = summary["failures"]
+        .as_array()
+        .expect("failures array missing");
+    assert!(
+        failures.iter().any(|value| value
+            .as_str()
+            .map(|line| line.contains("asdf"))
+            .unwrap_or(false)),
+        "failure summary should call out asdf attention requirements: {failures:?}"
+    );
+    assert!(
+        failures.iter().all(|value| value
+            .as_str()
+            .map(|line| !line.contains("direnv"))
+            .unwrap_or(true)),
+        "direnv should not be flagged for attention when missing on host and world: {failures:?}"
+    );
+}
+
+#[test]
+fn health_human_summary_respects_manager_parity_states() {
+    let fixture = DoctorFixture::new(parity_manifest());
+    fixture.write_world_deps_fixture(parity_world_deps_report(&fixture));
+
+    let output = fixture
+        .command()
+        .arg("health")
+        .output()
+        .expect("failed to run substrate health");
+    assert!(
+        output.status.success(),
+        "health command should succeed for parity summary scenario"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Managers detected: 2/4"),
+        "manager detection summary missing: {stdout}"
+    );
+    assert!(
+        stdout.contains("Guest tool sync: missing 2 (direnv, asdf)"),
+        "guest sync summary missing parity counts: {stdout}"
+    );
+    assert!(
+        stdout.contains("managers require world sync: asdf"),
+        "host-only manager should be flagged for world sync attention: {stdout}"
+    );
+    assert!(
+        !stdout.contains("managers require world sync: direnv"),
+        "both-missing manager should not be flagged for attention: {stdout}"
+    );
+    assert!(
+        !stdout.contains("managers require world sync: conda"),
+        "world-only manager should not be flagged for attention: {stdout}"
+    );
+    assert!(
+        stdout.contains("Overall status: attention required"),
+        "overall attention summary missing: {stdout}"
     );
 }

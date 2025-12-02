@@ -60,6 +60,7 @@ and `scripts/substrate/world-deps.yaml` in the repository root.
 | `SUBSTRATE_ANCHOR_PATH` | Custom anchor directory (paired with `custom` mode) | shell launch directory | `/workspaces/substrate` |
 | `SUBSTRATE_CAGED` | Enforce staying inside the resolved world root (`1`/`0`) | `1` | `0` |
 | `SUBSTRATE_WORLD_DEPS_MANIFEST` | Override manifest for `world deps` | `<prefix>/versions/<version>/config/world-deps.yaml` | `/tmp/world_deps.yaml` |
+| `SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE` | Force socket activation mode reporting (`socket_activation`, `manual`, or `unknown`) for diagnostics/tests | auto-detect via systemd | `socket_activation` |
 
 Legacy environment variables `SUBSTRATE_WORLD_ROOT_MODE` / `SUBSTRATE_WORLD_ROOT_PATH` are still
 parsed for compatibility.
@@ -421,6 +422,22 @@ HOME=$PWD/target/tests-tmp/ci \
 substrate shim doctor --json > artifacts/shim_doctor.json
 substrate health --json > artifacts/substrate_health.json
 substrate world doctor --json > artifacts/world_doctor.json
+```
+
+Surface the new parity signals when archiving these artifacts:
+
+- `summary.attention_required_managers` lists host-only managers that require a world sync.
+- `summary.world_only_managers` lists tools present in the guest but missing locally.
+- `summary.manager_states[].{name, parity, recommendation}` provides per-manager status plus the suggested remediation.
+
+Example (macOS Sonoma / zsh, temp HOME):
+
+```bash
+TMP=$PWD/target/tests-tmp/macos-health
+mkdir -p "$TMP/.substrate"
+HOME=$TMP SUBSTRATE_MANAGER_MANIFEST=$TMP/manager_hooks.yaml \
+  substrate health --json \
+  | jq '.summary | {\n      attention_required_managers,\n      world_only_managers,\n      manager_states: [.manager_states[] | {name, parity, recommendation}]\n    }'
 ```
 
 Need a legacy pipeline to inject snippets automatically? Run `substrate shim repair`

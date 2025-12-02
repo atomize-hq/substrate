@@ -9,19 +9,23 @@ pub(crate) fn world_transport_to_meta(transport: &pw::WorldTransport) -> Transpo
         pw::WorldTransport::Unix(path) => TransportMeta {
             mode: "unix".to_string(),
             endpoint: Some(path.display().to_string()),
+            socket_activation: None,
         },
         pw::WorldTransport::Tcp { host, port } => TransportMeta {
             mode: "tcp".to_string(),
             endpoint: Some(format!("{}:{}", host, port)),
+            socket_activation: None,
         },
         pw::WorldTransport::Vsock { port } => TransportMeta {
             mode: "vsock".to_string(),
             endpoint: Some(format!("{}", port)),
+            socket_activation: None,
         },
         #[cfg(target_os = "windows")]
         pw::WorldTransport::NamedPipe(path) => TransportMeta {
             mode: "named_pipe".to_string(),
             endpoint: Some(path.display().to_string()),
+            socket_activation: None,
         },
     }
 }

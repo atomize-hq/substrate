@@ -105,6 +105,10 @@ managers:
         stdout.contains("World deps"),
         "doctor output should include world deps header: {stdout}"
     );
+    assert!(
+        stdout.contains("Guest tools missing (1): node"),
+        "doctor output should summarize missing guest tools: {stdout}"
+    );
 }
 
 #[test]

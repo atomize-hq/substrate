@@ -19,6 +19,42 @@ apply one of these fixes.
 - [T-010 Forwarder log stale](#t-010-forwarder-log-stale)
 - [T-011 Pipe name already in use](#t-011-pipe-name-already-in-use)
 
+## Manager parity quick check
+
+Run the aggregated health command whenever the guest tools diverge from the
+Windows host. The text output calls out host-only vs world-only managers, while
+the JSON payload exposes explicit lists for telemetry.
+
+```powershell
+PS C:\> substrate.exe health --json `
+  | ConvertFrom-Json `
+  | Select-Object -ExpandProperty summary `
+  | Select-Object attention_required_managers, world_only_managers
+
+attention_required_managers : {asdf}
+world_only_managers        : {bun}
+```
+
+`attention_required_managers` lists host-present/world-missing managers (fix by
+running `substrate world deps sync --all` once WSL is healthy). `world_only_managers`
+shows tools that exist only in the guest (install them on Windows via
+`substrate shim repair --manager <name> --yes` or your preferred package
+manager).
+
+Inspect per-manager guidance with:
+
+```powershell
+PS C:\> substrate.exe health --json `
+  | ConvertFrom-Json `
+  | Select-Object -ExpandProperty summary `
+  | Select-Object -ExpandProperty manager_states `
+  | Format-Table name, parity, recommendation -AutoSize
+```
+
+`parity` values (`host_only`, `world_only`, `absent`, `synced`, `unknown`) help
+pin down whether the fix belongs on Windows or inside the guest. Keep the JSON
+snippet in evidence logs whenever you close a catalogue entry.
+
 ### T-001 Virtualization disabled
 
 - **Symptom**: Doctor reports `Virtualization disabled` or `systeminfo` shows

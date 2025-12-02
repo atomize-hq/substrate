@@ -98,6 +98,11 @@ substrate --shim-remove   # delete ~/.substrate/shims
 SUBSTRATE_NO_SHIMS=1 substrate   # skip deployment for this invocation
 ```
 
+On Linux, `substrate --shim-status[ --json]` also reports whether the world-agent
+socket is managed by systemd socket activation (`substrate-world-agent.socket`)
+or a manual listener, making it easier to distinguish provisioned services from
+legacy bindings.
+
 ### PATH Isolation & Legacy Hosts
 
 Compare the host vs Substrate PATH at any time:
@@ -145,6 +150,54 @@ Capture full host/guest readiness with the aggregated health command:
 substrate health                # text summary (managers + world doctor + world deps)
 substrate health --json | jq '.summary'
 substrate shim doctor --json    # detailed shim-centric payload
+```
+
+The health summary now highlights three manager parity buckets:
+
+- `summary.attention_required_managers` – host-only managers (present on the host, missing/unavailable in the world).
+- `summary.world_only_managers` – world-only managers (guest present, host missing).
+- `summary.manager_states[].parity` – per-manager status (`synced`, `host_only`, `world_only`, `absent`, or `unknown`) plus an optional `recommendation`.
+
+Example (Linux, bash):
+
+```bash
+$ substrate health
+== substrate health ==
+Managers detected: 4/5
+  Not detected on host (info): bun
+World backend: healthy
+Guest tool sync: missing 1 (asdf)
+Manager parity:
+  Host-only (world sync required): asdf
+    Next steps: Enable the world backend (`substrate world enable`) and run `substrate world deps sync --all` to mirror these managers into the guest.
+  World-only (host missing): bun
+    Next steps: Install the listed managers on the host (for example `substrate shim repair --manager <name>`) so shells can load the same snippets.
+  Missing everywhere (info): direnv
+    Next steps: Install these managers on the host first; the next `substrate world deps sync --all` run will copy them into the guest once they exist.
+Hints recorded: 0
+Overall status: attention required
+  - managers require world sync: asdf
+```
+
+Machine-readable parity lives under `summary.manager_states`:
+
+```bash
+$ substrate health --json | jq '.summary.manager_states[] | {name, parity, recommendation}'
+{
+  "name": "asdf",
+  "parity": "host_only",
+  "recommendation": "Enable the world backend (`substrate world enable`) then run `substrate world deps sync --all --verbose` so asdf exists inside the guest."
+}
+{
+  "name": "bun",
+  "parity": "world_only",
+  "recommendation": "Install bun on the host (for example `substrate shim repair --manager bun`) so both environments stay in sync."
+}
+{
+  "name": "direnv",
+  "parity": "absent",
+  "recommendation": "Install direnv on the host first, then rerun `substrate world deps sync --all` after provisioning to copy it into the guest."
+}
 ```
 
 Both commands honor the same overrides (`HOME`, `SUBSTRATE_MANAGER_MANIFEST`,

@@ -51,17 +51,44 @@ Windows currently degrades to host execution with a friendly notice.
 ### Native Linux provisioning helper
 
 - Run `scripts/linux/world-provision.sh` from the repository root (without `sudo`) to install the
-  world-agent under `/usr/local/bin`, write the systemd unit, and enable the
-  service. The script uses `sudo` for filesystem and systemd operations and
+  world-agent under `/usr/local/bin`, write the `.service` **and** `.socket` units,
+  and enable socket activation. The script uses `sudo` for filesystem and systemd operations and
   will prompt if elevated credentials are required.
-- After provisioning, verify the socket and capabilities:
+- After provisioning, verify the listener, units, and capabilities:
   ```bash
-  systemctl status substrate-world-agent --no-pager
+  systemctl status substrate-world-agent.socket --no-pager
+  systemctl status substrate-world-agent.service --no-pager
   sudo ls -l /run/substrate.sock
   sudo curl --unix-socket /run/substrate.sock http://localhost/v1/capabilities | jq .
+  substrate world doctor --json | jq '.world_socket'
+  substrate --shim-status | grep 'World socket'
   ```
+  The doctor JSON now surfaces a `world_socket` block:
+  ```json
+  {
+    "mode": "socket_activation",
+    "socket_path": "/run/substrate.sock",
+    "systemd_socket": {
+      "name": "substrate-world-agent.socket",
+      "active_state": "listening",
+      "unit_file_state": "enabled"
+    },
+    "systemd_service": {
+      "name": "substrate-world-agent.service",
+      "active_state": "active",
+      "unit_file_state": "enabled"
+    }
+  }
+  ```
+  `substrate --shim-status[ --json]` prints the same detection so operators immediately know
+  when socket activation is managing the transport instead of a manual bind.
+- Need to hand off a reproducible verification run? Execute `scripts/linux/world-socket-verify.sh`
+  (see `docs/manual_verification/linux_world_socket.md`) to provision the socket, capture
+  doctor/shim-status JSON, and optionally uninstall the units afterward.
 - Provisioning is idempotent; rerun the helper whenever the agent binary
-  changes or the service needs to be repaired.
+  changes or the units need to be repaired. Set `SUBSTRATE_WORLD_SOCKET` to
+  override the default `/run/substrate.sock` path if your deployment uses a
+  non-standard location.
 
 ---
 
@@ -237,7 +264,7 @@ Goal: Safely garbage‑collect orphaned `substrate-<WORLD_ID>` netns and best‑
 
 Implemented features:
 - Triggers
-  - Startup sweep (once), periodic sweep (default every 10 minutes; configurable), and `POST /v1/gc` endpoint for on‑demand GC.
+  - Startup sweep (once), periodic sweep (default every 10 minutes; configurable), and `POST /v1/gc` endpoint for on-demand GC.
 - Conservative delete criteria
   - Name matches `substrate-wld_`
   - `ip netns pids <ns>` has no PIDs
@@ -250,6 +277,21 @@ Implemented features:
 - Reporting & logs
   - JSON report: `{ removed: [..], kept: [{name,reason}], errors: [{name,message}] }`
   - INFO summary per sweep; DEBUG reasons per namespace
+
+### Host cleanup helper
+
+- The host CLI exposes the same inventory via `substrate world cleanup`. Without flags it reports idle/active namespaces, cgroups, and host-level nft tables plus the exact manual commands needed to purge them.
+- Add `--purge` (and run as root/CAP_NET_ADMIN) to delete idle `substrate-<WORLD_ID>` netns entries, their nft tables, and matching `/sys/fs/cgroup/substrate/<WORLD_ID>` directories.
+- macOS + Lima: run the helper inside the guest (`limactl shell substrate sudo substrate world cleanup --purge`). WSL follows the same pattern (`wsl -d substrate-wsl -- sudo substrate world cleanup --purge`).
+- When purge isn't available, follow the printed instructions (`sudo ip netns exec ... nft delete table inet substrate_<WORLD_ID>`, `sudo ip netns delete ...`, `sudo rm -rf /sys/fs/cgroup/substrate/<WORLD_ID>`).
+
+### Isolation fallback diagnostics
+
+- World/replay components now log which network-scoping strategy is active:
+  - Primary path installs nft rules inside the dedicated netns.
+  - If the host refuses `ip netns add`, the code falls back to socket cgroup matching and scopes nft rules to `/sys/fs/cgroup/substrate/<WORLD_ID>` so host processes are not impacted.
+  - When neither netns nor writable cgroups are available, nft scoping is disabled and warnings point to `substrate world cleanup --purge` to remove leftovers before retrying.
+- These logs surface in `--replay-verbose` output (`[replay] warn: using socket cgroup fallback...`) and in world-agent traces (`[agent] netns ... unavailable`).
 
 ---
 

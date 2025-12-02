@@ -80,9 +80,7 @@ pub async fn execute_direct(state: &ExecutionState, timeout_secs: u64) -> Result
         scopes_used: Vec::new(),
         duration_ms,
     };
-    if replay_verbose() && !out.scopes_used.is_empty() {
-        eprintln!("[replay] scopes: {}", out.scopes_used.join(","));
-    }
+    emit_scopes_line(replay_verbose(), &out.scopes_used);
     Ok(out)
 }
 
@@ -145,9 +143,7 @@ async fn try_world_backend(
                             scopes_used: res.scopes_used,
                             duration_ms,
                         };
-                        if verbose && !out.scopes_used.is_empty() {
-                            eprintln!("[replay] scopes: {}", out.scopes_used.join(","));
-                        }
+                        emit_scopes_line(verbose, &out.scopes_used);
                         return Ok(Some(out));
                     }
                     Err(e) => {
@@ -196,25 +192,58 @@ pub fn execute_on_linux(state: &ExecutionState, verbose: bool) -> Result<Executi
         let ns = format!("substrate-{}", world_id);
         let mut netns = world::netns::NetNs::new(&ns);
         match netns.add() {
-            Ok(true) => {
-                if let Err(_e) = netns.lo_up() {
-                    if verbose {
-                        eprintln!("[replay] warn: netns unavailable or insufficient privileges; applying host-wide rules or skipping network scoping");
-                    }
-                } else {
+            Ok(true) => match netns.lo_up() {
+                Ok(_) => {
                     netns_name = Some(ns);
                     _netns_handle = Some(netns);
                 }
-            }
-            _ => {
+                Err(err) => {
+                    if verbose {
+                        eprintln!(
+                            "[replay] warn: failed to bring loopback up in {}: {}",
+                            ns, err
+                        );
+                        eprintln!(
+                            "          run 'substrate world cleanup --purge' or rerun with CAP_NET_ADMIN to reset namespaces"
+                        );
+                    }
+                }
+            },
+            Ok(false) => {
                 if verbose {
-                    eprintln!("[replay] warn: netns unavailable or insufficient privileges; applying host-wide rules or skipping network scoping");
+                    eprintln!(
+                        "[replay] warn: netns {} unavailable (ip netns add returned false)",
+                        ns
+                    );
+                    eprintln!(
+                        "          run 'substrate world cleanup --purge' or rerun with elevated privileges to remove stale namespaces"
+                    );
+                }
+            }
+            Err(err) => {
+                if verbose {
+                    eprintln!("[replay] warn: netns {} unavailable: {}", ns, err);
+                    eprintln!(
+                        "          run 'substrate world cleanup --purge' or rerun with elevated privileges to remove stale namespaces"
+                    );
                 }
             }
         }
     } else if verbose {
         eprintln!("[replay] warn: netns unavailable or insufficient privileges; applying host-wide rules or skipping network scoping");
     }
+
+    enum NetScope {
+        Namespace(String),
+        Cgroup,
+    }
+    let scope_choice = if let Some(ref ns) = netns_name {
+        Some(NetScope::Namespace(ns.clone()))
+    } else if cgroup_active {
+        Some(NetScope::Cgroup)
+    } else {
+        None
+    };
 
     let mut _netfilter_opt: Option<world::netfilter::NetFilter> = None;
     let nft_ok = stdprocess::Command::new("nft")
@@ -223,29 +252,57 @@ pub fn execute_on_linux(state: &ExecutionState, verbose: bool) -> Result<Executi
         .map(|s| s.success())
         .unwrap_or(false);
     if nft_ok {
-        match world::netfilter::NetFilter::new(world_id, Vec::new()) {
-            Ok(mut nf) => {
-                if let Some(ref ns) = netns_name {
-                    nf.set_namespace(Some(ns.clone()));
-                }
-                if let Err(e) = nf.install_rules() {
-                    if verbose {
-                        eprintln!("[replay] warn: nft setup failed; netfilter scoping/logging disabled: {}", e);
-                    }
-                } else {
-                    if let Ok(val) = std::fs::read_to_string("/proc/sys/kernel/dmesg_restrict") {
-                        if val.trim() == "1" && verbose {
-                            eprintln!("[replay] warn: kernel.dmesg_restrict=1; LOG lines may not be visible");
+        if let Some(scope) = scope_choice {
+            match world::netfilter::NetFilter::new(world_id, Vec::new()) {
+                Ok(mut nf) => {
+                    match scope {
+                        NetScope::Namespace(ns) => {
+                            nf.set_namespace(Some(ns));
+                        }
+                        NetScope::Cgroup => {
+                            nf.set_cgroup_path(cgroup_mgr.path());
+                            if verbose {
+                                eprintln!(
+                                    "[replay] warn: using socket cgroup fallback for nft rules ({})",
+                                    cgroup_mgr.path().display()
+                                );
+                                eprintln!(
+                                    "          run 'substrate world cleanup --purge' if namespaces cannot be created"
+                                );
+                            }
                         }
                     }
-                    _netfilter_opt = Some(nf);
+                    if let Err(e) = nf.install_rules() {
+                        if verbose {
+                            eprintln!(
+                                "[replay] warn: nft setup failed; netfilter scoping/logging disabled: {}",
+                                e
+                            );
+                        }
+                    } else {
+                        if let Ok(val) = std::fs::read_to_string("/proc/sys/kernel/dmesg_restrict")
+                        {
+                            if val.trim() == "1" && verbose {
+                                eprintln!(
+                                    "[replay] warn: kernel.dmesg_restrict=1; LOG lines may not be visible"
+                                );
+                            }
+                        }
+                        _netfilter_opt = Some(nf);
+                    }
+                }
+                Err(e) => {
+                    if verbose {
+                        eprintln!(
+                            "[replay] warn: nft initialization failed; netfilter scoping/logging disabled: {}",
+                            e
+                        );
+                    }
                 }
             }
-            Err(e) => {
-                if verbose {
-                    eprintln!("[replay] warn: nft initialization failed; netfilter scoping/logging disabled: {}", e);
-                }
-            }
+        } else if verbose {
+            eprintln!("[replay] warn: nft fallback unavailable (no netns/cgroup); network scoping disabled");
+            eprintln!("          ensure cgroup v2 is writable or run 'substrate world cleanup --purge' to reset namespaces");
         }
     } else if verbose {
         eprintln!("[replay] warn: nft not available; netfilter scoping/logging disabled");
@@ -367,9 +424,7 @@ pub fn execute_on_linux(state: &ExecutionState, verbose: bool) -> Result<Executi
             scopes_used: Vec::new(),
             duration_ms,
         };
-        if verbose && !out.scopes_used.is_empty() {
-            eprintln!("[replay] scopes: {}", out.scopes_used.join(","));
-        }
+        emit_scopes_line(verbose, &out.scopes_used);
         return Ok(out);
     }
 
@@ -414,9 +469,7 @@ pub fn execute_on_linux(state: &ExecutionState, verbose: bool) -> Result<Executi
                 scopes_used: Vec::new(),
                 duration_ms,
             };
-            if verbose && !out.scopes_used.is_empty() {
-                eprintln!("[replay] scopes: {}", out.scopes_used.join(","));
-            }
+            emit_scopes_line(verbose, &out.scopes_used);
             return Ok(out);
         }
     }
@@ -447,8 +500,16 @@ pub fn execute_on_linux(state: &ExecutionState, verbose: bool) -> Result<Executi
         scopes_used: Vec::new(),
         duration_ms,
     };
-    if verbose && !out.scopes_used.is_empty() {
-        eprintln!("[replay] scopes: {}", out.scopes_used.join(","));
-    }
+    emit_scopes_line(verbose, &out.scopes_used);
     Ok(out)
+}
+fn emit_scopes_line(verbose: bool, scopes: &[String]) {
+    if !verbose {
+        return;
+    }
+    if scopes.is_empty() {
+        eprintln!("[replay] scopes: []");
+    } else {
+        eprintln!("[replay] scopes: [{}]", scopes.join(", "));
+    }
 }

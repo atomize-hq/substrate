@@ -55,7 +55,7 @@ cargo bench                                 # exercise hotspots when touching pe
 - Replay and diff analysis live in `docs/REPLAY.md` and `docs/TRACE.md`; update those docs when schema changes. See `docs/REPLAY.md` for privileged requirements (`SUBSTRATE_REPLAY_USE_WORLD`) and how to use `--no-world` when isolation isn’t available.
 
 ## Platform Worlds & Provisioning
-- **Linux**: Run `scripts/linux/world-provision.sh --profile release` to install `world-agent` as a systemd service and create `/run/substrate.sock`. Dev installs invoke this script automatically (sudo prompts expected). Validate with `systemctl status substrate-world-agent` and `substrate world doctor --json`.
+- **Linux**: Run `scripts/linux/world-provision.sh --profile release` to install `world-agent` plus the matching `.service`/`.socket` units so systemd manages `/run/substrate.sock`. Dev installs invoke this script automatically (sudo prompts expected). Validate with `systemctl status substrate-world-agent.socket`, `systemctl status substrate-world-agent.service`, and `substrate world doctor --json | jq '.world_socket'`.
 - **macOS**: `scripts/mac/lima-warm.sh` provisions the `substrate` Lima VM, installs dependencies, and ensures forwarding. `scripts/mac/lima-doctor.sh` and `scripts/mac/smoke.sh` validate PTY, REST, and replay flows.
 - **Windows**: Warm the WSL backend via `pwsh -File scripts/windows/wsl-warm.ps1 -DistroName substrate-wsl -ProjectPath (Resolve-Path .)`; verify with `scripts/windows/wsl-smoke.ps1`. The backend prefers named-pipe transport but can fall back to TCP (`SUBSTRATE_FORWARDER_PORT`).
 - Always capture doctor/smoke output in PRs touching `world-*`, `forwarder`, or `host-proxy` crates.

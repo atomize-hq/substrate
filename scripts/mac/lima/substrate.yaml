@@ -74,5 +74,23 @@ provision:
       WantedBy=multi-user.target
       EOF
       chmod 644 /etc/systemd/system/substrate-world-agent.service
+      cat >/etc/systemd/system/substrate-world-agent.socket <<'EOF'
+      [Unit]
+      Description=Substrate World Agent Socket
+      PartOf=substrate-world-agent.service
+
+      [Socket]
+      ListenStream=/run/substrate.sock
+      SocketMode=0660
+      SocketUser=root
+      SocketGroup=root
+      DirectoryMode=0750
+      RemoveOnStop=yes
+      Service=substrate-world-agent.service
+
+      [Install]
+      WantedBy=sockets.target
+      EOF
+      chmod 644 /etc/systemd/system/substrate-world-agent.socket
       systemctl daemon-reload
       # Binary copied later; leave service disabled until Phase 0.4
