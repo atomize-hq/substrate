@@ -24,7 +24,9 @@ use hyper::server::accept::from_stream;
 use std::net::SocketAddr;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+#[cfg(unix)]
+use std::path::Path;
+use std::path::PathBuf;
 use substrate_broker::{set_global_broker, BrokerHandle};
 use tokio::net::TcpListener;
 #[cfg(unix)]
