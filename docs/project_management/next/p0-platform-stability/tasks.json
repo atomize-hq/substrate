@@ -857,7 +857,7 @@
       "name": "Health manager parity – aggregation logic (integration)",
       "type": "integration",
       "phase": "H1a – Detection & Aggregation",
-      "status": "completed",
+      "status": "in_progress",
       "description": "Merge H1a code/test branches, rerun fmt/lint/tests, and prep for the CLI/doc UX phase.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
