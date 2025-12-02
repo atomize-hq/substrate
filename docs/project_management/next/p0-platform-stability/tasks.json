@@ -383,6 +383,45 @@
       "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1c-integ.md"
     },
     {
+      "id": "S1c-windows-dry-run",
+      "name": "Windows WSL warm WhatIf capture",
+      "type": "ops",
+      "phase": "S1c – Provisioning & Docs",
+      "status": "queued",
+      "description": "Re-run `pwsh -File scripts/windows/wsl-warm.ps1 -WhatIf` on a Windows host with PowerShell 7 to capture the socket-activation provisioning dry-run that was skipped on Linux.",
+      "references": [
+        "scripts/windows/wsl-warm.ps1",
+        "docs/cross-platform/wsl_world_setup.md",
+        "docs/INSTALLATION.md#windows",
+        "docs/project_management/next/p0-platform-stability/session_log.md"
+      ],
+      "acceptance_criteria": [
+        "Command is executed from the repo root using PowerShell 7 (pwsh) on Windows.",
+        "Output (stdout/stderr) is saved to a dated log under `artifacts/windows/` and referenced in the session log.",
+        "Session log entry captures host context (Windows build, WSL availability), command exit status, notable warnings/errors, and whether socket/service units already existed.",
+        "If the script indicates missing prerequisites, the log includes the remediation notes from the script along with next steps."
+      ],
+      "start_checklist": [
+        "Clone/checkout feat/p0-platform-stability on a Windows workstation with PowerShell 7.",
+        "Ensure WSL and the substrate-wsl distro (or the configured distro) are available or note their absence.",
+        "Append START entry to the session log describing the host context and intent.",
+        "Confirm this task is marked `in_progress` in tasks.json."
+      ],
+      "end_checklist": [
+        "Run `pwsh -File scripts/windows/wsl-warm.ps1 -WhatIf` from repo root; capture stdout/stderr to `artifacts/windows/wsl-warm-whatif-<DATE>.log`.",
+        "Record the command result, log location, and any follow-up actions in the session log END entry.",
+        "Update tasks.json status to `completed`.",
+        "If additional remediation is required (e.g., install VS Code Remote extensions, enable WSL optional components), capture those instructions in the END log."
+      ],
+      "depends_on": [
+        "S1c-integ"
+      ],
+      "concurrent_with": [],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": null
+    },
+    {
       "id": "R1a-code",
       "name": "Replay isolation fallback (code)",
       "type": "code",

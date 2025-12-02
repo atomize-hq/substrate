@@ -330,3 +330,8 @@ Template:
 - Provisioning validation: dry-run output still shows systemctl enable/restart steps plus operator hints (doctor + shim status commands). Installer smoke harness captured socket counts in the systemctl logs for both install/uninstall phases.
 - R1a-code/test kickoff prompts already published; reviewed for provisioning impacts and no edits were required.
 - Ready to merge ps-s1c-provision-integ back onto `feat/p0-platform-stability` after updating tasks/logs and cleaning up the ps-s1c worktree.
+
+## [2025-12-02 18:37 UTC] Integration Agent – S1c-windows-dry-run – TASK ADDED
+- Added follow-up task `S1c-windows-dry-run` to `tasks.json` so a Windows operator can rerun `pwsh -File scripts/windows/wsl-warm.ps1 -WhatIf` with PowerShell 7 and capture the missing WhatIf output.
+- Task details include prerequisites (Windows host + pwsh 7), acceptance criteria (log file saved under `artifacts/windows/`, session log updates, remediation notes), and start/end checklists so the remote operator can self-serve.
+- References point at the warm script, WSL setup doc, Windows install docs, and this session log for context.
