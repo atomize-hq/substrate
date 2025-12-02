@@ -301,7 +301,7 @@
       "name": "Socket activation – provisioning & docs (test)",
       "type": "test",
       "phase": "S1c – Provisioning & Docs",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Author harness coverage/dry-run verification for Linux/Lima/WSL installers/uninstallers plus world doctor scripts under socket activation.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
@@ -345,7 +345,7 @@
       "name": "Socket activation – provisioning & docs (integration)",
       "type": "integration",
       "phase": "S1c – Provisioning & Docs",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge S1c code/test branches, verify fmt/lint/tests, and close out the socket activation program before replay work proceeds.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
@@ -516,7 +516,7 @@
       "name": "Replay verbose scopes & warnings (code)",
       "type": "code",
       "phase": "R1b – Verbose Scopes & Warning Clarity",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Implement the `scopes: [...]` verbose output, differentiate shell vs replay warnings, and update docs/help text.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
@@ -896,7 +896,7 @@
       "name": "Health manager parity – UX & docs (code)",
       "type": "code",
       "phase": "H1b – CLI/Doctor UX & Docs",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Polish CLI/JSON output, doctor summaries, and documentation so the refined manager logic is visible and actionable across platforms.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
@@ -939,7 +939,7 @@
       "name": "Health manager parity – UX & docs (test)",
       "type": "test",
       "phase": "H1b – CLI/Doctor UX & Docs",
-      "status": "pending",
+      "status": "completed",
       "description": "Add CLI/integration tests ensuring doctor + health commands emit the refined messages in both text and JSON modes across mocked manager scenarios.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
