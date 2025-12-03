@@ -1184,6 +1184,101 @@
       "worktree": "wt/ps-h1b-healthux-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/H1b-integ.md"
+    },
+    {
+      "id": "S1d-code",
+      "name": "Installer socket-activation parity (code)",
+      "type": "code",
+      "phase": "S1d – Installer Socket-Activation Parity",
+      "status": "completed",
+      "description": "Update dev/prod installer scripts plus docs so socket-activated installs consistently provision the substrate group, apply lingering guidance, and reload the systemd units before prompting operators.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "scripts/substrate/dev-install-substrate.sh",
+        "scripts/substrate/dev-uninstall-substrate.sh",
+        "scripts/substrate/install-substrate.sh",
+        "scripts/substrate/uninstall-substrate.sh",
+        "docs/AGENTS.md",
+        "docs/INSTALLATION.md",
+        "docs/WORLD.md"
+      ],
+      "acceptance_criteria": [
+        "Dev and production installers create the substrate group when missing, add the invoking user on Linux hosts (with sudo guidance for curl-based installs), and leave macOS/WSL behavior unchanged.",
+        "Installers reload the socket/service units so `/run/substrate.sock` ends up owned by `root:substrate` with `0660` permissions, matching the provisioning scripts.",
+        "Install output highlights lingering requirements (`loginctl enable-linger <user>`) including detection of the current linger state.",
+        "Uninstall scripts remove the socket/service units and remind operators about lingering and group cleanup when appropriate.",
+        "Docs (AGENTS.md, INSTALLATION.md, WORLD.md) describe the group/linger expectations for dev + production setups.",
+        "`cargo fmt`; `shellcheck scripts/substrate/dev-install-substrate.sh scripts/substrate/dev-uninstall-substrate.sh scripts/substrate/install-substrate.sh scripts/substrate/uninstall-substrate.sh` executed or skips logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability && git pull --ff-only",
+        "Read p0_platform_stability_plan.md, tasks.json, session_log.md, and the kickoff prompt",
+        "Set S1d-code to in_progress, append START entry to the session log, commit doc update",
+        "Create branch ps-s1d-devinstall-code, add worktree wt/ps-s1d-devinstall-code, and switch into it"
+      ],
+      "end_checklist": [
+        "Ensure fmt/shellcheck completed (document skips if any)",
+        "Commit worktree changes (script/doc updates) with descriptive message",
+        "Merge ps-s1d-devinstall-code back into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm S1d-integ prompt remains accurate (edit if scope changed)",
+        "Commit docs/task/log updates on feat/p0-platform-stability"
+      ],
+      "depends_on": [
+        "S1c-integ"
+      ],
+      "concurrent_with": [
+        "S1d-test"
+      ],
+      "worktree": "wt/ps-s1d-devinstall-code",
+      "integration_task": "S1d-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-code.md"
+    },
+    {
+      "id": "S1e-code",
+      "name": "Installer state tracking & cleanup (code)",
+      "type": "code",
+      "phase": "S1e – Installer State Tracking",
+      "status": "queued",
+      "description": "Persist install-time host tweaks (substrate group membership, loginctl lingering, future interactive choices) and add opt-in uninstall cleanup so Substrate can restore the host to its prior state.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "scripts/substrate/install-substrate.sh",
+        "scripts/substrate/dev-install-substrate.sh",
+        "scripts/substrate/uninstall-substrate.sh",
+        "scripts/substrate/dev-uninstall-substrate.sh",
+        "docs/INSTALLATION.md",
+        "docs/WORLD.md",
+        "docs/CONFIGURATION.md"
+      ],
+      "acceptance_criteria": [
+        "Installers detect/record whether the substrate group existed, which users were added, and each user’s prior loginctl lingering state (metadata stored under ~/.substrate).",
+        "Uninstallers offer a flag (and future interactive mode hook) that removes group membership and disables lingering only when Substrate previously enabled them; default behavior continues to print guidance when provenance is unknown.",
+        "Metadata schema/versioning documented so future installers can add new host-state toggles without breaking older entries.",
+        "Docs describe the new cleanup flag, metadata location, and how interactive install/uninstall flow will surface these options.",
+        "`cargo fmt`; `shellcheck scripts/substrate/dev-install-substrate.sh scripts/substrate/install-substrate.sh scripts/substrate/dev-uninstall-substrate.sh scripts/substrate/uninstall-substrate.sh` executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Read the S1d results, plan/tasks/session log, and this kickoff prompt",
+        "Set S1e-code to in_progress, append START entry, commit doc update (`git commit -am \"docs: start S1e-code\"`)",
+        "Create branch/worktree: `git checkout -b ps-s1e-installer-code`, `git worktree add wt/ps-s1e-installer-code ps-s1e-installer-code`, `cd wt/ps-s1e-installer-code`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/shellcheck completed (note skips with justification)",
+        "Commit worktree changes with descriptive message",
+        "Merge ps-s1e-installer-code into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm S1e-integ prompt contents (or add it if missing)",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish S1e-code\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "S1d-code"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-s1e-installer-code",
+      "integration_task": "S1e-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1e-code.md"
     }
   ]
 }

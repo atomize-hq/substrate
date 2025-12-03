@@ -33,6 +33,148 @@ Options:
 USAGE
 }
 
+run_privileged() {
+  if [[ ${EUID} -eq 0 ]]; then
+    "$@"
+    return $?
+  fi
+  if command -v sudo >/dev/null 2>&1; then
+    sudo "$@"
+    return $?
+  fi
+  warn "Command requires elevated privileges but sudo is unavailable: $*"
+  return 1
+}
+
+detect_invoking_user() {
+  if [[ -n "${SUDO_USER:-}" ]]; then
+    printf '%s\n' "${SUDO_USER}"
+    return
+  fi
+  if [[ -n "${USER:-}" ]]; then
+    printf '%s\n' "${USER}"
+    return
+  fi
+  if command -v id >/dev/null 2>&1; then
+    id -un 2>/dev/null || true
+    return
+  fi
+  printf ''
+}
+
+user_in_group() {
+  local target_user="$1"
+  local target_group="$2"
+  if [[ -z "${target_user}" || -z "${target_group}" ]]; then
+    return 1
+  fi
+  if id -nG "${target_user}" 2>/dev/null | tr ' ' '\n' | grep -qx "${target_group}"; then
+    return 0
+  fi
+  return 1
+}
+
+ensure_substrate_group_membership() {
+  if [[ "${IS_LINUX}" -ne 1 || "${WORLD_ENABLED}" -ne 1 ]]; then
+    return
+  fi
+  local target_group="substrate"
+  if ! getent group "${target_group}" >/dev/null 2>&1; then
+    log "Creating '${target_group}' group (sudo may prompt)..."
+    if run_privileged groupadd --system "${target_group}"; then
+      log "Created ${target_group} group."
+    else
+      warn "Unable to create ${target_group} group automatically. Run 'sudo groupadd --system ${target_group}' and re-run the installer."
+      return
+    fi
+  fi
+
+  local invoking_user
+  invoking_user="$(detect_invoking_user)"
+  if [[ -z "${invoking_user}" || "${invoking_user}" == "root" ]]; then
+    warn "Could not determine the non-root user that should join the '${target_group}' group. Run 'sudo usermod -aG ${target_group} <user>' before retrying if socket access is required."
+    return
+  fi
+
+  if user_in_group "${invoking_user}" "${target_group}"; then
+    log "${invoking_user} already belongs to ${target_group}."
+    return
+  fi
+
+  log "Adding ${invoking_user} to ${target_group} (sudo may prompt)..."
+  if run_privileged usermod -aG "${target_group}" "${invoking_user}"; then
+    warn "${invoking_user} added to ${target_group}. Log out/in or run 'newgrp ${target_group}' so shells notice the new membership."
+  else
+    warn "Failed to add ${invoking_user} to ${target_group}; run 'sudo usermod -aG ${target_group} ${invoking_user}' manually."
+  fi
+}
+
+ensure_socket_group_alignment() {
+  if [[ "${IS_LINUX}" -ne 1 || "${WORLD_ENABLED}" -ne 1 ]]; then
+    return
+  fi
+  if ! command -v systemctl >/dev/null 2>&1; then
+    warn "systemctl not found; verify /run/substrate.sock is root:substrate 0660 after provisioning."
+    return
+  fi
+  local socket_unit="/etc/systemd/system/substrate-world-agent.socket"
+  if [[ ! -f "${socket_unit}" ]]; then
+    warn "Socket unit missing at ${socket_unit}; rerun scripts/linux/world-provision.sh to install it."
+    return
+  fi
+  if grep -q '^SocketGroup=substrate' "${socket_unit}"; then
+    log "substrate-world-agent.socket already sets SocketGroup=substrate."
+    return
+  fi
+
+  log "Updating ${socket_unit} to enforce SocketGroup=substrate (sudo may prompt)..."
+  if run_privileged sed -i 's/^SocketGroup=.*/SocketGroup=substrate/' "${socket_unit}"; then
+    run_privileged systemctl daemon-reload || true
+    run_privileged systemctl restart substrate-world-agent.socket || true
+    run_privileged systemctl restart substrate-world-agent.service || true
+    log "Reloaded socket/service units so /run/substrate.sock is recreated as root:substrate 0660."
+  else
+    warn "Failed to update ${socket_unit}; edit it manually so SocketGroup=substrate and rerun 'sudo systemctl daemon-reload'."
+  fi
+}
+
+print_linger_guidance() {
+  if [[ "${IS_LINUX}" -ne 1 || "${WORLD_ENABLED}" -ne 1 ]]; then
+    return
+  fi
+  local invoking_user
+  invoking_user="$(detect_invoking_user)"
+  if [[ -z "${invoking_user}" || "${invoking_user}" == "root" ]]; then
+    cat <<'MSG'
+[dev-install-substrate] loginctl: Unable to detect a non-root user for lingering.
+Enable lingering manually so socket-activated services stay available after logout:
+  loginctl enable-linger <user>
+MSG
+    return
+  fi
+
+  if ! command -v loginctl >/dev/null 2>&1; then
+    cat <<MSG
+[dev-install-substrate] loginctl not found. To keep the socket-activated world-agent alive
+across logouts/reboots, run this on a systemd host once:
+  loginctl enable-linger ${invoking_user}
+MSG
+    return
+  fi
+
+  local linger_state
+  linger_state="$(loginctl show-user "${invoking_user}" -p Linger 2>/dev/null | cut -d= -f2 || true)"
+  if [[ "${linger_state}" == "yes" ]]; then
+    log "loginctl reports lingering already enabled for ${invoking_user}."
+  else
+    cat <<MSG
+[dev-install-substrate] loginctl status for ${invoking_user}: ${linger_state:-unknown}
+Enable lingering to let systemd launch the socket after reboot/logout:
+  loginctl enable-linger ${invoking_user}
+MSG
+  fi
+}
+
 PREFIX="${HOME}/.substrate"
 PROFILE="debug"
 DEPLOY_SHIMS=1
@@ -248,6 +390,7 @@ elif [[ -x "${world_agent_src}.exe" ]]; then
 fi
 
 if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
+  ensure_substrate_group_membership
   PROVISION_SCRIPT="${REPO_ROOT}/scripts/linux/world-provision.sh"
   if [[ -x "${PROVISION_SCRIPT}" ]]; then
     log "Provisioning Linux world-agent service via ${PROVISION_SCRIPT} (sudo may prompt)..."
@@ -257,6 +400,7 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
   else
     warn "Linux world-provision script missing at ${PROVISION_SCRIPT}; world-agent service not configured."
   fi
+  ensure_socket_group_alignment
 fi
 
 cat >"${ENV_FILE}" <<EOF_ENV
@@ -292,3 +436,4 @@ if [[ -f "${INSTALL_CONFIG_PATH}" ]]; then
 else
   warn "install metadata missing at ${INSTALL_CONFIG_PATH}; run 'substrate config init' after installing to create defaults."
 fi
+print_linger_guidance

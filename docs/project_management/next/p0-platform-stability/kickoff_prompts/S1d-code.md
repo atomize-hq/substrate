@@ -17,7 +17,7 @@
   - Reload the socket/service units so `/run/substrate.sock` becomes `root:substrate 0660`, matching the provisioning scripts.
   - Print clear lingering guidance (`loginctl enable-linger <user>`) including detection of the current status.
 - Update both uninstall scripts so they remove the units/socket cleanly and optionally remind operators about lingering/group cleanup.
-- Refresh docs (AGENTS.md, INSTALLATION.md, WORLD.md) to call out the installer behavior and new requirements for both dev and production setups.
+- Refresh docs (`AGENTS.md`, `INSTALLATION.md`, `WORLD.md`) to call out the installer behavior and new requirements for both dev and production setups.
 
 ## Scope & Guardrails
 - Production shell scripts + docs only; test harness updates handled by S1d-test.

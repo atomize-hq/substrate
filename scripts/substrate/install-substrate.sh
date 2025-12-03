@@ -109,6 +109,109 @@ require_cmd() {
   command_exists "${cmd}" || fatal "Required command '${cmd}' not found. Please install it and re-run."
 }
 
+detect_primary_user() {
+  if [[ -n "${SUBSTRATE_INSTALL_PRIMARY_USER:-}" ]]; then
+    printf '%s\n' "${SUBSTRATE_INSTALL_PRIMARY_USER}"
+    return
+  fi
+  if [[ -n "${SUDO_USER:-}" ]]; then
+    printf '%s\n' "${SUDO_USER}"
+    return
+  fi
+  if [[ "${EUID}" -ne 0 ]]; then
+    if command -v id >/dev/null 2>&1; then
+      id -un 2>/dev/null || true
+      return
+    fi
+    if [[ -n "${USER:-}" ]]; then
+      printf '%s\n' "${USER}"
+      return
+    fi
+  fi
+  printf ''
+}
+
+user_in_group_linux() {
+  local target_user="$1"
+  local target_group="$2"
+  if [[ -z "${target_user}" || -z "${target_group}" ]]; then
+    return 1
+  fi
+  if id -nG "${target_user}" 2>/dev/null | tr ' ' '\n' | grep -qx "${target_group}"; then
+    return 0
+  fi
+  return 1
+}
+
+ensure_linux_group_membership() {
+  local target_user="$1"
+  local target_group="substrate"
+
+  if ! getent group "${target_group}" >/dev/null 2>&1; then
+    log "Creating '${target_group}' group (sudo may prompt)..."
+    if ! run_cmd sudo groupadd --system "${target_group}"; then
+      warn "Unable to create ${target_group} group automatically. Run 'sudo groupadd --system ${target_group}' and re-run the installer."
+      return
+    fi
+  fi
+
+  if [[ -z "${target_user}" || "${target_user}" == "root" ]]; then
+    warn "Could not determine which non-root user should join the '${target_group}' group. Run 'sudo usermod -aG ${target_group} <user>' manually if socket access is required."
+    return
+  fi
+
+  if user_in_group_linux "${target_user}" "${target_group}"; then
+    log "${target_user} already belongs to ${target_group}."
+    return
+  fi
+
+  log "Adding ${target_user} to ${target_group} (sudo may prompt)..."
+  if run_cmd sudo usermod -aG "${target_group}" "${target_user}"; then
+    warn "${target_user} added to ${target_group}. Log out/in or run 'newgrp ${target_group}' so group membership applies to new shells."
+  else
+    warn "Failed to add ${target_user} to ${target_group}; run 'sudo usermod -aG ${target_group} ${target_user}' manually."
+  fi
+}
+
+print_linger_guidance_linux() {
+  local target_user="$1"
+  if [[ -z "${target_user}" || "${target_user}" == "root" ]]; then
+    cat <<'MSG'
+[substrate-install] loginctl: Unable to detect a non-root user for lingering.
+Run 'loginctl enable-linger <user>' so socket-activated services start after logout.
+MSG
+    return
+  fi
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    cat <<MSG
+[substrate-install][dry-run] Would check lingering for ${target_user}. Ensure lingering
+is enabled later via: loginctl enable-linger ${target_user}
+MSG
+    return
+  fi
+
+  if ! command_exists loginctl; then
+    cat <<MSG
+[substrate-install] loginctl not found. To keep the socket active after logout, run:
+  loginctl enable-linger ${target_user}
+MSG
+    return
+  fi
+
+  local linger_state
+  linger_state="$(loginctl show-user "${target_user}" -p Linger 2>/dev/null | cut -d= -f2 || true)"
+  if [[ "${linger_state}" == "yes" ]]; then
+    log "loginctl reports lingering already enabled for ${target_user}."
+  else
+    cat <<MSG
+[substrate-install] loginctl status for ${target_user}: ${linger_state:-unknown}
+Enable lingering to allow systemd to start the world-agent socket after logout:
+  loginctl enable-linger ${target_user}
+MSG
+  fi
+}
+
 initialize_sudo() {
   if [[ ${#SUDO_CMD[@]} -gt 0 ]]; then
     return
@@ -1149,7 +1252,7 @@ PartOf=substrate-world-agent.service
 ListenStream=/run/substrate.sock
 SocketMode=0660
 SocketUser=root
-SocketGroup=root
+SocketGroup=substrate
 DirectoryMode=0750
 RemoveOnStop=yes
 Service=substrate-world-agent.service
@@ -1321,6 +1424,12 @@ install_linux() {
     world_enabled=0
   fi
 
+  local primary_user
+  primary_user="$(detect_primary_user)"
+  if [[ "${world_enabled}" -eq 1 ]]; then
+    ensure_linux_group_membership "${primary_user}"
+  fi
+
   local substrate_bin="${bin_dir}/substrate"
   deploy_shims "${substrate_bin}"
   harden_shim_symlinks "${shim_dir}"
@@ -1354,6 +1463,7 @@ install_linux() {
 
   if [[ "${world_enabled}" -eq 1 ]]; then
     log "World backend enabled; run '${bin_dir}/substrate world doctor --json' for diagnostics or '${bin_dir}/substrate world deps sync --all' to mirror host tools."
+    print_linger_guidance_linux "${primary_user}"
   else
     log "World backend disabled (--no-world). Run '${bin_dir}/substrate world enable --prefix \"${PREFIX}\"' when you are ready to provision."
   fi
