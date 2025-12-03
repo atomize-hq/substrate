@@ -472,3 +472,11 @@ Template:
 - Commands (carried over from the integration pass and validated prior to landing on follow-up): `cargo fmt`; `shellcheck scripts/substrate/dev-install-substrate.sh scripts/substrate/dev-uninstall-substrate.sh scripts/substrate/install-substrate.sh scripts/substrate/uninstall-substrate.sh`; `./tests/installers/install_smoke.sh --scenario dev`; `./tests/installers/install_smoke.sh --scenario prod` — all exited 0, with the dev harness logging substrate group creation + `loginctl` status for `substrate-smoke` (six systemctl invocations, two socket hits) and the prod scenario verifying config/manifests plus install/uninstall socket counts.
 - Harness updates now require Linux+systemd, capture group/linger operations via `GROUP_OP_LOG`/`LINGER_STATE_LOG`, stub `cargo`/`id`/`loginctl` so guidance is testable without touching the host, and teach the curl wrapper (`scripts/substrate/install.sh`) to download assets automatically when no local tree exists.
 - Next steps: unblock the Windows WhatIf follow-up (`S1c-windows-dry-run`) by running `pwsh -File scripts/windows/wsl-warm.ps1 -WhatIf` on a PowerShell 7 host, then proceed with S1e (installer state tracking/cleanup) using the freshly added prompts/manual validation notes.
+
+## [2025-12-03 17:46 UTC] Code Agent – S1e-code – START
+- Checked out `feat/p0-platform-stability-follow-up`, `git pull --ff-only`
+- Reviewed `p0_platform_stability_plan.md`, `tasks.json`, `session_log.md`, S1d outputs, and the S1e-code prompt
+- Updated `tasks.json` (`S1e-code → in_progress`); commit pending
+- Worktree: pending (`ps-s1e-installer-code` → `wt/ps-s1e-installer-code`)
+- Plan: add installer metadata for group existence/user additions/linger state with schema versioning, add opt-in uninstall cleanup flag with resilient fallbacks, update docs, run `cargo fmt` + `shellcheck`, merge branch and refresh tasks/logs
+- Blockers: none noted (host lacks provisioned world-agent but not needed here)
