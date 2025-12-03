@@ -1246,7 +1246,7 @@
       "name": "Installer state tracking & cleanup (test)",
       "type": "test",
       "phase": "S1e – Installer State Tracking",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add installer harness coverage to validate the metadata schema, cleanup flag behavior, and edge cases (missing/corrupt files, multi-user entries) introduced in S1e-code.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",

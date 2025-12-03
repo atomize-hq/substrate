@@ -496,3 +496,12 @@ Template:
 - Created worktree: pending (`ps-s1e-installer-test` → `wt/ps-s1e-installer-test`)
 - Plan: add installer metadata/cleanup harness coverage (creation/upgrade/missing/corrupt, multi-user, cleanup flag), keep harness safe on non-systemd hosts, run fmt + installer tests/shellcheck, merge and update docs/logs
 - Blockers: systemd/sudo may be unavailable; harness will rely on mocks/skips if needed
+
+## [2025-12-03 18:41 UTC] Test Agent – S1e-test – END
+- Worktree commits: 3f5e37a (test: cover installer state metadata – adds install_state_smoke harness and fixes linger array guard)
+- Commands: `cargo fmt`; `./tests/installers/install_state_smoke.sh`; `shellcheck tests/installers/install_state_smoke.sh`; `shellcheck scripts/substrate/uninstall-substrate.sh`
+- Results: pass / pass / pass / pass – harness exercises metadata creation/upgrade, multi-user cleanup flag, and missing/corrupt metadata fallbacks; uninstall script now tolerates empty recorded linger entries under `set -u`
+- Scripts executed: install_state_smoke stubbed all privileged/systemd calls; no real host mutation
+- Kickoff prompts created: updated `docs/project_management/next/p0-platform-stability/kickoff_prompts/S1e-integ.md` to include new harness commands
+- Docs commit: pending (`docs: finish S1e-test`)
+- Next steps / blockers: merge ps-s1e-installer-test into feat/p0-platform-stability-follow-up, update tasks.json to completed, remove worktree after doc commit

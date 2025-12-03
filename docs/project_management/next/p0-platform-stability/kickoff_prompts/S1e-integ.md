@@ -25,8 +25,10 @@
 ```
 cargo fmt
 shellcheck scripts/substrate/dev-install-substrate.sh scripts/substrate/install-substrate.sh scripts/substrate/dev-uninstall-substrate.sh scripts/substrate/uninstall-substrate.sh
-<installer harness/tests from S1e-test>  # document actual commands or skips
-```
+./tests/installers/install_state_smoke.sh
+./tests/installers/install_smoke.sh --scenario dev
+./tests/installers/install_smoke.sh --scenario prod
+``` 
 
 ## End Checklist
 1. Merge code/test branches and fast-forward `feat/p0-platform-stability-follow-up`.
