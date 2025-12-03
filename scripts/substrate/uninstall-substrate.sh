@@ -97,7 +97,13 @@ print_group_cleanup_notice() {
   if ! getent group substrate >/dev/null 2>&1; then
     return
   fi
-  if [[ -n "${target_user}" && "${target_user}" != "root" && user_in_group "${target_user}" substrate ]]; then
+  local in_group=0
+  if [[ -n "${target_user}" ]]; then
+    if user_in_group "${target_user}" substrate; then
+      in_group=1
+    fi
+  fi
+  if [[ -n "${target_user}" && "${target_user}" != "root" && "${in_group}" -eq 1 ]]; then
     cat <<MSG
 [substrate-uninstall] ${target_user} is still a member of the 'substrate' group.
 Remove the membership (and the group when empty) if you no longer need socket access:

@@ -94,7 +94,13 @@ print_group_cleanup_notice() {
   if ! getent group substrate >/dev/null 2>&1; then
     return
   fi
-  if [[ -n "${target_user}" && "${target_user}" != "root" && user_in_group "${target_user}" substrate ]]; then
+  local in_group=0
+  if [[ -n "${target_user}" ]]; then
+    if user_in_group "${target_user}" substrate; then
+      in_group=1
+    fi
+  fi
+  if [[ -n "${target_user}" && "${target_user}" != "root" && "${in_group}" -eq 1 ]]; then
     cat <<MSG
 [dev-uninstall-substrate] ${target_user} still belongs to the 'substrate' group.
 If you are done debugging, remove the membership and delete the group if unused:
