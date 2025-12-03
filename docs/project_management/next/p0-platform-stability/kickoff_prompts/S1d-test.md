@@ -1,7 +1,7 @@
 # Task S1d-test (Installer socket-activation parity) – TEST
 
-## Start Checklist (feat/p0-platform-stability)
-1. `git checkout feat/p0-platform-stability && git pull --ff-only`
+## Start Checklist (feat/p0-platform-stability-follow-up)
+1. `git checkout feat/p0-platform-stability-follow-up && git pull --ff-only`
 2. Read `p0_platform_stability_plan.md`, `tasks.json`, `session_log.md`, S1d-code scope, and this prompt.
 3. Set `S1d-test` to `in_progress`, append START entry, commit doc update (`git commit -am "docs: start S1d-test"`).
 4. Create branch/worktree:
@@ -35,7 +35,7 @@ If the smoke script can’t run on the current machine, record the skip and rati
 ## End Checklist
 1. Ensure fmt/tests/scripts completed; document skips with detail.
 2. Commit changes (e.g., `test: verify dev installer socket activation`).
-3. Merge `ps-s1d-devinstall-test` into `feat/p0-platform-stability`.
+3. Merge `ps-s1d-devinstall-test` into `feat/p0-platform-stability-follow-up`.
 4. Update `tasks.json` + `session_log.md` END entry with command results.
 5. Confirm `S1d-integ` prompt reflects any new suites.
-6. Commit doc/task/log updates (`git commit -am "docs: finish S1d-test"`), remove worktree, hand off.
+6. Commit doc/task/log updates (`git commit -am "docs: finish S1d-test"`) on `feat/p0-platform-stability-follow-up`, remove worktree, hand off.

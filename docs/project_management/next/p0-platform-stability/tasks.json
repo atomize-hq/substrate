@@ -1211,7 +1211,7 @@
         "`cargo fmt`; `shellcheck scripts/substrate/dev-install-substrate.sh scripts/substrate/dev-uninstall-substrate.sh scripts/substrate/install-substrate.sh scripts/substrate/uninstall-substrate.sh` executed or skips logged."
       ],
       "start_checklist": [
-        "Checkout feat/p0-platform-stability && git pull --ff-only",
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
         "Read p0_platform_stability_plan.md, tasks.json, session_log.md, and the kickoff prompt",
         "Set S1d-code to in_progress, append START entry to the session log, commit doc update",
         "Create branch ps-s1d-devinstall-code, add worktree wt/ps-s1d-devinstall-code, and switch into it"
@@ -1219,10 +1219,10 @@
       "end_checklist": [
         "Ensure fmt/shellcheck completed (document skips if any)",
         "Commit worktree changes (script/doc updates) with descriptive message",
-        "Merge ps-s1d-devinstall-code back into feat/p0-platform-stability",
+        "Merge ps-s1d-devinstall-code back into feat/p0-platform-stability-follow-up",
         "Update tasks.json + session_log.md with END entry",
         "Confirm S1d-integ prompt remains accurate (edit if scope changed)",
-        "Commit docs/task/log updates on feat/p0-platform-stability"
+        "Commit docs/task/log updates on feat/p0-platform-stability-follow-up"
       ],
       "depends_on": [
         "S1c-integ"
@@ -1233,6 +1233,51 @@
       "worktree": "wt/ps-s1d-devinstall-code",
       "integration_task": "S1d-integ",
       "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-code.md"
+    },
+    {
+      "id": "S1d-test",
+      "name": "Installer socket-activation parity (test)",
+      "type": "test",
+      "phase": "S1d – Installer Socket-Activation Parity",
+      "status": "in_progress",
+      "description": "Extend the installer smoke harness with dev/prod scenarios that verify socket activation parity, record lingering guidance, and gracefully skip when systemd prerequisites are missing.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "tests/installers/install_smoke.sh",
+        "scripts/substrate/dev-install-substrate.sh",
+        "scripts/substrate/install-substrate.sh",
+        "docs/WORLD.md"
+      ],
+      "acceptance_criteria": [
+        "Smoke script (or sibling harness) covers dev + prod installer flows, asserting `/run/substrate.sock` ownership (`root:substrate 0660`) after each run or capturing sudo output for curl installs.",
+        "Harness verifies the invoking user belongs to the `substrate` group (or warns when running as root/curl context) and records lingering guidance plus whether `loginctl enable-linger` is already configured.",
+        "Fixtures/log capture updated so non-systemd hosts record a structured skip with reasoning instead of failing.",
+        "Session log documents platform constraints (e.g., containerized CI) that prevent executing privileged commands.",
+        "`cargo fmt`; `./tests/installers/install_smoke.sh --scenario dev`; `./tests/installers/install_smoke.sh --scenario prod` executed or skips logged."
+      ],
+      "start_checklist": [
+        "git checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Read p0_platform_stability_plan.md, tasks.json, session_log.md, S1d-code scope, and the S1d-test prompt",
+        "Set S1d-test to in_progress, append START entry, commit doc update (`git commit -am \"docs: start S1d-test\"`)",
+        "Create branch/worktree: `git checkout -b ps-s1d-devinstall-test`, `git worktree add wt/ps-s1d-devinstall-test ps-s1d-devinstall-test`, `cd wt/ps-s1d-devinstall-test`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests/scripts completed; log skips or blockers with detail",
+        "Commit worktree changes (e.g., `test: add installer socket parity smoke`)",
+        "Merge ps-s1d-devinstall-test into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md (END entry with command results, skip rationales, lingering guidance notes)",
+        "Confirm S1d-integ prompt reflects the new smoke coverage expectations",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish S1d-test\"`) on feat/p0-platform-stability-follow-up, remove worktree, hand off"
+      ],
+      "depends_on": [
+        "S1d-code"
+      ],
+      "concurrent_with": [
+        "S1d-code"
+      ],
+      "worktree": "wt/ps-s1d-devinstall-test",
+      "integration_task": "S1d-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-test.md"
     },
     {
       "id": "S1e-code",

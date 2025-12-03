@@ -1,7 +1,7 @@
 # Task S1d-code (Installer socket-activation parity) – CODE
 
-## Start Checklist (feat/p0-platform-stability)
-1. `git checkout feat/p0-platform-stability && git pull --ff-only`
+## Start Checklist (feat/p0-platform-stability-follow-up)
+1. `git checkout feat/p0-platform-stability-follow-up && git pull --ff-only`
 2. Read `p0_platform_stability_plan.md`, `tasks.json`, `session_log.md`, and this prompt.
 3. Set `S1d-code` to `in_progress`, append START entry, commit doc update (`git commit -am "docs: start S1d-code"`).
 4. Create branch/worktree:
@@ -34,7 +34,7 @@ Log shellcheck output (or justify skips) in the session log.
 ## End Checklist
 1. Ensure fmt/shellcheck completed; note skips with justification.
 2. Commit worktree changes (e.g., `feat: align dev installer with socket activation`).
-3. Merge `ps-s1d-devinstall-code` into `feat/p0-platform-stability`.
+3. Merge `ps-s1d-devinstall-code` into `feat/p0-platform-stability-follow-up`.
 4. Update `tasks.json` + `session_log.md` END entry (include commands run).
 5. Confirm `S1d-integ` prompt remains accurate; edit if scope changed.
-6. Commit doc/task/log updates (`git commit -am "docs: finish S1d-code"`), remove worktree, hand off.
+6. Commit doc/task/log updates (`git commit -am "docs: finish S1d-code"`) on `feat/p0-platform-stability-follow-up`, remove worktree, hand off.
