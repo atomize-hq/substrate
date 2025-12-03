@@ -30,6 +30,85 @@ If neither --profile nor --bin is provided the script will look for
 USAGE
 }
 
+detect_invoking_user() {
+  if [[ -n "${SUDO_USER:-}" ]]; then
+    printf '%s\n' "${SUDO_USER}"
+    return
+  fi
+  if [[ -n "${USER:-}" ]]; then
+    printf '%s\n' "${USER}"
+    return
+  fi
+  if command -v id >/dev/null 2>&1; then
+    id -un 2>/dev/null || true
+    return
+  fi
+  printf ''
+}
+
+user_in_group() {
+  local target_user="$1"
+  local target_group="$2"
+  if [[ -z "${target_user}" || -z "${target_group}" ]]; then
+    return 1
+  fi
+  if id -nG "${target_user}" 2>/dev/null | tr ' ' '\n' | grep -qx "${target_group}"; then
+    return 0
+  fi
+  return 1
+}
+
+print_linger_cleanup_notice() {
+  local target_user="$1"
+  if [[ "$(uname -s)" != "Linux" ]]; then
+    return
+  fi
+  if [[ -z "${target_user}" || "${target_user}" == "root" ]]; then
+    cat <<'MSG'
+[dev-uninstall-substrate] loginctl: Unable to detect which user enabled lingering.
+Disable lingering manually if socket activation is no longer needed:
+  loginctl disable-linger <user>
+MSG
+    return
+  fi
+  if ! command -v loginctl >/dev/null 2>&1; then
+    return
+  fi
+
+  local linger_state
+  linger_state="$(loginctl show-user "${target_user}" -p Linger 2>/dev/null | cut -d= -f2 || true)"
+  if [[ "${linger_state}" == "yes" ]]; then
+    cat <<MSG
+[dev-uninstall-substrate] loginctl reports lingering is still enabled for ${target_user}.
+Disable it if you no longer need socket-activated services:
+  loginctl disable-linger ${target_user}
+MSG
+  fi
+}
+
+print_group_cleanup_notice() {
+  local target_user="$1"
+  if [[ "$(uname -s)" != "Linux" ]]; then
+    return
+  fi
+  if ! getent group substrate >/dev/null 2>&1; then
+    return
+  fi
+  if [[ -n "${target_user}" && "${target_user}" != "root" && user_in_group "${target_user}" substrate ]]; then
+    cat <<MSG
+[dev-uninstall-substrate] ${target_user} still belongs to the 'substrate' group.
+If you are done debugging, remove the membership and delete the group if unused:
+  sudo gpasswd -d ${target_user} substrate
+  sudo groupdel substrate    # when no members remain
+MSG
+  else
+    cat <<'MSG'
+[dev-uninstall-substrate] The 'substrate' group still exists. Remove it via
+'sudo groupdel substrate' once all members have been detached.
+MSG
+  fi
+}
+
 PREFIX="${HOME}/.substrate"
 PROFILE=""
 SUBSTRATE_BIN=""
@@ -189,8 +268,13 @@ if [[ "${REMOVE_WORLD_SERVICE}" -eq 1 && "$(uname -s)" == "Linux" ]]; then
     sudo rm -f /usr/local/bin/substrate-world-agent || true
     sudo rm -rf /var/lib/substrate || true
     sudo rm -rf /run/substrate || true
+    sudo rm -f /run/substrate.sock || true
   fi
 fi
+
+cleanup_user="$(detect_invoking_user)"
+print_linger_cleanup_notice "${cleanup_user}"
+print_group_cleanup_notice "${cleanup_user}"
 
 cat <<'MSG'
 

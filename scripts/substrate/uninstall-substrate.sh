@@ -33,6 +33,85 @@ run_python() {
   env -i PATH="${clean_path}" HOME="${HOME}" python3 "$@"
 }
 
+detect_primary_user() {
+  if [[ -n "${SUDO_USER:-}" ]]; then
+    printf '%s\n' "${SUDO_USER}"
+    return
+  fi
+  if [[ -n "${USER:-}" ]]; then
+    printf '%s\n' "${USER}"
+    return
+  fi
+  if command -v id >/dev/null 2>&1; then
+    id -un 2>/dev/null || true
+    return
+  fi
+  printf ''
+}
+
+user_in_group() {
+  local target_user="$1"
+  local target_group="$2"
+  if [[ -z "${target_user}" || -z "${target_group}" ]]; then
+    return 1
+  fi
+  if id -nG "${target_user}" 2>/dev/null | tr ' ' '\n' | grep -qx "${target_group}"; then
+    return 0
+  fi
+  return 1
+}
+
+print_linger_cleanup_notice() {
+  local target_user="$1"
+  if [[ "$(uname -s)" != "Linux" ]]; then
+    return
+  fi
+  if [[ -z "${target_user}" || "${target_user}" == "root" ]]; then
+    cat <<'MSG'
+[substrate-uninstall] loginctl: Unable to determine which user enabled lingering.
+Disable lingering manually if socket activation is no longer required:
+  loginctl disable-linger <user>
+MSG
+    return
+  fi
+  if ! command -v loginctl >/dev/null 2>&1; then
+    return
+  fi
+
+  local linger_state
+  linger_state="$(loginctl show-user "${target_user}" -p Linger 2>/dev/null | cut -d= -f2 || true)"
+  if [[ "${linger_state}" == "yes" ]]; then
+    cat <<MSG
+[substrate-uninstall] loginctl reports lingering enabled for ${target_user}.
+Disable it if Substrate is fully removed:
+  loginctl disable-linger ${target_user}
+MSG
+  fi
+}
+
+print_group_cleanup_notice() {
+  local target_user="$1"
+  if [[ "$(uname -s)" != "Linux" ]]; then
+    return
+  fi
+  if ! getent group substrate >/dev/null 2>&1; then
+    return
+  fi
+  if [[ -n "${target_user}" && "${target_user}" != "root" && user_in_group "${target_user}" substrate ]]; then
+    cat <<MSG
+[substrate-uninstall] ${target_user} is still a member of the 'substrate' group.
+Remove the membership (and the group when empty) if you no longer need socket access:
+  sudo gpasswd -d ${target_user} substrate
+  sudo groupdel substrate    # when no members remain
+MSG
+  else
+    cat <<'MSG'
+[substrate-uninstall] The 'substrate' group remains on this host. Delete it with
+'sudo groupdel substrate' once all members have been removed.
+MSG
+  fi
+}
+
 log "Stopping substrate processes (if any)..."
 pgrep -fl substrate || true
 pkill -x substrate || true
@@ -73,6 +152,7 @@ if command -v systemctl >/dev/null 2>&1; then
     maybe_sudo rm -f /etc/systemd/system/substrate-world-agent.socket || true
     maybe_sudo rm -rf /var/lib/substrate || true
     maybe_sudo rm -rf /run/substrate || true
+    maybe_sudo rm -f /run/substrate.sock || true
     maybe_sudo systemctl daemon-reload 2>/dev/null || true
 fi
 
@@ -106,5 +186,9 @@ fi
 
 log "Clearing shell command cache..."
 hash -r || true
+
+cleanup_user="$(detect_primary_user)"
+print_linger_cleanup_notice "${cleanup_user}"
+print_group_cleanup_notice "${cleanup_user}"
 
 log "Done. Open a new shell to pick up changes."

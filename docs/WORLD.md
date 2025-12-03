@@ -54,6 +54,11 @@ Windows currently degrades to host execution with a friendly notice.
   world-agent under `/usr/local/bin`, write the `.service` **and** `.socket` units,
   and enable socket activation. The script uses `sudo` for filesystem and systemd operations and
   will prompt if elevated credentials are required.
+- The helper ensures the Linux `substrate` group exists, adds the invoking user when possible,
+  and rewrites the socket unit so `/run/substrate.sock` is created as `root:substrate 0660`.
+  If it cannot add you automatically it prints `sudo usermod -aG substrate <user>`. Run
+  `loginctl enable-linger <user>` on hosts with systemd/logind (the script reports the current
+  status) so socket activation survives logout or reboot.
 - After provisioning, verify the listener, units, and capabilities:
   ```bash
   systemctl status substrate-world-agent.socket --no-pager
@@ -63,6 +68,8 @@ Windows currently degrades to host execution with a friendly notice.
   substrate world doctor --json | jq '.world_socket'
   substrate --shim-status | grep 'World socket'
   ```
+  The socket listing should show `root substrate 0660`. If it does not, rerun the provisioning
+  helper or the installer to refresh the socket unit and group membership.
   The doctor JSON now surfaces a `world_socket` block:
   ```json
   {
