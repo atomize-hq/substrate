@@ -505,3 +505,10 @@ Template:
 - Kickoff prompts created: updated `docs/project_management/next/p0-platform-stability/kickoff_prompts/S1e-integ.md` to include new harness commands
 - Docs commit: pending (`docs: finish S1e-test`)
 - Next steps / blockers: merge ps-s1e-installer-test into feat/p0-platform-stability-follow-up, update tasks.json to completed, remove worktree after doc commit
+
+## [2025-12-03 19:05 UTC] Integration Agent – S1e-integ – START
+- Checked out feat/p0-platform-stability-follow-up; confirmed S1e-code (e1f3431) + S1e-test (3f5e37a) completion in tasks/log
+- Updated tasks.json (`S1e-integ` → `in_progress`); doc commit pending
+- Worktree setup pending (`ps-s1e-installer-integ` → `wt/ps-s1e-installer-integ`)
+- Plan: merge ps-s1e-installer-code/test, resolve conflicts, run `cargo fmt`, `shellcheck` on installer scripts, `./tests/installers/install_state_smoke.sh`, `./tests/installers/install_smoke.sh --scenario dev`, `./tests/installers/install_smoke.sh --scenario prod`, fast-forward feat/p0-platform-stability-follow-up, update docs/logs, remove worktree
+- Blockers: none; installer harness expected to stub systemd/sudo where unavailable

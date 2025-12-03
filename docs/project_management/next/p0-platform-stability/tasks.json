@@ -1289,7 +1289,7 @@
       "name": "Installer state tracking & cleanup (integration)",
       "type": "integration",
       "phase": "S1e – Installer State Tracking",
-      "status": "queued",
+      "status": "in_progress",
       "description": "Merge the S1e code/test branches, re-run fmt/shellcheck/tests, and land the installer metadata feature on feat/p0-platform-stability-follow-up with updated docs/logs.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
