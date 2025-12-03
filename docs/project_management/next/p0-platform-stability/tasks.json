@@ -1054,6 +1054,55 @@
       "worktree": "wt/ps-h1b-healthux-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/H1b-integ.md"
+    },
+    {
+      "id": "S1d-code",
+      "name": "Installer socket-activation parity (code)",
+      "type": "code",
+      "phase": "S1d – Installer Socket-Activation Parity",
+      "status": "in_progress",
+      "description": "Update dev/prod installer scripts plus docs so socket-activated installs consistently provision the substrate group, apply lingering guidance, and reload the systemd units before prompting operators.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "scripts/substrate/dev-install-substrate.sh",
+        "scripts/substrate/dev-uninstall-substrate.sh",
+        "scripts/substrate/install-substrate.sh",
+        "scripts/substrate/uninstall-substrate.sh",
+        "docs/AGENTS.md",
+        "docs/INSTALLATION.md",
+        "docs/WORLD.md"
+      ],
+      "acceptance_criteria": [
+        "Dev and production installers create the substrate group when missing, add the invoking user on Linux hosts (with sudo guidance for curl-based installs), and leave macOS/WSL behavior unchanged.",
+        "Installers reload the socket/service units so `/run/substrate.sock` ends up owned by `root:substrate` with `0660` permissions, matching the provisioning scripts.",
+        "Install output highlights lingering requirements (`loginctl enable-linger <user>`) including detection of the current linger state.",
+        "Uninstall scripts remove the socket/service units and remind operators about lingering and group cleanup when appropriate.",
+        "Docs (AGENTS.md, INSTALLATION.md, WORLD.md) describe the group/linger expectations for dev + production setups.",
+        "`cargo fmt`; `shellcheck scripts/substrate/dev-install-substrate.sh scripts/substrate/dev-uninstall-substrate.sh scripts/substrate/install-substrate.sh scripts/substrate/uninstall-substrate.sh` executed or skips logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability && git pull --ff-only",
+        "Read p0_platform_stability_plan.md, tasks.json, session_log.md, and the kickoff prompt",
+        "Set S1d-code to in_progress, append START entry to the session log, commit doc update",
+        "Create branch ps-s1d-devinstall-code, add worktree wt/ps-s1d-devinstall-code, and switch into it"
+      ],
+      "end_checklist": [
+        "Ensure fmt/shellcheck completed (document skips if any)",
+        "Commit worktree changes (script/doc updates) with descriptive message",
+        "Merge ps-s1d-devinstall-code back into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm S1d-integ prompt remains accurate (edit if scope changed)",
+        "Commit docs/task/log updates on feat/p0-platform-stability"
+      ],
+      "depends_on": [
+        "S1c-integ"
+      ],
+      "concurrent_with": [
+        "S1d-test"
+      ],
+      "worktree": "wt/ps-s1d-devinstall-code",
+      "integration_task": "S1d-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-code.md"
     }
   ]
 }

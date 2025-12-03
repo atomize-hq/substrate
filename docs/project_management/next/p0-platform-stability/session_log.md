@@ -427,3 +427,11 @@ Template:
 - Artifacts: recorded the manual JSON output in the session log above; no additional scripts were required for this integration pass.
 - Docs commit: pending (`docs: finish H1b-integ`) to mark `H1b-integ` complete, update tasks, and close out the P0 program.
 - Next steps / blockers: fast-forward `feat/p0-platform-stability` to this integration branch, remove `wt/ps-h1b-healthux-integ`, and note that a real world-agent run is still a follow-up when a provisioned host is available.
+
+## [2025-12-03 15:02 UTC] Code Agent – S1d-code – START
+- Checked out `feat/p0-platform-stability`, confirmed `git pull --ff-only` succeeds locally (branch still lacks upstream).
+- Read the P0 plan, `tasks.json`, `session_log.md`, and the S1d-code kickoff prompt documenting installer parity scope.
+- Updated `tasks.json` (`S1d-code → in_progress`) and appended this START entry; doc-only commit pending after checklist items complete.
+- Worktree creation pending (`ps-s1d-devinstall-code` → `wt/ps-s1d-devinstall-code`) once the start commit lands.
+- Plan: ensure dev/prod installer scripts create the `substrate` group + add the invoking user, reload socket/service units for root:substrate 0660 ownership, emit lingering guidance, align uninstall scripts, refresh AGENTS/INSTALLATION/WORLD docs, then run `cargo fmt` + `shellcheck` per prompt.
+- Blockers: host lacks an installed world-agent/socket so some installer behaviors must remain guarded/documented rather than executed end-to-end.
