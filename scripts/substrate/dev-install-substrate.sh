@@ -323,18 +323,21 @@ ensure_socket_group_alignment() {
   fi
   if grep -q '^SocketGroup=substrate' "${socket_unit}"; then
     log "substrate-world-agent.socket already sets SocketGroup=substrate."
-    return
+  else
+    log "Updating ${socket_unit} to enforce SocketGroup=substrate (sudo may prompt)..."
+    if ! run_privileged sed -i 's/^SocketGroup=.*/SocketGroup=substrate/' "${socket_unit}"; then
+      warn "Failed to update ${socket_unit}; edit it manually so SocketGroup=substrate and rerun 'sudo systemctl daemon-reload'."
+      return
+    fi
   fi
 
-  log "Updating ${socket_unit} to enforce SocketGroup=substrate (sudo may prompt)..."
-  if run_privileged sed -i 's/^SocketGroup=.*/SocketGroup=substrate/' "${socket_unit}"; then
-    run_privileged systemctl daemon-reload || true
-    run_privileged systemctl restart substrate-world-agent.socket || true
-    run_privileged systemctl restart substrate-world-agent.service || true
-    log "Reloaded socket/service units so /run/substrate.sock is recreated as root:substrate 0660."
-  else
-    warn "Failed to update ${socket_unit}; edit it manually so SocketGroup=substrate and rerun 'sudo systemctl daemon-reload'."
-  fi
+  log "Restarting world-agent units to apply socket ownership (sudo may prompt)..."
+  run_privileged systemctl stop substrate-world-agent.service substrate-world-agent.socket || true
+  run_privileged rm -f /run/substrate.sock || true
+  run_privileged systemctl daemon-reload || true
+  run_privileged systemctl start substrate-world-agent.socket || true
+  run_privileged systemctl start substrate-world-agent.service || true
+  log "Reloaded socket/service units so /run/substrate.sock is recreated as root:substrate 0660."
 }
 
 print_linger_guidance() {
