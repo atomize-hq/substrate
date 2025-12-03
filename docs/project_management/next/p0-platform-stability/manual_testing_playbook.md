@@ -4,14 +4,13 @@ This document captures the full end-to-end validation flow for the socket-activa
 
 ## 1. Validation Checklist
 
-### 1.1 Linux Provisioning & Socket Activation
+### 1.1 Linux Provisioning & Socket Activation — World enabled
 
 1. Deploy dev build and provision the world-agent:
    ```bash
    ./scripts/substrate/dev-install-substrate.sh --profile release
    ./scripts/linux/world-provision.sh --profile release
    ```
-   (The dev installer always builds from the local tree; there is no skip-build flag. Reuse the same `target` dir to avoid full rebuilds.)
 2. Verify systemd units and socket:
    ```bash
    sudo systemctl status substrate-world-agent.socket --no-pager
@@ -29,7 +28,30 @@ This document captures the full end-to-end validation flow for the socket-activa
    cargo test -p substrate-shell --test logging
    ```
 
-### 1.2 macOS (Lima) Socket Activation
+### 1.2 Linux Provisioning & Socket Activation — No World
+
+1. Deploy dev build with world disabled:
+   ```bash
+   ./scripts/substrate/dev-install-substrate.sh --profile release --no-world
+   ```
+2. Verify systemd units and socket are absent/inactive:
+   ```bash
+   sudo systemctl status substrate-world-agent.socket --no-pager   # expect inactive or not-found
+   sudo systemctl status substrate-world-agent.service --no-pager  # expect inactive or not-found
+   ls -l /run/substrate.sock                                       # expect “No such file”
+   ```
+3. Probe the agent and shell telemetry:
+   ```bash
+   substrate world doctor --json | jq '{world_enabled, world_socket, warnings}'
+   substrate --shim-status | grep -i 'World socket'
+   ```
+   Expect `world_enabled: false` (or warning about no world) and no socket path.
+4. Optional: run the logging tests:
+   ```bash
+   cargo test -p substrate-shell --test logging
+   ```
+
+### 1.3 macOS (Lima) Socket Activation
 
 1. Warm the Lima guest and inspect the socket:
    ```bash
