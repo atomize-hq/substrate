@@ -444,3 +444,11 @@ Template:
 - Kickoff prompts: `S1d-integ` prompt not yet authored; scope unchanged so no edits required.
 - Docs commit: pending (`docs: finish S1d-code` once tasks/log update is staged).
 - Next steps / blockers: merge branch back to `feat/p0-platform-stability`, remove worktree after doc commit, and hand off to the next role.
+
+## [2025-12-03 16:40 UTC] Test Agent – S1d-test – START
+- Checked out `feat/p0-platform-stability`; `git pull --ff-only` succeeded locally (branch still lacks upstream tracking).
+- Read `p0_platform_stability_plan.md`, `tasks.json`, `session_log.md`, `docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-code.md`, and the S1d-test prompt.
+- Updated `tasks.json` (`S1d-test → in_progress`), added kickoff prompt `S1d-test.md`, and appended this START entry; doc-only commit pending per checklist.
+- Worktree setup pending (`ps-s1d-devinstall-test` → `wt/ps-s1d-devinstall-test`) once the start commit lands.
+- Plan: extend `tests/installers/install_smoke.sh` with dev/prod installer scenarios that verify `/run/substrate.sock` ownership, substrate group membership, and lingering guidance; add skip-aware logging for non-systemd hosts; run `cargo fmt` plus both smoke scenarios, documenting skips if this containerized host lacks the privileges/systemd socket.
+- Blockers: running privileged installers/systemd checks may be impossible inside this environment (no systemd, limited sudo); will log skips + rationale if commands cannot run.
