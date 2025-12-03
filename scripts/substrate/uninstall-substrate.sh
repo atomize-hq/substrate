@@ -263,7 +263,7 @@ cleanup_recorded_linger() {
   if [[ "${IS_LINUX}" -ne 1 ]]; then
     return 0
   fi
-  if [[ ${#RECORDED_LINGER_USERS[@]:-} -eq 0 ]]; then
+  if [[ ${#RECORDED_LINGER_USERS[@]} -eq 0 ]]; then
     return 0
   fi
   if ! command -v loginctl >/dev/null 2>&1; then
