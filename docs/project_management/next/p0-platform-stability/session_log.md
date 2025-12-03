@@ -435,3 +435,12 @@ Template:
 - Worktree creation pending (`ps-s1d-devinstall-code` → `wt/ps-s1d-devinstall-code`) once the start commit lands.
 - Plan: ensure dev/prod installer scripts create the `substrate` group + add the invoking user, reload socket/service units for root:substrate 0660 ownership, emit lingering guidance, align uninstall scripts, refresh AGENTS/INSTALLATION/WORLD docs, then run `cargo fmt` + `shellcheck` per prompt.
 - Blockers: host lacks an installed world-agent/socket so some installer behaviors must remain guarded/documented rather than executed end-to-end.
+
+## [2025-12-03 15:14 UTC] Code Agent – S1d-code – END
+- Worktree commits: 2557df3 (`feat: align installers with socket activation`).
+- Commands: `cargo fmt`; `shellcheck scripts/substrate/dev-install-substrate.sh scripts/substrate/dev-uninstall-substrate.sh scripts/substrate/install-substrate.sh scripts/substrate/uninstall-substrate.sh`.
+- Results: fmt pass; shellcheck pass (no warnings).
+- Scripts executed: shellcheck only (see command summary above).
+- Kickoff prompts: `S1d-integ` prompt not yet authored; scope unchanged so no edits required.
+- Docs commit: pending (`docs: finish S1d-code` once tasks/log update is staged).
+- Next steps / blockers: merge branch back to `feat/p0-platform-stability`, remove worktree after doc commit, and hand off to the next role.

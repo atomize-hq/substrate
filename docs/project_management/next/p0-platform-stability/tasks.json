@@ -1060,7 +1060,7 @@
       "name": "Installer socket-activation parity (code)",
       "type": "code",
       "phase": "S1d – Installer Socket-Activation Parity",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Update dev/prod installer scripts plus docs so socket-activated installs consistently provision the substrate group, apply lingering guidance, and reload the systemd units before prompting operators.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
