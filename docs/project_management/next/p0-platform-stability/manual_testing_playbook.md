@@ -8,9 +8,10 @@ This document captures the full end-to-end validation flow for the socket-activa
 
 1. Deploy dev build and provision the world-agent:
    ```bash
-   ./scripts/substrate/dev-install-substrate.sh --profile release --skip-build
+   ./scripts/substrate/dev-install-substrate.sh --profile release
    ./scripts/linux/world-provision.sh --profile release
    ```
+   (The dev installer always builds from the local tree; there is no skip-build flag. Reuse the same `target` dir to avoid full rebuilds.)
 2. Verify systemd units and socket:
    ```bash
    sudo systemctl status substrate-world-agent.socket --no-pager
@@ -84,6 +85,56 @@ This document captures the full end-to-end validation flow for the socket-activa
    cargo test -p substrate-shell --test shim_health
    cargo test -p substrate-shell --test shim_doctor
    ```
+
+### 1.6 Installer State Tracking & Cleanup (Linux dev/prod)
+
+Run both installer variants end-to-end with cleanup enabled so we validate the new metadata and unit teardown flow.
+
+**Dev flow (builds from the local tree)**
+1. Install with a temp prefix and capture logs:
+   ```bash
+   export PREFIX=/tmp/substrate-manual-dev
+   ./scripts/substrate/dev-install-substrate.sh --profile release
+   ```
+2. Inspect host state metadata:
+   ```bash
+   jq . "${PREFIX}/install_state.json"
+   ```
+   Confirm `schema_version=1`, `created_by_installer` reflects the run, `members` lists any users added, and `linger` shows the prior state.
+3. Verify units and socket (adjust paths if your distro differs):
+   ```bash
+   sudo systemctl status substrate-world-agent.socket --no-pager || true
+   sudo systemctl status substrate-world-agent.service --no-pager || true
+   ls -l /run/substrate.sock || true
+   ```
+4. Uninstall with cleanup:
+   ```bash
+   ./scripts/substrate/dev-uninstall-substrate.sh --cleanup-state
+   sudo systemctl status substrate-world-agent.socket --no-pager || true
+   sudo systemctl status substrate-world-agent.service --no-pager || true
+   ```
+   Missing-unit status is expected; confirm group membership/linger only changed when `created_by_installer=true`.
+
+**Prod flow (release-style install)**
+1. Install to a temp prefix (optionally pin a version with `--version <semver>`):
+   ```bash
+   export PREFIX=/tmp/substrate-manual-prod
+   ./scripts/substrate/install-substrate.sh --prefix "${PREFIX}"
+   ```
+2. Inspect metadata at `${PREFIX}/install_state.json` and confirm fields as above.
+3. Verify world doctor and unit state:
+   ```bash
+   "${PREFIX}/bin/substrate" world doctor --json | jq '.world_socket'
+   sudo systemctl status substrate-world-agent.socket --no-pager || true
+   sudo systemctl status substrate-world-agent.service --no-pager || true
+   ```
+4. Uninstall with cleanup:
+   ```bash
+   ./scripts/substrate/uninstall-substrate.sh --cleanup-state
+   sudo systemctl status substrate-world-agent.socket --no-pager || true
+   sudo systemctl status substrate-world-agent.service --no-pager || true
+   ```
+   Confirm the units are absent and the metadata-driven cleanup removed only installer-added users/linger entries. Preserve systemctl logs (`/tmp/substrate-installer-*/systemctl-*.log` if you ran the harness) with your artifacts.
 
 ## 2. Debugging Log (2025-12-02 UTC-5)
 
