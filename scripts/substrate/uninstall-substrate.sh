@@ -3,6 +3,19 @@ set -euo pipefail
 
 log() { printf '[substrate-uninstall] %s\n' "$1"; }
 
+usage() {
+  cat <<'USAGE'
+Substrate Uninstaller
+
+Usage:
+  uninstall-substrate.sh [--cleanup-state] [--auto-cleanup] [-h|--help]
+
+Options:
+  --cleanup-state, --auto-cleanup  Remove installer-recorded group membership/lingering (opt-in)
+  -h, --help                       Show this message
+USAGE
+}
+
 maybe_sudo() {
   if [[ ${EUID} -eq 0 ]]; then
     "$@"
@@ -118,6 +131,238 @@ MSG
   fi
 }
 
+load_host_state_metadata() {
+  HOST_STATE_METADATA_LOADED=0
+  RECORDED_GROUP_PREEXISTING=""
+  RECORDED_GROUP_CREATED=""
+  RECORDED_MEMBERS_ADDED=()
+  RECORDED_LINGER_USERS=()
+
+  local path="$1"
+  if [[ -z "${path}" || ! -f "${path}" ]]; then
+    return 1
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    log "python3 not available; skipping host state metadata read (${path})."
+    return 1
+  fi
+
+  local output
+  if ! output="$(python3 - "${path}" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+try:
+    data = json.loads(path.read_text())
+except Exception as exc:  # noqa: BLE001
+    sys.stderr.write(f"[substrate-uninstall] warning: unable to parse {path}: {exc}\n")
+    sys.exit(1)
+
+if data.get("schema_version") != 1:
+    sys.stderr.write(f"[substrate-uninstall] warning: unsupported host state schema in {path}\n")
+    sys.exit(2)
+
+host = data.get("host_state") or {}
+group = host.get("group") or {}
+pre = group.get("existed_before")
+if isinstance(pre, bool):
+    print(f"group_preexisting:{str(pre).lower()}")
+created = group.get("created_by_installer")
+if isinstance(created, bool):
+    print(f"group_created:{str(created).lower()}")
+members = group.get("members_added") or []
+for member in members:
+    if isinstance(member, str):
+        print(f"user_added:{member}")
+
+linger = host.get("linger") or {}
+for user, info in (linger.get("users") or {}).items():
+    if not isinstance(info, dict):
+        continue
+    if info.get("enabled_by_substrate"):
+        print(f"linger_enabled:{user}")
+PY
+)"; then
+    return 1
+  fi
+
+  while IFS= read -r line; do
+    case "${line}" in
+      group_preexisting:*)
+        RECORDED_GROUP_PREEXISTING="${line#*:}"
+        ;;
+      group_created:*)
+        RECORDED_GROUP_CREATED="${line#*:}"
+        ;;
+      user_added:*)
+        RECORDED_MEMBERS_ADDED+=("${line#*:}")
+        ;;
+      linger_enabled:*)
+        RECORDED_LINGER_USERS+=("${line#*:}")
+        ;;
+    esac
+  done <<< "${output}"
+
+  HOST_STATE_METADATA_LOADED=1
+  return 0
+}
+
+cleanup_recorded_group() {
+  local removed=0
+  if [[ "${IS_LINUX}" -ne 1 ]]; then
+    return 0
+  fi
+  if ! command -v getent >/dev/null 2>&1; then
+    log "getent not available; cannot verify substrate group membership for cleanup."
+    return 0
+  fi
+  if ! getent group substrate >/dev/null 2>&1; then
+    return 0
+  fi
+
+  for user in "${RECORDED_MEMBERS_ADDED[@]:-}"; do
+    if [[ -z "${user}" || "${user}" == "root" ]]; then
+      continue
+    fi
+    if user_in_group "${user}" "substrate"; then
+      if maybe_sudo gpasswd -d "${user}" substrate; then
+        log "Removed ${user} from substrate group (recorded during install)."
+        removed=1
+      else
+        log "Unable to remove ${user} from substrate group automatically."
+      fi
+    fi
+  done
+
+  local allow_group_delete=0
+  if [[ "${RECORDED_GROUP_PREEXISTING}" == "false" || "${RECORDED_GROUP_CREATED}" == "true" ]]; then
+    allow_group_delete=1
+  fi
+  if [[ "${allow_group_delete}" -eq 1 ]]; then
+    local members
+    members="$(getent group substrate | cut -d: -f4 || true)"
+    if [[ -z "${members}" ]]; then
+      if maybe_sudo groupdel substrate; then
+        log "Deleted substrate group (created by installer, no remaining members)."
+        removed=1
+      else
+        log "Unable to delete substrate group; remove it manually if desired."
+      fi
+    else
+      log "substrate group still has members (${members}); skipping deletion."
+    fi
+  fi
+
+  return ${removed}
+}
+
+cleanup_recorded_linger() {
+  local changed=0
+  if [[ "${IS_LINUX}" -ne 1 ]]; then
+    return 0
+  fi
+  if [[ ${#RECORDED_LINGER_USERS[@]:-} -eq 0 ]]; then
+    return 0
+  fi
+  if ! command -v loginctl >/dev/null 2>&1; then
+    log "loginctl not available; cannot disable lingering automatically."
+    return 0
+  fi
+
+  for user in "${RECORDED_LINGER_USERS[@]}"; do
+    if [[ -z "${user}" || "${user}" == "root" ]]; then
+      continue
+    fi
+    local linger_state
+    linger_state="$(loginctl show-user "${user}" -p Linger 2>/dev/null | cut -d= -f2 || true)"
+    if [[ "${linger_state}" != "yes" ]]; then
+      continue
+    fi
+    if maybe_sudo loginctl disable-linger "${user}"; then
+      log "Disabled lingering for ${user} based on installer metadata."
+      changed=1
+    else
+      log "Failed to disable lingering for ${user}; run 'loginctl disable-linger ${user}' manually if needed."
+    fi
+  done
+
+  return ${changed}
+}
+
+perform_auto_cleanup() {
+  local cleanup_user="$1"
+
+  if [[ "${AUTO_CLEANUP}" -ne 1 ]]; then
+    print_linger_cleanup_notice "${cleanup_user}"
+    print_group_cleanup_notice "${cleanup_user}"
+    return
+  fi
+
+  if [[ "${IS_LINUX}" -ne 1 ]]; then
+    log "Host-state cleanup is only supported on Linux; showing manual guidance."
+    print_linger_cleanup_notice "${cleanup_user}"
+    print_group_cleanup_notice "${cleanup_user}"
+    return
+  fi
+
+  if [[ "${HOST_STATE_METADATA_LOADED}" -ne 1 ]]; then
+    log "Host-state metadata missing or unreadable; falling back to manual cleanup guidance."
+    print_linger_cleanup_notice "${cleanup_user}"
+    print_group_cleanup_notice "${cleanup_user}"
+    return
+  fi
+
+  local actions=0
+  if ! cleanup_recorded_group; then
+    actions=1
+  fi
+  if ! cleanup_recorded_linger; then
+    actions=1
+  fi
+
+  if [[ "${actions}" -eq 0 ]]; then
+    log "No recorded host-state changes required automatic cleanup. Showing guidance instead."
+    print_linger_cleanup_notice "${cleanup_user}"
+    print_group_cleanup_notice "${cleanup_user}"
+  fi
+}
+
+AUTO_CLEANUP=0
+HOST_STATE_PATH="${HOME}/.substrate/install_state.json"
+HOST_STATE_METADATA_LOADED=0
+RECORDED_GROUP_PREEXISTING=""
+RECORDED_GROUP_CREATED=""
+RECORDED_MEMBERS_ADDED=()
+RECORDED_LINGER_USERS=()
+IS_LINUX=0
+if [[ "$(uname -s)" == "Linux" ]]; then
+  IS_LINUX=1
+fi
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --cleanup-state|--auto-cleanup)
+      AUTO_CLEANUP=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      log "Unknown argument: $1"
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+if [[ "${AUTO_CLEANUP}" -eq 1 ]]; then
+  load_host_state_metadata "${HOST_STATE_PATH}" || true
+fi
+
 log "Stopping substrate processes (if any)..."
 pgrep -fl substrate || true
 pkill -x substrate || true
@@ -194,7 +439,6 @@ log "Clearing shell command cache..."
 hash -r || true
 
 cleanup_user="$(detect_primary_user)"
-print_linger_cleanup_notice "${cleanup_user}"
-print_group_cleanup_notice "${cleanup_user}"
+perform_auto_cleanup "${cleanup_user}"
 
 log "Done. Open a new shell to pick up changes."

@@ -60,6 +60,22 @@ the exact `substrate world enable` command to run when you are ready to
 provision the backend. You can still force a single world-isolated run later
 with `substrate --world ...` without changing the stored metadata.
 
+### Installer Metadata & Cleanup
+
+- Both installers (`install-substrate.sh` + `dev-install-substrate.sh`) record
+  host-state details in `<prefix>/install_state.json` (default:
+  `~/.substrate/install_state.json`). Schema `version = 1` tracks whether the
+  `substrate` group existed, which users the installer added, and the observed
+  `loginctl` lingering state under `host_state.{group,linger}`.
+- Metadata writes are idempotent; missing or corrupted files only emit warnings
+  and never block install/uninstall runs.
+- Uninstallers accept `--cleanup-state`/`--auto-cleanup` to remove recorded
+  group memberships, drop the `substrate` group when the installer created it
+  and no members remain, and disable lingering only when Substrate previously
+  enabled it. Without the flag the existing guidance-only behavior remains.
+- Upcoming interactive install/uninstall flows will use the same metadata to
+  surface opt-in prompts before altering group membership or lingering.
+
 ### Prerequisites
 
 - PID 1 must be `systemd` (`ps -p 1 -o comm=`). On WSL, enable systemd by adding

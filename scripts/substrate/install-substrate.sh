@@ -33,6 +33,11 @@ SUDO_CMD=()
 MANAGER_ENV_PATH=""
 MANAGER_INIT_PATH=""
 INSTALL_CONFIG_PATH=""
+HOST_STATE_PATH=""
+HOST_STATE_GROUP_EXISTED=""
+HOST_STATE_GROUP_CREATED=0
+HOST_STATE_ADDED_USERS=()
+HOST_STATE_LINGER_ENTRIES=()
 
 log() {
   printf '[%s] %s\n' "${INSTALLER_NAME}" "$*" >&2
@@ -143,15 +148,220 @@ user_in_group_linux() {
   return 1
 }
 
+record_group_existence() {
+  if [[ "${PLATFORM:-}" != "linux" ]]; then
+    return
+  fi
+  if [[ -n "${HOST_STATE_GROUP_EXISTED}" ]]; then
+    return
+  fi
+  if command_exists getent; then
+    if getent group substrate >/dev/null 2>&1; then
+      HOST_STATE_GROUP_EXISTED="true"
+    else
+      HOST_STATE_GROUP_EXISTED="false"
+    fi
+  else
+    HOST_STATE_GROUP_EXISTED="unknown"
+  fi
+}
+
+record_group_created() {
+  HOST_STATE_GROUP_CREATED=1
+}
+
+record_user_added() {
+  local user="$1"
+  if [[ -z "${user}" ]]; then
+    return
+  fi
+  for existing in "${HOST_STATE_ADDED_USERS[@]:-}"; do
+    if [[ "${existing}" == "${user}" ]]; then
+      return
+    fi
+  done
+  HOST_STATE_ADDED_USERS+=("${user}")
+}
+
+record_linger_state() {
+  local user="$1"
+  local state="$2"
+  local enabled="${3:-0}"
+  if [[ -z "${user}" ]]; then
+    return
+  fi
+  local updated=0
+  for idx in "${!HOST_STATE_LINGER_ENTRIES[@]}"; do
+    IFS=':' read -r existing_user existing_state existing_enabled <<<"${HOST_STATE_LINGER_ENTRIES[$idx]}"
+    if [[ "${existing_user}" == "${user}" ]]; then
+      local new_state="${existing_state:-unknown}"
+      if [[ -n "${state}" ]]; then
+        new_state="${state}"
+      fi
+      local new_enabled="${existing_enabled:-0}"
+      if [[ "${enabled}" -eq 1 ]]; then
+        new_enabled="1"
+      fi
+      HOST_STATE_LINGER_ENTRIES[idx]="${user}:${new_state}:${new_enabled}"
+      updated=1
+      break
+    fi
+  done
+  if [[ "${updated}" -eq 0 ]]; then
+    local normalized_state="${state:-unknown}"
+    local normalized_enabled=0
+    if [[ "${enabled}" -eq 1 ]]; then
+      normalized_enabled=1
+    fi
+    HOST_STATE_LINGER_ENTRIES+=("${user}:${normalized_state}:${normalized_enabled}")
+  fi
+}
+
+write_host_state_metadata() {
+  local world_enabled="${1:-1}"
+  if [[ "${PLATFORM:-}" != "linux" || "${world_enabled}" -ne 1 ]]; then
+    return
+  fi
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    log "Skipping host state metadata during dry-run (${HOST_STATE_PATH:-unset})."
+    return
+  fi
+  if [[ -z "${HOST_STATE_PATH}" ]]; then
+    return
+  fi
+  if ! command_exists python3; then
+    warn "python3 not found; skipping host state metadata recording (${HOST_STATE_PATH})."
+    return
+  fi
+
+  local events=()
+  if [[ -n "${HOST_STATE_GROUP_EXISTED}" ]]; then
+    events+=("group_preexisting:${HOST_STATE_GROUP_EXISTED}")
+  fi
+  if [[ "${HOST_STATE_GROUP_CREATED}" -eq 1 ]]; then
+    events+=("group_created:true")
+  fi
+  for user in "${HOST_STATE_ADDED_USERS[@]:-}"; do
+    events+=("user_added:${user}")
+  done
+  for entry in "${HOST_STATE_LINGER_ENTRIES[@]:-}"; do
+    events+=("linger:${entry}")
+  done
+
+  if [[ ${#events[@]} -eq 0 ]]; then
+    log "No host state changes detected; skipping host metadata write."
+    return
+  fi
+
+  local event_payload
+  event_payload="$(printf '%s\n' "${events[@]}")"
+  mkdir -p "$(dirname "${HOST_STATE_PATH}")" || true
+  local tmp="${HOST_STATE_PATH}.tmp"
+  if ! STATE_EVENTS="${event_payload}" python3 - "${HOST_STATE_PATH}" > "${tmp}" <<'PY'
+import datetime
+import json
+import os
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+events = [line.strip() for line in os.environ.get("STATE_EVENTS", "").splitlines() if line.strip()]
+schema_version = 1
+timestamp = datetime.datetime.utcnow().isoformat() + "Z"
+
+base = {}
+if path.exists():
+    try:
+        with path.open() as f:
+            base = json.load(f)
+    except Exception as exc:  # noqa: BLE001
+        sys.stderr.write(f"[substrate-install] warning: unable to parse {path}: {exc}\n")
+        base = {}
+
+if base.get("schema_version") != schema_version:
+    base = {}
+
+base["schema_version"] = schema_version
+base.setdefault("created_at", timestamp)
+base["updated_at"] = timestamp
+
+host = base.setdefault("host_state", {})
+group = host.setdefault("group", {"name": "substrate", "members_added": []})
+group.setdefault("name", "substrate")
+members = {m for m in group.get("members_added", []) if isinstance(m, str)}
+linger = host.setdefault("linger", {})
+linger_users = linger.setdefault("users", {})
+
+
+def parse_bool(raw: str):
+    lowered = raw.lower()
+    if lowered in ("true", "1", "yes"):
+        return True
+    if lowered in ("false", "0", "no"):
+        return False
+    return None
+
+
+for raw_event in events:
+    parts = raw_event.split(":", 3)
+    if not parts:
+        continue
+    kind = parts[0]
+    if kind == "group_preexisting" and len(parts) >= 2:
+        val = parse_bool(parts[1])
+        if val is not None:
+            group["existed_before"] = val
+        elif "existed_before" not in group:
+            group["existed_before"] = None
+    elif kind == "group_created" and len(parts) >= 2:
+        val = parse_bool(parts[1])
+        if val is not None:
+            group["created_by_installer"] = val
+    elif kind == "user_added" and len(parts) >= 2:
+        user = parts[1]
+        if user:
+            members.add(user)
+    elif kind == "linger" and len(parts) >= 4:
+        user, state, enabled_flag = parts[1], parts[2], parts[3]
+        if not user:
+            continue
+        entry = linger_users.setdefault(user, {})
+        if state:
+            entry.setdefault("state_at_install", state)
+            entry["state_at_install"] = state
+        enabled_val = parse_bool(enabled_flag)
+        if enabled_val is not None:
+            entry["enabled_by_substrate"] = enabled_val
+        elif "enabled_by_substrate" not in entry:
+            entry["enabled_by_substrate"] = False
+
+group["members_added"] = sorted(members)
+json.dump(base, sys.stdout, indent=2, sort_keys=True)
+PY
+  then
+    warn "Failed to write host state metadata to ${HOST_STATE_PATH}; continuing without blocking install."
+    rm -f "${tmp}" || true
+    return
+  fi
+
+  mv "${tmp}" "${HOST_STATE_PATH}"
+  chmod 0644 "${HOST_STATE_PATH}" || true
+  log "Host state metadata recorded at ${HOST_STATE_PATH}"
+}
+
 ensure_linux_group_membership() {
   local target_user="$1"
   local target_group="substrate"
+
+  record_group_existence
 
   if ! getent group "${target_group}" >/dev/null 2>&1; then
     log "Creating '${target_group}' group (sudo may prompt)..."
     if ! run_cmd sudo groupadd --system "${target_group}"; then
       warn "Unable to create ${target_group} group automatically. Run 'sudo groupadd --system ${target_group}' and re-run the installer."
       return
+    else
+      record_group_created
     fi
   fi
 
@@ -168,6 +378,7 @@ ensure_linux_group_membership() {
   log "Adding ${target_user} to ${target_group} (sudo may prompt)..."
   if run_cmd sudo usermod -aG "${target_group}" "${target_user}"; then
     warn "${target_user} added to ${target_group}. Log out/in or run 'newgrp ${target_group}' so group membership applies to new shells."
+    record_user_added "${target_user}"
   else
     warn "Failed to add ${target_user} to ${target_group}; run 'sudo usermod -aG ${target_group} ${target_user}' manually."
   fi
@@ -180,6 +391,7 @@ print_linger_guidance_linux() {
 [substrate-install] loginctl: Unable to detect a non-root user for lingering.
 Run 'loginctl enable-linger <user>' so socket-activated services start after logout.
 MSG
+    record_linger_state "${target_user}" "unknown" 0
     return
   fi
 
@@ -188,6 +400,7 @@ MSG
 [substrate-install][dry-run] Would check lingering for ${target_user}. Ensure lingering
 is enabled later via: loginctl enable-linger ${target_user}
 MSG
+    record_linger_state "${target_user}" "unknown" 0
     return
   fi
 
@@ -196,11 +409,13 @@ MSG
 [substrate-install] loginctl not found. To keep the socket active after logout, run:
   loginctl enable-linger ${target_user}
 MSG
+    record_linger_state "${target_user}" "unknown" 0
     return
   fi
 
   local linger_state
   linger_state="$(loginctl show-user "${target_user}" -p Linger 2>/dev/null | cut -d= -f2 || true)"
+  record_linger_state "${target_user}" "${linger_state:-unknown}" 0
   if [[ "${linger_state}" == "yes" ]]; then
     log "loginctl reports lingering already enabled for ${target_user}."
   else
@@ -585,6 +800,7 @@ initialize_metadata_paths() {
   MANAGER_ENV_PATH="${PREFIX}/manager_env.sh"
   MANAGER_INIT_PATH="${PREFIX}/manager_init.sh"
   INSTALL_CONFIG_PATH="${PREFIX}/config.toml"
+  HOST_STATE_PATH="${PREFIX}/install_state.json"
 }
 
 ensure_manager_init_placeholder() {
@@ -1381,6 +1597,8 @@ install_macos() {
   else
     log "World backend disabled (--no-world). Run '${bin_dir}/substrate world enable --prefix \"${PREFIX}\"' when you are ready to provision."
   fi
+
+  write_host_state_metadata "${world_enabled}"
 }
 
 install_linux() {
@@ -1467,6 +1685,8 @@ install_linux() {
   else
     log "World backend disabled (--no-world). Run '${bin_dir}/substrate world enable --prefix \"${PREFIX}\"' when you are ready to provision."
   fi
+
+  write_host_state_metadata "${world_enabled}"
 }
 
 main() {
