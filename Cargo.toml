@@ -1,6 +1,6 @@
 [package]
 name = "substrate"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 rust-version = "1.89"
 authors = ["Atomize"]
@@ -22,8 +22,8 @@ path = "src/shim_main.rs"
 [dependencies]
 anyhow = { workspace = true }
 env_logger = "0.11"
-substrate-shell = { version = "0.2.3", path = "crates/shell" }
-substrate-shim = { version = "0.2.3", path = "crates/shim" }
+substrate-shell = { version = "0.2.4", path = "crates/shell" }
+substrate-shim = { version = "0.2.4", path = "crates/shim" }
 
 [package.metadata.dist]
 dist = true
