@@ -422,6 +422,136 @@
       "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1c-windows-dry-run.md"
     },
     {
+      "id": "S1d-code",
+      "name": "Installer socket-activation parity (code)",
+      "type": "code",
+      "phase": "S1d – Installer Parity",
+      "status": "pending",
+      "description": "Update the dev and production install/uninstall scripts so they match the provisioning flow (group creation, lingering guidance, logging).",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "scripts/substrate/dev-install-substrate.sh",
+        "scripts/substrate/dev-uninstall-substrate.sh",
+        "scripts/substrate/install-substrate.sh",
+        "scripts/substrate/uninstall-substrate.sh",
+        "scripts/linux/world-provision.sh",
+        "docs/INSTALLATION.md",
+        "AGENTS.md"
+      ],
+      "acceptance_criteria": [
+        "Both dev and production installers ensure the `substrate` group exists, add the invoking user (or emit instructions when running as non-root), and reload socket/service units so `/run/substrate.sock` is `root:substrate 0660`.",
+        "Installer output (dev + prod) highlights the need to run `loginctl enable-linger <user>` (with explanation) and records whether lingering is already enabled.",
+        "Both uninstallers remove the units/socket cleanly and provide guidance for reversing lingering/group setup when appropriate.",
+        "`cargo fmt`; `shellcheck scripts/substrate/dev-install-substrate.sh scripts/substrate/dev-uninstall-substrate.sh scripts/substrate/install-substrate.sh scripts/substrate/uninstall-substrate.sh` executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Set S1d-code to in_progress, log START entry, commit docs update",
+        "Create branch ps-s1d-devinstall-code",
+        "Create worktree wt/ps-s1d-devinstall-code from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/shellcheck runs recorded",
+        "Commit worktree changes",
+        "Merge ps-s1d-devinstall-code into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm S1d-integ prompt",
+        "Commit docs update on feat/p0-platform-stability"
+      ],
+      "depends_on": [
+        "S1c-integ"
+      ],
+      "concurrent_with": [
+        "S1d-test"
+      ],
+      "worktree": "wt/ps-s1d-devinstall-code",
+      "integration_task": "S1d-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-code.md"
+    },
+    {
+      "id": "S1d-test",
+      "name": "Dev installer socket-activation parity (test)",
+      "type": "test",
+      "phase": "S1d – Installer Parity",
+      "status": "pending",
+      "description": "Extend installer harness/tests to cover the dev install scenario, verifying socket perms, group membership, and lingering guidance.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "tests/installers/install_smoke.sh",
+        "scripts/substrate/dev-install-substrate.sh",
+        "scripts/substrate/dev-uninstall-substrate.sh",
+        "docs/INSTALLATION.md"
+      ],
+      "acceptance_criteria": [
+        "Installer harness asserts `/run/substrate.sock` ownership and records `substrate` group membership after both dev and production installs (or captures sudo output showing root-level setup).",
+        "Tests capture the lingering guidance output for both installers; skips documented if the environment cannot run systemd.",
+        "`./tests/installers/install_smoke.sh --scenario dev` (or equivalent) plus the production scenario executed/logged; docs updated with validation notes."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Set S1d-test to in_progress, log START entry, commit docs update",
+        "Create branch ps-s1d-devinstall-test",
+        "Create worktree wt/ps-s1d-devinstall-test from that branch"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests/scripts completed (note skips)",
+        "Commit worktree changes",
+        "Merge ps-s1d-devinstall-test into feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm S1d-integ prompt",
+        "Commit docs update on feat/p0-platform-stability"
+      ],
+      "depends_on": [
+        "S1c-integ"
+      ],
+      "concurrent_with": [
+        "S1d-code"
+      ],
+      "worktree": "wt/ps-s1d-devinstall-test",
+      "integration_task": "S1d-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-test.md"
+    },
+    {
+      "id": "S1d-integ",
+      "name": "Dev installer socket-activation parity (integration)",
+      "type": "integration",
+      "phase": "S1d – Installer Parity",
+      "status": "pending",
+      "description": "Merge S1d code/test branches, re-run fmt/shellcheck/installer harnesses, and update docs/logs with the new dev workflow.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "scripts/substrate/dev-install-substrate.sh",
+        "tests/installers/install_smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-s1d-devinstall-integ merges ps-s1d-devinstall-code/test; conflicts resolved.",
+        "`cargo fmt`; shellcheck on touched scripts; `./tests/installers/install_smoke.sh` covering both dev and production scenarios executed/logged (or skips documented).",
+        "Docs/tasks/session log updated with installer parity notes and lingering guidance references."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability, pull latest",
+        "Confirm S1d-code/test completed",
+        "Set S1d-integ to in_progress, log START entry, commit docs update",
+        "Create branch ps-s1d-devinstall-integ",
+        "Create worktree wt/ps-s1d-devinstall-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge code/test branches, resolve conflicts",
+        "Run required fmt/lint/tests/scripts",
+        "Merge integration branch back to feat/p0-platform-stability",
+        "Update tasks.json + session_log.md with END entry",
+        "Document closure/hand-off"
+      ],
+      "depends_on": [
+        "S1d-code",
+        "S1d-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-s1d-devinstall-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-integ.md"
+    },
+    {
       "id": "R1a-code",
       "name": "Replay isolation fallback (code)",
       "type": "code",
