@@ -5,7 +5,10 @@ mod support;
 use predicates::prelude::*;
 use serde_json::Value;
 use std::fs;
-use support::{get_substrate_binary, temp_dir, AgentSocket, SocketResponse};
+use support::{get_substrate_binary, temp_dir};
+#[cfg(target_os = "linux")]
+use support::{AgentSocket, SocketResponse};
+#[cfg(target_os = "linux")]
 use tempfile::Builder;
 
 #[test]

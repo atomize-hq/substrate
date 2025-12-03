@@ -127,6 +127,8 @@ Keep concise, actionable, and security-focused.
     ingestion pipeline, schema, query interface, and CLI.
   - Replace the current mock-only `substrate-graph` crate with a real backend.
 
+
+
 ## Hardening / Quality
 - Document backend divergence
   - Clarify why shell uses world-agent and replay uses LinuxLocalBackend; outline future convergence plan.
@@ -235,6 +237,7 @@ Risks / considerations
     - Coordination with world backend: snapshots might leverage overlayfs layers or copy-diff artifacts.
 
 
+
 ## DONE -- IMPLEMENTED
 
 - ~~Top Priority – Global configuration UX~~ **(Done)**
@@ -270,3 +273,4 @@ Risks / considerations
   - Implemented `world-mac-lima` agent calls via `agent-api-client` with VSock/SSH fallbacks.
   - Shell now routes macOS commands through Lima, ensures VM/forwarding, and mirrors Linux telemetry.
   - Acceptance met: `scripts/mac/smoke.sh` validates non-PTY, PTY, and replay; docs refreshed (`docs/WORLD.md`, `docs/dev/mac_world_setup.md`, `docs/INSTALLATION.md`).
+

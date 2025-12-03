@@ -650,13 +650,9 @@ fn print_socket_activation_summary() {
                 .unwrap_or("unknown")
         );
     } else if report.socket_exists {
-        println!(
-            "World socket: manual listener present"
-        );
+        println!("World socket: manual listener present");
     } else {
-        println!(
-            "World socket: listener missing; run `substrate world enable`"
-        );
+        println!("World socket: listener missing; run `substrate world enable`");
     }
     println!("Socket path: {}", report.socket_path);
 }

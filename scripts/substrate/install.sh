@@ -1,9 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-UPSTREAM_INSTALL="${SCRIPT_DIR}/install-substrate.sh"
-LOADER_DIR="${SCRIPT_DIR}/loader"
+SCRIPT_SOURCE="${BASH_SOURCE[0]:-}"
+SCRIPT_DIR=""
+if [[ -n "${SCRIPT_SOURCE}" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "${SCRIPT_SOURCE}")" && pwd)"
+fi
+
+ASSET_TMP_DIR=""
+ASSET_ROOT="${SCRIPT_DIR}"
+if [[ -z "${ASSET_ROOT}" || ! -f "${ASSET_ROOT}/install-substrate.sh" ]]; then
+  # When running via curl|bash there is no local tree, so fetch the helpers on demand.
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "[substrate-install] 'curl' is required to download installer assets." >&2
+    exit 1
+  fi
+  ASSET_TMP_DIR="$(mktemp -d -t substrate-install-assets.XXXXXX)"
+  INSTALL_REF="${SUBSTRATE_INSTALL_REF:-main}"
+  ASSET_BASE="${SUBSTRATE_INSTALL_WRAPPER_BASE_URL:-https://raw.githubusercontent.com/atomize-hq/substrate/${INSTALL_REF}/scripts/substrate}"
+  mkdir -p "${ASSET_TMP_DIR}/loader"
+  curl -fsSL "${ASSET_BASE}/install-substrate.sh" -o "${ASSET_TMP_DIR}/install-substrate.sh"
+  curl -fsSL "${ASSET_BASE}/loader/bash_loading_animations.sh" -o "${ASSET_TMP_DIR}/loader/bash_loading_animations.sh"
+  chmod +x "${ASSET_TMP_DIR}/install-substrate.sh"
+  ASSET_ROOT="${ASSET_TMP_DIR}"
+fi
+
+UPSTREAM_INSTALL="${ASSET_ROOT}/install-substrate.sh"
+LOADER_DIR="${ASSET_ROOT}/loader"
 
 if [[ ! -x "${UPSTREAM_INSTALL}" ]]; then
   echo "[substrate-install] missing installer at ${UPSTREAM_INSTALL}" >&2
@@ -36,6 +59,9 @@ stop_loader() {
 cleanup() {
   stop_loader
   rm -f "${TMP_LOG}"
+  if [[ -n "${ASSET_TMP_DIR}" && -d "${ASSET_TMP_DIR}" ]]; then
+    rm -rf "${ASSET_TMP_DIR}"
+  fi
 }
 trap cleanup EXIT
 

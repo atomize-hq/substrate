@@ -24,7 +24,9 @@ use hyper::server::accept::from_stream;
 use std::net::SocketAddr;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+#[cfg(unix)]
+use std::path::Path;
+use std::path::PathBuf;
 use substrate_broker::{set_global_broker, BrokerHandle};
 use tokio::net::TcpListener;
 #[cfg(unix)]
@@ -225,6 +227,7 @@ pub async fn run_world_agent() -> Result<()> {
     result
 }
 
+#[cfg(unix)]
 fn prepare_socket_path(path: &Path) -> Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).context("Failed to create socket directory")?;
