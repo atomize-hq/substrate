@@ -37,4 +37,4 @@ Log shellcheck output (or justify skips) in the session log.
 3. Merge `ps-s1d-devinstall-code` into `feat/p0-platform-stability-follow-up`.
 4. Update `tasks.json` + `session_log.md` END entry (include commands run).
 5. Confirm `S1d-integ` prompt remains accurate; edit if scope changed.
-6. Commit doc/task/log updates (`git commit -am "docs: finish S1d-code"`) on `feat/p0-platform-stability-follow-up`, remove worktree, hand off.
+6. Commit doc/task/log updates (`git commit -am "docs: finish S1d-code"`), remove worktree, hand off on `feat/p0-platform-stability-follow-up`.

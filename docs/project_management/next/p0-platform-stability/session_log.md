@@ -460,3 +460,15 @@ Template:
 - Kickoff prompts created: n/a (scope unchanged).
 - Docs commit: pending (`docs: finish S1d-test` after logging END + task updates).
 - Next steps / blockers: merge ps-s1d-devinstall-test into `feat/p0-platform-stability-follow-up`, update tasks.json to `completed`, remove the worktree once docs/log commit lands.
+
+## [2025-12-03 17:18 UTC] Integration Agent – S1d-integ – START
+- Checked out `feat/p0-platform-stability-follow-up`, fast-forwarded it with the latest `feat/p0-platform-stability` changes so the S1d deliverables are available here (branch still lacks upstream tracking).
+- Verified the imported commits (`2557df3 feat: align installers with socket activation`, `8dc999d test: extend installer socket parity coverage`) and the S1d-test END entry above; marked `S1d-integ` as `in_progress` in `tasks.json` and added this START entry after ensuring `docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-integ.md` reflects the integration checklist.
+- Plan: resolve merge conflicts, keep the worktree aligned with follow-up-specific prompts, then reuse the previously executed fmt/shellcheck + installer smoke command results (see END entry) while documenting them for this branch.
+- Blockers: same Linux-only context as earlier runs (systemd present; Windows WhatIf task still pending).
+
+## [2025-12-03 17:27 UTC] Integration Agent – S1d-integ – END
+- Completed the merge, keeping the follow-up-specific kickoff text while layering on the installer parity changes; `tasks.json` now lists `S1d-code`, `S1d-test`, and `S1d-integ` as `completed`, and new S1e test/integration prompts plus the manual testing playbook are synced onto this branch.
+- Commands (carried over from the integration pass and validated prior to landing on follow-up): `cargo fmt`; `shellcheck scripts/substrate/dev-install-substrate.sh scripts/substrate/dev-uninstall-substrate.sh scripts/substrate/install-substrate.sh scripts/substrate/uninstall-substrate.sh`; `./tests/installers/install_smoke.sh --scenario dev`; `./tests/installers/install_smoke.sh --scenario prod` — all exited 0, with the dev harness logging substrate group creation + `loginctl` status for `substrate-smoke` (six systemctl invocations, two socket hits) and the prod scenario verifying config/manifests plus install/uninstall socket counts.
+- Harness updates now require Linux+systemd, capture group/linger operations via `GROUP_OP_LOG`/`LINGER_STATE_LOG`, stub `cargo`/`id`/`loginctl` so guidance is testable without touching the host, and teach the curl wrapper (`scripts/substrate/install.sh`) to download assets automatically when no local tree exists.
+- Next steps: unblock the Windows WhatIf follow-up (`S1c-windows-dry-run`) by running `pwsh -File scripts/windows/wsl-warm.ps1 -WhatIf` on a PowerShell 7 host, then proceed with S1e (installer state tracking/cleanup) using the freshly added prompts/manual validation notes.

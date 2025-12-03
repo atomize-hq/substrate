@@ -13,7 +13,7 @@
 
 ## Spec
 - Extend `tests/installers/install_smoke.sh` (or a sibling harness) with dev and production scenarios that:
-  - Verify `/run/substrate.sock` ownership (`root:substrate 0660`) after each installer runs (or capture sudo output for curl-based install).
+  - Verify `/run/substrate.sock` ownership (`root:substrate 0660`) after each installer runs (or capture sudo output for curl-based installs).
   - Confirm the invoking user belongs to the `substrate` group (parse `id` output or env metadata) or log a warning when installing as root.
   - Capture the lingering guidance emitted by each installer and note whether `loginctl enable-linger` was already set.
 - Update fixtures/log capture so the smoke script can record “skipped” output on non-systemd platforms.
@@ -38,4 +38,4 @@ If the smoke script can’t run on the current machine, record the skip and rati
 3. Merge `ps-s1d-devinstall-test` into `feat/p0-platform-stability-follow-up`.
 4. Update `tasks.json` + `session_log.md` END entry with command results.
 5. Confirm `S1d-integ` prompt reflects any new suites.
-6. Commit doc/task/log updates (`git commit -am "docs: finish S1d-test"`) on `feat/p0-platform-stability-follow-up`, remove worktree, hand off.
+6. Commit doc/task/log updates (`git commit -am "docs: finish S1d-test"`), remove worktree, hand off on `feat/p0-platform-stability-follow-up`.
