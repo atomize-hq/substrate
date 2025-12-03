@@ -1324,6 +1324,89 @@
       "worktree": "wt/ps-s1e-installer-code",
       "integration_task": "S1e-integ",
       "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1e-code.md"
+    },
+    {
+      "id": "S1e-test",
+      "name": "Installer state tracking & cleanup (test)",
+      "type": "test",
+      "phase": "S1e – Installer State Tracking",
+      "status": "queued",
+      "description": "Add installer harness coverage to validate the metadata schema, cleanup flag behavior, and edge cases (missing/corrupt files, multi-user entries) introduced in S1e-code.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "scripts/substrate/install-substrate.sh",
+        "scripts/substrate/dev-install-substrate.sh",
+        "scripts/substrate/uninstall-substrate.sh",
+        "scripts/substrate/dev-uninstall-substrate.sh",
+        "tests/installers"
+      ],
+      "acceptance_criteria": [
+        "Unit/integration tests cover metadata creation/upgrade paths, fallback behavior when the file is missing, and cleanup-flag behavior when Substrate previously toggled lingering/group membership.",
+        "Harness scripts simulate multi-user metadata so we verify only recorded users/groups are modified.",
+        "Test docs/logs describe how to exercise the cleanup flag on real hosts vs hermetic mocks.",
+        "`cargo fmt`; installer harness/tests executed (or skips logged) with command output captured in the session log."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Review S1e-code implementation, plan/tasks/session log, and this prompt",
+        "Set S1e-test to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-s1e-installer-test`, `git worktree add wt/ps-s1e-installer-test ps-s1e-installer-test`, `cd wt/ps-s1e-installer-test`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests/scripts completed; document skips with justification",
+        "Commit worktree changes (tests/harness updates)",
+        "Merge ps-s1e-installer-test into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include command results)",
+        "Confirm S1e-integ prompt reflects new harness coverage",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish S1e-test\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "S1e-code"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-s1e-installer-test",
+      "integration_task": "S1e-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1e-test.md"
+    },
+    {
+      "id": "S1e-integ",
+      "name": "Installer state tracking & cleanup (integration)",
+      "type": "integration",
+      "phase": "S1e – Installer State Tracking",
+      "status": "queued",
+      "description": "Merge the S1e code/test branches, re-run fmt/shellcheck/tests, and land the installer metadata feature on feat/p0-platform-stability-follow-up with updated docs/logs.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "scripts/substrate",
+        "docs/INSTALLATION.md",
+        "docs/WORLD.md"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-s1e-installer-integ merges ps-s1e-installer-code/test cleanly and fast-forwards feat/p0-platform-stability-follow-up.",
+        "`cargo fmt`; `shellcheck` on installer/uninstaller scripts; installer harness/tests re-run (or skips logged) with results recorded.",
+        "tasks.json + session_log.md updated with END entry; next prompts (interactive installer work) referenced."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Confirm S1e-code/test completed",
+        "Set S1e-integ to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-s1e-installer-integ`, `git worktree add wt/ps-s1e-installer-integ ps-s1e-installer-integ`, `cd wt/ps-s1e-installer-integ`"
+      ],
+      "end_checklist": [
+        "Merge code/test branches, resolve conflicts",
+        "Run required fmt/shellcheck/tests; capture output",
+        "Fast-forward merge into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish S1e-integ\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "S1e-code",
+        "S1e-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-s1e-installer-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1e-integ.md"
     }
   ]
 }
