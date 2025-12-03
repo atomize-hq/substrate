@@ -480,3 +480,11 @@ Template:
 - Worktree: pending (`ps-s1e-installer-code` → `wt/ps-s1e-installer-code`)
 - Plan: add installer metadata for group existence/user additions/linger state with schema versioning, add opt-in uninstall cleanup flag with resilient fallbacks, update docs, run `cargo fmt` + `shellcheck`, merge branch and refresh tasks/logs
 - Blockers: none noted (host lacks provisioned world-agent but not needed here)
+
+## [2025-12-03 18:13 UTC] Code Agent – S1e-code – END
+- Worktree commits: e1f3431 (`feat: track installer host state`) merged into `feat/p0-platform-stability-follow-up`
+- Commands: `cargo fmt`; `shellcheck scripts/substrate/dev-install-substrate.sh scripts/substrate/install-substrate.sh scripts/substrate/dev-uninstall-substrate.sh scripts/substrate/uninstall-substrate.sh` (initial SC2004 on linger array index → fixed; reran clean)
+- Results: fmt pass; shellcheck pass after fix
+- Deliverables: installers now write `<prefix>/install_state.json` (schema_version=1) capturing substrate group existence/added users/linger state; uninstallers gain `--cleanup-state`/`--auto-cleanup` to drop recorded memberships, delete installer-created groups when empty, and disable lingering when Substrate enabled it with warnings on missing/corrupt metadata
+- Docs: `docs/INSTALLATION.md` documents metadata schema, cleanup flag, and upcoming interactive prompts; S1e-integ prompt already present (no changes)
+- Next steps / blockers: ready for S1e-test kickoff; remove `wt/ps-s1e-installer-code` after doc commit

@@ -1200,7 +1200,7 @@
       "name": "Installer state tracking & cleanup (code)",
       "type": "code",
       "phase": "S1e – Installer State Tracking",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Persist install-time host tweaks (substrate group membership, loginctl lingering, future interactive choices) and add opt-in uninstall cleanup so Substrate can restore the host to its prior state.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
