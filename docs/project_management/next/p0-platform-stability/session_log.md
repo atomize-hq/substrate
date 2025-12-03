@@ -512,3 +512,11 @@ Template:
 - Worktree setup pending (`ps-s1e-installer-integ` → `wt/ps-s1e-installer-integ`)
 - Plan: merge ps-s1e-installer-code/test, resolve conflicts, run `cargo fmt`, `shellcheck` on installer scripts, `./tests/installers/install_state_smoke.sh`, `./tests/installers/install_smoke.sh --scenario dev`, `./tests/installers/install_smoke.sh --scenario prod`, fast-forward feat/p0-platform-stability-follow-up, update docs/logs, remove worktree
 - Blockers: none; installer harness expected to stub systemd/sudo where unavailable
+
+## [2025-12-03 19:08 UTC] Integration Agent – S1e-integ – END
+- Worktree commits: n/a (code/test already merged; docs commit follows)
+- Branch merges: `git merge --ff-only ps-s1e-installer-code` (up to date); `git merge --ff-only ps-s1e-installer-test` (up to date)
+- Commands: `cargo fmt` (pass); `shellcheck scripts/substrate/dev-install-substrate.sh scripts/substrate/install-substrate.sh scripts/substrate/dev-uninstall-substrate.sh scripts/substrate/uninstall-substrate.sh` (pass); `./tests/installers/install_state_smoke.sh` (pass – metadata create/upgrade/missing/corrupt/cleanup scenarios logged under /tmp); `./tests/installers/install_smoke.sh --scenario dev` (pass – systemctl calls=6, socket entries=2, host lacks socket so warning recorded); `./tests/installers/install_smoke.sh --scenario prod` (pass – world doctor ok; install systemctl calls=6/socket=2; uninstall calls=5/socket=2)
+- Results: all required commands exited 0; harness stubs sudo/systemd while capturing logs under `/tmp/substrate-installer-*`
+- Docs/status: `tasks.json` marks S1e-integ completed; interactive installer follow-up still pending (kickoff prompt not yet published—flagged for next pass)
+- Next steps / blockers: fast-forward feat/p0-platform-stability-follow-up from ps-s1e-installer-integ, commit docs (`docs: finish S1e-integ`), remove worktree; Windows `S1c-windows-dry-run` remains separate
