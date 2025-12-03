@@ -488,3 +488,11 @@ Template:
 - Deliverables: installers now write `<prefix>/install_state.json` (schema_version=1) capturing substrate group existence/added users/linger state; uninstallers gain `--cleanup-state`/`--auto-cleanup` to drop recorded memberships, delete installer-created groups when empty, and disable lingering when Substrate enabled it with warnings on missing/corrupt metadata
 - Docs: `docs/INSTALLATION.md` documents metadata schema, cleanup flag, and upcoming interactive prompts; S1e-integ prompt already present (no changes)
 - Next steps / blockers: ready for S1e-test kickoff; remove `wt/ps-s1e-installer-code` after doc commit
+
+## [2025-12-03 18:22 UTC] Test Agent – S1e-test – START
+- Checked out feat/p0-platform-stability-follow-up, `git pull --ff-only`
+- Reviewed `p0_platform_stability_plan.md`, `tasks.json`, `session_log.md`, S1e-code outputs, and S1e-test prompt
+- Updated tasks.json + session_log.md (commit pending)
+- Created worktree: pending (`ps-s1e-installer-test` → `wt/ps-s1e-installer-test`)
+- Plan: add installer metadata/cleanup harness coverage (creation/upgrade/missing/corrupt, multi-user, cleanup flag), keep harness safe on non-systemd hosts, run fmt + installer tests/shellcheck, merge and update docs/logs
+- Blockers: systemd/sudo may be unavailable; harness will rely on mocks/skips if needed
