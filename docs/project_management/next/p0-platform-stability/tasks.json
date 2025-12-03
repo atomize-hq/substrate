@@ -1150,6 +1150,52 @@
       "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-test.md"
     },
     {
+      "id": "S1d-integ",
+      "name": "Installer socket-activation parity (integration)",
+      "type": "integration",
+      "phase": "S1d – Installer Socket-Activation Parity",
+      "status": "in_progress",
+      "description": "Merge the S1d installer code/test work, re-run fmt/shellcheck plus both installer smoke scenarios, and document the group creation + lingering guidance for dev/prod installers before fast-forwarding feat/p0-platform-stability.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "scripts/substrate/dev-install-substrate.sh",
+        "scripts/substrate/install-substrate.sh",
+        "scripts/substrate/dev-uninstall-substrate.sh",
+        "scripts/substrate/uninstall-substrate.sh",
+        "tests/installers/install_smoke.sh",
+        "docs/AGENTS.md",
+        "docs/INSTALLATION.md",
+        "docs/WORLD.md"
+      ],
+      "acceptance_criteria": [
+        "ps-s1d-devinstall-integ merges ps-s1d-devinstall-code/test cleanly and fast-forwards back onto feat/p0-platform-stability.",
+        "`cargo fmt`; `shellcheck scripts/substrate/dev-install-substrate.sh scripts/substrate/dev-uninstall-substrate.sh scripts/substrate/install-substrate.sh scripts/substrate/uninstall-substrate.sh`; `./tests/installers/install_smoke.sh --scenario dev`; `./tests/installers/install_smoke.sh --scenario prod` executed or skips/logged output.",
+        "Session log and docs capture installer parity guidance (substrate group creation + loginctl lingering for dev/prod paths) along with smoke command outcomes/skips.",
+        "tasks.json reflects `S1d-code`, `S1d-test`, and `S1d-integ` completion, worktree removed, and stakeholders notified of parity readiness."
+      ],
+      "start_checklist": [
+        "git checkout feat/p0-platform-stability && git pull --ff-only",
+        "Confirm S1d-code and S1d-test branches are ready/merged into feat/p0-platform-stability",
+        "Set S1d-integ to in_progress, append START entry, commit doc update (`git commit -am \"docs: start S1d-integ\"`)",
+        "Create branch/worktree: `git checkout -b ps-s1d-devinstall-integ`, `git worktree add wt/ps-s1d-devinstall-integ ps-s1d-devinstall-integ`, `cd wt/ps-s1d-devinstall-integ`"
+      ],
+      "end_checklist": [
+        "Confirm commands succeeded; log skips with justification",
+        "Merge integration branch back into feat/p0-platform-stability (fast-forward)",
+        "Update tasks.json (S1d-* statuses), append END entry with smoke results + lingering/group notes + Windows hand-off",
+        "Document installer guidance updates/next steps in session log and notify stakeholders that dev installer parity is met",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish S1d-integ\"`), remove worktree"
+      ],
+      "depends_on": [
+        "S1d-code",
+        "S1d-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-s1d-devinstall-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-integ.md"
+    },
+    {
       "id": "S1e-code",
       "name": "Installer state tracking & cleanup (code)",
       "type": "code",

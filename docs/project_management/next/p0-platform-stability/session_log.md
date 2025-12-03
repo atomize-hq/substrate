@@ -452,3 +452,10 @@ Template:
 - Worktree setup pending (`ps-s1d-devinstall-test` → `wt/ps-s1d-devinstall-test`) once the start commit lands.
 - Plan: extend `tests/installers/install_smoke.sh` with dev/prod installer scenarios that verify `/run/substrate.sock` ownership, substrate group membership, and lingering guidance; add skip-aware logging for non-systemd hosts; run `cargo fmt` plus both smoke scenarios, documenting skips if this containerized host lacks the privileges/systemd socket.
 - Blockers: running privileged installers/systemd checks may be impossible inside this environment (no systemd, limited sudo); will log skips + rationale if commands cannot run.
+
+## [2025-12-03 17:18 UTC] Integration Agent – S1d-integ – START
+- Checked out `feat/p0-platform-stability` and confirmed `git pull --ff-only` is up to date (branch still local-only).
+- Verified S1d-code landed on feat (`2557df3 feat: align installers with socket activation` already merged) and captured the outstanding `ps-s1d-devinstall-test` branch commits (`8dc999d` series) that need integration.
+- Added the missing `S1d-integ` entry to `tasks.json`, set it to `in_progress`, and authored `docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-integ.md` to reflect the integration plan / required commands.
+- Appending this START entry satisfies the start checklist; the doc-only commit will follow once tasks/log edits are staged.
+- Next steps: branch `ps-s1d-devinstall-integ`, add `wt/ps-s1d-devinstall-integ`, merge code/test branches, then run fmt/shellcheck + installer smoke scenarios while logging systemd skips on this host.
