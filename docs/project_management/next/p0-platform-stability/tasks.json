@@ -1239,7 +1239,7 @@
       "name": "Installer socket-activation parity (test)",
       "type": "test",
       "phase": "S1d – Installer Socket-Activation Parity",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Extend the installer smoke harness with dev/prod scenarios that verify socket activation parity, record lingering guidance, and gracefully skip when systemd prerequisites are missing.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",

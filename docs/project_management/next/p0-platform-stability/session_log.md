@@ -451,3 +451,12 @@ Template:
 - Confirmed `tasks.json` already lists S1d-test as `in_progress`; no field changes required beyond this log update.
 - Plan: expand `tests/installers/install_smoke.sh` with dev/prod socket checks, capture substrate group + lingering guidance (including skip handling when systemd unavailable), run `cargo fmt` plus `./tests/installers/install_smoke.sh --scenario {dev,prod}`, and document any skips or permission constraints.
 - Blockers: host runs systemd but `/run/substrate.sock` + installer flows still require elevated privileges; expect to record skips if sudo/systemctl interactions are restricted inside this environment.
+
+## [2025-12-03 17:08 UTC] Test Agent – S1d-test – END
+- Worktree commits: 8dc999d (`test: extend installer socket parity coverage`).
+- Commands: `cargo fmt`; `./tests/installers/install_smoke.sh --scenario dev`; `./tests/installers/install_smoke.sh --scenario prod`.
+- Results: pass / pass / pass – dev + prod scenarios now assert socket unit ownership, group membership logging, lingering guidance, and capture “skip” metadata when prerequisites are missing.
+- Scripts executed: installer smoke harness only (systemctl interactions are stubbed into logs; no real sudo/systemctl calls touched the host).
+- Kickoff prompts created: n/a (scope unchanged).
+- Docs commit: pending (`docs: finish S1d-test` after logging END + task updates).
+- Next steps / blockers: merge ps-s1d-devinstall-test into `feat/p0-platform-stability-follow-up`, update tasks.json to `completed`, remove the worktree once docs/log commit lands.
