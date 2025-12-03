@@ -405,6 +405,10 @@ if command -v systemctl >/dev/null 2>&1; then
     maybe_sudo rm -rf /run/substrate || true
     maybe_sudo rm -f /run/substrate.sock || true
     maybe_sudo systemctl daemon-reload 2>/dev/null || true
+
+    log "Verifying substrate-world-agent units are absent after uninstall (missing is ok)..."
+    maybe_sudo systemctl status substrate-world-agent.service 2>/dev/null || true
+    maybe_sudo systemctl status substrate-world-agent.socket 2>/dev/null || true
 fi
 
 log "Removing world-agent binary from /usr/local/bin (if present)..."

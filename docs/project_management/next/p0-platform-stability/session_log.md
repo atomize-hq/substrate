@@ -520,3 +520,9 @@ Template:
 - Results: all required commands exited 0; harness stubs sudo/systemd while capturing logs under `/tmp/substrate-installer-*`
 - Docs/status: `tasks.json` marks S1e-integ completed; interactive installer follow-up still pending (kickoff prompt not yet published—flagged for next pass)
 - Next steps / blockers: fast-forward feat/p0-platform-stability-follow-up from ps-s1e-installer-integ, commit docs (`docs: finish S1e-integ`), remove worktree; Windows `S1c-windows-dry-run` remains separate
+
+## [2025-12-03 19:18 UTC] Integration Agent – S1e-integ – FOLLOW-UP
+- Change: add post-uninstall status checks for substrate-world-agent service/socket so we log unit absence instead of skipping verification
+- Commands: `cargo fmt`; `shellcheck scripts/substrate/dev-install-substrate.sh scripts/substrate/install-substrate.sh scripts/substrate/dev-uninstall-substrate.sh scripts/substrate/uninstall-substrate.sh` (pass); `./tests/installers/install_state_smoke.sh` (pass); `./tests/installers/install_smoke.sh --scenario dev` (pass; install systemctl calls=6, socket entries=2); `./tests/installers/install_smoke.sh --scenario prod` (pass; install systemctl calls=6/socket=2; uninstall calls=7/socket=3, reflecting the added status probes)
+- Results: uninstall now records status of both units after removal; status failures remain non-fatal so hosts without units stay green
+- Next steps / blockers: none; S1e-integ remains completed, interactive installer prompt still to-be-authored in a follow-up
