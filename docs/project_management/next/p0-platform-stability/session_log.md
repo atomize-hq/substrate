@@ -532,3 +532,9 @@ Template:
 - Commands: `cargo fmt`; `shellcheck scripts/substrate/dev-install-substrate.sh scripts/substrate/install-substrate.sh scripts/substrate/dev-uninstall-substrate.sh scripts/substrate/uninstall-substrate.sh` (pass); `./tests/installers/install_smoke.sh --scenario dev` (pass; install systemctl calls=10, socket entries=4 after the new stop/start); `./tests/installers/install_smoke.sh --scenario prod` (pass; install calls=6/socket=2; uninstall calls=7/socket=3)
 - Results: local socket now starts with correct group/permissions via installer restarts; systemctl counts updated accordingly in dev harness logs
 - Next steps / blockers: none
+
+## [2025-12-03 21:00 UTC] Integration Agent – S1e-integ – FOLLOW-UP
+- Change: stabilize logging test on socket-activated hosts by forcing `SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE=manual` in the manual-mode test
+- Commands: `cargo test -p substrate-shell --test logging` (pass)
+- Results: logging suite now passes even when a real systemd socket is active on the host
+- Next steps / blockers: none
