@@ -459,3 +459,11 @@ Template:
 - Added the missing `S1d-integ` entry to `tasks.json`, set it to `in_progress`, and authored `docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-integ.md` to reflect the integration plan / required commands.
 - Appending this START entry satisfies the start checklist; the doc-only commit will follow once tasks/log edits are staged.
 - Next steps: branch `ps-s1d-devinstall-integ`, add `wt/ps-s1d-devinstall-integ`, merge code/test branches, then run fmt/shellcheck + installer smoke scenarios while logging systemd skips on this host.
+
+## [2025-12-03 17:27 UTC] Integration Agent – S1d-integ – END
+- Branched `ps-s1d-devinstall-integ`, merged `ps-s1d-devinstall-test`, and resolved kickoff/task conflicts so S1d-code/test/integration instructions all target `feat/p0-platform-stability`; brought in the new S1e-test/S1e-integ prompts plus `manual_testing_playbook.md` from the test branch.
+- Updated `tasks.json` (`S1d-test`/`S1d-integ` → `completed`), refreshed the S1d-code prompt + plan summary, and noted the installer guidance updates (substrate group + lingering reminders) in the program docs.
+- Commands: `cargo fmt`; `shellcheck scripts/substrate/dev-install-substrate.sh scripts/substrate/dev-uninstall-substrate.sh scripts/substrate/install-substrate.sh scripts/substrate/uninstall-substrate.sh`; `./tests/installers/install_smoke.sh --scenario dev`; `./tests/installers/install_smoke.sh --scenario prod` — all pass. Dev harness logged substrate group creation + `loginctl` status for `substrate-smoke` with six systemctl invocations/two socket hits, while prod coverage verified manifest/config output and captured install/uninstall socket counts.
+- Harness changes now require Linux+systemd, record group operations (`GROUP_OP_LOG`) and lingering state, stub `cargo/id/loginctl` so guidance is testable without privileged operations, and update the prod wrapper (`scripts/substrate/install.sh`) to download assets automatically for curl|bash installs.
+- Next steps: Windows coverage remains outstanding (`S1c-windows-dry-run` still needs a PowerShell 7 host to run `pwsh -File scripts/windows/wsl-warm.ps1 -WhatIf`), and S1e (installer state tracking/cleanup) should leverage the new prompts + manual validation playbook landed here.
+- Docs commit: `docs: finish S1d-integ`.
