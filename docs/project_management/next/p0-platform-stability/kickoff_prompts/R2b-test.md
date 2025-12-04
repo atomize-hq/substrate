@@ -14,7 +14,7 @@
 ## Spec
 - Add tests ensuring agent→local fallback warnings emit once per replay (with actionable text).
 - Cover copy-diff scratch root retries and overrides (env/flag) to ensure logs show the chosen path.
-- Exercise ENOSPC retry behavior and verify logging/telemetry matches spec; fixtures should simulate constrained scratch dirs.
+- Exercise ENOSPC retry behavior and verify logging/telemetry matches spec; fixtures should simulate constrained scratch dirs (origin/flip handled in R2d).
 
 ## Required Commands
 ```

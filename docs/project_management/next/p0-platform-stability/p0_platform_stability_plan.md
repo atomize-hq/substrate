@@ -77,5 +77,10 @@ Every backlog item is decomposed into multiple triads so each agent session stay
 3. **H1 – Health Manager Parity**
    - **H1a – Detection & aggregation logic**: Fix the status computation so only host-present/world-missing managers trigger “attention required”, and emit structured telemetry.
    - **H1b – CLI/doctor UX & docs**: Polish human/JSON output, doctor summaries, and documentation (USAGE/CONFIGURATION) with examples for macOS/Linux/WSL.
+4. **R2 – Agent-backed Replay (follow-up branch)**
+   - **R2a – Agent path default**: Prefer world-agent when healthy, keep host-only opt-outs.
+   - **R2b – Fallback warnings**: Improve warning deduplication and copy-diff retries.
+   - **R2c – Coverage polish**: Refresh CLI/docs/telemetry and replay fixtures.
+   - **R2d – Origin-aware defaults & agent routing**: Record execution origin/transport on spans, default replays to the recorded origin, add a flip flag, and make world-mode replays agent-first with a single-warning fallback to the local backend (overlay/fuse/copy-diff) while preserving cwd/anchor/caging/env.
 
 Each phase maps to its own `code`, `test`, and `integration` tasks described in `tasks.json` with dedicated kickoff prompts.

@@ -12,8 +12,8 @@
    ```
 
 ## Spec
-- Polish replay CLI help/docs to describe agent vs host-only vs local fallback (include warning samples).
-- Update TRACE/WORLD docs + telemetry schemas so new replay fields/warnings are documented.
+- Polish replay CLI help/docs to describe agent vs host-only vs local fallback (include warning samples). Origin/flip and agent-first schema updates land in R2d.
+- Update TRACE/WORLD docs + telemetry references so existing replay warnings from R2b are documented.
 - Capture manual `substrate --replay --replay-verbose ...` runs showing agent-on vs `--no-world`; log outputs in session log.
 - Ensure warning text added in R2b matches docs and CLI messaging.
 

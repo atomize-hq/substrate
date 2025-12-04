@@ -13,9 +13,9 @@
 
 ## Spec
 - Add tests that exercise replay choosing the agent path when the socket is healthy (mock/probe), asserting telemetry/warning output matches spec.
-- Cover agent-unavailable fallback to local backend/copy-diff, including ENOSPC retry behavior and single-warning emission.
+- Cover agent-unavailable fallback to local backend/copy-diff with a single warning; include ENOSPC retry behavior.
 - Ensure replay honors recorded cwd/anchor/caging/env so path alignment matches live runs; include fixtures for both caged and uncaged modes.
-- Update test docs/fixtures for new flags/env controls.
+- Update test docs/fixtures for existing flags/env controls (no new flags yet).
 
 ## Scope & Guardrails
 - Focus on replay/shell/world-agent tests and fixtures; code changes belong to R2a-code.

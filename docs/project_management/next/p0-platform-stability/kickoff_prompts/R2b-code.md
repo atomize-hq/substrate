@@ -15,7 +15,7 @@
 - Emit a single warning when replay falls back from agent → local backend (include cause and next steps). No repeated lines per command.
 - Enhance copy-diff fallback: retry alternate scratch roots (/run, /tmp, /var/tmp) with clear logging; support overrides via `SUBSTRATE_COPYDIFF_ROOT`.
 - Log/telemetry the chosen fallback path so traces show whether agent/local/copy-diff was used and why.
-- Update docs/help to describe warning wording, copy-diff root overrides, and manual cleanup guidance.
+- Update docs/help to describe warning wording, copy-diff root overrides, and manual cleanup guidance (origin/flip comes in R2d).
 
 ## Scope & Guardrails
 - Code changes in replay/shell/world-agent for warning/fallback plumbing + doc updates. Tests handled in R2c-test.

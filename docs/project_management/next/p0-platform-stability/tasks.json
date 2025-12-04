@@ -1705,6 +1705,172 @@
       "worktree": "wt/ps-r2c-replay-agent-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2c-integ.md"
+    },
+    {
+      "id": "R2c-buffer",
+      "name": "Buffer: stabilize after R2c",
+      "type": "ops",
+      "phase": "R2 \u2013 Agent-backed Replay",
+      "status": "queued",
+      "description": "Short buffer to resolve conflicts/skips after R2c-integ before starting R2d.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/next/p0-platform-stability/session_log.md"
+      ],
+      "acceptance_criteria": [
+        "R2c-integ merged into feat/p0-platform-stability-follow-up; no pending fmt/lint/test failures or unresolved skips.",
+        "tasks.json + session_log.md updated to reflect buffer completion and readiness for R2d."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Confirm R2c-integ completed",
+        "Set R2c-buffer to in_progress, append START entry, commit doc update"
+      ],
+      "end_checklist": [
+        "Resolve any outstanding conflicts/skips from R2c-integ",
+        "Update tasks.json + session_log.md with END entry",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2c-buffer\"`)"
+      ],
+      "depends_on": [
+        "R2c-integ"
+      ],
+      "concurrent_with": [],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": null
+    },
+    {
+      "id": "R2d-code",
+      "name": "Replay origin-aware defaults & agent routing (code)",
+      "type": "code",
+      "phase": "R2 \u2013 Agent-backed Replay",
+      "status": "queued",
+      "description": "Record execution origin/transport in spans, default replays to the recorded origin, add a flip flag, and make world-mode replays prefer the agent socket with a clean fallback to the local backend.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/replay",
+        "crates/shell",
+        "crates/world-agent",
+        "crates/trace",
+        "docs/REPLAY.md",
+        "docs/TRACE.md"
+      ],
+      "acceptance_criteria": [
+        "Spans record execution_origin (host/world) and world transport at command_complete; replay reconstruction consumes it (greenfield schema, no compat needed).",
+        "Default replay honors recorded origin; --flip-world (alias --upside-down) inverts it; --world/--no-world still override.",
+        "World-mode replay uses the agent socket first and falls back once with a single warning to the local backend (overlay/fuse/copy-diff) while preserving cwd/anchor/caging/env from the span.",
+        "Verbose output and telemetry document origin, flip reason, selected strategy, endpoint, and copy-diff root (including override env).",
+        "`cargo fmt`; `cargo clippy -p substrate-replay -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world` executed/logged; manual agent+host/no-world smoke noted."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Review R2a/R2b/R2c outputs, plan/tasks/session log, and this prompt",
+        "Set R2d-code to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2d-replay-origin-code`, `git worktree add wt/ps-r2d-replay-origin-code ps-r2d-replay-origin-code`, `cd wt/ps-r2d-replay-origin-code`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests/manual replay (agent vs host vs flipped) completed; note skips",
+        "Commit schema/replay/shell/world-agent changes + docs",
+        "Merge ps-r2d-replay-origin-code into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Confirm R2d-integ prompt accuracy",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2d-code\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2c-integ"
+      ],
+      "concurrent_with": [
+        "R2d-test"
+      ],
+      "worktree": "wt/ps-r2d-replay-origin-code",
+      "integration_task": "R2d-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2d-code.md"
+    },
+    {
+      "id": "R2d-test",
+      "name": "Replay origin-aware defaults & agent routing (test)",
+      "type": "test",
+      "phase": "R2 \u2013 Agent-backed Replay",
+      "status": "queued",
+      "description": "Add tests for recorded-origin defaults, flip flag, agent-first world path with fallback, and copy-diff override/warning behavior.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/replay",
+        "crates/shell/tests",
+        "crates/world/tests",
+        "docs/REPLAY.md"
+      ],
+      "acceptance_criteria": [
+        "Fixtures cover recorded-world spans defaulting to agent path, recorded-host spans defaulting to host, and --flip-world inversion for both.",
+        "Agent socket success/failure is exercised via stubs; on failure replay falls back once to local backend with a single warning and preserved cwd/anchor/caging/env.",
+        "Copy-diff fallback retries/override (`SUBSTRATE_COPYDIFF_ROOT`) are asserted with deduped warning text; verbose output captures chosen strategy and endpoint/root.",
+        "`cargo fmt`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world` executed/logged; platform skips documented."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Review R2d-code scope, plan/tasks/session log, and this prompt",
+        "Set R2d-test to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2d-replay-origin-test`, `git worktree add wt/ps-r2d-replay-origin-test ps-r2d-replay-origin-test`, `cd wt/ps-r2d-replay-origin-test`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests completed; document skips with justification",
+        "Commit worktree changes (tests/fixtures)",
+        "Merge ps-r2d-replay-origin-test into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include command results)",
+        "Confirm R2d-integ prompt contents",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2d-test\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2c-integ"
+      ],
+      "concurrent_with": [
+        "R2d-code"
+      ],
+      "worktree": "wt/ps-r2d-replay-origin-test",
+      "integration_task": "R2d-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2d-test.md"
+    },
+    {
+      "id": "R2d-integ",
+      "name": "Replay origin-aware defaults & agent routing (integration)",
+      "type": "integration",
+      "phase": "R2 \u2013 Agent-backed Replay",
+      "status": "queued",
+      "description": "Merge the R2d code/test branches, rerun fmt/lint/tests, and finalize the origin-aware agent-first replay rollout.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/replay",
+        "crates/shell",
+        "crates/world-agent",
+        "crates/trace",
+        "docs/TRACE.md"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-r2d-replay-origin-integ merges ps-r2d-replay-origin-code/test and fast-forwards feat/p0-platform-stability-follow-up.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world` executed/logged; manual agent vs host/flip smoke captured or skipped with reason.",
+        "tasks.json + session_log.md updated with END entry; handoff noted."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Confirm R2d-code/test completed",
+        "Set R2d-integ to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2d-replay-origin-integ`, `git worktree add wt/ps-r2d-replay-origin-integ ps-r2d-replay-origin-integ`, `cd wt/ps-r2d-replay-origin-integ`"
+      ],
+      "end_checklist": [
+        "Merge code/test branches, resolve conflicts",
+        "Run required fmt/lint/tests; capture output",
+        "Fast-forward merge into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2d-integ\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2d-code",
+        "R2d-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-r2d-replay-origin-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2d-integ.md"
     }
   ]
 }

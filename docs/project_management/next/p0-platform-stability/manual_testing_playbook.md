@@ -182,6 +182,55 @@ Run both installer variants end-to-end with cleanup enabled so we validate the n
    ```
    Confirm the units are absent and the metadata-driven cleanup removed only installer-added users/linger entries. Preserve systemctl logs (`/tmp/substrate-installer-*/systemctl-*.log` if you ran the harness) with your artifacts.
 
+### 1.7 Replay origin-aware defaults & agent routing
+
+Use a temp trace to keep spans isolated:
+```bash
+export SHIM_TRACE_LOG=/tmp/r2d-trace.jsonl
+rm -f "$SHIM_TRACE_LOG"
+```
+
+1. **Record a world span (agent path)**
+   ```bash
+   SUBSTRATE_WORLD=enabled SUBSTRATE_WORLD_ENABLED=1 \
+   ./target/debug/substrate -c 'printf world > /tmp/r2d_world.txt'
+   ```
+   Confirm `/run/substrate.sock` is healthy (`curl --unix-socket /run/substrate.sock http://localhost/v1/capabilities | jq .`).
+
+2. **Record a host span**
+   ```bash
+   SUBSTRATE_WORLD=disabled SUBSTRATE_WORLD_ENABLED=0 \
+   ./target/debug/substrate -c 'printf host > /tmp/r2d_host.txt'
+   ```
+
+3. **Default follows recorded origin**
+   ```bash
+   ./target/debug/substrate --replay <SPAN_WORLD_ID> --replay-verbose
+   ./target/debug/substrate --replay <SPAN_HOST_ID> --replay-verbose
+   ```
+   Expect world span to route via agent; host span should stay on host with no cgroup/netns warnings.
+
+4. **Flip flag inverts origin**
+   ```bash
+   ./target/debug/substrate --replay <SPAN_WORLD_ID> --replay-verbose --flip-world
+   ./target/debug/substrate --replay <SPAN_HOST_ID> --replay-verbose --flip-world
+   ```
+   World span should drop to host; host span should use agent/local world path. Verbose output should cite the flip reason.
+
+5. **Agent unavailable fallback (single warning)**
+   Temporarily point to a dead socket:
+   ```bash
+   SUBSTRATE_AGENT_ENDPOINT=/tmp/r2d-dead.sock ./target/debug/substrate --replay <SPAN_WORLD_ID> --replay-verbose
+   ```
+   Expect one `[replay] warn:` about agent failure and fallback to overlay/fuse/copy-diff; no repeated cgroup/netns/nft warnings.
+
+6. **Copy-diff root override + warning dedupe**
+   ```bash
+   SUBSTRATE_COPYDIFF_ROOT=/tmp/r2d-copydiff-root \
+   ./target/debug/substrate --replay <SPAN_WORLD_ID> --replay-verbose --flip-world
+   ```
+   Verify verbose output shows the overridden root and only a single warning if ENOSPC is simulated.
+
 ## 2. Debugging Log (2025-12-02 UTC-5)
 
 1. **Initial provisioning** – `dev-install-substrate` installed the socket/service pair, but `/run/substrate.sock` was owned by `root:root 0660`, so non-root CLI calls failed with `Permission denied (os error 13)`.

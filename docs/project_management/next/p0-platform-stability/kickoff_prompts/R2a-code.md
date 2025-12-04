@@ -12,10 +12,10 @@
    ```
 
 ## Spec
-- Default replay to agent-backed execution when `/run/substrate.sock` is healthy; only fall back to local backend/copy-diff when the agent is unavailable or explicitly disabled.
-- Provide clear controls: default agent path; `--no-world`/`SUBSTRATE_REPLAY_USE_WORLD=disabled` for host-only; an explicit opt-in for local backend if needed. Emit a single warning when falling back.
+- Default replay to agent-backed execution when `/run/substrate.sock` is healthy; otherwise fall back once to the local backend/copy-diff. Emit a single warning on fallback.
+- Controls: default agent path; `--no-world` / `SUBSTRATE_REPLAY_USE_WORLD=disabled` for host-only. Do not change host-only behavior beyond the agent preference.
 - Preserve/forward world root + caging/env for replayed commands so cwd/path alignment matches live runs; update telemetry/log messages to indicate the chosen path and any ENOSPC/cgroup/netns issues (no spam).
-- Update docs/help to describe replay path selection and the new toggles.
+- Update docs/help to describe replay path selection and the toggles (agent vs host-only).
 
 ## Scope & Guardrails
 - Code changes in replay/shell/world-agent as needed for agent-backed replay; tests live in R2a-test.

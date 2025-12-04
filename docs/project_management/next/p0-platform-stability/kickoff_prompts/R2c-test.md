@@ -15,7 +15,7 @@
 - Add tests for replay choosing the agent path when the socket probe succeeds (mock agent client or fixture). Assert telemetry/warning output, cwd/anchor propagation, and scope lines match expectations.
 - Cover agent-unavailable fallback to local backend/copy-diff, including ENOSPC retry behavior and single warnings. Include fixtures for caged vs uncaged spans.
 - Exercise `--no-world`/`SUBSTRATE_REPLAY_USE_WORLD=disabled` host-only mode to ensure logs/warnings skip agent/local noise.
-- Update test docs/fixtures and ensure warnings remain concise (no duplicate lines).
+- Update test docs/fixtures and ensure warnings remain concise (no duplicate lines). Origin/flip scenarios are deferred to R2d.
 
 ## Required Commands
 ```
