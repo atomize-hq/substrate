@@ -4,12 +4,12 @@
 mod common;
 
 use assert_cmd::Command;
-use common::{shared_tmpdir, substrate_shell_driver, temp_dir};
+use common::{substrate_shell_driver};
 use serde_json::{json, Map, Value};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use tempfile::TempDir;
+use tempfile::{Builder, TempDir};
 
 const HOST_SCRIPT_TEMPLATE: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
@@ -45,8 +45,13 @@ if [[ "${SUBSTRATE_WORLD_DEPS_FAIL_TOOL:-}" == "{tool}" ]]; then
   exit 90
 fi
 marker_dir="${SUBSTRATE_WORLD_DEPS_MARKER_DIR:?missing marker dir}"
-mkdir -p "$marker_dir"
+guest_bin="${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:-$marker_dir}"
+mkdir -p "$marker_dir" "$guest_bin"
 touch "$marker_dir/{marker}"
+# also mark the guest tool path and guest marker to satisfy post-install checks
+echo -e '#!/usr/bin/env bash\nexit 0' >"${guest_bin}/{tool}"
+chmod +x "${guest_bin}/{tool}"
+touch "$guest_bin/{marker}"
 echo "install complete for {tool}"
 "#;
 
@@ -62,22 +67,31 @@ struct WorldDepsFixture {
     host_log_path: PathBuf,
     guest_log_path: PathBuf,
     executor_log_path: PathBuf,
+    fake_socket_path: PathBuf,
+    guest_bin_dir: PathBuf,
 }
 
 impl WorldDepsFixture {
     fn new() -> Self {
-        let temp = temp_dir("substrate-world-deps-");
-        let home = temp.path().join("home");
+        // Use /tmp to ensure the world sandbox can write logs/markers.
+        let temp = Builder::new()
+            .prefix("substrate-world-deps-")
+            .tempdir()
+            .expect("world deps tempdir");
+        let root = temp.path();
+        let home = root.join("home");
         let substrate_home = home.join(".substrate");
-        let manifest_path = temp.path().join("manifests/world-deps.yaml");
+        let manifest_path = root.join("manifests/world-deps.yaml");
         let overlay_path = substrate_home.join("world-deps.local.yaml");
-        let host_marker_dir = temp.path().join("markers/host");
-        let guest_marker_dir = temp.path().join("markers/guest");
-        let scripts_dir = temp.path().join("scripts");
-        let logs_dir = temp.path().join("logs");
+        let host_marker_dir = root.join("markers/host");
+        let guest_marker_dir = root.join("markers/guest");
+        let scripts_dir = root.join("scripts");
+        let logs_dir = root.join("logs");
         let host_log_path = logs_dir.join("host.log");
         let guest_log_path = logs_dir.join("guest.log");
         let executor_log_path = logs_dir.join("executor.log");
+        let fake_socket_path = root.join("fake-world.sock");
+        let guest_bin_dir = root.join("guest-bin");
 
         fs::create_dir_all(&home).expect("fixture home");
         fs::create_dir_all(&substrate_home).expect("fixture substrate home");
@@ -86,6 +100,7 @@ impl WorldDepsFixture {
         fs::create_dir_all(&guest_marker_dir).expect("guest marker dir");
         fs::create_dir_all(&scripts_dir).expect("scripts dir");
         fs::create_dir_all(&logs_dir).expect("logs dir");
+        fs::create_dir_all(&guest_bin_dir).expect("guest bin dir");
 
         Self {
             _temp: temp,
@@ -99,6 +114,8 @@ impl WorldDepsFixture {
             host_log_path,
             guest_log_path,
             executor_log_path,
+            fake_socket_path,
+            guest_bin_dir,
         }
     }
 
@@ -106,17 +123,30 @@ impl WorldDepsFixture {
         let mut cmd = substrate_shell_driver();
         cmd.arg("world")
             .arg("deps")
-            .env("TMPDIR", shared_tmpdir())
+            .env("TMPDIR", self._temp.path())
             .env("HOME", &self.home)
             .env("USERPROFILE", &self.home)
             .env("SUBSTRATE_HOME", &self.substrate_home)
+            // Keep world enabled but avoid real host sockets; force manual mode and point to a temp socket.
             .env("SUBSTRATE_WORLD", "enabled")
             .env("SUBSTRATE_WORLD_ENABLED", "1")
+            .env("SUBSTRATE_WORLD_SOCKET", &self.fake_socket_path)
+            .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
             .env("SUBSTRATE_WORLD_DEPS_MANIFEST", &self.manifest_path)
             .env("SUBSTRATE_WORLD_DEPS_MARKER_DIR", &self.guest_marker_dir)
             .env("SUBSTRATE_WORLD_DEPS_HOST_LOG", &self.host_log_path)
             .env("SUBSTRATE_WORLD_DEPS_GUEST_LOG", &self.guest_log_path)
+            .env("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR", &self.guest_bin_dir)
             .env("SUBSTRATE_WORLD_DEPS_EXECUTOR_LOG", &self.executor_log_path);
+        // Ensure the stub guest bin dir is on PATH so post-install checks succeed.
+        let current_path = std::env::var("PATH").unwrap_or_default();
+        let prefix = self.guest_bin_dir.display().to_string();
+        let new_path = if current_path.is_empty() {
+            prefix
+        } else {
+            format!("{prefix}:{current_path}")
+        };
+        cmd.env("PATH", new_path);
         cmd
     }
 
@@ -154,7 +184,9 @@ impl WorldDepsFixture {
     }
 
     fn write_overlay_install_override(&self, tool: &str) {
-        let script = self.install_script(tool, &format!("overlay-{tool}"));
+        let marker_name = format!("overlay-{tool}");
+        let script = self.install_script(tool, &marker_name);
+        let guest_detect = self.guest_script_with_marker(tool, &marker_name, "-overlay");
         let overlay = Value::Object({
             let mut root = Map::new();
             root.insert("version".into(), json!(1));
@@ -165,6 +197,9 @@ impl WorldDepsFixture {
                     entries.insert(
                         tool.to_string(),
                         json!({
+                            "guest_detect": {
+                                "command": guest_detect
+                            },
                             "guest_install": {
                                 "custom": script
                             }
@@ -197,8 +232,14 @@ impl WorldDepsFixture {
     }
 
     fn guest_script(&self, tool: &str) -> String {
-        let marker = self.guest_marker_path(tool);
-        let path = self.scripts_dir.join(format!("guest-{tool}.sh"));
+        self.guest_script_with_marker(tool, tool, "")
+    }
+
+    fn guest_script_with_marker(&self, tool: &str, marker_name: &str, suffix: &str) -> String {
+        let marker = self.guest_marker_dir.join(marker_name);
+        let path = self
+            .scripts_dir
+            .join(format!("guest-{tool}{suffix}.sh"));
         let contents = GUEST_SCRIPT_TEMPLATE
             .replace("{tool}", tool)
             .replace("{marker}", marker.to_string_lossy().as_ref());

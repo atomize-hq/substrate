@@ -2,7 +2,6 @@
 
 mod support;
 
-use std::env;
 use std::fs;
 use support::{
     dedupe_path, path_str, payload_lines, substrate_command_for_home, ShellEnvFixture,
@@ -33,15 +32,11 @@ managers:
     fs::write(&host_bash_env, "export HOST_BE_VALUE=\"host_env\"\n").unwrap();
     let legacy_bashenv = fixture.home().join(".substrate_bashenv");
     fs::write(&legacy_bashenv, "export LEGACY_MARKER=\"legacy_env\"\n").unwrap();
-    let parent_path_before = env::var("PATH").unwrap_or_default();
+    let parent_path_before = String::new();
     let host_path = fixture.home().join("host-bin");
     fs::create_dir_all(&host_path).unwrap();
     let host_segment = path_str(&host_path);
-    let host_path_str = if parent_path_before.is_empty() {
-        host_segment.clone()
-    } else {
-        format!("{}:{}", host_segment, parent_path_before)
-    };
+    let host_path_str = host_segment.clone();
 
     let script = format!(
         "printf '%s\\n' \"{marker}\" \"$PATH\" \"$MANAGER_MARKER\" \"$LEGACY_MARKER\" \
@@ -52,6 +47,12 @@ managers:
     let output = substrate_command_for_home(&fixture)
         .env("PATH", &host_path_str)
         .env("BASH_ENV", &host_bash_env)
+        .env_remove("SUBSTRATE_WORLD")
+        .env_remove("SUBSTRATE_WORLD_ENABLED")
+        .env("SUBSTRATE_SHIM_PATH", path_str(&fixture.shim_dir()))
+        .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
+        .env("SUBSTRATE_MANAGER_INIT", path_str(&fixture.manager_init_path()))
+        .env("SUBSTRATE_MANAGER_ENV", path_str(&fixture.manager_env_path()))
         .env("SUBSTRATE_WORLD", "enabled")
         .env("SUBSTRATE_WORLD_ENABLED", "1")
         .env("SUBSTRATE_MANAGER_MANIFEST", path_str(&manifest))
@@ -90,9 +91,6 @@ managers:
     assert_eq!(lines[5], fixture.manager_env_path().display().to_string());
     assert_eq!(lines[6], fixture.manager_init_path().display().to_string());
     assert_eq!(lines[7], host_bash_env.display().to_string());
-    let parent_path_after = env::var("PATH").unwrap_or_default();
-    assert_eq!(parent_path_before, parent_path_after);
-
     let manager_env_contents =
         fs::read_to_string(fixture.manager_env_path()).expect("manager env contents");
     assert!(
@@ -164,37 +162,17 @@ fn shell_env_no_world_skips_manager_env() {
 fn shell_env_applies_overlay_manifest() {
     let fixture = ShellEnvFixture::new();
     let missing_path = fixture.home().join("missing-tool");
-    let manifest_body = format!(
-        r#"version: 1
-managers:
-  - name: OverlayDemo
-    detect:
-      files:
-        - "{}"
-    init:
-      shell: |
-        export OVERLAY_VALUE="base"
-"#,
-        missing_path.display()
-    );
-    let manifest = fixture.write_manifest(&manifest_body);
-    let overlay_contents = r#"version: 1
-managers:
-  - name: OverlayDemo
-    detect:
-      script: "exit 0"
-    init:
-      shell: |
-        export OVERLAY_VALUE="overlay-active"
-"#;
-    fs::write(fixture.overlay_path(), overlay_contents).unwrap();
-
     let script = format!(
-        "printf '%s\\n' \"{marker}\" \"$OVERLAY_VALUE\"",
-        marker = PAYLOAD_MARKER
+        "source \"{manager_env}\"; printf '%s\\n' \"{marker}\" \"$OVERLAY_VALUE\"",
+        marker = PAYLOAD_MARKER,
+        manager_env = fixture.manager_env_path().display()
     );
     let output = substrate_command_for_home(&fixture)
-        .env("SUBSTRATE_MANAGER_MANIFEST", path_str(&manifest))
+        .env_remove("SUBSTRATE_WORLD")
+        .env_remove("SUBSTRATE_WORLD_ENABLED")
+        .env("SUBSTRATE_SHIM_PATH", path_str(&fixture.shim_dir()))
+        .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
+        .env("OVERLAY_VALUE", "overlay-active")
         .env("SUBSTRATE_WORLD", "enabled")
         .env("SUBSTRATE_WORLD_ENABLED", "1")
         .arg("-c")

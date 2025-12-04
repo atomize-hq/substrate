@@ -29,10 +29,15 @@ maybe_sudo() {
       return
     fi
     if [[ ${status} -eq 1 ]]; then
+      if [[ -t 0 || -t 1 || -t 2 ]]; then
+        log "sudo password required for '$*'; prompting..."
+        sudo "$@"
+        return $?
+      fi
       log "sudo password required for '$*'; rerun uninstall with sudo to complete this step."
-    else
-      log "sudo failed running '$*' (exit ${status})."
+      return ${status}
     fi
+    log "sudo failed running '$*' (exit ${status})."
     return ${status}
   fi
 

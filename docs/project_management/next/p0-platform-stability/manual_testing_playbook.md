@@ -9,6 +9,29 @@ This document captures the full end-to-end validation flow for the socket-activa
 1. Deploy dev build and provision the world-agent:
    ```bash
    ./scripts/substrate/dev-install-substrate.sh --profile release
+   ```
+2. Verify systemd units and socket:
+   ```bash
+   sudo systemctl status substrate-world-agent.socket --no-pager
+   sudo systemctl status substrate-world-agent.service --no-pager
+   ls -l /run/substrate.sock
+   ```
+3. Probe the agent and shell telemetry:
+   ```bash
+   curl --unix-socket /run/substrate.sock http://localhost/v1/capabilities | jq .
+   substrate world doctor --json | jq '{world_socket, socket_activation}'
+   substrate --shim-status | grep 'World socket'
+   ```
+4. Run the logging tests:
+   ```bash
+   cargo test -p substrate-shell --test logging
+   ```
+
+### 1.2 Linux Provisioning & Socket Activation — Enable World after install
+
+1. Deploy dev build and provision the world-agent:
+   ```bash
+   ./scripts/substrate/dev-install-substrate.sh --profile release
    ./scripts/linux/world-provision.sh --profile release
    ```
 2. Verify systemd units and socket:
@@ -28,7 +51,8 @@ This document captures the full end-to-end validation flow for the socket-activa
    cargo test -p substrate-shell --test logging
    ```
 
-### 1.2 Linux Provisioning & Socket Activation — No World
+
+### 1.3 Linux Provisioning & Socket Activation — No World
 
 1. Deploy dev build with world disabled:
    ```bash

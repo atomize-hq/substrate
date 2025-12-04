@@ -457,6 +457,28 @@ pub(crate) fn execute_command(
         }
     }
 
+    // Handle lightweight builtins first (cd/pwd/export/unset) so stateful changes
+    // like cwd take effect before we hand off to the agent path.
+    if !needs_shell(trimmed) {
+        if let Some(status) = handle_builtin(config, trimmed, cmd_id)? {
+            if let Some(active_span) = span {
+                let _ = active_span.finish(status.code().unwrap_or(-1), vec![], None);
+            }
+            let completion_extra = json!({
+                log_schema::EXIT_CODE: status.code().unwrap_or(-1),
+                log_schema::DURATION_MS: start_time.elapsed().as_millis()
+            });
+            log_command_event(
+                config,
+                "command_complete",
+                &redacted_command,
+                cmd_id,
+                Some(completion_extra),
+            )?;
+            return Ok(status);
+        }
+    }
+
     #[cfg(target_os = "linux")]
     {
         let world_env = env::var("SUBSTRATE_WORLD").unwrap_or_default();
@@ -516,18 +538,8 @@ pub(crate) fn execute_command(
         }
     }
 
-    // Check for built-in commands only in interactive mode or for simple commands
-    // Complex commands with shell operators must be handled by the external shell
-    let status = if !needs_shell(trimmed) {
-        if let Some(status) = handle_builtin(config, trimmed, cmd_id)? {
-            status
-        } else {
-            execute_external(config, trimmed, running_child_pid, cmd_id)?
-        }
-    } else {
-        // Execute external command through shell for complex commands
-        execute_external(config, trimmed, running_child_pid, cmd_id)?
-    };
+    // Execute external command through shell for complex commands or when no builtin matched.
+    let status = execute_external(config, trimmed, running_child_pid, cmd_id)?;
 
     // Log command completion with redacted command
     let duration = start_time.elapsed();

@@ -6,7 +6,9 @@
 //! - Compare base vs work to produce FsDiff (writes/mods/deletes).
 //! - Enforce limits and set `truncated`/`summary` when exceeded.
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
+use nix::libc;
+use std::error::Error as StdError;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Read;
@@ -51,8 +53,70 @@ pub fn execute_with_copydiff(
     env: &std::collections::HashMap<String, String>,
     netns: Option<&str>,
 ) -> Result<(std::process::Output, FsDiff, Option<u32>)> {
-    let root = choose_base_dir();
-    fs::create_dir_all(&root).context("failed to create copydiff base dir")?;
+    let mut last_error: Option<anyhow::Error> = None;
+    for root in candidate_roots() {
+        match execute_with_copydiff_root(&root, world_id, cmd, project_dir, cwd, env, netns) {
+            Ok(result) => return Ok(result),
+            Err(err) => {
+                if is_enospc(&err) {
+                    eprintln!(
+                        "substrate: warn: copy-diff storage {} ran out of space; retrying fallback location",
+                        root.display()
+                    );
+                } else {
+                    eprintln!(
+                        "substrate: warn: copy-diff failed in {}; {}",
+                        root.display(),
+                        err
+                    );
+                }
+                last_error = Some(err);
+            }
+        }
+    }
+
+    Err(last_error.unwrap_or_else(|| anyhow!("copydiff execution failed")))
+}
+
+pub(crate) fn candidate_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    let primary = choose_base_dir();
+    roots.push(primary.clone());
+
+    #[cfg(target_os = "linux")]
+    {
+        let uid = nix::unistd::Uid::current().as_raw();
+        let tmp_root = PathBuf::from(format!("/tmp/substrate-{}-copydiff", uid));
+        if tmp_root != primary {
+            roots.push(tmp_root);
+        }
+        let var_tmp_root = PathBuf::from(format!("/var/tmp/substrate-{}-copydiff", uid));
+        if var_tmp_root != primary && !roots.contains(&var_tmp_root) {
+            roots.push(var_tmp_root);
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let fallback = PathBuf::from("/tmp/substrate-copydiff");
+        if fallback != primary {
+            roots.push(fallback);
+        }
+    }
+
+    roots
+}
+
+fn execute_with_copydiff_root(
+    root: &Path,
+    world_id: &str,
+    cmd: &str,
+    project_dir: &Path,
+    cwd: &Path,
+    env: &std::collections::HashMap<String, String>,
+    netns: Option<&str>,
+) -> Result<(std::process::Output, FsDiff, Option<u32>)> {
+    fs::create_dir_all(root).context("failed to create copydiff base dir")?;
     let base = root.join(format!("{}-base", world_id));
     let work = root.join(format!("{}-work", world_id));
 
@@ -62,53 +126,57 @@ pub fn execute_with_copydiff(
     fs::create_dir_all(&base)?;
     fs::create_dir_all(&work)?;
 
-    // Snapshot base and work using cp -a --reflink=auto when available
-    copy_tree(project_dir, &base)?;
-    copy_tree(project_dir, &work)?;
+    let result = (|| -> Result<(std::process::Output, FsDiff, Option<u32>)> {
+        // Snapshot base and work using cp -a --reflink=auto when available
+        copy_tree(project_dir, &base)?;
+        copy_tree(project_dir, &work)?;
 
-    // Execute under work at the mapped cwd
-    let mut rel = if cwd.starts_with(project_dir) {
-        cwd.strip_prefix(project_dir)
-            .unwrap_or_else(|_| Path::new("."))
-            .to_path_buf()
-    } else {
-        PathBuf::from(".")
-    };
-    if rel.as_os_str().is_empty() {
-        rel = PathBuf::from(".");
-    }
-    let target_dir = work.join(&rel);
-    let mut command = if netns.is_some() {
-        Command::new("ip")
-    } else {
-        Command::new("sh")
-    };
-    if let Some(ns) = netns {
-        command.args(["netns", "exec", ns, "sh", "-lc", cmd]);
-    } else {
-        command.args(["-lc", cmd]);
-    }
-    let child = command
-        .current_dir(&target_dir)
-        .envs(env)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .context("failed spawning command under copydiff work dir")?;
-    let child_pid = Some(child.id());
-    let output = child
-        .wait_with_output()
-        .context("failed waiting for command under copydiff work dir")?;
+        // Execute under work at the mapped cwd
+        let mut rel = if cwd.starts_with(project_dir) {
+            cwd.strip_prefix(project_dir)
+                .unwrap_or_else(|_| Path::new("."))
+                .to_path_buf()
+        } else {
+            PathBuf::from(".")
+        };
+        if rel.as_os_str().is_empty() {
+            rel = PathBuf::from(".");
+        }
+        let target_dir = work.join(&rel);
+        let mut command = if netns.is_some() {
+            Command::new("ip")
+        } else {
+            Command::new("sh")
+        };
+        if let Some(ns) = netns {
+            command.args(["netns", "exec", ns, "sh", "-lc", cmd]);
+        } else {
+            command.args(["-lc", cmd]);
+        }
+        let child = command
+            .current_dir(&target_dir)
+            .envs(env)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .context("failed spawning command under copydiff work dir")?;
+        let child_pid = Some(child.id());
+        let output = child
+            .wait_with_output()
+            .context("failed waiting for command under copydiff work dir")?;
 
-    // Compute diff base vs work
-    let diff = compute_diff(&base, &work)?;
+        // Compute diff base vs work
+        let diff = compute_diff(&base, &work)?;
 
-    // Cleanup
+        Ok((output, diff, child_pid))
+    })();
+
+    // Cleanup regardless of success
     let _ = fs::remove_dir_all(&base);
     let _ = fs::remove_dir_all(&work);
 
-    Ok((output, diff, child_pid))
+    result
 }
 
 fn copy_tree(from: &Path, to: &Path) -> Result<()> {
@@ -119,6 +187,8 @@ fn copy_tree(from: &Path, to: &Path) -> Result<()> {
         .arg("--reflink=auto")
         .arg(format!("{}/.", from.display()))
         .arg(to)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status();
     match status {
         Ok(s) if s.success() => Ok(()),
@@ -158,6 +228,19 @@ fn copy_tree(from: &Path, to: &Path) -> Result<()> {
             Ok(())
         }
     }
+}
+
+fn is_enospc(err: &anyhow::Error) -> bool {
+    let mut current: Option<&(dyn StdError + 'static)> = Some(err.as_ref());
+    while let Some(err) = current {
+        if let Some(io) = err.downcast_ref::<std::io::Error>() {
+            if io.raw_os_error() == Some(libc::ENOSPC) {
+                return true;
+            }
+        }
+        current = err.source();
+    }
+    false
 }
 
 fn compute_diff(base: &Path, work: &Path) -> Result<FsDiff> {
@@ -377,9 +460,16 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
+    fn clean_copydiff_roots() {
+        for root in candidate_roots() {
+            let _ = std::fs::remove_dir_all(&root);
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn test_copydiff_detects_metadata_mod() {
+        clean_copydiff_roots();
         let tmp = TempDir::new().unwrap();
         let project = tmp.path();
         std::fs::write(project.join("file.txt"), b"data").unwrap();
@@ -401,6 +491,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn test_copydiff_detects_write_and_delete() {
+        clean_copydiff_roots();
         let tmp = TempDir::new().unwrap();
         let project = tmp.path();
         std::fs::write(project.join("old.txt"), b"old").unwrap();

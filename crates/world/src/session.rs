@@ -44,6 +44,14 @@ impl SessionWorld {
         Ok(world)
     }
 
+    /// Determine whether this world can be reused for the requested spec.
+    pub(crate) fn compatible_with(&self, spec: &WorldSpec) -> bool {
+        self.project_dir == spec.project_dir
+            && self.spec.isolate_network == spec.isolate_network
+            && self.spec.always_isolate == spec.always_isolate
+            && self.spec.allowed_domains == spec.allowed_domains
+    }
+
     /// Find an existing session world if available.
     fn find_existing() -> Result<Option<Self>> {
         // TODO: Implement session discovery logic
@@ -249,5 +257,46 @@ mod tests {
                 println!("Expected failure on non-Linux: {}", e);
             }
         }
+    }
+
+    #[test]
+    fn session_compatibility_respects_core_spec_fields() {
+        let base_spec = WorldSpec {
+            reuse_session: true,
+            isolate_network: true,
+            limits: world_api::ResourceLimits::default(),
+            enable_preload: false,
+            allowed_domains: vec!["example.com".into()],
+            project_dir: PathBuf::from("/tmp/project-a"),
+            always_isolate: false,
+        };
+        let world = SessionWorld {
+            id: "wld_test".into(),
+            root_dir: PathBuf::from("/tmp/substrate-worlds"),
+            project_dir: base_spec.project_dir.clone(),
+            cgroup_path: PathBuf::from("/sys/fs/cgroup/substrate/wld_test"),
+            net_namespace: None,
+            spec: base_spec.clone(),
+            network_filter: None,
+            fs_by_span: HashMap::new(),
+        };
+
+        assert!(world.compatible_with(&base_spec));
+
+        let mut changed = base_spec.clone();
+        changed.project_dir = PathBuf::from("/tmp/other");
+        assert!(!world.compatible_with(&changed));
+
+        let mut changed = base_spec.clone();
+        changed.isolate_network = false;
+        assert!(!world.compatible_with(&changed));
+
+        let mut changed = base_spec.clone();
+        changed.always_isolate = true;
+        assert!(!world.compatible_with(&changed));
+
+        let mut changed = base_spec;
+        changed.allowed_domains = vec!["other.com".into()];
+        assert!(!world.compatible_with(&changed));
     }
 }

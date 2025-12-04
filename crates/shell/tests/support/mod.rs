@@ -69,7 +69,15 @@ pub fn substrate_command_for_home(fixture: &ShellEnvFixture) -> Command {
     let mut cmd = get_substrate_binary();
     cmd.env("HOME", fixture.home())
         .env("USERPROFILE", fixture.home())
-        .env("SHELL", "/bin/bash");
+        .env("SHELL", "/bin/bash")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        // Ensure host-installed shims do not affect PATH injection in tests.
+        .env_remove("SUBSTRATE_SHIM_PATH")
+        .env_remove("SUBSTRATE_SHIM_ORIGINAL_PATH")
+        .env_remove("SUBSTRATE_SHIM_DEPLOY_DIR")
+        .env_remove("SHIM_ORIGINAL_PATH")
+        .env_remove("PATH_BEFORE_SUBSTRATE_SHIM");
     cmd
 }
 
@@ -83,7 +91,11 @@ pub fn payload_lines(stdout: &[u8]) -> Vec<String> {
     let mut lines = Vec::new();
     for line in data.lines() {
         if marker_found {
-            lines.push(line.trim_end().to_string());
+            let trimmed = line.trim_end();
+            if trimmed.is_empty() || trimmed == PAYLOAD_MARKER {
+                continue;
+            }
+            lines.push(trimmed.to_string());
         } else if line.trim() == PAYLOAD_MARKER {
             marker_found = true;
         }
