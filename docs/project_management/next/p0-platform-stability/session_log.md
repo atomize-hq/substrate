@@ -198,6 +198,40 @@ Template:
 - Health JSON notes: host-only managers limited to nvm/pyenv; remaining managers absent on host; world doctor fell back to host execution because `/run/substrate.sock` + systemd units are unavailable here
 - Scripts executed: n/a
 - Merge: verified no additional ps-h1a-health-code/test refs exist; `ps-h1a-health-integ` fast-forwarded back onto feat/p0-platform-stability
+
+## [2025-12-03 15:10 UTC] PM Agent – R2a-planning – START
+- Checked out feat/p0-platform-stability-follow-up (local); no remote pull performed
+- Updated tasks.json + session_log.md planned (commit pending)
+- Goal: add R2a (agent-backed replay) code/test/integ tasks and kickoff prompts
+- Blockers: none
+
+## [2025-12-03 15:15 UTC] PM Agent – R2a-planning – END
+- Docs/tasks updated: added R2a-code/test/integ entries in tasks.json; new kickoff prompts at `docs/project_management/next/p0-platform-stability/kickoff_prompts/R2a-*.md`
+- Commands: none
+- Results: prompts/tasks staged (no commits yet)
+- Next steps: begin R2a-code/test per new prompts; ensure doc/task updates committed before branch work
+
+## [2025-12-03 15:40 UTC] PM Agent – R2 planning split – START
+- Reviewed replay issues + R2 scope with architect
+- Objective: split replay work into three triads (agent path, fallback warnings, tests/integ)
+- Blockers: none
+
+## [2025-12-03 15:48 UTC] PM Agent – R2 planning split – END
+- Updated `tasks.json`: replaced single R2a triad with `R2a-code`, `R2b-code`, `R2c-test`, and `R2c-integ`
+- Added kickoff prompts: `R2b-code.md`, `R2c-test.md`, `R2c-integ.md` (R2a prompts unchanged)
+- Commands: none
+- Next steps: commit doc/task updates, then kick off R2a-code
+
+## [2025-12-03 16:05 UTC] PM Agent – R2 planning follow-up – START
+- Received feedback: each replay triad must include code/test/integration tasks and run sequentially
+- Goal: expand R2 plan accordingly
+- Blockers: none
+
+## [2025-12-03 16:12 UTC] PM Agent – R2 planning follow-up – END
+- `tasks.json` now contains three replay triads (R2a/R2b/R2c), each with code/test/integration tasks + dependencies
+- Added kickoff prompts: `R2b-test.md`, `R2b-integ.md`, `R2c-code.md`
+- Commands: none
+- Next steps: commit doc/task updates, then begin R2a-code once ready
 - Kickoff prompts created: reviewed `docs/project_management/next/p0-platform-stability/kickoff_prompts/H1b-code.md` + `H1b-test.md`; both already reflect manager_states assumptions, no edits
 - Docs commit: pending (`docs: finish H1a-integ`)
 - Next steps / blockers: remove `wt/ps-h1a-health-integ`, prep H1b-code/test handoff
