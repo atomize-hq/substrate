@@ -625,3 +625,11 @@ Template:
 - Worktree setup pending (`ps-r2b-replay-fallback-code` → `wt/ps-r2b-replay-fallback-code`)
 - Plan: reapply single-warning agent fallback with doctor guidance, add copy-diff scratch root override/retries + telemetry, run fmt/clippy/tests; manual replay likely skipped (no agent socket)
 - Blockers: host lacks `/run/substrate.sock`; expect manual replay skip
+
+## [2025-12-07 18:36 UTC] Code Agent – R2b-code – END
+- Worktree commits: 3b4b0b5 (`feat: improve replay fallback warnings`)
+- Commands: `cargo fmt`; `cargo clippy -p substrate-replay -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`
+- Results: pass / pass / pass
+- Manual commands: `substrate --replay ...` skipped (no healthy `/run/substrate.sock` or sample spans on this host)
+- Changes: single agent→local warning with doctor/SUBSTRATE_WORLD_SOCKET guidance, copy-diff scratch retries (/run→/tmp→/var/tmp) with override env + verbose root logging, replay_strategy trace entries (strategy/fallback_reason/agent_socket/copydiff_root)
+- Docs: REPLAY/TRACE/manual testing playbook updated for warning text, telemetry, copy-diff overrides/cleanup

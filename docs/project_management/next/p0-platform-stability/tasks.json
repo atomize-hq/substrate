@@ -1457,7 +1457,7 @@
       "name": "Replay agent-backed execution \u2013 fallbacks & warnings (code)",
       "type": "code",
       "phase": "R2 \u2013 Agent-backed Replay",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Improve warning output and copy-diff fallback behavior (root retries, overrides, telemetry).",
       "references": [
         "docs/project_management/next/p0-platform_stability/p0_platform_stability_plan.md",
