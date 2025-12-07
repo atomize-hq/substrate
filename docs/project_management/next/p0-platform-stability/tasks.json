@@ -1923,7 +1923,7 @@
       "name": "Policy-driven world fs mode (test)",
       "type": "test",
       "phase": "R2e \u2013 Policy-driven World FS Mode",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add fixtures asserting policy-controlled read-only vs writable worlds (PTY + non-PTY) with trace/doctor coverage.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",

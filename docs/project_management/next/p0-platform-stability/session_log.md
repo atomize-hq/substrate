@@ -789,3 +789,12 @@ Template:
 - Worktree: pending (`ps-r2e-world-fs-test` → `wt/ps-r2e-world-fs-test`)
 - Plan: reapply read-only vs writable policy fixtures (PTY + non-PTY agent/local), ensure traces/doctor reflect mode, guard skips for overlay/cgroup limits, run fmt + required tests
 - Blockers: host may lack overlay/cgroup/copy-diff; note skips if hit
+
+## [2025-12-07 22:51 UTC] Test Agent – R2e-test – END (reapply)
+- Worktree commits: 55b9d3b (`test: add world fs mode coverage`)
+- Commands: `cargo fmt`; `cargo test -p substrate-shell world_enable`; `cargo test -p world-agent`
+- Results: pass / pass / pass (overlay/cgroup required; tests emit skip notes only if overlay missing)
+- Scripts executed: n/a
+- Kickoff prompts created: n/a
+- Docs commit: pending (`docs: finish R2e-test`)
+- Next steps / blockers: fast-forward merged into feat/p0-platform-stability-follow-up; remove worktree after doc update
