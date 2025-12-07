@@ -727,3 +727,10 @@ Template:
 - Commands: `cargo fmt`; `cargo clippy -p substrate-replay -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world`; `cargo build --bin substrate`
 - Manual replay: `target/debug/substrate --replay spn_019afa94-0f20-71b1-a420-3ba685ff7839 --replay-verbose` (origin=world default, agent strategy via /run/substrate.sock, scopes empty); `SUBSTRATE_WORLD_SOCKET=/run/substrate.sock.missing target/debug/substrate --replay spn_019afa94-0f20-71b1-a420-3ba685ff7839 --replay-verbose` (agent miss warning once, world backend probe failure, copy-diff fallback to /tmp with cgroup/netns warnings); `target/debug/substrate --replay spn_019afa94-0f20-71b1-a420-3ba685ff7839 --replay-verbose --flip-world` (origin world→host, host pwd)
 - Next steps / blockers: none
+
+## [2025-12-07 20:54 UTC] Test Agent – R2d-test – START
+- Checked out feat/p0-platform-stability-follow-up, `git pull --ff-only` (up to date)
+- Updated tasks.json (`R2d-test` → `in_progress`) and appended this entry; doc commit pending
+- Worktree setup pending (`ps-r2d-replay-origin-test` → `wt/ps-r2d-replay-origin-test`)
+- Plan: reapply fixtures for recorded origin defaults/flip, agent socket success/fallback with preserved cwd/anchor/caging/env, copy-diff retry + override coverage with deduped warnings and verbose strategy/root assertions; run fmt + required replay/shell tests; document host skips
+- Blockers: host lacks overlay/netns/cgroup and healthy agent socket; copy-diff likely unavailable so tests will emit fallback warnings/skips
