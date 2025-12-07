@@ -617,3 +617,11 @@ Template:
 - Scripts executed: n/a (no manual `substrate --replay`; host lacks agent socket)
 - Docs commit: pending (`docs: finish R2a-integ`)
 - Next steps / blockers: fast-forward feat/p0-platform-stability-follow-up with a37da6c, remove worktree after docs commit; manual agent smoke remains blocked without `/run/substrate.sock`
+
+## [2025-12-07 18:18 UTC] Code Agent – R2b-code – START
+- Checked out feat/p0-platform-stability-follow-up, `git pull --ff-only` (up to date)
+- Read p0 plan, tasks.json, session log, R2a outputs, and R2b-code prompt
+- Updated tasks.json (`R2b-code` → `in_progress`); commit pending per checklist
+- Worktree setup pending (`ps-r2b-replay-fallback-code` → `wt/ps-r2b-replay-fallback-code`)
+- Plan: reapply single-warning agent fallback with doctor guidance, add copy-diff scratch root override/retries + telemetry, run fmt/clippy/tests; manual replay likely skipped (no agent socket)
+- Blockers: host lacks `/run/substrate.sock`; expect manual replay skip
