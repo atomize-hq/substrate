@@ -572,3 +572,10 @@ Template:
 - Commands: `cargo test -p substrate-shell --test logging` (pass)
 - Results: logging suite now passes even when a real systemd socket is active on the host
 - Next steps / blockers: none
+
+## [2025-12-07 17:30 UTC] Code Agent – R2a-code – START
+- Checked out feat/p0-platform-stability-follow-up (sync after filesystem recovery)
+- Set R2a-code to in_progress; doc commit pending post-reapply
+- Plan: re-apply agent-first replay changes (agent socket default, single-warning fallback to local backend, world root/caging/env propagation), update docs/tasks/logs, rerun fmt/clippy/tests, and recommit
+- Worktree: working from branch root after loss; will reapply changes directly before recreating worktree if needed
+- Blockers: none noted (no healthy `/run/substrate.sock` expected here; manual replay smoke may be skipped)
