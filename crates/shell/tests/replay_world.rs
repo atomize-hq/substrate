@@ -3,7 +3,6 @@
 #[path = "support/mod.rs"]
 mod support;
 
-use libc;
 use serde_json::{json, Value};
 use std::env;
 use std::fs;
@@ -72,10 +71,6 @@ fn write_trace_with_options(
     fs::create_dir_all(trace.parent().unwrap()).expect("failed to create trace dir");
     fs::write(&trace, format!("{}\n", entry)).expect("failed to write trace entry");
     trace
-}
-
-fn write_trace(fixture: &ShellEnvFixture, span_id: &str, cmd: &str, cwd: &Path) -> PathBuf {
-    write_trace_with_options(fixture, span_id, cmd, cwd, TraceOptions::default())
 }
 
 fn replay_strategy_entries(trace_path: &Path) -> Vec<Value> {
