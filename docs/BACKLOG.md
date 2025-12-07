@@ -42,6 +42,11 @@ Keep concise, actionable, and security-focused.
     - Plumb the ID through `ShellConfig`/`WorldRootSettings` so the logging layer can access it regardless of execution path.
     - Update tests to assert the field is set when worlds are enabled, and note the behavior change in tracing docs so operators know how to interpret the new data.
 
+- **P1 – Capture caging/anchor in spans + replay verbose**
+  - Problem: replay verbose output can’t show whether the recorded command was caged or what anchor was used because spans don’t persist that state.
+  - Work: persist `caged` (bool) and `anchor_cwd` (string) in the span/replay_context, thread into replay reconstruction, and print in `--replay-verbose` with a warning when the replayed environment can’t honor the recorded caging/anchor.
+  - Acceptance: trace entries include the new fields for caged sessions; replay verbose shows caging/anchor and warns on mismatch; docs/tests updated to cover the fields.
+
 - **P1 - TCP bridge for agent (Cross-platform: Linux/macOS/Windows)**
   - Goal: Provide an optional loopback TCP endpoint that bridges to the agent UDS for environments/tools requiring TCP.
   - Current state:
