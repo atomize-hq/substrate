@@ -387,7 +387,7 @@
       "name": "Windows WSL warm WhatIf capture",
       "type": "ops",
       "phase": "S1c \u2013 Provisioning & Docs",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Re-run `pwsh -File scripts/windows/wsl-warm.ps1 -WhatIf` on a Windows host with PowerShell 7 to capture the socket-activation provisioning dry-run that was skipped on Linux.",
       "references": [
         "scripts/windows/wsl-warm.ps1",

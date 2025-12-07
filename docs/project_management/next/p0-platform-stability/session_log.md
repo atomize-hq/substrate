@@ -704,3 +704,12 @@ Template:
 - Created worktree plan: `ps-r2c-replay-agent-integ` → `wt/ps-r2c-replay-agent-integ`
 - Plan: fast-forward merge ps-r2c-replay-coverage-code/test, run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-replay -- --nocapture`, `cargo test -p substrate-shell replay_world`, document host limitations, update tasks/logs, and fast-forward base branch
 - Blockers: host lacks `/run/substrate.sock` and copy-diff roots under /run; expect fallback warnings/skips in replay_world suite
+
+## [2025-12-07 20:00 UTC] Integration Agent – R2c-integ – END
+- Worktree commits: n/a (ps-r2c code/test already merged; validation-only pass)
+- Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world`; `cargo test -p substrate-shell --test replay_world -- --nocapture`
+- Results: pass / pass / pass / pass (0 filtered tests) / pass with expected agent-missing + copy-diff retry warnings (host lacks `/run/substrate.sock`, overlay/cgroup/netns)
+- Scripts executed: n/a
+- Merge: `ps-r2c-replay-coverage-code` + `ps-r2c-replay-agent-test` fast-forwarded; integration branch current with feat/p0-platform-stability-follow-up
+- Docs/status: tasks.json marked R2c-integ completed; START/END entries recorded
+- Next steps / blockers: none
