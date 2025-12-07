@@ -743,3 +743,11 @@ Template:
 - Kickoff prompts created: n/a (R2d-integ prompt confirmed)
 - Docs commit: pending (`docs: finish R2d-test`)
 - Next steps / blockers: remove worktree after doc commit; host limitations documented above (no healthy agent socket, overlay/netns/cgroup/copy-diff unavailable)
+
+## [2025-12-07 21:05 UTC] Integration Agent – R2d-integ – START (reapply)
+- Checked out feat/p0-platform-stability-follow-up, repo clean
+- Confirmed R2d-code/test completion; reread plan/tasks/session_log + R2d-integ prompt
+- Updated tasks.json (`R2d-integ` → `in_progress`) and appended this entry; doc commit pending
+- Worktree: pending (`ps-r2d-replay-origin-integ` → `wt/ps-r2d-replay-origin-integ`)
+- Plan: merge R2d code/test, fix clippy (redundant import), run fmt/clippy/tests, capture manual agent replay via healthy /run/substrate.sock, update docs/tasks/logs and fast-forward
+- Blockers: env has healthy /run/substrate.sock but lacks overlay/netns/cgroup; copy-diff may still warn
