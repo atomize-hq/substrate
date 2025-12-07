@@ -39,7 +39,7 @@ fn replay_strategy_entries(trace_path: &Path) -> Vec<Value> {
     let reader = BufReader::new(file);
     reader
         .lines()
-        .filter_map(|line| line.ok())
+        .map_while(Result::ok)
         .filter_map(|line| serde_json::from_str::<Value>(&line).ok())
         .filter(|value| {
             value.get("event_type").and_then(|event| event.as_str()) == Some("replay_strategy")

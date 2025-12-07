@@ -650,3 +650,18 @@ Template:
 - Prompts: R2b-integ prompt reviewed (no edits needed)
 - Docs commit: pending (`docs: finish R2b-test`)
 - Next steps / blockers: ready for integration; worktree removal after doc/task commit
+
+## [2025-12-07 19:09 UTC] Integration Agent – R2b-integ – START
+- Checked out feat/p0-platform-stability-follow-up, `git pull --ff-only` (already up to date)
+- Confirmed R2b-code/test completed; set R2b-integ to in_progress in tasks.json
+- Worktree: reapplying after filesystem loss (ps-r2b-replay-fallback-integ) using root checkout
+- Plan: reapply clippy fix, rerun `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-replay -- --nocapture`, `cargo test -p substrate-shell replay_world` + targeted `--test replay_world`, update tasks/session log, mark R2b-integ completed
+
+## [2025-12-07 19:10 UTC] Integration Agent – R2b-integ – END
+- Worktree commits: pending (see root branch reapply; clippy fix in replay_world.rs)
+- Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world -- --nocapture`; `cargo test -p substrate-shell --test replay_world -- --nocapture`
+- Results: fmt pass; clippy pass after `map_while(Result::ok)` change; replay tests pass; shell replay_world filtered run shows 0 tests; targeted replay_world suite passes with expected copy-diff/agent-unavailable warnings on this host (no `/run/substrate.sock`, cgroup/netns/overlay/copy-diff unavailable)
+- Scripts executed: n/a (manual `substrate --replay` smoke skipped; agent socket absent)
+- Kickoff prompts created: n/a (R2c prompts already present)
+- Docs commit: pending (`docs: finish R2b-integ`)
+- Next steps / blockers: commit docs/tasks + code fix, ensure branch stays ahead for R2c

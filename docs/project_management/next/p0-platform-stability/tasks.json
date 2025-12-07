@@ -1543,7 +1543,7 @@
       "name": "Replay agent-backed execution \u2013 fallbacks & warnings (integration)",
       "type": "integration",
       "phase": "R2 \u2013 Agent-backed Replay",
-      "status": "queued",
+      "status": "completed",
       "description": "Merge the R2b code/test branches, rerun fmt/lint/tests, and document fallback behavior before coverage work begins.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
