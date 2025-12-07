@@ -609,3 +609,11 @@ Template:
 - Worktree setup pending (`ps-r2a-replay-agent-integ` → `wt/ps-r2a-replay-agent-integ`)
 - Plan: merge code/test branches, fix clippy regressions, run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-replay -- --nocapture`, `cargo test -p substrate-shell replay_world`, then update docs/logs and fast-forward base
 - Blockers: host lacks provisioned agent socket; manual `substrate --replay` smoke likely skipped
+
+## [2025-12-07 17:55 UTC] Integration Agent – R2a-integ – END
+- Worktree commits: a37da6c (`test: fix shell_env clippy warnings`)
+- Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world`
+- Results: pass / pass (after removing unused shell_env vars) / pass / pass
+- Scripts executed: n/a (no manual `substrate --replay`; host lacks agent socket)
+- Docs commit: pending (`docs: finish R2a-integ`)
+- Next steps / blockers: fast-forward feat/p0-platform-stability-follow-up with a37da6c, remove worktree after docs commit; manual agent smoke remains blocked without `/run/substrate.sock`

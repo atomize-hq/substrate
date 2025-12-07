@@ -1417,7 +1417,7 @@
       "name": "Replay agent-backed execution \u2013 agent path (integration)",
       "type": "integration",
       "phase": "R2 \u2013 Agent-backed Replay",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge the R2a code/test branches, rerun fmt/lint/tests, and document agent-backed defaults before fallback work begins.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
