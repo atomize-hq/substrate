@@ -2000,6 +2000,134 @@
       "worktree": "wt/ps-r2e-world-fs-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2e-integ.md"
+    },
+    {
+      "id": "R2f-code",
+      "name": "Host replay span parity (code)",
+      "type": "code",
+      "phase": "R2f \u2013 Host Replay Parity",
+      "status": "queued",
+      "description": "Emit replayable spans for host-only executions so host commands can be replayed with the same fidelity as world spans without probing the world backend.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/shell",
+        "crates/shim",
+        "crates/replay",
+        "crates/trace"
+      ],
+      "acceptance_criteria": [
+        "Host-only executions (--no-world, SUBSTRATE_REPLAY_USE_WORLD=disabled, or policy-host paths) still emit span_ids and replay_context with execution_origin=host.",
+        "Shell/shim avoid agent/world socket probes in host-only mode while preserving policy decisions and telemetry fields; trace schema remains backward compatible.",
+        "Replay consumes host spans and defaults to host execution; overrides (--world/--no-world, flip) continue to work with clear warnings when forced.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; targeted suites (`cargo test -p substrate-shell replay_world`, `cargo test -p substrate-replay -- --nocapture`) executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Read p0_platform_stability_plan.md, tasks.json, session_log.md, and this prompt",
+        "Set R2f-code to in_progress; append START entry; commit doc update (`git commit -am \"docs: start R2f-code\"`)",
+        "Create branch/worktree: `git checkout -b ps-r2f-host-replay-code`, `git worktree add wt/ps-r2f-host-replay-code ps-r2f-host-replay-code`, `cd wt/ps-r2f-host-replay-code`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests completed (note skips)",
+        "Commit code/doc changes",
+        "Merge ps-r2f-host-replay-code into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Confirm R2f-integ prompt contents",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2f-code\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2e-integ"
+      ],
+      "concurrent_with": [
+        "R2f-test"
+      ],
+      "worktree": "wt/ps-r2f-host-replay-code",
+      "integration_task": "R2f-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2f-code.md"
+    },
+    {
+      "id": "R2f-test",
+      "name": "Host replay span parity (test)",
+      "type": "test",
+      "phase": "R2f \u2013 Host Replay Parity",
+      "status": "queued",
+      "description": "Add coverage ensuring host-only commands emit replayable spans and that replay defaults to host execution without touching the world backend.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/shell/tests",
+        "crates/replay",
+        "crates/trace"
+      ],
+      "acceptance_criteria": [
+        "Tests assert span_ids + replay_context exist for host-only commands (--no-world, env opt-out) and mark execution_origin=host.",
+        "Replay fixtures run host spans on the host with no agent/world socket probes; warnings are single-shot when overrides force world use.",
+        "Coverage includes async REPL commands and non-PTY replay entrypoints; skips justified when host prerequisites differ.",
+        "`cargo fmt`; targeted suites (`cargo test -p substrate-shell replay_world`, `cargo test -p substrate-replay -- --nocapture`) executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Review plan/tasks/session_log.md and R2f-code scope",
+        "Set R2f-test to in_progress; append START entry; commit doc update (`git commit -am \"docs: start R2f-test\"`)",
+        "Create branch/worktree: `git checkout -b ps-r2f-host-replay-test`, `git worktree add wt/ps-r2f-host-replay-test ps-r2f-host-replay-test`, `cd wt/ps-r2f-host-replay-test`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests completed; document skips with justification",
+        "Commit test/fixture updates",
+        "Merge ps-r2f-host-replay-test into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Confirm R2f-integ prompt contents",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2f-test\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2e-integ"
+      ],
+      "concurrent_with": [
+        "R2f-code"
+      ],
+      "worktree": "wt/ps-r2f-host-replay-test",
+      "integration_task": "R2f-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2f-test.md"
+    },
+    {
+      "id": "R2f-integ",
+      "name": "Host replay span parity (integration)",
+      "type": "integration",
+      "phase": "R2f \u2013 Host Replay Parity",
+      "status": "queued",
+      "description": "Merge the host span replay parity code/test branches, rerun fmt/lint/tests, and ensure host-only spans are replayable without world dependencies.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/shell",
+        "crates/shim",
+        "crates/replay",
+        "crates/trace"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-r2f-host-replay-integ merges ps-r2f-host-replay-code/test cleanly and fast-forwards feat/p0-platform-stability-follow-up.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world` executed/logged (note skips if world socket absent).",
+        "tasks.json + session_log.md updated with END entry; docs mention host span replay parity."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Confirm R2f-code/test completed",
+        "Set R2f-integ to in_progress; append START entry; commit doc update (`git commit -am \"docs: start R2f-integ\"`)",
+        "Create branch/worktree: `git checkout -b ps-r2f-host-replay-integ`, `git worktree add wt/ps-r2f-host-replay-integ ps-r2f-host-replay-integ`, `cd wt/ps-r2f-host-replay-integ`"
+      ],
+      "end_checklist": [
+        "Merge code/test branches, resolve conflicts",
+        "Run required fmt/lint/tests; capture output",
+        "Fast-forward merge into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2f-integ\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2f-code",
+        "R2f-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-r2f-host-replay-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2f-integ.md"
     }
   ]
 }

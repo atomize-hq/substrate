@@ -63,6 +63,7 @@ Keep concise, actionable, and security-focused.
     - Consider adding backends for common package managers so commands like `substrate world deps install pip:package` can proxy installations into the writable anchor.
     - Ensure dev-install paths and env detection work inside the world so the helper can locate binaries/scripts.
   - Goal: make `world deps` a predictable way to provision world tooling or gracefully direct users to the correct workflow when an item isn’t supported yet.
+  - Parity gap: health/doctor currently reports `parity: "unknown"` for optional managers (nvm/pyenv/bun/direnv/asdf/etc.) because world-side detectors are missing. Add world detection (or consume doctor world data) so parity can report synced vs. attention-required when the agent is healthy.
 
 - **P2 – Session listing/resume UX**
   - Pain: Each `substrate` invocation mints a fresh session ID recorded in `trace.jsonl`. Users who want to resume a previous REPL session or correlate spans currently have to parse that file manually or export `SHIM_SESSION_ID` themselves.
@@ -131,6 +132,11 @@ Keep concise, actionable, and security-focused.
   - Finish the Kuzu-backed implementation outlined in `docs/project_management/future/PHASE_4_5_ADVANCED_FEATURES_PLAN.md`:
     ingestion pipeline, schema, query interface, and CLI.
   - Replace the current mock-only `substrate-graph` crate with a real backend.
+
+- **Later – CLI help/flag audit**
+  - Several subcommands inherit global flags that don’t make sense in context (e.g., `substrate world cleanup --help` shows `--world/--no-world` despite being world-only). Audit command help/flag surfaces, hide or override irrelevant globals, and ensure summaries/examples reflect intended usage.
+  - Scope: review top-level/global flags vs per-command applicability, adjust clap definitions to suppress noise, and refresh docs/USAGE snippets with cleaned help output.
+  - Acceptance: per-command help only shows relevant options; cleanup/help examples confirm noisy flags are removed or clearly explained.
 
 
 
