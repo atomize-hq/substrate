@@ -109,8 +109,10 @@ mod tests {
 
         let temp = tempdir().expect("tempdir");
         let policy_path = temp.path().join("policy.yaml");
-        let mut policy = substrate_broker::Policy::default();
-        policy.world_fs_mode = substrate_common::WorldFsMode::ReadOnly;
+        let policy = substrate_broker::Policy {
+            world_fs_mode: substrate_common::WorldFsMode::ReadOnly,
+            ..Default::default()
+        };
         fs::write(&policy_path, serde_yaml::to_string(&policy).unwrap()).expect("write policy");
 
         substrate_broker::reload_policy(&policy_path).expect("load policy");

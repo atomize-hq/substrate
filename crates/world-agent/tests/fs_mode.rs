@@ -309,11 +309,11 @@ async fn pty_writable_mode_allows_write() {
     while let Some(frame) = client_ws.next().await {
         match frame {
             Ok(Message::Text(text)) => {
-                if let Ok(msg) = serde_json::from_str::<ServerMessage>(&text) {
-                    if let ServerMessage::Exit { code } = msg {
-                        exit_code = Some(code);
-                        break;
-                    }
+                if let Ok(ServerMessage::Exit { code }) =
+                    serde_json::from_str::<ServerMessage>(&text)
+                {
+                    exit_code = Some(code);
+                    break;
                 }
             }
             Ok(Message::Close(_)) | Err(_) => break,

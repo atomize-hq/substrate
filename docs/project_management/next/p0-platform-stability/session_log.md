@@ -798,3 +798,17 @@ Template:
 - Kickoff prompts created: n/a
 - Docs commit: pending (`docs: finish R2e-test`)
 - Next steps / blockers: fast-forward merged into feat/p0-platform-stability-follow-up; remove worktree after doc update
+
+## [2025-12-07 23:03 UTC] Integration Agent – R2e-integ – START (reapply)
+- Checked out feat/p0-platform-stability-follow-up; repo clean aside from doc updates
+- Confirmed R2e-code/test already reapplied; set R2e-integ → in_progress (tasks.json updated)
+- Worktree: reusing root checkout per reapply instructions (wt removal earlier)
+- Plan: reapply clippy fixes, restore WorldFsMode serialization + policy loader error context, update manual playbook/tests, run fmt/clippy/tests, update docs/tasks/logs, fast-forward base
+- Blockers: host lacks provisioned `/run/substrate.sock` features beyond doctor; world-agent reachable but overlay/cgroup warnings possible during tests
+
+## [2025-12-07 23:05 UTC] Integration Agent – R2e-integ – END (reapply)
+- Commits: reapply clippy fix + serialization/policy loader/manual playbook updates on feat/p0-platform-stability-follow-up
+- Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-shell world_enable`; `cargo test -p world-agent`; `cargo test -p agent-api-types -- --nocapture`; `cargo test -p substrate-broker --lib tests::invalid_world_fs_mode_surfaces_clear_error`
+- Results: all pass (world-agent tests exercised PTY/non-PTY fs mode coverage; broker test now emits parse reason)
+- Docs/tasks: manual testing playbook includes R2e steps; tasks.json set `R2e-integ → in_progress` before work (ready to mark completed after doc commit)
+- Next steps: finalize doc/task updates (`docs: finish R2e-integ`), remove any stale worktrees (none), proceed to host replay triad when ready

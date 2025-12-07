@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 /// Selects whether a world filesystem should be writable (overlay/copy-diff)
 /// or mounted read-only.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorldFsMode {
     Writable,
     ReadOnly,
@@ -54,6 +54,15 @@ impl<'de> Deserialize<'de> for WorldFsMode {
     {
         let raw = String::deserialize(deserializer)?;
         raw.parse().map_err(serde::de::Error::custom)
+    }
+}
+
+impl Serialize for WorldFsMode {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.as_str())
     }
 }
 

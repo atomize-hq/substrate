@@ -1670,7 +1670,7 @@
       "name": "Replay agent-backed execution (integration)",
       "type": "integration",
       "phase": "R2 \u2013 Agent-backed Replay",
-      "status": "queued",
+      "status": "completed",
       "description": "Merge the R2c code/test branches, rerun fmt/lint/tests, and finalize agent-backed replay rollout.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",

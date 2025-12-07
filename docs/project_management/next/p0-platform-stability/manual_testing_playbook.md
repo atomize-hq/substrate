@@ -231,6 +231,52 @@ rm -f "$SHIM_TRACE_LOG"
    ```
    Verify verbose output shows the overridden root and only a single warning if ENOSPC is simulated.
 
+### 1.8 Policy-driven world fs mode (read-only vs writable)
+
+Use a scratch policy so broker reloads without touching user config:
+```bash
+cat > /tmp/r2e-policy.yaml <<'YAML'
+id: r2e-manual
+name: R2e manual fs mode policy
+world_fs_mode: read_only
+fs_read: ['*']
+fs_write: []
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+require_approval: false
+allow_shell_operators: true
+YAML
+SUBSTRATE_POLICY=/tmp/r2e-policy.yaml ./target/debug/substrate world doctor --json | jq '{world_fs_mode, world_socket}'
+```
+Expect `world_fs_mode: "read_only"`. Flip the value to `writable`, rerun doctor, and confirm the change.
+
+1. **Non-PTY read-only enforcement**
+   ```bash
+   curl --unix-socket /run/substrate.sock \
+     -H 'content-type: application/json' \
+     --data '{"cmd":"sh -lc \"echo deny > /tmp/r2e-ro.txt\"","pty":false,"agent_id":"manual","world_fs_mode":"read_only"}' \
+     http://localhost/v1/execute | jq '{exit, fs_diff}'
+   ```
+   Expect a non-zero exit and no `fs_diff` since writes are blocked.
+
+2. **PTY writable path**
+   ```bash
+   curl --unix-socket /run/substrate.sock \
+     -H 'content-type: application/json' \
+     --data '{"type":"start","cmd":"sh -lc \"echo ok > /tmp/r2e-writable.txt\"","env":{"SUBSTRATE_WORLD_FS_MODE":"writable"}}' \
+     http://localhost/v1/stream
+   ```
+   Exit 0 with `fs_diff` indicating the write.
+
+3. **Shim/trace export**
+   ```bash
+   SUBSTRATE_POLICY=/tmp/r2e-policy.yaml ./target/debug/substrate -c 'true'
+   tail -n1 ~/.substrate/trace.jsonl | jq '.replay_context.world_fs_mode'
+   ```
+   Confirm spans record the active mode for doctor/replay.
+
 ## 2. Debugging Log (2025-12-02 UTC-5)
 
 1. **Initial provisioning** – `dev-install-substrate` installed the socket/service pair, but `/run/substrate.sock` was owned by `root:root 0660`, so non-root CLI calls failed with `Permission denied (os error 13)`.
