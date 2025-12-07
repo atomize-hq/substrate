@@ -1877,7 +1877,7 @@
       "name": "Policy-driven world fs mode (code)",
       "type": "code",
       "phase": "R2e \u2013 Policy-driven World FS Mode",
-      "status": "queued",
+      "status": "in_progress",
       "description": "Add a broker policy toggle for read-only vs writable worlds, thread it through shell/world-agent, and document the knob so per-project/global policy controls world mutability.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
