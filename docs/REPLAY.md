@@ -16,19 +16,24 @@ substrate --replay <SPAN_ID>
 
 ## Linux Isolation
 
-On Linux, replay now prefers the world-agent path (`/run/substrate.sock`) when the socket responds. If the agent is unavailable, replay emits a single `[replay] warn: agent replay unavailable (<cause>); falling back to local backend. Run 'substrate world doctor --json' or set SUBSTRATE_WORLD_SOCKET=…` line and then uses the local world backend/copy-diff while still collecting `fs_diff` when isolation is possible—even when the rest of the CLI is running with `SUBSTRATE_WORLD=disabled` (for example, when invoked via `scripts/dev/substrate_shell_driver`). Replays manage their own world state so tests/harnesses do not need to touch global config files to flip modes.
+On Linux, replay is agent-first: when `/run/substrate.sock` responds, `--replay-verbose` prints `[replay] world strategy: agent (project_dir=...)`. If the agent is unavailable, replay emits a single `[replay] warn: agent replay unavailable (<cause>); falling back to local backend. Run `substrate world doctor --json` or set SUBSTRATE_WORLD_SOCKET to point at a healthy agent socket before switching to the local backend/copy-diff while still collecting `fs_diff`—even when the rest of the CLI is running with `SUBSTRATE_WORLD=disabled` (for example, when invoked via `scripts/dev/substrate_shell_driver`). Host-only runs use `--no-world` or `SUBSTRATE_REPLAY_USE_WORLD=disabled` and show `[replay] warn: running without world isolation (...)` in verbose mode so the warning sits alongside any `scopes: []` line. Replays manage their own world state so tests/harnesses do not need to touch global config files to flip modes.
 
 ```
-# Replay with default world isolation
+# Replay with default world isolation (agent-first on Linux)
 substrate --replay <SPAN_ID>
 
 # Verbose output shows isolation strategy and scopes used
-substrate --replay-verbose --replay <SPAN_ID>
-# Example lines when verbose:
-# [replay] world strategy: agent (project_dir=/workspace)    # when /run/substrate.sock is healthy
-# [replay] world strategy: overlay
-# [replay] scopes: [tcp:github.com:443, tcp:registry.npmjs.org:443]
+substrate --replay --replay-verbose <SPAN_ID>
+# Example lines when verbose and the agent is healthy:
+# [replay] span_id: <SPAN_ID>
+# [replay] world strategy: agent (project_dir=/workspace)
+# [replay] scopes: []
 # [replay] world toggle: enabled (default)
+
+# Agent unavailable (Linux only):
+# [replay] warn: agent replay unavailable (connect failed: Connection refused (socket: /run/substrate.sock)); falling back to local backend. Run `substrate world doctor --json` or set SUBSTRATE_WORLD_SOCKET to point at a healthy agent socket.
+# [replay] world strategy: overlay
+# [replay] scopes: []
 
 # Disable world isolation if needed (not recommended)
 # Option 1: CLI flag (applies only to this invocation)
@@ -37,6 +42,12 @@ substrate --no-world --replay <SPAN_ID>
 # Option 2: Environment variable
 export SUBSTRATE_REPLAY_USE_WORLD=disabled
 substrate --replay <SPAN_ID>
+
+# Host-only replay with verbose output (warning included)
+substrate --replay --replay-verbose --no-world <SPAN_ID>
+# [replay] world toggle: disabled (--no-world flag)
+# [replay] warn: running without world isolation (--no-world flag)
+# [replay] scopes: []
 ```
 
 Shell-side fallbacks emit `substrate: warn: shell world-agent path (<endpoint>) ...` so you can
@@ -94,4 +105,3 @@ On macOS and Linux, replay uses the world backend (Lima agent on macOS, agent-fi
 - ENOSPC or other copy-diff errors print a single replay warning per attempt (for example, `[replay] warn: copy-diff storage /tmp/substrate-1000-copydiff (/tmp) ran out of space; retrying fallback location`) and keep retrying the next root.
 - Set `SUBSTRATE_COPYDIFF_ROOT=/path/with/space` to pin the scratch root; the warning will mention the override when it fails and the verbose output prints the root actually used (`[replay] copy-diff root: ... (env:SUBSTRATE_COPYDIFF_ROOT)`).
 - Manual cleanup: remove any leftover `substrate-*-copydiff` directories under `/run`, `/tmp`, `/var/tmp`, or your override path if a replay was interrupted. These roots only hold temporary copies of the project/work trees created during replay.
-

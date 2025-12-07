@@ -299,6 +299,7 @@ Implemented features:
   - If the host refuses `ip netns add`, the code falls back to socket cgroup matching and scopes nft rules to `/sys/fs/cgroup/substrate/<WORLD_ID>` so host processes are not impacted.
   - When neither netns nor writable cgroups are available, nft scoping is disabled and warnings point to `substrate world cleanup --purge` to remove leftovers before retrying.
 - These logs surface in `--replay-verbose` output (`[replay] warn: using socket cgroup fallback...`) and in world-agent traces (`[agent] netns ... unavailable`).
+- Replay stays agent-first on Linux; when `/run/substrate.sock` is unhealthy it emits a single `[replay] warn: agent replay unavailable (<cause>); falling back to local backend. Run `substrate world doctor --json` or set SUBSTRATE_WORLD_SOCKET to point at a healthy agent socket before switching to the local backend/copy-diff. Copy-diff retries log `[replay] warn: copy-diff ...` with the attempted scratch root so you can adjust disk space or set `SUBSTRATE_COPYDIFF_ROOT`.
 
 ---
 
@@ -319,7 +320,7 @@ Implemented features:
 - Netfilter log prefix: `substrate-dropped-<WORLD_ID>:`
 - Cgroup: `/sys/fs/cgroup/substrate/<WORLD_ID>`
 - Socket: `/run/substrate.sock`
-  - Replay prefers this agent socket when it responds and emits a single warning before falling back to the local backend/copy-diff when unavailable.
+  - Replay prefers this agent socket when it responds and emits a single `[replay] warn: agent replay unavailable (<cause>); falling back to local backend. Run `substrate world doctor --json` or set SUBSTRATE_WORLD_SOCKET to point at a healthy agent socket before switching to the local backend/copy-diff when unavailable.
 
 ---
 

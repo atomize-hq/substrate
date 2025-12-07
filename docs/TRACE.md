@@ -85,12 +85,13 @@ jq 'select(.policy_decision.action == "deny")' ~/.substrate/trace.jsonl
 Verbose replay outputs (`--replay-verbose` or JSON mode) print `[replay] scopes: [...]` adjacent
 to the world strategy line so the CLI summary mirrors the `scopes_used` array above. When the
 shell falls back to host execution it now prefixes warnings with `shell world-agent path (...)`
-to keep them distinct from `[replay] warn: ...` diagnostics emitted by the replay runtime.
-Replay prefers the world-agent path (`/run/substrate.sock`) when it responds; verbose output shows
-`[replay] world strategy: agent (...)` and the runtime emits a single `[replay] warn: agent replay unavailable (<cause>); falling back to local backend. Run 'substrate world doctor --json' or set SUBSTRATE_WORLD_SOCKET=…`
-line before falling back to local isolation/copy-diff when the socket is unhealthy.
-Replay appends a `replay_strategy` telemetry entry for each run so traces capture the chosen backend and any
-fallback reasons:
+to keep them distinct from `[replay] warn: ...` diagnostics emitted by the replay runtime
+(agent fallback, copy-diff retries, isolation opt-outs). Replay prefers the world-agent path
+(`/run/substrate.sock`) when it responds; verbose output shows `[replay] world strategy: agent (...)` and
+the runtime emits a single `[replay] warn: agent replay unavailable (<cause>); falling back to local backend. Run `substrate world doctor --json` or set SUBSTRATE_WORLD_SOCKET to point at a healthy agent socket. The warning appears before falling back to local isolation/copy-diff when the socket is unhealthy. Replay appends a
+`replay_strategy` telemetry entry for each run so traces capture the chosen backend and any
+fallback reasons. The `fallback_reason` mirrors the warning text above (socket path included) and
+`copydiff_root*` fields appear when copy-diff retries log `[replay] warn: copy-diff ...` lines:
 
 ```json
 {
