@@ -270,12 +270,12 @@ fn replay_no_world_flag_reports_world_toggle() {
     let assert = cmd.assert().success();
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
     assert!(
-        stderr.contains("[replay] world toggle: disabled (--no-world flag)"),
-        "no-world flag should emit a world toggle summary, stderr:\n{}",
+        stderr.contains("[replay] origin: world -> host (--no-world flag)"),
+        "no-world flag should emit an origin summary, stderr:\n{}",
         stderr
     );
     assert!(
-        stderr.contains("[replay] warn: running without world isolation (--no-world flag)"),
+        stderr.contains("[replay] warn: running on host (--no-world flag)"),
         "no-world flag should document the opt-out reason, stderr:\n{}",
         stderr
     );
@@ -321,14 +321,12 @@ fn replay_env_override_reports_world_toggle() {
     let assert = cmd.assert().success();
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
     assert!(
-        stderr.contains("[replay] world toggle: disabled (SUBSTRATE_REPLAY_USE_WORLD override)"),
-        "env disable should emit the world toggle summary, stderr:\n{}",
+        stderr.contains("[replay] origin: world -> host (SUBSTRATE_REPLAY_USE_WORLD=disabled)"),
+        "env disable should emit the origin summary, stderr:\n{}",
         stderr
     );
     assert!(
-        stderr.contains(
-            "[replay] warn: running without world isolation (SUBSTRATE_REPLAY_USE_WORLD=disabled)"
-        ),
+        stderr.contains("[replay] warn: running on host (SUBSTRATE_REPLAY_USE_WORLD=disabled)"),
         "env disable should document the opt-out reason, stderr:\n{}",
         stderr
     );

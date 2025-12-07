@@ -32,7 +32,7 @@ use substrate_broker::{detect_profile, evaluate, Decision};
 use substrate_common::{log_schema, redact_sensitive, WorldRootMode};
 #[cfg(target_os = "linux")]
 use substrate_trace::TransportMeta;
-use substrate_trace::{create_span_builder, PolicyDecision};
+use substrate_trace::{create_span_builder, ExecutionOrigin, PolicyDecision};
 
 pub(crate) fn execute_command(
     config: &ShellConfig,
@@ -216,15 +216,16 @@ pub(crate) fn execute_command(
             let world_enabled = std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
             let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
             if world_enabled || uds_exists {
+                let transport_meta = TransportMeta {
+                    mode: "unix".to_string(),
+                    endpoint: Some("/run/substrate.sock".to_string()),
+                    socket_activation: Some(
+                        socket_activation::socket_activation_report().is_socket_activated(),
+                    ),
+                };
                 // Use span id if we have a span, otherwise fall back to cmd_id as a correlation hint
                 if let Some(active_span) = span.as_mut() {
-                    active_span.set_transport(TransportMeta {
-                        mode: "unix".to_string(),
-                        endpoint: Some("/run/substrate.sock".to_string()),
-                        socket_activation: Some(
-                            socket_activation::socket_activation_report().is_socket_activated(),
-                        ),
-                    });
+                    active_span.set_transport(transport_meta.clone());
                 }
                 let span_id_for_ws = span
                     .as_ref()
@@ -233,6 +234,9 @@ pub(crate) fn execute_command(
                 match execute_world_pty_over_ws(trimmed, &span_id_for_ws) {
                     Ok(code) => {
                         if let Some(active_span) = span.take() {
+                            let mut active_span = active_span;
+                            active_span.set_execution_origin(ExecutionOrigin::World);
+                            active_span.set_transport(transport_meta);
                             let (scopes_used, fs_diff) =
                                 collect_world_telemetry(active_span.get_span_id());
                             let _ = active_span.finish(code, scopes_used, fs_diff);
@@ -260,13 +264,18 @@ pub(crate) fn execute_command(
         #[cfg(target_os = "macos")]
         {
             let world_enabled = std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
-            let uds_exists = pw::get_context()
+            let context = pw::get_context();
+            let uds_exists = context
+                .as_ref()
                 .map(|c| match &c.transport {
                     pw::WorldTransport::Unix(p) => p.exists(),
                     _ => false,
                 })
                 .unwrap_or(false);
             if world_enabled || uds_exists {
+                let transport_meta = context
+                    .as_ref()
+                    .map(|ctx| world_transport_to_meta(&ctx.transport));
                 let span_id_for_ws = span
                     .as_ref()
                     .map(|s| s.get_span_id().to_string())
@@ -274,6 +283,11 @@ pub(crate) fn execute_command(
                 match execute_world_pty_over_ws_macos(trimmed, &span_id_for_ws) {
                     Ok(code) => {
                         if let Some(active_span) = span.take() {
+                            let mut active_span = active_span;
+                            if let Some(meta) = transport_meta {
+                                active_span.set_transport(meta);
+                            }
+                            active_span.set_execution_origin(ExecutionOrigin::World);
                             let (scopes_used, fs_diff) =
                                 collect_world_telemetry(active_span.get_span_id());
                             let _ = active_span.finish(code, scopes_used, fs_diff);
@@ -310,12 +324,12 @@ pub(crate) fn execute_command(
                 .or_else(|| pty_status.success().then_some(0))
                 .unwrap_or(-1);
             // Collect scopes and fs_diff from world backend if enabled
-            let (scopes_used, fs_diff) =
-                if env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
-                    collect_world_telemetry(active_span.get_span_id())
-                } else {
-                    (vec![], None)
-                };
+            let origin_is_world = active_span.execution_origin() == ExecutionOrigin::World;
+            let (scopes_used, fs_diff) = if origin_is_world {
+                collect_world_telemetry(active_span.get_span_id())
+            } else {
+                (vec![], None)
+            };
             let _ = active_span.finish(exit_code, scopes_used, fs_diff);
         }
 
@@ -378,11 +392,9 @@ pub(crate) fn execute_command(
             .map(|c| matches!(&c.transport, pw::WorldTransport::Unix(path) if path.exists()))
             .unwrap_or(false);
         if world_enabled || uds_exists {
-            if let Some(active_span) = span.as_mut() {
-                if let Some(ctx) = context.clone() {
-                    active_span.set_transport(world_transport_to_meta(&ctx.transport));
-                }
-            }
+            let transport_meta = context
+                .as_ref()
+                .map(|ctx| world_transport_to_meta(&ctx.transport));
             let mut agent_command = trimmed.to_string();
             if config.ci_mode && !config.no_exit_on_error {
                 let shell_name = Path::new(&config.shell_path)
@@ -395,7 +407,15 @@ pub(crate) fn execute_command(
                 }
             }
             match stream_non_pty_via_agent(&agent_command) {
-                Ok(outcome) => agent_result = Some(outcome),
+                Ok(outcome) => {
+                    if let Some(active_span) = span.as_mut() {
+                        active_span.set_execution_origin(ExecutionOrigin::World);
+                        if let Some(meta) = transport_meta.clone() {
+                            active_span.set_transport(meta);
+                        }
+                    }
+                    agent_result = Some(outcome);
+                }
                 Err(e) => {
                     static WARN_ONCE: std::sync::Once = std::sync::Once::new();
                     let path_hint = context
@@ -420,11 +440,9 @@ pub(crate) fn execute_command(
         let world_env = std::env::var("SUBSTRATE_WORLD").unwrap_or_default();
         let context = pw::get_context();
         if (world_env == "enabled" || context.is_some()) && !config.no_world {
-            if let Some(active_span) = span.as_mut() {
-                if let Some(ctx) = context.clone() {
-                    active_span.set_transport(world_transport_to_meta(&ctx.transport));
-                }
-            }
+            let transport_meta = context
+                .as_ref()
+                .map(|ctx| world_transport_to_meta(&ctx.transport));
             let mut agent_command = trimmed.to_string();
             if config.ci_mode && !config.no_exit_on_error {
                 let shell_name = Path::new(&config.shell_path)
@@ -437,7 +455,15 @@ pub(crate) fn execute_command(
                 }
             }
             match stream_non_pty_via_agent(&agent_command) {
-                Ok(outcome) => agent_result = Some(outcome),
+                Ok(outcome) => {
+                    if let Some(active_span) = span.as_mut() {
+                        active_span.set_execution_origin(ExecutionOrigin::World);
+                        if let Some(meta) = transport_meta.clone() {
+                            active_span.set_transport(meta);
+                        }
+                    }
+                    agent_result = Some(outcome);
+                }
                 Err(e) => {
                     static WARN_ONCE: std::sync::Once = std::sync::Once::new();
                     let path_hint = context
@@ -486,17 +512,21 @@ pub(crate) fn execute_command(
         let world_disabled = world_env == "disabled" || config.no_world;
         let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
         if world_enabled || (!world_disabled && uds_exists) {
-            if let Some(active_span) = span.as_mut() {
-                active_span.set_transport(TransportMeta {
-                    mode: "unix".to_string(),
-                    endpoint: Some("/run/substrate.sock".to_string()),
-                    socket_activation: Some(
-                        socket_activation::socket_activation_report().is_socket_activated(),
-                    ),
-                });
-            }
+            let transport_meta = TransportMeta {
+                mode: "unix".to_string(),
+                endpoint: Some("/run/substrate.sock".to_string()),
+                socket_activation: Some(
+                    socket_activation::socket_activation_report().is_socket_activated(),
+                ),
+            };
             match stream_non_pty_via_agent(trimmed) {
-                Ok(outcome) => agent_result = Some(outcome),
+                Ok(outcome) => {
+                    if let Some(active_span) = span.as_mut() {
+                        active_span.set_execution_origin(ExecutionOrigin::World);
+                        active_span.set_transport(transport_meta);
+                    }
+                    agent_result = Some(outcome);
+                }
                 Err(e) => {
                     eprintln!(
                         "substrate: warn: shell world-agent path (/run/substrate.sock) exec failed, running direct: {}",
@@ -573,8 +603,8 @@ pub(crate) fn execute_command(
     // Finish span if we created one
     if let Some(active_span) = span {
         let exit_code = status.code().unwrap_or(-1);
-        let (scopes_used, fs_diff) = if env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled"
-        {
+        let origin_is_world = active_span.execution_origin() == ExecutionOrigin::World;
+        let (scopes_used, fs_diff) = if origin_is_world {
             collect_world_telemetry(active_span.get_span_id())
         } else {
             (vec![], None)

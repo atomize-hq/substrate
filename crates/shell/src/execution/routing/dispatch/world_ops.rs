@@ -81,9 +81,12 @@ pub(super) fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Res
     // Connect UDS and do WS handshake
     let rt = tokio::runtime::Runtime::new()?;
     let code = rt.block_on(async move {
-        let stream = UnixStream::connect("/run/substrate.sock")
+        let socket_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("/run/substrate.sock"));
+        let stream = UnixStream::connect(&socket_path)
             .await
-            .map_err(|e| anyhow::anyhow!("connect UDS: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("connect UDS ({}): {}", socket_path.display(), e))?;
         let url = url::Url::parse("ws://localhost/v1/stream").unwrap();
         let (ws, _resp) = tungs::client_async(url, stream)
             .await
@@ -303,15 +306,19 @@ pub(super) fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Res
 #[cfg(target_os = "linux")]
 fn ensure_world_agent_ready() -> anyhow::Result<()> {
     use std::path::Path;
+    use std::path::PathBuf;
     use std::thread;
     use std::time::{Duration, Instant};
-    const SOCK: &str = "/run/substrate.sock";
     const ACTIVATION_WAIT_MS: u64 = 2_000;
 
+    let socket_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/run/substrate.sock"));
+
     // Helper: quick readiness probe via HTTP-over-UDS
-    fn probe_caps() -> bool {
+    fn probe_caps(sock: &Path) -> bool {
         use std::io::{Read, Write};
-        match std::os::unix::net::UnixStream::connect(SOCK) {
+        match std::os::unix::net::UnixStream::connect(sock) {
             Ok(mut s) => {
                 let _ = s.set_read_timeout(Some(std::time::Duration::from_millis(150)));
                 let _ = s.set_write_timeout(Some(std::time::Duration::from_millis(150)));
@@ -332,7 +339,7 @@ fn ensure_world_agent_ready() -> anyhow::Result<()> {
     }
 
     // Fast path: already ready
-    if probe_caps() {
+    if probe_caps(&socket_path) {
         return Ok(());
     }
 
@@ -341,20 +348,21 @@ fn ensure_world_agent_ready() -> anyhow::Result<()> {
     if activation_report.is_socket_activated() {
         let deadline = Instant::now() + Duration::from_millis(ACTIVATION_WAIT_MS);
         while Instant::now() < deadline {
-            if probe_caps() {
+            if probe_caps(&socket_path) {
                 return Ok(());
             }
             thread::sleep(Duration::from_millis(100));
         }
         anyhow::bail!(
-            "world-agent socket activation detected but /run/substrate.sock did not respond. \
-             Run 'systemctl status substrate-world-agent.socket' for details."
+            "world-agent socket activation detected but {} did not respond. \
+             Run 'systemctl status substrate-world-agent.socket' for details.",
+            socket_path.display()
         );
     }
 
     // Clean up stale socket if present (no responding server)
-    if !activation_report.is_socket_activated() && Path::new(SOCK).exists() {
-        let _ = std::fs::remove_file(SOCK);
+    if !activation_report.is_socket_activated() && Path::new(&socket_path).exists() {
+        let _ = std::fs::remove_file(&socket_path);
     }
 
     // Try to spawn agent
@@ -382,7 +390,7 @@ fn ensure_world_agent_ready() -> anyhow::Result<()> {
     // Wait up to ~1s for readiness
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1000);
     while std::time::Instant::now() < deadline {
-        if probe_caps() {
+        if probe_caps(&socket_path) {
             return Ok(());
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
@@ -612,7 +620,11 @@ fn build_agent_client_and_request_impl(
 )> {
     ensure_world_agent_ready()?;
 
-    let client = AgentClient::unix_socket("/run/substrate.sock")?;
+    let socket_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("/run/substrate.sock"));
+
+    let client = AgentClient::unix_socket(&socket_path)?;
     let cwd = std::env::current_dir()
         .unwrap_or_else(|_| std::path::PathBuf::from("."))
         .display()

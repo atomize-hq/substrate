@@ -10,6 +10,9 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::replay::ExecutionState;
 use crate::SpanFilter;
+use substrate_trace::{ExecutionOrigin, TransportMeta};
+
+pub use substrate_trace::ReplayContext;
 
 /// A span loaded from the trace file
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,12 +24,15 @@ pub struct TraceSpan {
     pub component: String,
     pub cmd: String,
     pub cwd: Option<PathBuf>,
+    #[serde(alias = "exit")]
     pub exit_code: Option<i32>,
     pub duration_ms: Option<u64>,
     pub policy_decision: Option<PolicyDecision>,
     pub fs_diff: Option<substrate_common::FsDiff>,
     pub scopes_used: Option<Vec<String>>,
     pub replay_context: Option<ReplayContext>,
+    pub transport: Option<TransportMeta>,
+    pub execution_origin: Option<ExecutionOrigin>,
     pub stdout: Option<String>,
     pub stderr: Option<String>,
     pub env_hash: Option<String>,
@@ -37,18 +43,6 @@ pub struct PolicyDecision {
     pub action: String,
     pub reason: Option<String>,
     pub restrictions: Option<Vec<String>>,
-}
-
-/// Context needed to replay a command deterministically
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReplayContext {
-    pub path: Option<String>,
-    pub env_hash: String,
-    pub hostname: Option<String>,
-    pub user: Option<String>,
-    pub shell: Option<String>,
-    pub term: Option<String>,
-    pub world_image: Option<String>,
 }
 
 /// Load a specific span from the trace file
@@ -91,6 +85,23 @@ pub fn reconstruct_state(
     span: &TraceSpan,
     env_overrides: &HashMap<String, String>,
 ) -> Result<ExecutionState> {
+    let (recorded_origin, recorded_origin_source) = span
+        .execution_origin
+        .map(|origin| (origin, "span".to_string()))
+        .or_else(|| {
+            span.replay_context
+                .as_ref()
+                .and_then(|ctx| ctx.execution_origin)
+                .map(|origin| (origin, "replay_context".to_string()))
+        })
+        .unwrap_or((ExecutionOrigin::World, "default_world".to_string()));
+
+    let recorded_transport = span.transport.clone().or_else(|| {
+        span.replay_context
+            .as_ref()
+            .and_then(|ctx| ctx.transport.clone())
+    });
+
     // Parse command into binary and args
     let (command, args) = crate::replay::parse_command(&span.cmd);
 
@@ -120,11 +131,42 @@ pub fn reconstruct_state(
         if let Some(hostname) = &ctx.hostname {
             env.insert("HOSTNAME".to_string(), hostname.clone());
         }
+        if let Some(anchor_mode) = &ctx.anchor_mode {
+            env.insert("SUBSTRATE_ANCHOR_MODE".to_string(), anchor_mode.clone());
+            env.insert("SUBSTRATE_WORLD_ROOT_MODE".to_string(), anchor_mode.clone());
+        }
+        if let Some(anchor_path) = &ctx.anchor_path {
+            env.insert("SUBSTRATE_ANCHOR_PATH".to_string(), anchor_path.clone());
+            env.insert("SUBSTRATE_WORLD_ROOT_PATH".to_string(), anchor_path.clone());
+        }
+        if let Some(world_root_mode) = &ctx.world_root_mode {
+            env.entry("SUBSTRATE_WORLD_ROOT_MODE".to_string())
+                .or_insert(world_root_mode.clone());
+        }
+        if let Some(world_root_path) = &ctx.world_root_path {
+            env.entry("SUBSTRATE_WORLD_ROOT_PATH".to_string())
+                .or_insert(world_root_path.clone());
+        }
+        if let Some(caged) = ctx.caged {
+            env.insert(
+                "SUBSTRATE_CAGED".to_string(),
+                if caged { "1" } else { "0" }.to_string(),
+            );
+        }
     }
 
     // Apply any overrides
     for (key, value) in env_overrides {
         env.insert(key.clone(), value.clone());
+    }
+
+    if !env.contains_key("SUBSTRATE_WORLD_SOCKET") {
+        if let Some(endpoint) = recorded_transport
+            .as_ref()
+            .and_then(|transport| transport.endpoint.clone())
+        {
+            env.insert("SUBSTRATE_WORLD_SOCKET".to_string(), endpoint);
+        }
     }
 
     // Preserve world root/caging hints from the current environment when not captured in the trace
@@ -154,6 +196,12 @@ pub fn reconstruct_state(
         stdin: None, // TODO: Support stdin replay if captured
         session_id: span.session_id.clone(),
         span_id: span.span_id.clone(),
+        recorded_origin,
+        recorded_origin_source: Some(recorded_origin_source),
+        recorded_transport,
+        target_origin: recorded_origin,
+        origin_reason: None,
+        origin_reason_code: None,
     })
 }
 
@@ -342,12 +390,27 @@ mod tests {
             replay_context: Some(ReplayContext {
                 path: Some("/usr/bin:/bin".to_string()),
                 env_hash: "abc123".to_string(),
+                umask: 22,
+                locale: None,
+                cwd: "/tmp".to_string(),
+                policy_id: "default".to_string(),
+                policy_commit: None,
+                world_image_version: "test".to_string(),
                 hostname: Some("test-host".to_string()),
                 user: Some("testuser".to_string()),
                 shell: Some("/bin/bash".to_string()),
                 term: Some("xterm-256color".to_string()),
                 world_image: None,
+                execution_origin: Some(ExecutionOrigin::World),
+                transport: None,
+                anchor_mode: None,
+                anchor_path: None,
+                world_root_mode: None,
+                world_root_path: None,
+                caged: None,
             }),
+            transport: None,
+            execution_origin: None,
             stdout: None,
             stderr: None,
             env_hash: None,

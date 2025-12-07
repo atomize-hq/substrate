@@ -103,6 +103,10 @@ pub struct Cli {
     #[arg(long = "replay-verbose", requires = "replay")]
     pub replay_verbose: bool,
 
+    /// Flip the recorded execution origin (host/world) before applying other world toggles
+    #[arg(long = "flip-world", visible_alias = "flip", requires = "replay")]
+    pub flip_world: bool,
+
     /// Keep the shell anchored to the resolved root
     #[arg(long = "caged", action = ArgAction::SetTrue, conflicts_with = "uncaged")]
     pub caged: bool,

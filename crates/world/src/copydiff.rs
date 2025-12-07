@@ -14,6 +14,7 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{Mutex, OnceLock};
 use substrate_common::FsDiff;
 use walkdir::WalkDir;
 
@@ -192,6 +193,9 @@ pub(crate) fn candidate_roots() -> Vec<CopyDiffCandidate> {
             push_candidate(&mut seen, &mut roots, run_root, CopyDiffRootSource::Run);
         }
 
+        let run_root = PathBuf::from("/run/substrate/copydiff");
+        push_candidate(&mut seen, &mut roots, run_root, CopyDiffRootSource::Run);
+
         let tmp_root = PathBuf::from(format!("/tmp/substrate-{}-copydiff", uid));
         push_candidate(&mut seen, &mut roots, tmp_root, CopyDiffRootSource::Tmp);
 
@@ -214,6 +218,16 @@ pub(crate) fn candidate_roots() -> Vec<CopyDiffCandidate> {
 }
 
 fn log_copydiff_failure(candidate: &CopyDiffCandidate, err: &anyhow::Error) {
+    static WARNED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    let key = format!("{}::{}", candidate.path.display(), err);
+    let mut seen = WARNED
+        .get_or_init(|| Mutex::new(HashSet::new()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if !seen.insert(key) {
+        return;
+    }
+
     if is_enospc(err) {
         eprintln!(
             "[replay] warn: copy-diff storage {} ({}) ran out of space; retrying fallback location",

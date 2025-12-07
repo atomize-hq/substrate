@@ -53,6 +53,12 @@ fn make_state(raw_cmd: &str) -> ExecutionState {
         stdin: None,
         session_id: "session".to_string(),
         span_id: "span".to_string(),
+        recorded_origin: substrate_trace::ExecutionOrigin::Host,
+        recorded_origin_source: None,
+        recorded_transport: None,
+        target_origin: substrate_trace::ExecutionOrigin::Host,
+        origin_reason: None,
+        origin_reason_code: None,
     }
 }
 

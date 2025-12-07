@@ -9,8 +9,8 @@ pub use context::{
 };
 pub use output::TraceOutput;
 pub use span::{
-    new_span, policy_violation, ActiveSpan, EdgeType, GraphEdge, PolicyDecision, ReplayContext,
-    Span, SpanBuilder, TransportMeta,
+    new_span, policy_violation, ActiveSpan, EdgeType, ExecutionOrigin, GraphEdge, PolicyDecision,
+    ReplayContext, Span, SpanBuilder, TransportMeta,
 };
 
 // FsDiff is now imported from substrate_common

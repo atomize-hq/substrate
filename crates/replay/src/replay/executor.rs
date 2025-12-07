@@ -679,7 +679,7 @@ fn project_dir_from_env(env: &HashMap<String, String>, cwd: &Path) -> Result<Pat
     Ok(base_dir)
 }
 
-fn record_replay_strategy(
+pub fn record_replay_strategy(
     state: &ExecutionState,
     strategy: &str,
     agent_socket: Option<&Path>,
@@ -694,6 +694,33 @@ fn record_replay_strategy(
         log_schema::COMPONENT: "replay",
         "strategy": strategy,
     });
+
+    entry["recorded_origin"] = json!(state.recorded_origin.as_str());
+    entry["target_origin"] = json!(state.target_origin.as_str());
+
+    if let Some(source) = &state.recorded_origin_source {
+        entry["recorded_origin_source"] = json!(source);
+    }
+
+    if let Some(reason) = &state.origin_reason {
+        entry["origin_reason"] = json!(reason);
+    }
+    if let Some(code) = &state.origin_reason_code {
+        entry["origin_reason_code"] = json!(code);
+    }
+
+    if let Some(transport) = state.recorded_transport.as_ref() {
+        let mut transport_obj = json!({
+            "mode": transport.mode,
+        });
+        if let Some(endpoint) = &transport.endpoint {
+            transport_obj["endpoint"] = json!(endpoint);
+        }
+        if let Some(activated) = transport.socket_activation {
+            transport_obj["socket_activation"] = json!(activated);
+        }
+        entry["recorded_transport"] = transport_obj;
+    }
 
     if let Some(reason) = fallback_reason {
         entry["fallback_reason"] = json!(reason);
@@ -719,7 +746,7 @@ async fn try_agent_backend(
     timeout_secs: u64,
     verbose: bool,
 ) -> Result<AgentBackendOutcome> {
-    let socket_path = agent_socket_path();
+    let socket_path = agent_socket_path(state);
     if !socket_path.exists() {
         let fallback = warn_agent_fallback(
             format!("agent socket missing ({})", socket_path.display()),
@@ -781,7 +808,8 @@ async fn try_agent_backend(
         Ok(Ok(resp)) => {
             if verbose {
                 eprintln!(
-                    "[replay] world strategy: agent (project_dir={})",
+                    "[replay] world strategy: agent (socket={}, project_dir={})",
+                    socket_path.display(),
                     project_dir.display()
                 );
             }
@@ -848,8 +876,18 @@ fn warn_agent_fallback(reason: String, socket_path: &Path) -> AgentFallback {
 }
 
 #[cfg(target_os = "linux")]
-fn agent_socket_path() -> std::path::PathBuf {
-    std::env::var_os("SUBSTRATE_WORLD_SOCKET")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::PathBuf::from("/run/substrate.sock"))
+fn agent_socket_path(state: &ExecutionState) -> std::path::PathBuf {
+    if let Some(from_env) = std::env::var_os("SUBSTRATE_WORLD_SOCKET") {
+        return std::path::PathBuf::from(from_env);
+    }
+
+    if let Some(transport) = state.recorded_transport.as_ref() {
+        if transport.mode == "unix" {
+            if let Some(endpoint) = &transport.endpoint {
+                return std::path::PathBuf::from(endpoint);
+            }
+        }
+    }
+
+    std::path::PathBuf::from("/run/substrate.sock")
 }

@@ -90,8 +90,10 @@ to keep them distinct from `[replay] warn: ...` diagnostics emitted by the repla
 (`/run/substrate.sock`) when it responds; verbose output shows `[replay] world strategy: agent (...)` and
 the runtime emits a single `[replay] warn: agent replay unavailable (<cause>); falling back to local backend. Run `substrate world doctor --json` or set SUBSTRATE_WORLD_SOCKET to point at a healthy agent socket. The warning appears before falling back to local isolation/copy-diff when the socket is unhealthy. Replay appends a
 `replay_strategy` telemetry entry for each run so traces capture the chosen backend and any
-fallback reasons. The `fallback_reason` mirrors the warning text above (socket path included) and
-`copydiff_root*` fields appear when copy-diff retries log `[replay] warn: copy-diff ...` lines:
+fallback reasons. The entry now records the recorded origin/transport from the span plus the
+selected origin after CLI/env/flip overrides. The `fallback_reason` mirrors the warning text above
+(socket path included) and `copydiff_root*` fields appear when copy-diff retries log
+`[replay] warn: copy-diff ...` lines:
 
 ```json
 {
@@ -101,6 +103,16 @@ fallback reasons. The `fallback_reason` mirrors the warning text above (socket p
   "cmd_id": "spn_demo",
   "component": "replay",
   "strategy": "copy-diff",
+  "recorded_origin": "world",
+  "recorded_origin_source": "span",
+  "target_origin": "host",
+  "recorded_transport": {
+    "mode": "unix",
+    "endpoint": "/run/substrate.sock",
+    "socket_activation": true
+  },
+  "origin_reason": "--flip-world",
+  "origin_reason_code": "flip_world",
   "fallback_reason": "agent socket missing (/run/substrate.sock)",
   "agent_socket": "/run/substrate.sock",
   "copydiff_root": "/tmp/substrate-1000-copydiff",
@@ -111,10 +123,10 @@ fallback reasons. The `fallback_reason` mirrors the warning text above (socket p
 Strategy values include `agent`, `world-backend`, `overlay`, `fuse`, and `copy-diff`; `copydiff_root*`
 fields appear only when that fallback is used.
 
-
 - Windows adds an optional `fs_diff.display_path` map that pairs canonical paths (e.g., `/mnt/c/...`) with native Windows representations; Linux and macOS omit this field. The map is populated by the `world-windows-wsl` backend and available whenever a diff is returned.
 - `transport.mode` reflects the active connector: `unix` for native Linux and Lima guests, `named_pipe` when routed through the Windows forwarder, and `tcp` only when an explicit fallback is selected.
 - `transport.socket_activation` is emitted on Linux when the world-agent socket originated from systemd socket activation (`true`) versus direct/manual binds (`false`). Non-Linux transports omit this field.
+- `execution_origin` on command_complete spans identifies where the command actually ran (`host` vs `world`). `replay_context` also includes the recorded origin/transport plus host/user/shell/term and anchor/world-root/caging hints (`SUBSTRATE_ANCHOR_*`, `SUBSTRATE_WORLD_ROOT_*`, `SUBSTRATE_CAGED`) so replays can honor the original environment.
 
 ## Architecture
 

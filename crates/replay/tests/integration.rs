@@ -46,8 +46,8 @@ async fn test_basic_replay_flow() {
     let temp_file = NamedTempFile::new().unwrap();
     let trace_content = r#"
 {"ts":"2024-01-01T00:00:00Z","event_type":"command_start","span_id":"test-span-1","session_id":"session-1","component":"shell","cmd":"echo hello","cwd":"/tmp"}
-{"ts":"2024-01-01T00:00:01Z","event_type":"command_complete","span_id":"test-span-1","session_id":"session-1","component":"shell","cmd":"echo hello","cwd":"/tmp","exit_code":0,"stdout":"hello\n","replay_context":{"path":"/usr/bin:/bin","env_hash":"abc123","hostname":"test-host","user":"testuser","shell":"/bin/bash","term":"xterm-256color","world_image":null}}
-{"ts":"2024-01-01T00:00:02Z","event_type":"command_complete","span_id":"test-span-2","session_id":"session-1","component":"shell","cmd":"false","exit_code":1}
+{"ts":"2024-01-01T00:00:01Z","event_type":"command_complete","span_id":"test-span-1","session_id":"session-1","component":"shell","cmd":"echo hello","cwd":"/tmp","exit_code":0,"stdout":"hello\n","replay_context":{"path":"/usr/bin:/bin","env_hash":"abc123","umask":22,"locale":"en_US.utf8","cwd":"/tmp","policy_id":"default","policy_commit":null,"world_image_version":"0.0.0","hostname":"test-host","user":"testuser","shell":"/bin/bash","term":"xterm-256color","world_image":null,"execution_origin":"host","transport":null,"anchor_mode":null,"anchor_path":null,"world_root_mode":null,"world_root_path":null,"caged":null},"execution_origin":"host"}
+{"ts":"2024-01-01T00:00:02Z","event_type":"command_complete","span_id":"test-span-2","session_id":"session-1","component":"shell","cmd":"false","exit_code":1,"execution_origin":"host"}
 "#;
 
     let mut file = tokio::fs::File::create(temp_file.path()).await.unwrap();
@@ -198,12 +198,27 @@ async fn test_env_reconstruction() {
         replay_context: Some(ReplayContext {
             path: Some("/custom/bin:/usr/bin".to_string()),
             env_hash: "hash123".to_string(),
+            umask: 22,
+            locale: None,
+            cwd: "/workspace".to_string(),
+            policy_id: "default".to_string(),
+            policy_commit: None,
+            world_image_version: "0.0.0".to_string(),
             hostname: Some("dev-machine".to_string()),
             user: Some("developer".to_string()),
             shell: Some("/bin/zsh".to_string()),
             term: Some("xterm-256color".to_string()),
             world_image: None,
+            execution_origin: Some(substrate_trace::ExecutionOrigin::Host),
+            transport: None,
+            anchor_mode: None,
+            anchor_path: None,
+            world_root_mode: None,
+            world_root_path: None,
+            caged: None,
         }),
+        transport: None,
+        execution_origin: Some(substrate_trace::ExecutionOrigin::Host),
         stdout: None,
         stderr: None,
         env_hash: None,
@@ -259,6 +274,8 @@ fn reconstruct_state_preserves_caged_anchor_env() {
         fs_diff: None,
         scopes_used: None,
         replay_context: None,
+        transport: None,
+        execution_origin: Some(substrate_trace::ExecutionOrigin::Host),
         stdout: None,
         stderr: None,
         env_hash: None,
@@ -304,6 +321,8 @@ fn reconstruct_state_preserves_uncaged_anchor_env() {
         fs_diff: None,
         scopes_used: None,
         replay_context: None,
+        transport: None,
+        execution_origin: Some(substrate_trace::ExecutionOrigin::Host),
         stdout: None,
         stderr: None,
         env_hash: None,
