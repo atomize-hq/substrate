@@ -579,3 +579,11 @@ Template:
 - Plan: re-apply agent-first replay changes (agent socket default, single-warning fallback to local backend, world root/caging/env propagation), update docs/tasks/logs, rerun fmt/clippy/tests, and recommit
 - Worktree: working from branch root after loss; will reapply changes directly before recreating worktree if needed
 - Blockers: none noted (no healthy `/run/substrate.sock` expected here; manual replay smoke may be skipped)
+
+## [2025-12-07 17:30 UTC] Code Agent – R2a-code – END
+- Reapplied agent-first replay with single-warning fallback and world-root/caging/env propagation for replayed commands (agent fs_diff/scopes returned when socket healthy, local backend copy-diff fallback otherwise)
+- Commands: `cargo fmt`; `cargo clippy -p substrate-replay -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world`
+- Results: pass / pass / pass / pass (shell replay_world still emits existing unused-variable warnings in shell_env)
+- Manual replay smoke: skipped (no healthy /run/substrate.sock or sample spans on this host)
+- Docs/tasks: updated REPLAY/TRACE/WORLD for agent-first behavior; R2a-code marked completed
+- Merge: changes applied directly on feat/p0-platform-stability-follow-up after FS recovery; no separate worktree used
