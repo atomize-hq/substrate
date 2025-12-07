@@ -734,3 +734,12 @@ Template:
 - Worktree setup pending (`ps-r2d-replay-origin-test` → `wt/ps-r2d-replay-origin-test`)
 - Plan: reapply fixtures for recorded origin defaults/flip, agent socket success/fallback with preserved cwd/anchor/caging/env, copy-diff retry + override coverage with deduped warnings and verbose strategy/root assertions; run fmt + required replay/shell tests; document host skips
 - Blockers: host lacks overlay/netns/cgroup and healthy agent socket; copy-diff likely unavailable so tests will emit fallback warnings/skips
+
+## [2025-12-07 21:02 UTC] Test Agent – R2d-test – END
+- Worktree commits: ba4b1d0 (`test: expand replay origin coverage`)
+- Commands: `cargo fmt`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world` (0 filtered); `cargo test -p substrate-shell --test replay_world -- --nocapture`
+- Results: fmt pass; replay crate tests pass; replay_world filter run emitted 0 tests; targeted replay_world suite passes with expected agent-missing/cgroup/netns/overlay/copy-diff fallback warnings and skipped replay_strategy assertions when trace entries absent; copy-diff unavailable on this host triggers retry logs
+- Scripts executed: n/a
+- Kickoff prompts created: n/a (R2d-integ prompt confirmed)
+- Docs commit: pending (`docs: finish R2d-test`)
+- Next steps / blockers: remove worktree after doc commit; host limitations documented above (no healthy agent socket, overlay/netns/cgroup/copy-diff unavailable)
