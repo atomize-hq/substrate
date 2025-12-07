@@ -665,3 +665,11 @@ Template:
 - Kickoff prompts created: n/a (R2c prompts already present)
 - Docs commit: pending (`docs: finish R2b-integ`)
 - Next steps / blockers: commit docs/tasks + code fix, ensure branch stays ahead for R2c
+
+## [2025-12-07 19:13 UTC] Code Agent – R2c-code – START
+- Checked out feat/p0-platform-stability-follow-up, `git pull --ff-only` (up to date)
+- Reviewed p0_platform_stability_plan.md, tasks.json, session_log.md, R2b-integ outputs, and R2c-code prompt
+- Updated tasks.json (R2c-code → in_progress); commit pending
+- Worktree setup pending (`ps-r2c-replay-coverage-code` → `wt/ps-r2c-replay-coverage-code`)
+- Plan: polish replay CLI/docs/telemetry for agent vs host-only/local fallback warnings, capture manual agent vs --no-world replay samples, run fmt/clippy/test per checklist, merge branch + update tasks/logs
+- Blockers: host lacks provisioned /run/substrate.sock; copy-diff roots may be constrained so manual replay will log fallback warnings/skips
