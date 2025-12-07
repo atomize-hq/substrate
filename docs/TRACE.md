@@ -86,6 +86,9 @@ Verbose replay outputs (`--replay-verbose` or JSON mode) print `[replay] scopes:
 to the world strategy line so the CLI summary mirrors the `scopes_used` array above. When the
 shell falls back to host execution it now prefixes warnings with `shell world-agent path (...)`
 to keep them distinct from `[replay] warn: ...` diagnostics emitted by the replay runtime.
+Replay prefers the world-agent path (`/run/substrate.sock`) when it responds; verbose output shows
+`[replay] world strategy: agent (...)` and the runtime emits a single `[replay] warn: agent replay unavailable...`
+line before falling back to local isolation/copy-diff when the socket is unhealthy.
 
 
 - Windows adds an optional `fs_diff.display_path` map that pairs canonical paths (e.g., `/mnt/c/...`) with native Windows representations; Linux and macOS omit this field. The map is populated by the `world-windows-wsl` backend and available whenever a diff is returned.

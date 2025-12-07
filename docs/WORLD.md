@@ -319,6 +319,7 @@ Implemented features:
 - Netfilter log prefix: `substrate-dropped-<WORLD_ID>:`
 - Cgroup: `/sys/fs/cgroup/substrate/<WORLD_ID>`
 - Socket: `/run/substrate.sock`
+  - Replay prefers this agent socket when it responds and emits a single warning before falling back to the local backend/copy-diff when unavailable.
 
 ---
 

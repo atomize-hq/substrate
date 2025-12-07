@@ -16,7 +16,7 @@ substrate --replay <SPAN_ID>
 
 ## Linux Isolation
 
-On Linux, replay uses the world-api backend by default for secure, consistent isolation and fs-diff collection—even when the rest of the CLI is running with `SUBSTRATE_WORLD=disabled` (for example, when invoked via `scripts/dev/substrate_shell_driver`). Replays now manage their own world state so tests/harnesses do not need to touch global config files to flip modes.
+On Linux, replay now prefers the world-agent path (`/run/substrate.sock`) when the socket responds. If the agent is unavailable, replay emits a single warning and falls back to the local world backend/copy-diff while still collecting `fs_diff` when isolation is possible—even when the rest of the CLI is running with `SUBSTRATE_WORLD=disabled` (for example, when invoked via `scripts/dev/substrate_shell_driver`). Replays manage their own world state so tests/harnesses do not need to touch global config files to flip modes.
 
 ```
 # Replay with default world isolation
@@ -25,6 +25,7 @@ substrate --replay <SPAN_ID>
 # Verbose output shows isolation strategy and scopes used
 substrate --replay-verbose --replay <SPAN_ID>
 # Example lines when verbose:
+# [replay] world strategy: agent (project_dir=/workspace)    # when /run/substrate.sock is healthy
 # [replay] world strategy: overlay
 # [replay] scopes: [tcp:github.com:443, tcp:registry.npmjs.org:443]
 # [replay] world toggle: enabled (default)
@@ -43,8 +44,9 @@ distinguish them from `[replay] warn: ...` messages that come from the replay ru
 
 
 By default on Linux, replay will:
-- Use the world-api backend (LinuxLocalBackend) for secure execution
+- Prefer the world-agent path when `/run/substrate.sock` responds; fall back once to the local world backend/copy-diff with a single warning when the agent is unavailable
 - Configure the world with `always_isolate: true`, forcing isolation for ALL commands (even simple ones like `echo` that normally wouldn't be isolated)
+- Carry world-root/caging env into the replay so cwd/path alignment matches the original span when isolation is active
 - Return `fs_diff` (writes/mods/deletes) and `scopes_used` from the isolated execution
 - Show isolation strategy in verbose mode (overlay/fuse/copy-diff)
 - Print the active world toggle in verbose mode (`[replay] world toggle: enabled (default)`), followed by `[replay] warn: running without world isolation (...)` whenever `--no-world` or `SUBSTRATE_REPLAY_USE_WORLD=disabled` opt-outs are in effect. This keeps the new `scopes: [...]` line aligned with the toggle that produced it.
@@ -64,7 +66,7 @@ To disable world isolation (not recommended for security reasons):
 - Pass `--no-world` on the command line, or
 - Set `SUBSTRATE_REPLAY_USE_WORLD=disabled` or `SUBSTRATE_REPLAY_USE_WORLD=0`
 
-On macOS and Linux, replay uses the world backend (Lima on macOS, local namespaces on Linux) to collect `fs_diff` and scopes. Other platforms fall back to direct execution without isolation or `fs_diff`.
+On macOS and Linux, replay uses the world backend (Lima agent on macOS, agent-first on Linux with a local backend fallback) to collect `fs_diff` and scopes. Other platforms fall back to direct execution without isolation or `fs_diff`.
 
 ### Isolation fallback & cleanup
 

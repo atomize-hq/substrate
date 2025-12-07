@@ -95,7 +95,7 @@ pub struct Cli {
     #[arg(long = "trace", value_name = "SPAN_ID", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status", "shim_remove", "replay"])]
     pub trace: Option<String>,
 
-    /// Replay a traced command by span ID (world isolation defaults on unless --no-world or SUBSTRATE_REPLAY_USE_WORLD=disabled)
+    /// Replay a traced command by span ID (prefers world-agent when available; --no-world or SUBSTRATE_REPLAY_USE_WORLD=disabled for host-only)
     #[arg(long = "replay", value_name = "SPAN_ID", conflicts_with_all = &["command", "script", "shim_deploy", "shim_status", "shim_remove", "trace"])]
     pub replay: Option<String>,
 

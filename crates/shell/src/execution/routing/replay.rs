@@ -1,12 +1,13 @@
 //! Trace and replay helpers for routing.
 
 use crate::execution::cli::Cli;
+use crate::execution::settings::world_root_from_env;
 use anyhow::Result;
 use std::collections::HashMap;
 use std::env;
 use std::path::PathBuf;
 use std::process::Stdio;
-use uuid::Uuid;
+use substrate_replay::state::{load_span_from_trace, reconstruct_state};
 
 #[derive(Debug)]
 enum ReplayWorldSource {
@@ -87,6 +88,35 @@ impl ReplayWorldMode {
     }
 }
 
+fn apply_replay_world_mode_env(env: &mut HashMap<String, String>, mode: &ReplayWorldMode) {
+    if mode.use_world {
+        env.insert("SUBSTRATE_WORLD".to_string(), "enabled".to_string());
+        env.insert("SUBSTRATE_WORLD_ENABLED".to_string(), "1".to_string());
+        env.remove("SUBSTRATE_REPLAY_USE_WORLD");
+    } else {
+        env.insert("SUBSTRATE_WORLD".to_string(), "disabled".to_string());
+        env.insert("SUBSTRATE_WORLD_ENABLED".to_string(), "0".to_string());
+        env.insert(
+            "SUBSTRATE_REPLAY_USE_WORLD".to_string(),
+            "disabled".to_string(),
+        );
+    }
+}
+
+fn inject_world_root_env(env: &mut HashMap<String, String>) {
+    let world_root = world_root_from_env();
+    let mode = world_root.mode.as_str().to_string();
+    let path = world_root.path.to_string_lossy().to_string();
+    env.insert("SUBSTRATE_ANCHOR_MODE".to_string(), mode.clone());
+    env.insert("SUBSTRATE_WORLD_ROOT_MODE".to_string(), mode);
+    env.insert("SUBSTRATE_ANCHOR_PATH".to_string(), path.clone());
+    env.insert("SUBSTRATE_WORLD_ROOT_PATH".to_string(), path);
+    env.insert(
+        "SUBSTRATE_CAGED".to_string(),
+        if world_root.caged { "1" } else { "0" }.to_string(),
+    );
+}
+
 pub(crate) fn handle_trace_command(span_id: &str) -> Result<()> {
     use std::fs::File;
     use std::io::{BufRead, BufReader};
@@ -147,11 +177,10 @@ pub(crate) fn handle_trace_command(span_id: &str) -> Result<()> {
 
 /// Handle replay command - replay a traced command by span ID
 pub(crate) fn handle_replay_command(span_id: &str, cli: &Cli) -> Result<()> {
-    use std::fs::File;
-    use std::io::{BufRead, BufReader};
+    let verbose_requested =
+        std::env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1" || cli.replay_verbose;
 
-    // Get trace file location
-    let trace_file = env::var("SHIM_TRACE_LOG")
+    let trace_file = std::env::var("SHIM_TRACE_LOG")
         .map(PathBuf::from)
         .unwrap_or_else(|_| {
             dirs::home_dir()
@@ -165,81 +194,24 @@ pub(crate) fn handle_replay_command(span_id: &str, cli: &Cli) -> Result<()> {
         std::process::exit(1);
     }
 
-    // Load the trace for the span
-    let file = File::open(&trace_file)?;
-    let reader = BufReader::new(file);
-    let mut trace_entry = None;
+    let runtime = tokio::runtime::Runtime::new()?;
 
-    for line in reader.lines() {
-        let line = line?;
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
-            if let Some(id) = json.get("span_id").and_then(|v| v.as_str()) {
-                if id == span_id {
-                    trace_entry = Some(json);
-                    break;
-                }
-            }
-        }
-    }
-
-    let entry = trace_entry.ok_or_else(|| anyhow::anyhow!("Span ID not found: {}", span_id))?;
-
-    // Extract command information from the trace
-    let command = entry
-        .get("cmd")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| anyhow::anyhow!("No command found in trace"))?;
-
-    let cwd = entry
-        .get("cwd")
-        .and_then(|v| v.as_str())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| env::current_dir().unwrap());
-
-    let session_id = entry
-        .get("session_id")
-        .and_then(|v| v.as_str())
-        .map(String::from)
-        .unwrap_or_else(|| Uuid::now_v7().to_string());
-
-    let verbose_requested =
-        env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1" || cli.replay_verbose;
+    // Reconstruct state from the trace entry (includes PATH/user/env metadata when captured)
+    let span = runtime.block_on(async { load_span_from_trace(&trace_file, span_id).await })?;
+    let mut state = reconstruct_state(&span, &HashMap::new())?;
 
     // Verbose header
     if verbose_requested {
         eprintln!("[replay] span_id: {}", span_id);
-        eprintln!("[replay] command: {}", command);
-        eprintln!("[replay] cwd: {}", cwd.display());
+        eprintln!("[replay] command: {}", state.raw_cmd);
+        eprintln!("[replay] cwd: {}", state.cwd.display());
         eprintln!("[replay] mode: bash -lc");
     }
 
-    // Parse command into command and args
-    let parts: Vec<&str> = command.split_whitespace().collect();
-    let (cmd, args) = if !parts.is_empty() {
-        (
-            parts[0].to_string(),
-            parts[1..].iter().map(|s| s.to_string()).collect(),
-        )
-    } else {
-        (command.to_string(), Vec::new())
-    };
-
-    // Create execution state
-    let state = substrate_replay::replay::ExecutionState {
-        raw_cmd: command.to_string(),
-        command: cmd,
-        args,
-        cwd,
-        env: HashMap::new(), // Could extract from trace if captured
-        stdin: None,
-        session_id,
-        span_id: span_id.to_string(),
-    };
-
-    // Execute with replay (choose world isolation; default enabled, allow opt-out)
-    let runtime = tokio::runtime::Runtime::new()?;
     // Respect replay toggle precedence: --world > --no-world > SUBSTRATE_REPLAY_USE_WORLD
     let replay_world_mode = ReplayWorldMode::from_cli(cli);
+    apply_replay_world_mode_env(&mut state.env, &replay_world_mode);
+    inject_world_root_env(&mut state.env);
     replay_world_mode.apply_env();
 
     if verbose_requested {

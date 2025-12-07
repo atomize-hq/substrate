@@ -3287,7 +3287,10 @@ dependencies = [
 name = "substrate-replay"
 version = "0.1.0"
 dependencies = [
+ "agent-api-client",
+ "agent-api-types",
  "anyhow",
+ "base64 0.22.1",
  "chrono",
  "hostname",
  "pretty_assertions",

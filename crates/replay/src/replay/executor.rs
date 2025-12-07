@@ -1,25 +1,35 @@
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Instant;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use tokio::process::Command;
 use tokio::time::{timeout, Duration};
 
 use super::{ExecutionResult, ExecutionState};
 use crate::replay::helpers::replay_verbose;
+use substrate_common::{FsDiff, WorldRootMode};
 
 #[cfg(target_os = "linux")]
-use std::collections::HashMap;
+use agent_api_client::AgentClient;
 #[cfg(target_os = "linux")]
-use std::path::Path;
+use agent_api_types::{ExecuteRequest, ExecuteResponse};
 #[cfg(target_os = "linux")]
-use std::path::PathBuf;
+use base64::engine::general_purpose::STANDARD as BASE64;
+#[cfg(target_os = "linux")]
+use base64::Engine;
 #[cfg(target_os = "linux")]
 use std::process as stdprocess;
 #[cfg(target_os = "linux")]
-use substrate_common::FsDiff;
+use std::sync::OnceLock;
 #[cfg(target_os = "linux")]
 use world::{copydiff, overlayfs};
+
+const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
+const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
+const LEGACY_ROOT_MODE_ENV: &str = "SUBSTRATE_WORLD_ROOT_MODE";
+const LEGACY_ROOT_PATH_ENV: &str = "SUBSTRATE_WORLD_ROOT_PATH";
 
 /// Execute a command directly (without world isolation)
 pub async fn execute_direct(state: &ExecutionState, timeout_secs: u64) -> Result<ExecutionResult> {
@@ -86,16 +96,25 @@ pub async fn execute_direct(state: &ExecutionState, timeout_secs: u64) -> Result
 
 pub async fn execute_with_world_backends(
     state: &ExecutionState,
-    #[cfg_attr(target_os = "linux", allow(unused_variables))] timeout_secs: u64,
+    timeout_secs: u64,
 ) -> Result<ExecutionResult> {
     let verbose = replay_verbose();
-    if let Some(result) = try_world_backend(state, verbose).await? {
+    let project_dir = project_dir_from_env(&state.env, &state.cwd)?;
+
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(result) = try_agent_backend(state, &project_dir, timeout_secs, verbose).await? {
+            return Ok(result);
+        }
+    }
+
+    if let Some(result) = try_world_backend(state, &project_dir, verbose).await? {
         return Ok(result);
     }
 
     #[cfg(target_os = "linux")]
     {
-        execute_on_linux(state, verbose)
+        execute_on_linux(state, &project_dir, verbose)
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -106,6 +125,7 @@ pub async fn execute_with_world_backends(
 
 async fn try_world_backend(
     state: &ExecutionState,
+    project_dir: &Path,
     verbose: bool,
 ) -> Result<Option<ExecutionResult>> {
     if let Ok(backend) = world_backend_factory::factory() {
@@ -117,7 +137,7 @@ async fn try_world_backend(
             limits: ResourceLimits::default(),
             enable_preload: false,
             allowed_domains: substrate_broker::allowed_domains(),
-            project_dir: state.cwd.clone(),
+            project_dir: project_dir.to_path_buf(),
             always_isolate: true,
         };
         match backend.ensure_session(&spec) {
@@ -167,7 +187,11 @@ async fn try_world_backend(
 }
 
 #[cfg(target_os = "linux")]
-pub fn execute_on_linux(state: &ExecutionState, verbose: bool) -> Result<ExecutionResult> {
+pub fn execute_on_linux(
+    state: &ExecutionState,
+    project_dir: &Path,
+    verbose: bool,
+) -> Result<ExecutionResult> {
     let world_id = &state.span_id;
     let bash_cmd = format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''"));
     let start = std::time::Instant::now();
@@ -378,7 +402,7 @@ pub fn execute_on_linux(state: &ExecutionState, verbose: bool) -> Result<Executi
     {
         _tried_overlay_kernel = true;
         let mut probe = overlayfs::OverlayFs::new(&format!("{}-probe", world_id))?;
-        if let Ok(_m) = probe.mount(&state.cwd) {
+        if let Ok(_m) = probe.mount(project_dir) {
             if !probe.is_using_fuse() {
                 let merged = probe.merged_dir_path().to_path_buf();
                 let _ = std::fs::create_dir_all(merged.join(".substrate-probe"));
@@ -392,11 +416,11 @@ pub fn execute_on_linux(state: &ExecutionState, verbose: bool) -> Result<Executi
 
     if overlay_kernel_ok {
         let mut ovl = overlayfs::OverlayFs::new(world_id)?;
-        ovl.mount(&state.cwd)?;
+        ovl.mount(project_dir)?;
         let (output, fs_diff, using_fuse, upper_entries) = run_in_overlay(
             ovl,
             &bash_cmd,
-            &state.cwd,
+            project_dir,
             &state.cwd,
             &state.env,
             if cgroup_active {
@@ -437,11 +461,11 @@ pub fn execute_on_linux(state: &ExecutionState, verbose: bool) -> Result<Executi
         .unwrap_or(false);
     if fuse_dev && fuse_bin_ok {
         let mut ovl = overlayfs::OverlayFs::new(world_id)?;
-        if let Ok(_m) = ovl.mount_fuse_only(&state.cwd) {
+        if let Ok(_m) = ovl.mount_fuse_only(project_dir) {
             let (output, fs_diff, using_fuse, upper_entries) = run_in_overlay(
                 ovl,
                 &bash_cmd,
-                &state.cwd,
+                project_dir,
                 &state.cwd,
                 &state.env,
                 if cgroup_active {
@@ -481,7 +505,7 @@ pub fn execute_on_linux(state: &ExecutionState, verbose: bool) -> Result<Executi
     let (output, fs_diff, child_pid_opt) = copydiff::execute_with_copydiff(
         world_id,
         &bash_cmd,
-        &state.cwd,
+        project_dir,
         &state.cwd,
         &state.env,
         netns_name.as_deref(),
@@ -511,5 +535,124 @@ fn emit_scopes_line(verbose: bool, scopes: &[String]) {
         eprintln!("[replay] scopes: []");
     } else {
         eprintln!("[replay] scopes: [{}]", scopes.join(", "));
+    }
+}
+
+fn project_dir_from_env(env: &HashMap<String, String>, cwd: &Path) -> Result<PathBuf> {
+    let mode = env
+        .get(ANCHOR_MODE_ENV)
+        .or_else(|| env.get(LEGACY_ROOT_MODE_ENV))
+        .and_then(|value| WorldRootMode::parse(value))
+        .unwrap_or(WorldRootMode::Project);
+
+    let root_path = env
+        .get(ANCHOR_PATH_ENV)
+        .or_else(|| env.get(LEGACY_ROOT_PATH_ENV))
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from);
+
+    let base_dir = match mode {
+        WorldRootMode::Project => root_path.unwrap_or_else(|| cwd.to_path_buf()),
+        WorldRootMode::FollowCwd => cwd.to_path_buf(),
+        WorldRootMode::Custom => root_path.ok_or_else(|| {
+            anyhow!("world root mode 'custom' requires SUBSTRATE_WORLD_ROOT_PATH")
+        })?,
+    };
+
+    Ok(base_dir)
+}
+
+#[cfg(target_os = "linux")]
+async fn try_agent_backend(
+    state: &ExecutionState,
+    project_dir: &Path,
+    timeout_secs: u64,
+    verbose: bool,
+) -> Result<Option<ExecutionResult>> {
+    if !std::path::Path::new("/run/substrate.sock").exists() {
+        warn_agent_fallback("agent socket missing".to_string());
+        return Ok(None);
+    }
+
+    let client = match AgentClient::unix_socket("/run/substrate.sock") {
+        Ok(client) => client,
+        Err(err) => {
+            warn_agent_fallback(format!("connect failed: {}", err));
+            return Ok(None);
+        }
+    };
+
+    match timeout(Duration::from_millis(500), client.capabilities()).await {
+        Ok(Ok(_)) => {}
+        Ok(Err(err)) => {
+            warn_agent_fallback(format!("capabilities error: {}", err));
+            return Ok(None);
+        }
+        Err(_) => {
+            warn_agent_fallback("capabilities probe timed out".to_string());
+            return Ok(None);
+        }
+    }
+
+    let request = ExecuteRequest {
+        profile: None,
+        cmd: format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''")),
+        cwd: Some(state.cwd.display().to_string()),
+        env: Some(state.env.clone()),
+        pty: false,
+        agent_id: std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "replay".to_string()),
+        budget: None,
+    };
+
+    let start = Instant::now();
+    match timeout(Duration::from_secs(timeout_secs), client.execute(request)).await {
+        Ok(Ok(resp)) => {
+            if verbose {
+                eprintln!(
+                    "[replay] world strategy: agent (project_dir={})",
+                    project_dir.display()
+                );
+            }
+            let duration_ms = start.elapsed().as_millis() as u64;
+            let out = convert_agent_response(resp, duration_ms);
+            emit_scopes_line(verbose, &out.scopes_used);
+            Ok(Some(out))
+        }
+        Ok(Err(err)) => {
+            warn_agent_fallback(format!("agent execute failed: {}", err));
+            Ok(None)
+        }
+        Err(_) => {
+            warn_agent_fallback("agent execute timed out".to_string());
+            Ok(None)
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn convert_agent_response(resp: ExecuteResponse, duration_ms: u64) -> ExecutionResult {
+    ExecutionResult {
+        exit_code: resp.exit,
+        stdout: BASE64
+            .decode(resp.stdout_b64.as_bytes())
+            .unwrap_or_else(|_| resp.stdout_b64.into_bytes()),
+        stderr: BASE64
+            .decode(resp.stderr_b64.as_bytes())
+            .unwrap_or_else(|_| resp.stderr_b64.into_bytes()),
+        fs_diff: resp.fs_diff,
+        scopes_used: resp.scopes_used,
+        duration_ms,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn warn_agent_fallback(reason: String) {
+    static WARN_ONCE: OnceLock<String> = OnceLock::new();
+    if WARN_ONCE.set(reason.clone()).is_ok() {
+        eprintln!(
+            "[replay] warn: agent replay unavailable, using local backend ({})",
+            reason
+        );
     }
 }

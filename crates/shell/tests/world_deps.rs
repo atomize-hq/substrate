@@ -4,7 +4,7 @@
 mod common;
 
 use assert_cmd::Command;
-use common::{substrate_shell_driver};
+use common::substrate_shell_driver;
 use serde_json::{json, Map, Value};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -237,9 +237,7 @@ impl WorldDepsFixture {
 
     fn guest_script_with_marker(&self, tool: &str, marker_name: &str, suffix: &str) -> String {
         let marker = self.guest_marker_dir.join(marker_name);
-        let path = self
-            .scripts_dir
-            .join(format!("guest-{tool}{suffix}.sh"));
+        let path = self.scripts_dir.join(format!("guest-{tool}{suffix}.sh"));
         let contents = GUEST_SCRIPT_TEMPLATE
             .replace("{tool}", tool)
             .replace("{marker}", marker.to_string_lossy().as_ref());

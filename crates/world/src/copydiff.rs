@@ -8,8 +8,8 @@
 
 use anyhow::{anyhow, Context, Result};
 use nix::libc;
-use std::error::Error as StdError;
 use std::collections::{BTreeMap, BTreeSet};
+use std::error::Error as StdError;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};

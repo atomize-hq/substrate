@@ -51,8 +51,14 @@ managers:
         .env_remove("SUBSTRATE_WORLD_ENABLED")
         .env("SUBSTRATE_SHIM_PATH", path_str(&fixture.shim_dir()))
         .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
-        .env("SUBSTRATE_MANAGER_INIT", path_str(&fixture.manager_init_path()))
-        .env("SUBSTRATE_MANAGER_ENV", path_str(&fixture.manager_env_path()))
+        .env(
+            "SUBSTRATE_MANAGER_INIT",
+            path_str(&fixture.manager_init_path()),
+        )
+        .env(
+            "SUBSTRATE_MANAGER_ENV",
+            path_str(&fixture.manager_env_path()),
+        )
         .env("SUBSTRATE_WORLD", "enabled")
         .env("SUBSTRATE_WORLD_ENABLED", "1")
         .env("SUBSTRATE_MANAGER_MANIFEST", path_str(&manifest))

@@ -127,6 +127,19 @@ pub fn reconstruct_state(
         env.insert(key.clone(), value.clone());
     }
 
+    // Preserve world root/caging hints from the current environment when not captured in the trace
+    for key in [
+        "SUBSTRATE_ANCHOR_MODE",
+        "SUBSTRATE_WORLD_ROOT_MODE",
+        "SUBSTRATE_ANCHOR_PATH",
+        "SUBSTRATE_WORLD_ROOT_PATH",
+        "SUBSTRATE_CAGED",
+    ] {
+        if let Ok(value) = std::env::var(key) {
+            env.entry(key.to_string()).or_insert(value);
+        }
+    }
+
     // Add substrate-specific environment
     env.insert("SUBSTRATE_REPLAY".to_string(), "1".to_string());
     env.insert("SHIM_SESSION_ID".to_string(), span.session_id.clone());
