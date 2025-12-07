@@ -1626,7 +1626,7 @@
       "name": "Replay agent-backed execution (tests)",
       "type": "test",
       "phase": "R2 \u2013 Agent-backed Replay",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Full coverage for agent path vs local fallback vs host-only, including ENOSPC retry and caged alignment.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",

@@ -689,3 +689,11 @@ Template:
 - Worktree setup pending (`ps-r2c-replay-agent-test` → `wt/ps-r2c-replay-agent-test`)
 - Plan: reapply agent-path vs local fallback tests (healthy socket selection, ENOSPC retry, caged/uncaged cwd/env/anchor alignment) and host-only `--no-world` coverage; run `cargo fmt`, `cargo test -p substrate-replay -- --nocapture`, `cargo test -p substrate-shell replay_world`
 - Blockers: host lacks provisioned `/run/substrate.sock`; copy-diff availability may be limited (log skips)
+
+## [2025-12-07 19:28 UTC] Test Agent – R2c-test – END
+- Worktree commits: d3246ed (`test: expand replay agent coverage`)
+- Commands: `cargo fmt`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world`; `cargo test -p substrate-shell --test replay_world -- --nocapture`
+- Results: fmt pass; replay tests pass; replay_world filter run hit 0 tests; targeted replay_world suite passes with skips/notes — copy-diff unavailable on this host so ENOSPC retries emit warnings and strategy asserts skip when trace lacks replay_strategy entries; agent socket absent so fallback warnings expected
+- Skips/notes: agent/caged strategy assertions guarded when no replay_strategy lines written; copy-diff roots under /run/tmp/var/tmp fail, ENOSPC shim still exercises retry paths; world-agent socket missing so agent probe falls back
+- Docs/prompts: reviewed `docs/project_management/next/p0-platform-stability/kickoff_prompts/R2c-integ.md` (no edits)
+- Next steps / blockers: ready for R2c-integ; host limitations documented above
