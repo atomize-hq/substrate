@@ -681,3 +681,11 @@ Template:
 - Manual replay: `target/debug/substrate --replay spn_019afa41-ce46-79f0-abd0-70405e887335 --replay-verbose` (agent strategy printed, scopes empty, dmesg warning); `target/debug/substrate --replay spn_019afa41-ce46-79f0-abd0-70405e887335 --replay-verbose --no-world` (host-only warning, scopes empty)
 - Docs/prompt: R2c-integ prompt reviewed (no edits needed)
 - Next steps / blockers: host still lacks healthy `/run/substrate.sock` and copy-diff roots under /run/xdg-runtime fail; warnings captured above
+
+## [2025-12-07 19:25 UTC] Test Agent – R2c-test – START
+- Checked out feat/p0-platform-stability-follow-up, `git pull --ff-only` (up to date)
+- Reviewed p0 plan, tasks.json, session log, R2a/R2b outputs, and R2c-test prompt
+- Updated tasks.json (`R2c-test` → `in_progress`) and appended this entry; doc commit pending
+- Worktree setup pending (`ps-r2c-replay-agent-test` → `wt/ps-r2c-replay-agent-test`)
+- Plan: reapply agent-path vs local fallback tests (healthy socket selection, ENOSPC retry, caged/uncaged cwd/env/anchor alignment) and host-only `--no-world` coverage; run `cargo fmt`, `cargo test -p substrate-replay -- --nocapture`, `cargo test -p substrate-shell replay_world`
+- Blockers: host lacks provisioned `/run/substrate.sock`; copy-diff availability may be limited (log skips)
