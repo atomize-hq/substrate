@@ -32,7 +32,6 @@ managers:
     fs::write(&host_bash_env, "export HOST_BE_VALUE=\"host_env\"\n").unwrap();
     let legacy_bashenv = fixture.home().join(".substrate_bashenv");
     fs::write(&legacy_bashenv, "export LEGACY_MARKER=\"legacy_env\"\n").unwrap();
-    let parent_path_before = String::new();
     let host_path = fixture.home().join("host-bin");
     fs::create_dir_all(&host_path).unwrap();
     let host_segment = path_str(&host_path);
@@ -167,7 +166,6 @@ fn shell_env_no_world_skips_manager_env() {
 #[test]
 fn shell_env_applies_overlay_manifest() {
     let fixture = ShellEnvFixture::new();
-    let missing_path = fixture.home().join("missing-tool");
     let script = format!(
         "source \"{manager_env}\"; printf '%s\\n' \"{marker}\" \"$OVERLAY_VALUE\"",
         marker = PAYLOAD_MARKER,
