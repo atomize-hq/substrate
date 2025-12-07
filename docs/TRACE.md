@@ -87,8 +87,28 @@ to the world strategy line so the CLI summary mirrors the `scopes_used` array ab
 shell falls back to host execution it now prefixes warnings with `shell world-agent path (...)`
 to keep them distinct from `[replay] warn: ...` diagnostics emitted by the replay runtime.
 Replay prefers the world-agent path (`/run/substrate.sock`) when it responds; verbose output shows
-`[replay] world strategy: agent (...)` and the runtime emits a single `[replay] warn: agent replay unavailable...`
+`[replay] world strategy: agent (...)` and the runtime emits a single `[replay] warn: agent replay unavailable (<cause>); falling back to local backend. Run 'substrate world doctor --json' or set SUBSTRATE_WORLD_SOCKET=…`
 line before falling back to local isolation/copy-diff when the socket is unhealthy.
+Replay appends a `replay_strategy` telemetry entry for each run so traces capture the chosen backend and any
+fallback reasons:
+
+```json
+{
+  "ts": "2025-12-04T17:00:00Z",
+  "event_type": "replay_strategy",
+  "session_id": "ses_demo",
+  "cmd_id": "spn_demo",
+  "component": "replay",
+  "strategy": "copy-diff",
+  "fallback_reason": "agent socket missing (/run/substrate.sock)",
+  "agent_socket": "/run/substrate.sock",
+  "copydiff_root": "/tmp/substrate-1000-copydiff",
+  "copydiff_root_source": "/tmp",
+  "netns": "substrate-spn_demo"
+}
+```
+Strategy values include `agent`, `world-backend`, `overlay`, `fuse`, and `copy-diff`; `copydiff_root*`
+fields appear only when that fallback is used.
 
 
 - Windows adds an optional `fs_diff.display_path` map that pairs canonical paths (e.g., `/mnt/c/...`) with native Windows representations; Linux and macOS omit this field. The map is populated by the `world-windows-wsl` backend and available whenever a diff is returned.

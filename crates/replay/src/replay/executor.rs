@@ -4,12 +4,15 @@ use std::process::Stdio;
 use std::time::Instant;
 
 use anyhow::{anyhow, Context, Result};
+use chrono::Utc;
+use serde_json::json;
 use tokio::process::Command;
 use tokio::time::{timeout, Duration};
 
 use super::{ExecutionResult, ExecutionState};
 use crate::replay::helpers::replay_verbose;
-use substrate_common::{FsDiff, WorldRootMode};
+use substrate_common::{log_schema, FsDiff, WorldRootMode};
+use substrate_trace::append_to_trace;
 
 #[cfg(target_os = "linux")]
 use agent_api_client::AgentClient;
@@ -30,6 +33,20 @@ const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
 const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
 const LEGACY_ROOT_MODE_ENV: &str = "SUBSTRATE_WORLD_ROOT_MODE";
 const LEGACY_ROOT_PATH_ENV: &str = "SUBSTRATE_WORLD_ROOT_PATH";
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug)]
+struct AgentFallback {
+    reason: String,
+    socket_path: PathBuf,
+}
+
+#[cfg(target_os = "linux")]
+struct AgentBackendOutcome {
+    result: Option<ExecutionResult>,
+    fallback: Option<AgentFallback>,
+    socket_path: PathBuf,
+}
 
 /// Execute a command directly (without world isolation)
 pub async fn execute_direct(state: &ExecutionState, timeout_secs: u64) -> Result<ExecutionResult> {
@@ -100,21 +117,69 @@ pub async fn execute_with_world_backends(
 ) -> Result<ExecutionResult> {
     let verbose = replay_verbose();
     let project_dir = project_dir_from_env(&state.env, &state.cwd)?;
+    let mut agent_fallback_reason: Option<String> = None;
+    let agent_socket: Option<PathBuf>;
 
     #[cfg(target_os = "linux")]
     {
-        if let Some(result) = try_agent_backend(state, &project_dir, timeout_secs, verbose).await? {
-            return Ok(result);
-        }
+        let outcome = try_agent_backend(state, &project_dir, timeout_secs, verbose).await?;
+        agent_socket = match outcome {
+            AgentBackendOutcome {
+                result: Some(result),
+                fallback: _,
+                socket_path,
+            } => {
+                record_replay_strategy(
+                    state,
+                    "agent",
+                    Some(&socket_path),
+                    None,
+                    json!({ "project_dir": project_dir.display().to_string() }),
+                );
+                return Ok(result);
+            }
+            AgentBackendOutcome {
+                result: None,
+                fallback,
+                socket_path,
+            } => {
+                if let Some(fallback) = fallback {
+                    agent_fallback_reason = Some(fallback.reason.clone());
+                    Some(fallback.socket_path)
+                } else {
+                    Some(socket_path)
+                }
+            }
+        };
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        agent_socket = None;
     }
 
     if let Some(result) = try_world_backend(state, &project_dir, verbose).await? {
+        record_replay_strategy(
+            state,
+            "world-backend",
+            agent_socket.as_deref(),
+            agent_fallback_reason.as_deref(),
+            json!({
+                "project_dir": project_dir.display().to_string(),
+                "backend": "world-api"
+            }),
+        );
         return Ok(result);
     }
 
     #[cfg(target_os = "linux")]
     {
-        execute_on_linux(state, &project_dir, verbose)
+        execute_on_linux(
+            state,
+            &project_dir,
+            verbose,
+            agent_fallback_reason,
+            agent_socket,
+        )
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -191,6 +256,8 @@ pub fn execute_on_linux(
     state: &ExecutionState,
     project_dir: &Path,
     verbose: bool,
+    agent_fallback_reason: Option<String>,
+    agent_socket: Option<PathBuf>,
 ) -> Result<ExecutionResult> {
     let world_id = &state.span_id;
     let bash_cmd = format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''"));
@@ -449,6 +516,17 @@ pub fn execute_on_linux(
             duration_ms,
         };
         emit_scopes_line(verbose, &out.scopes_used);
+        record_replay_strategy(
+            state,
+            if using_fuse { "fuse" } else { "overlay" },
+            agent_socket.as_deref(),
+            agent_fallback_reason.as_deref(),
+            json!({
+                "project_dir": project_dir.display().to_string(),
+                "cgroup_attached": cgroup_active,
+                "netns": netns_name.clone(),
+            }),
+        );
         return Ok(out);
     }
 
@@ -494,6 +572,17 @@ pub fn execute_on_linux(
                 duration_ms,
             };
             emit_scopes_line(verbose, &out.scopes_used);
+            record_replay_strategy(
+                state,
+                if using_fuse { "fuse" } else { "overlay" },
+                agent_socket.as_deref(),
+                agent_fallback_reason.as_deref(),
+                json!({
+                    "project_dir": project_dir.display().to_string(),
+                    "cgroup_attached": cgroup_active,
+                    "netns": netns_name.clone(),
+                }),
+            );
             return Ok(out);
         }
     }
@@ -502,7 +591,7 @@ pub fn execute_on_linux(
         eprintln!("[replay] warn: overlay and fuse-overlayfs unavailable; using copy-diff (userspace snapshot)");
         eprintln!("[replay] world strategy: copy-diff");
     }
-    let (output, fs_diff, child_pid_opt) = copydiff::execute_with_copydiff(
+    let copydiff_outcome = copydiff::execute_with_copydiff(
         world_id,
         &bash_cmd,
         project_dir,
@@ -510,10 +599,24 @@ pub fn execute_on_linux(
         &state.env,
         netns_name.as_deref(),
     )?;
+    let copydiff::CopyDiffOutcome {
+        output,
+        fs_diff,
+        child_pid,
+        root,
+        root_source,
+    } = copydiff_outcome;
     if cgroup_active {
-        if let Some(pid) = child_pid_opt {
+        if let Some(pid) = child_pid {
             let _ = cgroup_mgr.attach_pid(pid);
         }
+    }
+    if verbose {
+        eprintln!(
+            "[replay] copy-diff root: {} ({})",
+            root.display(),
+            root_source.as_str()
+        );
     }
     let duration_ms = start.elapsed().as_millis() as u64;
     let out = ExecutionResult {
@@ -525,6 +628,19 @@ pub fn execute_on_linux(
         duration_ms,
     };
     emit_scopes_line(verbose, &out.scopes_used);
+    record_replay_strategy(
+        state,
+        "copy-diff",
+        agent_socket.as_deref(),
+        agent_fallback_reason.as_deref(),
+        json!({
+            "project_dir": project_dir.display().to_string(),
+            "copydiff_root": root.display().to_string(),
+            "copydiff_root_source": root_source.as_str(),
+            "cgroup_attached": cgroup_active,
+            "netns": netns_name,
+        }),
+    );
     Ok(out)
 }
 fn emit_scopes_line(verbose: bool, scopes: &[String]) {
@@ -563,36 +679,90 @@ fn project_dir_from_env(env: &HashMap<String, String>, cwd: &Path) -> Result<Pat
     Ok(base_dir)
 }
 
+fn record_replay_strategy(
+    state: &ExecutionState,
+    strategy: &str,
+    agent_socket: Option<&Path>,
+    fallback_reason: Option<&str>,
+    extra: serde_json::Value,
+) {
+    let mut entry = json!({
+        log_schema::TIMESTAMP: Utc::now().to_rfc3339(),
+        log_schema::EVENT_TYPE: "replay_strategy",
+        log_schema::SESSION_ID: state.session_id,
+        log_schema::COMMAND_ID: state.span_id,
+        log_schema::COMPONENT: "replay",
+        "strategy": strategy,
+    });
+
+    if let Some(reason) = fallback_reason {
+        entry["fallback_reason"] = json!(reason);
+    }
+    if let Some(socket) = agent_socket {
+        entry["agent_socket"] = json!(socket.display().to_string());
+    }
+    if let Some(obj) = entry.as_object_mut() {
+        if let Some(extra_obj) = extra.as_object() {
+            for (k, v) in extra_obj {
+                obj.entry(k.clone()).or_insert_with(|| v.clone());
+            }
+        }
+    }
+
+    let _ = append_to_trace(&entry);
+}
+
 #[cfg(target_os = "linux")]
 async fn try_agent_backend(
     state: &ExecutionState,
     project_dir: &Path,
     timeout_secs: u64,
     verbose: bool,
-) -> Result<Option<ExecutionResult>> {
+) -> Result<AgentBackendOutcome> {
     let socket_path = agent_socket_path();
     if !socket_path.exists() {
-        warn_agent_fallback(format!("agent socket missing ({})", socket_path.display()));
-        return Ok(None);
+        let fallback = warn_agent_fallback(
+            format!("agent socket missing ({})", socket_path.display()),
+            &socket_path,
+        );
+        return Ok(AgentBackendOutcome {
+            result: None,
+            fallback: Some(fallback),
+            socket_path,
+        });
     }
 
     let client = match AgentClient::unix_socket(&socket_path) {
         Ok(client) => client,
         Err(err) => {
-            warn_agent_fallback(format!("connect failed: {}", err));
-            return Ok(None);
+            let fallback = warn_agent_fallback(format!("connect failed: {}", err), &socket_path);
+            return Ok(AgentBackendOutcome {
+                result: None,
+                fallback: Some(fallback),
+                socket_path,
+            });
         }
     };
 
     match timeout(Duration::from_millis(500), client.capabilities()).await {
         Ok(Ok(_)) => {}
         Ok(Err(err)) => {
-            warn_agent_fallback(format!("capabilities error: {}", err));
-            return Ok(None);
+            let fallback =
+                warn_agent_fallback(format!("capabilities error: {}", err), &socket_path);
+            return Ok(AgentBackendOutcome {
+                result: None,
+                fallback: Some(fallback),
+                socket_path,
+            });
         }
         Err(_) => {
-            warn_agent_fallback("capabilities probe timed out".to_string());
-            return Ok(None);
+            let fallback =
+                warn_agent_fallback("capabilities probe timed out".to_string(), &socket_path);
+            return Ok(AgentBackendOutcome {
+                result: None,
+                fallback: Some(fallback),
+                socket_path,
+            });
         }
     }
 
@@ -618,15 +788,28 @@ async fn try_agent_backend(
             let duration_ms = start.elapsed().as_millis() as u64;
             let out = convert_agent_response(resp, duration_ms);
             emit_scopes_line(verbose, &out.scopes_used);
-            Ok(Some(out))
+            Ok(AgentBackendOutcome {
+                result: Some(out),
+                fallback: None,
+                socket_path,
+            })
         }
         Ok(Err(err)) => {
-            warn_agent_fallback(format!("agent execute failed: {}", err));
-            Ok(None)
+            let fallback =
+                warn_agent_fallback(format!("agent execute failed: {}", err), &socket_path);
+            Ok(AgentBackendOutcome {
+                result: None,
+                fallback: Some(fallback),
+                socket_path,
+            })
         }
         Err(_) => {
-            warn_agent_fallback("agent execute timed out".to_string());
-            Ok(None)
+            let fallback = warn_agent_fallback("agent execute timed out".to_string(), &socket_path);
+            Ok(AgentBackendOutcome {
+                result: None,
+                fallback: Some(fallback),
+                socket_path,
+            })
         }
     }
 }
@@ -648,13 +831,19 @@ fn convert_agent_response(resp: ExecuteResponse, duration_ms: u64) -> ExecutionR
 }
 
 #[cfg(target_os = "linux")]
-fn warn_agent_fallback(reason: String) {
+fn warn_agent_fallback(reason: String, socket_path: &Path) -> AgentFallback {
     static WARN_ONCE: OnceLock<String> = OnceLock::new();
-    if WARN_ONCE.set(reason.clone()).is_ok() {
+    let reason_with_socket = format!("{} (socket: {})", reason, socket_path.display());
+    let stored_reason = WARN_ONCE.get_or_init(|| reason_with_socket.clone()).clone();
+    if stored_reason == reason_with_socket {
         eprintln!(
-            "[replay] warn: agent replay unavailable, using local backend ({})",
-            reason
+            "[replay] warn: agent replay unavailable ({}); falling back to local backend. Run 'substrate world doctor --json' or set SUBSTRATE_WORLD_SOCKET to point at a healthy agent socket.",
+            stored_reason
         );
+    }
+    AgentFallback {
+        reason: stored_reason,
+        socket_path: socket_path.to_path_buf(),
     }
 }
 

@@ -222,7 +222,7 @@ rm -f "$SHIM_TRACE_LOG"
    ```bash
    SUBSTRATE_AGENT_ENDPOINT=/tmp/r2d-dead.sock ./target/debug/substrate --replay <SPAN_WORLD_ID> --replay-verbose
    ```
-   Expect one `[replay] warn:` about agent failure and fallback to overlay/fuse/copy-diff; no repeated cgroup/netns/nft warnings.
+   Expect one `[replay] warn:` about agent failure (with doctor/SUBSTRATE_WORLD_SOCKET guidance) before fallback to overlay/fuse/copy-diff; no repeated cgroup/netns/nft warnings.
 
 6. **Copy-diff root override + warning dedupe**
    ```bash

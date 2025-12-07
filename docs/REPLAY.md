@@ -16,7 +16,7 @@ substrate --replay <SPAN_ID>
 
 ## Linux Isolation
 
-On Linux, replay now prefers the world-agent path (`/run/substrate.sock`) when the socket responds. If the agent is unavailable, replay emits a single warning and falls back to the local world backend/copy-diff while still collecting `fs_diff` when isolation is possible—even when the rest of the CLI is running with `SUBSTRATE_WORLD=disabled` (for example, when invoked via `scripts/dev/substrate_shell_driver`). Replays manage their own world state so tests/harnesses do not need to touch global config files to flip modes.
+On Linux, replay now prefers the world-agent path (`/run/substrate.sock`) when the socket responds. If the agent is unavailable, replay emits a single `[replay] warn: agent replay unavailable (<cause>); falling back to local backend. Run 'substrate world doctor --json' or set SUBSTRATE_WORLD_SOCKET=…` line and then uses the local world backend/copy-diff while still collecting `fs_diff` when isolation is possible—even when the rest of the CLI is running with `SUBSTRATE_WORLD=disabled` (for example, when invoked via `scripts/dev/substrate_shell_driver`). Replays manage their own world state so tests/harnesses do not need to touch global config files to flip modes.
 
 ```
 # Replay with default world isolation
@@ -87,3 +87,11 @@ On macOS and Linux, replay uses the world backend (Lima agent on macOS, agent-fi
 
 - If the replayed command modifies files (e.g., `npm install`), run on a disposable project copy or in a clean world.
 - Use `--trace <SPAN_ID>` first to confirm the command and working directory.
+
+### Copy-diff scratch space
+
+- Copy-diff uses a scratch root to stage the project and diff changes. The default order is: env override (`SUBSTRATE_COPYDIFF_ROOT`) → `/run` (`XDG_RUNTIME_DIR` or `/run/user/<uid>/substrate/copydiff`, `/run/substrate/copydiff` for root) → `/tmp/substrate-<uid>-copydiff` → `/var/tmp/substrate-<uid>-copydiff`. Hosts without `/run/user/<uid>` automatically skip that entry.
+- ENOSPC or other copy-diff errors print a single replay warning per attempt (for example, `[replay] warn: copy-diff storage /tmp/substrate-1000-copydiff (/tmp) ran out of space; retrying fallback location`) and keep retrying the next root.
+- Set `SUBSTRATE_COPYDIFF_ROOT=/path/with/space` to pin the scratch root; the warning will mention the override when it fails and the verbose output prints the root actually used (`[replay] copy-diff root: ... (env:SUBSTRATE_COPYDIFF_ROOT)`).
+- Manual cleanup: remove any leftover `substrate-*-copydiff` directories under `/run`, `/tmp`, `/var/tmp`, or your override path if a replay was interrupted. These roots only hold temporary copies of the project/work trees created during replay.
+

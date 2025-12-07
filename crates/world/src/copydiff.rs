@@ -8,7 +8,7 @@
 
 use anyhow::{anyhow, Context, Result};
 use nix::libc;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::error::Error as StdError;
 use std::fs;
 use std::io::Read;
@@ -19,6 +19,46 @@ use walkdir::WalkDir;
 
 const MAX_ENTRIES: usize = 10_000;
 const MAX_BYTES_SAMPLE: usize = 8 * 1024; // 8KB sample for content compare
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CopyDiffRootSource {
+    EnvOverride,
+    VarLib,
+    XdgRuntime,
+    Run,
+    Tmp,
+    VarTmp,
+    Fallback,
+}
+
+impl CopyDiffRootSource {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CopyDiffRootSource::EnvOverride => "env:SUBSTRATE_COPYDIFF_ROOT",
+            CopyDiffRootSource::VarLib => "/var/lib/substrate/copydiff",
+            CopyDiffRootSource::XdgRuntime => "xdg-runtime",
+            CopyDiffRootSource::Run => "/run",
+            CopyDiffRootSource::Tmp => "/tmp",
+            CopyDiffRootSource::VarTmp => "/var/tmp",
+            CopyDiffRootSource::Fallback => "auto",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CopyDiffCandidate {
+    path: PathBuf,
+    source: CopyDiffRootSource,
+}
+
+#[derive(Clone, Debug)]
+pub struct CopyDiffOutcome {
+    pub output: std::process::Output,
+    pub fs_diff: FsDiff,
+    pub child_pid: Option<u32>,
+    pub root: PathBuf,
+    pub root_source: CopyDiffRootSource,
+}
 
 fn choose_base_dir() -> PathBuf {
     #[cfg(target_os = "linux")]
@@ -52,24 +92,29 @@ pub fn execute_with_copydiff(
     cwd: &Path,
     env: &std::collections::HashMap<String, String>,
     netns: Option<&str>,
-) -> Result<(std::process::Output, FsDiff, Option<u32>)> {
+) -> Result<CopyDiffOutcome> {
     let mut last_error: Option<anyhow::Error> = None;
-    for root in candidate_roots() {
-        match execute_with_copydiff_root(&root, world_id, cmd, project_dir, cwd, env, netns) {
-            Ok(result) => return Ok(result),
+    for candidate in candidate_roots() {
+        match execute_with_copydiff_root(
+            &candidate.path,
+            world_id,
+            cmd,
+            project_dir,
+            cwd,
+            env,
+            netns,
+        ) {
+            Ok((output, fs_diff, child_pid_opt)) => {
+                return Ok(CopyDiffOutcome {
+                    output,
+                    fs_diff,
+                    child_pid: child_pid_opt,
+                    root: candidate.path,
+                    root_source: candidate.source,
+                })
+            }
             Err(err) => {
-                if is_enospc(&err) {
-                    eprintln!(
-                        "substrate: warn: copy-diff storage {} ran out of space; retrying fallback location",
-                        root.display()
-                    );
-                } else {
-                    eprintln!(
-                        "substrate: warn: copy-diff failed in {}; {}",
-                        root.display(),
-                        err
-                    );
-                }
+                log_copydiff_failure(&candidate, &err);
                 last_error = Some(err);
             }
         }
@@ -78,33 +123,110 @@ pub fn execute_with_copydiff(
     Err(last_error.unwrap_or_else(|| anyhow!("copydiff execution failed")))
 }
 
-pub(crate) fn candidate_roots() -> Vec<PathBuf> {
+fn override_root_from_env() -> Option<PathBuf> {
+    std::env::var_os("SUBSTRATE_COPYDIFF_ROOT")
+        .filter(|p| !p.is_empty())
+        .map(PathBuf::from)
+}
+
+fn root_source_for(path: &Path, env_override: Option<&Path>) -> CopyDiffRootSource {
+    if env_override.is_some_and(|env| env == path) {
+        return CopyDiffRootSource::EnvOverride;
+    }
+    if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
+        let xdg_path = PathBuf::from(xdg);
+        if !xdg_path.as_os_str().is_empty() && path.starts_with(&xdg_path) {
+            return CopyDiffRootSource::XdgRuntime;
+        }
+    }
+    if path.starts_with("/var/lib/substrate/copydiff") {
+        return CopyDiffRootSource::VarLib;
+    }
+    if path.starts_with("/run/user/") || path.starts_with("/run/substrate/") {
+        return CopyDiffRootSource::Run;
+    }
+    if path.starts_with("/tmp") {
+        return CopyDiffRootSource::Tmp;
+    }
+    if path.starts_with("/var/tmp") {
+        return CopyDiffRootSource::VarTmp;
+    }
+    if path.starts_with("/var/run") || path.starts_with("/run") {
+        return CopyDiffRootSource::Run;
+    }
+    CopyDiffRootSource::Fallback
+}
+
+fn push_candidate(
+    seen: &mut HashSet<PathBuf>,
+    roots: &mut Vec<CopyDiffCandidate>,
+    path: PathBuf,
+    source: CopyDiffRootSource,
+) {
+    if seen.insert(path.clone()) {
+        roots.push(CopyDiffCandidate { path, source });
+    }
+}
+
+pub(crate) fn candidate_roots() -> Vec<CopyDiffCandidate> {
     let mut roots = Vec::new();
+    let mut seen = HashSet::new();
+    let env_override = override_root_from_env();
+    if let Some(root) = env_override.clone() {
+        push_candidate(&mut seen, &mut roots, root, CopyDiffRootSource::EnvOverride);
+    }
+
     let primary = choose_base_dir();
-    roots.push(primary.clone());
+    let primary_source = root_source_for(&primary, env_override.as_deref());
+    push_candidate(&mut seen, &mut roots, primary.clone(), primary_source);
 
     #[cfg(target_os = "linux")]
     {
         let uid = nix::unistd::Uid::current().as_raw();
+        let run_root = if uid == 0 {
+            PathBuf::from("/run/substrate/copydiff")
+        } else {
+            PathBuf::from(format!("/run/user/{}/substrate/copydiff", uid))
+        };
+        if run_root.parent().unwrap_or(Path::new("/run")).exists() {
+            push_candidate(&mut seen, &mut roots, run_root, CopyDiffRootSource::Run);
+        }
+
         let tmp_root = PathBuf::from(format!("/tmp/substrate-{}-copydiff", uid));
-        if tmp_root != primary {
-            roots.push(tmp_root);
-        }
+        push_candidate(&mut seen, &mut roots, tmp_root, CopyDiffRootSource::Tmp);
+
         let var_tmp_root = PathBuf::from(format!("/var/tmp/substrate-{}-copydiff", uid));
-        if var_tmp_root != primary && !roots.contains(&var_tmp_root) {
-            roots.push(var_tmp_root);
-        }
+        push_candidate(
+            &mut seen,
+            &mut roots,
+            var_tmp_root,
+            CopyDiffRootSource::VarTmp,
+        );
     }
 
     #[cfg(not(target_os = "linux"))]
     {
         let fallback = PathBuf::from("/tmp/substrate-copydiff");
-        if fallback != primary {
-            roots.push(fallback);
-        }
+        push_candidate(&mut seen, &mut roots, fallback, CopyDiffRootSource::Tmp);
     }
 
     roots
+}
+
+fn log_copydiff_failure(candidate: &CopyDiffCandidate, err: &anyhow::Error) {
+    if is_enospc(err) {
+        eprintln!(
+            "[replay] warn: copy-diff storage {} ({}) ran out of space; retrying fallback location",
+            candidate.path.display(),
+            candidate.source.as_str()
+        );
+    } else {
+        eprintln!(
+            "[replay] warn: copy-diff failed in {} ({}); retrying fallback location",
+            candidate.path.display(),
+            err
+        );
+    }
 }
 
 fn execute_with_copydiff_root(
@@ -462,7 +584,7 @@ mod tests {
 
     fn clean_copydiff_roots() {
         for root in candidate_roots() {
-            let _ = std::fs::remove_dir_all(&root);
+            let _ = std::fs::remove_dir_all(&root.path);
         }
     }
 
@@ -475,7 +597,7 @@ mod tests {
         std::fs::write(project.join("file.txt"), b"data").unwrap();
 
         let env = std::collections::HashMap::new();
-        let (_out, diff, _pid) = execute_with_copydiff(
+        let outcome = execute_with_copydiff(
             "test-md",
             "sh -lc 'echo data > file.txt'",
             project,
@@ -485,6 +607,7 @@ mod tests {
         )
         .unwrap();
 
+        let diff = outcome.fs_diff;
         assert!(diff.mods.iter().any(|p| p.to_string_lossy() == "file.txt"));
     }
 
@@ -497,7 +620,7 @@ mod tests {
         std::fs::write(project.join("old.txt"), b"old").unwrap();
 
         let env = std::collections::HashMap::new();
-        let (_out, diff, _pid) = execute_with_copydiff(
+        let outcome = execute_with_copydiff(
             "test-wd",
             "sh -lc 'rm -f old.txt && mkdir -p demo && echo data > demo/file.txt'",
             project,
@@ -507,6 +630,7 @@ mod tests {
         )
         .unwrap();
 
+        let diff = outcome.fs_diff;
         assert!(diff.writes.iter().any(|p| p.to_string_lossy() == "demo"));
         assert!(diff
             .writes
