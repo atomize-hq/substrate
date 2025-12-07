@@ -12,7 +12,7 @@
    ```
 
 ## Spec
-- Add fixtures that record world vs host spans and assert default replay follows the recorded origin; `--flip-world` (alias `--upside-down`) inverts it; `--world` / `--no-world` still override.
+- Add fixtures that record world vs host spans and assert default replay follows the recorded origin; `--flip-world` (alias `--flip`) inverts it; `--world` / `--no-world` still override.
 - Mock agent socket success/failure (Unix stub) to prove agent-first selection, single warning on failure, and fallback to local backend with preserved cwd/anchor/caging/env.
 - Assert copy-diff fallback retries (/run, /tmp, /var/tmp) and `SUBSTRATE_COPYDIFF_ROOT` override with de-duped warning text and verbose strategy output.
 - Capture verbose output expectations for origin/flip reason, selected strategy, endpoint, and copy-diff root.

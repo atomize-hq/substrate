@@ -13,7 +13,7 @@
 
 ## Spec
 - Record execution origin (`host`/`world`) and transport on command_complete spans (trace schema + replay_context); greenfield schema so no compat shims required.
-- Default replay to the recorded origin; add `--flip-world` (alias `--upside-down`) to invert it. `--world` / `--no-world` keep highest precedence.
+- Default replay to the recorded origin; add `--flip-world` (alias `--flip`) to invert it. `--world` / `--no-world` keep highest precedence.
 - When world is selected, prefer the agent socket (/run/substrate.sock or recorded endpoint). On failure emit a single warning and fall back to the local backend (overlay/fuse/copy-diff) while preserving cwd/anchor/caging/env from the span.
 - Verbose output/telemetry must show origin, flip reason, selected strategy + endpoint, and copy-diff root (including override env).
 - Improve copy-diff fallback: include /run + /tmp + /var/tmp, honor `SUBSTRATE_COPYDIFF_ROOT`, and de-duplicate warnings.

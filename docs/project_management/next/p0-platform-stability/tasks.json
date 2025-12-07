@@ -1757,7 +1757,7 @@
       ],
       "acceptance_criteria": [
         "Spans record execution_origin (host/world) and world transport at command_complete; replay reconstruction consumes it (greenfield schema, no compat needed).",
-        "Default replay honors recorded origin; --flip-world (alias --upside-down) inverts it; --world/--no-world still override.",
+        "Default replay honors recorded origin; --flip-world (alias --flip) inverts it; --world/--no-world still override.",
         "World-mode replay uses the agent socket first and falls back once with a single warning to the local backend (overlay/fuse/copy-diff) while preserving cwd/anchor/caging/env from the span.",
         "Verbose output and telemetry document origin, flip reason, selected strategy, endpoint, and copy-diff root (including override env).",
         "`cargo fmt`; `cargo clippy -p substrate-replay -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world` executed/logged; manual agent+host/no-world smoke noted."
