@@ -774,3 +774,10 @@ Template:
 - Read p0 plan, tasks.json, session_log; set `R2e-code` → `in_progress` (tasks.json updated)
 - Scope: reapply policy-driven world fs mode (read_only vs writable) across broker/shell/world-agent/backends and docs; run fmt/clippy/tests per prompt
 - Blockers: none noted (host still lacks overlay/cgroup/netns, so read-only mount behavior tested best-effort)
+
+## [2025-12-08 13:20 UTC] Code Agent – R2e-code – END (reapply)
+- Worktree: ps-r2e-world-fs-code (merged into feat/p0-platform-stability-follow-up)
+- Changes: policy-controlled `world_fs_mode` with default writable; shell threads mode into PTY/non-PTY agent calls, doctor, and traces; world-agent/backends honor read-only mounts (no upper/copy-diff) and PTY path uses the same policy; replay updated; docs note new knob and doctor output.
+- Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-shell world_enable`; `cargo test -p world-agent` (host lacks overlay/netns/cgroup but suites pass)
+- Scripts: n/a
+- Next steps / blockers: none; ready for R2e-integ/R2e-test
