@@ -3,6 +3,7 @@
 #[path = "support/mod.rs"]
 mod support;
 
+use libc;
 use serde_json::{json, Value};
 use std::env;
 use std::fs;
@@ -10,6 +11,7 @@ use std::io::{BufRead, BufReader};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use substrate_trace::ExecutionOrigin;
 use support::{substrate_command_for_home, AgentSocket, ShellEnvFixture, SocketResponse};
 use tempfile::{Builder, TempDir};
 
@@ -17,9 +19,33 @@ fn trace_path(fixture: &ShellEnvFixture) -> PathBuf {
     fixture.home().join("trace.jsonl")
 }
 
-fn write_trace(fixture: &ShellEnvFixture, span_id: &str, cmd: &str, cwd: &Path) -> PathBuf {
+struct TraceOptions {
+    execution_origin: ExecutionOrigin,
+    transport_endpoint: Option<PathBuf>,
+    transport_socket_activation: Option<bool>,
+    replay_context: Option<Value>,
+}
+
+impl Default for TraceOptions {
+    fn default() -> Self {
+        Self {
+            execution_origin: ExecutionOrigin::World,
+            transport_endpoint: None,
+            transport_socket_activation: None,
+            replay_context: None,
+        }
+    }
+}
+
+fn write_trace_with_options(
+    fixture: &ShellEnvFixture,
+    span_id: &str,
+    cmd: &str,
+    cwd: &Path,
+    options: TraceOptions,
+) -> PathBuf {
     let trace = fixture.home().join("trace.jsonl");
-    let entry = json!({
+    let mut entry = json!({
         "ts": "2025-01-01T00:00:00Z",
         "event_type": "command_complete",
         "span_id": span_id,
@@ -27,11 +53,29 @@ fn write_trace(fixture: &ShellEnvFixture, span_id: &str, cmd: &str, cwd: &Path) 
         "component": "shell",
         "cmd": cmd,
         "cwd": cwd.to_string_lossy(),
-        "exit_code": 0
+        "exit_code": 0,
+        "execution_origin": options.execution_origin,
     });
+    if let Some(context) = options.replay_context {
+        entry["replay_context"] = context;
+    }
+    if let Some(endpoint) = options.transport_endpoint {
+        let mut transport = json!({
+            "mode": "unix",
+            "endpoint": endpoint.to_string_lossy(),
+        });
+        if let Some(activated) = options.transport_socket_activation {
+            transport["socket_activation"] = json!(activated);
+        }
+        entry["transport"] = transport;
+    }
     fs::create_dir_all(trace.parent().unwrap()).expect("failed to create trace dir");
     fs::write(&trace, format!("{}\n", entry)).expect("failed to write trace entry");
     trace
+}
+
+fn write_trace(fixture: &ShellEnvFixture, span_id: &str, cmd: &str, cwd: &Path) -> PathBuf {
+    write_trace_with_options(fixture, span_id, cmd, cwd, TraceOptions::default())
 }
 
 fn replay_strategy_entries(trace_path: &Path) -> Vec<Value> {
@@ -145,14 +189,15 @@ impl EnospcShim {
     }
 }
 
-fn replay_command(
+fn replay_command_with_options(
     fixture: &ShellEnvFixture,
     span_id: &str,
     command: &str,
     cwd: &Path,
     path_override: &str,
+    options: TraceOptions,
 ) -> assert_cmd::Command {
-    let trace = write_trace(fixture, span_id, command, cwd);
+    let trace = write_trace_with_options(fixture, span_id, command, cwd, options);
     let mut cmd = substrate_command_for_home(fixture);
     let xdg_runtime = fixture.home().join("xdg-runtime");
     fs::create_dir_all(&xdg_runtime).expect("failed to create xdg runtime dir");
@@ -167,6 +212,23 @@ fn replay_command(
         .env("XDG_RUNTIME_DIR", &xdg_runtime)
         .env("PATH", path_override);
     cmd
+}
+
+fn replay_command(
+    fixture: &ShellEnvFixture,
+    span_id: &str,
+    command: &str,
+    cwd: &Path,
+    path_override: &str,
+) -> assert_cmd::Command {
+    replay_command_with_options(
+        fixture,
+        span_id,
+        command,
+        cwd,
+        path_override,
+        TraceOptions::default(),
+    )
 }
 
 fn copydiff_unavailable(stderr: &str) -> bool {
@@ -351,6 +413,297 @@ fn replay_env_override_reports_world_toggle() {
 }
 
 #[test]
+fn replay_defaults_to_recorded_host_origin() {
+    let fixture = ShellEnvFixture::new();
+    let cwd = fixture.home().join("workspace-recorded-host");
+    fs::create_dir_all(&cwd).expect("failed to create replay cwd");
+    let span_id = "span-recorded-host-default";
+    let path_override = configure_nft_stub(&fixture, "#!/bin/sh\necho \"nft (test) v1\"\nexit 0\n");
+
+    let mut cmd = replay_command_with_options(
+        &fixture,
+        span_id,
+        "printf recorded-host > recorded-host.log",
+        &cwd,
+        &path_override,
+        TraceOptions {
+            execution_origin: ExecutionOrigin::Host,
+            ..TraceOptions::default()
+        },
+    );
+
+    let assert = cmd.assert().success();
+    let output = assert.get_output();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[replay] origin: host (recorded)"),
+        "recorded host origin should be reported when no flip/override is set: {stderr}"
+    );
+    assert!(
+        !stderr.contains("[replay] world strategy:"),
+        "host replay should skip world strategy output: {stderr}"
+    );
+    assert!(
+        !stderr.contains("warn: running on host"),
+        "recorded host origin should not emit a host warning: {stderr}"
+    );
+    let host_log = cwd.join("recorded-host.log");
+    let content = fs::read_to_string(&host_log).expect("host replay should write output in cwd");
+    assert!(
+        content.contains("recorded-host"),
+        "expected host replay to write to {:?}",
+        host_log
+    );
+
+    let Some(strategy) = latest_replay_strategy(&trace_path(&fixture)) else {
+        eprintln!("skipping recorded-host strategy assertions: no replay_strategy entries written");
+        return;
+    };
+    assert_eq!(
+        strategy.get("strategy").and_then(|value| value.as_str()),
+        Some("host"),
+        "strategy should record host execution: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("recorded_origin")
+            .and_then(|value| value.as_str()),
+        Some("host"),
+        "recorded_origin should reflect host span metadata: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("target_origin")
+            .and_then(|value| value.as_str()),
+        Some("host"),
+        "target_origin should remain host without flips/overrides: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("recorded_origin_source")
+            .and_then(|value| value.as_str()),
+        Some("span"),
+        "recorded_origin_source should track span metadata: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("origin_reason_code")
+            .and_then(|value| value.as_str()),
+        Some("recorded_origin"),
+        "origin_reason_code should note the recorded origin path: {strategy:?}"
+    );
+}
+
+#[test]
+fn replay_flip_world_to_host_reports_reason() {
+    let fixture = ShellEnvFixture::new();
+    let cwd = fixture.home().join("workspace-flip-world");
+    fs::create_dir_all(&cwd).expect("failed to create replay cwd");
+    let span_id = "span-flip-world-to-host";
+    let path_override = configure_nft_stub(&fixture, "#!/bin/sh\necho \"nft (test) v1\"\nexit 0\n");
+
+    let mut cmd = replay_command_with_options(
+        &fixture,
+        span_id,
+        "printf flipped-world > flipped-world.log",
+        &cwd,
+        &path_override,
+        TraceOptions {
+            execution_origin: ExecutionOrigin::World,
+            ..TraceOptions::default()
+        },
+    );
+    cmd.arg("--flip-world");
+
+    let assert = cmd.assert().success();
+    let output = assert.get_output();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[replay] origin: world -> host (--flip-world)"),
+        "flip flag should invert recorded world origin: {stderr}"
+    );
+    assert!(
+        stderr.contains("[replay] warn: running on host (--flip-world)"),
+        "flip from world to host should emit a host warning: {stderr}"
+    );
+    assert!(
+        !stderr.contains("[replay] world strategy:"),
+        "flipped host run should skip world strategy output: {stderr}"
+    );
+    let flipped_log = cwd.join("flipped-world.log");
+    let content =
+        fs::read_to_string(&flipped_log).expect("flipped host replay should write output in cwd");
+    assert!(
+        content.contains("flipped-world"),
+        "expected flipped host replay to write to {:?}",
+        flipped_log
+    );
+
+    let Some(strategy) = latest_replay_strategy(&trace_path(&fixture)) else {
+        eprintln!("skipping flip-world strategy assertions: no replay_strategy entries written");
+        return;
+    };
+    assert_eq!(
+        strategy.get("strategy").and_then(|value| value.as_str()),
+        Some("host"),
+        "strategy should record host execution after flip: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("recorded_origin")
+            .and_then(|value| value.as_str()),
+        Some("world"),
+        "recorded_origin should stay world even when flipped: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("target_origin")
+            .and_then(|value| value.as_str()),
+        Some("host"),
+        "target_origin should reflect flip to host: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("origin_reason_code")
+            .and_then(|value| value.as_str()),
+        Some("flip_world"),
+        "origin_reason_code should capture flip flag: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("fallback_reason")
+            .and_then(|value| value.as_str()),
+        Some("--flip-world"),
+        "fallback_reason should explain the host selection when flipped: {strategy:?}"
+    );
+}
+
+#[test]
+fn replay_flip_host_to_world_prefers_agent_and_reports_origin() {
+    let fixture = ShellEnvFixture::new();
+    let socket_dir = tempfile::Builder::new()
+        .prefix("substrate-agent-flip-")
+        .tempdir_in("/tmp")
+        .expect("failed to create socket tempdir");
+    let socket_path = socket_dir.path().join("substrate.sock");
+    let socket_str = socket_path.display().to_string();
+    let _socket = AgentSocket::start(
+        &socket_path,
+        SocketResponse::CapabilitiesAndExecute {
+            stdout: "agent-flip\n".to_string(),
+            stderr: String::new(),
+            exit: 0,
+            scopes: vec!["agent:uds:flip".to_string()],
+        },
+    );
+
+    let cwd = fixture.home().join("workspace-flip-to-world");
+    fs::create_dir_all(&cwd).expect("failed to create replay cwd");
+    let span_id = "span-flip-host-to-world";
+    let path_override = configure_nft_stub(&fixture, "#!/bin/sh\necho \"nft (test) v1\"\nexit 0\n");
+
+    let mut cmd = replay_command_with_options(
+        &fixture,
+        span_id,
+        "printf flipped-agent > flipped-agent.log",
+        &cwd,
+        &path_override,
+        TraceOptions {
+            execution_origin: ExecutionOrigin::Host,
+            transport_endpoint: Some(socket_path.clone()),
+            transport_socket_activation: Some(true),
+            ..TraceOptions::default()
+        },
+    );
+    cmd.env("SUBSTRATE_ANCHOR_MODE", "custom");
+    cmd.env("SUBSTRATE_WORLD_ROOT_MODE", "custom");
+    cmd.env("SUBSTRATE_ANCHOR_PATH", &cwd);
+    cmd.env("SUBSTRATE_WORLD_ROOT_PATH", &cwd);
+    cmd.env("SUBSTRATE_CAGED", "0");
+    cmd.arg("--flip");
+
+    let assert = cmd.assert().success();
+    let output = assert.get_output();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[replay] origin: host -> world (--flip-world)"),
+        "flip alias should invert recorded host origin: {stderr}"
+    );
+    assert!(
+        stderr.contains("[replay] world strategy: agent"),
+        "world strategy should route through the recorded agent endpoint after flip: {stderr}"
+    );
+    assert!(
+        stderr.contains(&socket_path.display().to_string()),
+        "agent strategy should mention the recorded socket path: {stderr}"
+    );
+    assert!(
+        stderr.contains(&cwd.display().to_string()),
+        "agent strategy should mention the project_dir: {stderr}"
+    );
+    assert!(
+        stderr.contains("[replay] scopes: [agent:uds:flip]"),
+        "scopes should reflect agent execution after flip: {stderr}"
+    );
+    assert!(
+        !stderr.contains("agent replay unavailable"),
+        "agent path should not emit fallback warning when flip succeeds: {stderr}"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("agent-flip"),
+        "flipped agent replay should return stubbed stdout payload: {stdout}"
+    );
+
+    let Some(strategy) = latest_replay_strategy(&trace_path(&fixture)) else {
+        eprintln!("skipping flip-agent strategy assertions: no replay_strategy entries written");
+        return;
+    };
+    assert_eq!(
+        strategy.get("strategy").and_then(|value| value.as_str()),
+        Some("agent"),
+        "strategy should record agent execution after flip: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("recorded_origin")
+            .and_then(|value| value.as_str()),
+        Some("host"),
+        "recorded_origin should reflect the original host span: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("target_origin")
+            .and_then(|value| value.as_str()),
+        Some("world"),
+        "target_origin should reflect flipped world execution: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("recorded_origin_source")
+            .and_then(|value| value.as_str()),
+        Some("span"),
+        "recorded_origin_source should track span metadata: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("origin_reason_code")
+            .and_then(|value| value.as_str()),
+        Some("flip_world"),
+        "origin_reason_code should capture flip flag: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("recorded_transport")
+            .and_then(|value| value.get("endpoint"))
+            .and_then(|value| value.as_str()),
+        Some(socket_str.as_str()),
+        "recorded transport endpoint should be captured for flipped agent replay: {strategy:?}"
+    );
+}
+
+#[test]
 fn replay_prefers_agent_when_socket_healthy() {
     let fixture = ShellEnvFixture::new();
     let socket_dir = Builder::new()
@@ -375,15 +728,21 @@ fn replay_prefers_agent_when_socket_healthy() {
     let span_id = "span-agent-healthy";
     let path_override = configure_nft_stub(&fixture, "#!/bin/sh\necho \"nft (test) v1\"\nexit 0\n");
     let anchor_root_str = anchor_root.display().to_string();
+    let options = TraceOptions {
+        execution_origin: ExecutionOrigin::World,
+        transport_endpoint: Some(socket_path.clone()),
+        transport_socket_activation: Some(true),
+        ..TraceOptions::default()
+    };
 
-    let mut cmd = replay_command(
+    let mut cmd = replay_command_with_options(
         &fixture,
         span_id,
         "printf agent-ok > replay-agent.log",
         &cwd,
         &path_override,
+        options,
     );
-    cmd.env("SUBSTRATE_WORLD_SOCKET", &socket_path);
     cmd.env("SUBSTRATE_ANCHOR_MODE", "custom");
     cmd.env("SUBSTRATE_WORLD_ROOT_MODE", "custom");
     cmd.env("SUBSTRATE_ANCHOR_PATH", &anchor_root);
@@ -394,11 +753,20 @@ fn replay_prefers_agent_when_socket_healthy() {
     let output = assert.get_output();
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains(&format!(
-            "[replay] world strategy: agent (project_dir={})",
-            anchor_root.display()
-        )),
-        "expected agent strategy and project dir in stderr: {stderr}"
+        stderr.contains("[replay] origin: world"),
+        "world origin should be reported in verbose output: {stderr}"
+    );
+    assert!(
+        stderr.contains("[replay] world strategy: agent"),
+        "expected agent strategy in stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains(&socket_path.display().to_string()),
+        "agent world strategy should mention socket path: {stderr}"
+    );
+    assert!(
+        stderr.contains(&anchor_root.display().to_string()),
+        "agent world strategy should mention project_dir: {stderr}"
     );
     assert!(
         stderr.contains("[replay] scopes: [agent:uds:test]"),
@@ -435,6 +803,42 @@ fn replay_prefers_agent_when_socket_healthy() {
         Some(socket_str.as_str()),
         "agent socket should be recorded in replay_strategy: {strategy:?}"
     );
+    assert_eq!(
+        strategy
+            .get("recorded_origin")
+            .and_then(|value| value.as_str()),
+        Some("world"),
+        "recorded_origin should be captured on the strategy entry: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("target_origin")
+            .and_then(|value| value.as_str()),
+        Some("world"),
+        "target_origin should stay world when no flip/overrides are set: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("recorded_origin_source")
+            .and_then(|value| value.as_str()),
+        Some("span"),
+        "recorded_origin_source should reflect span metadata: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("origin_reason_code")
+            .and_then(|value| value.as_str()),
+        Some("recorded_origin"),
+        "origin_reason_code should reflect the recorded origin path: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("recorded_transport")
+            .and_then(|value| value.get("endpoint"))
+            .and_then(|value| value.as_str()),
+        Some(socket_str.as_str()),
+        "recorded transport endpoint should be captured alongside the agent socket: {strategy:?}"
+    );
     assert!(
         strategy.get("fallback_reason").is_none(),
         "agent path should not record a fallback_reason: {strategy:?}"
@@ -458,15 +862,21 @@ fn replay_emits_single_agent_warning_and_retries_copydiff_on_enospc() {
     let _ = fs::remove_file(&missing_socket);
     let missing_socket_str = missing_socket.display().to_string();
     let enospc_prefix_str = enospc_prefix.display().to_string();
+    let options = TraceOptions {
+        execution_origin: ExecutionOrigin::World,
+        transport_endpoint: Some(missing_socket.clone()),
+        transport_socket_activation: Some(false),
+        ..TraceOptions::default()
+    };
 
-    let mut cmd = replay_command(
+    let mut cmd = replay_command_with_options(
         &fixture,
         span_id,
         "printf fallback > replay-fallback.log",
         &cwd,
         &path_override,
+        options,
     );
-    cmd.env("SUBSTRATE_WORLD_SOCKET", &missing_socket);
     cmd.env("XDG_RUNTIME_DIR", &xdg_runtime);
     cmd.env("LD_PRELOAD", &shim.path);
     cmd.env("SUBSTRATE_ENOSPC_PREFIX", &enospc_prefix);
@@ -480,6 +890,10 @@ fn replay_emits_single_agent_warning_and_retries_copydiff_on_enospc() {
         }
         panic!("replay command failed unexpectedly: {stderr}");
     }
+    assert!(
+        stderr.contains("[replay] origin: world"),
+        "world origin should be surfaced before agent fallback: {stderr}"
+    );
     let agent_warns = stderr.matches("agent replay unavailable").count();
     assert_eq!(
         agent_warns, 1,
@@ -575,15 +989,21 @@ fn replay_agent_fallback_uses_caged_project_dir() {
     let _ = fs::remove_file(&missing_socket);
     let missing_socket_str = missing_socket.display().to_string();
     let anchor_root_str = anchor_root.display().to_string();
+    let options = TraceOptions {
+        execution_origin: ExecutionOrigin::World,
+        transport_endpoint: Some(missing_socket.clone()),
+        transport_socket_activation: Some(false),
+        ..TraceOptions::default()
+    };
 
-    let mut cmd = replay_command(
+    let mut cmd = replay_command_with_options(
         &fixture,
         span_id,
         "printf fallback-caged > replay-fallback-caged.log",
         &cwd,
         &path_override,
+        options,
     );
-    cmd.env("SUBSTRATE_WORLD_SOCKET", &missing_socket);
     cmd.env("SUBSTRATE_ANCHOR_MODE", "custom");
     cmd.env("SUBSTRATE_WORLD_ROOT_MODE", "custom");
     cmd.env("SUBSTRATE_ANCHOR_PATH", &anchor_root);
@@ -600,6 +1020,10 @@ fn replay_agent_fallback_uses_caged_project_dir() {
         panic!("replay command failed unexpectedly: {stderr}");
     }
 
+    assert!(
+        stderr.contains("[replay] origin: world"),
+        "world origin should be logged before agent fallback: {stderr}"
+    );
     let agent_warns = stderr.matches("agent replay unavailable").count();
     assert_eq!(
         agent_warns, 1,
@@ -638,6 +1062,124 @@ fn replay_agent_fallback_uses_caged_project_dir() {
         Some(anchor_root_str.as_str()),
         "project_dir should reflect the caged anchor root: {strategy:?}"
     );
+}
+
+#[test]
+fn replay_retries_copydiff_roots_and_dedupes_warnings() {
+    let fixture = ShellEnvFixture::new();
+    let trace = trace_path(&fixture);
+    let cwd = fixture.home().join("workspace-copydiff-retries");
+    fs::create_dir_all(&cwd).expect("failed to create replay cwd");
+    let span_id = "span-copydiff-retries";
+    let path_override = configure_nft_stub(&fixture, "#!/bin/sh\nexit 1\n");
+
+    let uid = unsafe { libc::getuid() } as u32;
+    let tmp_root = PathBuf::from(format!("/tmp/substrate-{}-copydiff", uid));
+    let _ = fs::remove_dir_all(&tmp_root);
+    let _ = fs::remove_file(&tmp_root);
+    fs::write(&tmp_root, b"block tmp copydiff root")
+        .expect("failed to block default tmp copydiff root");
+
+    let shim = EnospcShim::build();
+    let xdg_runtime = fixture.home().join("xdg-runtime");
+    let enospc_prefix = xdg_runtime.join("substrate/copydiff");
+    let missing_socket = fixture.home().join("missing-agent-copydiff.sock");
+    let _ = fs::remove_file(&missing_socket);
+
+    let mut cmd = replay_command_with_options(
+        &fixture,
+        span_id,
+        "printf retry-roots > replay-copydiff-retries.log",
+        &cwd,
+        &path_override,
+        TraceOptions {
+            execution_origin: ExecutionOrigin::World,
+            transport_endpoint: Some(missing_socket.clone()),
+            transport_socket_activation: Some(false),
+            ..TraceOptions::default()
+        },
+    );
+    cmd.env("SUBSTRATE_WORLD_SOCKET", &missing_socket);
+    cmd.env("XDG_RUNTIME_DIR", &xdg_runtime);
+    cmd.env("LD_PRELOAD", &shim.path);
+    cmd.env("SUBSTRATE_ENOSPC_PREFIX", &enospc_prefix);
+
+    let output = cmd.output().expect("failed to run replay command");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        if copydiff_unavailable(&stderr) {
+            eprintln!("skipping copy-diff retry test: copy-diff unavailable\n{stderr}");
+            let _ = fs::remove_file(&tmp_root);
+            return;
+        }
+        panic!("replay command failed unexpectedly: {stderr}");
+    }
+
+    let retry_warnings = stderr.matches("retrying fallback location").count();
+    assert!(
+        retry_warnings >= 2,
+        "expected multiple copy-diff retry warnings after /run and /tmp failures: {stderr}"
+    );
+    let tmp_root_str = tmp_root.display().to_string();
+    assert_eq!(
+        stderr.matches(tmp_root_str.as_str()).count(),
+        1,
+        "tmp root failure should be logged once: {stderr}"
+    );
+    let enospc_prefix_str = enospc_prefix.display().to_string();
+    assert_eq!(
+        stderr.matches(enospc_prefix_str.as_str()).count(),
+        1,
+        "xdg-runtime ENOSPC warning should be logged once: {stderr}"
+    );
+    assert!(
+        stderr.contains("/run"),
+        "expected copy-diff retry warnings to mention /run roots: {stderr}"
+    );
+    assert!(
+        stderr.contains("[replay] copy-diff root:"),
+        "final copy-diff root should be reported in verbose output: {stderr}"
+    );
+
+    let strategies = replay_strategy_entries(&trace);
+    if strategies.is_empty() {
+        eprintln!("skipping copy-diff retry assertions: no replay_strategy entries written");
+        let _ = fs::remove_file(&tmp_root);
+        return;
+    }
+    let strategy = strategies.last().unwrap();
+    if strategy.get("strategy").and_then(|value| value.as_str()) != Some("copy-diff") {
+        eprintln!(
+            "skipping copy-diff retry assertions: expected copy-diff strategy, got {:?}",
+            strategy.get("strategy")
+        );
+        let _ = fs::remove_file(&tmp_root);
+        return;
+    }
+    let copydiff_root = strategy
+        .get("copydiff_root")
+        .and_then(|value| value.as_str())
+        .expect("copydiff_root missing from replay_strategy");
+    let copydiff_root_source = strategy
+        .get("copydiff_root_source")
+        .and_then(|value| value.as_str())
+        .expect("copydiff_root_source missing from replay_strategy");
+    assert!(
+        copydiff_root.starts_with("/var/tmp"),
+        "copy-diff should fall back to /var/tmp after /run and /tmp failures (got {copydiff_root})"
+    );
+    assert_eq!(
+        copydiff_root_source, "/var/tmp",
+        "copy-diff root source should reflect the /var/tmp fallback"
+    );
+    assert!(
+        stderr.contains(&format!(
+            "[replay] copy-diff root: {} ({})",
+            copydiff_root, copydiff_root_source
+        )),
+        "verbose output should include the final copy-diff root and source: {stderr}"
+    );
+    let _ = fs::remove_file(&tmp_root);
 }
 
 #[test]
