@@ -673,3 +673,11 @@ Template:
 - Worktree setup pending (`ps-r2c-replay-coverage-code` → `wt/ps-r2c-replay-coverage-code`)
 - Plan: polish replay CLI/docs/telemetry for agent vs host-only/local fallback warnings, capture manual agent vs --no-world replay samples, run fmt/clippy/test per checklist, merge branch + update tasks/logs
 - Blockers: host lacks provisioned /run/substrate.sock; copy-diff roots may be constrained so manual replay will log fallback warnings/skips
+
+## [2025-12-07 19:21 UTC] Code Agent – R2c-code – END
+- Worktree commits: f40c67c (`docs: clarify replay fallback messaging`)
+- Commands: `cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell replay_world` (0 filtered tests); `cargo test -p substrate-shell --test replay_world -- --nocapture`
+- Results: fmt/clippy pass; replay_world suite passes with expected agent-fallback and copy-diff retry warnings on this host (no world agent, cgroup/netns/overlay/copy-diff limitations)
+- Manual replay: `target/debug/substrate --replay spn_019afa41-ce46-79f0-abd0-70405e887335 --replay-verbose` (agent strategy printed, scopes empty, dmesg warning); `target/debug/substrate --replay spn_019afa41-ce46-79f0-abd0-70405e887335 --replay-verbose --no-world` (host-only warning, scopes empty)
+- Docs/prompt: R2c-integ prompt reviewed (no edits needed)
+- Next steps / blockers: host still lacks healthy `/run/substrate.sock` and copy-diff roots under /run/xdg-runtime fail; warnings captured above

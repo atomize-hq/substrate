@@ -1582,7 +1582,7 @@
       "name": "Replay agent-backed execution \u2013 coverage polish (code)",
       "type": "code",
       "phase": "R2 \u2013 Agent-backed Replay",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Polish CLI/docs/telemetry for replay toggles, capture manual agent vs no-world samples, and ensure warnings align with docs.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
