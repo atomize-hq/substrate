@@ -1374,7 +1374,7 @@
       "name": "Replay agent-backed execution \u2013 agent path (test)",
       "type": "test",
       "phase": "R2 \u2013 Agent-backed Replay",
-      "status": "queued",
+      "status": "completed",
       "description": "Add tests covering agent-backed replay toggles, caging propagation, and host-only mode.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",

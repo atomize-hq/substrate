@@ -587,3 +587,17 @@ Template:
 - Manual replay smoke: skipped (no healthy /run/substrate.sock or sample spans on this host)
 - Docs/tasks: updated REPLAY/TRACE/WORLD for agent-first behavior; R2a-code marked completed
 - Merge: changes applied directly on feat/p0-platform-stability-follow-up after FS recovery; no separate worktree used
+
+## [2025-12-07 17:44 UTC] Test Agent – R2a-test – START
+- Checked out feat/p0-platform-stability-follow-up after filesystem recovery
+- Set R2a-test to in_progress (doc commit pending); reread plan/tasks/session_log and R2a-code outputs
+- Worktree: ps-r2a-replay-agent-test reused paths; reapplying lost changes directly on branch
+- Plan: restore agent-path replay tests (healthy socket, fallback single warning + ENOSPC retry, cwd/anchor env alignment), run fmt + required replay/shell suites, update tasks/log
+- Blockers: copy-diff roots on host may be unavailable; expect skips recorded in stderr if so
+
+## [2025-12-07 17:44 UTC] Test Agent – R2a-test – END
+- Worktree commits: 5c01371 (test: add agent replay coverage), d9041e9 (docs: finish R2a-test)
+- Commands: `cargo fmt`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell --test replay_world -- --nocapture`; `cargo test -p substrate-shell replay_world`
+- Results: fmt pass; replay tests pass; shell replay_world passes with logged skips when copy-diff cannot spawn work dirs on this host (agent fallback + nft cases note copy-diff failures)
+- Scripts: compiled temporary LD_PRELOAD ENOSPC shim inside test; no manual `substrate --replay` runs
+- Notes: Agent socket tests use stubbed capabilities/execute server; warnings include host limitations (netns/cgroup/overlay/copydiff)
