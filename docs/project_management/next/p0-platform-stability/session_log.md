@@ -781,3 +781,11 @@ Template:
 - Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-shell world_enable`; `cargo test -p world-agent` (host lacks overlay/netns/cgroup but suites pass)
 - Scripts: n/a
 - Next steps / blockers: none; ready for R2e-integ/R2e-test
+
+## [2025-12-07 22:45 UTC] Test Agent – R2e-test – START (reapply)
+- Checked out feat/p0-platform-stability-follow-up (clean)
+- Read p0_platform_stability_plan.md, tasks.json, session_log.md, R2e-code scope, and R2e-test prompt
+- Updated tasks.json + session_log.md (commit pending)
+- Worktree: pending (`ps-r2e-world-fs-test` → `wt/ps-r2e-world-fs-test`)
+- Plan: reapply read-only vs writable policy fixtures (PTY + non-PTY agent/local), ensure traces/doctor reflect mode, guard skips for overlay/cgroup limits, run fmt + required tests
+- Blockers: host may lack overlay/cgroup/copy-diff; note skips if hit
