@@ -633,3 +633,11 @@ Template:
 - Manual commands: `substrate --replay ...` skipped (no healthy `/run/substrate.sock` or sample spans on this host)
 - Changes: single agent→local warning with doctor/SUBSTRATE_WORLD_SOCKET guidance, copy-diff scratch retries (/run→/tmp→/var/tmp) with override env + verbose root logging, replay_strategy trace entries (strategy/fallback_reason/agent_socket/copydiff_root)
 - Docs: REPLAY/TRACE/manual testing playbook updated for warning text, telemetry, copy-diff overrides/cleanup
+
+## [2025-12-07 18:50 UTC] Test Agent – R2b-test – START
+- Checked out feat/p0-platform-stability-follow-up, `git pull --ff-only` (up to date)
+- Reviewed `p0_platform_stability_plan.md`, `tasks.json`, `session_log.md`, R2b-code scope, and this prompt
+- Updated tasks.json (`R2b-test` → `in_progress`); commit pending
+- Worktree setup pending (`ps-r2b-replay-fallback-test` → `wt/ps-r2b-replay-fallback-test`)
+- Plan: add tests for single agent→local warning, copy-diff root retries/override logging, ENOSPC retry telemetry; run `cargo fmt`, `cargo test -p substrate-replay -- --nocapture`, `cargo test -p substrate-shell replay_world`
+- Blockers: no provisioned `/run/substrate.sock`; manual `substrate --replay` verification may be skipped

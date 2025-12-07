@@ -1501,7 +1501,7 @@
       "name": "Replay agent-backed execution \u2013 fallbacks & warnings (test)",
       "type": "test",
       "phase": "R2 \u2013 Agent-backed Replay",
-      "status": "queued",
+      "status": "in_progress",
       "description": "Add tests covering warning de-duplication, copy-diff overrides, and ENOSPC retries.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
