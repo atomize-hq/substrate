@@ -82,6 +82,7 @@ Every backlog item is decomposed into multiple triads so each agent session stay
    - **R2b – Fallback warnings**: Improve warning deduplication and copy-diff retries.
    - **R2c – Coverage polish**: Refresh CLI/docs/telemetry and replay fixtures.
    - **R2d – Origin-aware defaults & agent routing**: Record execution origin/transport on spans, default replays to the recorded origin, add a flip flag, and make world-mode replays agent-first with a single-warning fallback to the local backend (overlay/fuse/copy-diff) while preserving cwd/anchor/caging/env.
+   - **R2e – Policy-driven world fs mode**: Add a broker policy toggle for read-only vs writable worlds, wire it through shell/world-agent, update docs/doctor, and ensure systemd defaults allow policy to take effect.
    - **R2e – Policy-driven world fs mode**: Add a policy toggle for read-only vs writable worlds (global + per-project), plumb it through broker/shell/world-agent, surface it in doctor/telemetry, and ensure systemd defaults allow policy to take effect.
 
 Each phase maps to its own `code`, `test`, and `integration` tasks described in `tasks.json` with dedicated kickoff prompts.

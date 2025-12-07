@@ -12,22 +12,23 @@
    ```
 
 ## Spec
-- Add a broker policy flag for world filesystem mode (`read_only` vs `writable`) with default = writable; validate inputs and allow global + per-project settings.
-- Shell must include the resolved mode in world requests (PTY + non-PTY) and trace/doctor output so users can see the active mode and remediation guidance.
-- World-agent/backends honor the flag: read-only path mounts without an upper/copy-diff (writes fail cleanly); writable path keeps today’s overlay/copy-diff flow.
-- Update docs (CONFIGURATION/WORLD, WORLD/REPLAY references) to describe the knob and mention systemd baseline expectations (ProtectHome must permit policy to take effect).
+- Add a policy flag (global + per-project) for world filesystem mode (`read_only` vs `writable`) with default writable.
+- Broker validates the flag and surfaces clear errors for invalid values.
+- Shell threads the resolved policy into PTY + non-PTY world requests and records the active mode in traces/doctor output.
+- World-agent/backends honor the flag (read-only path mounts without upper/copy-diff; writable path matches today's behavior) and emit single-shot warnings when writes fail under read-only mode.
+- Docs (CONFIGURATION/WORLD, WORLD/REPLAY) describe the knob and mention that installers/systemd must permit `/home` writes so policy can take effect.
 
 ## Scope & Guardrails
-- Code touches broker, shell, world-agent/world backends, and docs; test-only work belongs in R2e-test.
-- Keep existing env/flag precedence intact (policy should slot between CLI overrides and defaults).
-- Ensure PTY/REPL commands follow the same policy as non-PTY; warn once when a write hits read-only mode.
+- Touch broker, shell, world-agent/backends, and docs; test-only work belongs in R2e-test.
+- Existing CLI/env precedence stays intact (`--world`/`--no-world` override policy when provided).
+- Both PTY and non-PTY paths must honor the policy.
 
 ## Required Commands
 ```
 cargo fmt
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test -p substrate-shell world_enable
-cargo test -p world-agent   # or document skips if privileged requirements block
+cargo test -p world-agent   # document skips if privileges lacking
 ```
 
 ## End Checklist

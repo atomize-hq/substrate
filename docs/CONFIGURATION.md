@@ -44,6 +44,7 @@ Environment variables and advanced configuration options for Substrate.
 | `SUBSTRATE_SKIP_MANAGER_INIT_LIST` | Comma-separated managers to skip | *none* | `nvm,pyenv` |
 | `SUBSTRATE_MANAGER_INIT_DEBUG` | Verbose detection logging | `0` | `1` |
 | `SUBSTRATE_SHIM_HINTS` | Disable/enable shim hint emission | `1` | `0` |
+| `SUBSTRATE_POLICY_GIT_CACHE` | Cache policy repo git hash across commands (`0`/`false` disables caching per process) | `1` | `0` |
 
 Release bundles place the base manifests under
 `<prefix>/versions/<version>/config/` (`manager_hooks.yaml` and

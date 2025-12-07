@@ -1878,6 +1878,136 @@
       "type": "code",
       "phase": "R2e \u2013 Policy-driven World FS Mode",
       "status": "queued",
+      "description": "Add a broker policy toggle for read-only vs writable worlds, thread it through shell/world-agent, and document the knob so per-project/global policy controls world mutability.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/CONFIGURATION.md",
+        "crates/broker",
+        "crates/shell",
+        "crates/world-agent",
+        "crates/world"
+      ],
+      "acceptance_criteria": [
+        "Policy schema exposes world fs mode (read_only/writable) with default writable; invalid values produce clear errors.",
+        "Shell passes the resolved policy into PTY + non-PTY world requests and surfaces the active mode via traces/doctor.",
+        "World-agent/backends honor the mode (read-only disables copy-diff/upper writes; writable matches current behavior).",
+        "Docs describe the knob and systemd expectations; doctor output highlights the active mode with remediation guidance.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; targeted suites (`cargo test -p substrate-shell world_enable`, `cargo test -p world-agent` or justified skips) executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Read plan, tasks.json, session_log.md, and this prompt",
+        "Set R2e-code to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2e-world-fs-code`, `git worktree add wt/ps-r2e-world-fs-code ps-r2e-world-fs-code`, `cd wt/ps-r2e-world-fs-code`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests completed (note skips)",
+        "Commit code/doc changes",
+        "Merge ps-r2e-world-fs-code into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Confirm R2e-integ prompt contents",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2e-code\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2d-integ"
+      ],
+      "concurrent_with": [
+        "R2e-test"
+      ],
+      "worktree": "wt/ps-r2e-world-fs-code",
+      "integration_task": "R2e-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2e-code.md"
+    },
+    {
+      "id": "R2e-test",
+      "name": "Policy-driven world fs mode (test)",
+      "type": "test",
+      "phase": "R2e \u2013 Policy-driven World FS Mode",
+      "status": "queued",
+      "description": "Add fixtures asserting policy-controlled read-only vs writable worlds (PTY + non-PTY) with trace/doctor coverage.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/CONFIGURATION.md",
+        "crates/shell/tests",
+        "crates/world/tests"
+      ],
+      "acceptance_criteria": [
+        "Read-only policy tests ensure writes fail cleanly and telemetry/doctor show read_only mode.",
+        "Writable policy tests ensure overlay/copy-diff writes succeed and telemetry/doctor show writable mode.",
+        "Coverage includes PTY path where feasible and documents skips when overlay/cgroup unavailable.",
+        "`cargo fmt`; targeted suites (`cargo test -p substrate-shell world_enable`, `cargo test -p world-agent` or justified skips) executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Review plan, tasks.json, session_log.md, and R2e-code scope",
+        "Set R2e-test to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2e-world-fs-test`, `git worktree add wt/ps-r2e-world-fs-test ps-r2e-world-fs-test`, `cd wt/ps-r2e-world-fs-test`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests completed; document skips with justification",
+        "Commit test/fixture updates",
+        "Merge ps-r2e-world-fs-test into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Confirm R2e-integ prompt contents",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2e-test\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2d-integ"
+      ],
+      "concurrent_with": [
+        "R2e-code"
+      ],
+      "worktree": "wt/ps-r2e-world-fs-test",
+      "integration_task": "R2e-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2e-test.md"
+    },
+    {
+      "id": "R2e-integ",
+      "name": "Policy-driven world fs mode (integration)",
+      "type": "integration",
+      "phase": "R2e \u2013 Policy-driven World FS Mode",
+      "status": "queued",
+      "description": "Merge the policy-driven world fs mode code/test branches, rerun fmt/lint/tests, and document read-only vs writable policy behavior.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/CONFIGURATION.md",
+        "crates/broker",
+        "crates/shell",
+        "crates/world-agent"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-r2e-world-fs-integ merges ps-r2e-world-fs-code/test and fast-forwards feat/p0-platform-stability-follow-up.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; targeted suites (`cargo test -p substrate-shell world_enable`, `cargo test -p world-agent` or justified skips) executed/logged.",
+        "tasks.json + session_log.md capture END entry; docs mention the new policy knob/systemd expectations."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Confirm R2e-code/test completed",
+        "Set R2e-integ to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2e-world-fs-integ`, `git worktree add wt/ps-r2e-world-fs-integ ps-r2e-world-fs-integ`, `cd wt/ps-r2e-world-fs-integ`"
+      ],
+      "end_checklist": [
+        "Merge code/test branches, resolve conflicts",
+        "Run required fmt/lint/tests; capture output",
+        "Fast-forward merge into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2e-integ\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2e-code",
+        "R2e-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-r2e-world-fs-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2e-integ.md"
+    },
+    {
+      "id": "R2e-code",
+      "name": "Policy-driven world fs mode (code)",
+      "type": "code",
+      "phase": "R2e \u2013 Policy-driven World FS Mode",
+      "status": "queued",
       "description": "Add a broker policy toggle for read-only vs writable worlds, thread it through shell requests, and teach world-agent/backends to honor it so per-project/global policy controls world mutability.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",

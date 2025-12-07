@@ -152,7 +152,7 @@ impl TraceContext {
             locale: env::var("LANG").ok(),
             cwd: env::current_dir()?.to_string_lossy().to_string(),
             policy_id: self.policy_id(),
-            policy_commit: get_policy_git_hash().ok(),
+            policy_commit: get_policy_git_hash()?,
             world_image_version: WORLD_IMAGE_VERSION.to_string(),
         })
     }

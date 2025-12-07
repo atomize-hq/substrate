@@ -13,10 +13,10 @@
 
 ## Spec
 - Add fixtures that exercise both policy modes:
-  - Read-only: confirm writes fail (PTY + non-PTY), doctor/trace reflect read-only, warnings are single-shot.
-  - Writable: confirm writes succeed via overlay/copy-diff, telemetry shows writable, and agent/local fallbacks respect the policy.
-- Ensure PTY/replay helpers reuse existing harnesses; gate assertions on host capabilities (overlay/cgroup). Document skips where necessary.
-- Verify `--world`/`--no-world` overrides still take precedence when policy differs.
+  - Read-only: writes in PTY + non-PTY fail cleanly, warnings logged once, traces/doctor report read_only mode.
+  - Writable: overlay/copy-diff writes succeed; telemetry shows writable mode.
+- Include agent + local fallback coverage to ensure policy is honored regardless of backend.
+- Document skips when overlay/cgroup privileges are missing; prefer hermetic harnesses.
 
 ## Required Commands
 ```
@@ -26,7 +26,7 @@ cargo test -p world-agent   # or document skips if privileged requirements block
 ```
 
 ## End Checklist
-1. Ensure fmt/tests completed; document skips with justification.
+1. Ensure fmt/tests completed; note skips with justification.
 2. Commit test/fixture updates.
 3. Merge `ps-r2e-world-fs-test` into `feat/p0-platform-stability-follow-up`.
 4. Update `tasks.json` + `session_log.md` END entry (include command results).
