@@ -3,14 +3,19 @@
 #[path = "support/mod.rs"]
 mod support;
 
-use serde_json::json;
+use serde_json::{json, Value};
 use std::env;
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use support::{substrate_command_for_home, AgentSocket, ShellEnvFixture, SocketResponse};
 use tempfile::{Builder, TempDir};
+
+fn trace_path(fixture: &ShellEnvFixture) -> PathBuf {
+    fixture.home().join("trace.jsonl")
+}
 
 fn write_trace(fixture: &ShellEnvFixture, span_id: &str, cmd: &str, cwd: &Path) -> PathBuf {
     let trace = fixture.home().join("trace.jsonl");
@@ -27,6 +32,19 @@ fn write_trace(fixture: &ShellEnvFixture, span_id: &str, cmd: &str, cwd: &Path) 
     fs::create_dir_all(trace.parent().unwrap()).expect("failed to create trace dir");
     fs::write(&trace, format!("{}\n", entry)).expect("failed to write trace entry");
     trace
+}
+
+fn replay_strategy_entries(trace_path: &Path) -> Vec<Value> {
+    let file = fs::File::open(trace_path).expect("missing trace log");
+    let reader = BufReader::new(file);
+    reader
+        .lines()
+        .filter_map(|line| line.ok())
+        .filter_map(|line| serde_json::from_str::<Value>(&line).ok())
+        .filter(|value| {
+            value.get("event_type").and_then(|event| event.as_str()) == Some("replay_strategy")
+        })
+        .collect()
 }
 
 fn configure_nft_stub(fixture: &ShellEnvFixture, script: &str) -> String {
@@ -366,6 +384,7 @@ fn replay_prefers_agent_when_socket_healthy() {
 #[test]
 fn replay_emits_single_agent_warning_and_retries_copydiff_on_enospc() {
     let fixture = ShellEnvFixture::new();
+    let trace = trace_path(&fixture);
     let cwd = fixture.home().join("workspace-agent-missing");
     fs::create_dir_all(&cwd).expect("failed to create replay cwd");
     let span_id = "span-agent-missing";
@@ -374,6 +393,9 @@ fn replay_emits_single_agent_warning_and_retries_copydiff_on_enospc() {
     let shim = EnospcShim::build();
     let xdg_runtime = fixture.home().join("xdg-runtime");
     let enospc_prefix = xdg_runtime.join("substrate/copydiff");
+    let missing_socket = fixture.home().join("missing-agent.sock");
+    let missing_socket_str = missing_socket.display().to_string();
+    let enospc_prefix_str = enospc_prefix.display().to_string();
 
     let mut cmd = replay_command(
         &fixture,
@@ -382,10 +404,7 @@ fn replay_emits_single_agent_warning_and_retries_copydiff_on_enospc() {
         &cwd,
         &path_override,
     );
-    cmd.env(
-        "SUBSTRATE_WORLD_SOCKET",
-        fixture.home().join("missing-agent.sock"),
-    );
+    cmd.env("SUBSTRATE_WORLD_SOCKET", &missing_socket);
     cmd.env("XDG_RUNTIME_DIR", &xdg_runtime);
     cmd.env("LD_PRELOAD", &shim.path);
     cmd.env("SUBSTRATE_ENOSPC_PREFIX", &enospc_prefix);
@@ -405,11 +424,142 @@ fn replay_emits_single_agent_warning_and_retries_copydiff_on_enospc() {
         "agent fallback warning should be emitted once: {stderr}"
     );
     assert!(
+        stderr.contains("substrate world doctor --json"),
+        "agent warning should include doctor guidance: {stderr}"
+    );
+    assert!(
+        stderr.contains("SUBSTRATE_WORLD_SOCKET"),
+        "agent warning should mention SUBSTRATE_WORLD_SOCKET override: {stderr}"
+    );
+    assert!(
         stderr.contains("copy-diff storage"),
         "copy-diff ENOSPC warning missing: {stderr}"
     );
     assert!(
         stderr.contains("ran out of space; retrying fallback location"),
         "copy-diff ENOSPC retry message missing: {stderr}"
+    );
+    assert!(
+        stderr.contains("[replay] copy-diff root:"),
+        "copy-diff root should be printed in verbose output: {stderr}"
+    );
+
+    let strategies = replay_strategy_entries(&trace);
+    assert!(
+        !strategies.is_empty(),
+        "expected replay_strategy entry in trace log"
+    );
+    let strategy = strategies.last().unwrap();
+    assert_eq!(
+        strategy.get("strategy").and_then(|value| value.as_str()),
+        Some("copy-diff"),
+        "expected copy-diff strategy when agent fallback triggered: {strategy:?}"
+    );
+    let fallback_reason = strategy
+        .get("fallback_reason")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+    assert!(
+        fallback_reason.contains("agent socket missing"),
+        "fallback_reason should mention missing agent socket: {fallback_reason}"
+    );
+    assert!(
+        fallback_reason.contains(&missing_socket_str),
+        "fallback_reason should include missing socket path ({fallback_reason})"
+    );
+    assert_eq!(
+        strategy
+            .get("agent_socket")
+            .and_then(|value| value.as_str()),
+        Some(missing_socket_str.as_str()),
+        "agent_socket should record missing socket path"
+    );
+    let copydiff_root = strategy
+        .get("copydiff_root")
+        .and_then(|value| value.as_str())
+        .expect("copydiff_root missing from replay_strategy");
+    let copydiff_root_source = strategy
+        .get("copydiff_root_source")
+        .and_then(|value| value.as_str())
+        .expect("copydiff_root_source missing from replay_strategy");
+    assert!(
+        stderr.contains(&format!("[replay] copy-diff root: {}", copydiff_root)),
+        "stderr should include the copy-diff root from telemetry ({copydiff_root}): {stderr}"
+    );
+    assert!(
+        stderr.contains(copydiff_root_source),
+        "stderr should include the copy-diff root source ({copydiff_root_source}): {stderr}"
+    );
+    assert!(
+        !copydiff_root.starts_with(&enospc_prefix_str),
+        "copy-diff should retry a different root after ENOSPC (got {copydiff_root})"
+    );
+}
+#[test]
+fn replay_logs_copydiff_override_root_and_telemetry() {
+    let fixture = ShellEnvFixture::new();
+    let trace = trace_path(&fixture);
+    let cwd = fixture.home().join("workspace-copydiff-override-with-env");
+    fs::create_dir_all(&cwd).expect("failed to create replay cwd");
+    let span_id = "span-copydiff-override";
+    let path_override = configure_nft_stub(&fixture, "#!/bin/sh\necho \"nft (test) v1\"\nexit 0\n");
+    let override_root = fixture.home().join("custom copydiff root");
+    let override_root_str = override_root.display().to_string();
+
+    let mut cmd = replay_command(
+        &fixture,
+        span_id,
+        "printf override-root > replay-copydiff-override.log",
+        &cwd,
+        &path_override,
+    );
+    cmd.env("SUBSTRATE_COPYDIFF_ROOT", &override_root);
+
+    let output = cmd.output().expect("failed to run replay command");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        if copydiff_unavailable(&stderr) {
+            eprintln!("skipping copy-diff override replay test: copy-diff unavailable\n{stderr}");
+            return;
+        }
+        panic!("replay command failed unexpectedly: {stderr}");
+    }
+
+    assert!(
+        stderr.contains(&format!(
+            "[replay] copy-diff root: {} (env:SUBSTRATE_COPYDIFF_ROOT)",
+            override_root.display()
+        )),
+        "copy-diff root line should reflect override path and source: {stderr}"
+    );
+    assert!(
+        !stderr.contains("copy-diff storage"),
+        "override root should not trigger copy-diff storage retries: {stderr}"
+    );
+
+    let strategies = replay_strategy_entries(&trace);
+    assert!(
+        !strategies.is_empty(),
+        "expected replay_strategy entry in trace log"
+    );
+    let strategy = strategies.last().unwrap();
+    assert_eq!(
+        strategy.get("strategy").and_then(|value| value.as_str()),
+        Some("copy-diff"),
+        "expected copy-diff strategy when override is provided: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("copydiff_root")
+            .and_then(|value| value.as_str()),
+        Some(override_root_str.as_str()),
+        "trace should record the override copy-diff root"
+    );
+    assert_eq!(
+        strategy
+            .get("copydiff_root_source")
+            .and_then(|value| value.as_str()),
+        Some("env:SUBSTRATE_COPYDIFF_ROOT"),
+        "trace should record the copy-diff root source"
     );
 }
