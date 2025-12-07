@@ -570,12 +570,13 @@ async fn try_agent_backend(
     timeout_secs: u64,
     verbose: bool,
 ) -> Result<Option<ExecutionResult>> {
-    if !std::path::Path::new("/run/substrate.sock").exists() {
-        warn_agent_fallback("agent socket missing".to_string());
+    let socket_path = agent_socket_path();
+    if !socket_path.exists() {
+        warn_agent_fallback(format!("agent socket missing ({})", socket_path.display()));
         return Ok(None);
     }
 
-    let client = match AgentClient::unix_socket("/run/substrate.sock") {
+    let client = match AgentClient::unix_socket(&socket_path) {
         Ok(client) => client,
         Err(err) => {
             warn_agent_fallback(format!("connect failed: {}", err));
@@ -655,4 +656,11 @@ fn warn_agent_fallback(reason: String) {
             reason
         );
     }
+}
+
+#[cfg(target_os = "linux")]
+fn agent_socket_path() -> std::path::PathBuf {
+    std::env::var_os("SUBSTRATE_WORLD_SOCKET")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("/run/substrate.sock"))
 }

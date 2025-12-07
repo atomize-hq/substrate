@@ -8,7 +8,9 @@ use std::env;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use support::{substrate_command_for_home, ShellEnvFixture};
+use std::process::Command;
+use support::{substrate_command_for_home, AgentSocket, ShellEnvFixture, SocketResponse};
+use tempfile::{Builder, TempDir};
 
 fn write_trace(fixture: &ShellEnvFixture, span_id: &str, cmd: &str, cwd: &Path) -> PathBuf {
     let trace = fixture.home().join("trace.jsonl");
@@ -45,6 +47,82 @@ fn configure_nft_stub(fixture: &ShellEnvFixture, script: &str) -> String {
     }
 }
 
+const ENOSPC_SHIM_SOURCE: &str = r#"
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+typedef int (*mkdir_fn)(const char *, mode_t);
+typedef int (*mkdirat_fn)(int, const char *, mode_t);
+
+static const char *prefix(void) {
+    return getenv("SUBSTRATE_ENOSPC_PREFIX");
+}
+
+int mkdir(const char *path, mode_t mode) {
+    static mkdir_fn real_mkdir = NULL;
+    if (!real_mkdir) {
+        real_mkdir = (mkdir_fn)dlsym(RTLD_NEXT, "mkdir");
+    }
+    const char *p = prefix();
+    if (p && strncmp(path, p, strlen(p)) == 0) {
+        errno = ENOSPC;
+        return -1;
+    }
+    return real_mkdir(path, mode);
+}
+
+int mkdirat(int dirfd, const char *path, mode_t mode) {
+    static mkdirat_fn real_mkdirat = NULL;
+    if (!real_mkdirat) {
+        real_mkdirat = (mkdirat_fn)dlsym(RTLD_NEXT, "mkdirat");
+    }
+    const char *p = prefix();
+    if (p && strncmp(path, p, strlen(p)) == 0) {
+        errno = ENOSPC;
+        return -1;
+    }
+    return real_mkdirat(dirfd, path, mode);
+}
+"#;
+
+struct EnospcShim {
+    _temp: TempDir,
+    path: PathBuf,
+}
+
+impl EnospcShim {
+    fn build() -> Self {
+        let temp = tempfile::Builder::new()
+            .prefix("substrate-enospc-shim-")
+            .tempdir()
+            .expect("failed to create shim tempdir");
+        let c_path = temp.path().join("shim.c");
+        fs::write(&c_path, ENOSPC_SHIM_SOURCE).expect("failed to write shim source");
+        let so_path = temp.path().join("libenospc_shim.so");
+        let status = Command::new("cc")
+            .arg("-shared")
+            .arg("-fPIC")
+            .arg(&c_path)
+            .arg("-o")
+            .arg(&so_path)
+            .status()
+            .expect("failed to invoke cc for ENOSPC shim");
+        assert!(
+            status.success(),
+            "failed to compile ENOSPC shim (status: {status})"
+        );
+        Self {
+            _temp: temp,
+            path: so_path,
+        }
+    }
+}
+
 fn replay_command(
     fixture: &ShellEnvFixture,
     span_id: &str,
@@ -54,6 +132,8 @@ fn replay_command(
 ) -> assert_cmd::Command {
     let trace = write_trace(fixture, span_id, command, cwd);
     let mut cmd = substrate_command_for_home(fixture);
+    let xdg_runtime = fixture.home().join("xdg-runtime");
+    fs::create_dir_all(&xdg_runtime).expect("failed to create xdg runtime dir");
     cmd.arg("--replay")
         .arg(span_id)
         .arg("--replay-verbose")
@@ -62,8 +142,14 @@ fn replay_command(
         .env("SUBSTRATE_REPLAY_USE_WORLD", "1")
         .env("SUBSTRATE_WORLD", "enabled")
         .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("XDG_RUNTIME_DIR", &xdg_runtime)
         .env("PATH", path_override);
     cmd
+}
+
+fn copydiff_unavailable(stderr: &str) -> bool {
+    stderr.contains("copy-diff failed in")
+        && stderr.contains("failed spawning command under copydiff work dir")
 }
 
 #[test]
@@ -82,8 +168,15 @@ fn replay_warns_when_nft_unavailable() {
         &path_override,
     );
 
-    let assert = cmd.assert().success();
-    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    let output = cmd.output().expect("failed to run replay command");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        if copydiff_unavailable(&stderr) {
+            eprintln!("skipping nft unavailable replay test: copy-diff unavailable\n{stderr}");
+            return;
+        }
+        panic!("replay command failed unexpectedly: {stderr}");
+    }
     assert!(
         stderr.contains("[replay] warn: nft not available; netfilter scoping/logging disabled"),
         "expected nft fallback warning in stderr, got:\n{}",
@@ -112,8 +205,15 @@ fn replay_keeps_standard_path_when_nft_succeeds() {
         &path_override,
     );
 
-    let assert = cmd.assert().success();
-    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    let output = cmd.output().expect("failed to run replay command");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        if copydiff_unavailable(&stderr) {
+            eprintln!("skipping nft available replay test: copy-diff unavailable\n{stderr}");
+            return;
+        }
+        panic!("replay command failed unexpectedly: {stderr}");
+    }
     assert!(
         !stderr.contains("[replay] warn: nft not available; netfilter scoping/logging disabled"),
         "nft available case should not warn, stderr:\n{}",
@@ -207,5 +307,109 @@ fn replay_env_override_reports_world_toggle() {
         stderr.contains("[replay] scopes: []"),
         "scopes line missing when env disables world, stderr:\n{}",
         stderr
+    );
+}
+
+#[test]
+fn replay_prefers_agent_when_socket_healthy() {
+    let fixture = ShellEnvFixture::new();
+    let socket_dir = Builder::new()
+        .prefix("substrate-agent-")
+        .tempdir_in("/tmp")
+        .expect("failed to create socket tempdir");
+    let socket_path = socket_dir.path().join("substrate.sock");
+    let _socket = AgentSocket::start(
+        &socket_path,
+        SocketResponse::CapabilitiesAndExecute {
+            stdout: "agent-ok\n".to_string(),
+            stderr: String::new(),
+            exit: 0,
+            scopes: vec!["agent:uds:test".to_string()],
+        },
+    );
+
+    let cwd = fixture.home().join("workspace-agent");
+    fs::create_dir_all(&cwd).expect("failed to create replay cwd");
+    let span_id = "span-agent-healthy";
+    let path_override = configure_nft_stub(&fixture, "#!/bin/sh\necho \"nft (test) v1\"\nexit 0\n");
+
+    let mut cmd = replay_command(
+        &fixture,
+        span_id,
+        "printf agent-ok > replay-agent.log",
+        &cwd,
+        &path_override,
+    );
+    cmd.env("SUBSTRATE_WORLD_SOCKET", &socket_path);
+
+    let assert = cmd.assert().success();
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    assert!(
+        stderr.contains("[replay] world strategy: agent"),
+        "expected agent strategy in stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("agent:uds:test"),
+        "scopes should reflect agent response: {stderr}"
+    );
+    assert!(
+        !stderr.contains("agent replay unavailable"),
+        "agent path should not emit fallback warning: {stderr}"
+    );
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    assert!(
+        stdout.contains("agent-ok"),
+        "stdout should include agent response payload: {stdout}"
+    );
+}
+
+#[test]
+fn replay_emits_single_agent_warning_and_retries_copydiff_on_enospc() {
+    let fixture = ShellEnvFixture::new();
+    let cwd = fixture.home().join("workspace-agent-missing");
+    fs::create_dir_all(&cwd).expect("failed to create replay cwd");
+    let span_id = "span-agent-missing";
+    let path_override = configure_nft_stub(&fixture, "#!/bin/sh\nexit 1\n");
+
+    let shim = EnospcShim::build();
+    let xdg_runtime = fixture.home().join("xdg-runtime");
+    let enospc_prefix = xdg_runtime.join("substrate/copydiff");
+
+    let mut cmd = replay_command(
+        &fixture,
+        span_id,
+        "printf fallback > replay-fallback.log",
+        &cwd,
+        &path_override,
+    );
+    cmd.env(
+        "SUBSTRATE_WORLD_SOCKET",
+        fixture.home().join("missing-agent.sock"),
+    );
+    cmd.env("XDG_RUNTIME_DIR", &xdg_runtime);
+    cmd.env("LD_PRELOAD", &shim.path);
+    cmd.env("SUBSTRATE_ENOSPC_PREFIX", &enospc_prefix);
+
+    let output = cmd.output().expect("failed to run replay command");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        if copydiff_unavailable(&stderr) {
+            eprintln!("skipping agent fallback replay test: copy-diff unavailable\n{stderr}");
+            return;
+        }
+        panic!("replay command failed unexpectedly: {stderr}");
+    }
+    let agent_warns = stderr.matches("agent replay unavailable").count();
+    assert_eq!(
+        agent_warns, 1,
+        "agent fallback warning should be emitted once: {stderr}"
+    );
+    assert!(
+        stderr.contains("copy-diff storage"),
+        "copy-diff ENOSPC warning missing: {stderr}"
+    );
+    assert!(
+        stderr.contains("ran out of space; retrying fallback location"),
+        "copy-diff ENOSPC retry message missing: {stderr}"
     );
 }

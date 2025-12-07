@@ -1,10 +1,43 @@
 #![cfg(unix)]
 //! Integration tests for Replay module
 
+use std::collections::HashMap;
+use std::env;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use substrate_replay::{find_spans_to_replay, replay_batch, replay_span, ReplayConfig, SpanFilter};
 use tempfile::NamedTempFile;
 use tokio::io::AsyncWriteExt;
+
+static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+struct EnvGuard {
+    vars: Vec<(String, Option<String>)>,
+}
+
+impl EnvGuard {
+    fn set(vars: &[(&str, &str)]) -> Self {
+        let mut captured = Vec::new();
+        for (key, value) in vars {
+            let prev = env::var(key).ok();
+            env::set_var(key, value);
+            captured.push((key.to_string(), prev));
+        }
+        Self { vars: captured }
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        for (key, value) in self.vars.drain(..) {
+            if let Some(v) = value {
+                env::set_var(&key, v);
+            } else {
+                env::remove_var(&key);
+            }
+        }
+    }
+}
 
 /// Test creating and replaying a simple trace
 #[tokio::test]
@@ -196,4 +229,94 @@ async fn test_env_reconstruction() {
         exec_state.env.get("SUBSTRATE_REPLAY"),
         Some(&"1".to_string())
     );
+}
+
+#[test]
+fn reconstruct_state_preserves_caged_anchor_env() {
+    use chrono::Utc;
+    use substrate_replay::state::{reconstruct_state, TraceSpan};
+
+    let _env_lock = ENV_LOCK.lock().unwrap();
+    let _guard = EnvGuard::set(&[
+        ("SUBSTRATE_ANCHOR_MODE", "custom"),
+        ("SUBSTRATE_WORLD_ROOT_MODE", "custom"),
+        ("SUBSTRATE_ANCHOR_PATH", "/opt/caged-root"),
+        ("SUBSTRATE_WORLD_ROOT_PATH", "/opt/caged-root"),
+        ("SUBSTRATE_CAGED", "1"),
+    ]);
+
+    let span = TraceSpan {
+        ts: Utc::now(),
+        event_type: "command_complete".to_string(),
+        span_id: "span-caged".to_string(),
+        session_id: "session-caged".to_string(),
+        component: "shell".to_string(),
+        cmd: "pwd".to_string(),
+        cwd: Some(PathBuf::from("/opt/caged-root/workdir")),
+        exit_code: Some(0),
+        duration_ms: Some(5),
+        policy_decision: None,
+        fs_diff: None,
+        scopes_used: None,
+        replay_context: None,
+        stdout: None,
+        stderr: None,
+        env_hash: None,
+    };
+
+    let exec_state = reconstruct_state(&span, &HashMap::new()).unwrap();
+    assert_eq!(
+        exec_state.env.get("SUBSTRATE_ANCHOR_PATH"),
+        Some(&"/opt/caged-root".to_string())
+    );
+    assert_eq!(
+        exec_state.env.get("SUBSTRATE_CAGED"),
+        Some(&"1".to_string())
+    );
+    assert_eq!(exec_state.cwd, PathBuf::from("/opt/caged-root/workdir"));
+}
+
+#[test]
+fn reconstruct_state_preserves_uncaged_anchor_env() {
+    use chrono::Utc;
+    use substrate_replay::state::{reconstruct_state, TraceSpan};
+
+    let _env_lock = ENV_LOCK.lock().unwrap();
+    let _guard = EnvGuard::set(&[
+        ("SUBSTRATE_ANCHOR_MODE", "project"),
+        ("SUBSTRATE_WORLD_ROOT_MODE", "project"),
+        ("SUBSTRATE_ANCHOR_PATH", "/srv/project"),
+        ("SUBSTRATE_WORLD_ROOT_PATH", "/srv/project"),
+        ("SUBSTRATE_CAGED", "0"),
+    ]);
+
+    let span = TraceSpan {
+        ts: Utc::now(),
+        event_type: "command_complete".to_string(),
+        span_id: "span-uncaged".to_string(),
+        session_id: "session-uncaged".to_string(),
+        component: "shell".to_string(),
+        cmd: "pwd".to_string(),
+        cwd: Some(PathBuf::from("/srv/project/app")),
+        exit_code: Some(0),
+        duration_ms: Some(5),
+        policy_decision: None,
+        fs_diff: None,
+        scopes_used: None,
+        replay_context: None,
+        stdout: None,
+        stderr: None,
+        env_hash: None,
+    };
+
+    let exec_state = reconstruct_state(&span, &HashMap::new()).unwrap();
+    assert_eq!(
+        exec_state.env.get("SUBSTRATE_ANCHOR_MODE"),
+        Some(&"project".to_string())
+    );
+    assert_eq!(
+        exec_state.env.get("SUBSTRATE_CAGED"),
+        Some(&"0".to_string())
+    );
+    assert_eq!(exec_state.cwd, PathBuf::from("/srv/project/app"));
 }
