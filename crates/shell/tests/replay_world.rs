@@ -47,6 +47,10 @@ fn replay_strategy_entries(trace_path: &Path) -> Vec<Value> {
         .collect()
 }
 
+fn latest_replay_strategy(trace_path: &Path) -> Option<Value> {
+    replay_strategy_entries(trace_path).last().cloned()
+}
+
 fn configure_nft_stub(fixture: &ShellEnvFixture, script: &str) -> String {
     let bin_dir = fixture.home().join("bin");
     fs::create_dir_all(&bin_dir).expect("failed to create stub bin dir");
@@ -251,6 +255,7 @@ fn replay_no_world_flag_reports_world_toggle() {
     fs::create_dir_all(&cwd).expect("failed to create replay cwd");
     let span_id = "span-no-world-flag";
     let path_override = configure_nft_stub(&fixture, "#!/bin/sh\nexit 1\n");
+    let missing_socket = fixture.home().join("missing-agent-no-world.sock");
 
     let mut cmd = replay_command(
         &fixture,
@@ -260,6 +265,7 @@ fn replay_no_world_flag_reports_world_toggle() {
         &path_override,
     );
     cmd.arg("--no-world");
+    cmd.env("SUBSTRATE_WORLD_SOCKET", &missing_socket);
 
     let assert = cmd.assert().success();
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
@@ -279,6 +285,14 @@ fn replay_no_world_flag_reports_world_toggle() {
         stderr
     );
     assert!(
+        !stderr.contains("agent replay unavailable"),
+        "no-world flag should skip agent socket warnings even when a socket path is set: {stderr}"
+    );
+    assert!(
+        !stderr.contains("copy-diff root"),
+        "no-world flag should skip copy-diff fallback lines: {stderr}"
+    );
+    assert!(
         stderr.contains("[replay] scopes: []"),
         "scopes line missing for no-world flag run, stderr:\n{}",
         stderr
@@ -292,6 +306,7 @@ fn replay_env_override_reports_world_toggle() {
     fs::create_dir_all(&cwd).expect("failed to create replay cwd");
     let span_id = "span-no-world-env";
     let path_override = configure_nft_stub(&fixture, "#!/bin/sh\nexit 1\n");
+    let missing_socket = fixture.home().join("missing-agent-no-world-env.sock");
 
     let mut cmd = replay_command(
         &fixture,
@@ -301,6 +316,7 @@ fn replay_env_override_reports_world_toggle() {
         &path_override,
     );
     cmd.env("SUBSTRATE_REPLAY_USE_WORLD", "disabled");
+    cmd.env("SUBSTRATE_WORLD_SOCKET", &missing_socket);
 
     let assert = cmd.assert().success();
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
@@ -322,6 +338,14 @@ fn replay_env_override_reports_world_toggle() {
         stderr
     );
     assert!(
+        !stderr.contains("agent replay unavailable"),
+        "env disable should skip agent socket warnings even when a socket path is set: {stderr}"
+    );
+    assert!(
+        !stderr.contains("copy-diff root"),
+        "env disable should skip copy-diff fallback lines: {stderr}"
+    );
+    assert!(
         stderr.contains("[replay] scopes: []"),
         "scopes line missing when env disables world, stderr:\n{}",
         stderr
@@ -336,6 +360,7 @@ fn replay_prefers_agent_when_socket_healthy() {
         .tempdir_in("/tmp")
         .expect("failed to create socket tempdir");
     let socket_path = socket_dir.path().join("substrate.sock");
+    let socket_str = socket_path.display().to_string();
     let _socket = AgentSocket::start(
         &socket_path,
         SocketResponse::CapabilitiesAndExecute {
@@ -346,10 +371,12 @@ fn replay_prefers_agent_when_socket_healthy() {
         },
     );
 
-    let cwd = fixture.home().join("workspace-agent");
+    let anchor_root = fixture.home().join("caged-root");
+    let cwd = anchor_root.join("workspace-agent");
     fs::create_dir_all(&cwd).expect("failed to create replay cwd");
     let span_id = "span-agent-healthy";
     let path_override = configure_nft_stub(&fixture, "#!/bin/sh\necho \"nft (test) v1\"\nexit 0\n");
+    let anchor_root_str = anchor_root.display().to_string();
 
     let mut cmd = replay_command(
         &fixture,
@@ -359,25 +386,60 @@ fn replay_prefers_agent_when_socket_healthy() {
         &path_override,
     );
     cmd.env("SUBSTRATE_WORLD_SOCKET", &socket_path);
+    cmd.env("SUBSTRATE_ANCHOR_MODE", "custom");
+    cmd.env("SUBSTRATE_WORLD_ROOT_MODE", "custom");
+    cmd.env("SUBSTRATE_ANCHOR_PATH", &anchor_root);
+    cmd.env("SUBSTRATE_WORLD_ROOT_PATH", &anchor_root);
+    cmd.env("SUBSTRATE_CAGED", "1");
 
     let assert = cmd.assert().success();
-    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    let output = assert.get_output();
+    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("[replay] world strategy: agent"),
-        "expected agent strategy in stderr: {stderr}"
+        stderr.contains(&format!(
+            "[replay] world strategy: agent (project_dir={})",
+            anchor_root.display()
+        )),
+        "expected agent strategy and project dir in stderr: {stderr}"
     );
     assert!(
-        stderr.contains("agent:uds:test"),
-        "scopes should reflect agent response: {stderr}"
+        stderr.contains("[replay] scopes: [agent:uds:test]"),
+        "scopes should reflect agent response in verbose output: {stderr}"
     );
     assert!(
         !stderr.contains("agent replay unavailable"),
         "agent path should not emit fallback warning: {stderr}"
     );
-    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
         stdout.contains("agent-ok"),
         "stdout should include agent response payload: {stdout}"
+    );
+
+    let Some(strategy) = latest_replay_strategy(&trace_path(&fixture)) else {
+        eprintln!("skipping agent strategy assertions: no replay_strategy entries written");
+        return;
+    };
+    assert_eq!(
+        strategy.get("strategy").and_then(|value| value.as_str()),
+        Some("agent"),
+        "expected agent replay_strategy entry: {strategy:?}"
+    );
+    assert_eq!(
+        strategy.get("project_dir").and_then(|value| value.as_str()),
+        Some(anchor_root_str.as_str()),
+        "project_dir should reflect caged anchor: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("agent_socket")
+            .and_then(|value| value.as_str()),
+        Some(socket_str.as_str()),
+        "agent socket should be recorded in replay_strategy: {strategy:?}"
+    );
+    assert!(
+        strategy.get("fallback_reason").is_none(),
+        "agent path should not record a fallback_reason: {strategy:?}"
     );
 }
 
@@ -387,13 +449,15 @@ fn replay_emits_single_agent_warning_and_retries_copydiff_on_enospc() {
     let trace = trace_path(&fixture);
     let cwd = fixture.home().join("workspace-agent-missing");
     fs::create_dir_all(&cwd).expect("failed to create replay cwd");
+    let cwd_str = cwd.display().to_string();
     let span_id = "span-agent-missing";
     let path_override = configure_nft_stub(&fixture, "#!/bin/sh\nexit 1\n");
 
     let shim = EnospcShim::build();
     let xdg_runtime = fixture.home().join("xdg-runtime");
     let enospc_prefix = xdg_runtime.join("substrate/copydiff");
-    let missing_socket = fixture.home().join("missing-agent.sock");
+    let missing_socket = PathBuf::from("/tmp/substrate-missing-agent.sock");
+    let _ = fs::remove_file(&missing_socket);
     let missing_socket_str = missing_socket.display().to_string();
     let enospc_prefix_str = enospc_prefix.display().to_string();
 
@@ -451,6 +515,11 @@ fn replay_emits_single_agent_warning_and_retries_copydiff_on_enospc() {
     );
     let strategy = strategies.last().unwrap();
     assert_eq!(
+        strategy.get("project_dir").and_then(|value| value.as_str()),
+        Some(cwd_str.as_str()),
+        "project_dir should match uncaged cwd: {strategy:?}"
+    );
+    assert_eq!(
         strategy.get("strategy").and_then(|value| value.as_str()),
         Some("copy-diff"),
         "expected copy-diff strategy when agent fallback triggered: {strategy:?}"
@@ -495,6 +564,84 @@ fn replay_emits_single_agent_warning_and_retries_copydiff_on_enospc() {
         "copy-diff should retry a different root after ENOSPC (got {copydiff_root})"
     );
 }
+
+#[test]
+fn replay_agent_fallback_uses_caged_project_dir() {
+    let fixture = ShellEnvFixture::new();
+    let anchor_root = fixture.home().join("caged-root");
+    let cwd = anchor_root.join("workspace-caged");
+    fs::create_dir_all(&cwd).expect("failed to create replay cwd");
+    let span_id = "span-agent-missing-caged";
+    let path_override = configure_nft_stub(&fixture, "#!/bin/sh\nexit 1\n");
+    let missing_socket = PathBuf::from("/tmp/substrate-missing-agent.sock");
+    let _ = fs::remove_file(&missing_socket);
+    let missing_socket_str = missing_socket.display().to_string();
+    let anchor_root_str = anchor_root.display().to_string();
+
+    let mut cmd = replay_command(
+        &fixture,
+        span_id,
+        "printf fallback-caged > replay-fallback-caged.log",
+        &cwd,
+        &path_override,
+    );
+    cmd.env("SUBSTRATE_WORLD_SOCKET", &missing_socket);
+    cmd.env("SUBSTRATE_ANCHOR_MODE", "custom");
+    cmd.env("SUBSTRATE_WORLD_ROOT_MODE", "custom");
+    cmd.env("SUBSTRATE_ANCHOR_PATH", &anchor_root);
+    cmd.env("SUBSTRATE_WORLD_ROOT_PATH", &anchor_root);
+    cmd.env("SUBSTRATE_CAGED", "1");
+
+    let output = cmd.output().expect("failed to run replay command");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        if copydiff_unavailable(&stderr) {
+            eprintln!("skipping caged agent fallback replay test: copy-diff unavailable\n{stderr}");
+            return;
+        }
+        panic!("replay command failed unexpectedly: {stderr}");
+    }
+
+    let agent_warns = stderr.matches("agent replay unavailable").count();
+    assert_eq!(
+        agent_warns, 1,
+        "agent fallback warning should be emitted once: {stderr}"
+    );
+    assert!(
+        stderr.contains("[replay] copy-diff root:"),
+        "copy-diff root should be printed after agent fallback: {stderr}"
+    );
+
+    let Some(strategy) = latest_replay_strategy(&trace_path(&fixture)) else {
+        eprintln!("skipping caged agent strategy assertions: no replay_strategy entries written");
+        return;
+    };
+    let fallback_reason = strategy
+        .get("fallback_reason")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+    assert!(
+        fallback_reason.contains("agent socket missing"),
+        "fallback reason should mention missing socket: {strategy:?}"
+    );
+    assert!(
+        fallback_reason.contains(&missing_socket_str),
+        "fallback reason should include missing socket path: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("agent_socket")
+            .and_then(|value| value.as_str()),
+        Some(missing_socket_str.as_str()),
+        "agent socket path should be recorded: {strategy:?}"
+    );
+    assert_eq!(
+        strategy.get("project_dir").and_then(|value| value.as_str()),
+        Some(anchor_root_str.as_str()),
+        "project_dir should reflect the caged anchor root: {strategy:?}"
+    );
+}
+
 #[test]
 fn replay_logs_copydiff_override_root_and_telemetry() {
     let fixture = ShellEnvFixture::new();
