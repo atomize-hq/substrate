@@ -96,3 +96,48 @@ pub(crate) fn handle_world_command(cmd: &WorldCmd, cli: &Cli) -> Result<()> {
 pub(crate) fn handle_health_command(cmd: &HealthCmd, cli: &Cli) -> Result<()> {
     commands::health::run(cmd.json, cli.no_world, cli.world)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn world_enable_exports_policy_fs_mode() {
+        let _ = substrate_broker::set_global_broker(substrate_broker::BrokerHandle::new());
+
+        let temp = tempdir().expect("tempdir");
+        let policy_path = temp.path().join("policy.yaml");
+        let mut policy = substrate_broker::Policy::default();
+        policy.world_fs_mode = substrate_common::WorldFsMode::ReadOnly;
+        fs::write(&policy_path, serde_yaml::to_string(&policy).unwrap()).expect("write policy");
+
+        substrate_broker::reload_policy(&policy_path).expect("load policy");
+
+        let prev_world = env::var("SUBSTRATE_WORLD").ok();
+        let prev_enabled = env::var("SUBSTRATE_WORLD_ENABLED").ok();
+        let prev_fs_mode = env::var("SUBSTRATE_WORLD_FS_MODE").ok();
+
+        update_world_env(false);
+
+        assert_eq!(
+            env::var("SUBSTRATE_WORLD_FS_MODE").as_deref(),
+            Ok("read_only"),
+            "policy-driven fs mode should be exported for downstream consumers"
+        );
+
+        match prev_world {
+            Some(value) => env::set_var("SUBSTRATE_WORLD", value),
+            None => env::remove_var("SUBSTRATE_WORLD"),
+        }
+        match prev_enabled {
+            Some(value) => env::set_var("SUBSTRATE_WORLD_ENABLED", value),
+            None => env::remove_var("SUBSTRATE_WORLD_ENABLED"),
+        }
+        match prev_fs_mode {
+            Some(value) => env::set_var("SUBSTRATE_WORLD_FS_MODE", value),
+            None => env::remove_var("SUBSTRATE_WORLD_FS_MODE"),
+        }
+    }
+}
