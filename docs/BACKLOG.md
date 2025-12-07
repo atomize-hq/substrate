@@ -26,6 +26,11 @@ Keep concise, actionable, and security-focused.
   - `substrate health` currently reports “attention required” whenever optional manager detection hooks (direnv, asdf, conda, etc.) aren’t found on the host, even though the host never had them. We only care when the world and host detection disagree (host has a manager, world doesn’t), not when both sides are missing a manager entirely.
   - Fix: adjust health summary logic to only flag mismatches when the host reports a manager and the world fails to mirror it. Missing managers that the host doesn’t have should not trigger an “attention required” status.
 
+- **P1 – Policy-driven world fs mode**
+  - Problem: write permissions inside worlds currently depend on systemd hardening + overlay success, not on broker policy. Sensitive repos need a policy bit to force read-only worlds while other projects remain writable, without editing unit files manually.
+  - Work: extend broker schema to accept `world.fs_mode = read_only|writable` (global + per-project), plumb into shell/world-agent so PTY + non-PTY sessions honor it, and update docs/doctor to surface the active mode. Systemd units must allow `/home` writes so policy can enforce RO vs writable deterministically.
+  - Acceptance: policy defaults to writable; flipping to read-only blocks writes (clear errors, trace telemetry); installers/docs explain the knob and tests cover both modes (with skip notes for hosts lacking overlay/cgroup permissions).
+
 - **P1 fs_diff parity (agent HTTP + PTY)**
   - *Agent HTTP path:* Today only replay/local backends attach `fs_diff`; agent-routed non-PTY commands drop the diff. Extend `agent-api-types::ExecuteResponse` / `world-agent` so `/v1/execute` returns `fs_diff: Option<FsDiff>` and update the shell to record it in completion spans. Acceptance: `fs_diff` shows up in `trace.jsonl` for agent HTTP runs.
   - *PTY sessions:* Interactive runs still lack filesystem diffs. Explore capturing post-exit diffs via overlayfs/copydiff and plumb the result through the PTY telemetry path so REPL + `substrate -i` sessions produce the same audit artifacts as non-PTY commands. Document caveats (long-running PTYs, partial diffs) and add tests to prove PTY diffs land in spans.
@@ -273,4 +278,3 @@ Risks / considerations
   - Implemented `world-mac-lima` agent calls via `agent-api-client` with VSock/SSH fallbacks.
   - Shell now routes macOS commands through Lima, ensures VM/forwarding, and mirrors Linux telemetry.
   - Acceptance met: `scripts/mac/smoke.sh` validates non-PTY, PTY, and replay; docs refreshed (`docs/WORLD.md`, `docs/dev/mac_world_setup.md`, `docs/INSTALLATION.md`).
-
