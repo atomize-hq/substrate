@@ -601,3 +601,11 @@ Template:
 - Results: fmt pass; replay tests pass; shell replay_world passes with logged skips when copy-diff cannot spawn work dirs on this host (agent fallback + nft cases note copy-diff failures)
 - Scripts: compiled temporary LD_PRELOAD ENOSPC shim inside test; no manual `substrate --replay` runs
 - Notes: Agent socket tests use stubbed capabilities/execute server; warnings include host limitations (netns/cgroup/overlay/copydiff)
+
+## [2025-12-07 17:51 UTC] Integration Agent – R2a-integ – START
+- Checked out feat/p0-platform-stability-follow-up after FS recovery; `git pull --ff-only` up to date
+- Confirmed R2a-code/test re-applied (676b2f9, 5c01371)
+- Updated tasks.json (`R2a-integ` → `in_progress`); doc commit pending
+- Worktree setup pending (`ps-r2a-replay-agent-integ` → `wt/ps-r2a-replay-agent-integ`)
+- Plan: merge code/test branches, fix clippy regressions, run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-replay -- --nocapture`, `cargo test -p substrate-shell replay_world`, then update docs/logs and fast-forward base
+- Blockers: host lacks provisioned agent socket; manual `substrate --replay` smoke likely skipped
