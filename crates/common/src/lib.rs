@@ -15,7 +15,7 @@ pub use manager_manifest::{
     DetectSpec, GuestSpec, InitSpec, InstallSpec, ManagerManifest, ManagerSpec, Platform,
     RegexPattern,
 };
-pub use settings::WorldRootMode;
+pub use settings::{WorldFsMode, WorldRootMode};
 pub use world_deps_manifest::{
     WorldDepDetectSpec, WorldDepInstallRecipe, WorldDepTool, WorldDepsManifest,
 };
@@ -44,7 +44,7 @@ pub mod prelude {
         RegexPattern,
     };
     pub use crate::paths;
-    pub use crate::settings::WorldRootMode;
+    pub use crate::settings::{WorldFsMode, WorldRootMode};
     pub use crate::world_deps_manifest::{
         WorldDepDetectSpec, WorldDepInstallRecipe, WorldDepTool, WorldDepsManifest,
     };

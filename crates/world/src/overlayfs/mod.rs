@@ -80,6 +80,31 @@ impl OverlayFs {
         }
     }
 
+    /// Mount the overlayfs in read-only mode (no upper/copy-diff layer).
+    pub fn mount_read_only(
+        &mut self,
+        #[allow(unused_variables)] lower_dir: &Path,
+    ) -> Result<PathBuf> {
+        if self.is_mounted {
+            return Ok(self.merged_dir.clone());
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            std::fs::create_dir_all(&self.overlay_dir)?;
+            std::fs::create_dir_all(&self.merged_dir)?;
+            self.lower_dir = Some(lower_dir.to_path_buf());
+            layering::mount_linux_read_only(self, lower_dir)?;
+            self.is_mounted = true;
+            Ok(self.merged_dir.clone())
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            anyhow::bail!("Overlayfs is only supported on Linux");
+        }
+    }
+
     /// Unmount the overlayfs.
     pub fn unmount(&mut self) -> Result<()> {
         if !self.is_mounted {
@@ -195,6 +220,40 @@ pub fn execute_with_overlay(
     overlay.cleanup()?;
 
     Ok((output, diff))
+}
+
+/// Execute a command against a read-only overlay mount so writes fail.
+pub fn execute_read_only(
+    world_id: &str,
+    cmd: &str,
+    project_dir: &Path,
+    cwd: &Path,
+    env: &std::collections::HashMap<String, String>,
+) -> Result<(std::process::Output, FsDiff)> {
+    let mut overlay = OverlayFs::new(world_id)?;
+    let merged_dir = overlay.mount_read_only(project_dir)?;
+
+    let mut rel = if cwd.starts_with(project_dir) {
+        cwd.strip_prefix(project_dir)
+            .unwrap_or_else(|_| Path::new("."))
+            .to_path_buf()
+    } else {
+        PathBuf::from(".")
+    };
+    if rel.as_os_str().is_empty() {
+        rel = PathBuf::from(".");
+    }
+    let target_dir = merged_dir.join(&rel);
+    let mut command_to_run = cmd.to_string();
+    if should_guard_anchor(env) {
+        command_to_run = wrap_with_anchor_guard(cmd, &merged_dir);
+    }
+    let output = crate::exec::execute_shell_command(&command_to_run, &target_dir, env, true)
+        .context("Failed to execute command in read-only overlay")?;
+
+    overlay.cleanup()?;
+
+    Ok((output, FsDiff::default()))
 }
 
 #[cfg(test)]

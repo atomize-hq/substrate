@@ -12,7 +12,7 @@ mod watcher;
 
 pub use api::{
     allowed_domains, detect_profile, evaluate, init, quick_check, reload_policy, set_global_broker,
-    set_observe_only,
+    set_observe_only, world_fs_mode,
 };
 pub use approval::{ApprovalCache, ApprovalContext, ApprovalStatus};
 pub use broker::Broker;

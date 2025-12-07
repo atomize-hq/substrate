@@ -1,4 +1,5 @@
 use serde_json::json;
+use substrate_broker::world_fs_mode;
 
 pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
     world_doctor_macos::run(json_mode, &world_doctor_macos::SystemRunner)
@@ -40,6 +41,7 @@ mod world_doctor_macos {
         let mut ok = true;
 
         let mut lima_info = LimaInfo::default();
+        let fs_mode = world_fs_mode();
 
         let pass = |msg: &str| println!("PASS  | {}", msg);
         let warn = |msg: &str| println!("WARN  | {}", msg);
@@ -79,6 +81,7 @@ mod world_doctor_macos {
             } else {
                 warn("vsock-proxy: not found (SSH forwarding will be used)");
             }
+            info(&format!("world_fs_mode: {}", fs_mode.as_str()));
         }
 
         // VM checks
@@ -260,6 +263,7 @@ mod world_doctor_macos {
             let out = json!({
                 "platform": "macos",
                 "lima": lima,
+                "world_fs_mode": fs_mode.as_str(),
                 "ok": ok,
             });
             println!("{}", serde_json::to_string_pretty(&out).unwrap());

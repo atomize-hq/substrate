@@ -2,6 +2,7 @@ use super::cli::{Cli, HealthCmd, WorldAction, WorldCmd};
 use crate::builtins as commands;
 use anyhow::Result;
 use std::env;
+use substrate_broker::world_fs_mode;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -30,8 +31,10 @@ use windows::world_doctor_main;
 ))]
 mod fallback {
     use serde_json::json;
+    use substrate_broker::world_fs_mode;
 
     pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
+        let fs_mode = world_fs_mode();
         if json_mode {
             let out = json!({
                 "platform": std::env::consts::OS,
@@ -42,6 +45,7 @@ mod fallback {
                 "dmesg_restrict": serde_json::Value::Null,
                 "overlay_root": serde_json::Value::Null,
                 "copydiff_root": serde_json::Value::Null,
+                "world_fs_mode": fs_mode.as_str(),
                 "ok": true
             });
             println!("{}", serde_json::to_string_pretty(&out).unwrap());
@@ -52,6 +56,7 @@ mod fallback {
             println!("cgroup v2: N/A");
             println!("nft: N/A");
             println!("dmesg_restrict: N/A");
+            println!("world_fs_mode: {}", fs_mode.as_str());
         }
         0
     }
@@ -65,6 +70,8 @@ pub(crate) fn update_world_env(no_world: bool) {
         env::set_var("SUBSTRATE_WORLD_ENABLED", "1");
         env::set_var("SUBSTRATE_WORLD", "enabled");
     }
+    let fs_mode = world_fs_mode();
+    env::set_var("SUBSTRATE_WORLD_FS_MODE", fs_mode.as_str());
 }
 
 pub(crate) fn handle_world_command(cmd: &WorldCmd, cli: &Cli) -> Result<()> {

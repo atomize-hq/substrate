@@ -107,6 +107,46 @@ pub(crate) fn mount_linux(overlay: &mut OverlayFs, lower_dir: &Path) -> Result<(
 }
 
 #[cfg(target_os = "linux")]
+pub(crate) fn mount_linux_read_only(overlay: &mut OverlayFs, lower_dir: &Path) -> Result<()> {
+    use nix::mount::{mount, umount2, MntFlags, MsFlags};
+
+    let bind_lower = overlay.overlay_dir.join("lower");
+    std::fs::create_dir_all(&bind_lower)?;
+    let _ = umount2(&bind_lower, MntFlags::MNT_DETACH);
+    mount(
+        Some(lower_dir),
+        &bind_lower,
+        None::<&str>,
+        MsFlags::MS_BIND,
+        None::<&str>,
+    )
+    .with_context(|| {
+        format!(
+            "Failed to bind-mount lower {} -> {}",
+            lower_dir.display(),
+            bind_lower.display()
+        )
+    })?;
+
+    let options = format!("lowerdir={}", bind_lower.display());
+    mount(
+        Some("overlay"),
+        &overlay.merged_dir,
+        Some("overlay"),
+        MsFlags::MS_RDONLY,
+        Some(options.as_bytes()),
+    )
+    .with_context(|| {
+        format!(
+            "Failed to mount read-only overlayfs on {}",
+            overlay.merged_dir.display()
+        )
+    })?;
+    overlay.bind_lower_dir = Some(bind_lower);
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
 pub(crate) fn mount_fuse_only(overlay: &mut OverlayFs, lower_dir: &Path) -> Result<()> {
     use nix::mount::{mount, umount2, MntFlags, MsFlags};
     use std::thread::sleep;

@@ -204,6 +204,7 @@ async fn try_world_backend(
             allowed_domains: substrate_broker::allowed_domains(),
             project_dir: project_dir.to_path_buf(),
             always_isolate: true,
+            fs_mode: substrate_broker::world_fs_mode(),
         };
         match backend.ensure_session(&spec) {
             Ok(handle) => {
@@ -801,6 +802,7 @@ async fn try_agent_backend(
         pty: false,
         agent_id: std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "replay".to_string()),
         budget: None,
+        world_fs_mode: Some(substrate_broker::world_fs_mode()),
     };
 
     let start = Instant::now();

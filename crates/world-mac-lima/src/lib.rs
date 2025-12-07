@@ -5,7 +5,7 @@
 //! by running a Linux VM via Lima and delegating to the world-agent inside.
 
 use agent_api_client::AgentClient;
-use agent_api_types::{ExecuteRequest, ExecuteResponse};
+use agent_api_types::{ExecuteRequest, ExecuteResponse, WorldFsMode};
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -255,6 +255,7 @@ impl MacLimaBackend {
             pty: req.pty,
             agent_id: "world-mac-lima".to_string(),
             budget: None,
+            world_fs_mode: Some(self.resolve_fs_mode()),
         }
     }
 
@@ -274,6 +275,13 @@ impl MacLimaBackend {
             scopes_used: resp.scopes_used,
             fs_diff: resp.fs_diff,
         }
+    }
+
+    fn resolve_fs_mode(&self) -> WorldFsMode {
+        std::env::var("SUBSTRATE_WORLD_FS_MODE")
+            .ok()
+            .and_then(|value| WorldFsMode::parse(&value))
+            .unwrap_or(WorldFsMode::Writable)
     }
 
     /// Build an AgentClient based on current forwarding.

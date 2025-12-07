@@ -170,6 +170,7 @@ impl TraceContext {
             anchor_path: env::var("SUBSTRATE_ANCHOR_PATH").ok(),
             world_root_mode: env::var("SUBSTRATE_WORLD_ROOT_MODE").ok(),
             world_root_path: env::var("SUBSTRATE_WORLD_ROOT_PATH").ok(),
+            world_fs_mode: env::var("SUBSTRATE_WORLD_FS_MODE").ok(),
             caged: env::var("SUBSTRATE_CAGED")
                 .ok()
                 .and_then(|value| match value.as_str() {

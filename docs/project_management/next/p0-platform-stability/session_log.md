@@ -768,3 +768,9 @@ Template:
 - Scripts executed: n/a
 - Docs/status: tasks.json marked R2d-integ completed; START/END entries recorded (reapply)
 - Next steps / blockers: fast-forward feat/p0-platform-stability-follow-up, commit docs (`docs: finish R2d-integ`), remove worktree
+
+## [2025-12-08 13:00 UTC] Code Agent – R2e-code – START (reapply)
+- Checked out `feat/p0-platform-stability-follow-up`, branch/worktree `ps-r2e-world-fs-code` (`wt/ps-r2e-world-fs-code`) already in place
+- Read p0 plan, tasks.json, session_log; set `R2e-code` → `in_progress` (tasks.json updated)
+- Scope: reapply policy-driven world fs mode (read_only vs writable) across broker/shell/world-agent/backends and docs; run fmt/clippy/tests per prompt
+- Blockers: none noted (host still lacks overlay/cgroup/netns, so read-only mount behavior tested best-effort)

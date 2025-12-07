@@ -5,6 +5,7 @@ use agent_api_client::{AgentClient, Transport};
 use anyhow::Result;
 use std::path::PathBuf;
 use std::sync::{Arc, Once, OnceLock};
+use substrate_broker::world_fs_mode;
 use world_api::{ResourceLimits, WorldBackend, WorldSpec};
 use world_windows_wsl::WindowsWslBackend;
 
@@ -96,6 +97,7 @@ pub fn world_spec() -> WorldSpec {
         allowed_domains: substrate_broker::allowed_domains(),
         project_dir: settings::world_root_from_env().path,
         always_isolate: false,
+        fs_mode: world_fs_mode(),
     }
 }
 

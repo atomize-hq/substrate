@@ -54,7 +54,7 @@ fn init_windows_world(config: &ShellConfig) {
 
 #[cfg(target_os = "macos")]
 fn init_macos_world(config: &ShellConfig) {
-    use substrate_broker::allowed_domains;
+    use substrate_broker::{allowed_domains, world_fs_mode};
     use world_api::{ResourceLimits, WorldSpec};
 
     if world_disabled(config) {
@@ -79,6 +79,7 @@ fn init_macos_world(config: &ShellConfig) {
                     allowed_domains: allowed_domains(),
                     project_dir: config.world_root.effective_root(),
                     always_isolate: false,
+                    fs_mode: world_fs_mode(),
                 };
                 if let Ok(handle) = ctx.backend.ensure_session(&spec) {
                     env::set_var("SUBSTRATE_WORLD_ID", handle.id);

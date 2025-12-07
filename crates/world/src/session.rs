@@ -3,7 +3,7 @@
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use world_api::{ExecResult, FsDiff, WorldSpec};
+use world_api::{ExecResult, FsDiff, WorldFsMode, WorldSpec};
 
 /// A reusable Linux world with proper isolation.
 pub struct SessionWorld {
@@ -50,6 +50,7 @@ impl SessionWorld {
             && self.spec.isolate_network == spec.isolate_network
             && self.spec.always_isolate == spec.always_isolate
             && self.spec.allowed_domains == spec.allowed_domains
+            && self.spec.fs_mode == spec.fs_mode
     }
 
     /// Find an existing session world if available.
@@ -163,7 +164,16 @@ impl SessionWorld {
         let mut diff_opt: Option<FsDiff> = None;
 
         // Check if command should be isolated with overlayfs
-        if self.should_isolate_command(cmd) {
+        if self.spec.fs_mode == WorldFsMode::ReadOnly {
+            let (exec_output, diff) =
+                crate::overlayfs::execute_read_only(&self.id, cmd, &self.project_dir, cwd, &env)?;
+            output = exec_output;
+            let diff_clone = diff.clone();
+            diff_opt = Some(diff);
+            if let Some(id) = span_id.as_ref() {
+                self.fs_by_span.insert(id.clone(), diff_clone);
+            }
+        } else if self.should_isolate_command(cmd) {
             // Execute with overlayfs isolation
             let (exec_output, diff) = crate::overlayfs::execute_with_overlay(
                 &self.id,
@@ -269,6 +279,7 @@ mod tests {
             allowed_domains: vec!["example.com".into()],
             project_dir: PathBuf::from("/tmp/project-a"),
             always_isolate: false,
+            fs_mode: world_api::WorldFsMode::Writable,
         };
         let world = SessionWorld {
             id: "wld_test".into(),
@@ -297,6 +308,10 @@ mod tests {
 
         let mut changed = base_spec;
         changed.allowed_domains = vec!["other.com".into()];
+        assert!(!world.compatible_with(&changed));
+
+        let mut changed = world.spec.clone();
+        changed.fs_mode = world_api::WorldFsMode::ReadOnly;
         assert!(!world.compatible_with(&changed));
     }
 }

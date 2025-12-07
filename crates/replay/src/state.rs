@@ -408,6 +408,7 @@ mod tests {
                 world_root_mode: None,
                 world_root_path: None,
                 caged: None,
+                world_fs_mode: None,
             }),
             transport: None,
             execution_origin: None,

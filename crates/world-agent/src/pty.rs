@@ -1,8 +1,8 @@
 //! PTY WebSocket handler for world-agent implementing JSON frame protocol
 
-#[cfg(target_os = "linux")]
-use crate::service::resolve_project_dir;
 use crate::service::WorldAgentService;
+#[cfg(target_os = "linux")]
+use crate::service::{resolve_project_dir, WORLD_FS_MODE_ENV};
 use axum::extract::ws::{Message, WebSocket};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use futures_util::stream::SplitSink;
@@ -11,13 +11,14 @@ use portable_pty::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{error, info};
 // no atomic imports needed here
 #[cfg(target_os = "linux")]
 use world::guard::{should_guard_anchor, wrap_with_anchor_guard};
+use world_api::WorldFsMode;
 
 #[cfg(unix)]
 fn parse_signal(sig: &str) -> Option<i32> {
@@ -167,6 +168,11 @@ pub async fn handle_ws_pty(
     let mut command_to_run = cmd.clone();
     #[cfg(not(target_os = "linux"))]
     let command_to_run = cmd.clone();
+    let mut cwd_for_child = cwd.clone();
+    #[cfg(target_os = "linux")]
+    let mut ro_overlay: Option<world::overlayfs::OverlayFs> = None;
+    #[cfg(target_os = "linux")]
+    let mut overlay_anchor: Option<PathBuf> = None;
 
     // Prepare in-world session context (best-effort)
     #[cfg(target_os = "linux")]
@@ -204,6 +210,10 @@ pub async fn handle_ws_pty(
                 return;
             }
         };
+        let fs_mode = env
+            .get(WORLD_FS_MODE_ENV)
+            .and_then(|value| WorldFsMode::parse(value))
+            .unwrap_or(WorldFsMode::Writable);
         let spec = WorldSpec {
             reuse_session: true,
             isolate_network: true,
@@ -212,10 +222,8 @@ pub async fn handle_ws_pty(
             allowed_domains: substrate_broker::allowed_domains(),
             project_dir: project_dir.clone(),
             always_isolate: false, // Default: use heuristic-based isolation
+            fs_mode,
         };
-        if should_guard_anchor(&env) {
-            command_to_run = wrap_with_anchor_guard(&command_to_run, &project_dir);
-        }
 
         if let Ok(world) = service.ensure_session_world(&spec) {
             world_id_for_logs = world.id.clone();
@@ -227,6 +235,46 @@ pub async fn handle_ws_pty(
             let cg = std::path::PathBuf::from("/sys/fs/cgroup/substrate").join(&world.id);
             cgroup_path_opt = Some(cg);
             in_world = true;
+        }
+
+        if fs_mode == WorldFsMode::ReadOnly {
+            let overlay_id = if world_id_for_logs == "-" {
+                "pty_ro"
+            } else {
+                &world_id_for_logs
+            };
+            match world::overlayfs::OverlayFs::new(overlay_id).and_then(|mut overlay| {
+                let merged_dir = overlay.mount_read_only(&project_dir)?;
+                let rel = if cwd.starts_with(&project_dir) {
+                    cwd.strip_prefix(&project_dir)
+                        .unwrap_or_else(|_| Path::new("."))
+                        .to_path_buf()
+                } else {
+                    PathBuf::from(".")
+                };
+                Ok((overlay, merged_dir, rel))
+            }) {
+                Ok((overlay, merged_dir, rel)) => {
+                    cwd_for_child = merged_dir.join(rel);
+                    overlay_anchor = Some(merged_dir);
+                    ro_overlay = Some(overlay);
+                }
+                Err(err) => {
+                    let _ = send_ws_message(
+                        &tx,
+                        &ServerMessage::Error {
+                            message: format!("Failed to prepare read-only mount: {}", err),
+                        },
+                    )
+                    .await;
+                    return;
+                }
+            }
+        }
+
+        if should_guard_anchor(&env) {
+            let anchor_root = overlay_anchor.as_ref().unwrap_or(&project_dir);
+            command_to_run = wrap_with_anchor_guard(&command_to_run, anchor_root);
         }
     }
 
@@ -264,7 +312,7 @@ pub async fn handle_ws_pty(
     {
         cmd_builder.args(["-lc", &command_to_run]);
     }
-    cmd_builder.cwd(cwd);
+    cmd_builder.cwd(&cwd_for_child);
     for (key, value) in env {
         cmd_builder.env(key, value);
     }
@@ -426,6 +474,11 @@ pub async fn handle_ws_pty(
     info!(exit_code, "ws_pty: exit");
     let exit_msg = ServerMessage::Exit { code: exit_code };
     let _ = send_ws_message(&tx, &exit_msg).await;
+
+    #[cfg(target_os = "linux")]
+    if let Some(mut overlay) = ro_overlay {
+        let _ = overlay.cleanup();
+    }
 
     // Clean up tasks
     reader_task.abort();

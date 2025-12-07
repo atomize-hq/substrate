@@ -216,6 +216,7 @@ async fn test_env_reconstruction() {
             world_root_mode: None,
             world_root_path: None,
             caged: None,
+            world_fs_mode: None,
         }),
         transport: None,
         execution_origin: Some(substrate_trace::ExecutionOrigin::Host),

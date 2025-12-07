@@ -101,6 +101,8 @@ pub struct ReplayContext {
     pub world_root_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub caged: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub world_fs_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

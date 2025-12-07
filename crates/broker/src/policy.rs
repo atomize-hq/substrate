@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use substrate_common::WorldFsMode;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Policy {
@@ -21,6 +22,8 @@ pub struct Policy {
     // Behavior
     pub require_approval: bool,
     pub allow_shell_operators: bool,
+    #[serde(default)]
+    pub world_fs_mode: WorldFsMode,
 
     // Resource limits (optional)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -52,6 +55,7 @@ impl Default for Policy {
             ],
             require_approval: false,
             allow_shell_operators: true,
+            world_fs_mode: WorldFsMode::Writable,
             limits: None,
             metadata: None,
         }
@@ -140,6 +144,10 @@ impl Policy {
         // Take the more restrictive settings
         self.require_approval = self.require_approval || other.require_approval;
         self.allow_shell_operators = self.allow_shell_operators && other.allow_shell_operators;
+        self.world_fs_mode = match (self.world_fs_mode, other.world_fs_mode) {
+            (WorldFsMode::ReadOnly, _) | (_, WorldFsMode::ReadOnly) => WorldFsMode::ReadOnly,
+            _ => WorldFsMode::Writable,
+        };
 
         // Merge resource limits (take the more restrictive)
         if let Some(other_limits) = &other.limits {

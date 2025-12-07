@@ -28,7 +28,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
-use substrate_broker::{detect_profile, evaluate, Decision};
+use substrate_broker::{detect_profile, evaluate, world_fs_mode, Decision};
 use substrate_common::{log_schema, redact_sensitive, WorldRootMode};
 #[cfg(target_os = "linux")]
 use substrate_trace::TransportMeta;
@@ -41,6 +41,9 @@ pub(crate) fn execute_command(
     running_child_pid: Arc<AtomicI32>,
 ) -> Result<ExitStatus> {
     let trimmed = command.trim();
+
+    let fs_mode = world_fs_mode();
+    std::env::set_var("SUBSTRATE_WORLD_FS_MODE", fs_mode.as_str());
 
     // Prepare redacted command once (used for span + logging)
     let redacted_for_logging = if std::env::var("SHIM_LOG_OPTS").as_deref() == Ok("raw") {

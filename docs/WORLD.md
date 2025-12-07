@@ -88,7 +88,9 @@ Windows currently degrades to host execution with a friendly notice.
   }
   ```
   `substrate --shim-status[ --json]` prints the same detection so operators immediately know
-  when socket activation is managing the transport instead of a manual bind.
+  when socket activation is managing the transport instead of a manual bind. The doctor payload
+  also includes `world_fs_mode` (`writable` or `read_only`) so policy-driven filesystem settings are
+  visible without digging through trace logs.
 - Need to hand off a reproducible verification run? Execute `scripts/linux/world-socket-verify.sh`
   (see `docs/manual_verification/linux_world_socket.md`) to provision the socket, capture
   doctor/shim-status JSON, and optionally uninstall the units afterward.

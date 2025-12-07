@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use std::convert::Infallible;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
-use substrate_common::WorldRootMode;
+use substrate_common::{WorldFsMode, WorldRootMode};
 #[cfg(target_os = "linux")]
 use tokio::task;
 #[cfg(target_os = "linux")]
@@ -30,10 +30,11 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 use world::stream::{install_stream_sink, StreamKind, StreamSink};
 use world_api::{WorldBackend, WorldHandle, WorldSpec};
 
-const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
-const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
-const LEGACY_ROOT_MODE_ENV: &str = "SUBSTRATE_WORLD_ROOT_MODE";
-const LEGACY_ROOT_PATH_ENV: &str = "SUBSTRATE_WORLD_ROOT_PATH";
+pub(crate) const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
+pub(crate) const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
+pub(crate) const LEGACY_ROOT_MODE_ENV: &str = "SUBSTRATE_WORLD_ROOT_MODE";
+pub(crate) const LEGACY_ROOT_PATH_ENV: &str = "SUBSTRATE_WORLD_ROOT_PATH";
+pub(crate) const WORLD_FS_MODE_ENV: &str = "SUBSTRATE_WORLD_FS_MODE";
 
 /// Main service running inside the world.
 #[derive(Clone)]
@@ -149,6 +150,7 @@ impl WorldAgentService {
             // For agent non-PTY path, prefer consistent fs_diff collection
             // to enable immediate span enrichment in the shell.
             always_isolate: true,
+            fs_mode: resolve_fs_mode(req.world_fs_mode, req.env.as_ref()),
         };
 
         // Ensure world exists
@@ -228,6 +230,7 @@ impl WorldAgentService {
             allowed_domains: substrate_broker::allowed_domains(),
             project_dir,
             always_isolate: true,
+            fs_mode: resolve_fs_mode(req.world_fs_mode, req.env.as_ref()),
         };
 
         let world = match self.backend.ensure_session(&spec) {
@@ -345,6 +348,31 @@ impl StreamSink for StreamingSink {
         };
         let _ = self.tx.send(frame);
     }
+}
+
+pub(crate) fn resolve_fs_mode(
+    requested: Option<WorldFsMode>,
+    env: Option<&HashMap<String, String>>,
+) -> WorldFsMode {
+    if let Some(mode) = requested {
+        return mode;
+    }
+
+    if let Some(env) = env {
+        if let Some(raw) = env.get(WORLD_FS_MODE_ENV) {
+            if let Some(mode) = WorldFsMode::parse(raw) {
+                return mode;
+            }
+        }
+    }
+
+    if let Ok(raw) = std::env::var(WORLD_FS_MODE_ENV) {
+        if let Some(mode) = WorldFsMode::parse(&raw) {
+            return mode;
+        }
+    }
+
+    WorldFsMode::Writable
 }
 
 pub(crate) fn resolve_project_dir(

@@ -11,13 +11,14 @@ use crate::execution::{
 };
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use agent_api_client::AgentClient;
-use agent_api_types::{ExecuteRequest, ExecuteStreamFrame};
+use agent_api_types::{ExecuteRequest, ExecuteStreamFrame, WorldFsMode};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use std::env;
 use std::io;
 #[cfg(target_os = "linux")]
 use substrate_broker::allowed_domains;
+use substrate_broker::world_fs_mode;
 use substrate_common::agent_events::AgentEvent;
 #[cfg(unix)]
 use tokio::net::UnixStream;
@@ -443,6 +444,7 @@ where
                 allowed_domains: allowed_domains(),
                 project_dir: crate::execution::settings::world_root_from_env().path,
                 always_isolate: false,
+                fs_mode: world_fs_mode(),
             };
             let backend = LinuxLocalBackend::new();
             match backend.ensure_session(&spec) {
@@ -610,6 +612,13 @@ pub(crate) fn build_agent_client_and_request(
     build_agent_client_and_request_impl(cmd)
 }
 
+fn current_world_fs_mode() -> WorldFsMode {
+    std::env::var("SUBSTRATE_WORLD_FS_MODE")
+        .ok()
+        .and_then(|value| WorldFsMode::parse(&value))
+        .unwrap_or_else(world_fs_mode)
+}
+
 #[cfg(target_os = "linux")]
 fn build_agent_client_and_request_impl(
     cmd: &str,
@@ -640,6 +649,7 @@ fn build_agent_client_and_request_impl(
         pty: false,
         agent_id: agent_id.clone(),
         budget: None,
+        world_fs_mode: Some(current_world_fs_mode()),
     };
 
     Ok((client, request, agent_id))
@@ -677,6 +687,7 @@ fn build_agent_client_and_request_impl(
         pty: false,
         agent_id: agent_id.clone(),
         budget: None,
+        world_fs_mode: Some(current_world_fs_mode()),
     };
 
     Ok((client, request, agent_id))
@@ -709,6 +720,7 @@ fn build_agent_client_and_request_impl(
         pty: false,
         agent_id: agent_id.clone(),
         budget: None,
+        world_fs_mode: Some(current_world_fs_mode()),
     };
 
     Ok((client, request, agent_id))

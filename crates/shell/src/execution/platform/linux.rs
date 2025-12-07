@@ -5,6 +5,7 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
+use substrate_broker::world_fs_mode;
 use which::which;
 
 pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
@@ -94,6 +95,7 @@ pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
     }
 
     let activation_report = socket_activation::socket_activation_report();
+    let fs_mode = world_fs_mode();
 
     // overlay
     let mut overlay_ok = overlay_present();
@@ -181,6 +183,7 @@ pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
         println!("INFO  | dmesg_restrict={}", dmsg);
         println!("INFO  | overlay_root: {}", o_root.display());
         println!("INFO  | copydiff_root: {}", c_root.display());
+        println!("INFO  | world_fs_mode: {}", fs_mode.as_str());
         if activation_report.is_socket_activated() {
             pass(&format!(
                 "agent socket: systemd-managed ({} {})",
@@ -264,6 +267,7 @@ pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
             "dmesg_restrict": dmsg,
             "overlay_root": o_root,
             "copydiff_root": c_root,
+            "world_fs_mode": fs_mode.as_str(),
             "agent_socket": socket_json.clone(),
             "world_socket": socket_json,
             "ok": ok,
