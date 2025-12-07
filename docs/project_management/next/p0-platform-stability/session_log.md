@@ -751,3 +751,12 @@ Template:
 - Worktree: pending (`ps-r2d-replay-origin-integ` → `wt/ps-r2d-replay-origin-integ`)
 - Plan: merge R2d code/test, fix clippy (redundant import), run fmt/clippy/tests, capture manual agent replay via healthy /run/substrate.sock, update docs/tasks/logs and fast-forward
 - Blockers: env has healthy /run/substrate.sock but lacks overlay/netns/cgroup; copy-diff may still warn
+
+## [2025-12-07 21:08 UTC] Integration Agent – R2d-integ – END (reapply)
+- Worktree commits: e57659d (test: drop redundant libc import)
+- Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world`; `cargo test -p substrate-shell --test replay_world -- --nocapture`
+- Results: pass / pass / pass / pass (filter ran 0) / pass (expected agent-missing + copy-diff fallback warnings on host without overlay/netns/cgroup)
+- Manual replay: `SHIM_TRACE_LOG=tmp/r2d-manual-trace.jsonl SUBSTRATE_WORLD_SOCKET=/run/substrate.sock target/debug/substrate --replay span_manual_agent --replay-verbose` (agent strategy selected, exit 0, produced manual-agent.log then cleaned up)
+- Scripts executed: n/a
+- Docs/status: tasks.json marked R2d-integ completed; START/END entries recorded (reapply)
+- Next steps / blockers: fast-forward feat/p0-platform-stability-follow-up, commit docs (`docs: finish R2d-integ`), remove worktree
