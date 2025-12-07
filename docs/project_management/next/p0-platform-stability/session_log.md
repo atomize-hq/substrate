@@ -697,3 +697,10 @@ Template:
 - Skips/notes: agent/caged strategy assertions guarded when no replay_strategy lines written; copy-diff roots under /run/tmp/var/tmp fail, ENOSPC shim still exercises retry paths; world-agent socket missing so agent probe falls back
 - Docs/prompts: reviewed `docs/project_management/next/p0-platform-stability/kickoff_prompts/R2c-integ.md` (no edits)
 - Next steps / blockers: ready for R2c-integ; host limitations documented above
+
+## [2025-12-07 19:47 UTC] Integration Agent – R2c-integ – START
+- Checked out feat/p0-platform-stability-follow-up, `git pull --ff-only` (up to date)
+- Updated tasks.json (`R2c-integ → in_progress`); committed changes pending
+- Created worktree plan: `ps-r2c-replay-agent-integ` → `wt/ps-r2c-replay-agent-integ`
+- Plan: fast-forward merge ps-r2c-replay-coverage-code/test, run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-replay -- --nocapture`, `cargo test -p substrate-shell replay_world`, document host limitations, update tasks/logs, and fast-forward base branch
+- Blockers: host lacks `/run/substrate.sock` and copy-diff roots under /run; expect fallback warnings/skips in replay_world suite
