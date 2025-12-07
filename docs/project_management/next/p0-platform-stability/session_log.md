@@ -713,3 +713,17 @@ Template:
 - Merge: `ps-r2c-replay-coverage-code` + `ps-r2c-replay-agent-test` fast-forwarded; integration branch current with feat/p0-platform-stability-follow-up
 - Docs/status: tasks.json marked R2c-integ completed; START/END entries recorded
 - Next steps / blockers: none
+
+## [2025-12-07 20:47 UTC] Code Agent – R2d-code – START
+- Checked out feat/p0-platform-stability-follow-up; repo clean
+- Reviewed plan/tasks/session log and R2d-code prompt
+- Updated tasks.json (`R2d-code` → `in_progress`); worktree not used
+- Plan: reapply origin-aware replay schema/CLI (execution_origin + transport), agent-first defaults with flip flag, copy-diff fallback tweaks, docs, fmt/clippy/tests, manual replay (agent healthy vs missing, flip)
+- Blockers: none (agent socket present at /run/substrate.sock; cgroup/netns/overlay still limited)
+
+## [2025-12-07 21:10 UTC] Code Agent – R2d-code – END
+- Worktree commits: (reapplied) code/doc updates for origin-aware replay routing
+- Changes: spans/replay_context now carry execution_origin + transport + host/user/anchor/caged hints; replay defaults to recorded origin with `--flip-world/--flip`, honors `--world/--no-world`; agent-first world replay with single-warning fallback to overlay/fuse/copy-diff (expanded roots, deduped warnings); shell spans tag origin/transport; docs (TRACE/REPLAY) updated.
+- Commands: `cargo fmt`; `cargo clippy -p substrate-replay -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world`; `cargo build --bin substrate`
+- Manual replay: `target/debug/substrate --replay spn_019afa94-0f20-71b1-a420-3ba685ff7839 --replay-verbose` (origin=world default, agent strategy via /run/substrate.sock, scopes empty); `SUBSTRATE_WORLD_SOCKET=/run/substrate.sock.missing target/debug/substrate --replay spn_019afa94-0f20-71b1-a420-3ba685ff7839 --replay-verbose` (agent miss warning once, world backend probe failure, copy-diff fallback to /tmp with cgroup/netns warnings); `target/debug/substrate --replay spn_019afa94-0f20-71b1-a420-3ba685ff7839 --replay-verbose --flip-world` (origin world→host, host pwd)
+- Next steps / blockers: none

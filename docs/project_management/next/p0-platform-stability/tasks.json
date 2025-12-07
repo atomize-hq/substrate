@@ -1744,7 +1744,7 @@
       "name": "Replay origin-aware defaults & agent routing (code)",
       "type": "code",
       "phase": "R2 \u2013 Agent-backed Replay",
-      "status": "queued",
+      "status": "completed",
       "description": "Record execution origin/transport in spans, default replays to the recorded origin, add a flip flag, and make world-mode replays prefer the agent socket with a clean fallback to the local backend.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
