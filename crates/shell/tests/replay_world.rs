@@ -90,6 +90,45 @@ fn latest_replay_strategy(trace_path: &Path) -> Option<Value> {
     replay_strategy_entries(trace_path).last().cloned()
 }
 
+fn command_complete_entries(trace_path: &Path) -> Vec<Value> {
+    if !trace_path.exists() {
+        return Vec::new();
+    }
+    fs::read_to_string(trace_path)
+        .map(|content| {
+            content
+                .lines()
+                .filter(|line| !line.trim().is_empty())
+                .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+                .filter(|event| {
+                    event
+                        .get("event_type")
+                        .and_then(|value| value.as_str())
+                        == Some("command_complete")
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn find_command_span(entries: &[Value], needle: &str) -> Option<Value> {
+    entries
+        .iter()
+        .find(|event| {
+            event
+                .get("cmd")
+                .and_then(|value| value.as_str())
+                .map(|cmd| cmd.contains(needle))
+                .unwrap_or(false)
+                || event
+                    .get("command")
+                    .and_then(|value| value.as_str())
+                    .map(|cmd| cmd.contains(needle))
+                    .unwrap_or(false)
+        })
+        .cloned()
+}
+
 fn configure_nft_stub(fixture: &ShellEnvFixture, script: &str) -> String {
     let bin_dir = fixture.home().join("bin");
     fs::create_dir_all(&bin_dir).expect("failed to create stub bin dir");
@@ -229,6 +268,406 @@ fn replay_command(
 fn copydiff_unavailable(stderr: &str) -> bool {
     stderr.contains("copy-diff failed in")
         && stderr.contains("failed spawning command under copydiff work dir")
+}
+
+#[test]
+fn host_commands_emit_replayable_spans() {
+    let fixture = ShellEnvFixture::new();
+    let trace = trace_path(&fixture);
+    if let Some(parent) = trace.parent() {
+        fs::create_dir_all(parent).expect("failed to create trace dir");
+    }
+    fs::write(&trace, "").expect("failed to reset trace file");
+
+    let workspace = fixture.home().join("host-span-workspace");
+    fs::create_dir_all(&workspace).expect("failed to prepare workspace");
+
+    let mut no_world_cmd = substrate_command_for_home(&fixture);
+    no_world_cmd
+        .env("SHIM_TRACE_LOG", &trace)
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .arg("--no-world")
+        .arg("-c")
+        .arg("printf host-no-world > host-no-world.log")
+        .current_dir(&workspace)
+        .assert()
+        .success();
+
+    let mut env_disable_cmd = substrate_command_for_home(&fixture);
+    env_disable_cmd
+        .env("SHIM_TRACE_LOG", &trace)
+        .env("SUBSTRATE_WORLD", "disabled")
+        .env("SUBSTRATE_WORLD_ENABLED", "0")
+        .env("SUBSTRATE_REPLAY_USE_WORLD", "disabled")
+        .arg("-c")
+        .arg("printf host-env-opt-out > host-env-opt-out.log")
+        .current_dir(&workspace)
+        .assert()
+        .success();
+
+    let entries = command_complete_entries(&trace);
+    assert!(
+        !entries.is_empty(),
+        "expected command_complete spans in trace at {:?}",
+        trace
+    );
+
+    for marker in ["host-no-world", "host-env-opt-out"] {
+        let Some(span) = find_command_span(&entries, marker) else {
+            eprintln!(
+                "skipping host span assertions: missing span for {marker} in {:?}",
+                entries
+            );
+            return;
+        };
+        let Some(_span_id) = span.get("span_id").and_then(|value| value.as_str()) else {
+            eprintln!(
+                "skipping host span assertions: span_id missing for {marker}: {:?}",
+                span
+            );
+            return;
+        };
+
+        let Some(replay_ctx) = span
+            .get("replay_context")
+            .and_then(|value| value.as_object()) else {
+                eprintln!(
+                    "skipping host span assertions: replay_context missing for {marker}: {:?}",
+                    span
+                );
+                return;
+            };
+
+        assert_eq!(
+            replay_ctx
+                .get("execution_origin")
+                .and_then(|value| value.as_str()),
+            Some("host"),
+            "replay_context should mark host origin for {marker}: {:?}",
+            span
+        );
+        assert_eq!(
+            span.get("execution_origin")
+                .and_then(|value| value.as_str()),
+            Some("host"),
+            "span should record host execution origin for {marker}: {:?}",
+            span
+        );
+    }
+}
+
+#[test]
+fn replay_host_span_respects_env_opt_out_without_agent_probe() {
+    let fixture = ShellEnvFixture::new();
+    let trace = trace_path(&fixture);
+    if let Some(parent) = trace.parent() {
+        fs::create_dir_all(parent).expect("failed to create trace dir");
+    }
+    fs::write(&trace, "").expect("failed to reset trace file");
+
+    let workspace = fixture.home().join("workspace-replay-host");
+    fs::create_dir_all(&workspace).expect("failed to create replay workspace");
+
+    let mut record_cmd = substrate_command_for_home(&fixture);
+    record_cmd
+        .env("SHIM_TRACE_LOG", &trace)
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .arg("--no-world")
+        .arg("-c")
+        .arg("printf host-replay > host-replay.log")
+        .current_dir(&workspace)
+        .assert()
+        .success();
+
+    let entries = command_complete_entries(&trace);
+    let Some(span) = find_command_span(&entries, "host-replay") else {
+        eprintln!(
+            "skipping host replay env opt-out assertions: missing recorded span in {:?}",
+            entries
+        );
+        return;
+    };
+    let Some(span_id) = span.get("span_id").and_then(|value| value.as_str()) else {
+        eprintln!(
+            "skipping host replay env opt-out assertions: span_id missing: {:?}",
+            span
+        );
+        return;
+    };
+    let Some(replay_ctx) = span
+        .get("replay_context")
+        .and_then(|value| value.as_object()) else {
+            eprintln!(
+                "skipping host replay env opt-out assertions: replay_context missing: {:?}",
+                span
+            );
+            return;
+        };
+    assert_eq!(
+        replay_ctx
+            .get("execution_origin")
+            .and_then(|value| value.as_str()),
+        Some("host"),
+        "host span replay_context should mark host execution"
+    );
+    assert_eq!(
+        span.get("execution_origin")
+            .and_then(|value| value.as_str()),
+        Some("host"),
+        "host span should record host execution origin"
+    );
+    let span_id = span_id.to_string();
+
+    let replay_log = workspace.join("host-replay.log");
+    let _ = fs::remove_file(&replay_log);
+
+    let path_override =
+        configure_nft_stub(&fixture, "#!/bin/sh\necho \"nft (test) v1\"\nexit 0\n");
+    let xdg_runtime = fixture.home().join("xdg-runtime-host-replay");
+    fs::create_dir_all(&xdg_runtime).expect("failed to create xdg runtime dir");
+    let missing_socket = fixture.home().join("missing-agent-host-replay.sock");
+
+    let assert = substrate_command_for_home(&fixture)
+        .env("SHIM_TRACE_LOG", &trace)
+        .env("SUBSTRATE_REPLAY_VERBOSE", "1")
+        .env("SUBSTRATE_REPLAY_USE_WORLD", "disabled")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD_SOCKET", &missing_socket)
+        .env("XDG_RUNTIME_DIR", &xdg_runtime)
+        .env("PATH", &path_override)
+        .current_dir(&workspace)
+        .arg("--replay")
+        .arg(&span_id)
+        .arg("--replay-verbose")
+        .assert()
+        .success();
+
+    let output = assert.get_output();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("SUBSTRATE_REPLAY_USE_WORLD=disabled"),
+        "env opt-out reason should be reported: {stderr}"
+    );
+    assert!(
+        stderr.contains("[replay] origin: host"),
+        "host origin summary should be present: {stderr}"
+    );
+    let host_warns = stderr.matches("warn: running on host").count();
+    assert_eq!(
+        host_warns, 1,
+        "host opt-out warning should be deduped: {stderr}"
+    );
+    assert!(
+        !stderr.contains("agent replay unavailable"),
+        "host replay should skip agent probes even when socket env is set: {stderr}"
+    );
+    assert!(
+        !stderr.contains("[replay] world strategy:"),
+        "host replay should not log world strategies: {stderr}"
+    );
+
+    let content = fs::read_to_string(&replay_log)
+        .expect("replayed host command should write output in workspace");
+    assert_eq!(
+        content, "host-replay",
+        "host replay should run command in workspace: {}",
+        replay_log.display()
+    );
+
+    if let Some(strategy) = latest_replay_strategy(&trace) {
+        assert_eq!(
+            strategy.get("strategy").and_then(|value| value.as_str()),
+            Some("host"),
+            "replay_strategy should record host execution: {strategy:?}"
+        );
+        assert_eq!(
+            strategy
+                .get("recorded_origin")
+                .and_then(|value| value.as_str()),
+            Some("host"),
+            "replay_strategy recorded_origin should be host: {strategy:?}"
+        );
+        assert_eq!(
+            strategy
+                .get("target_origin")
+                .and_then(|value| value.as_str()),
+            Some("host"),
+            "replay_strategy target_origin should stay host: {strategy:?}"
+        );
+        assert_eq!(
+            strategy
+                .get("origin_reason_code")
+                .and_then(|value| value.as_str()),
+            Some("env_disabled"),
+            "replay_strategy should note env opt-out reason: {strategy:?}"
+        );
+    } else {
+        eprintln!("skipping host replay strategy assertions: no replay_strategy entries written");
+    }
+}
+
+#[test]
+fn replay_host_span_warns_once_when_forced_to_world() {
+    let fixture = ShellEnvFixture::new();
+    let trace = trace_path(&fixture);
+    if let Some(parent) = trace.parent() {
+        fs::create_dir_all(parent).expect("failed to create trace dir");
+    }
+    fs::write(&trace, "").expect("failed to reset trace file");
+
+    let workspace = fixture.home().join("workspace-force-world");
+    fs::create_dir_all(&workspace).expect("failed to create replay workspace");
+
+    let mut record_cmd = substrate_command_for_home(&fixture);
+    record_cmd
+        .env("SHIM_TRACE_LOG", &trace)
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .arg("--no-world")
+        .arg("-c")
+        .arg("printf host-force-world > host-force-world.log")
+        .current_dir(&workspace)
+        .assert()
+        .success();
+
+    let entries = command_complete_entries(&trace);
+    let Some(span) = find_command_span(&entries, "host-force-world") else {
+        eprintln!(
+            "skipping forced-world host replay assertions: missing recorded span in {:?}",
+            entries
+        );
+        return;
+    };
+    let Some(span_id) = span.get("span_id").and_then(|value| value.as_str()) else {
+        eprintln!(
+            "skipping forced-world host replay assertions: span_id missing: {:?}",
+            span
+        );
+        return;
+    };
+    let Some(replay_ctx) = span
+        .get("replay_context")
+        .and_then(|value| value.as_object()) else {
+            eprintln!(
+                "skipping forced-world host replay assertions: replay_context missing: {:?}",
+                span
+            );
+            return;
+        };
+    assert_eq!(
+        replay_ctx
+            .get("execution_origin")
+            .and_then(|value| value.as_str()),
+        Some("host"),
+        "host span replay_context should mark host execution"
+    );
+    assert_eq!(
+        span.get("execution_origin")
+            .and_then(|value| value.as_str()),
+        Some("host"),
+        "host span should record host execution origin"
+    );
+    let span_id = span_id.to_string();
+
+    let path_override =
+        configure_nft_stub(&fixture, "#!/bin/sh\necho \"nft (test) v1\"\nexit 0\n");
+    let xdg_runtime = fixture.home().join("xdg-runtime-force-world");
+    fs::create_dir_all(&xdg_runtime).expect("failed to create xdg runtime dir");
+
+    let socket_dir = Builder::new()
+        .prefix("substrate-agent-force-world-")
+        .tempdir_in("/tmp")
+        .expect("failed to create socket dir");
+    let socket_path = socket_dir.path().join("substrate.sock");
+    let _socket = AgentSocket::start(
+        &socket_path,
+        SocketResponse::CapabilitiesAndExecute {
+            stdout: "agent-host-forced\n".to_string(),
+            stderr: String::new(),
+            exit: 0,
+            scopes: vec!["agent:uds:host-force".to_string()],
+        },
+    );
+
+    let assert = substrate_command_for_home(&fixture)
+        .env("SHIM_TRACE_LOG", &trace)
+        .env("SUBSTRATE_REPLAY_VERBOSE", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .env("XDG_RUNTIME_DIR", &xdg_runtime)
+        .env("PATH", &path_override)
+        .current_dir(&workspace)
+        .arg("--replay")
+        .arg(&span_id)
+        .arg("--replay-verbose")
+        .arg("--world")
+        .assert()
+        .success();
+
+    let output = assert.get_output();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[replay] origin: host -> world (--world flag)"),
+        "world override should surface in origin summary: {stderr}"
+    );
+    let world_warns = stderr.matches("warn: running on world").count();
+    assert_eq!(
+        world_warns, 1,
+        "world override should emit a single warning: {stderr}"
+    );
+    assert!(
+        stderr.contains(&format!(
+            "[replay] world strategy: agent (socket={}, project_dir={})",
+            socket_path.display(),
+            workspace.display()
+        )),
+        "world strategy should route through stub agent: {stderr}"
+    );
+    assert!(
+        stderr.contains("[replay] scopes: [agent:uds:host-force]"),
+        "scopes should reflect stub agent execution: {stderr}"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("agent-host-forced"),
+        "forced world replay should return agent stdout payload: {stdout}"
+    );
+
+    if let Some(strategy) = latest_replay_strategy(&trace) {
+        assert_eq!(
+            strategy.get("strategy").and_then(|value| value.as_str()),
+            Some("agent"),
+            "replay_strategy should record agent execution: {strategy:?}"
+        );
+        assert_eq!(
+            strategy
+                .get("recorded_origin")
+                .and_then(|value| value.as_str()),
+            Some("host"),
+            "replay_strategy recorded_origin should stay host: {strategy:?}"
+        );
+        assert_eq!(
+            strategy
+                .get("target_origin")
+                .and_then(|value| value.as_str()),
+            Some("world"),
+            "replay_strategy target_origin should be world after override: {strategy:?}"
+        );
+        assert_eq!(
+            strategy
+                .get("origin_reason_code")
+                .and_then(|value| value.as_str()),
+            Some("flag_world"),
+            "replay_strategy should capture override reason code: {strategy:?}"
+        );
+    } else {
+        eprintln!("skipping forced-world strategy assertions: no replay_strategy entries written");
+    }
 }
 
 #[test]

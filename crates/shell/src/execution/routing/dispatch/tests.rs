@@ -9,6 +9,9 @@ pub(crate) use support::with_test_mode;
 #[cfg(target_os = "linux")]
 #[path = "tests/linux_world.rs"]
 mod linux_world;
+#[cfg(unix)]
+#[path = "tests/host_replay.rs"]
+mod host_replay;
 #[path = "tests/pty.rs"]
 mod pty;
 #[path = "tests/registry.rs"]
