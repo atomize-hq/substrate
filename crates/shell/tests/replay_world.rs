@@ -101,9 +101,7 @@ fn command_complete_entries(trace_path: &Path) -> Vec<Value> {
                 .filter(|line| !line.trim().is_empty())
                 .filter_map(|line| serde_json::from_str::<Value>(line).ok())
                 .filter(|event| {
-                    event
-                        .get("event_type")
-                        .and_then(|value| value.as_str())
+                    event.get("event_type").and_then(|value| value.as_str())
                         == Some("command_complete")
                 })
                 .collect()
@@ -331,13 +329,14 @@ fn host_commands_emit_replayable_spans() {
 
         let Some(replay_ctx) = span
             .get("replay_context")
-            .and_then(|value| value.as_object()) else {
-                eprintln!(
-                    "skipping host span assertions: replay_context missing for {marker}: {:?}",
-                    span
-                );
-                return;
-            };
+            .and_then(|value| value.as_object())
+        else {
+            eprintln!(
+                "skipping host span assertions: replay_context missing for {marker}: {:?}",
+                span
+            );
+            return;
+        };
 
         assert_eq!(
             replay_ctx
@@ -398,13 +397,14 @@ fn replay_host_span_respects_env_opt_out_without_agent_probe() {
     };
     let Some(replay_ctx) = span
         .get("replay_context")
-        .and_then(|value| value.as_object()) else {
-            eprintln!(
-                "skipping host replay env opt-out assertions: replay_context missing: {:?}",
-                span
-            );
-            return;
-        };
+        .and_then(|value| value.as_object())
+    else {
+        eprintln!(
+            "skipping host replay env opt-out assertions: replay_context missing: {:?}",
+            span
+        );
+        return;
+    };
     assert_eq!(
         replay_ctx
             .get("execution_origin")
@@ -423,8 +423,7 @@ fn replay_host_span_respects_env_opt_out_without_agent_probe() {
     let replay_log = workspace.join("host-replay.log");
     let _ = fs::remove_file(&replay_log);
 
-    let path_override =
-        configure_nft_stub(&fixture, "#!/bin/sh\necho \"nft (test) v1\"\nexit 0\n");
+    let path_override = configure_nft_stub(&fixture, "#!/bin/sh\necho \"nft (test) v1\"\nexit 0\n");
     let xdg_runtime = fixture.home().join("xdg-runtime-host-replay");
     fs::create_dir_all(&xdg_runtime).expect("failed to create xdg runtime dir");
     let missing_socket = fixture.home().join("missing-agent-host-replay.sock");
@@ -472,7 +471,8 @@ fn replay_host_span_respects_env_opt_out_without_agent_probe() {
     let content = fs::read_to_string(&replay_log)
         .expect("replayed host command should write output in workspace");
     assert_eq!(
-        content, "host-replay",
+        content,
+        "host-replay",
         "host replay should run command in workspace: {}",
         replay_log.display()
     );
@@ -550,13 +550,14 @@ fn replay_host_span_warns_once_when_forced_to_world() {
     };
     let Some(replay_ctx) = span
         .get("replay_context")
-        .and_then(|value| value.as_object()) else {
-            eprintln!(
-                "skipping forced-world host replay assertions: replay_context missing: {:?}",
-                span
-            );
-            return;
-        };
+        .and_then(|value| value.as_object())
+    else {
+        eprintln!(
+            "skipping forced-world host replay assertions: replay_context missing: {:?}",
+            span
+        );
+        return;
+    };
     assert_eq!(
         replay_ctx
             .get("execution_origin")
@@ -572,8 +573,7 @@ fn replay_host_span_warns_once_when_forced_to_world() {
     );
     let span_id = span_id.to_string();
 
-    let path_override =
-        configure_nft_stub(&fixture, "#!/bin/sh\necho \"nft (test) v1\"\nexit 0\n");
+    let path_override = configure_nft_stub(&fixture, "#!/bin/sh\necho \"nft (test) v1\"\nexit 0\n");
     let xdg_runtime = fixture.home().join("xdg-runtime-force-world");
     fs::create_dir_all(&xdg_runtime).expect("failed to create xdg runtime dir");
 
