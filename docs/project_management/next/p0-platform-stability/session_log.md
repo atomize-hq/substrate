@@ -812,3 +812,11 @@ Template:
 - Results: all pass (world-agent tests exercised PTY/non-PTY fs mode coverage; broker test now emits parse reason)
 - Docs/tasks: manual testing playbook includes R2e steps; tasks.json set `R2e-integ → in_progress` before work (ready to mark completed after doc commit)
 - Next steps: finalize doc/task updates (`docs: finish R2e-integ`), remove any stale worktrees (none), proceed to host replay triad when ready
+
+## [2025-12-08 02:05 UTC] Code Agent – R2f-code – START (reapply)
+- Checked out feat/p0-platform-stability-follow-up, `git pull --ff-only` (up to date)
+- Reviewed p0_platform_stability_plan.md, tasks.json, session_log.md, and R2f-code prompt
+- Updated tasks.json + session_log.md (commit pending)
+- Worktree: pending (`ps-r2f-host-replay-code` → `wt/ps-r2f-host-replay-code`)
+- Plan: reapply host-only span/replay changes (execution_origin=host spans, avoid world probes), ensure replay warnings aligned, rerun fmt/clippy/tests
+- Blockers: host lacks `/run/substrate.sock`; agent path not exercised
