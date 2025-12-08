@@ -829,3 +829,11 @@ Template:
 - Kickoff prompts created: n/a (R2f-integ prompt unchanged)
 - Docs commit: pending (`docs: finish R2f-code`)
 - Next steps / blockers: remove worktree after docs update
+
+## [2025-12-08 02:33 UTC] Test Agent – R2f-test – START (reapply)
+- Checked out feat/p0-platform-stability-follow-up, `git pull --ff-only` (up to date)
+- Reviewed p0_platform_stability_plan.md, tasks.json, session_log.md, R2f-code scope, and R2f-test prompt
+- Updated tasks.json (R2f-test → in_progress); doc commit pending
+- Worktree: pending (`ps-r2f-host-replay-test` → `wt/ps-r2f-host-replay-test`)
+- Plan: reapply host-only replay fixtures covering span_id/replay_context execution_origin=host, ensure replay stays on host with deduped warnings, cover async REPL + non-PTY entrypoints with env-aware skips; run fmt + required replay/shell tests
+- Blockers: host lacks `/run/substrate.sock`/overlay/netns/cgroup; expect skips/warnings documented
