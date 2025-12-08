@@ -837,3 +837,10 @@ Template:
 - Worktree: pending (`ps-r2f-host-replay-test` → `wt/ps-r2f-host-replay-test`)
 - Plan: reapply host-only replay fixtures covering span_id/replay_context execution_origin=host, ensure replay stays on host with deduped warnings, cover async REPL + non-PTY entrypoints with env-aware skips; run fmt + required replay/shell tests
 - Blockers: host lacks `/run/substrate.sock`/overlay/netns/cgroup; expect skips/warnings documented
+
+## [2025-12-08 02:39 UTC] Test Agent – R2f-test – END (reapply)
+- Worktree commits: dd3b3f3 (`test: add host replay span coverage`), 8d9b6ce (`test: expand host replay coverage`)
+- Commands: `cargo fmt`; `cargo test -p substrate-shell replay_world` (filter ran 0 tests); `cargo test -p substrate-shell --test replay_world -- --nocapture`; `cargo test -p substrate-replay -- --nocapture`
+- Results: fmt pass; replay_world filter emitted 0 tests; full replay_world suite passed with host span assertions skipping when span_id/replay_context absent on this host and expected agent/cgroup/netns/copy-diff warnings on missing world backend; substrate-replay tests passed
+- Notes: host span traces still missing span_id on this host, so host-origin checks gate with skip logs; world socket/cgroup/netns unavailable so warnings present but expected
+- Next steps / blockers: update tasks.json (R2f-test → completed), commit docs (`docs: finish R2f-test`), remove worktree
