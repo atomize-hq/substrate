@@ -820,3 +820,12 @@ Template:
 - Worktree: pending (`ps-r2f-host-replay-code` → `wt/ps-r2f-host-replay-code`)
 - Plan: reapply host-only span/replay changes (execution_origin=host spans, avoid world probes), ensure replay warnings aligned, rerun fmt/clippy/tests
 - Blockers: host lacks `/run/substrate.sock`; agent path not exercised
+
+## [2025-12-08 02:19 UTC] Code Agent – R2f-code – END (reapply)
+- Worktree commits: eb39113 (`feat: capture host-only replay spans`)
+- Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-shell replay_world` (filter emitted 0 tests); `cargo test -p substrate-replay -- --nocapture`
+- Results: pass / pass / pass / pass
+- Scripts executed: n/a
+- Kickoff prompts created: n/a (R2f-integ prompt unchanged)
+- Docs commit: pending (`docs: finish R2f-code`)
+- Next steps / blockers: remove worktree after docs update

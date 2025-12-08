@@ -2136,7 +2136,7 @@
       "name": "Host replay span parity (code)",
       "type": "code",
       "phase": "R2f \u2013 Host Replay Parity",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Emit replayable spans for host-only executions so host commands can be replayed with the same fidelity as world spans without probing the world backend.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
