@@ -171,7 +171,15 @@ impl ReplayWorldMode {
 
     fn warn_reason(&self) -> Option<String> {
         if self.selected == ExecutionOrigin::World {
-            return None;
+            return match &self.source {
+                ReplayWorldSource::ForceWorldFlag => Some("--world flag".to_string()),
+                ReplayWorldSource::Recorded
+                    if self.flipped && self.recorded == ExecutionOrigin::Host =>
+                {
+                    Some("--flip-world".to_string())
+                }
+                _ => None,
+            };
         }
         match &self.source {
             ReplayWorldSource::NoWorldFlag => Some("--no-world flag".to_string()),
@@ -247,7 +255,7 @@ pub(crate) fn handle_trace_command(span_id: &str) -> Result<()> {
 
     if !trace_file.exists() {
         eprintln!("Trace file not found: {}", trace_file.display());
-        eprintln!("Make sure tracing is enabled with SUBSTRATE_WORLD=enabled");
+        eprintln!("Make sure tracing is enabled (set SHIM_TRACE_LOG or avoid disabling tracing via SUBSTRATE_WORLD)");
         std::process::exit(1);
     }
 
@@ -305,7 +313,7 @@ pub(crate) fn handle_replay_command(span_id: &str, cli: &Cli) -> Result<()> {
 
     if !trace_file.exists() {
         eprintln!("Trace file not found: {}", trace_file.display());
-        eprintln!("Make sure tracing is enabled with SUBSTRATE_WORLD=enabled");
+        eprintln!("Make sure tracing is enabled (set SHIM_TRACE_LOG or avoid disabling tracing via SUBSTRATE_WORLD)");
         std::process::exit(1);
     }
 

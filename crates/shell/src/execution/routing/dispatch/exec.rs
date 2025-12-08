@@ -115,9 +115,13 @@ pub(crate) fn execute_command(
         out.join(" ")
     };
 
+    let world_env = std::env::var("SUBSTRATE_WORLD").unwrap_or_default();
+    let world_enabled = world_env == "enabled";
+    let world_disabled = world_env == "disabled" || config.no_world;
+
     // Start span for command execution
     let policy_decision;
-    let mut span = if std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
+    let mut span = if world_enabled {
         // Policy evaluation (Phase 4)
         let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
@@ -203,7 +207,24 @@ pub(crate) fn execute_command(
             eprintln!("substrate: failed to create span builder");
             None
         }
+    } else if let Ok(mut builder) = create_span_builder() {
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        builder = builder
+            .with_command(&redacted_for_logging)
+            .with_cwd(cwd.to_str().unwrap_or("."));
+
+        match builder.start() {
+            Ok(span) => {
+                std::env::set_var("SHIM_PARENT_SPAN", span.get_span_id());
+                Some(span)
+            }
+            Err(e) => {
+                eprintln!("substrate: failed to create span: {}", e);
+                None
+            }
+        }
     } else {
+        eprintln!("substrate: failed to create span builder");
         None
     };
 
@@ -216,9 +237,8 @@ pub(crate) fn execute_command(
         // Attempt world-agent PTY WS route on Linux when world is enabled or agent socket exists
         #[cfg(target_os = "linux")]
         {
-            let world_enabled = std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
             let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
-            if world_enabled || uds_exists {
+            if !world_disabled && (world_enabled || uds_exists) {
                 let transport_meta = TransportMeta {
                     mode: "unix".to_string(),
                     endpoint: Some("/run/substrate.sock".to_string()),
@@ -266,7 +286,6 @@ pub(crate) fn execute_command(
         // Attempt world-agent PTY WS route on mac when world is enabled
         #[cfg(target_os = "macos")]
         {
-            let world_enabled = std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
             let context = pw::get_context();
             let uds_exists = context
                 .as_ref()
@@ -275,7 +294,7 @@ pub(crate) fn execute_command(
                     _ => false,
                 })
                 .unwrap_or(false);
-            if world_enabled || uds_exists {
+            if !world_disabled && (world_enabled || uds_exists) {
                 let transport_meta = context
                     .as_ref()
                     .map(|ctx| world_transport_to_meta(&ctx.transport));
@@ -388,13 +407,12 @@ pub(crate) fn execute_command(
 
     #[cfg(target_os = "macos")]
     {
-        let world_enabled = std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
         let context = pw::get_context();
         let uds_exists = context
             .as_ref()
             .map(|c| matches!(&c.transport, pw::WorldTransport::Unix(path) if path.exists()))
             .unwrap_or(false);
-        if world_enabled || uds_exists {
+        if !world_disabled && (world_enabled || uds_exists) {
             let transport_meta = context
                 .as_ref()
                 .map(|ctx| world_transport_to_meta(&ctx.transport));
@@ -440,9 +458,8 @@ pub(crate) fn execute_command(
 
     #[cfg(target_os = "windows")]
     {
-        let world_env = std::env::var("SUBSTRATE_WORLD").unwrap_or_default();
         let context = pw::get_context();
-        if (world_env == "enabled" || context.is_some()) && !config.no_world {
+        if !world_disabled && (world_enabled || context.is_some()) {
             let transport_meta = context
                 .as_ref()
                 .map(|ctx| world_transport_to_meta(&ctx.transport));
@@ -510,11 +527,8 @@ pub(crate) fn execute_command(
 
     #[cfg(target_os = "linux")]
     {
-        let world_env = env::var("SUBSTRATE_WORLD").unwrap_or_default();
-        let world_enabled = world_env == "enabled";
-        let world_disabled = world_env == "disabled" || config.no_world;
         let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
-        if world_enabled || (!world_disabled && uds_exists) {
+        if !world_disabled && (world_enabled || uds_exists) {
             let transport_meta = TransportMeta {
                 mode: "unix".to_string(),
                 endpoint: Some("/run/substrate.sock".to_string()),
