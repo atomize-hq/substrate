@@ -29,6 +29,8 @@ pub(crate) fn mount_linux(overlay: &mut OverlayFs, lower_dir: &Path) -> Result<(
     let bind_lower = overlay.overlay_dir.join("lower");
     std::fs::create_dir_all(&bind_lower)?;
     let _ = umount2(&bind_lower, MntFlags::MNT_DETACH);
+    // Track the bind mount so cleanup can detach it even if the overlay mount fails.
+    overlay.bind_lower_dir = Some(bind_lower.clone());
     mount(
         Some(lower_dir),
         &bind_lower,
@@ -109,6 +111,8 @@ pub(crate) fn mount_linux(overlay: &mut OverlayFs, lower_dir: &Path) -> Result<(
 #[cfg(target_os = "linux")]
 pub(crate) fn mount_linux_read_only(overlay: &mut OverlayFs, lower_dir: &Path) -> Result<()> {
     use nix::mount::{mount, umount2, MntFlags, MsFlags};
+    use std::thread::sleep;
+    use std::time::Duration;
 
     let bind_lower = overlay.overlay_dir.join("lower");
     std::fs::create_dir_all(&bind_lower)?;
@@ -127,22 +131,60 @@ pub(crate) fn mount_linux_read_only(overlay: &mut OverlayFs, lower_dir: &Path) -
             bind_lower.display()
         )
     })?;
+    // Record the bind mount immediately so failure paths can clean it up.
+    overlay.bind_lower_dir = Some(bind_lower.clone());
 
     let options = format!("lowerdir={}", bind_lower.display());
-    mount(
+    match mount(
         Some("overlay"),
         &overlay.merged_dir,
         Some("overlay"),
         MsFlags::MS_RDONLY,
         Some(options.as_bytes()),
-    )
-    .with_context(|| {
-        format!(
-            "Failed to mount read-only overlayfs on {}",
-            overlay.merged_dir.display()
-        )
-    })?;
-    overlay.bind_lower_dir = Some(bind_lower);
+    ) {
+        Ok(()) => {}
+        Err(e) => {
+            // Fallback to fuse-overlayfs when kernel overlay mount is unavailable/denied.
+            let fuse_bin = which::which("fuse-overlayfs").map_err(|which_err| {
+                anyhow::anyhow!(
+                    "Failed to mount read-only overlayfs on {}: {e}. Also missing fuse-overlayfs binary: {which_err}",
+                    overlay.merged_dir.display()
+                )
+            })?;
+
+            let mut child = Command::new(&fuse_bin)
+                .arg("-o")
+                .arg(format!("lowerdir={}", bind_lower.display()))
+                .arg(&overlay.merged_dir)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .context("Failed to spawn fuse-overlayfs")?;
+
+            let mut ready = false;
+            for _ in 0..30 {
+                if let Ok(Some(fs_type)) = is_path_mounted(&overlay.merged_dir) {
+                    if fs_type.contains("fuse") || fs_type.contains("fuse-overlayfs") {
+                        ready = true;
+                        break;
+                    }
+                }
+                sleep(Duration::from_millis(33));
+            }
+
+            if !ready {
+                let _ = child.kill();
+                anyhow::bail!(
+                    "fuse-overlayfs did not mount {} within timeout",
+                    overlay.merged_dir.display()
+                );
+            }
+
+            overlay.using_fuse = true;
+            overlay.fuse_child = Some(child);
+        }
+    }
     Ok(())
 }
 
@@ -169,6 +211,7 @@ pub(crate) fn mount_fuse_only(overlay: &mut OverlayFs, lower_dir: &Path) -> Resu
             bind_lower.display()
         )
     })?;
+    overlay.bind_lower_dir = Some(bind_lower.clone());
 
     let fuse_bin =
         which::which("fuse-overlayfs").context("fuse-overlayfs binary not found in PATH")?;
@@ -215,22 +258,27 @@ pub(crate) fn mount_fuse_only(overlay: &mut OverlayFs, lower_dir: &Path) -> Resu
 pub(crate) fn unmount_linux(overlay: &mut OverlayFs) -> Result<()> {
     use nix::mount::{umount2, MntFlags};
 
-    if overlay.using_fuse {
-        let _status = Command::new("fusermount3")
-            .arg("-u")
-            .arg(&overlay.merged_dir)
-            .status();
-        let _ = umount2(&overlay.merged_dir, MntFlags::MNT_DETACH);
-        if let Some(mut ch) = overlay.fuse_child.take() {
-            let _ = ch.kill();
+    if overlay.is_mounted {
+        if overlay.using_fuse {
+            let _status = Command::new("fusermount3")
+                .arg("-u")
+                .arg(&overlay.merged_dir)
+                .status();
+            let _ = umount2(&overlay.merged_dir, MntFlags::MNT_DETACH);
+            if let Some(mut ch) = overlay.fuse_child.take() {
+                let _ = ch.kill();
+            }
+        } else {
+            umount2(&overlay.merged_dir, MntFlags::MNT_DETACH)
+                .context("Failed to unmount overlayfs")?;
         }
-    } else {
-        umount2(&overlay.merged_dir, MntFlags::MNT_DETACH)
-            .context("Failed to unmount overlayfs")?;
     }
 
     if let Some(ref bind_lower) = overlay.bind_lower_dir {
-        let _ = umount2(bind_lower, MntFlags::MNT_DETACH);
+        if is_path_mounted(bind_lower)?.is_some() {
+            umount2(bind_lower, MntFlags::MNT_DETACH)
+                .context("Failed to unmount bind-mounted lower directory")?;
+        }
     }
 
     Ok(())

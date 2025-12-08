@@ -42,6 +42,10 @@ pub(crate) fn execute_command(
 ) -> Result<ExitStatus> {
     let trimmed = command.trim();
 
+    // Always refresh policy/profile for this cwd before we read fs_mode.
+    let cwd_for_profile = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let _ = detect_profile(&cwd_for_profile);
+
     let fs_mode = world_fs_mode();
     std::env::set_var("SUBSTRATE_WORLD_FS_MODE", fs_mode.as_str());
 
@@ -118,6 +122,13 @@ pub(crate) fn execute_command(
     let world_env = std::env::var("SUBSTRATE_WORLD").unwrap_or_default();
     let world_enabled = world_env == "enabled";
     let world_disabled = world_env == "disabled" || config.no_world;
+    let world_required = fs_mode != substrate_common::WorldFsMode::Writable && !world_disabled;
+    if world_required && world_disabled {
+        anyhow::bail!(
+            "world execution required (fs_mode={}) but world is disabled (SUBSTRATE_WORLD=disabled or --no-world)",
+            fs_mode.as_str()
+        );
+    }
 
     // Start span for command execution
     let policy_decision;
@@ -238,7 +249,14 @@ pub(crate) fn execute_command(
         #[cfg(target_os = "linux")]
         {
             let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
-            if !world_disabled && (world_enabled || uds_exists) {
+            let world_available = !world_disabled && (world_enabled || uds_exists);
+            if world_required && !world_available {
+                anyhow::bail!(
+                    "world execution required (fs_mode={}) but world-agent is unavailable (/run/substrate.sock missing)",
+                    fs_mode.as_str()
+                );
+            }
+            if world_available {
                 let transport_meta = TransportMeta {
                     mode: "unix".to_string(),
                     endpoint: Some("/run/substrate.sock".to_string()),
@@ -276,7 +294,17 @@ pub(crate) fn execute_command(
                         }
                     }
                     Err(e) => {
-                        eprintln!("substrate: warn: world PTY over WS failed, falling back to host PTY: {}", e);
+                        if world_required {
+                            anyhow::bail!(
+                                "world execution required (fs_mode={}); PTY world path failed: {}",
+                                fs_mode.as_str(),
+                                e
+                            );
+                        }
+                        eprintln!(
+                            "substrate: warn: world PTY over WS failed, falling back to host PTY: {}",
+                            e
+                        );
                         // fall through to host PTY
                     }
                 }
@@ -294,7 +322,14 @@ pub(crate) fn execute_command(
                     _ => false,
                 })
                 .unwrap_or(false);
-            if !world_disabled && (world_enabled || uds_exists) {
+            let world_available = !world_disabled && (world_enabled || uds_exists);
+            if world_required && !world_available {
+                anyhow::bail!(
+                    "world execution required (fs_mode={}) but world-agent is unavailable",
+                    fs_mode.as_str()
+                );
+            }
+            if world_available {
                 let transport_meta = context
                     .as_ref()
                     .map(|ctx| world_transport_to_meta(&ctx.transport));
@@ -326,6 +361,13 @@ pub(crate) fn execute_command(
                         }
                     }
                     Err(e) => {
+                        if world_required {
+                            anyhow::bail!(
+                                "world execution required (fs_mode={}); PTY world path failed: {}",
+                                fs_mode.as_str(),
+                                e
+                            );
+                        }
                         static WARNED: std::sync::Once = std::sync::Once::new();
                         WARNED.call_once(|| {
                             eprintln!("substrate: warn: world PTY over WS failed on mac, falling back to host PTY: {}", e);
@@ -412,7 +454,14 @@ pub(crate) fn execute_command(
             .as_ref()
             .map(|c| matches!(&c.transport, pw::WorldTransport::Unix(path) if path.exists()))
             .unwrap_or(false);
-        if !world_disabled && (world_enabled || uds_exists) {
+        let world_available = !world_disabled && (world_enabled || uds_exists);
+        if world_required && !world_available {
+            anyhow::bail!(
+                "world execution required (fs_mode={}) but world-agent is unavailable",
+                fs_mode.as_str()
+            );
+        }
+        if world_available {
             let transport_meta = context
                 .as_ref()
                 .map(|ctx| world_transport_to_meta(&ctx.transport));
@@ -438,6 +487,13 @@ pub(crate) fn execute_command(
                     agent_result = Some(outcome);
                 }
                 Err(e) => {
+                    if world_required {
+                        anyhow::bail!(
+                            "world execution required (fs_mode={}); world-agent exec failed: {}",
+                            fs_mode.as_str(),
+                            e
+                        );
+                    }
                     static WARN_ONCE: std::sync::Once = std::sync::Once::new();
                     let path_hint = context
                         .as_ref()
@@ -459,7 +515,14 @@ pub(crate) fn execute_command(
     #[cfg(target_os = "windows")]
     {
         let context = pw::get_context();
-        if !world_disabled && (world_enabled || context.is_some()) {
+        let world_available = !world_disabled && (world_enabled || context.is_some());
+        if world_required && !world_available {
+            anyhow::bail!(
+                "world execution required (fs_mode={}) but world-agent is unavailable",
+                fs_mode.as_str()
+            );
+        }
+        if world_available {
             let transport_meta = context
                 .as_ref()
                 .map(|ctx| world_transport_to_meta(&ctx.transport));
@@ -485,6 +548,13 @@ pub(crate) fn execute_command(
                     agent_result = Some(outcome);
                 }
                 Err(e) => {
+                    if world_required {
+                        anyhow::bail!(
+                            "world execution required (fs_mode={}); world-agent exec failed: {}",
+                            fs_mode.as_str(),
+                            e
+                        );
+                    }
                     static WARN_ONCE: std::sync::Once = std::sync::Once::new();
                     let path_hint = context
                         .as_ref()
@@ -528,7 +598,14 @@ pub(crate) fn execute_command(
     #[cfg(target_os = "linux")]
     {
         let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
-        if !world_disabled && (world_enabled || uds_exists) {
+        let world_available = !world_disabled && (world_enabled || uds_exists);
+        if world_required && !world_available {
+            anyhow::bail!(
+                "world execution required (fs_mode={}) but world-agent is unavailable (/run/substrate.sock missing)",
+                fs_mode.as_str()
+            );
+        }
+        if world_available {
             let transport_meta = TransportMeta {
                 mode: "unix".to_string(),
                 endpoint: Some("/run/substrate.sock".to_string()),
@@ -545,6 +622,13 @@ pub(crate) fn execute_command(
                     agent_result = Some(outcome);
                 }
                 Err(e) => {
+                    if world_required {
+                        anyhow::bail!(
+                            "world execution required (fs_mode={}); world-agent exec failed: {}",
+                            fs_mode.as_str(),
+                            e
+                        );
+                    }
                     eprintln!(
                         "substrate: warn: shell world-agent path (/run/substrate.sock) exec failed, running direct: {}",
                         e

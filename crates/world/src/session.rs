@@ -1,5 +1,6 @@
 //! Session world implementation for Linux.
 
+use crate::overlayfs::OverlayFs;
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -15,6 +16,9 @@ pub struct SessionWorld {
     pub spec: WorldSpec,
     pub network_filter: Option<crate::netfilter::NetFilter>,
     pub fs_by_span: HashMap<String, FsDiff>,
+    /// Persistent overlay mount for this session (writable or read-only).
+    overlay: Option<OverlayFs>,
+    overlay_mode: Option<WorldFsMode>,
 }
 
 impl SessionWorld {
@@ -38,6 +42,8 @@ impl SessionWorld {
             spec,
             network_filter: None,
             fs_by_span: HashMap::new(),
+            overlay: None,
+            overlay_mode: None,
         };
 
         world.setup()?;
@@ -50,7 +56,6 @@ impl SessionWorld {
             && self.spec.isolate_network == spec.isolate_network
             && self.spec.always_isolate == spec.always_isolate
             && self.spec.allowed_domains == spec.allowed_domains
-            && self.spec.fs_mode == spec.fs_mode
     }
 
     /// Find an existing session world if available.
@@ -163,29 +168,39 @@ impl SessionWorld {
         let scopes_used;
         let mut diff_opt: Option<FsDiff> = None;
 
-        // Check if command should be isolated with overlayfs
-        if self.spec.fs_mode == WorldFsMode::ReadOnly {
-            let (exec_output, diff) =
-                crate::overlayfs::execute_read_only(&self.id, cmd, &self.project_dir, cwd, &env)?;
-            output = exec_output;
-            let diff_clone = diff.clone();
-            diff_opt = Some(diff);
-            if let Some(id) = span_id.as_ref() {
-                self.fs_by_span.insert(id.clone(), diff_clone);
+        // When fs_mode is enforced or heuristics request isolation, run against a persistent overlay
+        // so state is consistent across commands within this session.
+        if self.spec.fs_mode == WorldFsMode::ReadOnly
+            || self.spec.fs_mode != WorldFsMode::Writable
+            || self.should_isolate_command(cmd)
+        {
+            let merged_dir = self.ensure_overlay_mounted()?;
+            let mut rel = if cwd.starts_with(&self.project_dir) {
+                cwd.strip_prefix(&self.project_dir)
+                    .unwrap_or_else(|_| Path::new("."))
+                    .to_path_buf()
+            } else {
+                PathBuf::from(".")
+            };
+            if rel.as_os_str().is_empty() {
+                rel = PathBuf::from(".");
             }
-        } else if self.should_isolate_command(cmd) {
-            // Execute with overlayfs isolation
-            let (exec_output, diff) = crate::overlayfs::execute_with_overlay(
-                &self.id,
-                cmd,
-                &self.project_dir,
-                cwd,
-                &env,
-            )?;
-            output = exec_output;
-            diff_opt = Some(diff.clone());
-            if let Some(id) = span_id.as_ref() {
-                self.fs_by_span.insert(id.clone(), diff);
+            let target_dir = merged_dir.join(&rel);
+            let mut command_to_run = cmd.to_string();
+            if crate::guard::should_guard_anchor(&env) {
+                command_to_run = crate::guard::wrap_with_anchor_guard(cmd, &merged_dir);
+            }
+            output = crate::exec::execute_shell_command(&command_to_run, &target_dir, &env, true)
+                .context("Failed to execute command in overlay")?;
+
+            if self.spec.fs_mode == WorldFsMode::ReadOnly {
+                diff_opt = Some(FsDiff::default());
+            } else if let Some(ref overlay) = self.overlay {
+                let diff = overlay.compute_diff()?;
+                diff_opt = Some(diff.clone());
+                if let Some(id) = span_id.as_ref() {
+                    self.fs_by_span.insert(id.clone(), diff);
+                }
             }
         } else {
             output = crate::exec::execute_shell_command(cmd, cwd, &env, false)
@@ -240,10 +255,52 @@ impl SessionWorld {
             .any(|pattern| cmd.contains(pattern))
     }
 
+    /// Ensure a persistent overlay mount is available for this session and return the merged root.
+    fn ensure_overlay_mounted(&mut self) -> Result<PathBuf> {
+        if let Some(ref mut overlay) = self.overlay {
+            return Ok(overlay.merged_dir_path().to_path_buf());
+        }
+
+        // Tear down any previous overlay if the requested mode changed.
+        if let Some(mode) = self.overlay_mode {
+            if mode != self.spec.fs_mode {
+                if let Some(ref mut overlay) = self.overlay {
+                    let _ = overlay.cleanup();
+                }
+                self.overlay = None;
+                self.overlay_mode = None;
+            }
+        }
+
+        if let Some(ref mut overlay) = self.overlay {
+            return Ok(overlay.merged_dir_path().to_path_buf());
+        }
+
+        let mut overlay = OverlayFs::new(&self.id)?;
+        let merged = if self.spec.fs_mode == WorldFsMode::ReadOnly {
+            overlay.mount_read_only(&self.project_dir)?
+        } else {
+            overlay.mount(&self.project_dir)?
+        };
+        let merged_dir = merged.clone();
+        self.overlay = Some(overlay);
+        self.overlay_mode = Some(self.spec.fs_mode);
+        Ok(merged_dir)
+    }
+
     /// Apply policy to this world.
     pub fn apply_policy(&self, _spec: &WorldSpec) -> Result<()> {
         // TODO: Implement policy application
         Ok(())
+    }
+}
+
+impl Drop for SessionWorld {
+    fn drop(&mut self) {
+        if let Some(ref mut overlay) = self.overlay {
+            let _ = overlay.cleanup();
+        }
+        self.overlay_mode = None;
     }
 }
 
@@ -290,6 +347,8 @@ mod tests {
             spec: base_spec.clone(),
             network_filter: None,
             fs_by_span: HashMap::new(),
+            overlay: None,
+            overlay_mode: None,
         };
 
         assert!(world.compatible_with(&base_spec));

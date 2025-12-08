@@ -107,10 +107,6 @@ impl OverlayFs {
 
     /// Unmount the overlayfs.
     pub fn unmount(&mut self) -> Result<()> {
-        if !self.is_mounted {
-            return Ok(());
-        }
-
         #[cfg(target_os = "linux")]
         layering::unmount_linux(self)?;
 
@@ -136,6 +132,19 @@ impl OverlayFs {
     /// Clean up the overlay directories.
     pub fn cleanup(&mut self) -> Result<()> {
         self.unmount()?;
+
+        // If the bind mount is somehow still present, avoid descending into it.
+        #[cfg(target_os = "linux")]
+        if let Some(ref bind_lower) = self.bind_lower_dir {
+            if let Ok(Some(_)) = crate::overlayfs::utils::is_path_mounted(bind_lower) {
+                eprintln!(
+                    "[overlay] warn: bind mount still active at {}; skipping removal of {}",
+                    bind_lower.display(),
+                    self.overlay_dir.display()
+                );
+                return Ok(());
+            }
+        }
 
         if self.overlay_dir.exists() {
             if let Err(e) = std::fs::remove_dir_all(&self.overlay_dir) {
@@ -362,6 +371,53 @@ mod tests {
         assert!(
             !overlay_dir.exists(),
             "cleanup should remove overlay directory even when not mounted"
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn cleanup_detaches_bind_mount_when_mount_fails() {
+        use nix::mount::{mount, umount2, MntFlags, MsFlags};
+        use nix::unistd::Uid;
+
+        if !Uid::current().is_root() {
+            println!("Skipping bind mount cleanup test (requires root)");
+            return;
+        }
+
+        let temp_dir = TempDir::new().unwrap();
+        let project_dir = temp_dir.path().join("project");
+        std::fs::create_dir_all(&project_dir).unwrap();
+        std::fs::write(project_dir.join("file.txt"), b"data").unwrap();
+
+        let mut overlay = OverlayFs::new("bind_cleanup").unwrap();
+        let bind_lower = overlay.overlay_dir.join("lower");
+        std::fs::create_dir_all(&bind_lower).unwrap();
+
+        mount(
+            Some(&project_dir),
+            &bind_lower,
+            None::<&str>,
+            MsFlags::MS_BIND,
+            None::<&str>,
+        )
+        .unwrap();
+        overlay.bind_lower_dir = Some(bind_lower.clone());
+
+        // Simulate a failed mount (is_mounted stays false) and ensure cleanup
+        // tears down the bind without deleting the project contents.
+        overlay.cleanup().unwrap();
+
+        assert!(
+            project_dir.join("file.txt").exists(),
+            "cleanup should never delete files from the project dir"
+        );
+        let _ = umount2(&bind_lower, MntFlags::MNT_DETACH);
+        assert!(
+            crate::overlayfs::utils::is_path_mounted(&bind_lower)
+                .unwrap_or(None)
+                .is_none(),
+            "bind mount should be detached during cleanup"
         );
     }
 }

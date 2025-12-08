@@ -49,11 +49,11 @@ impl WorldBackend for LinuxLocalBackend {
         self.check_platform()?;
 
         if spec.reuse_session {
-            let cache = self
-                .session_cache
-                .read()
-                .map_err(|e| anyhow::anyhow!("Failed to acquire session cache read lock: {}", e))?;
-            if let Some(world) = cache.values().find(|world| world.compatible_with(spec)) {
+            let mut cache = self.session_cache.write().map_err(|e| {
+                anyhow::anyhow!("Failed to acquire session cache write lock: {}", e)
+            })?;
+            if let Some(world) = cache.values_mut().find(|world| world.compatible_with(spec)) {
+                world.spec.fs_mode = spec.fs_mode;
                 return Ok(WorldHandle {
                     id: world.id.clone(),
                 });
