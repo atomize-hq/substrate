@@ -851,3 +851,11 @@ Template:
 - Created worktree: pending (`ps-r2f-host-replay-integ` → `wt/ps-r2f-host-replay-integ` after doc commit)
 - Plan: merge R2f code/test branches, resolve conflicts, run fmt/clippy/tests, fast-forward base, update tasks/logs
 - Blockers: no provisioned `/run/substrate.sock` on this host; expect host-mode replay warnings during tests
+
+## [2025-12-08 03:25 UTC] Integration Agent – R2f-integ – END
+- Worktree commits: 4011bad (`chore: fmt host replay tests`)
+- Commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world` (filter-only, 0 tests); `cargo test -p substrate-shell --test replay_world -- --nocapture`
+- Results: fmt/clippy pass; substrate-replay suite passes; replay_world filter ran 0 tests; replay_world integration suite passes with expected skips/warnings (missing span_id on host spans; agent socket/cgroup/netns/overlay/copy-diff unavailable on this host, copy-diff retries logged)
+- Scripts executed: n/a
+- Docs commit: pending (`docs: finish R2f-integ` after tasks/session updates)
+- Next steps / blockers: fast-forward feat/p0-platform-stability-follow-up to ps-r2f-host-replay-integ; remove worktree after doc commit

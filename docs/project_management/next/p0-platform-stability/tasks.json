@@ -2223,7 +2223,7 @@
       "name": "Host replay span parity (integration)",
       "type": "integration",
       "phase": "R2f \u2013 Host Replay Parity",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge the host span replay parity code/test branches, rerun fmt/lint/tests, and ensure host-only spans are replayable without world dependencies.",
       "references": [
         "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
