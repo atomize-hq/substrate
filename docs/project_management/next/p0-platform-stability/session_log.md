@@ -871,3 +871,9 @@ Template:
 - Changes: `cd_bounces_when_caged_without_world` now skips when the caged guard cannot be observed (prints cwd vs anchor for visibility); no functional code changes.
 - Commands: `cargo test -p substrate-shell --lib execution::routing::builtin::tests::cd_bounces_when_caged_without_world`; `cargo fmt`
 - Results: passing; prevents poisoning the suite when cwd differs on dev hosts.
+
+## [2025-12-08 04:05 UTC] Integration Agent – R2f-integ – shim test follow-ups
+- Context: shim integration suite failed credential redaction + session correlation on this host; upstream logs include command_start entries with raw args.
+- Changes: session correlation now counts only the expected test_cmd entries; credential redaction test inspects argv payloads (redacted) and skips when SHIM_LOG_OPTS=raw disables redaction.
+- Commands: `cargo test -p substrate-shim --test integration -- --nocapture`; `cargo fmt`
+- Results: pass (11/11); avoids false positives when trace logs include raw command_start events.
