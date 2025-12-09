@@ -27,3 +27,18 @@ pub(crate) use manager::{
 pub(crate) use platform::{handle_health_command, handle_world_command, update_world_env};
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) use platform_world as pw;
+
+#[cfg(test)]
+use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
+#[cfg(test)]
+use std::sync::OnceLock;
+
+#[cfg(test)]
+static WORLD_ENV_LOCK: OnceLock<ReentrantMutex<()>> = OnceLock::new();
+
+#[cfg(test)]
+pub(crate) fn world_env_guard() -> ReentrantMutexGuard<'static, ()> {
+    WORLD_ENV_LOCK
+        .get_or_init(|| ReentrantMutex::new(()))
+        .lock()
+}

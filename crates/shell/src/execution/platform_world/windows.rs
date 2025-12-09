@@ -1,5 +1,7 @@
 use super::{PlatformWorldContext, WorldTransport};
 use crate::execution::settings;
+#[cfg(test)]
+use crate::execution::world_env_guard;
 use crate::Cli;
 use agent_api_client::{AgentClient, Transport};
 use anyhow::Result;
@@ -66,6 +68,9 @@ where
     if world_env == "disabled" && !cli.world {
         return Ok(None);
     }
+
+    #[cfg(test)]
+    let _env_guard = world_env_guard();
 
     let backend = backend_provider()?;
     let spec = world_spec();

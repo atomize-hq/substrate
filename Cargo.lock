@@ -3339,6 +3339,7 @@ dependencies = [
  "log",
  "nix 0.29.0",
  "nu-ansi-term",
+ "parking_lot",
  "portable-pty",
  "predicates",
  "proptest",

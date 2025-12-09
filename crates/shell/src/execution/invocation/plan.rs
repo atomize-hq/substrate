@@ -17,6 +17,8 @@ use std::collections::HashMap;
 use std::env;
 use std::io::{self, IsTerminal};
 use std::path::PathBuf;
+#[cfg(test)]
+use std::sync::{Mutex, OnceLock};
 use substrate_common::{dedupe_path, paths as substrate_paths, WorldRootMode};
 use uuid::Uuid;
 
@@ -57,6 +59,12 @@ impl ShellConfig {
     }
 
     pub fn from_cli(cli: Cli) -> Result<Self> {
+        #[cfg(test)]
+        let _env_lock = FROM_CLI_ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("env mutex poisoned");
+
         // macOS-only: apply CLI overrides to environment for platform detection precedence
         #[cfg(target_os = "macos")]
         {
@@ -575,6 +583,9 @@ impl ShellConfig {
         })
     }
 }
+
+#[cfg(test)]
+static FROM_CLI_ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 pub fn needs_shell(cmd: &str) -> bool {
     let Ok(tokens) = shell_words::split(cmd) else {

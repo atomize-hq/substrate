@@ -1,5 +1,7 @@
 //! World initialization flows for routing, including platform-gated defaults and agent bridging.
 
+#[cfg(all(test, any(target_os = "windows", target_os = "macos")))]
+use crate::execution::world_env_guard;
 use crate::execution::ShellConfig;
 use std::env;
 
@@ -34,6 +36,9 @@ fn init_windows_world(config: &ShellConfig) {
         return;
     }
 
+    #[cfg(test)]
+    let _env_guard = world_env_guard();
+
     match pw::detect() {
         Ok(ctx) => {
             if let Err(e) = (ctx.ensure_ready)() {
@@ -60,6 +65,9 @@ fn init_macos_world(config: &ShellConfig) {
     if world_disabled(config) {
         return;
     }
+
+    #[cfg(test)]
+    let _env_guard = world_env_guard();
 
     match pw::detect() {
         Ok(ctx) => {

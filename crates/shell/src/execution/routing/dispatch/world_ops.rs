@@ -4,6 +4,8 @@ use super::shim_ops::build_world_env_map;
 use crate::execution::agent_events::publish_agent_event;
 #[cfg(target_os = "macos")]
 use crate::execution::pw;
+#[cfg(all(test, any(target_os = "linux", target_os = "windows")))]
+use crate::execution::world_env_guard;
 #[cfg(target_os = "linux")]
 use crate::execution::{
     routing::{get_term_size, RawModeGuard},
@@ -422,6 +424,9 @@ where
         return LinuxWorldInit::Disabled;
     }
 
+    #[cfg(test)]
+    let _env_guard = world_env_guard();
+
     match agent_probe() {
         Ok(()) => {
             env::set_var("SUBSTRATE_WORLD", "enabled");
@@ -704,6 +709,10 @@ fn build_agent_client_and_request_impl(
     use crate::execution::platform_world::windows;
     let backend = windows::get_backend()?;
     let handle = backend.ensure_session(&windows::world_spec())?;
+
+    #[cfg(test)]
+    let _env_guard = world_env_guard();
+
     std::env::set_var("SUBSTRATE_WORLD", "enabled");
     std::env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
 

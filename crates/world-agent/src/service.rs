@@ -89,12 +89,12 @@ impl WorldAgentService {
             let linux_backend = Arc::new(world::LinuxLocalBackend::new());
             let backend: Arc<dyn WorldBackend> = linux_backend.clone();
 
-            return Ok(Self {
+            Ok(Self {
                 backend,
                 linux_backend,
                 worlds: Arc::new(RwLock::new(HashMap::new())),
                 budgets: Arc::new(RwLock::new(HashMap::new())),
-            });
+            })
         }
 
         #[cfg(not(target_os = "linux"))]

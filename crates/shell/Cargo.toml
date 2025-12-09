@@ -78,6 +78,7 @@ serial_test = "3.0"
 proptest = "1.4"
 toml = "0.8"
 serde_yaml = "0.9"
+parking_lot = "0.12"
 
 [build-dependencies]
 rustc_version = "0.4"

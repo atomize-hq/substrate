@@ -1,5 +1,7 @@
 use super::cli::{Cli, HealthCmd, WorldAction, WorldCmd};
 use crate::builtins as commands;
+#[cfg(test)]
+use crate::execution::world_env_guard;
 use anyhow::Result;
 use std::env;
 use substrate_broker::world_fs_mode;
@@ -63,6 +65,9 @@ mod fallback {
 }
 
 pub(crate) fn update_world_env(no_world: bool) {
+    #[cfg(test)]
+    let _env_lock = world_env_guard();
+
     if no_world {
         env::set_var("SUBSTRATE_WORLD_ENABLED", "0");
         env::set_var("SUBSTRATE_WORLD", "disabled");

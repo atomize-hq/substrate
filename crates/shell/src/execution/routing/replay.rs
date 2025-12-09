@@ -2,6 +2,8 @@
 
 use crate::execution::cli::Cli;
 use crate::execution::settings::world_root_from_env;
+#[cfg(test)]
+use crate::execution::world_env_guard;
 use anyhow::Result;
 use serde_json::json;
 use std::collections::HashMap;
@@ -110,6 +112,9 @@ impl ReplayWorldMode {
     }
 
     fn apply_env(&self) {
+        #[cfg(test)]
+        let _env_guard = world_env_guard();
+
         if self.selected == ExecutionOrigin::World {
             env::set_var("SUBSTRATE_WORLD", "enabled");
             env::set_var("SUBSTRATE_WORLD_ENABLED", "1");

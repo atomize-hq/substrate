@@ -1,4 +1,5 @@
 use crate::execution::settings::WorldRootSettings;
+use crate::execution::world_env_guard;
 use crate::execution::{ShellConfig, ShellMode};
 use std::collections::HashMap;
 use std::env;
@@ -45,12 +46,14 @@ pub(crate) fn test_shell_config(temp: &TempDir) -> ShellConfig {
 }
 
 pub(crate) fn set_env(key: &str, value: &str) -> Option<String> {
+    let _guard = world_env_guard();
     let previous = env::var(key).ok();
     env::set_var(key, value);
     previous
 }
 
 pub(crate) fn restore_env(key: &str, previous: Option<String>) {
+    let _guard = world_env_guard();
     if let Some(value) = previous {
         env::set_var(key, value);
     } else {
