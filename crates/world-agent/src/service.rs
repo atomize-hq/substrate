@@ -40,6 +40,8 @@ pub(crate) const WORLD_FS_MODE_ENV: &str = "SUBSTRATE_WORLD_FS_MODE";
 #[derive(Clone)]
 pub struct WorldAgentService {
     backend: Arc<dyn WorldBackend>,
+    #[cfg(target_os = "linux")]
+    linux_backend: Arc<world::LinuxLocalBackend>,
     #[allow(dead_code)]
     worlds: Arc<RwLock<HashMap<String, WorldHandle>>>,
     budgets: Arc<RwLock<HashMap<String, AgentBudgetTracker>>>,
@@ -82,13 +84,29 @@ impl AgentBudgetTracker {
 
 impl WorldAgentService {
     pub fn new() -> Result<Self> {
-        let backend = Self::create_backend()?;
+        #[cfg(target_os = "linux")]
+        {
+            let linux_backend = Arc::new(world::LinuxLocalBackend::new());
+            let backend: Arc<dyn WorldBackend> = linux_backend.clone();
 
-        Ok(Self {
-            backend,
-            worlds: Arc::new(RwLock::new(HashMap::new())),
-            budgets: Arc::new(RwLock::new(HashMap::new())),
-        })
+            return Ok(Self {
+                backend,
+                linux_backend,
+                worlds: Arc::new(RwLock::new(HashMap::new())),
+                budgets: Arc::new(RwLock::new(HashMap::new())),
+            });
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let backend = Self::create_backend()?;
+
+            Ok(Self {
+                backend,
+                worlds: Arc::new(RwLock::new(HashMap::new())),
+                budgets: Arc::new(RwLock::new(HashMap::new())),
+            })
+        }
     }
 
     /// Ensure a session world (thin wrapper over backend)
@@ -97,10 +115,12 @@ impl WorldAgentService {
         self.backend.ensure_session(spec)
     }
 
+    /// Ensure the session world exists and return the merged overlay root for PTY sessions.
     #[cfg(target_os = "linux")]
-    fn create_backend() -> Result<Arc<dyn WorldBackend>> {
-        use world::LinuxLocalBackend;
-        Ok(Arc::new(LinuxLocalBackend::new()))
+    pub fn ensure_session_overlay_root(&self, spec: &WorldSpec) -> Result<(WorldHandle, PathBuf)> {
+        let world = self.linux_backend.ensure_session(spec)?;
+        let merged = self.linux_backend.ensure_overlay_root(&world)?;
+        Ok((world, merged))
     }
 
     #[cfg(not(target_os = "linux"))]

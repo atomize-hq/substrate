@@ -44,3 +44,10 @@ tokei-all-crates:
 	done; \
 	cat "$(LOG_DIR)"/*_*$$(printf '%s\n' "$(RUN_TS)").log > "$(FINAL_LOG)"; \
 	echo "Combined log written to: $(FINAL_LOG)"
+
+.PHONY: flightcheck
+
+flightcheck:
+	@echo "##flightcheck -- must run from repo root"
+	@echo "##flightcheck -- must run pass for *integ tasks to be considered green"
+	cargo fmt && cargo clippy --workspace --all-targets && cargo clean && cargo check --workspace --all-targets && cargo test --workspace --all-targets

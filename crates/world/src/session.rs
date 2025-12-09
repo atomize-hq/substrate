@@ -231,6 +231,11 @@ impl SessionWorld {
         Ok(FsDiff::default())
     }
 
+    /// Ensure the overlay is mounted and return the merged root for reuse across entry points.
+    pub(crate) fn ensure_overlay_root(&mut self) -> Result<PathBuf> {
+        self.ensure_overlay_mounted()
+    }
+
     /// Check if a command should be isolated with overlayfs.
     fn should_isolate_command(&self, cmd: &str) -> bool {
         // Force isolation if always_isolate is set
@@ -257,31 +262,43 @@ impl SessionWorld {
 
     /// Ensure a persistent overlay mount is available for this session and return the merged root.
     fn ensure_overlay_mounted(&mut self) -> Result<PathBuf> {
-        // Tear down any previous overlay if the requested mode changed.
-        if let Some(mode) = self.overlay_mode {
-            if mode != self.spec.fs_mode {
-                if let Some(ref mut overlay) = self.overlay {
-                    let _ = overlay.cleanup();
-                }
-                self.overlay = None;
-                self.overlay_mode = None;
+        if self.overlay.is_none() {
+            self.overlay = Some(OverlayFs::new(&self.id)?);
+        }
+
+        let desired_mode = self.spec.fs_mode;
+        let overlay = self
+            .overlay
+            .as_mut()
+            .expect("overlay should be initialized above");
+
+        if !overlay.is_mounted() {
+            overlay.mount(&self.project_dir)?;
+        }
+
+        if self.overlay_mode != Some(desired_mode)
+            && (desired_mode == WorldFsMode::ReadOnly || self.overlay_mode.is_some())
+        {
+            if desired_mode == WorldFsMode::ReadOnly {
+                #[cfg(target_os = "linux")]
+                overlay
+                    .remount_read_only()
+                    .context("Failed to remount overlay read-only")?;
+                #[cfg(not(target_os = "linux"))]
+                anyhow::bail!("read-only overlay remount is only supported on Linux");
+            } else {
+                #[cfg(target_os = "linux")]
+                overlay
+                    .remount_writable()
+                    .context("Failed to remount overlay writable")?;
             }
+            self.overlay_mode = Some(desired_mode);
+        } else if self.overlay_mode.is_none() {
+            // Record the initial mode without forcing an extra remount.
+            self.overlay_mode = Some(desired_mode);
         }
 
-        if let Some(ref mut overlay) = self.overlay {
-            return Ok(overlay.merged_dir_path().to_path_buf());
-        }
-
-        let mut overlay = OverlayFs::new(&self.id)?;
-        let merged = if self.spec.fs_mode == WorldFsMode::ReadOnly {
-            overlay.mount_read_only(&self.project_dir)?
-        } else {
-            overlay.mount(&self.project_dir)?
-        };
-        let merged_dir = merged.clone();
-        self.overlay = Some(overlay);
-        self.overlay_mode = Some(self.spec.fs_mode);
-        Ok(merged_dir)
+        Ok(overlay.merged_dir_path().to_path_buf())
     }
 
     /// Apply policy to this world.

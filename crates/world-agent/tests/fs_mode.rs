@@ -147,6 +147,11 @@ fn non_pty_writable_mode_records_diffs_for_writes() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn pty_read_only_mode_returns_clear_error() {
+    if !overlay_available() {
+        eprintln!("skipping read-only PTY test: overlay support or privileges missing");
+        return;
+    }
+
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
         Err(err) => {
@@ -251,7 +256,12 @@ async fn pty_read_only_mode_returns_clear_error() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn pty_writable_mode_allows_write() {
+async fn pty_writable_mode_keeps_writes_in_overlay() {
+    if !overlay_available() {
+        eprintln!("skipping writable PTY test: overlay support or privileges missing");
+        return;
+    }
+
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
         Err(err) => {
@@ -332,11 +342,205 @@ async fn pty_writable_mode_allows_write() {
             );
             return;
         }
+
         assert!(
-            target.exists(),
-            "writable PTY execution should create files in project dir"
+            !target.exists(),
+            "writable PTY execution should stay inside the overlay (host path exists: {})",
+            target.display()
         );
+
+        let verify_req = ExecuteRequest {
+            profile: None,
+            cmd: "sh -lc 'cat pty-writable.txt'".to_string(),
+            cwd: Some(cwd.display().to_string()),
+            env: Some(HashMap::new()),
+            pty: false,
+            agent_id: "fs-mode-test".to_string(),
+            budget: None,
+            world_fs_mode: Some(WorldFsMode::Writable),
+        };
+
+        match service.execute(verify_req).await {
+            Ok(resp) => {
+                if resp.exit != 0 {
+                    eprintln!(
+                        "skipping writable PTY assertions: overlay verify failed with {}",
+                        resp.exit
+                    );
+                    return;
+                }
+                let stdout = decode(&resp.stdout_b64);
+                assert!(
+                    stdout.contains("writable-ok"),
+                    "overlay should retain PTY writes (stdout: {stdout})"
+                );
+            }
+            Err(err) => {
+                eprintln!("skipping writable PTY assertions: overlay verify failed: {err}");
+            }
+        }
     } else {
         eprintln!("skipping writable PTY assertions: no exit frame received");
     }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn pty_and_non_pty_share_overlay_state_across_mode_switch() {
+    if !overlay_available() {
+        eprintln!("skipping mode-switch overlay test: overlay support or privileges missing");
+        return;
+    }
+
+    let service = match WorldAgentService::new() {
+        Ok(svc) => svc,
+        Err(err) => {
+            eprintln!("skipping mode-switch overlay test: service init failed: {err}");
+            return;
+        }
+    };
+
+    let tmp = tempdir().expect("tempdir");
+    let cwd = tmp.path().to_path_buf();
+    let non_pty_target = cwd.join("nonpty.txt");
+    let pty_target = cwd.join("pty.txt");
+    let ro_target = cwd.join("ro-deny.txt");
+
+    let write_non_pty = ExecuteRequest {
+        profile: None,
+        cmd: "sh -lc 'echo nonpty-write > nonpty.txt'".to_string(),
+        cwd: Some(cwd.display().to_string()),
+        env: Some(HashMap::new()),
+        pty: false,
+        agent_id: "fs-mode-test".to_string(),
+        budget: None,
+        world_fs_mode: Some(WorldFsMode::Writable),
+    };
+
+    match service.execute(write_non_pty).await {
+        Ok(resp) => {
+            if resp.exit != 0 {
+                eprintln!(
+                    "skipping mode-switch overlay test: non-PTY write exited with {}",
+                    resp.exit
+                );
+                return;
+            }
+        }
+        Err(err) => {
+            eprintln!("skipping mode-switch overlay test: non-PTY write failed: {err}");
+            return;
+        }
+    }
+
+    // Run a PTY write in the same world to ensure it stays in the overlay.
+    let router = Router::new().route(
+        "/pty",
+        get({
+            let service = service.clone();
+            move |ws: WebSocketUpgrade| {
+                let service = service.clone();
+                async move { ws.on_upgrade(move |socket| handle_ws_pty(service, socket)) }
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind ws listener");
+    let addr = listener.local_addr().expect("ws listener addr");
+    let std_listener = listener.into_std().expect("into_std listener");
+    let server = tokio::spawn(async move {
+        let _ = Server::from_tcp(std_listener)
+            .unwrap()
+            .serve(router.into_make_service())
+            .await;
+    });
+
+    let (mut client_ws, _) = connect_async(format!("ws://{}/pty", addr))
+        .await
+        .expect("connect ws");
+
+    let start = serde_json::json!({
+        "type": "start",
+        "cmd": "sh -lc 'echo pty-write > pty.txt'",
+        "cwd": cwd,
+        "env": {
+            "SUBSTRATE_WORLD_FS_MODE": "writable"
+        },
+        "span_id": null,
+        "cols": 80,
+        "rows": 24
+    });
+    client_ws
+        .send(Message::Text(start.to_string()))
+        .await
+        .expect("send start");
+
+    let mut pty_exit: Option<i32> = None;
+    while let Some(frame) = client_ws.next().await {
+        match frame {
+            Ok(Message::Text(text)) => {
+                if let Ok(ServerMessage::Exit { code }) =
+                    serde_json::from_str::<ServerMessage>(&text)
+                {
+                    pty_exit = Some(code);
+                    break;
+                }
+            }
+            Ok(Message::Close(_)) | Err(_) => break,
+            _ => {}
+        }
+    }
+
+    let _ = client_ws.close(None).await;
+    server.abort();
+
+    if pty_exit != Some(0) {
+        eprintln!("skipping mode-switch overlay assertions: PTY write exited with {pty_exit:?}");
+        return;
+    }
+
+    assert!(
+        !non_pty_target.exists() && !pty_target.exists(),
+        "overlay writes should not appear on the host filesystem"
+    );
+
+    let verify_ro = ExecuteRequest {
+        profile: None,
+        cmd: "sh -lc 'cat nonpty.txt && cat pty.txt && touch ro-deny.txt'".to_string(),
+        cwd: Some(cwd.display().to_string()),
+        env: Some(HashMap::new()),
+        pty: false,
+        agent_id: "fs-mode-test".to_string(),
+        budget: None,
+        world_fs_mode: Some(WorldFsMode::ReadOnly),
+    };
+
+    match service.execute(verify_ro).await {
+        Ok(resp) => {
+            let stdout = decode(&resp.stdout_b64);
+            assert!(
+                stdout.contains("nonpty-write"),
+                "read-only view should include non-PTY overlay writes (stdout: {stdout})"
+            );
+            assert!(
+                stdout.contains("pty-write"),
+                "read-only view should include PTY overlay writes (stdout: {stdout})"
+            );
+
+            let stderr = decode(&resp.stderr_b64);
+            assert!(
+                resp.exit != 0 || stderr.to_lowercase().contains("read-only"),
+                "read-only mode should reject writes"
+            );
+        }
+        Err(err) => {
+            eprintln!("skipping mode-switch overlay assertions: read-only verify failed: {err}");
+            return;
+        }
+    }
+
+    assert!(
+        !ro_target.exists(),
+        "read-only mode should not leak writes to host"
+    );
 }

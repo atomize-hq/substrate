@@ -168,17 +168,18 @@ pub async fn handle_ws_pty(
     let mut command_to_run = cmd.clone();
     #[cfg(not(target_os = "linux"))]
     let command_to_run = cmd.clone();
-    let mut cwd_for_child = cwd.clone();
     #[cfg(target_os = "linux")]
-    let mut ro_overlay: Option<world::overlayfs::OverlayFs> = None;
+    let cwd_for_child: PathBuf;
+    #[cfg(not(target_os = "linux"))]
+    let cwd_for_child = cwd.clone();
     #[cfg(target_os = "linux")]
-    let mut overlay_anchor: Option<PathBuf> = None;
+    let anchor_root: PathBuf;
 
     // Prepare in-world session context (best-effort)
     #[cfg(target_os = "linux")]
-    let mut world_id_for_logs: String = "-".to_string();
+    let world_id_for_logs: Option<String>;
     #[cfg(not(target_os = "linux"))]
-    let world_id_for_logs: String = "-".to_string();
+    let world_id_for_logs: Option<String> = None;
 
     #[cfg(target_os = "linux")]
     let mut ns_name_opt: Option<String> = None;
@@ -186,12 +187,12 @@ pub async fn handle_ws_pty(
     let ns_name_opt: Option<String> = None;
 
     #[cfg(target_os = "linux")]
-    let mut cgroup_path_opt: Option<std::path::PathBuf> = None;
+    let cgroup_path_opt: Option<std::path::PathBuf>;
     #[cfg(not(target_os = "linux"))]
     let cgroup_path_opt: Option<std::path::PathBuf> = None;
 
     #[cfg(target_os = "linux")]
-    let mut in_world = false;
+    let in_world: bool;
     #[cfg(not(target_os = "linux"))]
     let in_world = false;
     #[cfg(target_os = "linux")]
@@ -221,30 +222,22 @@ pub async fn handle_ws_pty(
             enable_preload: false,
             allowed_domains: substrate_broker::allowed_domains(),
             project_dir: project_dir.clone(),
-            always_isolate: false, // Default: use heuristic-based isolation
+            always_isolate: true,
             fs_mode,
         };
 
-        if let Ok(world) = service.ensure_session_world(&spec) {
-            world_id_for_logs = world.id.clone();
-            let ns_name = format!("substrate-{}", world.id);
-            let ns_path = format!("/var/run/netns/{}", ns_name);
-            if std::path::Path::new(&ns_path).exists() {
-                ns_name_opt = Some(ns_name);
-            }
-            let cg = std::path::PathBuf::from("/sys/fs/cgroup/substrate").join(&world.id);
-            cgroup_path_opt = Some(cg);
-            in_world = true;
-        }
+        match service.ensure_session_overlay_root(&spec) {
+            Ok((world, merged_dir)) => {
+                world_id_for_logs = Some(world.id.clone());
+                let ns_name = format!("substrate-{}", world.id);
+                let ns_path = format!("/var/run/netns/{}", ns_name);
+                if std::path::Path::new(&ns_path).exists() {
+                    ns_name_opt = Some(ns_name);
+                }
+                let cg = std::path::PathBuf::from("/sys/fs/cgroup/substrate").join(&world.id);
+                cgroup_path_opt = Some(cg);
+                in_world = true;
 
-        if fs_mode == WorldFsMode::ReadOnly {
-            let overlay_id = if world_id_for_logs == "-" {
-                "pty_ro"
-            } else {
-                &world_id_for_logs
-            };
-            match world::overlayfs::OverlayFs::new(overlay_id).and_then(|mut overlay| {
-                let merged_dir = overlay.mount_read_only(&project_dir)?;
                 let rel = if cwd.starts_with(&project_dir) {
                     cwd.strip_prefix(&project_dir)
                         .unwrap_or_else(|_| Path::new("."))
@@ -252,29 +245,23 @@ pub async fn handle_ws_pty(
                 } else {
                     PathBuf::from(".")
                 };
-                Ok((overlay, merged_dir, rel))
-            }) {
-                Ok((overlay, merged_dir, rel)) => {
-                    cwd_for_child = merged_dir.join(rel);
-                    overlay_anchor = Some(merged_dir);
-                    ro_overlay = Some(overlay);
-                }
-                Err(err) => {
-                    let _ = send_ws_message(
-                        &tx,
-                        &ServerMessage::Error {
-                            message: format!("Failed to prepare read-only mount: {}", err),
-                        },
-                    )
-                    .await;
-                    return;
-                }
+                cwd_for_child = merged_dir.join(rel);
+                anchor_root = merged_dir;
+            }
+            Err(err) => {
+                let _ = send_ws_message(
+                    &tx,
+                    &ServerMessage::Error {
+                        message: format!("Failed to prepare world overlay: {}", err),
+                    },
+                )
+                .await;
+                return;
             }
         }
 
         if should_guard_anchor(&env) {
-            let anchor_root = overlay_anchor.as_ref().unwrap_or(&project_dir);
-            command_to_run = wrap_with_anchor_guard(&command_to_run, anchor_root);
+            command_to_run = wrap_with_anchor_guard(&command_to_run, &anchor_root);
         }
     }
 
@@ -344,8 +331,9 @@ pub async fn handle_ws_pty(
     drop(pair.slave);
 
     // Log start with in-world context
+    let world_id_log = world_id_for_logs.as_deref().unwrap_or("-");
     info!(
-        world_id = %world_id_for_logs,
+        world_id = %world_id_log,
         ns = %ns_name_opt.clone().unwrap_or_else(|| "-".into()),
         cgroup = %cgroup_path_opt
             .as_ref()
@@ -474,11 +462,6 @@ pub async fn handle_ws_pty(
     info!(exit_code, "ws_pty: exit");
     let exit_msg = ServerMessage::Exit { code: exit_code };
     let _ = send_ws_message(&tx, &exit_msg).await;
-
-    #[cfg(target_os = "linux")]
-    if let Some(mut overlay) = ro_overlay {
-        let _ = overlay.cleanup();
-    }
 
     // Clean up tasks
     reader_task.abort();

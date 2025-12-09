@@ -58,6 +58,11 @@ impl OverlayFs {
         })
     }
 
+    /// Return true if the overlay is currently mounted.
+    pub fn is_mounted(&self) -> bool {
+        self.is_mounted
+    }
+
     /// Mount the overlayfs with the given lower directory.
     pub fn mount(&mut self, #[allow(unused_variables)] lower_dir: &Path) -> Result<PathBuf> {
         if self.is_mounted {
@@ -103,6 +108,49 @@ impl OverlayFs {
         {
             anyhow::bail!("Overlayfs is only supported on Linux");
         }
+    }
+
+    /// Remount the merged directory as read-only while preserving overlay state.
+    #[cfg(target_os = "linux")]
+    pub fn remount_read_only(&mut self) -> Result<()> {
+        use nix::mount::{mount, MsFlags};
+
+        if !self.is_mounted {
+            anyhow::bail!("cannot remount overlay read-only before mount");
+        }
+
+        // Use a generic remount so it applies to kernel or fuse overlay mounts.
+        mount(
+            None::<&str>,
+            &self.merged_dir,
+            None::<&str>,
+            MsFlags::MS_REMOUNT | MsFlags::MS_RDONLY,
+            None::<&str>,
+        )
+        .context("Failed to remount overlay read-only")?;
+
+        Ok(())
+    }
+
+    /// Remount the merged directory back to writable mode.
+    #[cfg(target_os = "linux")]
+    pub fn remount_writable(&mut self) -> Result<()> {
+        use nix::mount::{mount, MsFlags};
+
+        if !self.is_mounted {
+            anyhow::bail!("cannot remount overlay writable before mount");
+        }
+
+        mount(
+            None::<&str>,
+            &self.merged_dir,
+            None::<&str>,
+            MsFlags::MS_REMOUNT,
+            None::<&str>,
+        )
+        .context("Failed to remount overlay writable")?;
+
+        Ok(())
     }
 
     /// Unmount the overlayfs.
