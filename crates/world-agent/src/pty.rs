@@ -11,13 +11,16 @@ use portable_pty::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+#[cfg(target_os = "linux")]
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{error, info};
 // no atomic imports needed here
 #[cfg(target_os = "linux")]
 use world::guard::{should_guard_anchor, wrap_with_anchor_guard};
+#[cfg(target_os = "linux")]
 use world_api::WorldFsMode;
 
 #[cfg(unix)]

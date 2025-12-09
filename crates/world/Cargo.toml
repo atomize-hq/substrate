@@ -19,6 +19,7 @@ dns-lookup = "2"
 world-api = { path = "../world-api" }
 sha2.workspace = true
 tracing = "0.1"
+libc = "0.2"
 
 # Linux-specific dependencies
 [target.'cfg(all(target_os = "linux", not(target_env = "musl")))'.dependencies]
