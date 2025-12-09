@@ -649,7 +649,17 @@ elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
 
   linux_agent="$(find_linux_world_agent "${REPO_ROOT}" "${TARGET_DIR}")" || true
   if [[ -z "${linux_agent:-}" ]]; then
-    fatal "Linux world-agent binary not found (expected in bin/linux/ or target/*-unknown-linux-gnu/${TARGET_DIR}); macOS world provisioning cannot proceed. Build a Linux world-agent or rerun with --no-world."
+    log "Linux world-agent binary not found on host; building inside Lima VM..."
+    build_flag=""
+    target_dir="debug"
+    if [[ "${PROFILE}" == "release" ]]; then
+      build_flag="--release"
+      target_dir="release"
+    fi
+    if ! limactl shell substrate bash -lc "set -euo pipefail; cd /src; if ! command -v cargo >/dev/null 2>&1; then echo 'cargo not found inside Lima VM; install Rust toolchain there or rerun with --no-world' >&2; exit 1; fi; cargo build -p world-agent ${build_flag}"; then
+      fatal "Failed to build world-agent inside Lima VM; install Rust toolchain in the VM (via rustup) or provide a prebuilt Linux agent."
+    fi
+    linux_agent="/src/target/${target_dir}/world-agent"
   fi
 
   log "Copying Linux world-agent into Lima VM..."
