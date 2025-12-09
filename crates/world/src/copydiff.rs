@@ -7,6 +7,9 @@
 //! - Enforce limits and set `truncated`/`summary` when exceeded.
 
 use anyhow::{anyhow, Context, Result};
+use libc;
+#[cfg(target_os = "linux")]
+use nix::unistd::Uid;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::error::Error as StdError;
 use std::fs;
@@ -16,9 +19,6 @@ use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use substrate_common::FsDiff;
 use walkdir::WalkDir;
-use libc;
-#[cfg(target_os = "linux")]
-use nix::unistd::Uid;
 
 const MAX_ENTRIES: usize = 10_000;
 const MAX_BYTES_SAMPLE: usize = 8 * 1024; // 8KB sample for content compare

@@ -11,9 +11,9 @@ use tokio::time::{timeout, Duration};
 
 use super::{ExecutionResult, ExecutionState};
 use crate::replay::helpers::replay_verbose;
-use substrate_common::{log_schema, WorldRootMode};
 #[cfg(target_os = "linux")]
 use substrate_common::FsDiff;
+use substrate_common::{log_schema, WorldRootMode};
 use substrate_trace::append_to_trace;
 
 #[cfg(target_os = "linux")]
