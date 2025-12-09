@@ -340,8 +340,12 @@ RECORDED_GROUP_CREATED=""
 RECORDED_MEMBERS_ADDED=()
 RECORDED_LINGER_USERS=()
 IS_LINUX=0
+IS_MAC=0
 if [[ "$(uname -s)" == "Linux" ]]; then
   IS_LINUX=1
+fi
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  IS_MAC=1
 fi
 
 while [[ $# -gt 0 ]]; do
@@ -494,7 +498,7 @@ if [[ -d "${PREFIX}" ]]; then
   rmdir "${PREFIX}" 2>/dev/null && log "Removed empty prefix ${PREFIX}"
 fi
 
-if [[ "${REMOVE_WORLD_SERVICE}" -eq 1 && "$(uname -s)" == "Linux" ]]; then
+if [[ "${REMOVE_WORLD_SERVICE}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
   log "Attempting to remove substrate-world-agent service (sudo may prompt)"
   if ! command -v sudo >/dev/null 2>&1; then
     warn "sudo not available; cannot modify substrate-world-agent service."
@@ -507,6 +511,23 @@ if [[ "${REMOVE_WORLD_SERVICE}" -eq 1 && "$(uname -s)" == "Linux" ]]; then
     sudo rm -rf /var/lib/substrate || true
     sudo rm -rf /run/substrate || true
     sudo rm -f /run/substrate.sock || true
+  fi
+elif [[ "${REMOVE_WORLD_SERVICE}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
+  log "Attempting to remove Lima world-agent service from VM 'substrate'"
+  if ! command -v limactl >/dev/null 2>&1; then
+    warn "limactl not available; cannot modify Lima world-agent service. Remove manually if desired."
+  else
+    limactl shell substrate sudo systemctl disable --now substrate-world-agent.socket substrate-world-agent.service >/dev/null 2>&1 || warn "Failed to disable agent units inside Lima VM"
+    limactl shell substrate sudo rm -f /etc/systemd/system/substrate-world-agent.service /etc/systemd/system/substrate-world-agent.socket >/dev/null 2>&1 || true
+    limactl shell substrate sudo systemctl daemon-reload >/dev/null 2>&1 || true
+    limactl shell substrate sudo rm -f /usr/local/bin/substrate-world-agent >/dev/null 2>&1 || true
+    limactl shell substrate sudo rm -rf /var/lib/substrate /run/substrate >/dev/null 2>&1 || true
+    limactl shell substrate sudo rm -f /run/substrate.sock >/dev/null 2>&1 || true
+    # Clean up host-forwarded socket if present
+    host_sock="${HOME}/.substrate/sock/agent.sock"
+    if [[ -S "${host_sock}" || -f "${host_sock}" ]]; then
+      rm -f "${host_sock}" || warn "Unable to remove host agent socket at ${host_sock}"
+    fi
   fi
 fi
 
