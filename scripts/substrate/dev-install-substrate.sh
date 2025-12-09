@@ -143,6 +143,25 @@ record_linger_state() {
   fi
 }
 
+find_linux_world_agent() {
+  local root="$1"
+  local target_dir="$2"
+  local candidates=(
+    "${root}/bin/linux/world-agent"
+    "${root}/bin/world-agent-linux"
+    "${root}/bin/world-agent"
+    "${root}/target/x86_64-unknown-linux-gnu/${target_dir}/world-agent"
+    "${root}/target/aarch64-unknown-linux-gnu/${target_dir}/world-agent"
+  )
+  for candidate in "${candidates[@]}"; do
+    if [[ -x "${candidate}" ]]; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+
 write_host_state_metadata() {
   if [[ "${IS_LINUX}" -ne 1 || "${WORLD_ENABLED}" -ne 1 ]]; then
     return
@@ -389,6 +408,7 @@ ANCHOR_PATH=""
 WORLD_CAGED=1
 VERSION_LABEL="dev"
 IS_LINUX=0
+IS_MAC=0
 HOST_STATE_PATH=""
 HOST_STATE_GROUP_EXISTED=""
 HOST_STATE_GROUP_CREATED=0
@@ -396,6 +416,9 @@ HOST_STATE_ADDED_USERS=()
 HOST_STATE_LINGER_ENTRIES=()
 if [[ "$(uname -s)" == "Linux" ]]; then
   IS_LINUX=1
+fi
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  IS_MAC=1
 fi
 
 while [[ $# -gt 0 ]]; do
@@ -613,6 +636,30 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
     warn "Linux world-provision script missing at ${PROVISION_SCRIPT}; world-agent service not configured."
   fi
   ensure_socket_group_alignment
+elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
+  log "Provisioning macOS Lima world-agent service..."
+  if ! command -v limactl >/dev/null 2>&1; then
+    fatal "limactl not found; install Lima or rerun with --no-world to skip macOS world provisioning."
+  fi
+  LIMA_WARM="${REPO_ROOT}/scripts/mac/lima-warm.sh"
+  if [[ ! -x "${LIMA_WARM}" ]]; then
+    fatal "Expected Lima warm helper at ${LIMA_WARM}"
+  fi
+  (cd "${REPO_ROOT}" && "${LIMA_WARM}" "${REPO_ROOT}")
+
+  linux_agent="$(find_linux_world_agent "${REPO_ROOT}" "${TARGET_DIR}")" || true
+  if [[ -z "${linux_agent:-}" ]]; then
+    fatal "Linux world-agent binary not found (expected in bin/linux/ or target/*-unknown-linux-gnu/${TARGET_DIR}); macOS world provisioning cannot proceed. Build a Linux world-agent or rerun with --no-world."
+  fi
+
+  log "Copying Linux world-agent into Lima VM..."
+  limactl copy "${linux_agent}" substrate:/tmp/world-agent
+  limactl shell substrate sudo mv /tmp/world-agent /usr/local/bin/substrate-world-agent
+  limactl shell substrate sudo chmod 755 /usr/local/bin/substrate-world-agent
+  limactl shell substrate sudo systemctl daemon-reload
+  limactl shell substrate sudo systemctl enable substrate-world-agent.service
+  limactl shell substrate sudo systemctl enable --now substrate-world-agent.socket
+  limactl shell substrate sudo systemctl restart substrate-world-agent.service
 fi
 
 cat >"${ENV_FILE}" <<EOF_ENV
