@@ -384,7 +384,11 @@ fn cd_bounces_when_caged_with_world_enabled() {
     let status = handle_builtin(&config, "cd ../../outside", "test-cmd").unwrap();
     assert!(status.is_some());
 
-    assert_eq!(env::current_dir().unwrap(), config.world_root.path);
+    assert_eq!(
+        env::current_dir().unwrap(),
+        config.world_root.path,
+        "cd bounce should return to cage root when world is enabled"
+    );
     assert_eq!(
         env::var("OLDPWD").unwrap(),
         inside_canon.display().to_string()

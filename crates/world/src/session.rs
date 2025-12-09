@@ -257,10 +257,6 @@ impl SessionWorld {
 
     /// Ensure a persistent overlay mount is available for this session and return the merged root.
     fn ensure_overlay_mounted(&mut self) -> Result<PathBuf> {
-        if let Some(ref mut overlay) = self.overlay {
-            return Ok(overlay.merged_dir_path().to_path_buf());
-        }
-
         // Tear down any previous overlay if the requested mode changed.
         if let Some(mode) = self.overlay_mode {
             if mode != self.spec.fs_mode {
@@ -371,6 +367,9 @@ mod tests {
 
         let mut changed = world.spec.clone();
         changed.fs_mode = world_api::WorldFsMode::ReadOnly;
-        assert!(!world.compatible_with(&changed));
+        assert!(
+            world.compatible_with(&changed),
+            "fs_mode differences should not force a new world; overlay remount handles mode changes"
+        );
     }
 }

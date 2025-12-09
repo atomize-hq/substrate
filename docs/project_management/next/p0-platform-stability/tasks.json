@@ -2258,6 +2258,40 @@
       "worktree": "wt/ps-r2f-host-replay-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2f-integ.md"
+    },
+    {
+      "id": "INV-overlay-consistency",
+      "name": "Investigate PTY vs non-PTY world FS consistency",
+      "type": "investigation",
+      "phase": "Follow-up",
+      "status": "queued",
+      "description": "Root-cause inconsistent world state across fs_mode toggles (read_only vs writable) and PTY vs non-PTY execution; writable PTY writes leak to host while non-PTY uses overlay, causing divergent views.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/INV-overlay-consistency.md",
+        "crates/world-agent/src/pty.rs",
+        "crates/world/src/session.rs",
+        "crates/shell/src/execution/routing/dispatch/exec.rs",
+        "crates/shell/src/execution/routing/dispatch/world_ops.rs",
+        "docs/CONFIGURATION.md"
+      ],
+      "acceptance_criteria": [
+        "Documented repro and root-cause for PTY writable path running on host while non-PTY uses overlay; confirmed by trace/mount logs.",
+        "Agreed plan to unify PTY/non-PTY isolation (e.g., writable overlay for PTY) and avoid host leaks across fs_mode switches.",
+        "Test plan drafted covering PTY/non-PTY read_only+writable and mode switches; spans/telemetry updated to report fs_mode + overlay use."
+      ],
+      "start_checklist": [
+        "Set INV-overlay-consistency to in_progress and append START entry to session_log.md.",
+        "Review INV-overlay-consistency.md and recent repro traces; gather fresh logs if needed."
+      ],
+      "end_checklist": [
+        "Update INV-overlay-consistency.md with root cause, decisions, and proposed code changes.",
+        "Log END entry in session_log.md with findings and next actions; set task to completed in tasks.json."
+      ],
+      "depends_on": [],
+      "concurrent_with": [],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": null
     }
   ]
 }
