@@ -11,7 +11,9 @@ use tokio::time::{timeout, Duration};
 
 use super::{ExecutionResult, ExecutionState};
 use crate::replay::helpers::replay_verbose;
-use substrate_common::{log_schema, FsDiff, WorldRootMode};
+use substrate_common::{log_schema, WorldRootMode};
+#[cfg(target_os = "linux")]
+use substrate_common::FsDiff;
 use substrate_trace::append_to_trace;
 
 #[cfg(target_os = "linux")]
@@ -117,7 +119,10 @@ pub async fn execute_with_world_backends(
 ) -> Result<ExecutionResult> {
     let verbose = replay_verbose();
     let project_dir = project_dir_from_env(&state.env, &state.cwd)?;
+    #[cfg(target_os = "linux")]
     let mut agent_fallback_reason: Option<String> = None;
+    #[cfg(not(target_os = "linux"))]
+    let agent_fallback_reason: Option<String> = None;
     let agent_socket: Option<PathBuf>;
 
     #[cfg(target_os = "linux")]
