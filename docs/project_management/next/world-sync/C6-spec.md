@@ -1,8 +1,8 @@
 # C6-spec: .substrate-git Integration (Commits & Checkpoints)
 
 ## Scope
-- Initialize and manage an internal git repo at `.substrate-git/.git` with worktree=`.`; ensure `.substrate-git` is ignored by user git.
-- After successful world→host sync (manual or auto), stage and commit changed paths to `.substrate-git` with metadata (session/span/command, direction, conflict policy, dry-run indicator).
+- Initialize and manage host internal git repo at `.substrate-git/.git` with worktree=`.`; ensure `.substrate-git` is ignored by user git.
+- After successful world→host sync (manual or auto), stage and commit changed paths to host `.substrate-git` with metadata (session/span/command, direction, conflict policy, dry-run indicator).
 - Settings:
   - `use_internal_git` (bool, default true)
   - `enforce_clean_tree_before_sync` (bool, default false): if true, fail sync when worktree has external dirt (outside Substrate changes).

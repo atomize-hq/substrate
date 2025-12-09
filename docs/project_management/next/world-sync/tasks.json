@@ -1,6 +1,45 @@
 {
   "tasks": [
     {
+      "id": "C0-code",
+      "name": "Init & gating (code)",
+      "type": "code",
+      "phase": "World Sync",
+      "status": "pending",
+      "description": "Implement substrate init and world gating per C0-spec (production code only).",
+      "worktree": "wt/ws-c0-init-code",
+      "integration_task": "C0-integ",
+      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C0-code.md",
+      "depends_on": [],
+      "concurrent_with": ["C0-test"]
+    },
+    {
+      "id": "C0-test",
+      "name": "Init & gating (test)",
+      "type": "test",
+      "phase": "World Sync",
+      "status": "pending",
+      "description": "Add tests for substrate init and gating per C0-spec.",
+      "worktree": "wt/ws-c0-init-test",
+      "integration_task": "C0-integ",
+      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C0-test.md",
+      "depends_on": [],
+      "concurrent_with": ["C0-code"]
+    },
+    {
+      "id": "C0-integ",
+      "name": "Init & gating (integration)",
+      "type": "integration",
+      "phase": "World Sync",
+      "status": "pending",
+      "description": "Merge C0 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "worktree": "wt/ws-c0-init-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C0-integ.md",
+      "depends_on": ["C0-code", "C0-test"],
+      "concurrent_with": []
+    },
+    {
       "id": "C1-code",
       "name": "Sync config/CLI surface",
       "type": "code",
@@ -10,7 +49,7 @@
       "worktree": "wt/ws-c1-config-code",
       "integration_task": "C1-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C1-code.md",
-      "depends_on": [],
+      "depends_on": ["C0-integ"],
       "concurrent_with": ["C1-test"]
     },
     {
@@ -23,7 +62,7 @@
       "worktree": "wt/ws-c1-config-test",
       "integration_task": "C1-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C1-test.md",
-      "depends_on": [],
+      "depends_on": ["C0-integ"],
       "concurrent_with": ["C1-code"]
     },
     {
@@ -202,11 +241,11 @@
 
     {
       "id": "C6-code",
-      "name": ".substrate-git integration",
+      "name": ".substrate-git integration (host)",
       "type": "code",
       "phase": "World Sync",
       "status": "pending",
-      "description": "Add internal git init/commit/checkpoint hooks per C6-spec.",
+      "description": "Add host-side internal git init/commit/checkpoint hooks per C6-spec.",
       "worktree": "wt/ws-c6-git-code",
       "integration_task": "C6-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C6-code.md",
@@ -219,7 +258,7 @@
       "type": "test",
       "phase": "World Sync",
       "status": "pending",
-      "description": "Add tests for internal git init/commit/checkpoint per C6-spec.",
+      "description": "Add tests for host-side internal git init/commit/checkpoint per C6-spec.",
       "worktree": "wt/ws-c6-git-test",
       "integration_task": "C6-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C6-test.md",
@@ -277,6 +316,84 @@
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C7-integ.md",
       "depends_on": ["C7-code", "C7-test"],
+      "concurrent_with": []
+    },
+    {
+      "id": "C8-code",
+      "name": "World-side internal git bridge",
+      "type": "code",
+      "phase": "World Sync",
+      "status": "pending",
+      "description": "Ensure world-side .substrate-git bootstrap/bridge per C8-spec.",
+      "worktree": "wt/ws-c8-worldgit-code",
+      "integration_task": "C8-integ",
+      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C8-code.md",
+      "depends_on": ["C6-integ"],
+      "concurrent_with": ["C8-test"]
+    },
+    {
+      "id": "C8-test",
+      "name": "Tests: world-side internal git bridge",
+      "type": "test",
+      "phase": "World Sync",
+      "status": "pending",
+      "description": "Add tests for world-side .substrate-git bootstrap/bridge per C8-spec.",
+      "worktree": "wt/ws-c8-worldgit-test",
+      "integration_task": "C8-integ",
+      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C8-test.md",
+      "depends_on": ["C6-integ"],
+      "concurrent_with": ["C8-code"]
+    },
+    {
+      "id": "C8-integ",
+      "name": "Integrate C8 world git bridge",
+      "type": "integration",
+      "phase": "World Sync",
+      "status": "pending",
+      "description": "Merge C8 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "worktree": "wt/ws-c8-worldgit-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C8-integ.md",
+      "depends_on": ["C8-code", "C8-test"],
+      "concurrent_with": []
+    },
+    {
+      "id": "C9-code",
+      "name": "Init UX & migration",
+      "type": "code",
+      "phase": "World Sync",
+      "status": "pending",
+      "description": "Enhance init UX/migration per C9-spec (production code).",
+      "worktree": "wt/ws-c9-initux-code",
+      "integration_task": "C9-integ",
+      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C9-code.md",
+      "depends_on": ["C0-integ"],
+      "concurrent_with": ["C9-test"]
+    },
+    {
+      "id": "C9-test",
+      "name": "Tests: init UX & migration",
+      "type": "test",
+      "phase": "World Sync",
+      "status": "pending",
+      "description": "Add tests for init UX/migration per C9-spec.",
+      "worktree": "wt/ws-c9-initux-test",
+      "integration_task": "C9-integ",
+      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C9-test.md",
+      "depends_on": ["C0-integ"],
+      "concurrent_with": ["C9-code"]
+    },
+    {
+      "id": "C9-integ",
+      "name": "Integrate C9 init UX & migration",
+      "type": "integration",
+      "phase": "World Sync",
+      "status": "pending",
+      "description": "Merge C9 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "worktree": "wt/ws-c9-initux-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C9-integ.md",
+      "depends_on": ["C9-code", "C9-test"],
       "concurrent_with": []
     }
   ]

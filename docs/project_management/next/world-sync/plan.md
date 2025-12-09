@@ -3,7 +3,7 @@
 ## Context
 - Goal: deliver deterministic host ↔ world filesystem sync with clear directionality, conflict policy, and protected-path rules, then layer in `.substrate-git` as the internal history/rollback store.
 - Execution model: triads (code/test/integration) per slice. Code and test run in parallel on separate task branches/worktrees; integration merges and runs full verification.
-- New per-triad spec files (`C*-spec.md`) are the single source of truth for scope/acceptance. Code/Test/Integration must align to the spec; integration is responsible for reconciling any drift.
+- Per-triad spec files (`C*-spec.md`) are the single source of truth for scope/acceptance. Code/Test/Integration must align to the spec; integration is responsible for reconciling any drift.
 
 ## Global Guardrails
 - Branch: `feat/world-sync` (orchestrator). Docs/tasks/session log live only here; never edit them in worktrees.
@@ -34,10 +34,13 @@
   3. Merge integration branch back to `feat/world-sync` (ff-only), update `tasks.json`/`session_log.md`, commit docs, remove worktree.
 
 ## Triads Overview
+- C0: Init + gating (require `substrate init`, create `.substrate/` and `.substrate-git/`, host/world readiness guards).
 - C1: Config/CLI surface (no behavior change).
 - C2: Manual world→host sync (non-PTY) with conflict/filter controls.
 - C3: Auto-sync (non-PTY) on session close + safety rails.
 - C4: PTY overlay diff + manual/auto world→host sync.
 - C5: Host→world pre-sync and directional semantics.
-- C6: `.substrate-git` integration for sync commits/checkpoints.
-- C7: Rollback CLI via `.substrate-git` (if needed).
+- C6: `.substrate-git` integration (host path) for sync commits/checkpoints.
+- C7: Rollback CLI via `.substrate-git`.
+- C8: World-side `.substrate-git` bootstrap/bridge (ensure world repo exists/aligns, agent-side ops).
+- C9: Init UX & migration (interactive defaults, existing workspace migration, improved gating UX).
