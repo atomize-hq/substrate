@@ -1,6 +1,7 @@
 use crate::execution::settings::WorldRootSettings;
 use crate::execution::world_env_guard;
 use crate::execution::{ShellConfig, ShellMode};
+use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
 use std::collections::HashMap;
 use std::env;
 use std::path::PathBuf;
@@ -63,12 +64,17 @@ pub(crate) fn restore_env(key: &str, previous: Option<String>) {
 
 pub(crate) struct DirGuard {
     original: PathBuf,
+    _lock: ReentrantMutexGuard<'static, ()>,
 }
 
 impl DirGuard {
     pub(crate) fn new() -> Self {
+        let lock = cwd_lock().lock();
         let original = env::current_dir().expect("capture cwd");
-        Self { original }
+        Self {
+            original,
+            _lock: lock,
+        }
     }
 }
 
@@ -76,4 +82,10 @@ impl Drop for DirGuard {
     fn drop(&mut self) {
         let _ = env::set_current_dir(&self.original);
     }
+}
+
+fn cwd_lock() -> &'static ReentrantMutex<()> {
+    use std::sync::OnceLock;
+    static LOCK: OnceLock<ReentrantMutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| ReentrantMutex::new(()))
 }
