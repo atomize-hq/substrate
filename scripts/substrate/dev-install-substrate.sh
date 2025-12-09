@@ -656,8 +656,19 @@ elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
       build_flag="--release"
       target_dir="release"
     fi
-    if ! limactl shell substrate bash -lc "set -euo pipefail; cd /src; if ! command -v cargo >/dev/null 2>&1; then echo 'cargo not found inside Lima VM; install Rust toolchain there or rerun with --no-world' >&2; exit 1; fi; cargo build -p world-agent ${build_flag}"; then
-      fatal "Failed to build world-agent inside Lima VM; install Rust toolchain in the VM (via rustup) or provide a prebuilt Linux agent."
+    if ! limactl shell substrate env BUILD_FLAG="${build_flag}" bash -lc 'set -euo pipefail
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "[dev-install-substrate] cargo not found inside Lima VM; installing rustup toolchain..." >&2
+  curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+  # shellcheck disable=SC1090
+  source "$HOME/.cargo/env"
+fi
+# shellcheck disable=SC1090
+source "$HOME/.cargo/env"
+cd /src
+cargo build -p world-agent ${BUILD_FLAG}
+'; then
+      fatal "Failed to build world-agent inside Lima VM; ensure rustup is available or provide a prebuilt Linux agent (or rerun with --no-world)."
     fi
     linux_agent="/src/target/${target_dir}/world-agent"
   fi
