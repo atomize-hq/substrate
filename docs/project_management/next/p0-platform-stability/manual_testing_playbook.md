@@ -82,7 +82,7 @@ This document captures the full end-to-end validation flow for the socket-activa
    ./scripts/mac/lima-warm.sh --check-only
    ./scripts/mac/lima-warm.sh
    limactl shell substrate sudo systemctl status substrate-world-agent.socket
-   limactl shell substrate substrate world doctor --json | jq '.world_socket'
+   limactl shell substrate world doctor --json | jq '.world_socket'
    ```
 
 ### 1.3 Windows/WSL Socket Activation

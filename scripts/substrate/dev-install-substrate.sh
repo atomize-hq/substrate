@@ -648,16 +648,29 @@ elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
   fi
   (cd "${REPO_ROOT}" && "${LIMA_WARM}" "${REPO_ROOT}")
 
+  build_flag=""
+  target_dir="debug"
+  if [[ "${PROFILE}" == "release" ]]; then
+    build_flag="--release"
+    target_dir="release"
+  fi
+
   linux_agent="$(find_linux_world_agent "${REPO_ROOT}" "${TARGET_DIR}")" || true
+  need_build_agent=0
   if [[ -z "${linux_agent:-}" ]]; then
-    log "Linux world-agent binary not found on host; building inside Lima VM..."
-    build_flag=""
-    target_dir="debug"
-    if [[ "${PROFILE}" == "release" ]]; then
-      build_flag="--release"
-      target_dir="release"
+    need_build_agent=1
+  else
+    file_type="$(file -b "${linux_agent}" 2>/dev/null || true)"
+    if ! echo "${file_type}" | grep -q "ELF"; then
+      log "Host world-agent candidate is not a Linux ELF; building inside Lima instead..."
+      linux_agent=""
+      need_build_agent=1
     fi
-    if ! limactl shell substrate env BUILD_FLAG="${build_flag}" bash <<'LIMA_BUILD_AGENT'; then
+  fi
+
+  lima_target_dir="/tmp/substrate-dev-target"
+  log "Building Linux substrate inside Lima (target=${target_dir}; agent_build=${need_build_agent})..."
+  if ! limactl shell substrate env BUILD_FLAG="${build_flag}" TARGET_DIR="${target_dir}" BUILD_AGENT="${need_build_agent}" CARGO_TARGET_DIR="${lima_target_dir}" bash <<'LIMA_BUILD_AGENT'; then
 set -euo pipefail
 
 ensure_cargo() {
@@ -724,17 +737,32 @@ if [[ -z "${cargo_cmd}" ]]; then
   exit 1
 fi
 cd /src
-"${cargo_cmd}" build -p world-agent ${BUILD_FLAG}
+"${cargo_cmd}" build --bin substrate ${BUILD_FLAG}
+if [[ "${BUILD_AGENT}" == "1" ]]; then
+  "${cargo_cmd}" build -p world-agent ${BUILD_FLAG}
+fi
 LIMA_BUILD_AGENT
-      fatal "Failed to build world-agent inside Lima VM; ensure rustup/apt is available or provide a prebuilt Linux agent (or rerun with --no-world)."
-    fi
-    linux_agent="/src/target/${target_dir}/world-agent"
+    fatal "Failed to build Linux binaries inside Lima VM; ensure rustup/apt is available or rerun with --no-world."
   fi
 
-  log "Copying Linux world-agent into Lima VM..."
-  limactl copy "${linux_agent}" substrate:/tmp/world-agent
-  limactl shell substrate sudo mv /tmp/world-agent /usr/local/bin/substrate-world-agent
-  limactl shell substrate sudo chmod 755 /usr/local/bin/substrate-world-agent
+  vm_substrate="${lima_target_dir}/${target_dir}/substrate"
+  log "Installing Linux substrate CLI inside Lima..."
+  limactl shell substrate sudo install -Dm0755 "${vm_substrate}" /usr/local/bin/substrate
+  limactl shell substrate 'printf "#!/usr/bin/env bash\nexec substrate world \"$@\"\n" | sudo tee /usr/local/bin/world >/dev/null'
+  limactl shell substrate sudo chmod 755 /usr/local/bin/world
+
+  if [[ "${need_build_agent}" -eq 1 ]]; then
+    linux_agent="${lima_target_dir}/${target_dir}/world-agent"
+  fi
+
+  log "Installing Linux world-agent inside Lima..."
+  if [[ -n "${linux_agent:-}" && "${need_build_agent}" -eq 1 ]]; then
+    limactl shell substrate sudo install -m0755 "${linux_agent}" /usr/local/bin/substrate-world-agent
+  else
+    limactl copy "${linux_agent}" substrate:/tmp/world-agent
+    limactl shell substrate sudo install -m0755 /tmp/world-agent /usr/local/bin/substrate-world-agent
+    limactl shell substrate sudo rm -f /tmp/world-agent
+  fi
   limactl shell substrate sudo systemctl daemon-reload
   limactl shell substrate sudo systemctl enable substrate-world-agent.service
   limactl shell substrate sudo systemctl enable --now substrate-world-agent.socket

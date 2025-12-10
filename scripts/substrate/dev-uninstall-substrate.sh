@@ -521,6 +521,7 @@ elif [[ "${REMOVE_WORLD_SERVICE}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
     limactl shell substrate sudo rm -f /etc/systemd/system/substrate-world-agent.service /etc/systemd/system/substrate-world-agent.socket >/dev/null 2>&1 || true
     limactl shell substrate sudo systemctl daemon-reload >/dev/null 2>&1 || true
     limactl shell substrate sudo rm -f /usr/local/bin/substrate-world-agent >/dev/null 2>&1 || true
+    limactl shell substrate sudo rm -f /usr/local/bin/substrate /usr/local/bin/world >/dev/null 2>&1 || true
     limactl shell substrate sudo rm -rf /var/lib/substrate /run/substrate >/dev/null 2>&1 || true
     limactl shell substrate sudo rm -f /run/substrate.sock >/dev/null 2>&1 || true
     # Clean up host-forwarded socket if present
