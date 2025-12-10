@@ -748,8 +748,11 @@ LIMA_BUILD_AGENT
   vm_substrate="${lima_target_dir}/${target_dir}/substrate"
   log "Installing Linux substrate CLI inside Lima..."
   limactl shell substrate sudo install -Dm0755 "${vm_substrate}" /usr/local/bin/substrate
-  limactl shell substrate 'printf "#!/usr/bin/env bash\nexec substrate world \"$@\"\n" | sudo tee /usr/local/bin/world >/dev/null'
-  limactl shell substrate sudo chmod 755 /usr/local/bin/world
+  limactl shell substrate bash -lc 'set -euo pipefail; sudo install -d /usr/local/bin; sudo tee /usr/local/bin/world >/dev/null <<'"'"'EOF'"'"'
+#!/usr/bin/env bash
+exec substrate world "$@"
+EOF
+sudo chmod 755 /usr/local/bin/world'
 
   if [[ "${need_build_agent}" -eq 1 ]]; then
     linux_agent="${lima_target_dir}/${target_dir}/world-agent"
