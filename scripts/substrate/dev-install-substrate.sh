@@ -661,15 +661,32 @@ ensure_cargo() {
   if command -v cargo >/dev/null 2>&1; then
     return 0
   fi
+  fix_dns() {
+    if getent hosts ports.ubuntu.com >/dev/null 2>&1; then
+      return 0
+    fi
+    echo "[dev-install-substrate] DNS resolution failed in Lima; applying fallback resolv.conf (1.1.1.1 / 8.8.8.8)..." >&2
+    local SUDO_CMD="sudo"
+    if sudo -n true 2>/dev/null; then
+      SUDO_CMD="sudo -n"
+    fi
+    $SUDO_CMD sh -c 'printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\n" > /etc/resolv.conf' || true
+    $SUDO_CMD systemctl restart dnsmasq 2>/dev/null || true
+    $SUDO_CMD systemctl restart systemd-resolved 2>/dev/null || true
+    getent hosts ports.ubuntu.com >/dev/null 2>&1
+  }
+
   echo "[dev-install-substrate] cargo not found inside Lima VM; attempting apt install (rustc cargo)..." >&2
   local SUDO="sudo"
   if sudo -n true 2>/dev/null; then
     SUDO="sudo -n"
   fi
+  fix_dns || true
   if $SUDO apt-get update && $SUDO apt-get install -y rustc cargo; then
     return 0
   fi
   echo "[dev-install-substrate] apt install failed; trying rustup via curl (IPv4, retries)..." >&2
+  fix_dns || true
   if curl -4 --connect-timeout 10 --retry 3 --retry-delay 1 --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal; then
     # shellcheck disable=SC1090
     source "$HOME/.cargo/env"
