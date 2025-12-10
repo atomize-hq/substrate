@@ -701,10 +701,29 @@ if ! ensure_cargo; then
   echo "[dev-install-substrate][ERROR] Unable to install cargo inside Lima VM; install Rust manually (apt/rustup) or rerun with --no-world." >&2
   exit 1
 fi
+# Prefer a modern toolchain via rustup to satisfy lockfile version requirements.
+if ! command -v rustup >/dev/null 2>&1; then
+  echo "[dev-install-substrate] Installing rustup (stable toolchain)..." >&2
+  if curl -4 --connect-timeout 10 --retry 3 --retry-delay 1 --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal; then
+    :
+  else
+    echo "[dev-install-substrate][WARN] rustup installation failed; falling back to system cargo (may be too old)" >&2
+  fi
+fi
 # shellcheck disable=SC1090
 source "$HOME/.cargo/env" 2>/dev/null || true
+cargo_cmd="$(command -v cargo || true)"
+if command -v rustup >/dev/null 2>&1; then
+  rustup toolchain install stable --profile minimal >/dev/null 2>&1 || true
+  rustup default stable >/dev/null 2>&1 || true
+  cargo_cmd="$HOME/.cargo/bin/cargo"
+fi
+if [[ -z "${cargo_cmd}" ]]; then
+  echo "[dev-install-substrate][ERROR] cargo still unavailable after toolchain setup." >&2
+  exit 1
+fi
 cd /src
-cargo build -p world-agent ${BUILD_FLAG}
+"${cargo_cmd}" build -p world-agent ${BUILD_FLAG}
 LIMA_BUILD_AGENT
       fatal "Failed to build world-agent inside Lima VM; ensure rustup/apt is available or provide a prebuilt Linux agent (or rerun with --no-world)."
     fi
