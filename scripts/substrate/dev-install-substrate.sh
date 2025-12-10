@@ -706,7 +706,6 @@ source "$HOME/.cargo/env" 2>/dev/null || true
 cd /src
 cargo build -p world-agent ${BUILD_FLAG}
 LIMA_BUILD_AGENT
-    then
       fatal "Failed to build world-agent inside Lima VM; ensure rustup/apt is available or provide a prebuilt Linux agent (or rerun with --no-world)."
     fi
     linux_agent="/src/target/${target_dir}/world-agent"
