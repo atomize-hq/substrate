@@ -656,7 +656,9 @@ elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
       build_flag="--release"
       target_dir="release"
     fi
-    if ! limactl shell substrate env BUILD_FLAG="${build_flag}" bash -lc 'set -euo pipefail
+    if ! limactl shell substrate env BUILD_FLAG="${build_flag}" bash <<'LIMA_BUILD_AGENT'; then
+set -euo pipefail
+
 ensure_cargo() {
   if command -v cargo >/dev/null 2>&1; then
     return 0
@@ -670,7 +672,7 @@ ensure_cargo() {
     if sudo -n true 2>/dev/null; then
       SUDO_CMD="sudo -n"
     fi
-    $SUDO_CMD sh -c 'printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\n" > /etc/resolv.conf' || true
+    $SUDO_CMD sh -c "printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf" || true
     $SUDO_CMD systemctl restart dnsmasq 2>/dev/null || true
     $SUDO_CMD systemctl restart systemd-resolved 2>/dev/null || true
     getent hosts ports.ubuntu.com >/dev/null 2>&1
@@ -703,7 +705,8 @@ fi
 source "$HOME/.cargo/env" 2>/dev/null || true
 cd /src
 cargo build -p world-agent ${BUILD_FLAG}
-'; then
+LIMA_BUILD_AGENT
+    then
       fatal "Failed to build world-agent inside Lima VM; ensure rustup/apt is available or provide a prebuilt Linux agent (or rerun with --no-world)."
     fi
     linux_agent="/src/target/${target_dir}/world-agent"
