@@ -152,6 +152,7 @@ find_linux_world_agent() {
     "${root}/bin/world-agent"
     "${root}/target/x86_64-unknown-linux-gnu/${target_dir}/world-agent"
     "${root}/target/aarch64-unknown-linux-gnu/${target_dir}/world-agent"
+    "${root}/target/${target_dir}/world-agent"
   )
   for candidate in "${candidates[@]}"; do
     if [[ -x "${candidate}" ]]; then
