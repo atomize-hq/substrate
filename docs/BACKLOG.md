@@ -80,6 +80,14 @@ Keep concise, actionable, and security-focused.
     - Handle missing/invalid directories gracefully when resuming and document what context is restored (only tracing metadata, not the world state).
     - Update docs to explain session IDs vs. span IDs and the new resume workflow.
 
+- **P2 – World-disabled UX (no-world installs)**
+  - Pain: When Substrate is installed with `--no-world`, commands still probe systemd/agent sockets and emit warnings (inactive socket, agent replay unavailable, cgroup/netns/overlay fallbacks) even though the world backend is intentionally disabled.
+  - Improvements:
+    - `substrate world doctor` should short-circuit when world is disabled and report a clear “world disabled/not provisioned” status (JSON/text) without probing systemd/socket.
+    - Replay should detect disabled/missing world early and emit a single “world disabled/no agent installed; staying host-only” message instead of attempting world creation and logging cgroup/netns/overlay warnings.
+    - `world deps` and related subcommands should surface that the world is disabled by install/config/env before implying a broken agent.
+  - Goal: make host-only installs quiet and explicit, avoiding misleading “agent unavailable” warnings when the world was intentionally skipped.
+
 - **P3 – Interactive configuration commands**
   - Add shell built-ins/commands (`:config`, `:profile load`, `:world status`,
     `:shims status`, etc.) to view and adjust settings without restarting.
