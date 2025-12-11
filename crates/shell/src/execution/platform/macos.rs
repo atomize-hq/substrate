@@ -458,7 +458,7 @@ mod world_doctor_macos {
 
 #[cfg(test)]
 mod platform_tests {
-    use crate::execution::update_world_env;
+    use crate::execution::{update_world_env, world_env_guard};
     use std::env;
 
     fn snapshot(keys: &[&str]) -> Vec<Option<String>> {
@@ -476,6 +476,7 @@ mod platform_tests {
 
     #[test]
     fn update_world_env_sets_enabled_flags() {
+        let _guard = world_env_guard();
         let keys = ["SUBSTRATE_WORLD", "SUBSTRATE_WORLD_ENABLED"];
         let prev = snapshot(&keys);
 
@@ -489,6 +490,7 @@ mod platform_tests {
 
     #[test]
     fn update_world_env_sets_disabled_flags() {
+        let _guard = world_env_guard();
         let keys = ["SUBSTRATE_WORLD", "SUBSTRATE_WORLD_ENABLED"];
         let prev = snapshot(&keys);
 
