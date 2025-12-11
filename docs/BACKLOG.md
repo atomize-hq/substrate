@@ -105,6 +105,14 @@ Keep concise, actionable, and security-focused.
   - Enhance `scripts/substrate/install-substrate.sh` to auto-install required macOS tools (e.g., `envsubst` via Homebrew `gettext`) when missing, falling back to clear guidance if no supported package manager is detected.
   - Acceptance: Fresh macOS host without gettext can run the installer end-to-end without manual prerequisite setup. 
 
+- **P4 – Cleanup skips for already-removed worlds**
+  - `substrate world cleanup` still enumerates every historical `wld_*` entry and prints “manual” nft/cgroup commands even when those resources no longer exist (the helper treats ENOENT as failure). Users who already deleted the leftovers get spammed with scary warnings on each run.
+  - Improvements:
+    - Probe nft tables, netns entries, and cgroup directories before attempting removal; skip entries that are already absent.
+    - Treat ENOENT from `nft delete`/`rm -rf` as success so the CLI reports “all clear” when nothing remains.
+    - Summarize results with a clean “nothing to clean” message instead of reprinting stale IDs.
+  - Acceptance: running `substrate world cleanup` on a host with no lingering worlds produces a success summary with no manual commands; lingering resources still result in actionable instructions.
+
 - **P5 – Doctor/health output UX**
   - The current `substrate world doctor`, `substrate shim doctor`, and `substrate health` outputs are verbose but not well structured: actionable issues are buried in large sections (e.g., listing every missing manager even when the host never had them), and the ordering makes it hard to see what needs attention.
   - Improvements:
