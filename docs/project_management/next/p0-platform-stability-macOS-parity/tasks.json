@@ -88,7 +88,7 @@
     "name": "Lima socket parity (integration)",
     "type": "integration",
     "phase": "M1",
-    "status": "pending",
+    "status": "in_progress",
     "description": "Merge M1 code/test, reconcile to spec, and ensure mac socket parity replacement/provisioning is green.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
