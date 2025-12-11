@@ -907,3 +907,11 @@ Template:
 - Kickoff prompts created: n/a
 - Docs commit: pending (`docs: finish LP1-test`)
 - Next steps / blockers: waiting on LP1-code landing so harness stops flagging SocketGroup=root/linger gaps
+
+## [2025-12-11 16:35 UTC] Integration Agent – LP1-integ – START
+- Checked out feat/p0-platform-stability (synced) then feat/p0-platform-stability-macOS-parity; repo clean
+- Reviewed p0 plan, tasks.json, session_log.md, LP1-spec.md, and LP1-integ prompt
+- Updated tasks.json (LP1-integ → in_progress); docs commit pending
+- Worktree: pending (`ps-lp1-provision-integ` → `wt/ps-lp1-provision-integ` after start commit)
+- Plan: merge LP1 code/test, validate script/docs per spec, run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, LP1-test harnesses, and `make preflight`
+- Blockers: none (expect installer harness skips for privileged steps; will note if encountered)
