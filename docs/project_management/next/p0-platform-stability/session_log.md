@@ -877,3 +877,10 @@ Template:
 - Changes: session correlation now counts only the expected test_cmd entries; credential redaction test inspects argv payloads (redacted) and skips when SHIM_LOG_OPTS=raw disables redaction.
 - Commands: `cargo test -p substrate-shim --test integration -- --nocapture`; `cargo fmt`
 - Results: pass (11/11); avoids false positives when trace logs include raw command_start events.
+
+## [2025-12-11 16:12 UTC] Code Agent – LP1-code – START
+- Checked out feat/p0-platform-stability-macOS-parity, pulled latest (workspace clean)
+- Reviewed p0 plan, LP1-spec, kickoff prompt, tasks.json, and session logs for Linux provision parity scope
+- Updated tasks.json (LP1-code → in_progress); preparing worktree setup per checklist
+- Commands: none yet (fmt/clippy to run after implementation)
+- Blockers: none; next up is docs start commit + worktree creation
