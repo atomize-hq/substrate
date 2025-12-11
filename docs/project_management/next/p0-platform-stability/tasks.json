@@ -2264,7 +2264,7 @@
     "name": "Linux world provision parity fix (code)",
     "type": "code",
     "phase": "LP1 \u2013 Linux Provision Parity",
-    "status": "in_progress",
+    "status": "completed",
     "description": "Align scripts/linux/world-provision.sh with installer behavior (SocketGroup=substrate, group add, linger guidance) so standalone provisioning yields usable sockets without dev-installer fixups.",
     "references": [
       "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",

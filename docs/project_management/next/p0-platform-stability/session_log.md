@@ -885,6 +885,12 @@ Template:
 - Commands: none yet (fmt/clippy to run after implementation)
 - Blockers: none; next up is docs start commit + worktree creation
 
+## [2025-12-11 16:21 UTC] Code Agent – LP1-code – END
+- Worktree: wt/ps-lp1-provision-code (ps-lp1-provision-code @ c56f92b)
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass)
+- Outputs: Linux provisioner now enforces SocketGroup=substrate, ensures substrate group/user membership, recreates /run/substrate.sock as root:substrate 0660, prints lingering guidance; world-socket-verify captures socket/group/linger logs; manual verification doc lists the new artifacts
+- Blockers: none
+
 ## [2025-12-11 16:13 UTC] Test Agent – LP1-test – START
 - Checked out feat/p0-platform-stability-macOS-parity, pulled latest
 - Reviewed plan.md, tasks.json, session_log.md, LP1-spec.md, LP1-test prompt
