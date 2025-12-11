@@ -12,7 +12,7 @@
 6. Do **not** edit docs/tasks/session_log from the worktree.
 
 ## Requirements
-- Add tests/fixtures that validate fs_mode propagation on mac (unit/fixture level), forwarding-before-probe behavior, and doctor JSON/text outputs (platform-agnostic portions).
+- Add tests/fixtures that validate fs_mode propagation on mac (unit/fixture level), forwarding-before-probe behavior, and doctor/shim-status/health JSON/text outputs (platform-agnostic portions).
 - Prefer platform-agnostic assertions; document any mac-only coverage or skips in the END log.
 - Required commands:  
   - `cargo fmt`  

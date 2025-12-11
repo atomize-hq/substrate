@@ -2254,16 +2254,143 @@
         "R2f-code",
         "R2f-test"
       ],
-      "concurrent_with": [],
-      "worktree": "wt/ps-r2f-host-replay-integ",
-      "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2f-integ.md"
-    },
-    {
-      "id": "INV-overlay-consistency",
-      "name": "Investigate PTY vs non-PTY world FS consistency",
-      "type": "investigation",
-      "phase": "Follow-up",
+    "concurrent_with": [],
+    "worktree": "wt/ps-r2f-host-replay-integ",
+    "integration_task": null,
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2f-integ.md"
+  },
+  {
+    "id": "LP1-code",
+    "name": "Linux world provision parity fix (code)",
+    "type": "code",
+    "phase": "LP1 \u2013 Linux Provision Parity",
+    "status": "pending",
+    "description": "Align scripts/linux/world-provision.sh with installer behavior (SocketGroup=substrate, group add, linger guidance) so standalone provisioning yields usable sockets without dev-installer fixups.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+      "docs/project_management/next/p0-platform-stability/LP1-spec.md",
+      "scripts/linux/world-provision.sh",
+      "scripts/linux/world-socket-verify.sh",
+      "docs/WORLD.md",
+      "docs/INSTALLATION.md",
+      "scripts/substrate/dev-install-substrate.sh"
+    ],
+    "acceptance_criteria": [
+      "scripts/linux/world-provision.sh installs socket/service units with SocketGroup=substrate and recreates /run/substrate.sock as root:substrate 0660.",
+      "Provisioner ensures the substrate group exists and adds the invoking user when possible (or emits clear guidance when it cannot) and prints linger guidance.",
+      "Script remains idempotent, honors --skip-build/profile flags, and retains non-root invocation (self-escalates via sudo).",
+      "Docs/helpers referencing the provisioner reflect the corrected behavior (world-socket-verify, WORLD/INSTALLATION notes).",
+      "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings` executed/logged."
+    ],
+    "start_checklist": [
+      "Checkout feat/p0-platform-stability && git pull --ff-only",
+      "Read plan.md, tasks.json, session_log.md, LP1-spec.md, kickoff prompt",
+      "Set LP1-code to in_progress in tasks.json (orchestration branch only)",
+      "Add START entry to session_log.md; commit docs (`docs: start LP1-code`)",
+      "Create branch ps-lp1-provision-code and worktree wt/ps-lp1-provision-code"
+    ],
+    "end_checklist": [
+      "Run cargo fmt; run cargo clippy --workspace --all-targets -- -D warnings (record skips if any)",
+      "Commit worktree changes",
+      "Merge back fast-forward into feat/p0-platform-stability (pull --ff-only first)",
+      "Update tasks.json status to completed; add END entry to session_log.md with commands/results; commit docs (`docs: finish LP1-code`)",
+      "Remove worktree wt/ps-lp1-provision-code"
+    ],
+    "depends_on": [],
+    "concurrent_with": [
+      "LP1-test"
+    ],
+    "worktree": "wt/ps-lp1-provision-code",
+    "integration_task": "LP1-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/LP1-code.md"
+  },
+  {
+    "id": "LP1-test",
+    "name": "Linux world provision parity fix (test)",
+    "type": "test",
+    "phase": "LP1 \u2013 Linux Provision Parity",
+    "status": "pending",
+    "description": "Add tests/fixtures/harness coverage verifying the provisioner emits SocketGroup=substrate, group/linger guidance, and correct socket metadata without relying on installer fixups.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+      "docs/project_management/next/p0-platform-stability/LP1-spec.md",
+      "scripts/linux/world-provision.sh",
+      "scripts/linux/world-socket-verify.sh",
+      "tests/installers/install_smoke.sh"
+    ],
+    "acceptance_criteria": [
+      "Tests/fixtures assert the provisioner writes SocketGroup=substrate and surfaces group/linger guidance (stub/dry-run acceptable with documented skips for privileged actions).",
+      "Coverage captures expected socket path/ownership fields in doctor/shim-status outputs or helper artifacts where platform-agnostic.",
+      "`cargo fmt`; targeted tests/shellcheck or harness runs executed/logged (record skips/justification if privileged).",
+      "No production code changes."
+    ],
+    "start_checklist": [
+      "Checkout feat/p0-platform-stability && git pull --ff-only",
+      "Read plan.md, tasks.json, session_log.md, LP1-spec.md, kickoff prompt",
+      "Set LP1-test to in_progress in tasks.json (orchestration branch only)",
+      "Add START entry to session_log.md; commit docs (`docs: start LP1-test`)",
+      "Create branch ps-lp1-provision-test and worktree wt/ps-lp1-provision-test"
+    ],
+    "end_checklist": [
+      "Run cargo fmt; run targeted tests added/updated (record skips/justification)",
+      "Commit worktree changes",
+      "Merge back fast-forward into feat/p0-platform-stability (pull --ff-only first)",
+      "Update tasks.json status to completed; add END entry to session_log.md with commands/results; commit docs (`docs: finish LP1-test`)",
+      "Remove worktree wt/ps-lp1-provision-test"
+    ],
+    "depends_on": [],
+    "concurrent_with": [
+      "LP1-code"
+    ],
+    "worktree": "wt/ps-lp1-provision-test",
+    "integration_task": "LP1-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/LP1-test.md"
+  },
+  {
+    "id": "LP1-integ",
+    "name": "Linux world provision parity fix (integration)",
+    "type": "integration",
+    "phase": "LP1 \u2013 Linux Provision Parity",
+    "status": "pending",
+    "description": "Merge LP1 code/test branches, reconcile to spec, and gate with fmt/clippy/tests + make preflight so standalone provisioning matches installer behavior.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+      "docs/project_management/next/p0-platform-stability/LP1-spec.md",
+      "scripts/linux/world-provision.sh",
+      "scripts/linux/world-socket-verify.sh"
+    ],
+    "acceptance_criteria": [
+      "wt/ps-lp1-provision-integ merges ps-lp1-provision-code/test and fast-forwards feat/p0-platform-stability.",
+      "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; relevant tests/harnesses (including provisioner coverage) executed/logged; `make preflight` run.",
+      "tasks.json + session_log.md updated with END entry; docs reflect corrected provisioner behavior."
+    ],
+    "start_checklist": [
+      "Checkout feat/p0-platform-stability && git pull --ff-only",
+      "Confirm LP1-code/test completed",
+      "Set LP1-integ to in_progress; append START entry; commit doc update (`docs: start LP1-integ`)",
+      "Create branch/worktree: `git checkout -b ps-lp1-provision-integ`, `git worktree add wt/ps-lp1-provision-integ ps-lp1-provision-integ`, `cd wt/ps-lp1-provision-integ`"
+    ],
+    "end_checklist": [
+      "Merge code/test branches, resolve conflicts",
+      "Run required fmt/clippy/tests and `make preflight`; capture output",
+      "Fast-forward merge into feat/p0-platform-stability",
+      "Update tasks.json + session_log.md with END entry (include commands run); commit docs (`docs: finish LP1-integ`)",
+      "Remove worktree wt/ps-lp1-provision-integ"
+    ],
+    "depends_on": [
+      "LP1-code",
+      "LP1-test"
+    ],
+    "concurrent_with": [],
+    "worktree": "wt/ps-lp1-provision-integ",
+    "integration_task": null,
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/LP1-integ.md"
+  },
+  {
+    "id": "INV-overlay-consistency",
+    "name": "Investigate PTY vs non-PTY world FS consistency",
+    "type": "investigation",
+    "phase": "Follow-up",
       "status": "queued",
       "description": "Root-cause inconsistent world state across fs_mode toggles (read_only vs writable) and PTY vs non-PTY execution; writable PTY writes leak to host while non-PTY uses overlay, causing divergent views.",
       "references": [

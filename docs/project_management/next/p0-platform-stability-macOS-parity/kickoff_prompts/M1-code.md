@@ -15,6 +15,7 @@
 ## Requirements
 - Implement migration + idempotent warm/provisioning per M1-spec; surface actionable errors when prerequisites (agent, units, toolchain, Lima) are missing.
 - Align socket ownership/permissions and user access model with documented mac behavior (root/substrate or documented equivalent).
+- Ensure the Lima provisioning path (including any reuse of `scripts/linux/world-provision.sh` in-guest) sets `SocketGroup=substrate`, adds the SSH user to the `substrate` group, and emits linger guidance so socket activation survives logout.
 - Keep changes confined to mac flows (Lima profiles, warm/provision scripts, mac doctor hooks as needed).
 - Protected paths: do not touch `.git`, device nodes, or unrelated host paths.
 - Required commands (before handoff):  

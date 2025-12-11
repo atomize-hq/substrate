@@ -70,6 +70,7 @@ Every backlog item is decomposed into multiple triads so each agent session stay
    - **S1b – Shell readiness + telemetry**: Update `ensure_world_agent_ready()`, `world_enable`, shim status, and tracing so shell-side tooling gracefully handles socket activation.
    - **S1c – Provisioning & docs**: Modify Linux/Lima/WSL installers/uninstallers plus supporting docs/tests to deploy/manage `.service` + `.socket` units.
    - **S1d – Installer parity**: Update both the developer and production installers so they mirror the provisioning scripts (create the `substrate` group, add the invoking user, set socket permissions, document lingering requirements, and capture validation logs).
+   - **LP1 – Linux provision parity fix**: Correct `scripts/linux/world-provision.sh` to match installer behavior (SocketGroup=substrate, group add, linger guidance) so standalone provisioning yields `root:substrate 0660` sockets without installer-dependent fixups.
 2. **R1 – Replay Isolation & Visibility**
    - **R1a – Isolation fallback & diagnostics**: Finish the nft cgroup fallback, netns/rule cleanup helpers, and related documentation.
    - **R1b – Verbose scopes & warnings**: Add the `scopes: [...]` line under `--replay-verbose`, differentiate shell vs replay warnings, and update docs/help text.

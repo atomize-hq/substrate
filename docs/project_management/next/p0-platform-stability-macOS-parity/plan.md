@@ -18,8 +18,8 @@ Bridge every behavior shipped in `p0-platform-stability` to macOS. This includes
 
 ## Triad Overview
 - **M1 – Lima migration & socket parity:** Detect/migrate existing Lima VMs to the socket-activated layout, ensure agent binary + units + permissions align with Linux/WSL expectations, and make warm/provisioning idempotent.
-- **M2 – Installer parity (dev/prod):** Align mac installers with Linux behavior: build/copy Linux agent (and optional CLI shim) inside Lima when missing, honor cleanup-state metadata, and keep uninstall parity.
-- **M3 – Backend & doctor parity:** Propagate policy fs_mode to mac backend, fix forwarding/readiness ordering, align socket/group expectations and doctor/manual flows with P0 outputs, and refresh docs/tests accordingly.
+- **M2 – Installer parity (dev/prod):** Align mac installers with Linux behavior: prod copies bundled Linux agent into Lima (build only on missing/invalid bundle); dev may build in-guest; optional CLI shim parity; cleanup-state metadata; uninstall parity.
+- **M3 – Backend & doctor parity:** Propagate policy fs_mode to mac backend, fix forwarding/readiness ordering, align socket/group expectations and doctor/manual flows (including shim-status and health parity) with P0 outputs, and refresh docs/tests accordingly.
 
 ## Start Checklist (all tasks)
 1. `git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only`

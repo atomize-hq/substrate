@@ -12,7 +12,7 @@
 6. Do **not** edit docs/tasks/session_log from the worktree.
 
 ## Requirements
-- Merge code/test branches, ensure mac fs_mode propagation, forwarding order, and doctor/docs outputs match M3-spec.
+- Merge code/test branches, ensure mac fs_mode propagation, forwarding order, doctor/docs outputs, and shim-status/health parity match M3-spec.
 - Run required commands (capture outputs in END log):  
   - `cargo fmt`  
   - `cargo clippy --workspace --all-targets -- -D warnings`  

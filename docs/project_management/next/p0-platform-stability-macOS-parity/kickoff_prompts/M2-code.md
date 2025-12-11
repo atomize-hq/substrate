@@ -12,9 +12,9 @@
 6. Do **not** edit docs/tasks/session_log from the worktree.
 
 ## Requirements
-- Update mac dev/prod installers to build/install the Linux agent inside Lima when not bundled; copy when present; fail loudly with guidance otherwise.
+- Update mac dev/prod installers to prefer copying the bundled Linux agent into Lima for prod; build in-guest only when the bundle is missing/invalid (dev may build in-guest by design); fail loudly with guidance otherwise.
 - Keep CLI shim behavior consistent across dev/prod if required for diagnostics; ensure uninstall removes guest/host artifacts and honors cleanup-state metadata.
-- Preserve/align installer metadata and logging with Linux P0 behavior.
+- Preserve/align installer metadata and logging with Linux P0 behavior; log whether copy vs build path was taken.
 - Required commands:  
   - `cargo fmt`  
   - `cargo clippy --workspace --all-targets -- -D warnings`

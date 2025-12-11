@@ -12,7 +12,7 @@
 6. Do **not** edit docs/tasks/session_log from the worktree.
 
 ## Requirements
-- Add tests/harnesses for mac install/uninstall flows: missing-agent fallback, cleanup-state metadata, and log/diagnostic expectations (platform-agnostic portions).
+- Add tests/harnesses for mac install/uninstall flows: prod copy-first path with build-as-fallback, dev build-in-guest path, missing-agent fallback, cleanup-state metadata, and log/diagnostic expectations (platform-agnostic portions).
 - Capture outputs/fixtures so behavior can be validated without a mac VM where possible; note any mac-only requirements in the END log.
 - Required commands:  
   - `cargo fmt`  

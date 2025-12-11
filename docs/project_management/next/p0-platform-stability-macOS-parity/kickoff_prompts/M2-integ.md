@@ -12,7 +12,7 @@
 6. Do **not** edit docs/tasks/session_log from the worktree.
 
 ## Requirements
-- Merge code/test branches and ensure mac installer/uninstaller parity matches M2-spec (agent build/copy fallback, CLI shim stance, cleanup-state metadata).
+- Merge code/test branches and ensure mac installer/uninstaller parity matches M2-spec (prod copy-first with build fallback when bundle invalid/missing; dev build-in-guest path; CLI shim stance; cleanup-state metadata).
 - Run required commands (capture outputs in END log):  
   - `cargo fmt`  
   - `cargo clippy --workspace --all-targets -- -D warnings`  

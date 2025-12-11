@@ -5,6 +5,7 @@
   - Ensure `/etc/systemd/system/substrate-world-agent.service` and `.socket` are present/enabled, with `/run/substrate.sock` created at boot.
   - Install the Linux `substrate-world-agent` binary inside the VM (copied or built) when missing or outdated.
   - Align socket permissions/ownership with Linux/WSL expectations (root + substrate group or documented equivalent) and ensure the default SSH user can access the socket via group membership or forwarding.
+  - Ensure the Lima-side provisioning path (including any reuse of `scripts/linux/world-provision.sh` or equivalents) sets `SocketGroup=substrate`, adds the user to the `substrate` group, and carries linger guidance so socket activation works post-login.
 - Make `scripts/mac/lima-warm.sh` (and related helpers/profiles) idempotent:
   - Start or create the VM, detect legacy/non-socket setups, and trigger reprovision/restart when required.
   - Surface actionable guidance when migration cannot proceed (e.g., missing agent, stale profile, damaged units).

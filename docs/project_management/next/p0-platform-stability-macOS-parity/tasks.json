@@ -15,6 +15,7 @@
     "acceptance_criteria": [
       "Warm/provision flow migrates legacy Lima VMs to socket-activated world-agent with units and agent installed.",
       "Socket ownership/permissions align with documented mac model and allow SSH user access via group/forwarding.",
+      "Lima provisioning ensures `SocketGroup=substrate`, adds the user to the substrate group (or documented equivalent), and carries linger guidance so socket activation persists post-login.",
       "Migration/re-run is idempotent and emits actionable errors when prerequisites are missing.",
       "Doctor/logging surfaces migration status and next steps."
     ],
@@ -127,6 +128,8 @@
     ],
     "acceptance_criteria": [
       "Dev/prod mac installers install a usable agent even when no Linux binary is bundled (build-in-VM fallback or explicit fail with guidance).",
+      "Prod path copies a valid bundled Linux agent into Lima; in-guest build occurs only as a logged fallback when the bundle is missing/invalid.",
+      "Dev path may build in-guest; logging distinguishes copy vs build flows.",
       "Optional CLI shim behavior is consistent across dev/prod and documented.",
       "Cleanup-state and metadata handling mirror Linux semantics; uninstall removes guest/host artifacts accordingly.",
       "Logs clearly differentiate copy vs build flows and surface actionable errors."
@@ -164,6 +167,7 @@
     ],
     "acceptance_criteria": [
       "Tests validate mac install/uninstall flows including missing-agent fallback and cleanup-state metadata where platform-agnostic.",
+      "Coverage includes prod copy-first path vs build fallback (document skips where platform-specific).",
       "Harness captures logs/outputs for guidance verification.",
       "Required commands executed (fmt + targeted tests) and recorded in session_log.md.",
       "No production code changes."
@@ -230,7 +234,7 @@
     "type": "code",
     "phase": "M3",
     "status": "pending",
-    "description": "Propagate policy fs_mode to mac backend, fix readiness/forwarding ordering, align socket/group expectations, and update doctor/doc flows per M3-spec.",
+    "description": "Propagate policy fs_mode to mac backend, fix readiness/forwarding ordering, align socket/group expectations, and update doctor/doc/shim/health flows per M3-spec.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
       "docs/project_management/next/p0-platform-stability-macOS-parity/M3-spec.md",
@@ -240,6 +244,8 @@
       "Mac backend honors WorldSpec.fs_mode across PTY/non-PTY and replay paths.",
       "Agent readiness establishes forwarding before probing; no spurious failures from missing pre-forward UDS.",
       "Socket/group expectations are aligned or documented, and doctor reflects fs_mode/socket activation status with mac guidance.",
+      "Shim status (text/JSON) on mac reports socket activation/migration and fs_mode in parity with Linux P0 outputs (document mac-only exceptions if any).",
+      "Health CLI (text/JSON) mirrors Linux manager parity/socket signaling on mac or clearly documents deviations.",
       "Docs/manual flows updated where code changes alter behavior."
     ],
     "start_checklist": [
@@ -268,7 +274,7 @@
     "type": "test",
     "phase": "M3",
     "status": "pending",
-    "description": "Add tests/fixtures for mac backend fs_mode propagation, doctor outputs, and readiness/forwarding ordering per M3-spec.",
+    "description": "Add tests/fixtures for mac backend fs_mode propagation, doctor/shim-status/health outputs, and readiness/forwarding ordering per M3-spec.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
       "docs/project_management/next/p0-platform-stability-macOS-parity/M3-spec.md"
@@ -276,6 +282,7 @@
     "acceptance_criteria": [
       "Tests validate fs_mode propagation and doctor JSON/text outputs (platform-agnostic portions).",
       "Readiness ordering and socket activation behaviors are covered by unit/integration fixtures where feasible.",
+      "Shim-status and health outputs include mac parity checks for socket activation/fs_mode/manager states (platform-agnostic portions), with skips documented.",
       "Required commands executed (fmt + targeted tests) and recorded in session_log.md.",
       "No production code changes."
     ],
@@ -312,7 +319,7 @@
     ],
     "acceptance_criteria": [
       "Backend/doctor parity changes merged and match M3-spec.",
-      "cargo fmt + clippy + relevant tests + make preflight executed and logged.",
+      "cargo fmt + clippy + relevant tests (including shim-status/health parity coverage) + make preflight executed and logged.",
       "Integration merged fast-forward; tasks/logs updated."
     ],
     "start_checklist": [
