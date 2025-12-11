@@ -52,3 +52,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Updated `tasks.json` (`M2-test` → `in_progress`) per checklist; scope confirmed: add mac installer/uninstaller parity tests + fixtures only (prod copy-first vs build fallback, cleanup-state metadata/log guidance)
 - Plan: commit docs with `docs: start M2-test`, create branch/worktree `mp-m2-installer-test`/`wt/mp-m2-installer-test`, explore existing installer harnesses, add new fixtures/tests capturing prod copy vs build fallback, cleanup-state metadata, log expectations; run `cargo fmt` + targeted `cargo test ...` suites added/touched, capture outputs for END log
 - Blockers: none
+
+## [2025-12-11 20:49 UTC] Integration Agent – M2-integ – START
+- Checked out `feat/p0-platform-stability-macOS-parity`, pulled latest, read plan/tasks/session log/M2-spec/kickoff prompt per checklist
+- Updated `tasks.json` (`M2-integ` → `in_progress`) and confirmed integration scope: merge M2 code + tests, enforce prod copy-first/build fallback + dev build paths, CLI shim + cleanup-state parity, ensure Linux installers unaffected
+- Next steps: commit start docs, create branch `mp-m2-installer-integ` with worktree `wt/mp-m2-installer-integ`, merge upstream branches, reconcile to M2-spec, then run required commands (`cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, `make preflight`)
+- Blockers: none

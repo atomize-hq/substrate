@@ -217,7 +217,7 @@
     "name": "Installer parity (macOS) \u2013 integration",
     "type": "integration",
     "phase": "M2",
-    "status": "pending",
+    "status": "in_progress",
     "description": "Merge M2 code/test, align mac installer/uninstaller parity with spec, and gate with fmt/clippy/tests/make preflight.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
