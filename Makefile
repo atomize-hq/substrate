@@ -51,3 +51,6 @@ flightcheck:
 	@echo "##flightcheck -- must run from repo root"
 	@echo "##flightcheck -- must run pass for *integ tasks to be considered green"
 	cargo fmt && cargo clippy --workspace --all-targets && cargo clean && cargo check --workspace --all-targets && cargo test --workspace --all-targets
+
+.PHONY: preflight
+preflight: flightcheck

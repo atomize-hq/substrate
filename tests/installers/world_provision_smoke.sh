@@ -144,14 +144,14 @@ log_systemctl() {
 case "${cmd}" in
   systemctl)
     log_systemctl "$@"
-    exit 0
+    exec "${cmd}" "$@"
     ;;
   install|cp|mv|ln)
     args=("$@")
     rewrite_dest_arg args
     exec "${cmd}" "${args[@]}"
     ;;
-  rm|mkdir|chmod|chown)
+  rm|mkdir|chmod|chown|ls)
     args=("$@")
     rewrite_all_paths args
     exec "${cmd}" "${args[@]}"
@@ -170,8 +170,16 @@ write_stub_systemctl() {
 #!/usr/bin/env bash
 set -euo pipefail
 log="${SUBSTRATE_TEST_SYSTEMCTL_LOG:-}"
+fake_root="${FAKE_ROOT:-}"
 if [[ -n "${log}" ]]; then
   printf 'systemctl %s\n' "$*" >>"${log}"
+fi
+if [[ $# -ge 2 && "$1" == "start" && "$2" == "substrate-world-agent.socket" && -n "${fake_root}" ]]; then
+  socket_path="${fake_root}/run/substrate.sock"
+  mkdir -p "$(dirname "${socket_path}")"
+  : >"${socket_path}"
+  chmod 0660 "${socket_path}" 2>/dev/null || true
+  chgrp substrate "${socket_path}" 2>/dev/null || true
 fi
 exit 0
 EOF
