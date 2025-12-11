@@ -430,6 +430,12 @@ if command -v limactl >/dev/null 2>&1; then
   fi
 fi
 
+host_agent_socket="${HOME}/.substrate/sock/agent.sock"
+if [[ -S "${host_agent_socket}" || -f "${host_agent_socket}" ]]; then
+  log "Removing host-forwarded agent socket at ${host_agent_socket}..."
+  rm -f "${host_agent_socket}" || log "Unable to remove agent socket at ${host_agent_socket}; delete it manually."
+fi
+
 log "Checking for host symlinks..."
 for target in /usr/local/bin/substrate*; do
   if [[ -e "${target}" ]]; then

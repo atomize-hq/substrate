@@ -706,6 +706,7 @@ elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
   linux_agent="$(find_linux_world_agent "${REPO_ROOT}" "${TARGET_DIR}")" || true
   need_build_agent=0
   if [[ -z "${linux_agent:-}" ]]; then
+    log "Linux world-agent binary not found under ${REPO_ROOT}/target/${TARGET_DIR}; building inside Lima."
     need_build_agent=1
   else
     file_type="$(file -b "${linux_agent}" 2>/dev/null || true)"
@@ -713,6 +714,8 @@ elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
       log "Host world-agent candidate is not a Linux ELF; building inside Lima instead..."
       linux_agent=""
       need_build_agent=1
+    else
+      log "Linux world-agent install source: ${linux_agent}"
     fi
   fi
 
