@@ -28,3 +28,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Scope: merge `M1-code` + `M1-test`, ensure Lima socket parity replacement aligns with spec, gate with `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, targeted tests, `make preflight`
 - Next: create integration branch/worktree (`mp-m1-sockets-integ`), merge upstream branches, reconcile behavior/tests before running required commands
 - Blockers: none
+
+## [2025-12-11 19:32 UTC] Integration Agent – M1-integ – END
+- Worktree `wt/mp-m1-sockets-integ` merged `mp-m1-sockets-code` + `mp-m1-sockets-test` (branch `mp-m1-sockets-integ` now carries socket-parity Lima warm/doctor scripts, YAML SocketGroup fixes, and the mac doctor fixture/test additions) and fast-forwarded `feat/p0-platform-stability-macOS-parity`
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `cargo test -p substrate-shell socket_activation` (pass); `tests/mac/lima_doctor_fixture.sh` (pass – fixture logs at `/tmp/substrate-mac-doctor.S4aeLX`); `make preflight` (pass – reran fmt/clippy/clean/check/test for the workspace)
+- Result: Lima warm flow now enforces socket-activated layout + group perms, doctor surfaces sentinel/group/socket state, tests/scripts cover socket activation text + Lima doctor scenarios; no regressions observed on Linux builds
+- Blockers: none
