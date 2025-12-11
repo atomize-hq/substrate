@@ -898,3 +898,12 @@ Template:
 - Worktree: pending (`ps-lp1-provision-test` → `wt/ps-lp1-provision-test` after start commit)
 - Plan: add provisioning harness fixtures asserting SocketGroup=substrate, group/linger guidance, socket metadata in doctor outputs; rely on dry-run stubs for privileged portions; run fmt + targeted tests
 - Blockers: host lacks provisioned `/run/substrate.sock`; will rely on mocked artifacts for socket metadata
+
+## [2025-12-11 16:22 UTC] Test Agent – LP1-test – END
+- Worktree commits: 9b875a8 (test: add Linux provision parity harness)
+- Commands: `cargo fmt` (pass); `cargo test -p substrate-shell socket_activation` (pass); `shellcheck tests/installers/world_provision_smoke.sh` (pass); `tests/installers/world_provision_smoke.sh` (fail – socket unit still declares SocketGroup=root so harness aborts as designed)
+- Results: socket_activation JSON coverage passes; world-provision harness currently fails until LP1-code updates the script to set SocketGroup=substrate and emit group/linger guidance by default
+- Scripts executed: `tests/installers/world_provision_smoke.sh` (dry-run harness; fails pending LP1-code changes)
+- Kickoff prompts created: n/a
+- Docs commit: pending (`docs: finish LP1-test`)
+- Next steps / blockers: waiting on LP1-code landing so harness stops flagging SocketGroup=root/linger gaps
