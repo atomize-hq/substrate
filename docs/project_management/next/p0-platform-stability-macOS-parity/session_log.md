@@ -8,3 +8,10 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Worktree pending (`mp-m1-sockets-code` to be added after docs commit)
 - Plan: refresh Lima profile + warm/provision scripts for socket-activated agent, enforce SocketGroup=substrate + user group membership + linger guidance, ensure idempotent rebuild path with actionable errors, wire diagnostics into mac doctor flows, run `cargo fmt`/`cargo clippy --workspace --all-targets -- -D warnings`, commit via worktree, update docs/tasks/log at end
 - Blockers: none
+
+## [2025-12-11 19:12 UTC] Test Agent – M1-test – START
+- Checked out feat/p0-platform-stability-macOS-parity, `git pull --ff-only` (up to date)
+- Read plan/tasks/session log/M1-spec/kickoff prompt; updated tasks.json (M1-test → in_progress)
+- Scope: add fixtures/tests validating mac Lima replacement/provision detection + socket activation reporting without touching production logic
+- Plan: create `mp-m1-sockets-test` branch/worktree, explore existing mac doctor/provision harnesses, add fixture coverage for warm/provision outputs + socket state detection, run `cargo fmt` + targeted tests, capture results for END log
+- Blockers: none
