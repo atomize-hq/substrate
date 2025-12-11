@@ -82,6 +82,7 @@ setup_workspace() {
   mkdir -p "${STUB_BIN}"
   PATH="${STUB_BIN}:${HOST_PATH}"
   export PATH
+  export SHIM_ORIGINAL_PATH="${PATH}"
   HOME="${WORK_ROOT}/home"
   mkdir -p "${HOME}"
   export HOME
