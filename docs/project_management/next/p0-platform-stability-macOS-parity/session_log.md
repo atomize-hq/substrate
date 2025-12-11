@@ -58,3 +58,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Updated `tasks.json` (`M2-integ` → `in_progress`) and confirmed integration scope: merge M2 code + tests, enforce prod copy-first/build fallback + dev build paths, CLI shim + cleanup-state parity, ensure Linux installers unaffected
 - Next steps: commit start docs, create branch `mp-m2-installer-integ` with worktree `wt/mp-m2-installer-integ`, merge upstream branches, reconcile to M2-spec, then run required commands (`cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, `make preflight`)
 - Blockers: none
+
+## [2025-12-11 20:56 UTC] Integration Agent – M2-integ – END
+- Worktree `wt/mp-m2-installer-integ` merged `mp-m2-installer-code` + `mp-m2-installer-test`, reconciled installer parity (copy-first w/ build fallback, dev build logging, cleanup-state/uninstall metadata) and patched the mac installer fixture to export `SHIM_ORIGINAL_PATH` so stubs work under shimmed shells; branch `mp-m2-installer-integ` now contains merge commits + fixture fix
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `tests/mac/installer_parity_fixture.sh --all` (pass – logs at `/tmp/substrate-mac-installer-prod-copy.O1JCbq/prod-copy.log`, `.prod-build.XfW0Cf/...`, `.dev-build.bxDxYd/...`, `.cleanup-guidance.7DkDvF/...`); `make preflight` (pass – reran fmt/clippy/clean/check/test for the workspace)
+- Result: prod installer now verifies Lima agent installs regardless of bundle state, dev installer logs guest build sources, uninstall removes host socket, Lima warm only builds CLI/agent when missing, and the mac installer fixture exercises copy/build/cleanup guidance on Linux hosts; Linux/WSL installers unchanged (mac-only code paths touched)
+- Blockers: none
