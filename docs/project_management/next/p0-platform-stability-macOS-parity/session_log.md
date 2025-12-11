@@ -34,3 +34,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `cargo test -p substrate-shell socket_activation` (pass); `tests/mac/lima_doctor_fixture.sh` (pass – fixture logs at `/tmp/substrate-mac-doctor.S4aeLX`); `make preflight` (pass – reran fmt/clippy/clean/check/test for the workspace)
 - Result: Lima warm flow now enforces socket-activated layout + group perms, doctor surfaces sentinel/group/socket state, tests/scripts cover socket activation text + Lima doctor scenarios; no regressions observed on Linux builds
 - Blockers: none
+
+## [2025-12-11 20:22 UTC] Code Agent – M2-code – START
+- Checked out `feat/p0-platform-stability-macOS-parity`, pulled latest, read plan/tasks/session/M2-spec/kickoff prompt
+- Updated `tasks.json` (`M2-code` → `in_progress`); scope confirmed: mac installer parity (prod copy fallback, dev build option, CLI shim/uninstall cleanup-state alignment)
+- Next steps: doc commit (`docs: start M2-code`), branch `mp-m2-installer-code` + worktree, then implement installer changes + run fmt/clippy before END log
+- Blockers: none
