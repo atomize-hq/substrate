@@ -31,10 +31,13 @@ The script performs the following:
    world-agent, write both systemd units, and enable the socket.
 3. Records `systemctl status` output for the `.socket` and `.service` into
    `artifacts/linux/world-socket-verify-<timestamp>/`.
-4. Runs `substrate world doctor --json` with the newly provisioned socket and writes
+4. Captures `/run/substrate.sock` ownership/perms (`root:substrate 0660`),
+   the invoking user's group memberships, and the current `loginctl` lingering
+   state so the archive proves group/linger guidance was surfaced.
+5. Runs `substrate world doctor --json` with the newly provisioned socket and writes
    the JSON and `world_socket` extract to the same artifact directory.
-5. Runs `substrate --shim-status-json` and stores the output.
-6. By default, executes `scripts/substrate/uninstall-substrate.sh` so the host returns to its
+6. Runs `substrate --shim-status-json` and stores the output.
+7. By default, executes `scripts/substrate/uninstall-substrate.sh` so the host returns to its
    pre-test state (use `--skip-cleanup` if you want to keep the units running).
 
 Artifacts include:
@@ -43,6 +46,9 @@ Artifacts include:
 - `world-doctor.json`
 - `world-doctor-world_socket.json` (falls back to `agent_socket` if the new key is absent)
 - `shim-status.json`
+- `run-substrate-socket.txt` (stat output showing owner/group/mode)
+- `invoking-user-groups.txt`
+- `loginctl-linger.txt`
 
 Attach these files or summaries to the session log / PR when demonstrating socket-activation support on real hardware.
 
