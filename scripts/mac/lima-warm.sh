@@ -267,67 +267,114 @@ sudo rm -f /tmp/world-agent
 EOF
 }
 
-build_agent_inside_vm() {
+host_cli_candidate() {
+    local base="${PROJECT_PATH}"
+    local candidates=(
+        "${base}/bin/linux/substrate"
+        "${base}/bin/substrate-linux"
+        "${base}/bin/substrate"
+        "${base}/target/aarch64-unknown-linux-gnu/${BUILD_PROFILE}/substrate"
+        "${base}/target/x86_64-unknown-linux-gnu/${BUILD_PROFILE}/substrate"
+        "${base}/target/${BUILD_PROFILE}/substrate"
+    )
+    local path
+    for path in "${candidates[@]}"; do
+        if [[ -f "${path}" ]]; then
+            local file_type
+            file_type="$(file -b "${path}" 2>/dev/null || true)"
+            if echo "${file_type}" | grep -qi "ELF"; then
+                printf '%s\n' "${path}"
+                return 0
+            fi
+        fi
+    done
+    return 1
+}
+
+install_cli_from_host() {
+    local cli_path="$1"
+    log "Installing Linux substrate CLI from ${cli_path}"
+    limactl copy "${cli_path}" "${VM_NAME}:/tmp/substrate-cli"
+    limactl shell "${VM_NAME}" bash <<'EOF'
+set -euo pipefail
+sudo install -Dm0755 /tmp/substrate-cli /usr/local/bin/substrate
+sudo tee /usr/local/bin/world >/dev/null <<'WORLD'
+#!/usr/bin/env bash
+exec substrate world "$@"
+WORLD
+sudo chmod 0755 /usr/local/bin/world
+sudo rm -f /tmp/substrate-cli
+EOF
+}
+
+build_cli_and_agent_inside_vm() {
     if [[ ! -f "${PROJECT_PATH}/Cargo.toml" ]]; then
-        fatal "No Linux world-agent binary found and Cargo sources missing at ${PROJECT_PATH}. Provide a Linux binary under bin/linux or run from a source checkout."
-    fi
-    log "Building world-agent inside Lima (profile: ${BUILD_PROFILE})"
+        fatal "No Cargo sources found at ${PROJECT_PATH}; provide Linux binaries under bin/linux or run from a source checkout."
+    }
+    log "Building Linux substrate CLI and world-agent inside Lima (profile: ${BUILD_PROFILE})"
     limactl shell "${VM_NAME}" env BUILD_PROFILE="${BUILD_PROFILE}" bash <<'EOF'
 set -euo pipefail
 ensure_cargo() {
     if command -v cargo >/dev/null 2>&1; then
         return 0
     fi
-    echo "[lima-warm] Installing rustup (stable toolchain)..." >&2
+    if command -v apt-get >/dev/null 2>&1; then
+        sudo apt-get update
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y rustc cargo >/dev/null
+    fi
+    if command -v cargo >/dev/null 2>&1; then
+        return 0
+    fi
     if curl -4 --connect-timeout 10 --retry 3 --retry-delay 1 --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal >/dev/null 2>&1; then
         :
     else
-        echo "[lima-warm][ERROR] Unable to install rustup via curl." >&2
         return 1
     fi
     return 0
 }
 
-if ! command -v curl >/dev/null 2>&1; then
-    sudo apt-get update
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates >/dev/null
-fi
-
 if ! ensure_cargo; then
-    echo "[lima-warm][ERROR] cargo unavailable inside Lima VM." >&2
+    echo "[lima-warm][ERROR] unable to install cargo inside Lima VM; install Rust manually or provide Linux binaries." >&2
     exit 1
 fi
-
 if command -v rustup >/dev/null 2>&1; then
     rustup toolchain install stable --profile minimal >/dev/null 2>&1 || true
     rustup default stable >/dev/null 2>&1 || true
 fi
-
 if [ -f "$HOME/.cargo/env" ]; then
     # shellcheck disable=SC1090
     source "$HOME/.cargo/env"
 fi
-
 if ! command -v cargo >/dev/null 2>&1; then
-    echo "[lima-warm][ERROR] cargo still missing after rustup installation." >&2
+    echo "[lima-warm][ERROR] cargo still missing after toolchain installation." >&2
     exit 1
 fi
-
 BUILD_DIR="/tmp/substrate-lima-build"
 mkdir -p "${BUILD_DIR}"
 cd /src
+CARGO_TARGET_DIR="${BUILD_DIR}" cargo build --bin substrate --profile "${BUILD_PROFILE}" --locked
 CARGO_TARGET_DIR="${BUILD_DIR}" cargo build -p world-agent --profile "${BUILD_PROFILE}" --locked
+sudo install -Dm0755 "${BUILD_DIR}/${BUILD_PROFILE}/substrate" /usr/local/bin/substrate
+sudo tee /usr/local/bin/world >/dev/null <<'WORLD'
+#!/usr/bin/env bash
+exec substrate world "$@"
+WORLD
+sudo chmod 0755 /usr/local/bin/world
 sudo install -Dm0755 "${BUILD_DIR}/${BUILD_PROFILE}/world-agent" /usr/local/bin/substrate-world-agent
 rm -rf "${BUILD_DIR}"
 EOF
 }
 
-install_world_agent() {
-    local candidate
-    if candidate="$(host_agent_candidate)"; then
-        install_agent_from_host "${candidate}"
+install_guest_binaries() {
+    local cli_candidate agent_candidate
+    cli_candidate="$(host_cli_candidate)" || true
+    agent_candidate="$(host_agent_candidate)" || true
+
+    if [[ -n "${cli_candidate:-}" && -n "${agent_candidate:-}" ]]; then
+        install_cli_from_host "${cli_candidate}"
+        install_agent_from_host "${agent_candidate}"
     else
-        build_agent_inside_vm
+        build_cli_and_agent_inside_vm
     fi
 }
 
@@ -441,7 +488,7 @@ configure_guest() {
         fatal "Unable to determine Lima guest user."
     fi
     ensure_substrate_group "${vm_user}"
-    install_world_agent
+    install_guest_binaries
     write_systemd_units
     enable_socket_activation
     socket_summary
