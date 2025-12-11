@@ -211,3 +211,21 @@ fn shim_status_json_marks_manual_mode_when_socket_absent() {
         "shim status JSON should report manual mode when no socket is present"
     );
 }
+
+#[test]
+fn world_doctor_text_reports_socket_activation_summary() {
+    let fixture = ActivationFixture::new();
+    let _socket = AgentSocket::start(fixture.socket_path(), SocketResponse::Capabilities);
+
+    let assert = fixture
+        .command_with_mode("socket_activation")
+        .arg("world")
+        .arg("doctor")
+        .assert()
+        .success();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    assert!(
+        stdout.contains("agent socket: systemd-managed"),
+        "doctor text output missing socket activation summary: {stdout}"
+    );
+}
