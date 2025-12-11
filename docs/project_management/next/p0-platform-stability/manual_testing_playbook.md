@@ -101,11 +101,11 @@ This document captures the full end-to-end validation flow for the socket-activa
 
 1. World-on replay:
    ```bash
-   substrate --replay --span <SPAN_ID> --replay-verbose
+   substrate --replay <SPAN_ID> --replay-verbose
    ```
 2. `--no-world` and env opt-out:
    ```bash
-   substrate --replay --span <SPAN_ID> --replay-verbose --no-world
+   substrate --replay <SPAN_ID> --replay-verbose --no-world
    SUBSTRATE_REPLAY_USE_WORLD=disabled substrate --replay --span <SPAN_ID> --replay-verbose
    ```
 3. Cleanup helper:

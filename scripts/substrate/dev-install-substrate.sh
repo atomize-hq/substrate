@@ -360,6 +360,48 @@ ensure_socket_group_alignment() {
   log "Reloaded socket/service units so /run/substrate.sock is recreated as root:substrate 0660."
 }
 
+ensure_world_enable_helper_bridge() {
+  local target_root="$1"
+  local scripts_root="$2"
+  local dest_dir="${target_root%/}/scripts/substrate"
+  local -a helper_files=("world-enable.sh" "install-substrate.sh")
+  mkdir -p "${dest_dir}"
+  for helper in "${helper_files[@]}"; do
+    local src="${scripts_root%/}/${helper}"
+    local dest="${dest_dir}/${helper}"
+    if [[ -f "${src}" ]]; then
+      ln -sfn "${src}" "${dest}"
+      log "Linked ${helper} helper into ${dest}"
+    else
+      warn "${helper} helper missing at ${src}; CLI world enable path may fail."
+    fi
+  done
+}
+
+ensure_release_bin_bridge() {
+  local target_root="$1"
+  local profile_dir="$2"
+  local src_root="${target_root%/}/${profile_dir}"
+  local dest_bin="${target_root%/}/bin"
+  mkdir -p "${dest_bin}" "${dest_bin}/linux"
+  local -a binaries=("substrate" "substrate-shim" "substrate-forwarder" "host-proxy" "world-agent")
+  for binary in "${binaries[@]}"; do
+    local src="${src_root}/${binary}"
+    local dest="${dest_bin}/${binary}"
+    if [[ -x "${src}" ]]; then
+      ln -sfn "${src}" "${dest}"
+      if [[ "${binary}" == "world-agent" ]]; then
+        ln -sfn "${src}" "${dest_bin}/linux/world-agent"
+        ln -sfn "${src}" "${dest_bin}/world-agent-linux"
+      fi
+    fi
+    local src_exe="${src}.exe"
+    if [[ -x "${src_exe}" ]]; then
+      ln -sfn "${src_exe}" "${dest}.exe"
+    fi
+  done
+}
+
 print_linger_guidance() {
   if [[ "${IS_LINUX}" -ne 1 || "${WORLD_ENABLED}" -ne 1 ]]; then
     return
@@ -623,6 +665,12 @@ if [[ -x "${world_agent_src}" ]]; then
   ln -sfn "${world_agent_src}" "${BIN_DIR}/substrate-world-agent"
 elif [[ -x "${world_agent_src}.exe" ]]; then
   ln -sfn "${world_agent_src}.exe" "${BIN_DIR}/substrate-world-agent.exe"
+fi
+
+if [[ -d "${REPO_ROOT}/target" ]]; then
+  version_root="$(cd "${REPO_ROOT}/target" && pwd)"
+  ensure_world_enable_helper_bridge "${version_root}" "${REPO_ROOT}/scripts/substrate"
+  ensure_release_bin_bridge "${version_root}" "${TARGET_DIR}"
 fi
 
 if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
