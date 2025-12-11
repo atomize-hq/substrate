@@ -18,5 +18,5 @@
 - Logging clearly distinguishes copy vs build-in-VM flows and surfaces next steps when prerequisites (Lima, toolchain, network) are missing.
 
 ## Out of Scope
-- Lima VM migration of existing instances (handled in M1).
+- Lima VM state verification/provisioning (handled in M1).
 - Backend runtime behavior (fs_mode, forwarding) and doctor UX (handled in M3).

@@ -15,7 +15,7 @@
 - Honor `WorldSpec.fs_mode` across mac exec/replay (PTY/non-PTY); keep env overrides compatible.
 - Ensure forwarding is established before agent probes; avoid pre-forward UDS failures.
 - Align/document socket ownership/group model and reflect this in doctor/shim/health output/manuals; update mac portions of docs/manual testing playbook as needed.
-- Ensure `substrate --shim-status[(-json)]` and `substrate health[ --json]` on mac surface socket activation/migration and manager parity in line with Linux P0 (document any mac-only caveats).
+- Ensure `substrate --shim-status[(-json)]` and `substrate health[ --json]` on mac surface socket activation state and manager parity in line with Linux P0 (document any mac-only caveats).
 - Required commands:  
   - `cargo fmt`  
   - `cargo clippy --workspace --all-targets -- -D warnings`

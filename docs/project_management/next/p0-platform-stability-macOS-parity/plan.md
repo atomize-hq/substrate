@@ -9,15 +9,16 @@ Bridge every behavior shipped in `p0-platform-stability` to macOS. This includes
 - Test: tests/fixtures/harnesses only; no production logic. Required commands: `cargo fmt`; targeted `cargo test ...` for suites added/touched.
 - Integration: merges code+tests, reconciles to spec, and must run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, **and `make preflight`** (required).
 - Docs/tasks/session_log edits happen only on the orchestration branch (`feat/p0-platform-stability-macOS-parity`), never from worktrees.
-- Respect protected paths (no touching `.git`, sockets, device nodes, host-sensitive roots) when adding migration or cleanup logic.
+- Respect protected paths (no touching `.git`, sockets, device nodes, host-sensitive roots) when adding provisioning or cleanup logic.
+- Treat the existing Lima environment as replaceable: we re-provision/upgrade mac hosts to the new socket layout and do not maintain backwards compatibility or perform in-place user carry-over.
 
 ## Branch & Worktree Conventions
 - Orchestration branch: `feat/p0-platform-stability-macOS-parity`.
-- Branch naming: `mp-<triad>-<scope>-<role>` (e.g., `mp-m1-migration-code`).
-- Worktrees: `wt/<branch>` (e.g., `wt/mp-m1-migration-code`).
+- Branch naming: `mp-<triad>-<scope>-<role>` (e.g., `mp-m1-sockets-code`).
+- Worktrees: `wt/<branch>` (e.g., `wt/mp-m1-sockets-code`).
 
 ## Triad Overview
-- **M1 – Lima migration & socket parity:** Detect/migrate existing Lima VMs to the socket-activated layout, ensure agent binary + units + permissions align with Linux/WSL expectations, and make warm/provisioning idempotent.
+- **M1 – Lima socket parity upgrade:** Replace the current Lima environment with the socket-activated layout, ensure agent binary + units + permissions align with Linux/WSL expectations, and keep warm/provisioning idempotent.
 - **M2 – Installer parity (dev/prod):** Align mac installers with Linux behavior: prod copies bundled Linux agent into Lima (build only on missing/invalid bundle); dev may build in-guest; optional CLI shim parity; cleanup-state metadata; uninstall parity.
 - **M3 – Backend & doctor parity:** Propagate policy fs_mode to mac backend, fix forwarding/readiness ordering, align socket/group expectations and doctor/manual flows (including shim-status and health parity) with P0 outputs, and refresh docs/tests accordingly.
 

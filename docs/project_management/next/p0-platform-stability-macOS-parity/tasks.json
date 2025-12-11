@@ -1,11 +1,11 @@
 [
   {
     "id": "M1-code",
-    "name": "Lima migration & socket parity (code)",
+    "name": "Lima socket parity (code)",
     "type": "code",
     "phase": "M1",
     "status": "pending",
-    "description": "Implement mac Lima migration to the socket-activated layout, ensure agent binary + units + socket perms are installed/healthy, and make warm/provision idempotent.",
+    "description": "Replace/re-provision Lima with the socket-activated world-agent layout, ensure the agent binary + units + socket perms are installed/healthy, and make warm/provision idempotent.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
       "docs/project_management/next/p0-platform-stability-macOS-parity/M1-spec.md",
@@ -13,28 +13,28 @@
       "docs/project_management/next/p0-platform-stability/manual_testing_playbook.md"
     ],
     "acceptance_criteria": [
-      "Warm/provision flow migrates legacy Lima VMs to socket-activated world-agent with units and agent installed.",
-      "Socket ownership/permissions align with documented mac model and allow SSH user access via group/forwarding.",
+      "Warm/provision flow replaces any existing Lima environment with socket-activated world-agent units and an installed agent binary.",
+      "Socket ownership/permissions align with the documented mac model and allow SSH user access via group/forwarding.",
       "Lima provisioning ensures `SocketGroup=substrate`, adds the user to the substrate group (or documented equivalent), and carries linger guidance so socket activation persists post-login.",
-      "Migration/re-run is idempotent and emits actionable errors when prerequisites are missing.",
-      "Doctor/logging surfaces migration status and next steps."
+      "Provisioning can be re-run idempotently (including tearing down/recreating the VM) and emits actionable errors when prerequisites are missing.",
+      "Doctor/logging surfaces provisioning status and next steps."
     ],
     "start_checklist": [
       "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
       "Read plan, tasks.json, session_log.md, M1-spec.md, kickoff prompt",
       "Set task status to in_progress in tasks.json (orchestration branch)",
       "Add START entry to session_log.md; commit docs with message 'docs: start M1-code'",
-      "Create branch mp-m1-migration-code from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m1-migration-code mp-m1-migration-code`.",
+      "Create branch mp-m1-sockets-code from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m1-sockets-code mp-m1-sockets-code`.",
       "Do not edit docs/tasks/session_log.md from the worktree."
     ],
     "end_checklist": [
       "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings.",
-      "Inside wt/mp-m1-migration-code, commit M1-code changes to branch mp-m1-migration-code (no docs/tasks/session_log edits).",
-      "Outside the worktree, ensure branch mp-m1-migration-code contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Inside wt/mp-m1-sockets-code, commit M1-code changes to branch mp-m1-sockets-code (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m1-sockets-code contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
       "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M1-code'.",
-      "Remove worktree wt/mp-m1-migration-code."
+      "Remove worktree wt/mp-m1-sockets-code."
     ],
-    "worktree": "wt/mp-m1-migration-code",
+    "worktree": "wt/mp-m1-sockets-code",
     "integration_task": "M1-integ",
     "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M1-code.md",
     "depends_on": [],
@@ -44,19 +44,19 @@
   },
   {
     "id": "M1-test",
-    "name": "Lima migration & socket parity (test)",
+    "name": "Lima socket parity (test)",
     "type": "test",
     "phase": "M1",
     "status": "pending",
-    "description": "Add tests/fixtures/harnesses validating mac Lima migration and socket parity behavior per M1-spec.",
+    "description": "Add tests/fixtures/harnesses validating mac Lima socket parity replacement/provisioning per M1-spec.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
       "docs/project_management/next/p0-platform-stability-macOS-parity/M1-spec.md",
       "docs/project_management/next/p0-platform-stability/manual_testing_playbook.md"
     ],
     "acceptance_criteria": [
-      "Tests cover migration detection/remediation logic and socket state reporting where platform-agnostic.",
-      "Fixtures/log harnesses capture doctor/migration outputs for verification.",
+      "Tests cover replacement/provisioning detection/remediation logic and socket state reporting where platform-agnostic.",
+      "Fixtures/log harnesses capture doctor/provisioning outputs for verification (including rebuild-required states).",
       "Required commands executed (fmt + targeted tests) and recorded in session_log.md.",
       "No production code changes."
     ],
@@ -65,17 +65,17 @@
       "Read plan, tasks.json, session_log.md, M1-spec.md, kickoff prompt",
       "Set task status to in_progress in tasks.json (orchestration branch)",
       "Add START entry to session_log.md; commit docs with message 'docs: start M1-test'",
-      "Create branch mp-m1-migration-test from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m1-migration-test mp-m1-migration-test`.",
+      "Create branch mp-m1-sockets-test from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m1-sockets-test mp-m1-sockets-test`.",
       "Do not edit docs/tasks/session_log.md from the worktree."
     ],
     "end_checklist": [
       "Run required commands (capture outputs): cargo fmt; targeted cargo test commands for suites added/updated.",
-      "Inside wt/mp-m1-migration-test, commit M1-test changes to branch mp-m1-migration-test (no docs/tasks/session_log edits).",
-      "Outside the worktree, ensure branch mp-m1-migration-test contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Inside wt/mp-m1-sockets-test, commit M1-test changes to branch mp-m1-sockets-test (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m1-sockets-test contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
       "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M1-test'.",
-      "Remove worktree wt/mp-m1-migration-test."
+      "Remove worktree wt/mp-m1-sockets-test."
     ],
-    "worktree": "wt/mp-m1-migration-test",
+    "worktree": "wt/mp-m1-sockets-test",
     "integration_task": "M1-integ",
     "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M1-test.md",
     "depends_on": [],
@@ -85,11 +85,11 @@
   },
   {
     "id": "M1-integ",
-    "name": "Lima migration & socket parity (integration)",
+    "name": "Lima socket parity (integration)",
     "type": "integration",
     "phase": "M1",
     "status": "pending",
-    "description": "Merge M1 code/test, reconcile to spec, and ensure mac migration/socket parity is green.",
+    "description": "Merge M1 code/test, reconcile to spec, and ensure mac socket parity replacement/provisioning is green.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
       "docs/project_management/next/p0-platform-stability-macOS-parity/M1-spec.md",
@@ -105,17 +105,17 @@
       "Read plan, tasks.json, session_log.md, M1-spec.md, kickoff prompt",
       "Set task status to in_progress in tasks.json (orchestration branch)",
       "Add START entry to session_log.md; commit docs with message 'docs: start M1-integ'",
-      "Create branch mp-m1-migration-integ from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m1-migration-integ mp-m1-migration-integ`.",
+      "Create branch mp-m1-sockets-integ from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m1-sockets-integ mp-m1-sockets-integ`.",
       "Do not edit docs/tasks/session_log.md from the worktree."
     ],
     "end_checklist": [
-      "Merge upstream code/test branches for M1 into mp-m1-migration-integ inside wt/mp-m1-migration-integ and reconcile behavior to the spec.",
+      "Merge upstream code/test branches for M1 into mp-m1-sockets-integ inside wt/mp-m1-sockets-integ and reconcile behavior to the spec.",
       "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
-      "Commit integration changes on branch mp-m1-migration-integ.",
-      "Fast-forward merge mp-m1-migration-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M1-integ'.",
-      "Remove worktree wt/mp-m1-migration-integ."
+      "Commit integration changes on branch mp-m1-sockets-integ.",
+      "Fast-forward merge mp-m1-sockets-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M1-integ'.",
+      "Remove worktree wt/mp-m1-sockets-integ."
     ],
-    "worktree": "wt/mp-m1-migration-integ",
+    "worktree": "wt/mp-m1-sockets-integ",
     "integration_task": "M1-integ",
     "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M1-integ.md",
     "depends_on": [
@@ -268,7 +268,7 @@
       "Mac backend honors WorldSpec.fs_mode across PTY/non-PTY and replay paths.",
       "Agent readiness establishes forwarding before probing; no spurious failures from missing pre-forward UDS.",
       "Socket/group expectations are aligned or documented, and doctor reflects fs_mode/socket activation status with mac guidance.",
-      "Shim status (text/JSON) on mac reports socket activation/migration and fs_mode in parity with Linux P0 outputs (document mac-only exceptions if any).",
+      "Shim status (text/JSON) on mac reports socket activation and fs_mode in parity with Linux P0 outputs (document mac-only exceptions if any).",
       "Health CLI (text/JSON) mirrors Linux manager parity/socket signaling on mac or clearly documents deviations.",
       "Docs/manual flows updated where code changes alter behavior."
     ],
