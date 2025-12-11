@@ -13,6 +13,9 @@ set -euo pipefail
 PROFILE=release
 SKIP_BUILD=0
 DRY_RUN=0
+SUBSTRATE_GROUP="substrate"
+SOCKET_FS_PATH="/run/substrate.sock"
+INVOKING_USER=""
 
 show_cmd() {
     printf '[dry-run]'
@@ -27,6 +30,100 @@ run_cmd() {
         show_cmd "$@"
     else
         "$@"
+    fi
+}
+
+detect_invoking_user() {
+    if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
+        printf '%s\n' "${SUDO_USER}"
+        return
+    fi
+    local current
+    current=$(id -un 2>/dev/null || true)
+    if [[ -n "${current}" ]]; then
+        printf '%s\n' "${current}"
+    fi
+}
+
+user_in_group() {
+    local user="$1"
+    local group="$2"
+    local groups
+    groups="$(id -nG "${user}" 2>/dev/null || true)"
+    [[ " ${groups} " == *" ${group} "* ]]
+}
+
+ensure_substrate_group_exists() {
+    if getent group "${SUBSTRATE_GROUP}" >/dev/null 2>&1; then
+        echo "==> ${SUBSTRATE_GROUP} group already exists."
+        return
+    fi
+    echo "==> Creating ${SUBSTRATE_GROUP} group (sudo may prompt)"
+    if run_cmd sudo groupadd --system "${SUBSTRATE_GROUP}"; then
+        echo "    Created ${SUBSTRATE_GROUP} group."
+    else
+        echo "ERROR: Unable to create the ${SUBSTRATE_GROUP} group. Run 'sudo groupadd --system ${SUBSTRATE_GROUP}' manually and rerun this script." >&2
+        exit 1
+    fi
+}
+
+ensure_user_in_group() {
+    local user="$1"
+    if [[ -z "${user}" || "${user}" == "root" ]]; then
+        cat <<'MSG'
+WARNING: Unable to detect a non-root user to add to the substrate group.
+Run 'sudo usermod -aG substrate <user>' manually so shells can access /run/substrate.sock.
+MSG
+        return
+    fi
+    if ! id "${user}" >/dev/null 2>&1; then
+        cat <<MSG
+WARNING: Unable to look up user '${user}'. Ensure the intended operator belongs to the '${SUBSTRATE_GROUP}' group before relying on socket activation:
+  sudo usermod -aG ${SUBSTRATE_GROUP} <user>
+MSG
+        return
+    fi
+    if user_in_group "${user}" "${SUBSTRATE_GROUP}"; then
+        echo "==> ${user} already belongs to ${SUBSTRATE_GROUP}."
+        return
+    fi
+    echo "==> Adding ${user} to ${SUBSTRATE_GROUP} (sudo may prompt)"
+    if run_cmd sudo usermod -aG "${SUBSTRATE_GROUP}" "${user}"; then
+        echo "    Added ${user} to ${SUBSTRATE_GROUP}. Log out/in or run 'newgrp ${SUBSTRATE_GROUP}' to refresh group membership."
+    else
+        cat <<MSG
+WARNING: Failed to add ${user} to ${SUBSTRATE_GROUP}.
+Run 'sudo usermod -aG ${SUBSTRATE_GROUP} ${user}' manually and re-login so /run/substrate.sock is accessible without sudo.
+MSG
+    fi
+}
+
+print_linger_guidance() {
+    local user="$1"
+    echo "==> Lingering guidance"
+    if [[ -z "${user}" || "${user}" == "root" ]]; then
+        cat <<'MSG'
+loginctl enable-linger <user> ensures socket-activated services remain available after logout or reboot.
+Run 'sudo loginctl enable-linger <user>' for the operator account once you know which user should keep the socket alive.
+MSG
+        return
+    fi
+    if ! command -v loginctl >/dev/null 2>&1; then
+        cat <<MSG
+loginctl not found. On systemd hosts run the following once so socket activation survives logout:
+  sudo loginctl enable-linger ${user}
+MSG
+        return
+    fi
+    local linger_state
+    linger_state="$(loginctl show-user "${user}" -p Linger 2>/dev/null | cut -d= -f2 || true)"
+    if [[ "${linger_state}" == "yes" ]]; then
+        echo "    loginctl reports lingering already enabled for ${user}."
+    else
+        cat <<MSG
+    loginctl reports lingering=${linger_state:-unknown} for ${user}.
+    Run 'sudo loginctl enable-linger ${user}' so the socket stays available after logout/reboot.
+MSG
     fi
 }
 
@@ -87,6 +184,8 @@ if [[ ${EUID} -eq 0 ]]; then
     exit 1
 fi
 
+INVOKING_USER="$(detect_invoking_user)"
+
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
 BIN_PATH="${REPO_ROOT}/target/${PROFILE}/world-agent"
@@ -115,6 +214,10 @@ if [[ ${DRY_RUN} -eq 0 && ! -x "${BIN_PATH}" ]]; then
     echo "world-agent binary not found at ${BIN_PATH}. Did the build succeed?" >&2
     exit 1
 fi
+
+echo "==> Ensuring ${SUBSTRATE_GROUP} group and membership"
+ensure_substrate_group_exists
+ensure_user_in_group "${INVOKING_USER}"
 
 SERVICE_PATH="/etc/systemd/system/substrate-world-agent.service"
 SOCKET_PATH="/etc/systemd/system/substrate-world-agent.socket"
@@ -160,7 +263,7 @@ PartOf=substrate-world-agent.service
 ListenStream=/run/substrate.sock
 SocketMode=0660
 SocketUser=root
-SocketGroup=root
+SocketGroup=substrate
 DirectoryMode=0750
 RemoveOnStop=yes
 Service=substrate-world-agent.service
@@ -183,16 +286,27 @@ install_unit "${SOCKET_PATH}" "${SOCKET_UNIT_CONTENT}"
 echo "==> Reloading systemd and enabling socket activation"
 run_cmd sudo systemctl daemon-reload
 run_cmd sudo systemctl enable substrate-world-agent.service
-run_cmd sudo systemctl enable --now substrate-world-agent.socket
-run_cmd sudo systemctl restart substrate-world-agent.service
+run_cmd sudo systemctl enable substrate-world-agent.socket
+
+echo "==> Restarting socket/service to enforce ${SOCKET_FS_PATH} ownership"
+run_cmd sudo systemctl stop substrate-world-agent.service
+run_cmd sudo systemctl stop substrate-world-agent.socket
+run_cmd sudo rm -f "${SOCKET_FS_PATH}"
+run_cmd sudo systemctl start substrate-world-agent.socket
+run_cmd sudo systemctl start substrate-world-agent.service
+
+echo "==> ${SOCKET_FS_PATH} listing (should be root:${SUBSTRATE_GROUP} 0660)"
+run_cmd sudo ls -l "${SOCKET_FS_PATH}"
 
 echo "==> substrate-world-agent.socket status (last 10 log lines)"
 run_cmd sudo systemctl status substrate-world-agent.socket --no-pager --lines=10 || true
 echo "==> substrate-world-agent.service status (last 10 log lines)"
 run_cmd sudo systemctl status substrate-world-agent.service --no-pager --lines=10 || true
 
+print_linger_guidance "${INVOKING_USER}"
+
 echo "==> Provisioning complete"
-echo "    Verify socket with: sudo ls -l /run/substrate.sock"
-echo "    Probe capabilities: sudo curl --unix-socket /run/substrate.sock http://localhost/v1/capabilities"
+echo "    Verify socket with: sudo ls -l ${SOCKET_FS_PATH}"
+echo "    Probe capabilities: sudo curl --unix-socket ${SOCKET_FS_PATH} http://localhost/v1/capabilities"
 echo "    Doctor socket block: substrate world doctor --json | jq '.world_socket'"
 echo "    Shim summary: substrate --shim-status | grep 'World socket'"
