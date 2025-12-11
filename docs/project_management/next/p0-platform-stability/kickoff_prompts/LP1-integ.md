@@ -8,8 +8,8 @@
 2. Read: plan.md, tasks.json, session_log.md, LP1-spec.md, this prompt.
 3. Set `LP1-integ` status to `in_progress` in tasks.json (orchestration branch only).
 4. Add START entry to session_log.md; commit docs (`docs: start LP1-integ`).
-5. Create branch `ps-lp1-provision-integ` and worktree `wt/ps-lp1-provision-integ`.
-6. Do **not** edit docs/tasks/session_log from the worktree.
+5. Create branch `ps-lp1-provision-integ` from `feat/p0-platform-stability-macOS-parity`; run `git worktree add wt/ps-lp1-provision-integ ps-lp1-provision-integ`.
+6. Do **not** edit docs/tasks/session_log.md from the worktree.
 
 ## Requirements
 - Merge code/test branches; ensure `scripts/linux/world-provision.sh` matches spec (SocketGroup=substrate, group add, linger guidance) and docs/helpers reflect the behavior.
@@ -20,8 +20,8 @@
   - `make preflight`
 
 ## End Checklist
-1. Run required commands above.
-2. Commit integration changes.
-3. `git checkout feat/p0-platform-stability && git pull --ff-only && git merge --ff-only ps-lp1-provision-integ`
-4. Update tasks.json status to completed; add END entry to session_log.md with commands/results; commit docs (`docs: finish LP1-integ`).
+1. Merge the LP1 code/test branches into `ps-lp1-provision-integ` inside `wt/ps-lp1-provision-integ` and reconcile behavior to the spec.
+2. Run the required commands (cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; `make preflight`) and capture outputs.
+3. Commit integration changes on branch `ps-lp1-provision-integ`.
+4. Fast-forward merge `ps-lp1-provision-integ` into `feat/p0-platform-stability-macOS-parity`; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs (`docs: finish LP1-integ`).
 5. Remove worktree `wt/ps-lp1-provision-integ`.

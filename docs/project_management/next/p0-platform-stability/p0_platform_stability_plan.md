@@ -36,22 +36,27 @@ These threads are tightly coupled to platform stability and observability. We wi
 ### Start Checklist (feat/p0-platform-stability)
 
 1. `git checkout feat/p0-platform-stability && git pull --ff-only`
-2. Read this plan, `tasks.json`, `session_log.md`, and the kickoff prompt for your task.
-3. Update `tasks.json` (`status: in_progress`) and append a START entry to `session_log.md`. Commit doc-only change (`git commit -am "docs: start <task-id>"`).
-4. Create a task branch + worktree (never edit code/tests from the root checkout):
-   ```
-   git checkout -b <task-branch>
-   git worktree add wt/<task-branch> <task-branch>
-   cd wt/<task-branch>
-   ```
+2. Read this plan, `tasks.json`, `session_log.md`, the relevant spec, and your kickoff prompt.
+3. Set the task status to `in_progress` in `tasks.json`.
+4. Add a START entry to `session_log.md`; commit docs (`docs: start <task-id>`).
+5. Create the task branch from `feat/p0-platform-stability`, then add the worktree: `git worktree add wt/<task-branch> <task-branch>`.
+6. Do **not** edit docs/tasks/session_log from the worktree.
 
-### End Checklist
+### End Checklist (code/test)
 
-1. Ensure required fmt/lint/tests/scripts per prompt completed successfully.
-2. Commit worktree changes with descriptive messages.
-3. Merge the task branch back into `feat/p0-platform-stability` (fast-forward).
-4. Update `tasks.json` (`status: completed`), append END log entry with results/commands, create downstream kickoff prompts as required, and commit docs (`git commit -am "docs: finish <task-id>"`).
-5. Remove the worktree (`git worktree remove wt/<task-branch>`) and hand off/push per workflow.
+1. Run required commands (code: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`. Test: `cargo fmt`; targeted `cargo test ...`). Capture outputs.
+2. From inside the worktree, commit task branch changes (no docs/tasks/session_log edits).
+3. From outside the worktree, fast-forward the task branch if needed. Do **not** touch `feat/p0-platform-stability`.
+4. Checkout `feat/p0-platform-stability`; update `tasks.json` status, add END entry to `session_log.md` with commands/results/blockers, create downstream prompts if missing, and commit docs (`docs: finish <task-id>`).
+5. Remove the worktree: `git worktree remove wt/<task-branch>`.
+
+### End Checklist (integration)
+
+1. Merge code/test branches into the integration worktree; reconcile to the spec.
+2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make preflight`. Capture outputs.
+3. Commit integration changes to the integration branch.
+4. Fast-forward merge the integration branch into `feat/p0-platform-stability`; update `tasks.json` and `session_log.md` with END entry (commands/results/blockers) and commit docs (`docs: finish <task-id>`).
+5. Remove the worktree.
 
 ### Role Responsibilities
 

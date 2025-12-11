@@ -8,8 +8,8 @@
 2. Read: plan.md, tasks.json, session_log.md, M3-spec.md, this prompt.
 3. Set `M3-code` status to `in_progress` in tasks.json (orchestration branch only).
 4. Add START entry to session_log.md; commit docs (`docs: start M3-code`).
-5. Create branch `mp-m3-backend-code` and worktree `wt/mp-m3-backend-code`.
-6. Do **not** edit docs/tasks/session_log from the worktree.
+5. Create branch `mp-m3-backend-code` from `feat/p0-platform-stability-macOS-parity`; run `git worktree add wt/mp-m3-backend-code mp-m3-backend-code`.
+6. Do **not** edit docs/tasks/session_log.md from the worktree.
 
 ## Requirements
 - Honor `WorldSpec.fs_mode` across mac exec/replay (PTY/non-PTY); keep env overrides compatible.
@@ -22,8 +22,8 @@
 - Optional sanity checks allowed; no required tests.
 
 ## End Checklist
-1. Run required commands above.
-2. Commit worktree changes.
-3. `git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only && git merge --ff-only mp-m3-backend-code`
-4. Update tasks.json status to completed; add END entry to session_log.md with commands/results; commit docs (`docs: finish M3-code`).
+1. Run the required commands above and capture their outputs.
+2. Inside `wt/mp-m3-backend-code`, commit M3-code changes to branch `mp-m3-backend-code` (no docs/tasks/session_log.md edits).
+3. From outside the worktree, ensure branch `mp-m3-backend-code` contains the worktree commit (fast-forward if needed); do **not** merge into `feat/p0-platform-stability-macOS-parity`.
+4. Checkout `feat/p0-platform-stability-macOS-parity`; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs (`docs: finish M3-code`).
 5. Remove worktree `wt/mp-m3-backend-code`.

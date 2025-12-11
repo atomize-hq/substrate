@@ -2283,18 +2283,19 @@
       "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings` executed/logged."
     ],
     "start_checklist": [
-      "Checkout feat/p0-platform-stability && git pull --ff-only",
+      "git checkout feat/p0-platform-stability && git pull --ff-only",
       "Read plan.md, tasks.json, session_log.md, LP1-spec.md, kickoff prompt",
       "Set LP1-code to in_progress in tasks.json (orchestration branch only)",
-      "Add START entry to session_log.md; commit docs (`docs: start LP1-code`)",
-      "Create branch ps-lp1-provision-code and worktree wt/ps-lp1-provision-code"
+      "Add START entry to session_log.md; commit docs with message 'docs: start LP1-code'",
+      "Create branch ps-lp1-provision-code from feat/p0-platform-stability; run `git worktree add wt/ps-lp1-provision-code ps-lp1-provision-code`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
     ],
     "end_checklist": [
-      "Run cargo fmt; run cargo clippy --workspace --all-targets -- -D warnings (record skips if any)",
-      "Commit worktree changes",
-      "Merge back fast-forward into feat/p0-platform-stability (pull --ff-only first)",
-      "Update tasks.json status to completed; add END entry to session_log.md with commands/results; commit docs (`docs: finish LP1-code`)",
-      "Remove worktree wt/ps-lp1-provision-code"
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings.",
+      "Inside wt/ps-lp1-provision-code, commit LP1-code changes to branch ps-lp1-provision-code (no docs/tasks/session_log.md edits).",
+      "Outside the worktree, ensure branch ps-lp1-provision-code contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability.",
+      "Checkout feat/p0-platform-stability; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish LP1-code'.",
+      "Remove worktree wt/ps-lp1-provision-code."
     ],
     "depends_on": [],
     "concurrent_with": [
@@ -2325,18 +2326,19 @@
       "No production code changes."
     ],
     "start_checklist": [
-      "Checkout feat/p0-platform-stability && git pull --ff-only",
+      "git checkout feat/p0-platform-stability && git pull --ff-only",
       "Read plan.md, tasks.json, session_log.md, LP1-spec.md, kickoff prompt",
       "Set LP1-test to in_progress in tasks.json (orchestration branch only)",
-      "Add START entry to session_log.md; commit docs (`docs: start LP1-test`)",
-      "Create branch ps-lp1-provision-test and worktree wt/ps-lp1-provision-test"
+      "Add START entry to session_log.md; commit docs with message 'docs: start LP1-test'",
+      "Create branch ps-lp1-provision-test from feat/p0-platform-stability; run `git worktree add wt/ps-lp1-provision-test ps-lp1-provision-test`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
     ],
     "end_checklist": [
-      "Run cargo fmt; run targeted tests added/updated (record skips/justification)",
-      "Commit worktree changes",
-      "Merge back fast-forward into feat/p0-platform-stability (pull --ff-only first)",
-      "Update tasks.json status to completed; add END entry to session_log.md with commands/results; commit docs (`docs: finish LP1-test`)",
-      "Remove worktree wt/ps-lp1-provision-test"
+      "Run required commands (capture outputs): cargo fmt; targeted cargo test commands for suites added/updated.",
+      "Inside wt/ps-lp1-provision-test, commit LP1-test changes to branch ps-lp1-provision-test (no docs/tasks/session_log.md edits).",
+      "Outside the worktree, ensure branch ps-lp1-provision-test contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability.",
+      "Checkout feat/p0-platform-stability; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish LP1-test'.",
+      "Remove worktree wt/ps-lp1-provision-test."
     ],
     "depends_on": [],
     "concurrent_with": [
@@ -2365,17 +2367,19 @@
       "tasks.json + session_log.md updated with END entry; docs reflect corrected provisioner behavior."
     ],
     "start_checklist": [
-      "Checkout feat/p0-platform-stability && git pull --ff-only",
-      "Confirm LP1-code/test completed",
-      "Set LP1-integ to in_progress; append START entry; commit doc update (`docs: start LP1-integ`)",
-      "Create branch/worktree: `git checkout -b ps-lp1-provision-integ`, `git worktree add wt/ps-lp1-provision-integ ps-lp1-provision-integ`, `cd wt/ps-lp1-provision-integ`"
+      "git checkout feat/p0-platform-stability && git pull --ff-only",
+      "Read plan.md, tasks.json, session_log.md, LP1-spec.md, kickoff prompt",
+      "Set LP1-integ to in_progress in tasks.json (orchestration branch only)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start LP1-integ'",
+      "Create branch ps-lp1-provision-integ from feat/p0-platform-stability; run `git worktree add wt/ps-lp1-provision-integ ps-lp1-provision-integ`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
     ],
     "end_checklist": [
-      "Merge code/test branches, resolve conflicts",
-      "Run required fmt/clippy/tests and `make preflight`; capture output",
-      "Fast-forward merge into feat/p0-platform-stability",
-      "Update tasks.json + session_log.md with END entry (include commands run); commit docs (`docs: finish LP1-integ`)",
-      "Remove worktree wt/ps-lp1-provision-integ"
+      "Merge the upstream LP1 code/test branches into ps-lp1-provision-integ inside wt/ps-lp1-provision-integ and reconcile behavior to the spec.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Commit integration changes on branch ps-lp1-provision-integ.",
+      "Fast-forward merge ps-lp1-provision-integ into feat/p0-platform-stability; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish LP1-integ'.",
+      "Remove worktree wt/ps-lp1-provision-integ."
     ],
     "depends_on": [
       "LP1-code",

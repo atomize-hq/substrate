@@ -99,16 +99,16 @@ Start (all tasks):
 
 End (code/test):
 1. Run required commands (code: fmt/clippy; test: fmt + targeted tests). Capture outputs.
-2. Commit worktree changes.
-3. Merge/cherry-pick into task branch if needed; from repo root: `git checkout <orchestration-branch> && git pull --ff-only && git merge --ff-only <task-branch>`.
-4. Update tasks.json status; add END entry (commands/results/blockers) to session_log.md; create downstream prompts if missing; commit docs (`docs: finish <task-id>`).
-5. Remove worktree: `git worktree remove wt/<worktree>`.
+2. Commit worktree changes to the task branch (from inside the worktree). Do **not** touch the orchestration branch.
+3. From the task branch (outside the worktree), fast-forward/merge the worktree commit into the task branch if needed.
+4. Switch to the orchestration branch; update tasks.json status and add the END entry (commands/results/blockers) to session_log.md; create downstream prompts if missing; commit docs (`docs: finish <task-id>`).
+5. Remove worktree: `git worktree remove wt/<worktree>`. Leave the task branch intact for integration.
 
 End (integration):
-1. Merge code+test branches into integration worktree; resolve drift to spec.
+1. Merge code+test task branches into the integration worktree; resolve drift to spec.
 2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make preflight`. Capture outputs.
-3. Commit integration changes.
-4. Merge back to orchestration branch (ff-only); update tasks.json/session_log.md with END entry; commit docs (`docs: finish <task-id>`).
+3. Commit integration changes to the integration branch.
+4. Fast-forward merge the integration branch into the orchestration branch; update tasks.json/session_log.md with END entry; commit docs (`docs: finish <task-id>`).
 5. Remove worktree.
 
 ## Role Command Requirements

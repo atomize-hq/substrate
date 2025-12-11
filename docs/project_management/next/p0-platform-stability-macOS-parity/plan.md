@@ -26,19 +26,19 @@ Bridge every behavior shipped in `p0-platform-stability` to macOS. This includes
 2. Read: this plan, tasks.json, session_log.md, the relevant spec, and your kickoff prompt.
 3. Set the task status to `in_progress` in tasks.json (orchestration branch only).
 4. Add a START entry to session_log.md; commit docs (`docs: start <task-id>`).
-5. Create task branch and worktree: `git worktree add wt/<branch> <branch>`.
+5. Create the task branch from `feat/p0-platform-stability-macOS-parity`, then add the worktree: `git worktree add wt/<branch> <branch>`.
 6. Do **not** edit docs/tasks/session_log from the worktree.
 
 ## End Checklist (code/test)
-1. Run required commands (code: fmt + clippy; test: fmt + targeted tests).
-2. Commit worktree changes.
-3. Merge back fast-forward into orchestration branch (`git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only && git merge --ff-only <task-branch>`).
-4. Update tasks.json status; add END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs (`docs: finish <task-id>`).
-5. Remove worktree: `git worktree remove wt/<branch>`.
+1. Run required commands (code: fmt + clippy; test: fmt + targeted tests) and capture outputs.
+2. From inside the worktree, commit task branch changes (no docs/tasks/session_log edits).
+3. From outside the worktree, fast-forward the task branch to include the worktree commit if needed. Do **not** touch the orchestration branch.
+4. Checkout `feat/p0-platform-stability-macOS-parity`; update tasks.json status; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs (`docs: finish <task-id>`).
+5. Remove the worktree: `git worktree remove wt/<branch>`.
 
 ## End Checklist (integration)
-1. Merge code/test branches into the integration worktree; reconcile to the spec.
+1. Merge code/test branches into the integration worktree; reconcile behavior to the spec.
 2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make preflight` (required). Capture outputs.
-3. Commit integration changes.
-4. Merge back fast-forward into orchestration branch; update tasks.json and session_log.md with END entry; commit docs (`docs: finish <task-id>`).
-5. Remove worktree.
+3. Commit integration changes to the integration branch.
+4. Fast-forward merge the integration branch into `feat/p0-platform-stability-macOS-parity`; update tasks.json and session_log.md with the END entry (commands/results/blockers); commit docs (`docs: finish <task-id>`).
+5. Remove the worktree.

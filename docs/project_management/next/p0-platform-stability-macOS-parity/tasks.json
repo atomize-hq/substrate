@@ -24,20 +24,23 @@
       "Read plan, tasks.json, session_log.md, M1-spec.md, kickoff prompt",
       "Set task status to in_progress in tasks.json (orchestration branch)",
       "Add START entry to session_log.md; commit docs with message 'docs: start M1-code'",
-      "Create branch mp-m1-migration-code and worktree wt/mp-m1-migration-code"
+      "Create branch mp-m1-migration-code from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m1-migration-code mp-m1-migration-code`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
     ],
     "end_checklist": [
-      "Run: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings",
-      "Commit worktree changes",
-      "Merge back fast-forward into feat/p0-platform-stability-macOS-parity",
-      "Update tasks.json to completed; add END entry to session_log.md; commit docs with 'docs: finish M1-code'",
-      "Remove worktree wt/mp-m1-migration-code"
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings.",
+      "Inside wt/mp-m1-migration-code, commit M1-code changes to branch mp-m1-migration-code (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m1-migration-code contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M1-code'.",
+      "Remove worktree wt/mp-m1-migration-code."
     ],
     "worktree": "wt/mp-m1-migration-code",
     "integration_task": "M1-integ",
     "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M1-code.md",
     "depends_on": [],
-    "concurrent_with": ["M1-test"]
+    "concurrent_with": [
+      "M1-test"
+    ]
   },
   {
     "id": "M1-test",
@@ -62,20 +65,23 @@
       "Read plan, tasks.json, session_log.md, M1-spec.md, kickoff prompt",
       "Set task status to in_progress in tasks.json (orchestration branch)",
       "Add START entry to session_log.md; commit docs with message 'docs: start M1-test'",
-      "Create branch mp-m1-migration-test and worktree wt/mp-m1-migration-test"
+      "Create branch mp-m1-migration-test from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m1-migration-test mp-m1-migration-test`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
     ],
     "end_checklist": [
-      "Run: cargo fmt; targeted cargo test commands for added/updated suites",
-      "Commit worktree changes",
-      "Merge back fast-forward into feat/p0-platform-stability-macOS-parity",
-      "Update tasks.json to completed; add END entry to session_log.md; commit docs with 'docs: finish M1-test'",
-      "Remove worktree wt/mp-m1-migration-test"
+      "Run required commands (capture outputs): cargo fmt; targeted cargo test commands for suites added/updated.",
+      "Inside wt/mp-m1-migration-test, commit M1-test changes to branch mp-m1-migration-test (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m1-migration-test contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M1-test'.",
+      "Remove worktree wt/mp-m1-migration-test."
     ],
     "worktree": "wt/mp-m1-migration-test",
     "integration_task": "M1-integ",
     "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M1-test.md",
     "depends_on": [],
-    "concurrent_with": ["M1-code"]
+    "concurrent_with": [
+      "M1-code"
+    ]
   },
   {
     "id": "M1-integ",
@@ -99,24 +105,28 @@
       "Read plan, tasks.json, session_log.md, M1-spec.md, kickoff prompt",
       "Set task status to in_progress in tasks.json (orchestration branch)",
       "Add START entry to session_log.md; commit docs with message 'docs: start M1-integ'",
-      "Create branch mp-m1-migration-integ and worktree wt/mp-m1-migration-integ"
+      "Create branch mp-m1-migration-integ from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m1-migration-integ mp-m1-migration-integ`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
     ],
     "end_checklist": [
-      "Run: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight",
-      "Commit integration changes",
-      "Merge back fast-forward into feat/p0-platform-stability-macOS-parity",
-      "Update tasks.json to completed; add END entry to session_log.md; commit docs with 'docs: finish M1-integ'",
-      "Remove worktree wt/mp-m1-migration-integ"
+      "Merge upstream code/test branches for M1 into mp-m1-migration-integ inside wt/mp-m1-migration-integ and reconcile behavior to the spec.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Commit integration changes on branch mp-m1-migration-integ.",
+      "Fast-forward merge mp-m1-migration-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M1-integ'.",
+      "Remove worktree wt/mp-m1-migration-integ."
     ],
     "worktree": "wt/mp-m1-migration-integ",
     "integration_task": "M1-integ",
     "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M1-integ.md",
-    "depends_on": ["M1-code", "M1-test"],
+    "depends_on": [
+      "M1-code",
+      "M1-test"
+    ],
     "concurrent_with": []
   },
   {
     "id": "M2-code",
-    "name": "Installer parity (macOS) – code",
+    "name": "Installer parity (macOS) \u2013 code",
     "type": "code",
     "phase": "M2",
     "status": "pending",
@@ -139,24 +149,29 @@
       "Read plan, tasks.json, session_log.md, M2-spec.md, kickoff prompt",
       "Set task status to in_progress in tasks.json (orchestration branch)",
       "Add START entry to session_log.md; commit docs with message 'docs: start M2-code'",
-      "Create branch mp-m2-installer-code and worktree wt/mp-m2-installer-code"
+      "Create branch mp-m2-installer-code from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m2-installer-code mp-m2-installer-code`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
     ],
     "end_checklist": [
-      "Run: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings",
-      "Commit worktree changes",
-      "Merge back fast-forward into feat/p0-platform-stability-macOS-parity",
-      "Update tasks.json to completed; add END entry to session_log.md; commit docs with 'docs: finish M2-code'",
-      "Remove worktree wt/mp-m2-installer-code"
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings.",
+      "Inside wt/mp-m2-installer-code, commit M2-code changes to branch mp-m2-installer-code (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m2-installer-code contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M2-code'.",
+      "Remove worktree wt/mp-m2-installer-code."
     ],
     "worktree": "wt/mp-m2-installer-code",
     "integration_task": "M2-integ",
     "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M2-code.md",
-    "depends_on": ["M1-integ"],
-    "concurrent_with": ["M2-test"]
+    "depends_on": [
+      "M1-integ"
+    ],
+    "concurrent_with": [
+      "M2-test"
+    ]
   },
   {
     "id": "M2-test",
-    "name": "Installer parity (macOS) – test",
+    "name": "Installer parity (macOS) \u2013 test",
     "type": "test",
     "phase": "M2",
     "status": "pending",
@@ -177,24 +192,29 @@
       "Read plan, tasks.json, session_log.md, M2-spec.md, kickoff prompt",
       "Set task status to in_progress in tasks.json (orchestration branch)",
       "Add START entry to session_log.md; commit docs with message 'docs: start M2-test'",
-      "Create branch mp-m2-installer-test and worktree wt/mp-m2-installer-test"
+      "Create branch mp-m2-installer-test from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m2-installer-test mp-m2-installer-test`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
     ],
     "end_checklist": [
-      "Run: cargo fmt; targeted cargo test commands for added/updated suites",
-      "Commit worktree changes",
-      "Merge back fast-forward into feat/p0-platform-stability-macOS-parity",
-      "Update tasks.json to completed; add END entry to session_log.md; commit docs with 'docs: finish M2-test'",
-      "Remove worktree wt/mp-m2-installer-test"
+      "Run required commands (capture outputs): cargo fmt; targeted cargo test commands for suites added/updated.",
+      "Inside wt/mp-m2-installer-test, commit M2-test changes to branch mp-m2-installer-test (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m2-installer-test contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M2-test'.",
+      "Remove worktree wt/mp-m2-installer-test."
     ],
     "worktree": "wt/mp-m2-installer-test",
     "integration_task": "M2-integ",
     "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M2-test.md",
-    "depends_on": ["M1-integ"],
-    "concurrent_with": ["M2-code"]
+    "depends_on": [
+      "M1-integ"
+    ],
+    "concurrent_with": [
+      "M2-code"
+    ]
   },
   {
     "id": "M2-integ",
-    "name": "Installer parity (macOS) – integration",
+    "name": "Installer parity (macOS) \u2013 integration",
     "type": "integration",
     "phase": "M2",
     "status": "pending",
@@ -213,24 +233,28 @@
       "Read plan, tasks.json, session_log.md, M2-spec.md, kickoff prompt",
       "Set task status to in_progress in tasks.json (orchestration branch)",
       "Add START entry to session_log.md; commit docs with message 'docs: start M2-integ'",
-      "Create branch mp-m2-installer-integ and worktree wt/mp-m2-installer-integ"
+      "Create branch mp-m2-installer-integ from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m2-installer-integ mp-m2-installer-integ`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
     ],
     "end_checklist": [
-      "Run: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight",
-      "Commit integration changes",
-      "Merge back fast-forward into feat/p0-platform-stability-macOS-parity",
-      "Update tasks.json to completed; add END entry to session_log.md; commit docs with 'docs: finish M2-integ'",
-      "Remove worktree wt/mp-m2-installer-integ"
+      "Merge upstream code/test branches for M2 into mp-m2-installer-integ inside wt/mp-m2-installer-integ and reconcile behavior to the spec.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Commit integration changes on branch mp-m2-installer-integ.",
+      "Fast-forward merge mp-m2-installer-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M2-integ'.",
+      "Remove worktree wt/mp-m2-installer-integ."
     ],
     "worktree": "wt/mp-m2-installer-integ",
     "integration_task": "M2-integ",
     "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M2-integ.md",
-    "depends_on": ["M2-code", "M2-test"],
+    "depends_on": [
+      "M2-code",
+      "M2-test"
+    ],
     "concurrent_with": []
   },
   {
     "id": "M3-code",
-    "name": "Backend & doctor parity – code",
+    "name": "Backend & doctor parity \u2013 code",
     "type": "code",
     "phase": "M3",
     "status": "pending",
@@ -253,24 +277,29 @@
       "Read plan, tasks.json, session_log.md, M3-spec.md, kickoff prompt",
       "Set task status to in_progress in tasks.json (orchestration branch)",
       "Add START entry to session_log.md; commit docs with message 'docs: start M3-code'",
-      "Create branch mp-m3-backend-code and worktree wt/mp-m3-backend-code"
+      "Create branch mp-m3-backend-code from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m3-backend-code mp-m3-backend-code`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
     ],
     "end_checklist": [
-      "Run: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings",
-      "Commit worktree changes",
-      "Merge back fast-forward into feat/p0-platform-stability-macOS-parity",
-      "Update tasks.json to completed; add END entry to session_log.md; commit docs with 'docs: finish M3-code'",
-      "Remove worktree wt/mp-m3-backend-code"
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings.",
+      "Inside wt/mp-m3-backend-code, commit M3-code changes to branch mp-m3-backend-code (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m3-backend-code contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M3-code'.",
+      "Remove worktree wt/mp-m3-backend-code."
     ],
     "worktree": "wt/mp-m3-backend-code",
     "integration_task": "M3-integ",
     "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M3-code.md",
-    "depends_on": ["M2-integ"],
-    "concurrent_with": ["M3-test"]
+    "depends_on": [
+      "M2-integ"
+    ],
+    "concurrent_with": [
+      "M3-test"
+    ]
   },
   {
     "id": "M3-test",
-    "name": "Backend & doctor parity – test",
+    "name": "Backend & doctor parity \u2013 test",
     "type": "test",
     "phase": "M3",
     "status": "pending",
@@ -291,24 +320,29 @@
       "Read plan, tasks.json, session_log.md, M3-spec.md, kickoff prompt",
       "Set task status to in_progress in tasks.json (orchestration branch)",
       "Add START entry to session_log.md; commit docs with message 'docs: start M3-test'",
-      "Create branch mp-m3-backend-test and worktree wt/mp-m3-backend-test"
+      "Create branch mp-m3-backend-test from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m3-backend-test mp-m3-backend-test`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
     ],
     "end_checklist": [
-      "Run: cargo fmt; targeted cargo test commands for added/updated suites",
-      "Commit worktree changes",
-      "Merge back fast-forward into feat/p0-platform-stability-macOS-parity",
-      "Update tasks.json to completed; add END entry to session_log.md; commit docs with 'docs: finish M3-test'",
-      "Remove worktree wt/mp-m3-backend-test"
+      "Run required commands (capture outputs): cargo fmt; targeted cargo test commands for suites added/updated.",
+      "Inside wt/mp-m3-backend-test, commit M3-test changes to branch mp-m3-backend-test (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m3-backend-test contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M3-test'.",
+      "Remove worktree wt/mp-m3-backend-test."
     ],
     "worktree": "wt/mp-m3-backend-test",
     "integration_task": "M3-integ",
     "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M3-test.md",
-    "depends_on": ["M2-integ"],
-    "concurrent_with": ["M3-code"]
+    "depends_on": [
+      "M2-integ"
+    ],
+    "concurrent_with": [
+      "M3-code"
+    ]
   },
   {
     "id": "M3-integ",
-    "name": "Backend & doctor parity – integration",
+    "name": "Backend & doctor parity \u2013 integration",
     "type": "integration",
     "phase": "M3",
     "status": "pending",
@@ -327,19 +361,23 @@
       "Read plan, tasks.json, session_log.md, M3-spec.md, kickoff prompt",
       "Set task status to in_progress in tasks.json (orchestration branch)",
       "Add START entry to session_log.md; commit docs with message 'docs: start M3-integ'",
-      "Create branch mp-m3-backend-integ and worktree wt/mp-m3-backend-integ"
+      "Create branch mp-m3-backend-integ from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m3-backend-integ mp-m3-backend-integ`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
     ],
     "end_checklist": [
-      "Run: cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight",
-      "Commit integration changes",
-      "Merge back fast-forward into feat/p0-platform-stability-macOS-parity",
-      "Update tasks.json to completed; add END entry to session_log.md; commit docs with 'docs: finish M3-integ'",
-      "Remove worktree wt/mp-m3-backend-integ"
+      "Merge upstream code/test branches for M3 into mp-m3-backend-integ inside wt/mp-m3-backend-integ and reconcile behavior to the spec.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Commit integration changes on branch mp-m3-backend-integ.",
+      "Fast-forward merge mp-m3-backend-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M3-integ'.",
+      "Remove worktree wt/mp-m3-backend-integ."
     ],
     "worktree": "wt/mp-m3-backend-integ",
     "integration_task": "M3-integ",
     "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M3-integ.md",
-    "depends_on": ["M3-code", "M3-test"],
+    "depends_on": [
+      "M3-code",
+      "M3-test"
+    ],
     "concurrent_with": []
   }
 ]
