@@ -2310,7 +2310,7 @@
     "name": "Linux world provision parity fix (test)",
     "type": "test",
     "phase": "LP1 \u2013 Linux Provision Parity",
-    "status": "pending",
+    "status": "in_progress",
     "description": "Add tests/fixtures/harness coverage verifying the provisioner emits SocketGroup=substrate, group/linger guidance, and correct socket metadata without relying on installer fixups.",
     "references": [
       "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",

@@ -884,3 +884,11 @@ Template:
 - Updated tasks.json (LP1-code → in_progress); preparing worktree setup per checklist
 - Commands: none yet (fmt/clippy to run after implementation)
 - Blockers: none; next up is docs start commit + worktree creation
+
+## [2025-12-11 16:13 UTC] Test Agent – LP1-test – START
+- Checked out feat/p0-platform-stability-macOS-parity, pulled latest
+- Reviewed plan.md, tasks.json, session_log.md, LP1-spec.md, LP1-test prompt
+- Updated tasks.json (LP1-test → in_progress); docs commit pending
+- Worktree: pending (`ps-lp1-provision-test` → `wt/ps-lp1-provision-test` after start commit)
+- Plan: add provisioning harness fixtures asserting SocketGroup=substrate, group/linger guidance, socket metadata in doctor outputs; rely on dry-run stubs for privileged portions; run fmt + targeted tests
+- Blockers: host lacks provisioned `/run/substrate.sock`; will rely on mocked artifacts for socket metadata
