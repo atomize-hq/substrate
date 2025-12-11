@@ -40,3 +40,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Updated `tasks.json` (`M2-code` → `in_progress`); scope confirmed: mac installer parity (prod copy fallback, dev build option, CLI shim/uninstall cleanup-state alignment)
 - Next steps: doc commit (`docs: start M2-code`), branch `mp-m2-installer-code` + worktree, then implement installer changes + run fmt/clippy before END log
 - Blockers: none
+
+## [2025-12-11 20:23 UTC] Test Agent – M2-test – START
+- Checked out `feat/p0-platform-stability-macOS-parity`, ran `git pull --ff-only` (already up to date), reread plan/tasks/session log/M2-spec/kickoff prompt
+- Updated `tasks.json` (`M2-test` → `in_progress`) per checklist; scope confirmed: add mac installer/uninstaller parity tests + fixtures only (prod copy-first vs build fallback, cleanup-state metadata/log guidance)
+- Plan: commit docs with `docs: start M2-test`, create branch/worktree `mp-m2-installer-test`/`wt/mp-m2-installer-test`, explore existing installer harnesses, add new fixtures/tests capturing prod copy vs build fallback, cleanup-state metadata, log expectations; run `cargo fmt` + targeted `cargo test ...` suites added/touched, capture outputs for END log
+- Blockers: none
