@@ -1336,44 +1336,18 @@ provision_macos_world() {
 
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     printf '[%s][dry-run] (cd %s && %s %s)\n' "${INSTALLER_NAME}" "${release_root}" "${lima_script}" "${release_root}" >&2
-  else
-    (
-      cd "${release_root}" &&
-      "${lima_script}" "${release_root}"
-    )
-  fi
-
-  local linux_agent=""
-  if [[ -f "${release_root}/bin/linux/world-agent" ]]; then
-    linux_agent="${release_root}/bin/linux/world-agent"
-  elif [[ -f "${release_root}/bin/world-agent-linux" ]]; then
-    linux_agent="${release_root}/bin/world-agent-linux"
-  elif [[ -f "${release_root}/bin/world-agent" ]]; then
-    # Detect whether the bundled binary is ELF (Linux) or Mach-O (macOS host)
-    if [[ "${DRY_RUN}" -eq 1 ]]; then
-      linux_agent="${release_root}/bin/world-agent"
-    else
-      local file_type
-      file_type="$(file -b "${release_root}/bin/world-agent" 2>/dev/null || true)"
-      if echo "${file_type}" | grep -q "ELF"; then
-        linux_agent="${release_root}/bin/world-agent"
-      fi
-    fi
-  fi
-
-  if [[ -z "${linux_agent}" ]]; then
-    warn "Linux world-agent binary not found in release bundle; skipping agent install. (Ensure release publishes a Linux build.)"
     return
   fi
 
-  log "Installing Linux world agent inside Lima..."
-  run_cmd limactl copy "${linux_agent}" substrate:/tmp/world-agent
-  run_cmd limactl shell substrate sudo mv /tmp/world-agent /usr/local/bin/substrate-world-agent
-  run_cmd limactl shell substrate sudo chmod 755 /usr/local/bin/substrate-world-agent
-  run_cmd limactl shell substrate sudo systemctl daemon-reload
-  run_cmd limactl shell substrate sudo systemctl enable substrate-world-agent.service
-  run_cmd limactl shell substrate sudo systemctl enable --now substrate-world-agent.socket
-  run_cmd limactl shell substrate sudo systemctl restart substrate-world-agent.service
+  (
+    cd "${release_root}" &&
+    "${lima_script}" "${release_root}"
+  )
+
+  if ! limactl shell substrate test -x /usr/local/bin/substrate-world-agent >/dev/null 2>&1; then
+    fatal "Lima provisioning completed but /usr/local/bin/substrate-world-agent is missing. Provide bin/linux/world-agent in the release bundle or rerun from a source checkout so the installer can build one."
+  fi
+  log "Verified Linux world-agent installation inside Lima (copy/build path logged above)."
 }
 
 provision_linux_world() {

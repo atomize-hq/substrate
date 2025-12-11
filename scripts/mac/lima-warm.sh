@@ -307,13 +307,34 @@ sudo rm -f /tmp/substrate-cli
 EOF
 }
 
-build_cli_and_agent_inside_vm() {
+build_missing_components_inside_vm() {
+    local build_cli="${1:-0}"
+    local build_agent="${2:-0}"
+
+    if [[ "${build_cli}" -ne 1 && "${build_agent}" -ne 1 ]]; then
+        return 0
+    fi
+
+    if [[ "${build_agent}" -eq 1 ]]; then
+        log "Building Linux world-agent inside Lima (profile: ${BUILD_PROFILE})"
+    fi
+    if [[ "${build_cli}" -eq 1 ]]; then
+        log "Building Linux substrate CLI inside Lima for diagnostics (profile: ${BUILD_PROFILE})"
+    fi
+
     if [[ ! -f "${PROJECT_PATH}/Cargo.toml" ]]; then
-        fatal "No Cargo sources found at ${PROJECT_PATH}; provide Linux binaries under bin/linux or run from a source checkout."
-    }
-    log "Building Linux substrate CLI and world-agent inside Lima (profile: ${BUILD_PROFILE})"
-    limactl shell "${VM_NAME}" env BUILD_PROFILE="${BUILD_PROFILE}" bash <<'EOF'
+        if [[ "${build_agent}" -eq 1 ]]; then
+            fatal "Linux world-agent missing and ${PROJECT_PATH} does not contain Cargo sources. Provide bin/linux/world-agent or rerun from a source checkout."
+        fi
+        warn "Skipping guest CLI build; ${PROJECT_PATH} lacks Cargo sources."
+        return 1
+    fi
+
+    if ! limactl shell "${VM_NAME}" env BUILD_PROFILE="${BUILD_PROFILE}" BUILD_GUEST_CLI="${build_cli}" BUILD_GUEST_AGENT="${build_agent}" bash <<'EOF'; then
 set -euo pipefail
+build_cli="${BUILD_GUEST_CLI:-0}"
+build_agent="${BUILD_GUEST_AGENT:-0}"
+
 ensure_cargo() {
     if command -v cargo >/dev/null 2>&1; then
         return 0
@@ -333,6 +354,10 @@ ensure_cargo() {
     return 0
 }
 
+if [[ "${build_cli}" != "1" && "${build_agent}" != "1" ]]; then
+    exit 0
+fi
+
 if ! ensure_cargo; then
     echo "[lima-warm][ERROR] unable to install cargo inside Lima VM; install Rust manually or provide Linux binaries." >&2
     exit 1
@@ -345,36 +370,61 @@ if [ -f "$HOME/.cargo/env" ]; then
     # shellcheck disable=SC1090
     source "$HOME/.cargo/env"
 fi
-if ! command -v cargo >/dev/null 2>&1; then
+cargo_bin="$(command -v cargo || true)"
+if [[ -z "${cargo_bin}" ]]; then
     echo "[lima-warm][ERROR] cargo still missing after toolchain installation." >&2
     exit 1
 fi
 BUILD_DIR="/tmp/substrate-lima-build"
 mkdir -p "${BUILD_DIR}"
 cd /src
-CARGO_TARGET_DIR="${BUILD_DIR}" cargo build --bin substrate --profile "${BUILD_PROFILE}" --locked
-CARGO_TARGET_DIR="${BUILD_DIR}" cargo build -p world-agent --profile "${BUILD_PROFILE}" --locked
-sudo install -Dm0755 "${BUILD_DIR}/${BUILD_PROFILE}/substrate" /usr/local/bin/substrate
-sudo tee /usr/local/bin/world >/dev/null <<'WORLD'
+if [[ "${build_cli}" == "1" ]]; then
+    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build --bin substrate --profile "${BUILD_PROFILE}" --locked
+    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_PROFILE}/substrate" /usr/local/bin/substrate
+    sudo tee /usr/local/bin/world >/dev/null <<'WORLD'
 #!/usr/bin/env bash
 exec substrate world "$@"
 WORLD
-sudo chmod 0755 /usr/local/bin/world
-sudo install -Dm0755 "${BUILD_DIR}/${BUILD_PROFILE}/world-agent" /usr/local/bin/substrate-world-agent
+    sudo chmod 0755 /usr/local/bin/world
+fi
+if [[ "${build_agent}" == "1" ]]; then
+    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build -p world-agent --profile "${BUILD_PROFILE}" --locked
+    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_PROFILE}/world-agent" /usr/local/bin/substrate-world-agent
+fi
 rm -rf "${BUILD_DIR}"
 EOF
+        local status=$?
+        if [[ "${build_agent}" -eq 1 ]]; then
+            fatal "Failed to build Linux world-agent inside Lima (exit ${status}). Provide a prebuilt agent under bin/linux/world-agent or rerun from a source checkout."
+        fi
+        warn "Failed to build Linux CLI inside Lima; diagnostics requiring a guest CLI will need to run on the host."
+        return 1
+    fi
 }
 
 install_guest_binaries() {
     local cli_candidate agent_candidate
-    cli_candidate="$(host_cli_candidate)" || true
-    agent_candidate="$(host_agent_candidate)" || true
+    local need_cli_build=0
+    local need_agent_build=0
 
-    if [[ -n "${cli_candidate:-}" && -n "${agent_candidate:-}" ]]; then
+    cli_candidate="$(host_cli_candidate)" || true
+    if [[ -n "${cli_candidate:-}" ]]; then
         install_cli_from_host "${cli_candidate}"
+    else
+        log "Linux substrate CLI not found in ${PROJECT_PATH}; attempting in-guest build for diagnostics."
+        need_cli_build=1
+    fi
+
+    agent_candidate="$(host_agent_candidate)" || true
+    if [[ -n "${agent_candidate:-}" ]]; then
         install_agent_from_host "${agent_candidate}"
     else
-        build_cli_and_agent_inside_vm
+        log "Linux world-agent binary not found or invalid in ${PROJECT_PATH}; falling back to an in-guest build."
+        need_agent_build=1
+    fi
+
+    if [[ "${need_cli_build}" -eq 1 || "${need_agent_build}" -eq 1 ]]; then
+        build_missing_components_inside_vm "${need_cli_build}" "${need_agent_build}"
     fi
 }
 
