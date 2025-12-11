@@ -2353,7 +2353,7 @@
     "name": "Linux world provision parity fix (integration)",
     "type": "integration",
     "phase": "LP1 \u2013 Linux Provision Parity",
-    "status": "in_progress",
+    "status": "completed",
     "description": "Merge LP1 code/test branches, reconcile to spec, and gate with fmt/clippy/tests + make preflight so standalone provisioning matches installer behavior.",
     "references": [
       "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
