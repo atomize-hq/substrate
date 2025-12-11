@@ -41,6 +41,12 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Next steps: doc commit (`docs: start M2-code`), branch `mp-m2-installer-code` + worktree, then implement installer changes + run fmt/clippy before END log
 - Blockers: none
 
+## [2025-12-11 20:32 UTC] Code Agent – M2-code – END
+- Worktree `wt/mp-m2-installer-code` on branch `mp-m2-installer-code` (commit 693043b) now logs/validates mac installer strategies (prod copy-first with Lima build fallback + CLI shim parity, dev install source logging, Lima agent verification) and extends the host uninstall to remove the forwarded socket
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass – workspace clean)
+- Results: prod installer relies on `lima-warm` copy/build logging + post-run verification, dev installer reports agent source before provisioning, `lima-warm` builds individual components only when missing (agent failures now fatal with guidance), and uninstall removes the host `~/.substrate/sock/agent.sock`
+- Blockers: none
+
 ## [2025-12-11 20:23 UTC] Test Agent – M2-test – START
 - Checked out `feat/p0-platform-stability-macOS-parity`, ran `git pull --ff-only` (already up to date), reread plan/tasks/session log/M2-spec/kickoff prompt
 - Updated `tasks.json` (`M2-test` → `in_progress`) per checklist; scope confirmed: add mac installer/uninstaller parity tests + fixtures only (prod copy-first vs build fallback, cleanup-state metadata/log guidance)

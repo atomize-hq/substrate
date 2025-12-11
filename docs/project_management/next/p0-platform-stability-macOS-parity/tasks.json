@@ -4,7 +4,7 @@
     "name": "Lima socket parity (code)",
     "type": "code",
     "phase": "M1",
-    "status": "in_progress",
+    "status": "completed",
     "description": "Replace/re-provision Lima with the socket-activated world-agent layout, ensure the agent binary + units + socket perms are installed/healthy, and make warm/provision idempotent.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
