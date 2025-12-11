@@ -47,7 +47,7 @@
     "name": "Lima socket parity (test)",
     "type": "test",
     "phase": "M1",
-    "status": "in_progress",
+    "status": "completed",
     "description": "Add tests/fixtures/harnesses validating mac Lima socket parity replacement/provisioning per M1-spec.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
