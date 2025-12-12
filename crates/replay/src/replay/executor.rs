@@ -74,6 +74,10 @@ pub async fn execute_direct(state: &ExecutionState, timeout_secs: u64) -> Result
 
     if state.stdin.is_some() {
         cmd.stdin(Stdio::piped());
+    } else {
+        // Deterministic behavior: when stdin wasn't captured, don't inherit the
+        // user's TTY during replay (commands like `jq .` or `cat` would hang).
+        cmd.stdin(Stdio::null());
     }
 
     let start = Instant::now();

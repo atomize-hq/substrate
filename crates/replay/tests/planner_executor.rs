@@ -82,6 +82,15 @@ async fn execute_direct_streams_stdin() {
 }
 
 #[tokio::test]
+async fn execute_direct_defaults_stdin_to_null_when_missing() {
+    let state = make_state("cat");
+
+    let result = execute_direct(&state, 1).await.unwrap();
+    assert_eq!(result.exit_code, 0);
+    assert!(result.stdout.is_empty());
+}
+
+#[tokio::test]
 async fn execute_in_world_respects_disable_env() {
     let _lock = ENV_LOCK.lock().await;
     let _guard = EnvGuard::set(&[
