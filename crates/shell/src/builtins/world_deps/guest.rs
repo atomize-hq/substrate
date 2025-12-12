@@ -188,6 +188,13 @@ fn should_fallback_to_host(err: &anyhow::Error) -> bool {
         if message.contains("world-agent")
             || message.contains("platform world context")
             || message.contains("world backend")
+            // Connectivity/transport failures should degrade to host execution.
+            || message.contains("connect UDS")
+            || message.contains("unix socket")
+            || message.contains("Connection refused")
+            || message.contains("connection refused")
+            || message.contains("timed out")
+            || message.contains("No such file or directory")
         {
             return true;
         }

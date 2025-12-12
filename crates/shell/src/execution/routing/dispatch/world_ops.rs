@@ -668,6 +668,32 @@ fn build_agent_client_and_request_impl(
     agent_api_types::ExecuteRequest,
     String,
 )> {
+    // Allow explicit socket overrides (used by tests/fixtures and advanced setups).
+    // When set, we bypass Lima detection/startup and connect directly.
+    if let Some(socket_path) = std::env::var_os("SUBSTRATE_WORLD_SOCKET") {
+        let socket_path = std::path::PathBuf::from(socket_path);
+        let client = AgentClient::unix_socket(&socket_path)?;
+        let cwd = std::env::current_dir()
+            .unwrap_or_else(|_| std::path::PathBuf::from("."))
+            .display()
+            .to_string();
+        let env_map = build_world_env_map();
+        let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+
+        let request = ExecuteRequest {
+            profile: None,
+            cmd: cmd.to_string(),
+            cwd: Some(cwd),
+            env: Some(env_map),
+            pty: false,
+            agent_id: agent_id.clone(),
+            budget: None,
+            world_fs_mode: Some(current_world_fs_mode()),
+        };
+
+        return Ok((client, request, agent_id));
+    }
+
     let ctx = match pw::get_context() {
         Some(ctx) => ctx,
         None => {
