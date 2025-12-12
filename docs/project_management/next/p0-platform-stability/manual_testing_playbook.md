@@ -116,7 +116,18 @@ This document captures the full end-to-end validation flow for the socket-activa
    ./scripts/mac/smoke.sh
    ```
 
-6. Optional: installer/uninstaller parity checks (M2)
+6. PTY TUI sanity (nano/vim) — verify raw keystroke forwarding
+   ```bash
+   substrate
+   # inside the substrate> prompt:
+   nano pty-smoke.md
+   ```
+   Expectations:
+   - Keystrokes are not line-buffered (arrow keys, backspace, etc. respond immediately).
+   - `Ctrl+X` exits `nano` normally (no need to press Enter to “flush” input).
+   - No `nano` warning about failing to create `~/.local/share/nano` (XDG data dir).
+
+7. Optional: installer/uninstaller parity checks (M2)
    - Warm should prefer copying a bundled Linux agent (ELF) into Lima, and only fall back to in-guest builds when the bundle is missing/invalid (see `scripts/mac/lima-warm.sh` logs).
    - If you ran an install/uninstall flow, confirm the host forwarded socket is removed on uninstall:
      ```bash

@@ -23,6 +23,30 @@ use world::guard::{should_guard_anchor, wrap_with_anchor_guard};
 #[cfg(target_os = "linux")]
 use world_api::WorldFsMode;
 
+fn ensure_xdg_dirs(env: &mut HashMap<String, String>) {
+    // Some minimal images don't ship with pre-created XDG dirs (e.g. /root/.local/share),
+    // and TUIs like `nano` expect them to exist.
+    let home = env
+        .get("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/root"));
+    let data_home = env
+        .get("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".local").join("share"));
+
+    if std::fs::create_dir_all(&data_home).is_err() {
+        // If the caller provided a HOME/XDG path that doesn't exist in-world (e.g. host HOME),
+        // fall back to a stable, writable location.
+        let fallback = PathBuf::from("/tmp/substrate-xdg");
+        let _ = std::fs::create_dir_all(&fallback);
+        env.insert(
+            "XDG_DATA_HOME".to_string(),
+            fallback.to_string_lossy().to_string(),
+        );
+    }
+}
+
 #[cfg(unix)]
 fn parse_signal(sig: &str) -> Option<i32> {
     match sig {
@@ -112,6 +136,8 @@ pub async fn handle_ws_pty(
                 cols,
                 rows,
             }) => {
+                let mut env = env;
+                ensure_xdg_dirs(&mut env);
                 info!(
                     %cmd,
                     cwd = %cwd.display(),
@@ -475,6 +501,47 @@ pub async fn handle_ws_pty(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ensure_xdg_dirs_creates_default_data_home_under_home() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut env = HashMap::new();
+        env.insert("HOME".to_string(), tmp.path().display().to_string());
+
+        ensure_xdg_dirs(&mut env);
+
+        assert!(tmp.path().join(".local/share").is_dir());
+    }
+
+    #[test]
+    fn ensure_xdg_dirs_creates_explicit_xdg_data_home() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data_home = tmp.path().join("xdg-data");
+        let mut env = HashMap::new();
+        env.insert("HOME".to_string(), tmp.path().display().to_string());
+        env.insert("XDG_DATA_HOME".to_string(), data_home.display().to_string());
+
+        ensure_xdg_dirs(&mut env);
+
+        assert!(data_home.is_dir());
+    }
+
+    #[test]
+    fn ensure_xdg_dirs_falls_back_when_data_home_uncreatable() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut env = HashMap::new();
+
+        let home = tmp.path().join("home-as-file");
+        std::fs::write(&home, "not a dir").unwrap();
+        env.insert("HOME".to_string(), home.display().to_string());
+
+        ensure_xdg_dirs(&mut env);
+
+        assert_eq!(
+            env.get("XDG_DATA_HOME").map(String::as_str),
+            Some("/tmp/substrate-xdg")
+        );
+    }
 
     #[test]
     fn test_client_message_start_serialization() {

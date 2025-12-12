@@ -477,6 +477,11 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
     use tungs::tungstenite::Message;
 
     let ctx = pw::get_context().ok_or_else(|| anyhow::anyhow!("no platform world context"))?;
+
+    // Put the host terminal into raw mode so interactive programs (nano/vim/top)
+    // receive keystrokes immediately (not line-buffered until Enter).
+    let _terminal_guard = crate::execution::pty::MinimalTerminalGuard::new()?;
+
     let rt = tokio::runtime::Runtime::new()?;
     let code = rt.block_on(async move {
         async fn handle_ws<S>(
@@ -488,7 +493,10 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
             S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
         {
             use futures::SinkExt;
+            use std::sync::Arc;
+            use tokio::sync::Mutex;
             let (mut sink, mut stream) = ws.split();
+            let sink = Arc::new(Mutex::new(sink));
 
             let cmd_sanitized = if let Some(rest) = cmd.strip_prefix(":pty ") {
                 rest
@@ -496,8 +504,11 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
                 cmd
             };
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-            let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
-            let (cols, rows) = (80u16, 24u16);
+            let env_map = build_world_env_map();
+            let (cols, rows) = match crate::execution::pty::get_terminal_size() {
+                Ok(sz) => (sz.cols, sz.rows),
+                Err(_) => (80u16, 24u16),
+            };
             let start = serde_json::json!({
                 "type": "start",
                 "cmd": cmd_sanitized,
@@ -507,12 +518,15 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
                 "cols": cols,
                 "rows": rows,
             });
-            sink.send(Message::Text(start.to_string()))
+            sink.lock()
+                .await
+                .send(Message::Text(start.to_string()))
                 .await
                 .map_err(|e| anyhow::anyhow!("ws send start: {}", e))?;
 
             // stdin forwarder
             let mut stdin = tokio::io::stdin();
+            let sink_for_stdin = sink.clone();
             let stdin_task = tokio::spawn(async move {
                 use tokio::io::AsyncReadExt;
                 let mut buf = [0u8; 8192];
@@ -522,11 +536,45 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
                         Ok(n) => {
                             let b64 = base64::engine::general_purpose::STANDARD.encode(&buf[..n]);
                             let frame = serde_json::json!({"type":"stdin", "data_b64": b64});
-                            if sink.send(Message::Text(frame.to_string())).await.is_err() {
+                            if sink_for_stdin
+                                .lock()
+                                .await
+                                .send(Message::Text(frame.to_string()))
+                                .await
+                                .is_err()
+                            {
                                 break;
                             }
                         }
                         Err(_) => break,
+                    }
+                }
+            });
+
+            // Terminal resize forwarder (SIGWINCH => WS "resize" frame).
+            let sink_for_resize = sink.clone();
+            let resize_task = tokio::spawn(async move {
+                #[cfg(unix)]
+                {
+                    use tokio::signal::unix::{signal, SignalKind};
+                    if let Ok(mut sigwinch) = signal(SignalKind::window_change()) {
+                        while sigwinch.recv().await.is_some() {
+                            let (cols, rows) = match crate::execution::pty::get_terminal_size() {
+                                Ok(sz) => (sz.cols, sz.rows),
+                                Err(_) => continue,
+                            };
+                            let frame =
+                                serde_json::json!({"type":"resize", "cols": cols, "rows": rows});
+                            if sink_for_resize
+                                .lock()
+                                .await
+                                .send(Message::Text(frame.to_string()))
+                                .await
+                                .is_err()
+                            {
+                                break;
+                            }
+                        }
                     }
                 }
             });
@@ -566,6 +614,7 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
             }
 
             stdin_task.abort();
+            resize_task.abort();
             Ok::<i32, anyhow::Error>(exit_code)
         }
 
