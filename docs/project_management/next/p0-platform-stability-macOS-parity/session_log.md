@@ -64,3 +64,10 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `tests/mac/installer_parity_fixture.sh --all` (pass – logs at `/tmp/substrate-mac-installer-prod-copy.O1JCbq/prod-copy.log`, `.prod-build.XfW0Cf/...`, `.dev-build.bxDxYd/...`, `.cleanup-guidance.7DkDvF/...`); `make preflight` (pass – reran fmt/clippy/clean/check/test for the workspace)
 - Result: prod installer now verifies Lima agent installs regardless of bundle state, dev installer logs guest build sources, uninstall removes host socket, Lima warm only builds CLI/agent when missing, and the mac installer fixture exercises copy/build/cleanup guidance on Linux hosts; Linux/WSL installers unchanged (mac-only code paths touched)
 - Blockers: none
+
+## [2025-12-12 02:42 UTC] Code Agent – M3-code – START
+- Checked out `feat/p0-platform-stability-macOS-parity`, `git pull --ff-only` (up to date)
+- Read plan/tasks/session log/M3-spec/kickoff prompt; updated tasks.json (M3-code → in_progress)
+- Worktree pending (`mp-m3-backend-code` to be added after docs commit)
+- Plan: propagate policy fs_mode through mac backend (exec + replay PTY/non-PTY), reorder forwarding/readiness to establish forwarding before probes, align mac socket/group expectations in doctor/shim-status/health and update mac manual playbooks, run `cargo fmt`/`cargo clippy --workspace --all-targets -- -D warnings`, commit via worktree, update docs/tasks/log at end
+- Blockers: none

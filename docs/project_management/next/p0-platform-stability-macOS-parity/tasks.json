@@ -257,7 +257,7 @@
     "name": "Backend & doctor parity \u2013 code",
     "type": "code",
     "phase": "M3",
-    "status": "pending",
+    "status": "in_progress",
     "description": "Propagate policy fs_mode to mac backend, fix readiness/forwarding ordering, align socket/group expectations, and update doctor/doc/shim/health flows per M3-spec.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
