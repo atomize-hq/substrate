@@ -668,7 +668,17 @@ fn build_agent_client_and_request_impl(
     agent_api_types::ExecuteRequest,
     String,
 )> {
-    let ctx = pw::get_context().ok_or_else(|| anyhow::anyhow!("no platform world context"))?;
+    let ctx = match pw::get_context() {
+        Some(ctx) => ctx,
+        None => {
+            // Subcommands like `substrate health` may execute without going through the full shell
+            // initialization path, so the platform world context might not be populated yet.
+            let detected =
+                pw::detect().map_err(|e| anyhow::anyhow!("platform world detect failed: {e:#}"))?;
+            pw::store_context_globally(detected);
+            pw::get_context().ok_or_else(|| anyhow::anyhow!("no platform world context"))?
+        }
+    };
     (ctx.ensure_ready.as_ref())()?;
 
     let client = match &ctx.transport {
