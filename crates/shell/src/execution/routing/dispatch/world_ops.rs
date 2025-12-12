@@ -504,7 +504,25 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
                 cmd
             };
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-            let env_map = build_world_env_map();
+            let mut env_map = build_world_env_map();
+            // macOS host env (e.g. HOME=/Users/...) doesn't map cleanly into the Linux guest.
+            // Prefer a sane in-guest default for interactive sessions.
+            let home = env_map
+                .get("HOME")
+                .map(|v| v.as_str())
+                .unwrap_or_default();
+            if home.is_empty() || home.starts_with("/Users/") {
+                env_map.insert("HOME".to_string(), "/root".to_string());
+            }
+            env_map
+                .entry("XDG_DATA_HOME".to_string())
+                .or_insert_with(|| "/root/.local/share".to_string());
+
+            // Ensure a few common XDG dirs exist to avoid noisy TUI warnings (e.g. nano history).
+            // This is best-effort and does not fail the session in read-only modes.
+            let cmd_sanitized = format!(
+                "mkdir -p \"${{XDG_DATA_HOME:-$HOME/.local/share}}\" >/dev/null 2>&1 || true; {cmd_sanitized}"
+            );
             let (cols, rows) = match crate::execution::pty::get_terminal_size() {
                 Ok(sz) => (sz.cols, sz.rows),
                 Err(_) => (80u16, 24u16),
