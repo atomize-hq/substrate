@@ -30,6 +30,7 @@ pub struct MacLimaBackend {
     runtime: Option<Runtime>,
     forwarding: std::sync::Mutex<Option<ForwardingHandle>>,
     session_cache: std::sync::Mutex<Option<WorldHandle>>,
+    fs_mode: std::sync::Mutex<WorldFsMode>,
 }
 
 impl MacLimaBackend {
@@ -52,6 +53,7 @@ impl MacLimaBackend {
             runtime: Some(runtime),
             forwarding: std::sync::Mutex::new(None),
             session_cache: std::sync::Mutex::new(None),
+            fs_mode: std::sync::Mutex::new(WorldFsMode::Writable),
         })
     }
 
@@ -173,39 +175,55 @@ impl MacLimaBackend {
     }
 
     fn test_agent_connection(&self) -> Result<()> {
-        // Simple test: try to execute a basic command
+        let forwarding_established = self
+            .forwarding
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?
+            .is_some();
+
+        // Simple test: ensure agent socket is present and reachable
         match &self.transport {
             Transport::UnixSocket => {
-                // Test UDS connection
-                std::os::unix::net::UnixStream::connect(&self.agent_socket)
-                    .context("Failed to connect to agent socket")?;
-            }
-            Transport::VSock => {
-                // For VSock, we can't test connection before forwarding is established
-                // Just check if agent socket exists inside the VM
-                let output = Command::new("limactl")
-                    .args([
-                        "shell",
-                        &self.vm_name,
-                        "sudo",
-                        "-n",
-                        "test",
-                        "-S",
-                        "/run/substrate.sock",
-                    ])
-                    .output()
-                    .context("Failed to check agent socket in VM")?;
-
-                if !output.status.success() {
-                    anyhow::bail!("Agent socket not found in VM");
+                if forwarding_established {
+                    std::os::unix::net::UnixStream::connect(&self.agent_socket)
+                        .context("Failed to connect to agent socket")?;
+                } else {
+                    self.check_agent_socket_in_vm()?;
                 }
             }
+            Transport::VSock => {
+                self.check_agent_socket_in_vm()?;
+            }
             Transport::TCP => {
-                // Test TCP connection
-                std::net::TcpStream::connect("127.0.0.1:7788")
-                    .context("Failed to connect to agent TCP port")?;
+                if forwarding_established {
+                    std::net::TcpStream::connect("127.0.0.1:7788")
+                        .context("Failed to connect to agent TCP port")?;
+                } else {
+                    self.check_agent_socket_in_vm()?;
+                }
             }
         }
+        Ok(())
+    }
+
+    fn check_agent_socket_in_vm(&self) -> Result<()> {
+        let output = Command::new("limactl")
+            .args([
+                "shell",
+                &self.vm_name,
+                "sudo",
+                "-n",
+                "test",
+                "-S",
+                "/run/substrate.sock",
+            ])
+            .output()
+            .context("Failed to check agent socket in VM")?;
+
+        if !output.status.success() {
+            anyhow::bail!("Agent socket not found in VM");
+        }
+
         Ok(())
     }
 
@@ -246,7 +264,7 @@ impl MacLimaBackend {
     }
 
     /// Convert world_api::ExecRequest to agent_api_types::ExecuteRequest.
-    fn convert_exec_request(&self, req: &ExecRequest) -> ExecuteRequest {
+    fn convert_exec_request(&self, req: &ExecRequest, fs_mode: WorldFsMode) -> ExecuteRequest {
         ExecuteRequest {
             profile: None,
             cmd: req.cmd.clone(),
@@ -255,7 +273,7 @@ impl MacLimaBackend {
             pty: req.pty,
             agent_id: "world-mac-lima".to_string(),
             budget: None,
-            world_fs_mode: Some(self.resolve_fs_mode()),
+            world_fs_mode: Some(fs_mode),
         }
     }
 
@@ -277,11 +295,26 @@ impl MacLimaBackend {
         }
     }
 
-    fn resolve_fs_mode(&self) -> WorldFsMode {
-        std::env::var("SUBSTRATE_WORLD_FS_MODE")
-            .ok()
-            .and_then(|value| WorldFsMode::parse(&value))
-            .unwrap_or(WorldFsMode::Writable)
+    fn store_fs_mode(&self, fs_mode: WorldFsMode) -> Result<()> {
+        let mut guard = self
+            .fs_mode
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+        *guard = fs_mode;
+        Ok(())
+    }
+
+    fn effective_fs_mode(&self) -> Result<WorldFsMode> {
+        if let Ok(raw) = std::env::var("SUBSTRATE_WORLD_FS_MODE") {
+            if let Some(mode) = WorldFsMode::parse(&raw) {
+                return Ok(mode);
+            }
+        }
+        let guard = self
+            .fs_mode
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+        Ok(*guard)
     }
 
     /// Build an AgentClient based on current forwarding.
@@ -315,6 +348,8 @@ impl WorldBackend for MacLimaBackend {
     fn ensure_session(&self, spec: &WorldSpec) -> Result<WorldHandle> {
         self.ensure_vm_running()?;
         self.ensure_forwarding()?;
+
+        self.store_fs_mode(spec.fs_mode)?;
 
         // Cache session if requested
         if spec.reuse_session {
@@ -357,7 +392,8 @@ impl WorldBackend for MacLimaBackend {
         let client = self.build_agent_client()?;
 
         // Convert request
-        let agent_req = self.convert_exec_request(&req);
+        let fs_mode = self.effective_fs_mode()?;
+        let agent_req = self.convert_exec_request(&req, fs_mode);
 
         // Execute via agent
         let resp = self.block_on_compat(async { client.execute(agent_req).await })?;
@@ -385,7 +421,8 @@ impl WorldBackend for MacLimaBackend {
         }
     }
 
-    fn apply_policy(&self, _world: &WorldHandle, _spec: &WorldSpec) -> Result<()> {
+    fn apply_policy(&self, _world: &WorldHandle, spec: &WorldSpec) -> Result<()> {
+        self.store_fs_mode(spec.fs_mode)?;
         // TODO: Implement policy application when agent endpoint is available
         // For now, this is a no-op as mentioned in the plan
         tracing::debug!("Policy application not yet implemented for macOS backend");
