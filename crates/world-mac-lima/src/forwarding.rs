@@ -304,6 +304,9 @@ fn lima_ssh_config_path(vm_name: &str) -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
+    use std::fs;
+    use tempfile::tempdir;
 
     #[test]
     fn test_vsock_detection() {
@@ -330,6 +333,70 @@ mod tests {
 
         for kind in kinds {
             println!("Forwarding kind: {:?}", kind);
+        }
+    }
+
+    #[test]
+    fn ssh_uds_forwarding_waits_for_socket_after_spawning() {
+        let temp = tempdir().expect("tempdir");
+        let home = temp.path().join("home");
+        let bin = temp.path().join("bin");
+        fs::create_dir_all(&bin).expect("bin dir");
+        fs::create_dir_all(home.join(".lima/substrate")).expect("ssh config dir");
+        fs::write(
+            home.join(".lima/substrate/ssh.config"),
+            "Host lima-substrate\n  User stub\n",
+        )
+        .expect("write ssh.config");
+
+        // Stub ssh: create the forwarded socket file immediately.
+        let ssh_stub = bin.join("ssh");
+        fs::write(
+            &ssh_stub,
+            r#"#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "$HOME/.substrate/sock"
+touch "$HOME/.substrate/sock/agent.sock"
+exit 0
+"#,
+        )
+        .expect("write ssh stub");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&ssh_stub).expect("ssh stub metadata").permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&ssh_stub, perms).expect("set ssh stub perms");
+        }
+
+        let prev_home = env::var_os("HOME");
+        let prev_path = env::var_os("PATH");
+        env::set_var("HOME", &home);
+        let new_path = match prev_path {
+            Some(p) => format!("{}:{}", bin.display(), p.to_string_lossy()),
+            None => bin.display().to_string(),
+        };
+        env::set_var("PATH", &new_path);
+
+        let handle = create_ssh_uds_forwarding("substrate")
+            .expect("ssh uds forwarding should succeed once stub creates socket");
+        match handle.kind() {
+            ForwardingKind::SshUds { path } => {
+                assert!(
+                    path.ends_with("agent.sock"),
+                    "expected forwarded socket to be agent.sock, got {path:?}"
+                );
+            }
+            other => panic!("expected SSH UDS forwarding, got {other:?}"),
+        }
+
+        match prev_home {
+            Some(v) => env::set_var("HOME", v),
+            None => env::remove_var("HOME"),
+        }
+        match prev_path {
+            Some(v) => env::set_var("PATH", v),
+            None => env::remove_var("PATH"),
         }
     }
 }

@@ -424,4 +424,57 @@ mod tests {
         assert_eq!(state.env.get("PATH"), Some(&"/usr/bin:/bin".to_string()));
         assert_eq!(state.env.get("USER"), Some(&"testuser".to_string()));
     }
+
+    #[test]
+    fn reconstruct_state_exports_world_fs_mode_from_replay_context() {
+        let span = TraceSpan {
+            ts: Utc::now(),
+            event_type: "command_complete".to_string(),
+            span_id: "test-span-fs-mode".to_string(),
+            session_id: "test-session".to_string(),
+            component: "shell".to_string(),
+            cmd: "echo hi".to_string(),
+            cwd: Some(PathBuf::from("/tmp")),
+            exit_code: Some(0),
+            duration_ms: Some(10),
+            policy_decision: None,
+            fs_diff: None,
+            scopes_used: None,
+            replay_context: Some(ReplayContext {
+                path: Some("/usr/bin:/bin".to_string()),
+                env_hash: "abc123".to_string(),
+                umask: 22,
+                locale: None,
+                cwd: "/tmp".to_string(),
+                policy_id: "default".to_string(),
+                policy_commit: None,
+                world_image_version: "test".to_string(),
+                hostname: None,
+                user: Some("testuser".to_string()),
+                shell: Some("/bin/bash".to_string()),
+                term: None,
+                world_image: None,
+                execution_origin: Some(ExecutionOrigin::World),
+                transport: None,
+                anchor_mode: None,
+                anchor_path: None,
+                world_root_mode: None,
+                world_root_path: None,
+                caged: None,
+                world_fs_mode: Some("read_only".to_string()),
+            }),
+            transport: None,
+            execution_origin: None,
+            stdout: None,
+            stderr: None,
+            env_hash: None,
+        };
+
+        let state = reconstruct_state(&span, &HashMap::new()).unwrap();
+        assert_eq!(
+            state.env.get("SUBSTRATE_WORLD_FS_MODE").map(String::as_str),
+            Some("read_only"),
+            "replay context world_fs_mode should be exported for backend parity"
+        );
+    }
 }
