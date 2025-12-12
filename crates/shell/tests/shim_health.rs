@@ -3,7 +3,9 @@
 #[path = "common.rs"]
 mod common;
 
+use assert_cmd::Command;
 use common::doctor_fixture::DoctorFixture;
+use common::{binary_path, ensure_substrate_built, shared_tmpdir};
 use serde_json::{json, Value};
 use std::fs;
 
@@ -559,5 +561,36 @@ fn health_json_surfaces_world_fs_mode_details() {
         payload["shim"]["world"]["details"]["world_fs_mode"],
         json!("read_only"),
         "health JSON should preserve world_fs_mode from shim/world doctor snapshot"
+    );
+}
+
+#[test]
+fn health_json_is_valid_when_world_deps_falls_back() {
+    ensure_substrate_built();
+
+    let mut cmd = Command::new(binary_path());
+    cmd.env("TMPDIR", shared_tmpdir());
+    cmd.env_remove("SHIM_ORIGINAL_PATH");
+    cmd.env("SUBSTRATE_WORLD", "enabled");
+    cmd.env("SUBSTRATE_WORLD_ENABLED", "1");
+    cmd.env_remove("SUBSTRATE_WORLD_ID");
+    cmd.env("SUBSTRATE_WORLD_SOCKET", "/tmp/substrate-test-missing.sock");
+    cmd.arg("health").arg("--json");
+
+    let output = cmd.output().expect("failed to run substrate health --json");
+    assert!(
+        output.status.success(),
+        "health --json should succeed even when world deps falls back: stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let payload: Value = serde_json::from_slice(&output.stdout)
+        .expect("health --json should emit valid JSON to stdout");
+    assert!(
+        payload.get("shim").is_some(),
+        "expected shim report in payload"
+    );
+    assert!(
+        payload.get("summary").is_some(),
+        "expected summary report in payload"
     );
 }

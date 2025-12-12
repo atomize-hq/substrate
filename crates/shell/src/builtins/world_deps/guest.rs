@@ -100,7 +100,7 @@ pub(crate) fn world_exec_fallback_active() -> bool {
 pub(crate) fn mark_world_exec_unavailable(err: &anyhow::Error) {
     let previously = WORLD_EXEC_FALLBACK.swap(true, Ordering::SeqCst);
     if !previously {
-        println!(
+        eprintln!(
             "substrate: warn: world backend unavailable for world deps (falling back to host execution): {:#}",
             err
         );
@@ -134,7 +134,7 @@ fn run_world_command(command: &str) -> Result<agent_api_types::ExecuteResponse> 
 }
 
 fn run_host_install(script: &str, verbose: bool) -> Result<()> {
-    println!("substrate: warn: world backend unavailable; running installer on the host.");
+    eprintln!("substrate: warn: world backend unavailable; running installer on the host.");
     let body = build_bash_body(script, true);
     let mut cmd = Command::new("bash");
     cmd.arg("-lc").arg(&body);
