@@ -71,3 +71,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Worktree pending (`mp-m3-backend-code` to be added after docs commit)
 - Plan: propagate policy fs_mode through mac backend (exec + replay PTY/non-PTY), reorder forwarding/readiness to establish forwarding before probes, align mac socket/group expectations in doctor/shim-status/health and update mac manual playbooks, run `cargo fmt`/`cargo clippy --workspace --all-targets -- -D warnings`, commit via worktree, update docs/tasks/log at end
 - Blockers: none
+
+## [2025-12-12 02:46 UTC] Test Agent – M3-test – START
+- Checked out `feat/p0-platform-stability-macOS-parity`, `git pull --ff-only` (up to date), read plan/tasks/session log/M3-spec/kickoff prompt
+- Updated `tasks.json` (`M3-test` → `in_progress`) per checklist; scope confirmed: tests/fixtures only for mac fs_mode propagation, readiness/forwarding ordering, and doctor/shim-status/health JSON/text parity (platform-agnostic portions)
+- Next steps: commit docs with `docs: start M3-test`, create branch/worktree `mp-m3-backend-test`/`wt/mp-m3-backend-test`, add required tests/fixtures, run `cargo fmt` + targeted `cargo test ...`, capture outputs for END log
+- Blockers: none
