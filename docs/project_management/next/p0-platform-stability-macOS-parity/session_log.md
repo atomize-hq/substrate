@@ -77,3 +77,12 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Updated `tasks.json` (`M3-test` → `in_progress`) per checklist; scope confirmed: tests/fixtures only for mac fs_mode propagation, readiness/forwarding ordering, and doctor/shim-status/health JSON/text parity (platform-agnostic portions)
 - Next steps: commit docs with `docs: start M3-test`, create branch/worktree `mp-m3-backend-test`/`wt/mp-m3-backend-test`, add required tests/fixtures, run `cargo fmt` + targeted `cargo test ...`, capture outputs for END log
 - Blockers: none
+
+## [2025-12-12 03:00 UTC] Code Agent – M3-code – END
+- Worktree `wt/mp-m3-backend-code` on branch `mp-m3-backend-code` (commit 91bafdb) propagates policy `fs_mode` to the mac Lima backend, fixes pre-forwarding readiness by probing the guest socket before host forwarding, and aligns mac shim-status + world doctor JSON/text with Linux P0 (socket activation state and `agent_socket`/`world_socket` parity).
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass)
+- Results: clippy built `substrate-shell`, `world-mac-lima`, and `substrate` with no warnings.
+- Scripts executed: n/a
+- Kickoff prompts created: n/a (M3-test/M3-integ prompts already present)
+- Docs commit: pending (`docs: finish M3-code`)
+- Blockers: none
