@@ -423,4 +423,31 @@ mod tests {
             Transport::UnixSocket | Transport::TCP | Transport::VSock
         );
     }
+
+    #[test]
+    fn convert_exec_request_propagates_env_fs_mode() {
+        let prev = std::env::var("SUBSTRATE_WORLD_FS_MODE").ok();
+        std::env::set_var("SUBSTRATE_WORLD_FS_MODE", "read_only");
+
+        if let Ok(backend) = MacLimaBackend::new() {
+            let req = ExecRequest {
+                cmd: "echo hi".to_string(),
+                cwd: PathBuf::from("/tmp"),
+                env: std::collections::HashMap::new(),
+                pty: false,
+                span_id: None,
+            };
+            let agent_req = backend.convert_exec_request(&req);
+            assert_eq!(
+                agent_req.world_fs_mode,
+                Some(WorldFsMode::ReadOnly),
+                "mac backend should pass through env-derived fs mode"
+            );
+        }
+
+        match prev {
+            Some(value) => std::env::set_var("SUBSTRATE_WORLD_FS_MODE", value),
+            None => std::env::remove_var("SUBSTRATE_WORLD_FS_MODE"),
+        }
+    }
 }
