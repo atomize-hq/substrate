@@ -86,3 +86,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Kickoff prompts created: n/a (M3-test/M3-integ prompts already present)
 - Docs commit: pending (`docs: finish M3-code`)
 - Blockers: none
+
+## [2025-12-12 03:13 UTC] Test Agent – M3-test – END
+- Worktree `wt/mp-m3-backend-test` on branch `mp-m3-backend-test` (commit e91e690) adds replay fs_mode propagation regression, mac forwarding ordering unit test, mac ExecuteRequest fs_mode env propagation unit test, fixture-backed shim doctor/health fs_mode surfacing checks, and shim-status fs_mode parity tests.
+- Commands: `cargo fmt --all` (pass); `cargo test -p substrate-shell --test shim_doctor` (pass); `cargo test -p substrate-shell --test shim_health` (pass); `cargo test -p substrate-shell --test shim_status_fs_mode` (fail – shim status missing `world_fs_mode` in JSON/text); `cargo test -p substrate-replay reconstruct_state_exports_world_fs_mode_from_replay_context` (fail – replay context fs_mode not exported to env).
+- Mac-only coverage: unit tests in `crates/world-mac-lima` are `#[cfg(target_os = "macos")]` and were not executed on Linux; verify on mac during M3-integ.
+- Blockers: pending M3-code integration to surface `world_fs_mode` in shim-status outputs and honor replay-context fs_mode during replay.

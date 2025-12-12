@@ -302,7 +302,7 @@
     "name": "Backend & doctor parity \u2013 test",
     "type": "test",
     "phase": "M3",
-    "status": "in_progress",
+    "status": "completed",
     "description": "Add tests/fixtures for mac backend fs_mode propagation, doctor/shim-status/health outputs, and readiness/forwarding ordering per M3-spec.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
