@@ -495,7 +495,7 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
             use futures::SinkExt;
             use std::sync::Arc;
             use tokio::sync::Mutex;
-            let (mut sink, mut stream) = ws.split();
+            let (sink, mut stream) = ws.split();
             let sink = Arc::new(Mutex::new(sink));
 
             let cmd_sanitized = if let Some(rest) = cmd.strip_prefix(":pty ") {
