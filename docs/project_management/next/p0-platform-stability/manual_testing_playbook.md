@@ -75,17 +75,55 @@ This document captures the full end-to-end validation flow for the socket-activa
    cargo test -p substrate-shell --test logging
    ```
 
-### 1.3 macOS (Lima) Socket Activation
+### 1.4 macOS (Lima) Socket Activation + Parity (M1/M2/M3)
 
-1. Warm the Lima guest and inspect the socket:
+1. Warm/provision Lima idempotently (rebuilds the VM if the socket-parity layout sentinel is missing/stale):
    ```bash
    ./scripts/mac/lima-warm.sh --check-only
    ./scripts/mac/lima-warm.sh
-   limactl shell substrate sudo systemctl status substrate-world-agent.socket
-   limactl shell substrate world doctor --json | jq '.world_socket'
+   ./scripts/mac/lima-doctor.sh
    ```
 
-### 1.3 Windows/WSL Socket Activation
+2. Verify socket-activation units + permissions inside the guest:
+   ```bash
+   limactl shell substrate sudo -n cat /etc/substrate-lima-layout
+   limactl shell substrate sudo -n systemctl is-active substrate-world-agent.socket
+   limactl shell substrate sudo -n systemctl is-active substrate-world-agent.service
+   limactl shell substrate sudo -n stat -c '%U:%G %a' /run/substrate.sock
+   limactl shell substrate sudo -n timeout 5 curl --fail --unix-socket /run/substrate.sock http://localhost/v1/capabilities | jq .
+   ```
+   Expect `/etc/substrate-lima-layout` = `socket-parity-v1` and `/run/substrate.sock` perms `root:substrate 660`.
+
+3. Verify host-facing forwarded socket works (agent endpoint is `~/.substrate/sock/agent.sock`):
+   ```bash
+   rm -f ~/.substrate/sock/agent.sock
+   substrate -c 'true'
+   ls -l ~/.substrate/sock/agent.sock
+   curl --unix-socket ~/.substrate/sock/agent.sock http://localhost/v1/capabilities | jq .
+   ```
+
+4. Verify doctor/shim-status/health parity surfaces socket state + `world_fs_mode` (M3):
+   ```bash
+   substrate world doctor --json | jq '{ok, world_fs_mode, socket_mode: .world_socket.mode, socket_exists: .world_socket.socket_exists, probe_ok: .world_socket.probe_ok}'
+   substrate --shim-status
+   substrate --shim-status-json | jq '{world_fs_mode, socket_mode: .agent_socket.mode, socket_exists: .agent_socket.socket_exists, agent_world_fs_mode: .agent_socket.world_fs_mode, vm_status: .agent_socket.lima.vm_status}'
+   substrate health
+   substrate health --json | jq '.shim.world.details.world_fs_mode'
+   ```
+
+5. End-to-end smoke (non-PTY + PTY + replay + fs diff):
+   ```bash
+   ./scripts/mac/smoke.sh
+   ```
+
+6. Optional: installer/uninstaller parity checks (M2)
+   - Warm should prefer copying a bundled Linux agent (ELF) into Lima, and only fall back to in-guest builds when the bundle is missing/invalid (see `scripts/mac/lima-warm.sh` logs).
+   - If you ran an install/uninstall flow, confirm the host forwarded socket is removed on uninstall:
+     ```bash
+     test ! -S "$HOME/.substrate/sock/agent.sock" || echo "expected $HOME/.substrate/sock/agent.sock to be removed"
+     ```
+
+### 1.5 Windows/WSL Socket Activation
 
 1. Run the PowerShell warm script with `-WhatIf` and capture logs:
    ```powershell
@@ -97,7 +135,7 @@ This document captures the full end-to-end validation flow for the socket-activa
    wsl -d substrate-wsl -- bash -lc "systemctl status substrate-world-agent.socket"
    ```
 
-### 1.4 Replay Isolation & Verbose Scopes
+### 1.6 Replay Isolation & Verbose Scopes
 
 1. World-on replay:
    ```bash
@@ -119,7 +157,7 @@ This document captures the full end-to-end validation flow for the socket-activa
    cargo test -p substrate-shell --test replay_world
    ```
 
-### 1.5 Health Manager Parity
+### 1.7 Health Manager Parity
 
 1. CLI checks:
    ```bash
@@ -132,7 +170,7 @@ This document captures the full end-to-end validation flow for the socket-activa
    cargo test -p substrate-shell --test shim_doctor
    ```
 
-### 1.6 Installer State Tracking & Cleanup (Linux dev/prod)
+### 1.8 Installer State Tracking & Cleanup (Linux dev/prod)
 
 Run both installer variants end-to-end with cleanup enabled so we validate the new metadata and unit teardown flow.
 
@@ -182,7 +220,7 @@ Run both installer variants end-to-end with cleanup enabled so we validate the n
    ```
    Confirm the units are absent and the metadata-driven cleanup removed only installer-added users/linger entries. Preserve systemctl logs (`/tmp/substrate-installer-*/systemctl-*.log` if you ran the harness) with your artifacts.
 
-### 1.7 Replay origin-aware defaults & agent routing
+### 1.9 Replay origin-aware defaults & agent routing
 
 Use a temp trace to keep spans isolated:
 ```bash
@@ -195,7 +233,9 @@ rm -f "$SHIM_TRACE_LOG"
    SUBSTRATE_WORLD=enabled SUBSTRATE_WORLD_ENABLED=1 \
    ./target/debug/substrate -c 'printf world > /tmp/r2d_world.txt'
    ```
-   Confirm `/run/substrate.sock` is healthy (`curl --unix-socket /run/substrate.sock http://localhost/v1/capabilities | jq .`).
+   Confirm the agent socket is healthy:
+   - Linux: `curl --unix-socket /run/substrate.sock http://localhost/v1/capabilities | jq .`
+   - macOS: `curl --unix-socket "$HOME/.substrate/sock/agent.sock" http://localhost/v1/capabilities | jq .`
 
 2. **Record a host span**
    ```bash
@@ -231,11 +271,12 @@ rm -f "$SHIM_TRACE_LOG"
    ```
    Verify verbose output shows the overridden root and only a single warning if ENOSPC is simulated.
 
-### 1.8 Policy-driven world fs mode (read-only vs writable)
+### 1.10 Policy-driven world fs mode (read-only vs writable)
 
-Use a scratch policy so broker reloads without touching user config:
+Use a scratch directory with a per-project policy (`.substrate-profile`) so you can validate policy-driven fs_mode without touching global state:
 ```bash
-cat > /tmp/r2e-policy.yaml <<'YAML'
+R2E_DIR="$(mktemp -d)"
+cat > "${R2E_DIR}/.substrate-profile" <<'YAML'
 id: r2e-manual
 name: R2e manual fs mode policy
 world_fs_mode: read_only
@@ -248,34 +289,45 @@ cmd_isolated: []
 require_approval: false
 allow_shell_operators: true
 YAML
-SUBSTRATE_POLICY=/tmp/r2e-policy.yaml ./target/debug/substrate world doctor --json | jq '{world_fs_mode, world_socket}'
+cd "${R2E_DIR}"
 ```
-Expect `world_fs_mode: "read_only"`. Flip the value to `writable`, rerun doctor, and confirm the change.
 
-1. **Non-PTY read-only enforcement**
+1. **CLI parity: surface `world_fs_mode`**
    ```bash
-   curl --unix-socket /run/substrate.sock \
-     -H 'content-type: application/json' \
-     --data '{"cmd":"sh -lc \"echo deny > /tmp/r2e-ro.txt\"","pty":false,"agent_id":"manual","world_fs_mode":"read_only"}' \
-     http://localhost/v1/execute | jq '{exit, fs_diff}'
+   substrate --shim-status-json | jq '{world_fs_mode, agent_socket_mode: .agent_socket.mode, agent_socket_exists: .agent_socket.socket_exists}'
+   substrate world doctor --json | jq '{world_fs_mode, ok, socket_mode: .world_socket.mode, probe_ok: .world_socket.probe_ok}'
    ```
+   Expect `world_fs_mode: "read_only"`. If it reports `writable`, capture outputs (policy loading regression).
+
+2. **Substrate non-PTY enforcement (read-only)**
+   ```bash
+   substrate -c 'sh -lc "echo deny > /tmp/r2e-ro.txt"'
+   ```
+   Expect a non-zero exit (write blocked).
+
+3. **Agent API enforcement (optional, socket path differs by platform)**
+   - Linux:
+     ```bash
+     curl --unix-socket /run/substrate.sock \
+       -H 'content-type: application/json' \
+       --data '{"cmd":"sh -lc \"echo deny > /tmp/r2e-ro.txt\"","pty":false,"agent_id":"manual","world_fs_mode":"read_only"}' \
+       http://localhost/v1/execute | jq '{exit, fs_diff}'
+     ```
+   - macOS (Lima forwarded socket):
+     ```bash
+     curl --unix-socket "$HOME/.substrate/sock/agent.sock" \
+       -H 'content-type: application/json' \
+       --data '{"cmd":"sh -lc \"echo deny > /tmp/r2e-ro.txt\"","pty":false,"agent_id":"manual","world_fs_mode":"read_only"}' \
+       http://localhost/v1/execute | jq '{exit, fs_diff}'
+     ```
    Expect a non-zero exit and no `fs_diff` since writes are blocked.
 
-2. **PTY writable path**
+4. **Trace export (replay_context includes fs_mode)**
    ```bash
-   curl --unix-socket /run/substrate.sock \
-     -H 'content-type: application/json' \
-     --data '{"type":"start","cmd":"sh -lc \"echo ok > /tmp/r2e-writable.txt\"","env":{"SUBSTRATE_WORLD_FS_MODE":"writable"}}' \
-     http://localhost/v1/stream
-   ```
-   Exit 0 with `fs_diff` indicating the write.
-
-3. **Shim/trace export**
-   ```bash
-   SUBSTRATE_POLICY=/tmp/r2e-policy.yaml ./target/debug/substrate -c 'true'
+   substrate -c 'true'
    tail -n1 ~/.substrate/trace.jsonl | jq '.replay_context.world_fs_mode'
    ```
-   Confirm spans record the active mode for doctor/replay.
+   Expect `read_only`.
 
 ## 2. Debugging Log (2025-12-02 UTC-5)
 
