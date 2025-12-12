@@ -98,3 +98,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Updated `tasks.json` (`M3-integ` → `in_progress`); integration scope confirmed: merge `M3-code` + `M3-test`, reconcile mac fs_mode propagation, forwarding/readiness ordering, doctor/shim-status/health parity with M3-spec
 - Next steps: commit this START docs update (`docs: start M3-integ`), create branch/worktree `mp-m3-backend-integ`/`wt/mp-m3-backend-integ`, merge upstream branches, fix outstanding test failures (shim-status `world_fs_mode` surfacing and replay-context fs_mode env export), then run required commands (`cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, `make preflight`)
 - Blockers: none
+
+## [2025-12-12 03:51 UTC] Integration Agent – M3-integ – END
+- Worktree `wt/mp-m3-backend-integ` merged `mp-m3-backend-code` + `mp-m3-backend-test`, resolved minor test conflicts/duplication, and reconciled to M3-spec. Added shim-status `world_fs_mode` parity (JSON/text) and exported replay-context fs_mode via `SUBSTRATE_WORLD_FS_MODE`; forwarding ordering and mac backend fs_mode propagation retained from M3-code.
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass after removing duplicate tests and fixing a clippy lint in `shim_status_fs_mode`); `cargo test -p substrate-shell --test shim_doctor` (pass); `cargo test -p substrate-shell --test shim_health` (pass); `cargo test -p substrate-shell --test shim_status_fs_mode` (pass); `cargo test -p substrate-replay reconstruct_state_exports_world_fs_mode_from_replay_context` (pass); `make preflight` (pass – reran fmt/clippy/clean/check/test for workspace).
+- Result: mac shim-status/health/doctor outputs now surface fs_mode and socket activation in parity with Linux P0, mac backend honors policy fs_mode across exec/replay, and readiness no longer probes pre-forwarding. Workspace remains green on non-mac targets.
+- Blockers: none

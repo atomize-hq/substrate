@@ -129,7 +129,7 @@
     "name": "Installer parity (macOS) \u2013 code",
     "type": "code",
     "phase": "M2",
-    "status": "in_progress",
+    "status": "completed",
     "description": "Align mac dev/prod installers with Linux parity: build/copy agent/CLI in Lima when missing, honor cleanup-state metadata, and keep uninstall parity.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
