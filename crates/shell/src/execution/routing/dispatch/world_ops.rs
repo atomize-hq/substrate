@@ -33,6 +33,28 @@ use world::LinuxLocalBackend;
 #[cfg(target_os = "linux")]
 use world_api::{ResourceLimits, WorldBackend, WorldSpec};
 
+#[cfg(target_os = "macos")]
+fn normalize_env_for_linux_guest(env_map: &mut std::collections::HashMap<String, String>) {
+    const GUEST_BASE_PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+    let normalized = match env_map.get("PATH") {
+        Some(existing) if existing.is_empty() => GUEST_BASE_PATH.to_string(),
+        Some(existing) if existing.starts_with(GUEST_BASE_PATH) => existing.to_string(),
+        Some(existing) => format!("{GUEST_BASE_PATH}:{existing}"),
+        None => GUEST_BASE_PATH.to_string(),
+    };
+    env_map.insert("PATH".to_string(), normalized);
+
+    // Avoid leaking macOS host HOME into the Linux guest. This both reduces
+    // accidental use of macOS toolchains (nvm/pyenv) and keeps guest-only state
+    // in a predictable location.
+    if env_map
+        .get("HOME")
+        .is_none_or(|home| home.is_empty() || home.starts_with("/Users/"))
+    {
+        env_map.insert("HOME".to_string(), "/root".to_string());
+    }
+}
+
 /// Collect filesystem diff and network scopes from world backend
 #[allow(unused_variables)]
 pub(super) fn collect_world_telemetry(
@@ -505,15 +527,7 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
             };
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let mut env_map = build_world_env_map();
-            // macOS host env (e.g. HOME=/Users/...) doesn't map cleanly into the Linux guest.
-            // Prefer a sane in-guest default for interactive sessions.
-            let home = env_map
-                .get("HOME")
-                .map(|v| v.as_str())
-                .unwrap_or_default();
-            if home.is_empty() || home.starts_with("/Users/") {
-                env_map.insert("HOME".to_string(), "/root".to_string());
-            }
+            normalize_env_for_linux_guest(&mut env_map);
             env_map
                 .entry("XDG_DATA_HOME".to_string())
                 .or_insert_with(|| "/root/.local/share".to_string());
@@ -744,7 +758,8 @@ fn build_agent_client_and_request_impl(
             .unwrap_or_else(|_| std::path::PathBuf::from("."))
             .display()
             .to_string();
-        let env_map = build_world_env_map();
+        let mut env_map = build_world_env_map();
+        normalize_env_for_linux_guest(&mut env_map);
         let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
 
         let request = ExecuteRequest {
@@ -784,7 +799,8 @@ fn build_agent_client_and_request_impl(
         .unwrap_or_else(|_| std::path::PathBuf::from("."))
         .display()
         .to_string();
-    let env_map = build_world_env_map();
+    let mut env_map = build_world_env_map();
+    normalize_env_for_linux_guest(&mut env_map);
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
 
     let request = ExecuteRequest {
