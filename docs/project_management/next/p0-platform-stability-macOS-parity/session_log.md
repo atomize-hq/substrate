@@ -92,3 +92,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Commands: `cargo fmt --all` (pass); `cargo test -p substrate-shell --test shim_doctor` (pass); `cargo test -p substrate-shell --test shim_health` (pass); `cargo test -p substrate-shell --test shim_status_fs_mode` (fail – shim status missing `world_fs_mode` in JSON/text); `cargo test -p substrate-replay reconstruct_state_exports_world_fs_mode_from_replay_context` (fail – replay context fs_mode not exported to env).
 - Mac-only coverage: unit tests in `crates/world-mac-lima` are `#[cfg(target_os = "macos")]` and were not executed on Linux; verify on mac during M3-integ.
 - Blockers: pending M3-code integration to surface `world_fs_mode` in shim-status outputs and honor replay-context fs_mode during replay.
+
+## [2025-12-12 03:30 UTC] Integration Agent – M3-integ – START
+- Checked out `feat/p0-platform-stability-macOS-parity`, ran `git pull --ff-only` (already up to date), read plan/tasks/session log/M3-spec/kickoff prompt per checklist
+- Updated `tasks.json` (`M3-integ` → `in_progress`); integration scope confirmed: merge `M3-code` + `M3-test`, reconcile mac fs_mode propagation, forwarding/readiness ordering, doctor/shim-status/health parity with M3-spec
+- Next steps: commit this START docs update (`docs: start M3-integ`), create branch/worktree `mp-m3-backend-integ`/`wt/mp-m3-backend-integ`, merge upstream branches, fix outstanding test failures (shim-status `world_fs_mode` surfacing and replay-context fs_mode env export), then run required commands (`cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, `make preflight`)
+- Blockers: none
