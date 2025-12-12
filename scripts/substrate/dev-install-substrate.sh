@@ -694,7 +694,7 @@ elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
   if [[ ! -x "${LIMA_WARM}" ]]; then
     fatal "Expected Lima warm helper at ${LIMA_WARM}"
   fi
-  (cd "${REPO_ROOT}" && "${LIMA_WARM}" "${REPO_ROOT}")
+  (cd "${REPO_ROOT}" && SUBSTRATE_LIMA_SKIP_GUEST_BUILD=1 "${LIMA_WARM}" "${REPO_ROOT}")
 
   build_flag=""
   target_dir="debug"
