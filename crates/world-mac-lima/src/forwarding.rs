@@ -364,7 +364,9 @@ exit 0
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&ssh_stub).expect("ssh stub metadata").permissions();
+            let mut perms = fs::metadata(&ssh_stub)
+                .expect("ssh stub metadata")
+                .permissions();
             perms.set_mode(0o755);
             fs::set_permissions(&ssh_stub, perms).expect("set ssh stub perms");
         }

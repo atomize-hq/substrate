@@ -140,6 +140,7 @@ impl ShellConfig {
                     "missing": [],
                     "path_ok": serde_json::Value::Null,
                     "path_first": serde_json::Value::Null,
+                    "world_fs_mode": shim_status_world_fs_mode().as_str(),
                     "agent_socket": shim_status_socket_json(),
                     "exit": 0
                 });
@@ -161,6 +162,7 @@ impl ShellConfig {
                     "missing": [],
                     "path_ok": serde_json::Value::Null,
                     "path_first": env::var("PATH").ok().and_then(|p| p.split(if cfg!(windows){';'} else {':'}).next().map(|s| s.to_string())),
+                    "world_fs_mode": shim_status_world_fs_mode().as_str(),
                     "agent_socket": shim_status_socket_json(),
                     "exit": 1
                 });
@@ -228,6 +230,7 @@ impl ShellConfig {
                     "missing": missing_list,
                     "path_ok": path_ok,
                     "path_first": first_path,
+                    "world_fs_mode": shim_status_world_fs_mode().as_str(),
                     "agent_socket": shim_status_socket_json(),
                     "exit": exit_code
                 });
@@ -245,6 +248,7 @@ impl ShellConfig {
                     "missing": [],
                     "path_ok": path_ok,
                     "path_first": first_path,
+                    "world_fs_mode": shim_status_world_fs_mode().as_str(),
                     "agent_socket": shim_status_socket_json(),
                     "exit": 1
                 });
@@ -600,6 +604,36 @@ pub fn needs_shell(cmd: &str) -> bool {
     })
 }
 
+fn shim_status_world_fs_mode() -> substrate_common::WorldFsMode {
+    use substrate_broker::{Policy, ProfileDetector};
+    use substrate_common::WorldFsMode;
+
+    let mut detector = ProfileDetector::new();
+
+    if let Ok(cwd) = std::env::current_dir() {
+        if let Ok(Some(profile_path)) = detector.find_profile(&cwd) {
+            if let Ok(content) = std::fs::read_to_string(&profile_path) {
+                if let Ok(policy) = serde_yaml::from_str::<Policy>(&content) {
+                    return policy.world_fs_mode;
+                }
+            }
+        }
+    }
+
+    if let Ok(home) = substrate_paths::substrate_home() {
+        let policy_path = home.join("policy.yaml");
+        if policy_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&policy_path) {
+                if let Ok(policy) = serde_yaml::from_str::<Policy>(&content) {
+                    return policy.world_fs_mode;
+                }
+            }
+        }
+    }
+
+    WorldFsMode::Writable
+}
+
 #[cfg(target_os = "linux")]
 fn shim_status_socket_json() -> serde_json::Value {
     let report = socket_activation::socket_activation_report();
@@ -628,7 +662,6 @@ fn shim_status_socket_json() -> serde_json::Value {
 fn shim_status_socket_json() -> serde_json::Value {
     use std::path::PathBuf;
     use std::process::Command;
-    use substrate_broker::world_fs_mode;
 
     let socket_path = dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
@@ -695,7 +728,7 @@ fn shim_status_socket_json() -> serde_json::Value {
         "path": socket_path,
         "socket_path": socket_path,
         "socket_exists": socket_exists,
-        "world_fs_mode": world_fs_mode().as_str(),
+        "world_fs_mode": shim_status_world_fs_mode().as_str(),
         "lima": {
             "vm_status": vm_status,
             "socket_unit_active": socket_unit_active,
@@ -746,19 +779,19 @@ fn print_socket_activation_summary() {
         println!("World socket: listener missing; run `substrate world enable`");
     }
     println!("Socket path: {}", report.socket_path);
+    println!("world_fs_mode: {}", shim_status_world_fs_mode().as_str());
 }
 
 #[cfg(target_os = "macos")]
 fn print_socket_activation_summary() {
     use std::path::PathBuf;
     use std::process::Command;
-    use substrate_broker::world_fs_mode;
 
     let socket_path = dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".substrate/sock/agent.sock");
     let socket_exists = socket_path.exists();
-    let fs_mode = world_fs_mode();
+    let fs_mode = shim_status_world_fs_mode();
 
     if which::which("limactl").is_err() {
         println!("World socket: limactl missing; run `substrate world enable`");

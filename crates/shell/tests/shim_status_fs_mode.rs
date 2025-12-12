@@ -36,8 +36,10 @@ fn seed_shims(home: &Path) {
 }
 
 fn write_read_only_policy(home: &Path) {
-    let mut policy = Policy::default();
-    policy.world_fs_mode = WorldFsMode::ReadOnly;
+    let policy = Policy {
+        world_fs_mode: WorldFsMode::ReadOnly,
+        ..Default::default()
+    };
     let yaml = serde_yaml::to_string(&policy).expect("policy yaml");
     let policy_path = home.join(".substrate").join("policy.yaml");
     fs::create_dir_all(policy_path.parent().unwrap()).expect("policy dir");
@@ -61,8 +63,7 @@ fn shim_status_json_reports_world_fs_mode() {
         .output()
         .expect("run --shim-status-json");
 
-    let payload: Value =
-        serde_json::from_slice(&output.stdout).expect("shim status json payload");
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("shim status json payload");
     assert_eq!(
         payload.get("world_fs_mode"),
         Some(&json!("read_only")),

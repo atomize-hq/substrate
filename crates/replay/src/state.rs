@@ -131,6 +131,9 @@ pub fn reconstruct_state(
         if let Some(hostname) = &ctx.hostname {
             env.insert("HOSTNAME".to_string(), hostname.clone());
         }
+        if let Some(world_fs_mode) = &ctx.world_fs_mode {
+            env.insert("SUBSTRATE_WORLD_FS_MODE".to_string(), world_fs_mode.clone());
+        }
         if let Some(anchor_mode) = &ctx.anchor_mode {
             env.insert("SUBSTRATE_ANCHOR_MODE".to_string(), anchor_mode.clone());
             env.insert("SUBSTRATE_WORLD_ROOT_MODE".to_string(), anchor_mode.clone());
