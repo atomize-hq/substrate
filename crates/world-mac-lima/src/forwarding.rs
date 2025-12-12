@@ -374,7 +374,7 @@ exit 0
         let prev_home = env::var_os("HOME");
         let prev_path = env::var_os("PATH");
         env::set_var("HOME", &home);
-        let new_path = match prev_path {
+        let new_path = match prev_path.as_ref() {
             Some(p) => format!("{}:{}", bin.display(), p.to_string_lossy()),
             None => bin.display().to_string(),
         };

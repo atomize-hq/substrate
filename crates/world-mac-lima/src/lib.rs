@@ -474,7 +474,8 @@ mod tests {
                 pty: false,
                 span_id: None,
             };
-            let agent_req = backend.convert_exec_request(&req);
+            let fs_mode = backend.effective_fs_mode().expect("fs_mode");
+            let agent_req = backend.convert_exec_request(&req, fs_mode);
             assert_eq!(
                 agent_req.world_fs_mode,
                 Some(WorldFsMode::ReadOnly),
