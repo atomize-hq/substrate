@@ -624,7 +624,87 @@ fn shim_status_socket_json() -> serde_json::Value {
     })
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
+fn shim_status_socket_json() -> serde_json::Value {
+    use std::path::PathBuf;
+    use std::process::Command;
+    use substrate_broker::world_fs_mode;
+
+    let socket_path = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".substrate/sock/agent.sock");
+    let socket_exists = socket_path.exists();
+
+    let mut vm_status = "unknown".to_string();
+    let mut socket_unit_active: Option<bool> = None;
+    let mut service_unit_active: Option<bool> = None;
+
+    if which::which("limactl").is_ok() {
+        match Command::new("limactl")
+            .args(["list", "substrate", "--json"])
+            .output()
+        {
+            Ok(output) if output.status.success() => {
+                if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+                    if let Some(status) = value.get("status").and_then(|v| v.as_str()) {
+                        vm_status = status.to_string();
+                    }
+                }
+            }
+            Ok(_) => vm_status = "missing".to_string(),
+            Err(_) => vm_status = "limactl_failed".to_string(),
+        }
+
+        if vm_status == "Running" {
+            socket_unit_active = Command::new("limactl")
+                .args([
+                    "shell",
+                    "substrate",
+                    "systemctl",
+                    "is-active",
+                    "substrate-world-agent.socket",
+                ])
+                .output()
+                .ok()
+                .map(|o| o.status.success());
+
+            service_unit_active = Command::new("limactl")
+                .args([
+                    "shell",
+                    "substrate",
+                    "systemctl",
+                    "is-active",
+                    "substrate-world-agent",
+                ])
+                .output()
+                .ok()
+                .map(|o| o.status.success());
+        }
+    } else {
+        vm_status = "limactl_missing".to_string();
+    }
+
+    let mode = if socket_unit_active == Some(true) {
+        "socket_activation"
+    } else {
+        "manual"
+    };
+
+    json!({
+        "mode": mode,
+        "path": socket_path,
+        "socket_path": socket_path,
+        "socket_exists": socket_exists,
+        "world_fs_mode": world_fs_mode().as_str(),
+        "lima": {
+            "vm_status": vm_status,
+            "socket_unit_active": socket_unit_active,
+            "service_unit_active": service_unit_active,
+        }
+    })
+}
+
+#[cfg(all(not(target_os = "linux"), not(target_os = "macos")))]
 fn shim_status_socket_json() -> serde_json::Value {
     serde_json::Value::Null
 }
@@ -668,5 +748,72 @@ fn print_socket_activation_summary() {
     println!("Socket path: {}", report.socket_path);
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
+fn print_socket_activation_summary() {
+    use std::path::PathBuf;
+    use std::process::Command;
+    use substrate_broker::world_fs_mode;
+
+    let socket_path = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".substrate/sock/agent.sock");
+    let socket_exists = socket_path.exists();
+    let fs_mode = world_fs_mode();
+
+    if which::which("limactl").is_err() {
+        println!("World socket: limactl missing; run `substrate world enable`");
+        println!("Socket path: {}", socket_path.display());
+        println!("world_fs_mode: {}", fs_mode.as_str());
+        return;
+    }
+
+    let mut vm_status = "unknown".to_string();
+    if let Ok(output) = Command::new("limactl")
+        .args(["list", "substrate", "--json"])
+        .output()
+    {
+        if output.status.success() {
+            if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+                if let Some(status) = value.get("status").and_then(|v| v.as_str()) {
+                    vm_status = status.to_string();
+                }
+            }
+        } else {
+            vm_status = "missing".to_string();
+        }
+    }
+
+    if vm_status != "Running" {
+        println!("World socket: Lima VM not running (status: {vm_status})");
+        println!("Socket path: {}", socket_path.display());
+        println!("world_fs_mode: {}", fs_mode.as_str());
+        return;
+    }
+
+    let socket_unit_active = Command::new("limactl")
+        .args([
+            "shell",
+            "substrate",
+            "systemctl",
+            "is-active",
+            "substrate-world-agent.socket",
+        ])
+        .output()
+        .ok()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
+    if socket_unit_active {
+        println!("World socket: socket activation (substrate-world-agent.socket active in Lima)");
+    } else if socket_exists {
+        println!("World socket: manual forwarded listener present");
+    } else {
+        println!("World socket: listener missing; run `substrate world enable`");
+    }
+
+    println!("Socket path: {}", socket_path.display());
+    println!("world_fs_mode: {}", fs_mode.as_str());
+}
+
+#[cfg(all(not(target_os = "linux"), not(target_os = "macos")))]
 fn print_socket_activation_summary() {}
