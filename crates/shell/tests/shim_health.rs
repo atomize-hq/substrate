@@ -561,3 +561,28 @@ fn health_human_summary_respects_manager_parity_states() {
         "overall attention summary missing: {stdout}"
     );
 }
+
+#[test]
+fn health_json_surfaces_world_fs_mode_details() {
+    let fixture = DoctorFixture::new(sample_manifest());
+    fixture.write_world_doctor_fixture(json!({
+        "platform": "fixture-macos",
+        "ok": true,
+        "world_fs_mode": "read_only"
+    }));
+
+    let output = fixture
+        .command()
+        .arg("health")
+        .arg("--json")
+        .output()
+        .expect("failed to run substrate health --json");
+    assert!(output.status.success(), "health --json should succeed");
+
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("valid JSON payload");
+    assert_eq!(
+        payload["shim"]["world"]["details"]["world_fs_mode"],
+        json!("read_only"),
+        "health JSON should preserve world_fs_mode from shim/world doctor snapshot"
+    );
+}
