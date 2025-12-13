@@ -51,7 +51,7 @@ pub(crate) fn install_in_guest(script: &str, verbose: bool) -> Result<()> {
         return run_host_install(script, verbose);
     }
 
-    let command = wrap_for_bash(script, true);
+    let command = wrap_for_bash(&wrap_guest_install_script(script), true);
     if verbose {
         match stream_non_pty_via_agent(&command) {
             Ok(outcome) => {
@@ -167,6 +167,35 @@ fn wrap_for_bash(script: &str, strict: bool) -> String {
     let body = build_bash_body(script, strict);
     let escaped = body.replace('\'', "'\"'\"'");
     format!("bash -lc '{}'", escaped)
+}
+
+fn wrap_guest_install_script(script: &str) -> String {
+    // `sudo` can fail inside some world environments (e.g. userns where only uid 0 is mapped).
+    // For guest installs we prefer to run commands directly when already root, and otherwise
+    // fall back to invoking the real sudo.
+    //
+    // Must handle common sudo flags used by recipes (e.g. `sudo -E bash -`, `sudo -n`).
+    let prelude = r#"
+substrate_sudo() {
+  if [ "$(id -u)" -eq 0 ]; then
+    # Strip common sudo flags when we're already root (options are for sudo, not the target cmd).
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        -E|-n|-S|-k|-H) shift ;;
+        --) shift; break ;;
+        -*) shift ;;
+        *) break ;;
+      esac
+    done
+    "$@"
+  else
+    command sudo "$@"
+  fi
+}
+sudo() { substrate_sudo "$@"; }
+"#;
+
+    format!("{prelude}\n{script}")
 }
 
 fn build_bash_body(script: &str, strict: bool) -> String {
