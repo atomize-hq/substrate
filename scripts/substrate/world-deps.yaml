@@ -22,8 +22,35 @@ managers:
       command: "node --version"
     guest_install:
       custom: |
-        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-        sudo apt-get install -y nodejs
+        set -euo pipefail
+        ROOT="${SUBSTRATE_WORLD_DEPS_PREFIX:-/var/lib/substrate/world-deps}"
+        BIN_DIR="${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:-${ROOT}/bin}"
+        CACHE_DIR="${ROOT}/cache"
+        INSTALL_DIR="${ROOT}/node"
+
+        mkdir -p "${BIN_DIR}" "${CACHE_DIR}" "${INSTALL_DIR}"
+
+        arch="$(uname -m)"
+        case "${arch}" in
+          x86_64|amd64) node_arch="x64" ;;
+          aarch64|arm64) node_arch="arm64" ;;
+          *) echo "unsupported arch: ${arch}" >&2; exit 1 ;;
+        esac
+
+        version="$(
+          curl -fsSL https://nodejs.org/dist/index.json | python3 -c 'import json,sys; data=json.load(sys.stdin); v=[x["version"].lstrip("v") for x in data if x.get("version","").startswith("v20.")]; v.sort(key=lambda s: [int(p) for p in s.split(".")], reverse=True); print(v[0])'
+        )"
+
+        tarball="node-v${version}-linux-${node_arch}.tar.xz"
+        url="https://nodejs.org/dist/v${version}/${tarball}"
+        curl -fsSL -o "${CACHE_DIR}/${tarball}" "${url}"
+
+        rm -rf "${INSTALL_DIR}/node-v${version}-linux-${node_arch}"
+        tar -xJf "${CACHE_DIR}/${tarball}" -C "${INSTALL_DIR}"
+
+        ln -sf "${INSTALL_DIR}/node-v${version}-linux-${node_arch}/bin/node" "${BIN_DIR}/node"
+        ln -sf "${INSTALL_DIR}/node-v${version}-linux-${node_arch}/bin/npm" "${BIN_DIR}/npm"
+        ln -sf "${INSTALL_DIR}/node-v${version}-linux-${node_arch}/bin/npx" "${BIN_DIR}/npx"
 
   python:
     summary: "Python 3 runtime"

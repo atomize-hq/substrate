@@ -35,14 +35,15 @@ use world_api::{ResourceLimits, WorldBackend, WorldSpec};
 
 #[cfg(target_os = "macos")]
 fn normalize_env_for_linux_guest(env_map: &mut std::collections::HashMap<String, String>) {
+    // macOS host PATH often contains directories that are mounted into the guest (e.g. /Users/...),
+    // which can lead to confusing behavior where `which node` points at a macOS binary that cannot
+    // run inside the Linux VM. Prefer a stable Linux guest PATH.
     const GUEST_BASE_PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
-    let normalized = match env_map.get("PATH") {
-        Some(existing) if existing.is_empty() => GUEST_BASE_PATH.to_string(),
-        Some(existing) if existing.starts_with(GUEST_BASE_PATH) => existing.to_string(),
-        Some(existing) => format!("{GUEST_BASE_PATH}:{existing}"),
-        None => GUEST_BASE_PATH.to_string(),
-    };
-    env_map.insert("PATH".to_string(), normalized);
+    const WORLD_DEPS_BIN: &str = "/var/lib/substrate/world-deps/bin";
+    env_map.insert(
+        "PATH".to_string(),
+        format!("{WORLD_DEPS_BIN}:{GUEST_BASE_PATH}"),
+    );
 
     // Avoid leaking macOS host HOME into the Linux guest. This both reduces
     // accidental use of macOS toolchains (nvm/pyenv) and keeps guest-only state
@@ -53,6 +54,10 @@ fn normalize_env_for_linux_guest(env_map: &mut std::collections::HashMap<String,
     {
         env_map.insert("HOME".to_string(), "/root".to_string());
     }
+
+    env_map
+        .entry("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR".to_string())
+        .or_insert_with(|| WORLD_DEPS_BIN.to_string());
 }
 
 /// Collect filesystem diff and network scopes from world backend
