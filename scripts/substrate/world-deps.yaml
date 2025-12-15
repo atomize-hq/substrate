@@ -46,7 +46,7 @@ managers:
         curl -fsSL -o "${CACHE_DIR}/${tarball}" "${url}"
 
         rm -rf "${INSTALL_DIR}/node-v${version}-linux-${node_arch}"
-        tar -xJf "${CACHE_DIR}/${tarball}" -C "${INSTALL_DIR}"
+        tar --no-same-owner --no-same-permissions -xJf "${CACHE_DIR}/${tarball}" -C "${INSTALL_DIR}"
 
         ln -sf "${INSTALL_DIR}/node-v${version}-linux-${node_arch}/bin/node" "${BIN_DIR}/node"
         ln -sf "${INSTALL_DIR}/node-v${version}-linux-${node_arch}/bin/npm" "${BIN_DIR}/npm"
