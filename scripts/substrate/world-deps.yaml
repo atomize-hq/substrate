@@ -56,10 +56,21 @@ managers:
     summary: "Python 3 runtime"
     detect:
       commands:
+        - "python --version"
         - "python3 --version"
     guest_detect:
-      command: "python3 --version"
+      command: "python --version"
     guest_install:
-      apt: |
-        sudo apt-get update
-        sudo apt-get install -y python3 python3-venv python3-pip
+      custom: |
+        set -euo pipefail
+        ROOT="${SUBSTRATE_WORLD_DEPS_PREFIX:-/var/lib/substrate/world-deps}"
+        BIN_DIR="${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:-${ROOT}/bin}"
+
+        mkdir -p "${BIN_DIR}"
+
+        if ! command -v python3 >/dev/null 2>&1; then
+          echo "python3 is missing inside the guest; install Python 3 via the base VM image/provisioning." >&2
+          exit 1
+        fi
+
+        ln -sf "$(command -v python3)" "${BIN_DIR}/python"
