@@ -204,3 +204,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Worktree `wt/mp-m5b-world-deps-host-detect-test` on branch `mp-m5b-world-deps-host-detect-test` (commit 80beebe) adds a manager-init host detection fixture plus a status test for manager-provided tools
 - Commands: `cargo fmt` (pass); `cargo test -p substrate-shell --test world_deps -- --nocapture` (fail – `world_deps_status_detects_tools_from_manager_init_env` reports `host_detected=false` for `m5b-manager-tool`, expected manager init env to be used)
 - Blockers: pending M5b-code updates to run host detection under manager init env so host tools surface as present
+
+## [2025-12-19 17:31 UTC] Integration Agent – M5b-integ – START
+- Checked out `feat/p0-platform-stability-macOS-parity`, `git pull --ff-only` (already up to date)
+- Read plan/tasks/session log/M5b-spec/kickoff prompt; updated `tasks.json` (`M5b-integ` → `in_progress`)
+- Next steps: commit this START docs update (`docs: start M5b-integ`), create branch/worktree `mp-m5b-world-deps-host-detect-integ`/`wt/mp-m5b-world-deps-host-detect-integ`, merge `mp-m5b-world-deps-host-detect-code` + `mp-m5b-world-deps-host-detect-test`, reconcile to M5b-spec, run required commands, record outputs in END entry
+- Blockers: none
