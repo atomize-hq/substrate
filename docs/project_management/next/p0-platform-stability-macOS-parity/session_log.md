@@ -104,3 +104,10 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass after removing duplicate tests and fixing a clippy lint in `shim_status_fs_mode`); `cargo test -p substrate-shell --test shim_doctor` (pass); `cargo test -p substrate-shell --test shim_health` (pass); `cargo test -p substrate-shell --test shim_status_fs_mode` (pass); `cargo test -p substrate-replay reconstruct_state_exports_world_fs_mode_from_replay_context` (pass); `make preflight` (pass – reran fmt/clippy/clean/check/test for workspace).
 - Result: mac shim-status/health/doctor outputs now surface fs_mode and socket activation in parity with Linux P0, mac backend honors policy fs_mode across exec/replay, and readiness no longer probes pre-forwarding. Workspace remains green on non-mac targets.
 - Blockers: none
+
+## [2025-12-19 14:38 UTC] Code Agent – M4-code – START
+- Checked out `feat/p0-platform-stability-macOS-parity`, `git pull --ff-only` (up to date)
+- Read plan/tasks/session log/M4-spec/kickoff prompt; updated tasks.json (M4-code → in_progress)
+- Worktree pending (`mp-m4-world-deps-manifest-code` to be added after docs commit)
+- Plan: update world deps manifest resolution to prefer installed `<prefix>/versions/<version>/config/world-deps.yaml` by default, retain workspace fallback to repo `scripts/substrate/world-deps.yaml`, preserve `SUBSTRATE_WORLD_DEPS_MANIFEST` override semantics across status/install/sync, and ensure status JSON/human output surfaces resolved paths; run `cargo fmt`/`cargo clippy --workspace --all-targets -- -D warnings`, commit via worktree, update docs/tasks/log at end
+- Blockers: none
