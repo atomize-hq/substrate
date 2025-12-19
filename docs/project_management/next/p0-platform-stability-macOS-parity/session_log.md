@@ -148,3 +148,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Worktree pending (`mp-m5a-world-deps-inventory-code` to be added after docs commit)
 - Plan: align world deps tool inventory with shim doctor/health, make installed `world-deps.yaml` act as an override layer on top of the base inventory, keep `~/.substrate/world-deps.local.yaml` as the highest-priority overlay, and surface resolved manifests in `world deps status --json`; run `cargo fmt`/`cargo clippy --workspace --all-targets -- -D warnings`, commit via worktree, update docs/tasks/log at end
 - Blockers: none
+
+## [2025-12-19 15:10 UTC] Test Agent – M5a-test – START
+- Checked out `feat/p0-platform-stability-macOS-parity`, ran `git pull --ff-only` (up to date), read plan/tasks/session log/M5a-spec/kickoff prompt
+- Updated `tasks.json` (`M5a-test` → `in_progress`) per checklist; scope confirmed: tests/fixtures/harnesses only (no production code, no docs edits from worktree)
+- Next steps: commit this START entry (`docs: start M5a-test`), create branch/worktree `mp-m5a-world-deps-inventory-test`/`wt/mp-m5a-world-deps-inventory-test`, add deterministic fixtures/tests for inventory alignment + manifest layering, run `cargo fmt` + targeted `cargo test ...`, capture outputs for END log
+- Blockers: none
