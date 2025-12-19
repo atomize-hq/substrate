@@ -65,7 +65,7 @@ pub(crate) fn world_deps_manifest_base_path() -> PathBuf {
     }
 
     if let Some(path) = installed_world_deps_manifest_base_path() {
-        return path;
+        return canonicalize_or(&path);
     }
 
     repo_world_deps_manifest_base_path()

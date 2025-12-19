@@ -321,6 +321,10 @@ fn write_minimal_manifest(path: &Path) {
     fs::write(path, "version: 1\nmanagers: {}\n").expect("write manifest");
 }
 
+fn canonicalize_or(path: &Path) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
 fn parse_world_deps_status_json(stdout: &[u8]) -> Value {
     serde_json::from_slice(stdout).expect("parse world deps status JSON")
 }
@@ -620,7 +624,11 @@ fn world_deps_uses_versioned_manifest_when_running_from_installed_layout() {
         .success();
 
     let report = parse_world_deps_status_json(&assert.get_output().stdout);
-    assert_eq!(extract_manifest_base(&report), fixture.base_manifest);
+    let base = extract_manifest_base(&report);
+    assert_eq!(
+        canonicalize_or(&base),
+        canonicalize_or(&fixture.base_manifest)
+    );
     assert_eq!(
         extract_manifest_overlay(&report),
         Some(fixture.prefix.join("world-deps.local.yaml"))
@@ -655,7 +663,8 @@ fn world_deps_workspace_build_falls_back_to_repo_manifest_when_no_installed_layo
         .success();
 
     let report = parse_world_deps_status_json(&assert.get_output().stdout);
-    assert_eq!(extract_manifest_base(&report), expected);
+    let base = extract_manifest_base(&report);
+    assert_eq!(canonicalize_or(&base), canonicalize_or(&expected));
     assert_eq!(
         extract_manifest_overlay(&report),
         Some(substrate_home.join("world-deps.local.yaml"))
@@ -685,7 +694,8 @@ fn world_deps_manifest_env_override_takes_precedence_over_defaults() {
         .success();
 
     let report = parse_world_deps_status_json(&assert.get_output().stdout);
-    assert_eq!(extract_manifest_base(&report), manifest);
+    let base = extract_manifest_base(&report);
+    assert_eq!(canonicalize_or(&base), canonicalize_or(&manifest));
     assert_eq!(
         extract_manifest_overlay(&report),
         Some(substrate_home.join("world-deps.local.yaml"))
