@@ -20,8 +20,7 @@ pub(crate) struct HostDetectionResult {
 
 enum HostDetectionContext {
     Bash(HostBashContext),
-    Legacy,
-    Skipped(String),
+    Legacy { reason: Option<String> },
 }
 
 struct HostBashContext {
@@ -33,14 +32,13 @@ struct HostBashContext {
 pub(crate) fn detect_host(commands: &[String]) -> HostDetectionResult {
     let context = resolve_host_detection_context();
     match &context {
-        HostDetectionContext::Skipped(reason) => HostDetectionResult {
-            detected: false,
-            reason: Some(reason.clone()),
-        },
-        HostDetectionContext::Legacy => HostDetectionResult {
-            detected: commands.iter().any(|cmd| run_host_command(cmd)),
-            reason: None,
-        },
+        HostDetectionContext::Legacy { reason } => {
+            let detected = commands.iter().any(|cmd| run_host_command(cmd));
+            HostDetectionResult {
+                detected,
+                reason: if detected { None } else { reason.clone() },
+            }
+        }
         HostDetectionContext::Bash(bash_ctx) => HostDetectionResult {
             detected: commands
                 .iter()
@@ -79,29 +77,33 @@ pub(crate) fn detect_guest(commands: &[String]) -> Result<bool> {
 }
 
 fn resolve_host_detection_context() -> HostDetectionContext {
-    if !cfg!(target_os = "macos") {
-        return HostDetectionContext::Legacy;
+    if cfg!(windows) {
+        return HostDetectionContext::Legacy { reason: None };
     }
 
     let bash_path = match which("bash") {
         Ok(path) => path,
         Err(_) => {
-            return HostDetectionContext::Skipped(
-                "bash not found; host detection requires bash to load manager init".to_string(),
-            );
+            return HostDetectionContext::Legacy {
+                reason: Some(
+                    "bash not found; host detection requires bash to load manager init".to_string(),
+                ),
+            };
         }
     };
 
     let manager_env_path = match resolve_manager_env_path() {
         Ok(path) => path,
-        Err(err) => return HostDetectionContext::Skipped(err),
+        Err(err) => return HostDetectionContext::Legacy { reason: Some(err) },
     };
 
     if !manager_env_path.exists() {
-        return HostDetectionContext::Skipped(format!(
-            "manager env script missing at {}",
-            manager_env_path.display()
-        ));
+        return HostDetectionContext::Legacy {
+            reason: Some(format!(
+                "manager env script missing at {}",
+                manager_env_path.display()
+            )),
+        };
     }
 
     let original_bash_env = env::var("BASH_ENV").ok().and_then(|value| {
