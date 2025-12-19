@@ -64,7 +64,7 @@ Options:
   --prefix <path>      Installation prefix (default: ~/.substrate)
   --no-world           Skip world backend provisioning
   --no-shims           Skip shim deployment
-  --sync-deps          Run 'substrate world deps sync --all' after provisioning completes
+  --sync-deps          Run 'substrate world deps sync' after provisioning completes
   --dry-run            Print actions without executing
   --artifact-dir <dir> Use pre-downloaded host bundle + SHA256SUMS
   --archive <dir>      Alias for --artifact-dir (deprecated)
@@ -1478,6 +1478,26 @@ run_world_checks() {
   fi
 }
 
+print_world_deps_summary() {
+  local substrate_bin="$1"
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    printf '[%s][dry-run] %s world deps status --json\n' "${INSTALLER_NAME}" "${substrate_bin}" >&2
+    return
+  fi
+
+  log "Guest dependency status (host vs guest):"
+  if ! "${substrate_bin}" world deps status --json | jq -r '
+    if (.tools | length) == 0 then
+      "  (no tools listed)"
+    else
+      .tools[]
+      | "- \(.name): host=\(if .host_detected then "present" else "missing" end)\(if .host_reason then " (\(.host_reason))" else "" end) guest=\(.guest.status)\(if .guest.reason then " (\(.guest.reason))" else "" end)"
+    end
+  '; then
+    warn "world deps status failed; run 'substrate world deps status --json' for details."
+  fi
+}
+
 sync_world_deps() {
   local substrate_bin="$1"
   if [[ "${SYNC_DEPS}" -ne 1 ]]; then
@@ -1488,14 +1508,16 @@ sync_world_deps() {
     return
   fi
   if [[ "${DRY_RUN}" -eq 1 ]]; then
-    printf '[%s][dry-run] %s world deps sync --all --verbose\n' "${INSTALLER_NAME}" "${substrate_bin}" >&2
+    printf '[%s][dry-run] %s world deps sync\n' "${INSTALLER_NAME}" "${substrate_bin}" >&2
+    print_world_deps_summary "${substrate_bin}"
     return
   fi
 
-  log "Syncing guest dependencies via 'substrate world deps sync --all'..."
-  if ! "${substrate_bin}" world deps sync --all --verbose; then
-    warn "world deps sync failed; run 'substrate world deps sync --all' later to finish provisioning."
+  log "Syncing guest dependencies via 'substrate world deps sync'..."
+  if ! "${substrate_bin}" world deps sync; then
+    warn "world deps sync failed; run 'substrate world deps sync' later to finish provisioning."
   fi
+  print_world_deps_summary "${substrate_bin}"
 }
 
 install_macos() {
@@ -1567,7 +1589,7 @@ install_macos() {
   log "If the global config is missing or needs regeneration, run 'substrate config init' after installing."
 
   if [[ "${world_enabled}" -eq 1 ]]; then
-    log "World backend enabled; run '${bin_dir}/substrate world doctor --json' or '${bin_dir}/substrate world deps sync --all' as needed."
+    log "World backend enabled; run '${bin_dir}/substrate world doctor --json' or '${bin_dir}/substrate world deps sync' as needed."
   else
     log "World backend disabled (--no-world). Run '${bin_dir}/substrate world enable --prefix \"${PREFIX}\"' when you are ready to provision."
   fi
@@ -1654,7 +1676,7 @@ install_linux() {
   log "If the global config is missing or needs regeneration, run 'substrate config init' after installing."
 
   if [[ "${world_enabled}" -eq 1 ]]; then
-    log "World backend enabled; run '${bin_dir}/substrate world doctor --json' for diagnostics or '${bin_dir}/substrate world deps sync --all' to mirror host tools."
+    log "World backend enabled; run '${bin_dir}/substrate world doctor --json' for diagnostics or '${bin_dir}/substrate world deps sync' to mirror host tools."
     print_linger_guidance_linux "${primary_user}"
   else
     log "World backend disabled (--no-world). Run '${bin_dir}/substrate world enable --prefix \"${PREFIX}\"' when you are ready to provision."

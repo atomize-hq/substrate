@@ -338,7 +338,7 @@ fn determine_parity(
 fn recommendation_for(name: &str, parity: ManagerParityState) -> Option<String> {
     match parity {
         ManagerParityState::HostOnly => Some(format!(
-            "Enable the world backend (`substrate world enable`) then run `substrate world deps sync --all --verbose` so {manager} exists inside the guest.",
+            "Enable the world backend (`substrate world enable`) then run `substrate world deps sync` so {manager} exists inside the guest.",
             manager = name
         )),
         ManagerParityState::WorldOnly => Some(format!(
@@ -346,7 +346,7 @@ fn recommendation_for(name: &str, parity: ManagerParityState) -> Option<String> 
             manager = name
         )),
         ManagerParityState::Absent => Some(format!(
-            "Install {manager} on the host first, then rerun `substrate world deps sync --all` after provisioning to copy it into the guest.",
+            "Install {manager} on the host first, then rerun `substrate world deps sync` after provisioning to copy it into the guest.",
             manager = name
         )),
         _ => None,
@@ -363,7 +363,7 @@ fn print_manager_parity_summary(summary: &HealthSummary) {
     emit_manager_category(
         "Host-only (world sync required)",
         &summary.attention_required_managers,
-        "Enable the world backend (`substrate world enable`) and run `substrate world deps sync --all` to mirror these managers into the guest.",
+        "Enable the world backend (`substrate world enable`) and run `substrate world deps sync` to mirror these managers into the guest.",
     );
     emit_manager_category(
         "World-only (host missing)",
@@ -380,7 +380,7 @@ fn print_manager_parity_summary(summary: &HealthSummary) {
     emit_manager_category(
         "Missing everywhere (info)",
         &absent,
-        "Install these managers on the host first; the next `substrate world deps sync --all` run will copy them into the guest once they exist.",
+        "Install these managers on the host first; the next `substrate world deps sync` run will copy them into the guest once they exist.",
     );
 
     if summary.attention_required_managers.is_empty()
