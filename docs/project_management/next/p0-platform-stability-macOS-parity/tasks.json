@@ -471,7 +471,7 @@
     "name": "World deps base manifest parity (integration)",
     "type": "integration",
     "phase": "M4",
-    "status": "in_progress",
+    "status": "completed",
     "description": "Merge M4 code/test, reconcile manifest resolution behavior to M4-spec, and gate with fmt/clippy/tests/make preflight.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",

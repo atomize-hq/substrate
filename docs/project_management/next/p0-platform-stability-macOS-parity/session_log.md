@@ -135,3 +135,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Updated `tasks.json` (`M4-integ` → `in_progress`); integration scope confirmed: merge `M4-code` + `M4-test`, reconcile manifest resolution behavior to M4-spec, gate with `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, `make preflight`
 - Next steps: commit this START docs update (`docs: start M4-integ`), create branch/worktree `mp-m4-world-deps-manifest-integ`/`wt/mp-m4-world-deps-manifest-integ`, merge upstream branches, resolve conflicts/failures, then run required commands and record outputs in END entry
 - Blockers: none
+
+## [2025-12-19 15:04 UTC] Integration Agent – M4-integ – END
+- Worktree `wt/mp-m4-world-deps-manifest-integ` merged `mp-m4-world-deps-manifest-code` + `mp-m4-world-deps-manifest-test`, reconciled to M4-spec, and fast-forwarded `feat/p0-platform-stability-macOS-parity` (integration head commit 1116afc)
+- Reconciliation: stabilized installed-layout manifest path assertions by canonicalizing manifest paths in the `world deps status --json` test harness so `target/tests-tmp` roots compare equal even when constructed via `CARGO_MANIFEST_DIR/../../…` segments
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `cargo test -p substrate-shell --test world_deps -- --nocapture` (pass – 10 tests); `make preflight` (pass – ran fmt/clippy/clean/check/test; `cargo clean` removed 8730 files, 2.9GiB)
+- Blockers: none
