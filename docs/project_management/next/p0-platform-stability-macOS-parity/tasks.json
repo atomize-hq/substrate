@@ -676,7 +676,7 @@
     "name": "Host detection parity (test)",
     "type": "test",
     "phase": "M5b",
-    "status": "in_progress",
+    "status": "completed",
     "description": "Add tests/fixtures validating world deps host detection runs under manager init semantics per M5b-spec.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
