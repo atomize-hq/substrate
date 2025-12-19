@@ -386,7 +386,7 @@
     "name": "World deps base manifest parity (code)",
     "type": "code",
     "phase": "M4",
-    "status": "in_progress",
+    "status": "completed",
     "description": "Make `substrate world deps` prefer the installed/bundled world-deps manifest by default (with explicit env overrides preserved), per M4-spec.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",

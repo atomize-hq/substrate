@@ -112,6 +112,12 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Plan: update world deps manifest resolution to prefer installed `<prefix>/versions/<version>/config/world-deps.yaml` by default, retain workspace fallback to repo `scripts/substrate/world-deps.yaml`, preserve `SUBSTRATE_WORLD_DEPS_MANIFEST` override semantics across status/install/sync, and ensure status JSON/human output surfaces resolved paths; run `cargo fmt`/`cargo clippy --workspace --all-targets -- -D warnings`, commit via worktree, update docs/tasks/log at end
 - Blockers: none
 
+## [2025-12-19 14:43 UTC] Code Agent – M4-code – END
+- Worktree `wt/mp-m4-world-deps-manifest-code` on branch `mp-m4-world-deps-manifest-code` (commit 47e4ae7) updates world deps base manifest resolution to prefer the installed `<prefix>/versions/<version>/config/world-deps.yaml` inferred from the running `substrate` binary (while keeping the repo fallback for workspace builds and `SUBSTRATE_WORLD_DEPS_MANIFEST` override semantics).
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass – `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in 1.03s`)
+- Results: `substrate world deps {status,install,sync}` now uses the installed manifest by default outside the repo; `status --json` reports the same resolved `manifest.base` path used for execution.
+- Blockers: none
+
 ## [2025-12-19 14:39 UTC] Test Agent – M4-test – START
 - Checked out `feat/p0-platform-stability-macOS-parity`, ran `git pull --ff-only` (up to date), read plan/tasks/session log/M4-spec/kickoff prompt
 - Updated `tasks.json` (`M4-test` → `in_progress`) per checklist; scope confirmed: tests/fixtures only for world-deps manifest resolution (installed vs workspace) and `SUBSTRATE_WORLD_DEPS_MANIFEST` override behavior
