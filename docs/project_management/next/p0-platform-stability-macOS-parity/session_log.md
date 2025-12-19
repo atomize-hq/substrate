@@ -118,6 +118,13 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Results: `substrate world deps {status,install,sync}` now uses the installed manifest by default outside the repo; `status --json` reports the same resolved `manifest.base` path used for execution.
 - Blockers: none
 
+## [2025-12-19 23:32 UTC] Integration Agent – M5c-integ – START
+- Checked out `feat/p0-platform-stability-macOS-parity`, `git pull --ff-only` (already up to date)
+- Read plan/tasks/session log/M5c-spec/kickoff prompt; updated tasks.json (M5c-integ → in_progress)
+- Scope: merge M5c code + tests for first-run UX wiring, reconcile spec parity, gate with `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant `cargo test ...`, and `make preflight`
+- Next steps: commit docs (`docs: start M5c-integ`), create branch/worktree `mp-m5c-world-deps-first-run-integ`/`wt/mp-m5c-world-deps-first-run-integ`, merge upstream branches, reconcile behavior/tests before running required commands
+- Blockers: none
+
 ## [2025-12-19 14:39 UTC] Test Agent – M4-test – START
 - Checked out `feat/p0-platform-stability-macOS-parity`, ran `git pull --ff-only` (up to date), read plan/tasks/session log/M4-spec/kickoff prompt
 - Updated `tasks.json` (`M4-test` → `in_progress`) per checklist; scope confirmed: tests/fixtures only for world-deps manifest resolution (installed vs workspace) and `SUBSTRATE_WORLD_DEPS_MANIFEST` override behavior
