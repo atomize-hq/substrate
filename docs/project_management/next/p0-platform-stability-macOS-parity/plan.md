@@ -21,6 +21,11 @@ Bridge every behavior shipped in `p0-platform-stability` to macOS. This includes
 - **M1 – Lima socket parity upgrade:** Replace the current Lima environment with the socket-activated layout, ensure agent binary + units + permissions align with Linux/WSL expectations, and keep warm/provisioning idempotent.
 - **M2 – Installer parity (dev/prod):** Align mac installers with Linux behavior: prod copies bundled Linux agent into Lima (build only on missing/invalid bundle); dev may build in-guest; optional CLI shim parity; cleanup-state metadata; uninstall parity.
 - **M3 – Backend & doctor parity:** Propagate policy fs_mode to mac backend, fix forwarding/readiness ordering, align socket/group expectations and doctor/manual flows (including shim-status and health parity) with P0 outputs, and refresh docs/tests accordingly.
+- **M4 – World deps base manifest parity:** Ensure `substrate world deps` uses the installed/bundled manifest by default (not the repo/CWD fallback), and that manifest resolution matches `docs/CONFIGURATION.md`.
+- **M5a – World deps inventory & layering:** Define and implement the authoritative base inventory for `world deps` (aligned with shim doctor/health) and treat `world-deps.yaml` as an overlay/override layer.
+- **M5b – Host detection parity:** Make “host present” detection for world deps match the Substrate-managed host environment (manager init semantics), so first-run parity reflects what users actually have available on the host.
+- **M5c – First-run UX wiring:** Ensure installer/provision flows (including `--sync-deps`) and health/doctor recommendations produce a coherent “feels like host” out-of-box experience.
+- **M6 – World deps failure safety (macOS):** Prevent misleading host fallbacks during world deps operations on macOS; surface actionable errors when the world backend/forwarding is unavailable so “sync” can’t report success without affecting the guest.
 
 ## Start Checklist (all tasks)
 1. `git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only`
