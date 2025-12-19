@@ -210,3 +210,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Read plan/tasks/session log/M5b-spec/kickoff prompt; updated `tasks.json` (`M5b-integ` → `in_progress`)
 - Next steps: commit this START docs update (`docs: start M5b-integ`), create branch/worktree `mp-m5b-world-deps-host-detect-integ`/`wt/mp-m5b-world-deps-host-detect-integ`, merge `mp-m5b-world-deps-host-detect-code` + `mp-m5b-world-deps-host-detect-test`, reconcile to M5b-spec, run required commands, record outputs in END entry
 - Blockers: none
+
+## [2025-12-19 17:51 UTC] Integration Agent – M5b-integ – END
+- Worktree `wt/mp-m5b-world-deps-host-detect-integ` merged `mp-m5b-world-deps-host-detect-code` + `mp-m5b-world-deps-host-detect-test`, reconciled to M5b-spec, and fast-forwarded `feat/p0-platform-stability-macOS-parity` (integration head commit 8ee3b93)
+- Reconciliation: world deps subcommand now prepares manager init/env scripts so host detection can reuse manager init semantics, host detection falls back to legacy shell probing with explicit reasons when manager env is unavailable, and sync output notes skipped/degraded host detection
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass – `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in 3.75s`); `cargo test -p substrate-shell --test world_deps -- --nocapture` (pass – 11 tests); `make preflight` (pass – ran fmt/clippy/clean/check/test; `cargo clean` removed 8748 files, 2.9GiB)
+- Blockers: none
