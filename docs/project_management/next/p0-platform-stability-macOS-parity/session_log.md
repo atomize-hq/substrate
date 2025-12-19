@@ -216,3 +216,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Reconciliation: world deps subcommand now prepares manager init/env scripts so host detection can reuse manager init semantics, host detection falls back to legacy shell probing with explicit reasons when manager env is unavailable, and sync output notes skipped/degraded host detection
 - Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass – `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in 3.75s`); `cargo test -p substrate-shell --test world_deps -- --nocapture` (pass – 11 tests); `make preflight` (pass – ran fmt/clippy/clean/check/test; `cargo clean` removed 8748 files, 2.9GiB)
 - Blockers: none
+
+## [2025-12-19 20:32 UTC] Code Agent – M5c-code – START
+- Checked out `feat/p0-platform-stability-macOS-parity`, `git pull --ff-only` (already up to date)
+- Read plan/tasks/session log/M5c-spec/kickoff prompt; updated tasks.json (M5c-code → in_progress)
+- Next steps: commit this START docs update (`docs: start M5c-code`), create branch/worktree `mp-m5c-world-deps-first-run-code`/`wt/mp-m5c-world-deps-first-run-code`, implement M5c first-run UX wiring, run `cargo fmt` + `cargo clippy --workspace --all-targets -- -D warnings`, commit changes in worktree, update docs/tasks/log at end
+- Blockers: none
