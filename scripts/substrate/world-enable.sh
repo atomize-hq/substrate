@@ -123,21 +123,6 @@ fi
 doctor_path="${PREFIX}/bin:${ORIGINAL_PATH}"
 PATH="${doctor_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" run_world_checks "${substrate_bin}"
 
-if [[ "${SYNC_DEPS}" -eq 1 ]]; then
-  if [[ ${DRY_RUN} -eq 1 ]]; then
-    printf '[%s][dry-run] %s world deps sync --verbose\n' "${INSTALLER_NAME}" "${substrate_bin}" >&2
-    printf '[%s][dry-run] %s world deps status --json\n' "${INSTALLER_NAME}" "${substrate_bin}" >&2
-  else
-    log "Syncing guest dependencies via 'substrate world deps sync'..."
-    if ! PATH="${doctor_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" "${substrate_bin}" world deps sync --verbose; then
-      warn "world deps sync failed; run 'substrate world deps sync --all' later to finish provisioning."
-    fi
-
-    log "Verifying guest dependency status..."
-    PATH="${doctor_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" "${substrate_bin}" world deps status --json \
-      | jq '{tools: [.tools[] | {name, host_detected, guest: .guest.status, reason: .guest.reason}]}' \
-      || true
-  fi
-fi
+PATH="${doctor_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" sync_world_deps "${substrate_bin}"
 
 log "World provisioning complete via world-enable helper"
