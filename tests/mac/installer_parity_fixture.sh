@@ -13,6 +13,7 @@ Scenarios:
   prod-copy         Production installer with bundled Linux agent (copy-first path).
   prod-build        Production installer fallback when Linux agent missing (build in Lima).
   dev-build         Dev installer (host cargo stub + in-guest build path).
+  sync-deps         Production installer with --sync-deps (world deps sync wired).
   cleanup-guidance  Uninstaller cleanup-state guidance on mac hosts.
   all               Run every scenario (default).
 
@@ -361,6 +362,9 @@ LIMA
   cat >"${stage}/bin/substrate" <<'BIN'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ -n "${SUBSTRATE_TEST_SUBSTRATE_LOG:-}" ]]; then
+  printf '%s\n' "$*" >>"${SUBSTRATE_TEST_SUBSTRATE_LOG}"
+fi
 if [[ "$1" == "--shim-deploy" ]]; then
   printf '[fake-substrate] shim deploy\n' >&2
   exit 0
@@ -472,6 +476,37 @@ run_dev_scenario() {
   info "  capture dir: ${capture_dir}"
 }
 
+run_sync_deps_scenario() {
+  local label="sync-deps"
+  info "Running scenario ${label}"
+  setup_workspace "${label}"
+  install_common_stubs
+  local artifact_dir
+  artifact_dir="$(prepare_release_bundle "${label}" 1)"
+  local prefix="${WORK_ROOT}/${label}-prefix"
+  mkdir -p "${prefix}"
+  local log="${WORK_ROOT}/${label}.log"
+  local substrate_log="${WORK_ROOT}/${label}-substrate.log"
+  export SUBSTRATE_TEST_SUBSTRATE_LOG="${substrate_log}"
+  if ! "${REPO_ROOT}/scripts/substrate/install-substrate.sh" \
+    --version "${FAKE_VERSION}" \
+    --prefix "${prefix}" \
+    --artifact-dir "${artifact_dir}" \
+    --no-shims \
+    --sync-deps >"${log}" 2>&1; then
+    cat "${log}" >&2 || true
+    fatal "install-substrate failed for ${label}"
+  fi
+  assert_contains "${log}" "Syncing guest dependencies via 'substrate world deps sync --all'" \
+    "sync-deps should announce world deps sync"
+  assert_contains "${substrate_log}" "world deps sync --all --verbose" \
+    "sync-deps should invoke world deps sync"
+  unset SUBSTRATE_TEST_SUBSTRATE_LOG
+  info "Scenario ${label} complete:"
+  info "  install log: ${log}"
+  info "  substrate log: ${substrate_log}"
+}
+
 run_cleanup_guidance() {
   local label="cleanup-guidance"
   info "Running scenario ${label}"
@@ -519,6 +554,9 @@ run_selected() {
     dev-build)
       run_dev_scenario
       ;;
+    sync-deps)
+      run_sync_deps_scenario
+      ;;
     cleanup-guidance)
       run_cleanup_guidance
       ;;
@@ -526,6 +564,7 @@ run_selected() {
       run_prod_scenario "prod-copy" 1
       run_prod_scenario "prod-build" 0
       run_dev_scenario
+      run_sync_deps_scenario
       run_cleanup_guidance
       ;;
     *)

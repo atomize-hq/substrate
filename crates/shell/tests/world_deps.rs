@@ -680,6 +680,35 @@ fn world_deps_install_fails_when_world_disabled() {
 }
 
 #[test]
+fn world_deps_sync_skips_missing_host_tools_without_all_flag() {
+    let fixture = WorldDepsFixture::new();
+    fixture.write_manifest(&["git"]);
+
+    let assert = fixture.command().arg("sync").assert().success();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    let combined = format!("{stdout}{stderr}");
+    let combined_lower = combined.to_lowercase();
+    let mentions_skip = combined_lower.contains("no tools were synced")
+        || combined_lower.contains("host detection")
+        || combined_lower.contains("not detected on the host")
+        || (combined_lower.contains("skip") && combined_lower.contains("host"));
+    assert!(
+        mentions_skip,
+        "sync should explain the host-missing skip: {combined}"
+    );
+    assert!(
+        !combined.contains("All tracked tools are already available inside the guest."),
+        "sync should not claim all tools present when host detection fails: {combined}"
+    );
+    assert!(
+        fixture.executor_log().is_empty(),
+        "sync should not attempt installs when host tools are missing: {}",
+        fixture.executor_log()
+    );
+}
+
+#[test]
 fn world_deps_sync_installs_missing_tools_with_all_flag() {
     let fixture = WorldDepsFixture::new();
     fixture.write_manifest(&["git", "node"]);
