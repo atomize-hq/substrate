@@ -141,3 +141,10 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Reconciliation: stabilized installed-layout manifest path assertions by canonicalizing manifest paths in the `world deps status --json` test harness so `target/tests-tmp` roots compare equal even when constructed via `CARGO_MANIFEST_DIR/../../…` segments
 - Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `cargo test -p substrate-shell --test world_deps -- --nocapture` (pass – 10 tests); `make preflight` (pass – ran fmt/clippy/clean/check/test; `cargo clean` removed 8730 files, 2.9GiB)
 - Blockers: none
+
+## [2025-12-19 15:09 UTC] Code Agent – M5a-code – START
+- Checked out `feat/p0-platform-stability-macOS-parity`, `git pull --ff-only` (up to date)
+- Read plan/tasks/session log/M5a-spec/kickoff prompt; updated tasks.json (M5a-code → in_progress)
+- Worktree pending (`mp-m5a-world-deps-inventory-code` to be added after docs commit)
+- Plan: align world deps tool inventory with shim doctor/health, make installed `world-deps.yaml` act as an override layer on top of the base inventory, keep `~/.substrate/world-deps.local.yaml` as the highest-priority overlay, and surface resolved manifests in `world deps status --json`; run `cargo fmt`/`cargo clippy --workspace --all-targets -- -D warnings`, commit via worktree, update docs/tasks/log at end
+- Blockers: none
