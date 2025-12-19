@@ -1,7 +1,7 @@
 use super::guest::{detect_guest, detect_host, run_guest_install, world_exec_fallback_active};
 use super::models::{
-    GuestProbe, WorldDepGuestStatus, WorldDepStatusEntry, WorldDepsManifestInfo,
-    WorldDepsStatusReport,
+    GuestProbe, ManifestLayerInfo, WorldDepGuestStatus, WorldDepStatusEntry, WorldDepsManifestInfo,
+    WorldDepsOverlayInfo, WorldDepsStatusReport,
 };
 use super::state::WorldState;
 use crate::{
@@ -9,6 +9,7 @@ use crate::{
 };
 use anyhow::{anyhow, bail, Context, Result};
 use std::collections::HashSet;
+use std::env;
 use std::path::PathBuf;
 use substrate_common::{paths as substrate_paths, WorldDepTool, WorldDepsManifest};
 
@@ -31,34 +32,82 @@ pub fn run(cmd: &WorldDepsCmd, cli_no_world: bool, cli_force_world: bool) -> Res
 }
 
 struct ManifestPaths {
-    base: PathBuf,
-    overlay: Option<PathBuf>,
+    inventory_base: PathBuf,
+    inventory_overlay: Option<PathBuf>,
+    installed_overlay: PathBuf,
+    user_overlay: Option<PathBuf>,
 }
 
 impl ManifestPaths {
     fn resolve() -> Result<Self> {
-        let base = crate::execution::world_deps_manifest_base_path();
-        let overlay = Some(substrate_paths::substrate_home()?.join("world-deps.local.yaml"));
-        Ok(Self { base, overlay })
+        let substrate_home = substrate_paths::substrate_home()?;
+        let inventory_base = crate::execution::manager_manifest_base_path();
+        let inventory_overlay = Some(substrate_home.join("manager_hooks.local.yaml"));
+
+        let installed_overlay = crate::execution::world_deps_manifest_base_path();
+        let installed_overlay_required = env::var_os("SUBSTRATE_WORLD_DEPS_MANIFEST").is_some();
+        if installed_overlay_required && !installed_overlay.exists() {
+            bail!(
+                "SUBSTRATE_WORLD_DEPS_MANIFEST points to a missing manifest: {}",
+                installed_overlay.display()
+            );
+        }
+
+        let user_overlay = Some(substrate_home.join("world-deps.local.yaml"));
+
+        Ok(Self {
+            inventory_base,
+            inventory_overlay,
+            installed_overlay,
+            user_overlay,
+        })
     }
 
-    fn overlay_exists(&self) -> bool {
-        self.overlay
+    fn inventory_overlay_exists(&self) -> bool {
+        self.inventory_overlay
             .as_ref()
             .map(|path| path.exists())
             .unwrap_or(false)
+    }
+
+    fn installed_overlay_exists(&self) -> bool {
+        self.installed_overlay.exists()
+    }
+
+    fn user_overlay_exists(&self) -> bool {
+        self.user_overlay
+            .as_ref()
+            .map(|path| path.exists())
+            .unwrap_or(false)
+    }
+
+    fn overlays_for_loading(&self) -> Vec<PathBuf> {
+        let mut overlays = Vec::new();
+        if let Some(path) = &self.inventory_overlay {
+            overlays.push(path.clone());
+        }
+        overlays.push(self.installed_overlay.clone());
+        if let Some(path) = &self.user_overlay {
+            overlays.push(path.clone());
+        }
+        overlays
     }
 }
 
 fn build_runner(cli_no_world: bool, cli_force_world: bool) -> Result<WorldDepsRunner> {
     let manifest_paths = ManifestPaths::resolve()?;
-    let manifest = WorldDepsManifest::load(&manifest_paths.base, manifest_paths.overlay.as_deref())
-        .with_context(|| {
-            format!(
-                "failed to load world deps manifest from {}",
-                manifest_paths.base.display()
-            )
-        })?;
+    let overlays = manifest_paths.overlays_for_loading();
+    let manifest = WorldDepsManifest::load_layered(
+        crate::execution::current_platform(),
+        &manifest_paths.inventory_base,
+        &overlays,
+    )
+    .with_context(|| {
+        format!(
+            "failed to load world deps inventory from {}",
+            manifest_paths.inventory_base.display()
+        )
+    })?;
     let world = WorldState::detect(cli_no_world, cli_force_world)?;
     Ok(WorldDepsRunner::new(manifest, manifest_paths, world))
 }
@@ -80,9 +129,17 @@ impl WorldDepsRunner {
 
     fn manifest_info(&self) -> WorldDepsManifestInfo {
         WorldDepsManifestInfo {
-            base: self.paths.base.clone(),
-            overlay: self.paths.overlay.clone(),
-            overlay_exists: self.paths.overlay_exists(),
+            inventory: ManifestLayerInfo {
+                base: self.paths.inventory_base.clone(),
+                overlay: self.paths.inventory_overlay.clone(),
+                overlay_exists: self.paths.inventory_overlay_exists(),
+            },
+            overlays: WorldDepsOverlayInfo {
+                installed: self.paths.installed_overlay.clone(),
+                installed_exists: self.paths.installed_overlay_exists(),
+                user: self.paths.user_overlay.clone(),
+                user_exists: self.paths.user_overlay_exists(),
+            },
         }
     }
 
@@ -95,22 +152,37 @@ impl WorldDepsRunner {
 
         if report.tools.is_empty() {
             println!(
-                "No tools defined in manifest {}",
-                report.manifest.base.display()
+                "No tools defined in inventory {}",
+                report.manifest.inventory.base.display()
             );
             return Ok(());
         }
 
-        println!("Manifest: {}", report.manifest.base.display());
-        if let Some(overlay) = &report.manifest.overlay {
-            let status = if report.manifest.overlay_exists {
+        println!("Inventory: {}", report.manifest.inventory.base.display());
+        if let Some(overlay) = &report.manifest.inventory.overlay {
+            let status = if report.manifest.inventory.overlay_exists {
                 "present"
             } else {
                 "missing"
             };
-            println!("Overlay: {} ({status})", overlay.display());
+            println!("Inventory overlay: {} ({status})", overlay.display());
+        }
+        let installed_status = if report.manifest.overlays.installed_exists {
+            "present"
         } else {
-            println!("Overlay: <not configured>");
+            "missing"
+        };
+        println!(
+            "Installed overlay: {} ({installed_status})",
+            report.manifest.overlays.installed.display()
+        );
+        if let Some(user) = &report.manifest.overlays.user {
+            let status = if report.manifest.overlays.user_exists {
+                "present"
+            } else {
+                "missing"
+            };
+            println!("User overlay: {} ({status})", user.display());
         }
 
         if let Some(message) = &report.world_disabled_reason {
@@ -177,8 +249,8 @@ impl WorldDepsRunner {
         let tools = self.manifest.tools.iter().collect::<Vec<_>>();
         if tools.is_empty() {
             println!(
-                "No tools defined in manifest {}; nothing to sync.",
-                self.paths.base.display()
+                "No tools defined in inventory {}; nothing to sync.",
+                self.paths.inventory_base.display()
             );
             return Ok(());
         }
@@ -225,7 +297,7 @@ impl WorldDepsRunner {
             anyhow!(
                 "tool `{}` has no install recipes in {}",
                 tool.name,
-                self.paths.base.display()
+                self.paths.inventory_base.display()
             )
         })?;
 

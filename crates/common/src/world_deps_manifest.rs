@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::{anyhow, Context, Result};
 
-use crate::manager_manifest::{InstallSpec, ManagerManifest, ManagerSpec};
+use crate::manager_manifest::{InstallSpec, ManagerManifest, ManagerSpec, Platform};
 
 /// Wrapper around the shared manager manifest that exposes world-deps specific
 /// helpers (host detection commands + guest install recipes).
@@ -13,11 +13,20 @@ pub struct WorldDepsManifest {
 }
 
 impl WorldDepsManifest {
-    pub fn load(base: &Path, overlay: Option<&Path>) -> Result<Self> {
-        let manifest = ManagerManifest::load(base, overlay)
-            .with_context(|| format!("failed to load manager manifest from {}", base.display()))?;
+    pub fn load_layered(
+        platform: Platform,
+        inventory_base: &Path,
+        overlays: &[std::path::PathBuf],
+    ) -> Result<Self> {
+        let manifest =
+            ManagerManifest::load_layered(inventory_base, overlays).with_context(|| {
+                format!(
+                    "failed to load layered manager manifest from {}",
+                    inventory_base.display()
+                )
+            })?;
         let tools = manifest
-            .managers
+            .resolve_for_platform(platform)
             .iter()
             .map(WorldDepTool::from_manager)
             .collect::<Result<Vec<_>>>()?;
