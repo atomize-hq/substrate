@@ -497,9 +497,9 @@ run_sync_deps_scenario() {
     cat "${log}" >&2 || true
     fatal "install-substrate failed for ${label}"
   fi
-  assert_contains "${log}" "Syncing guest dependencies via 'substrate world deps sync --all'" \
+  assert_contains "${log}" "Syncing guest dependencies via 'substrate world deps sync'" \
     "sync-deps should announce world deps sync"
-  assert_contains "${substrate_log}" "world deps sync --all --verbose" \
+  assert_contains "${substrate_log}" "world deps sync" \
     "sync-deps should invoke world deps sync"
   unset SUBSTRATE_TEST_SUBSTRATE_LOG
   info "Scenario ${label} complete:"

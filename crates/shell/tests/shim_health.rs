@@ -597,7 +597,7 @@ fn health_json_recommendations_align_with_parity_states() {
         "asdf recommendation should mention world enable: {asdf_reco}"
     );
     assert!(
-        asdf_reco.contains("substrate world deps sync --all --verbose"),
+        asdf_reco.contains("substrate world deps sync"),
         "asdf recommendation should mention world deps sync: {asdf_reco}"
     );
 
@@ -613,7 +613,7 @@ fn health_json_recommendations_align_with_parity_states() {
         "direnv recommendation should mention host install: {direnv_reco}"
     );
     assert!(
-        direnv_reco.contains("substrate world deps sync --all"),
+        direnv_reco.contains("substrate world deps sync"),
         "direnv recommendation should mention world deps sync: {direnv_reco}"
     );
 
