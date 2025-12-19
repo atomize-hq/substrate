@@ -717,7 +717,7 @@
     "name": "Host detection parity (integration)",
     "type": "integration",
     "phase": "M5b",
-    "status": "in_progress",
+    "status": "completed",
     "description": "Merge M5b code/test, reconcile host detection semantics to M5b-spec, and gate with fmt/clippy/tests/make preflight.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
