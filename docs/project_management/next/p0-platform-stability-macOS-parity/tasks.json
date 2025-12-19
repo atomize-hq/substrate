@@ -430,7 +430,7 @@
     "name": "World deps base manifest parity (test)",
     "type": "test",
     "phase": "M4",
-    "status": "pending",
+    "status": "in_progress",
     "description": "Add tests/fixtures validating installed-vs-workspace world-deps manifest resolution and env override behavior per M4-spec.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",

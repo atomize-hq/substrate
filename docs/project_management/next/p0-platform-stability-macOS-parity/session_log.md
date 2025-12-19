@@ -111,3 +111,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Worktree pending (`mp-m4-world-deps-manifest-code` to be added after docs commit)
 - Plan: update world deps manifest resolution to prefer installed `<prefix>/versions/<version>/config/world-deps.yaml` by default, retain workspace fallback to repo `scripts/substrate/world-deps.yaml`, preserve `SUBSTRATE_WORLD_DEPS_MANIFEST` override semantics across status/install/sync, and ensure status JSON/human output surfaces resolved paths; run `cargo fmt`/`cargo clippy --workspace --all-targets -- -D warnings`, commit via worktree, update docs/tasks/log at end
 - Blockers: none
+
+## [2025-12-19 14:39 UTC] Test Agent – M4-test – START
+- Checked out `feat/p0-platform-stability-macOS-parity`, ran `git pull --ff-only` (up to date), read plan/tasks/session log/M4-spec/kickoff prompt
+- Updated `tasks.json` (`M4-test` → `in_progress`) per checklist; scope confirmed: tests/fixtures only for world-deps manifest resolution (installed vs workspace) and `SUBSTRATE_WORLD_DEPS_MANIFEST` override behavior
+- Next steps: commit docs with `docs: start M4-test`, create branch/worktree `mp-m4-world-deps-manifest-test`/`wt/mp-m4-world-deps-manifest-test`, add/adjust platform-agnostic tests for manifest path resolution and status JSON, run `cargo fmt` + targeted `cargo test ...`, capture outputs for END log
+- Blockers: none
