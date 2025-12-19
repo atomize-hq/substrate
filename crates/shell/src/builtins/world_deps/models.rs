@@ -37,6 +37,8 @@ pub(crate) struct WorldDepsOverlayInfo {
 pub(crate) struct WorldDepStatusEntry {
     pub name: String,
     pub host_detected: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_reason: Option<String>,
     pub guest: WorldDepGuestStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,

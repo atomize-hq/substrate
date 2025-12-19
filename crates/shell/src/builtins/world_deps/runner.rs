@@ -1,7 +1,7 @@
 use super::guest::{detect_guest, detect_host, run_guest_install, world_exec_fallback_active};
 use super::models::{
-    GuestProbe, ManifestLayerInfo, WorldDepGuestStatus, WorldDepStatusEntry, WorldDepsManifestInfo,
-    WorldDepsOverlayInfo, WorldDepsStatusReport,
+    sanitize_reason, GuestProbe, ManifestLayerInfo, WorldDepGuestStatus, WorldDepStatusEntry,
+    WorldDepsManifestInfo, WorldDepsOverlayInfo, WorldDepsStatusReport,
 };
 use super::state::WorldState;
 use crate::{
@@ -227,12 +227,15 @@ impl WorldDepsRunner {
 
         let mut entries = Vec::with_capacity(tools.len());
         for tool in tools {
-            let host_detected = detect_host(&tool.host.commands);
+            let host_probe = detect_host(&tool.host.commands);
+            let host_detected = host_probe.detected;
+            let host_reason = host_probe.reason.map(|reason| sanitize_reason(&reason));
             let guest_status = self.probe_guest(tool);
             let provider = tool.install.first().map(|recipe| recipe.provider.clone());
             entries.push(WorldDepStatusEntry {
                 name: tool.name.clone(),
                 host_detected,
+                host_reason,
                 provider,
                 guest: WorldDepGuestStatus::from_probe(guest_status),
             });
@@ -270,18 +273,36 @@ impl WorldDepsRunner {
         }
 
         let mut to_install = Vec::new();
+        let mut host_detection_reason: Option<String> = None;
+        let mut missing_in_guest = false;
         for tool in tools {
-            let host_detected = detect_host(&tool.host.commands);
+            let host_probe = detect_host(&tool.host.commands);
+            if host_detection_reason.is_none() {
+                host_detection_reason = host_probe.reason.clone();
+            }
+            let host_detected = host_probe.detected;
             let guest_status = self.ensure_guest_state(tool)?;
             if guest_status {
                 continue;
             }
+            missing_in_guest = true;
             if args.all || host_detected {
                 to_install.push(tool);
             }
         }
 
+        let host_detection_reason = host_detection_reason.map(|reason| sanitize_reason(&reason));
+
         if to_install.is_empty() {
+            if missing_in_guest && !args.all {
+                if let Some(reason) = host_detection_reason.as_deref() {
+                    println!(
+                        "No tools were synced because host detection was skipped ({}).",
+                        reason
+                    );
+                    return Ok(());
+                }
+            }
             println!("All tracked tools are already available inside the guest.");
             return Ok(());
         }
@@ -294,12 +315,24 @@ impl WorldDepsRunner {
     }
 
     fn install_tool(&self, tool: &WorldDepTool, verbose: bool, dry_run: bool) -> Result<()> {
-        let host_detected = detect_host(&tool.host.commands);
+        let host_probe = detect_host(&tool.host.commands);
+        let host_detected = host_probe.detected;
         if !host_detected {
-            println!(
-                "substrate: warn: `{}` is not detected on the host; continuing with guest install anyway.",
-                tool.name
-            );
+            let reason = host_probe
+                .reason
+                .as_ref()
+                .map(|value| sanitize_reason(value));
+            if let Some(reason) = reason {
+                println!(
+                    "substrate: warn: `{}` is not detected on the host ({}); continuing with guest install anyway.",
+                    tool.name, reason
+                );
+            } else {
+                println!(
+                    "substrate: warn: `{}` is not detected on the host; continuing with guest install anyway.",
+                    tool.name
+                );
+            }
         }
 
         if self.ensure_guest_state(tool)? {
@@ -388,14 +421,17 @@ impl WorldDepsRunner {
 fn print_status_table(entries: &[WorldDepStatusEntry]) {
     for entry in entries {
         let provider = entry.provider.as_deref().unwrap_or("n/a");
+        let host_label = if entry.host_detected {
+            "present".to_string()
+        } else if let Some(reason) = entry.host_reason.as_deref() {
+            format!("missing ({reason})")
+        } else {
+            "missing".to_string()
+        };
         println!(
             "- {}: host={} guest={} installer={}",
             entry.name,
-            if entry.host_detected {
-                "present"
-            } else {
-                "missing"
-            },
+            host_label,
             entry.guest.label(),
             provider
         );

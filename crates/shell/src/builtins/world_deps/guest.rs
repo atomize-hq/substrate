@@ -2,20 +2,52 @@ use crate::execution::{build_agent_client_and_request, stream_non_pty_via_agent}
 use anyhow::{bail, Result};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
+use std::env;
 use std::error::Error as StdError;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
+use substrate_common::paths as substrate_paths;
 use tokio::runtime::Runtime;
+use which::which;
 
 static WORLD_EXEC_FALLBACK: AtomicBool = AtomicBool::new(false);
 
-pub(crate) fn detect_host(commands: &[String]) -> bool {
-    for cmd in commands {
-        if run_host_command(cmd) {
-            return true;
-        }
+pub(crate) struct HostDetectionResult {
+    pub detected: bool,
+    pub reason: Option<String>,
+}
+
+enum HostDetectionContext {
+    Bash(HostBashContext),
+    Legacy,
+    Skipped(String),
+}
+
+struct HostBashContext {
+    bash_path: PathBuf,
+    manager_env_path: PathBuf,
+    original_bash_env: Option<String>,
+}
+
+pub(crate) fn detect_host(commands: &[String]) -> HostDetectionResult {
+    let context = resolve_host_detection_context();
+    match &context {
+        HostDetectionContext::Skipped(reason) => HostDetectionResult {
+            detected: false,
+            reason: Some(reason.clone()),
+        },
+        HostDetectionContext::Legacy => HostDetectionResult {
+            detected: commands.iter().any(|cmd| run_host_command(cmd)),
+            reason: None,
+        },
+        HostDetectionContext::Bash(bash_ctx) => HostDetectionResult {
+            detected: commands
+                .iter()
+                .any(|cmd| run_host_detection_command(cmd, bash_ctx)),
+            reason: None,
+        },
     }
-    false
 }
 
 pub(crate) fn detect_guest(commands: &[String]) -> Result<bool> {
@@ -44,6 +76,66 @@ pub(crate) fn detect_guest(commands: &[String]) -> Result<bool> {
         }
     }
     Ok(false)
+}
+
+fn resolve_host_detection_context() -> HostDetectionContext {
+    if !cfg!(target_os = "macos") {
+        return HostDetectionContext::Legacy;
+    }
+
+    let bash_path = match which("bash") {
+        Ok(path) => path,
+        Err(_) => {
+            return HostDetectionContext::Skipped(
+                "bash not found; host detection requires bash to load manager init".to_string(),
+            );
+        }
+    };
+
+    let manager_env_path = match resolve_manager_env_path() {
+        Ok(path) => path,
+        Err(err) => return HostDetectionContext::Skipped(err),
+    };
+
+    if !manager_env_path.exists() {
+        return HostDetectionContext::Skipped(format!(
+            "manager env script missing at {}",
+            manager_env_path.display()
+        ));
+    }
+
+    let original_bash_env = env::var("BASH_ENV").ok().and_then(|value| {
+        let manager_env = manager_env_path.display().to_string();
+        if value == manager_env {
+            None
+        } else {
+            Some(value)
+        }
+    });
+
+    HostDetectionContext::Bash(HostBashContext {
+        bash_path,
+        manager_env_path,
+        original_bash_env,
+    })
+}
+
+fn resolve_manager_env_path() -> std::result::Result<PathBuf, String> {
+    if let Ok(path) = env::var("SUBSTRATE_MANAGER_ENV") {
+        if path.trim().is_empty() {
+            return Err("SUBSTRATE_MANAGER_ENV is set but empty".to_string());
+        }
+        return Ok(PathBuf::from(path));
+    }
+
+    substrate_paths::substrate_home()
+        .map(|home| home.join("manager_env.sh"))
+        .map_err(|err| {
+            format!(
+                "failed to resolve Substrate home for manager env: {:#}",
+                err
+            )
+        })
 }
 
 pub(crate) fn install_in_guest(script: &str, verbose: bool) -> Result<()> {
@@ -105,6 +197,22 @@ pub(crate) fn mark_world_exec_unavailable(err: &anyhow::Error) {
             err
         );
     }
+}
+
+fn run_host_detection_command(command: &str, bash_ctx: &HostBashContext) -> bool {
+    let mut cmd = Command::new(&bash_ctx.bash_path);
+    cmd.arg("-c").arg(command);
+    // Use BASH_ENV to source the manager env without touching user rc files.
+    cmd.env("BASH_ENV", &bash_ctx.manager_env_path);
+    cmd.env("SUBSTRATE_MANAGER_ENV", &bash_ctx.manager_env_path);
+    if let Some(original) = &bash_ctx.original_bash_env {
+        cmd.env("SUBSTRATE_ORIGINAL_BASH_ENV", original);
+    } else {
+        cmd.env_remove("SUBSTRATE_ORIGINAL_BASH_ENV");
+    }
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::null());
+    cmd.status().map(|status| status.success()).unwrap_or(false)
 }
 
 pub(crate) fn run_host_command(command: &str) -> bool {

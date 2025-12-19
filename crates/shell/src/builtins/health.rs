@@ -274,7 +274,9 @@ fn classify_manager_states(
             .map(|state| state.detected)
             .or_else(|| world_entry.map(|entry| entry.host_detected))
             .unwrap_or(false);
-        let host_reason = host_state.and_then(|state| state.reason.clone());
+        let host_reason = host_state
+            .and_then(|state| state.reason.clone())
+            .or_else(|| world_entry.and_then(|entry| entry.host_reason.clone()));
 
         let world_status = world_entry.map(|entry| ManagerWorldStatus {
             status: entry.guest.status,
