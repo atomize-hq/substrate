@@ -125,6 +125,12 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Next steps: commit docs (`docs: start M5c-integ`), create branch/worktree `mp-m5c-world-deps-first-run-integ`/`wt/mp-m5c-world-deps-first-run-integ`, merge upstream branches, reconcile behavior/tests before running required commands
 - Blockers: none
 
+## [2025-12-19 23:41 UTC] Integration Agent – M5c-integ – END
+- Worktree `wt/mp-m5c-world-deps-first-run-integ` merged `mp-m5c-world-deps-first-run-code` + `mp-m5c-world-deps-first-run-test`, then aligned sync-deps/recommendation expectations with spec (installer uses `world deps sync` default; health recommendations point to `world deps sync` without `--all` by default).
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `cargo test -p substrate-shell --test shim_health` (pass); `cargo test -p substrate-shell --test world_deps` (pass); `tests/mac/installer_parity_fixture.sh --scenario sync-deps` (pass – logs at `/tmp/substrate-mac-installer-sync-deps.Nxu7Tq/sync-deps.log`, `/tmp/substrate-mac-installer-sync-deps.Nxu7Tq/sync-deps-substrate.log`); `make preflight` (pass – fmt/clippy/clean/check/test workspace run).
+- Result: first-run sync wiring uses safe defaults; health/installer guidance aligned to world deps sync semantics while keeping host-missing installs gated behind `--all`.
+- Blockers: none
+
 ## [2025-12-19 14:39 UTC] Test Agent – M4-test – START
 - Checked out `feat/p0-platform-stability-macOS-parity`, ran `git pull --ff-only` (up to date), read plan/tasks/session log/M4-spec/kickoff prompt
 - Updated `tasks.json` (`M4-test` → `in_progress`) per checklist; scope confirmed: tests/fixtures only for world-deps manifest resolution (installed vs workspace) and `SUBSTRATE_WORLD_DEPS_MANIFEST` override behavior

@@ -842,7 +842,7 @@
     "name": "First-run UX wiring (integration)",
     "type": "integration",
     "phase": "M5c",
-    "status": "in_progress",
+    "status": "completed",
     "description": "Merge M5c code/test, reconcile first-run wiring and recommendations to M5c-spec, and gate with fmt/clippy/tests/make preflight.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
