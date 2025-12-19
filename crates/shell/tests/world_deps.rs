@@ -4,10 +4,12 @@
 mod common;
 
 use assert_cmd::Command;
-use common::substrate_shell_driver;
+use common::{
+    binary_path, ensure_substrate_built, shared_tmpdir, substrate_shell_driver, temp_dir,
+};
 use serde_json::{json, Map, Value};
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{symlink, PermissionsExt};
 use std::path::{Path, PathBuf};
 use tempfile::{Builder, TempDir};
 
@@ -312,6 +314,94 @@ impl WorldDepsFixture {
     }
 }
 
+fn write_minimal_manifest(path: &Path) {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).expect("manifest parent dir");
+    }
+    fs::write(path, "version: 1\nmanagers: {}\n").expect("write manifest");
+}
+
+fn parse_world_deps_status_json(stdout: &[u8]) -> Value {
+    serde_json::from_slice(stdout).expect("parse world deps status JSON")
+}
+
+fn extract_manifest_base(report: &Value) -> PathBuf {
+    report["manifest"]["base"]
+        .as_str()
+        .expect("manifest.base is string")
+        .into()
+}
+
+fn extract_manifest_overlay(report: &Value) -> Option<PathBuf> {
+    report["manifest"]["overlay"].as_str().map(PathBuf::from)
+}
+
+struct InstalledLayoutFixture {
+    _temp: TempDir,
+    prefix: PathBuf,
+    installed_bin: PathBuf,
+    base_manifest: PathBuf,
+    home: PathBuf,
+    cwd: PathBuf,
+}
+
+impl InstalledLayoutFixture {
+    fn new(version_label: &str) -> Self {
+        ensure_substrate_built();
+
+        let temp = temp_dir("substrate-world-deps-installed-");
+        let prefix = temp.path().join("prefix");
+        let version_dir = prefix.join("versions").join(version_label);
+        let version_bin_dir = version_dir.join("bin");
+        let version_config_dir = version_dir.join("config");
+        let base_manifest = version_config_dir.join("world-deps.yaml");
+        let installed_bin = prefix.join("bin").join("substrate");
+        let installed_real_bin = version_bin_dir.join("substrate");
+        let home = temp.path().join("home");
+        let cwd = temp.path().join("cwd");
+
+        fs::create_dir_all(&home).expect("home dir");
+        fs::create_dir_all(&cwd).expect("cwd dir");
+        fs::create_dir_all(&version_bin_dir).expect("version bin dir");
+        fs::create_dir_all(installed_bin.parent().expect("bin parent")).expect("bin dir");
+
+        write_minimal_manifest(&base_manifest);
+
+        fs::copy(PathBuf::from(binary_path()), &installed_real_bin)
+            .expect("copy substrate into install");
+        let mut perms = fs::metadata(&installed_real_bin)
+            .expect("installed substrate metadata")
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&installed_real_bin, perms).expect("chmod installed substrate");
+
+        symlink(&installed_real_bin, &installed_bin).expect("symlink prefix/bin/substrate");
+
+        Self {
+            _temp: temp,
+            prefix,
+            installed_bin,
+            base_manifest,
+            home,
+            cwd,
+        }
+    }
+
+    fn command(&self) -> Command {
+        let mut cmd = Command::new(&self.installed_bin);
+        cmd.current_dir(&self.cwd)
+            .env("TMPDIR", shared_tmpdir())
+            .env("HOME", &self.home)
+            .env("USERPROFILE", &self.home)
+            .env("SUBSTRATE_HOME", &self.prefix)
+            .env("SUBSTRATE_WORLD", "disabled")
+            .env("SUBSTRATE_WORLD_ENABLED", "0")
+            .env_remove("SUBSTRATE_WORLD_DEPS_MANIFEST")
+            .env_remove("SHIM_ORIGINAL_PATH");
+        cmd
+    }
+}
+
 #[test]
 fn world_deps_status_warns_when_world_disabled_but_reports_host_info() {
     let fixture = WorldDepsFixture::new();
@@ -516,5 +606,88 @@ fn world_deps_install_surfaces_helper_failures() {
     assert!(
         !fixture.guest_marker_exists("git"),
         "failed install should not report guest success"
+    );
+}
+
+#[test]
+fn world_deps_uses_versioned_manifest_when_running_from_installed_layout() {
+    let fixture = InstalledLayoutFixture::new("9.9.9-test");
+
+    let assert = fixture
+        .command()
+        .args(["world", "deps", "status", "--json"])
+        .assert()
+        .success();
+
+    let report = parse_world_deps_status_json(&assert.get_output().stdout);
+    assert_eq!(extract_manifest_base(&report), fixture.base_manifest);
+    assert_eq!(
+        extract_manifest_overlay(&report),
+        Some(fixture.prefix.join("world-deps.local.yaml"))
+    );
+}
+
+#[test]
+fn world_deps_workspace_build_falls_back_to_repo_manifest_when_no_installed_layout_present() {
+    let temp = temp_dir("substrate-world-deps-workspace-");
+    let home = temp.path().join("home");
+    let substrate_home = temp.path().join("substrate-home");
+    let cwd = temp.path().join("cwd");
+    fs::create_dir_all(&home).expect("home dir");
+    fs::create_dir_all(&substrate_home).expect("substrate home dir");
+    fs::create_dir_all(&cwd).expect("cwd dir");
+
+    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|dir| dir.parent())
+        .expect("repo root")
+        .to_path_buf();
+    let expected = repo_root.join("scripts/substrate/world-deps.yaml");
+
+    let assert = substrate_shell_driver()
+        .current_dir(&cwd)
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", &substrate_home)
+        .env_remove("SUBSTRATE_WORLD_DEPS_MANIFEST")
+        .args(["world", "deps", "status", "--json"])
+        .assert()
+        .success();
+
+    let report = parse_world_deps_status_json(&assert.get_output().stdout);
+    assert_eq!(extract_manifest_base(&report), expected);
+    assert_eq!(
+        extract_manifest_overlay(&report),
+        Some(substrate_home.join("world-deps.local.yaml"))
+    );
+}
+
+#[test]
+fn world_deps_manifest_env_override_takes_precedence_over_defaults() {
+    let temp = temp_dir("substrate-world-deps-override-");
+    let home = temp.path().join("home");
+    let substrate_home = temp.path().join("substrate-home");
+    let cwd = temp.path().join("cwd");
+    let manifest = temp.path().join("override/world-deps.yaml");
+    fs::create_dir_all(&home).expect("home dir");
+    fs::create_dir_all(&substrate_home).expect("substrate home dir");
+    fs::create_dir_all(&cwd).expect("cwd dir");
+    write_minimal_manifest(&manifest);
+
+    let assert = substrate_shell_driver()
+        .current_dir(&cwd)
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", &substrate_home)
+        .env("SUBSTRATE_WORLD_DEPS_MANIFEST", &manifest)
+        .args(["world", "deps", "status", "--json"])
+        .assert()
+        .success();
+
+    let report = parse_world_deps_status_json(&assert.get_output().stdout);
+    assert_eq!(extract_manifest_base(&report), manifest);
+    assert_eq!(
+        extract_manifest_overlay(&report),
+        Some(substrate_home.join("world-deps.local.yaml"))
     );
 }
