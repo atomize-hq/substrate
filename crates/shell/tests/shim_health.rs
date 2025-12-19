@@ -568,6 +568,82 @@ fn health_summary_classifies_manager_parity_states() {
 }
 
 #[test]
+fn health_json_recommendations_align_with_parity_states() {
+    let fixture = DoctorFixture::new(parity_manifest());
+    fixture.write_world_deps_fixture(parity_world_deps_report(&fixture));
+
+    let output = fixture
+        .command()
+        .arg("health")
+        .arg("--json")
+        .output()
+        .expect("failed to run substrate health --json");
+    assert!(output.status.success(), "health --json should succeed");
+
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("valid JSON payload");
+    let states = payload["summary"]["manager_states"]
+        .as_array()
+        .expect("manager states missing");
+
+    let asdf_state = states
+        .iter()
+        .find(|entry| entry["name"] == "asdf")
+        .expect("asdf entry missing");
+    let asdf_reco = asdf_state["recommendation"]
+        .as_str()
+        .expect("asdf recommendation missing");
+    assert!(
+        asdf_reco.contains("substrate world enable"),
+        "asdf recommendation should mention world enable: {asdf_reco}"
+    );
+    assert!(
+        asdf_reco.contains("substrate world deps sync --all --verbose"),
+        "asdf recommendation should mention world deps sync: {asdf_reco}"
+    );
+
+    let direnv_state = states
+        .iter()
+        .find(|entry| entry["name"] == "direnv")
+        .expect("direnv entry missing");
+    let direnv_reco = direnv_state["recommendation"]
+        .as_str()
+        .expect("direnv recommendation missing");
+    assert!(
+        direnv_reco.contains("Install direnv on the host first"),
+        "direnv recommendation should mention host install: {direnv_reco}"
+    );
+    assert!(
+        direnv_reco.contains("substrate world deps sync --all"),
+        "direnv recommendation should mention world deps sync: {direnv_reco}"
+    );
+
+    let conda_state = states
+        .iter()
+        .find(|entry| entry["name"] == "conda")
+        .expect("conda entry missing");
+    let conda_reco = conda_state["recommendation"]
+        .as_str()
+        .expect("conda recommendation missing");
+    assert!(
+        conda_reco.contains("Install conda on the host"),
+        "conda recommendation should mention host install: {conda_reco}"
+    );
+    assert!(
+        conda_reco.contains("substrate shim repair --manager conda"),
+        "conda recommendation should mention shim repair: {conda_reco}"
+    );
+
+    let pyenv_state = states
+        .iter()
+        .find(|entry| entry["name"] == "pyenv")
+        .expect("pyenv entry missing");
+    assert!(
+        pyenv_state.get("recommendation").is_none(),
+        "synced managers should omit recommendations: {pyenv_state:?}"
+    );
+}
+
+#[test]
 fn health_human_summary_respects_manager_parity_states() {
     let fixture = DoctorFixture::new(parity_manifest());
     fixture.write_world_deps_fixture(parity_world_deps_report(&fixture));
