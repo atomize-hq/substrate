@@ -800,7 +800,7 @@
     "name": "First-run UX wiring (test)",
     "type": "test",
     "phase": "M5c",
-    "status": "pending",
+    "status": "in_progress",
     "description": "Add tests/fixtures validating first-run wiring and coherent recommendations per M5c-spec.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
