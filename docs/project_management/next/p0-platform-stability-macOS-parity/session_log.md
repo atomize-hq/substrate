@@ -167,3 +167,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Observability: `substrate world deps status --json` now reports `manifest.inventory` (base + overlay) and `manifest.overlays` (installed + user) with resolved paths and existence flags.
 - Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass – `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in 3.54s`)
 - Blockers: none
+
+## [2025-12-19 15:28 UTC] Integration Agent – M5a-integ – START
+- Checked out `feat/p0-platform-stability-macOS-parity`, `git pull --ff-only` (already up to date), read plan/tasks/session log/M5a-spec/kickoff prompt per checklist
+- Updated `tasks.json` (`M5a-integ` → `in_progress`); integration scope confirmed: merge `M5a-code` + `M5a-test`, reconcile inventory + layering behavior to M5a-spec, gate with `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, `make preflight`
+- Next steps: commit this START docs update (`docs: start M5a-integ`), create branch/worktree `mp-m5a-world-deps-inventory-integ`/`wt/mp-m5a-world-deps-inventory-integ`, merge upstream branches, resolve conflicts/failures, then run required commands and record outputs in END entry
+- Blockers: none
