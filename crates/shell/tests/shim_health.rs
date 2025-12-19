@@ -73,9 +73,23 @@ managers:
 fn parity_world_deps_report(fixture: &DoctorFixture) -> Value {
     json!({
         "manifest": {
-            "base": fixture.home().join(".substrate/world-deps.yaml"),
-            "overlay": null,
-            "overlay_exists": false
+            "inventory": {
+                "base": fixture.home().join("manager_hooks.yaml"),
+                "overlay": fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                "overlay_exists": false
+            },
+            "overlays": {
+                "installed": fixture.home().join(".substrate/world-deps.yaml"),
+                "installed_exists": false,
+                "user": fixture.home().join(".substrate/world-deps.local.yaml"),
+                "user_exists": false
+            },
+            "layers": [
+                fixture.home().join("manager_hooks.yaml"),
+                fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                fixture.home().join(".substrate/world-deps.yaml"),
+                fixture.home().join(".substrate/world-deps.local.yaml")
+            ]
         },
         "world_disabled_reason": null,
         "tools": [
@@ -127,9 +141,23 @@ fn health_json_reports_summary_details() {
     }));
     fixture.write_world_deps_fixture(json!({
         "manifest": {
-            "base": fixture.home().join(".substrate/world-deps.yaml"),
-            "overlay": null,
-            "overlay_exists": false
+            "inventory": {
+                "base": fixture.home().join("manager_hooks.yaml"),
+                "overlay": fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                "overlay_exists": false
+            },
+            "overlays": {
+                "installed": fixture.home().join(".substrate/world-deps.yaml"),
+                "installed_exists": false,
+                "user": fixture.home().join(".substrate/world-deps.local.yaml"),
+                "user_exists": false
+            },
+            "layers": [
+                fixture.home().join("manager_hooks.yaml"),
+                fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                fixture.home().join(".substrate/world-deps.yaml"),
+                fixture.home().join(".substrate/world-deps.local.yaml")
+            ]
         },
         "world_disabled_reason": null,
         "tools": [
@@ -192,9 +220,23 @@ fn health_human_summary_highlights_failures() {
     }));
     fixture.write_world_deps_fixture(json!({
         "manifest": {
-            "base": fixture.home().join(".substrate/world-deps.yaml"),
-            "overlay": null,
-            "overlay_exists": false
+            "inventory": {
+                "base": fixture.home().join("manager_hooks.yaml"),
+                "overlay": fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                "overlay_exists": false
+            },
+            "overlays": {
+                "installed": fixture.home().join(".substrate/world-deps.yaml"),
+                "installed_exists": false,
+                "user": fixture.home().join(".substrate/world-deps.local.yaml"),
+                "user_exists": false
+            },
+            "layers": [
+                fixture.home().join("manager_hooks.yaml"),
+                fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                fixture.home().join(".substrate/world-deps.yaml"),
+                fixture.home().join(".substrate/world-deps.local.yaml")
+            ]
         },
         "world_disabled_reason": "install metadata reports world disabled",
         "tools": [
@@ -241,9 +283,23 @@ fn health_json_marks_skip_manager_init_and_world_disabled_reason() {
     let fixture = DoctorFixture::new(sample_manifest());
     fixture.write_world_deps_fixture(json!({
         "manifest": {
-            "base": fixture.home().join(".substrate/world-deps.yaml"),
-            "overlay": fixture.home().join(".substrate/world-deps.local.yaml"),
-            "overlay_exists": false
+            "inventory": {
+                "base": fixture.home().join("manager_hooks.yaml"),
+                "overlay": fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                "overlay_exists": false
+            },
+            "overlays": {
+                "installed": fixture.home().join(".substrate/world-deps.yaml"),
+                "installed_exists": false,
+                "user": fixture.home().join(".substrate/world-deps.local.yaml"),
+                "user_exists": false
+            },
+            "layers": [
+                fixture.home().join("manager_hooks.yaml"),
+                fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                fixture.home().join(".substrate/world-deps.yaml"),
+                fixture.home().join(".substrate/world-deps.local.yaml")
+            ]
         },
         "world_disabled_reason": "install metadata reports world disabled",
         "tools": []
@@ -304,9 +360,23 @@ fn health_json_reports_world_backend_error_and_guest_missing_tools() {
     .expect("failed to corrupt world doctor fixture");
     fixture.write_world_deps_fixture(json!({
         "manifest": {
-            "base": fixture.home().join(".substrate/world-deps.yaml"),
-            "overlay": null,
-            "overlay_exists": false
+            "inventory": {
+                "base": fixture.home().join("manager_hooks.yaml"),
+                "overlay": fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                "overlay_exists": false
+            },
+            "overlays": {
+                "installed": fixture.home().join(".substrate/world-deps.yaml"),
+                "installed_exists": false,
+                "user": fixture.home().join(".substrate/world-deps.local.yaml"),
+                "user_exists": false
+            },
+            "layers": [
+                fixture.home().join("manager_hooks.yaml"),
+                fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                fixture.home().join(".substrate/world-deps.yaml"),
+                fixture.home().join(".substrate/world-deps.local.yaml")
+            ]
         },
         "world_disabled_reason": null,
         "tools": [

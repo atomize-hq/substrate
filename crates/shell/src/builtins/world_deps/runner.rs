@@ -128,6 +128,19 @@ impl WorldDepsRunner {
     }
 
     fn manifest_info(&self) -> WorldDepsManifestInfo {
+        let layers = {
+            let mut layers = Vec::new();
+            layers.push(self.paths.inventory_base.clone());
+            if let Some(path) = &self.paths.inventory_overlay {
+                layers.push(path.clone());
+            }
+            layers.push(self.paths.installed_overlay.clone());
+            if let Some(path) = &self.paths.user_overlay {
+                layers.push(path.clone());
+            }
+            layers
+        };
+
         WorldDepsManifestInfo {
             inventory: ManifestLayerInfo {
                 base: self.paths.inventory_base.clone(),
@@ -140,6 +153,7 @@ impl WorldDepsRunner {
                 user: self.paths.user_overlay.clone(),
                 user_exists: self.paths.user_overlay_exists(),
             },
+            layers,
         }
     }
 

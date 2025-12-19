@@ -45,9 +45,23 @@ managers:
     }));
     fixture.write_world_deps_fixture(json!({
         "manifest": {
-            "base": fixture.home().join(".substrate/world-deps.yaml"),
-            "overlay": null,
-            "overlay_exists": false
+            "inventory": {
+                "base": fixture.home().join("manager_hooks.yaml"),
+                "overlay": fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                "overlay_exists": false
+            },
+            "overlays": {
+                "installed": fixture.home().join(".substrate/world-deps.yaml"),
+                "installed_exists": false,
+                "user": fixture.home().join(".substrate/world-deps.local.yaml"),
+                "user_exists": false
+            },
+            "layers": [
+                fixture.home().join("manager_hooks.yaml"),
+                fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                fixture.home().join(".substrate/world-deps.yaml"),
+                fixture.home().join(".substrate/world-deps.local.yaml")
+            ]
         },
         "world_disabled_reason": "install metadata reports world disabled",
         "tools": [
@@ -362,9 +376,23 @@ managers:
     }));
     fixture.write_world_deps_fixture(json!({
         "manifest": {
-            "base": fixture.home().join(".substrate/world-deps.yaml"),
-            "overlay": null,
-            "overlay_exists": false
+            "inventory": {
+                "base": fixture.home().join("manager_hooks.yaml"),
+                "overlay": fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                "overlay_exists": false
+            },
+            "overlays": {
+                "installed": fixture.home().join(".substrate/world-deps.yaml"),
+                "installed_exists": false,
+                "user": fixture.home().join(".substrate/world-deps.local.yaml"),
+                "user_exists": false
+            },
+            "layers": [
+                fixture.home().join("manager_hooks.yaml"),
+                fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                fixture.home().join(".substrate/world-deps.yaml"),
+                fixture.home().join(".substrate/world-deps.local.yaml")
+            ]
         },
         "world_disabled_reason": null,
         "tools": "invalid"

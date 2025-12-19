@@ -13,6 +13,7 @@ pub(crate) struct WorldDepsStatusReport {
 pub(crate) struct WorldDepsManifestInfo {
     pub inventory: ManifestLayerInfo,
     pub overlays: WorldDepsOverlayInfo,
+    pub layers: Vec<PathBuf>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

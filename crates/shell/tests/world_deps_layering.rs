@@ -438,7 +438,12 @@ fn world_deps_install_prefers_user_overlay_over_installed_and_base() {
     fixture.write_user_overlay_manifest(&[("git", "user-git")]);
     fixture.mark_host_tool("git");
 
-    let assert = fixture.command().arg("status").arg("--json").assert().success();
+    let assert = fixture
+        .command()
+        .arg("status")
+        .arg("--json")
+        .assert()
+        .success();
     let report = parse_status(&assert.get_output().stdout);
     let names = tool_names(&report);
     assert!(
@@ -475,7 +480,12 @@ fn world_deps_install_prefers_installed_overlay_over_base_when_no_user_overlay()
     fixture.write_installed_overlay_manifest(&[("git", "installed-git")]);
     fixture.mark_host_tool("git");
 
-    let assert = fixture.command().arg("status").arg("--json").assert().success();
+    let assert = fixture
+        .command()
+        .arg("status")
+        .arg("--json")
+        .assert()
+        .success();
     let report = parse_status(&assert.get_output().stdout);
     let names = tool_names(&report);
     assert!(

@@ -3,7 +3,13 @@ use super::ShellConfig;
 use anyhow::Result;
 use chrono::Utc;
 use serde_json::json;
-use std::{env, path::PathBuf, process::Command};
+use std::{
+    env,
+    ffi::OsStr,
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 use substrate_common::{log_schema, Platform};
 use substrate_trace::append_to_trace;
 use tracing::warn;
@@ -74,12 +80,38 @@ pub(crate) fn manager_manifest_base_path() -> PathBuf {
         return PathBuf::from(override_path);
     }
 
+    if let Some(path) = installed_manager_manifest_base_path() {
+        return canonicalize_or(&path);
+    }
+
     let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     crate_dir
         .parent()
         .and_then(|dir| dir.parent())
         .map(|root| root.join("config").join("manager_hooks.yaml"))
         .unwrap_or_else(|| PathBuf::from("config/manager_hooks.yaml"))
+}
+
+fn canonicalize_or(path: &Path) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn installed_manager_manifest_base_path() -> Option<PathBuf> {
+    let exe_path = env::current_exe().ok()?;
+    let canonical = canonicalize_or(&exe_path);
+
+    let bin_dir = canonical.parent()?;
+    if bin_dir.file_name() != Some(OsStr::new("bin")) {
+        return None;
+    }
+
+    let version_dir = bin_dir.parent()?;
+    let versions_dir = version_dir.parent()?;
+    if versions_dir.file_name() != Some(OsStr::new("versions")) {
+        return None;
+    }
+
+    Some(version_dir.join("config").join("manager_hooks.yaml"))
 }
 
 pub(crate) fn current_platform() -> Platform {

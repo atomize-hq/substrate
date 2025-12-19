@@ -61,6 +61,7 @@ struct WorldDepsFixture {
     _temp: TempDir,
     home: PathBuf,
     substrate_home: PathBuf,
+    manager_manifest_path: PathBuf,
     manifest_path: PathBuf,
     overlay_path: PathBuf,
     host_marker_dir: PathBuf,
@@ -83,6 +84,7 @@ impl WorldDepsFixture {
         let root = temp.path();
         let home = root.join("home");
         let substrate_home = home.join(".substrate");
+        let manager_manifest_path = root.join("manifests/manager_hooks.yaml");
         let manifest_path = root.join("manifests/world-deps.yaml");
         let overlay_path = substrate_home.join("world-deps.local.yaml");
         let host_marker_dir = root.join("markers/host");
@@ -104,10 +106,13 @@ impl WorldDepsFixture {
         fs::create_dir_all(&logs_dir).expect("logs dir");
         fs::create_dir_all(&guest_bin_dir).expect("guest bin dir");
 
+        write_minimal_manifest(&manager_manifest_path);
+
         Self {
             _temp: temp,
             home,
             substrate_home,
+            manager_manifest_path,
             manifest_path,
             overlay_path,
             host_marker_dir,
@@ -134,6 +139,7 @@ impl WorldDepsFixture {
             .env("SUBSTRATE_WORLD_ENABLED", "1")
             .env("SUBSTRATE_WORLD_SOCKET", &self.fake_socket_path)
             .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
+            .env("SUBSTRATE_MANAGER_MANIFEST", &self.manager_manifest_path)
             .env("SUBSTRATE_WORLD_DEPS_MANIFEST", &self.manifest_path)
             .env("SUBSTRATE_WORLD_DEPS_MARKER_DIR", &self.guest_marker_dir)
             .env("SUBSTRATE_WORLD_DEPS_HOST_LOG", &self.host_log_path)
@@ -329,21 +335,31 @@ fn parse_world_deps_status_json(stdout: &[u8]) -> Value {
     serde_json::from_slice(stdout).expect("parse world deps status JSON")
 }
 
-fn extract_manifest_base(report: &Value) -> PathBuf {
-    report["manifest"]["base"]
+fn extract_inventory_base(report: &Value) -> PathBuf {
+    report["manifest"]["inventory"]["base"]
         .as_str()
-        .expect("manifest.base is string")
+        .expect("manifest.inventory.base is string")
         .into()
 }
 
-fn extract_manifest_overlay(report: &Value) -> Option<PathBuf> {
-    report["manifest"]["overlay"].as_str().map(PathBuf::from)
+fn extract_installed_overlay(report: &Value) -> PathBuf {
+    report["manifest"]["overlays"]["installed"]
+        .as_str()
+        .expect("manifest.overlays.installed is string")
+        .into()
+}
+
+fn extract_user_overlay(report: &Value) -> Option<PathBuf> {
+    report["manifest"]["overlays"]["user"]
+        .as_str()
+        .map(PathBuf::from)
 }
 
 struct InstalledLayoutFixture {
     _temp: TempDir,
     prefix: PathBuf,
     installed_bin: PathBuf,
+    manager_manifest: PathBuf,
     base_manifest: PathBuf,
     home: PathBuf,
     cwd: PathBuf,
@@ -358,6 +374,7 @@ impl InstalledLayoutFixture {
         let version_dir = prefix.join("versions").join(version_label);
         let version_bin_dir = version_dir.join("bin");
         let version_config_dir = version_dir.join("config");
+        let manager_manifest = version_config_dir.join("manager_hooks.yaml");
         let base_manifest = version_config_dir.join("world-deps.yaml");
         let installed_bin = prefix.join("bin").join("substrate");
         let installed_real_bin = version_bin_dir.join("substrate");
@@ -369,6 +386,7 @@ impl InstalledLayoutFixture {
         fs::create_dir_all(&version_bin_dir).expect("version bin dir");
         fs::create_dir_all(installed_bin.parent().expect("bin parent")).expect("bin dir");
 
+        write_minimal_manifest(&manager_manifest);
         write_minimal_manifest(&base_manifest);
 
         fs::copy(PathBuf::from(binary_path()), &installed_real_bin)
@@ -385,6 +403,7 @@ impl InstalledLayoutFixture {
             _temp: temp,
             prefix,
             installed_bin,
+            manager_manifest,
             base_manifest,
             home,
             cwd,
@@ -624,13 +643,18 @@ fn world_deps_uses_versioned_manifest_when_running_from_installed_layout() {
         .success();
 
     let report = parse_world_deps_status_json(&assert.get_output().stdout);
-    let base = extract_manifest_base(&report);
+    let inventory_base = extract_inventory_base(&report);
     assert_eq!(
-        canonicalize_or(&base),
+        canonicalize_or(&inventory_base),
+        canonicalize_or(&fixture.manager_manifest)
+    );
+    let installed = extract_installed_overlay(&report);
+    assert_eq!(
+        canonicalize_or(&installed),
         canonicalize_or(&fixture.base_manifest)
     );
     assert_eq!(
-        extract_manifest_overlay(&report),
+        extract_user_overlay(&report),
         Some(fixture.prefix.join("world-deps.local.yaml"))
     );
 }
@@ -650,7 +674,8 @@ fn world_deps_workspace_build_falls_back_to_repo_manifest_when_no_installed_layo
         .and_then(|dir| dir.parent())
         .expect("repo root")
         .to_path_buf();
-    let expected = repo_root.join("scripts/substrate/world-deps.yaml");
+    let expected_inventory = repo_root.join("config/manager_hooks.yaml");
+    let expected_installed = repo_root.join("scripts/substrate/world-deps.yaml");
 
     let assert = substrate_shell_driver()
         .current_dir(&cwd)
@@ -663,10 +688,18 @@ fn world_deps_workspace_build_falls_back_to_repo_manifest_when_no_installed_layo
         .success();
 
     let report = parse_world_deps_status_json(&assert.get_output().stdout);
-    let base = extract_manifest_base(&report);
-    assert_eq!(canonicalize_or(&base), canonicalize_or(&expected));
+    let inventory_base = extract_inventory_base(&report);
     assert_eq!(
-        extract_manifest_overlay(&report),
+        canonicalize_or(&inventory_base),
+        canonicalize_or(&expected_inventory)
+    );
+    let installed = extract_installed_overlay(&report);
+    assert_eq!(
+        canonicalize_or(&installed),
+        canonicalize_or(&expected_installed)
+    );
+    assert_eq!(
+        extract_user_overlay(&report),
         Some(substrate_home.join("world-deps.local.yaml"))
     );
 }
@@ -694,10 +727,10 @@ fn world_deps_manifest_env_override_takes_precedence_over_defaults() {
         .success();
 
     let report = parse_world_deps_status_json(&assert.get_output().stdout);
-    let base = extract_manifest_base(&report);
-    assert_eq!(canonicalize_or(&base), canonicalize_or(&manifest));
+    let installed = extract_installed_overlay(&report);
+    assert_eq!(canonicalize_or(&installed), canonicalize_or(&manifest));
     assert_eq!(
-        extract_manifest_overlay(&report),
+        extract_user_overlay(&report),
         Some(substrate_home.join("world-deps.local.yaml"))
     );
 }

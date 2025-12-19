@@ -340,10 +340,15 @@ fn ensure_world_agent_ready() -> anyhow::Result<()> {
     use std::thread;
     use std::time::{Duration, Instant};
     const ACTIVATION_WAIT_MS: u64 = 2_000;
+    const DEFAULT_SOCKET_PATH: &str = "/run/substrate.sock";
 
     let socket_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/run/substrate.sock"));
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_SOCKET_PATH));
+
+    let socket_override_active = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
+        .map(|p| p != std::ffi::OsStr::new(DEFAULT_SOCKET_PATH))
+        .unwrap_or(false);
 
     // Helper: quick readiness probe via HTTP-over-UDS
     fn probe_caps(sock: &Path) -> bool {
@@ -393,6 +398,13 @@ fn ensure_world_agent_ready() -> anyhow::Result<()> {
     // Clean up stale socket if present (no responding server)
     if !activation_report.is_socket_activated() && Path::new(&socket_path).exists() {
         let _ = std::fs::remove_file(&socket_path);
+    }
+
+    if socket_override_active {
+        anyhow::bail!(
+            "world backend unavailable (SUBSTRATE_WORLD_SOCKET override): {} did not respond",
+            socket_path.display()
+        );
     }
 
     // Try to spawn agent
