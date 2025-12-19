@@ -123,3 +123,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Updated `tasks.json` (`M4-test` → `in_progress`) per checklist; scope confirmed: tests/fixtures only for world-deps manifest resolution (installed vs workspace) and `SUBSTRATE_WORLD_DEPS_MANIFEST` override behavior
 - Next steps: commit docs with `docs: start M4-test`, create branch/worktree `mp-m4-world-deps-manifest-test`/`wt/mp-m4-world-deps-manifest-test`, add/adjust platform-agnostic tests for manifest path resolution and status JSON, run `cargo fmt` + targeted `cargo test ...`, capture outputs for END log
 - Blockers: none
+
+## [2025-12-19 14:51 UTC] Test Agent – M4-test – END
+- Worktree `wt/mp-m4-world-deps-manifest-test` on branch `mp-m4-world-deps-manifest-test` (commit 1f18954) extends the existing `crates/shell/tests/world_deps.rs` harness with manifest resolution assertions: installed-layout defaults to `<prefix>/versions/<version>/config/world-deps.yaml`, workspace builds fall back to repo `scripts/substrate/world-deps.yaml`, and `SUBSTRATE_WORLD_DEPS_MANIFEST` override takes precedence (all via `world deps status --json`).
+- Commands: `cargo fmt` (pass); `cargo test -p substrate-shell --test world_deps -- --nocapture` (fail – expected until M4-code: `world_deps_uses_versioned_manifest_when_running_from_installed_layout` asserts base manifest resolves to the installed prefix, but current behavior resolves to the repo manifest at `scripts/substrate/world-deps.yaml`).
+- Result: new test coverage pins the M4-spec path resolution behavior and should flip green once M4-code updates `world_deps_manifest_base_path` to prefer installed manifests by default.
+- Blockers: pending M4-code implementation to satisfy the new installed-layout resolution assertion.
