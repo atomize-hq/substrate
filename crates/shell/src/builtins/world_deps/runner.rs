@@ -352,6 +352,7 @@ impl WorldDepsRunner {
         let mut to_install = Vec::new();
         let mut host_detection_reason: Option<String> = None;
         let mut missing_in_guest = false;
+        let mut skipped_on_host = Vec::new();
         for tool in tools {
             let host_probe = detect_host(&tool.host.commands);
             if host_detection_reason.is_none() {
@@ -365,6 +366,8 @@ impl WorldDepsRunner {
             missing_in_guest = true;
             if args.all || host_detected {
                 to_install.push(tool);
+            } else {
+                skipped_on_host.push(tool.name.clone());
             }
         }
 
@@ -376,6 +379,16 @@ impl WorldDepsRunner {
                     println!(
                         "No tools were synced because host detection was skipped or degraded ({}).",
                         reason
+                    );
+                    return Ok(());
+                }
+                if !skipped_on_host.is_empty() {
+                    println!(
+                        "No tools were synced because these tools were not detected on the host: {}.",
+                        skipped_on_host.join(", ")
+                    );
+                    println!(
+                        "Install them on the host first, or rerun `substrate world deps sync --all` to force guest installs."
                     );
                     return Ok(());
                 }
