@@ -234,3 +234,8 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Scope: tests/fixtures only for first-run wiring and coherent recommendations across installer/health/doctor per M5c-spec
 - Next steps: commit this START entry (`docs: start M5c-test`), create branch/worktree `mp-m5c-world-deps-first-run-test`/`wt/mp-m5c-world-deps-first-run-test`, add deterministic fixture-backed tests (no Lima), run `cargo fmt` + targeted `cargo test ...`, capture outputs for END log
 - Blockers: none
+
+## [2025-12-19 21:07 UTC] Test Agent – M5c-test – END
+- Worktree `wt/mp-m5c-world-deps-first-run-test` on branch `mp-m5c-world-deps-first-run-test` (commit d4808df) adds a sync-deps installer fixture scenario, a world deps sync skip regression, and health recommendation parity assertions.
+- Commands: `cargo fmt` (pass); `cargo test -p substrate-shell --test shim_health -- --nocapture` (pass); `cargo test -p substrate-shell --test world_deps -- --nocapture` (fail – `world_deps_sync_skips_missing_host_tools_without_all_flag` expects an explicit skip message but output says “All tracked tools are already available inside the guest.” plus backend fallback warning); `tests/mac/installer_parity_fixture.sh --scenario sync-deps` (pass – logs at `/tmp/substrate-mac-installer-sync-deps.26D4Cl`).
+- Blockers: M5c-code should update `world deps sync` messaging to avoid claiming all tools are present when host detection skips missing tools; rerun world_deps test after integration.

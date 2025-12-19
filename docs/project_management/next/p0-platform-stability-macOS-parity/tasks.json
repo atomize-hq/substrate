@@ -757,7 +757,7 @@
     "name": "First-run UX wiring (code)",
     "type": "code",
     "phase": "M5c",
-    "status": "in_progress",
+    "status": "completed",
     "description": "Wire first-run/provision flows and recommendations so macOS installs feel like host out of the box per M5c-spec.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
