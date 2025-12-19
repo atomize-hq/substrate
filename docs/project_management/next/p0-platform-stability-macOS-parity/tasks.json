@@ -595,7 +595,7 @@
     "name": "World deps inventory & layering (integration)",
     "type": "integration",
     "phase": "M5a",
-    "status": "in_progress",
+    "status": "completed",
     "description": "Merge M5a code/test, reconcile inventory + layering behavior to M5a-spec, and gate with fmt/clippy/tests/make preflight.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",

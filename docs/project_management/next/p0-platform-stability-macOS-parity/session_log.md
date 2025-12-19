@@ -173,3 +173,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Updated `tasks.json` (`M5a-integ` → `in_progress`); integration scope confirmed: merge `M5a-code` + `M5a-test`, reconcile inventory + layering behavior to M5a-spec, gate with `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, `make preflight`
 - Next steps: commit this START docs update (`docs: start M5a-integ`), create branch/worktree `mp-m5a-world-deps-inventory-integ`/`wt/mp-m5a-world-deps-inventory-integ`, merge upstream branches, resolve conflicts/failures, then run required commands and record outputs in END entry
 - Blockers: none
+
+## [2025-12-19 16:11 UTC] Integration Agent – M5a-integ – END
+- Worktree `wt/mp-m5a-world-deps-inventory-integ` merged `mp-m5a-world-deps-inventory-code` + `mp-m5a-world-deps-inventory-test`, reconciled to M5a-spec, and fast-forwarded `feat/p0-platform-stability-macOS-parity` (integration head commit a660722)
+- Reconciliation: fixed `world deps sync --all` test hang by constraining the test fixture inventory via `SUBSTRATE_MANAGER_MANIFEST` (so sync only covers the intended tools), and updated shim doctor/health world deps fixtures to the new `WorldDepsStatusReport` schema (`manifest.inventory`/`manifest.overlays` + `manifest.layers`)
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `cargo test -p substrate-shell --test world_deps_layering -- --nocapture` (pass – 3 tests); `cargo test -p substrate-shell --test world_deps -- --nocapture` (pass – 10 tests); `make preflight` (pass – ran fmt/clippy/clean/check/test; `cargo clean` removed 18270 files, 7.7GiB)
+- Blockers: none
