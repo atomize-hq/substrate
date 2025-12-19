@@ -154,3 +154,10 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Updated `tasks.json` (`M5a-test` → `in_progress`) per checklist; scope confirmed: tests/fixtures/harnesses only (no production code, no docs edits from worktree)
 - Next steps: commit this START entry (`docs: start M5a-test`), create branch/worktree `mp-m5a-world-deps-inventory-test`/`wt/mp-m5a-world-deps-inventory-test`, add deterministic fixtures/tests for inventory alignment + manifest layering, run `cargo fmt` + targeted `cargo test ...`, capture outputs for END log
 - Blockers: none
+
+## [2025-12-19 15:23 UTC] Code Agent – M5a-code – END
+- Worktree `wt/mp-m5a-world-deps-inventory-code` on branch `mp-m5a-world-deps-inventory-code` (commit 3c2bb11) aligns `substrate world deps` inventory with shim doctor/health by loading the base inventory from `manager_hooks.yaml` (plus `manager_hooks.local.yaml`), then layering `world-deps.yaml` (installed/bundled) and `world-deps.local.yaml` (user) as override manifests.
+- `scripts/substrate/world-deps.yaml` now acts as an overlay stub so the canonical tool inventory comes from `config/manager_hooks.yaml` by default.
+- Observability: `substrate world deps status --json` now reports `manifest.inventory` (base + overlay) and `manifest.overlays` (installed + user) with resolved paths and existence flags.
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass – `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in 3.54s`)
+- Blockers: none

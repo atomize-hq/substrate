@@ -511,7 +511,7 @@
     "name": "World deps inventory & layering (code)",
     "type": "code",
     "phase": "M5a",
-    "status": "in_progress",
+    "status": "completed",
     "description": "Align world deps tool inventory with shim doctor/health and ensure world-deps manifests behave as override layers per M5a-spec.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
@@ -554,7 +554,7 @@
     "name": "World deps inventory & layering (test)",
     "type": "test",
     "phase": "M5a",
-    "status": "in_progress",
+    "status": "completed",
     "description": "Add tests/fixtures validating world deps inventory alignment and manifest layering per M5a-spec.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
