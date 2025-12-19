@@ -174,7 +174,7 @@
     "name": "Installer parity (macOS) \u2013 test",
     "type": "test",
     "phase": "M2",
-    "status": "in_progress",
+    "status": "completed",
     "description": "Add tests/harnesses covering mac installer/uninstaller parity (build-in-VM fallback, cleanup-state, metadata) per M2-spec.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
@@ -345,7 +345,7 @@
     "name": "Backend & doctor parity \u2013 integration",
     "type": "integration",
     "phase": "M3",
-    "status": "in_progress",
+    "status": "completed",
     "description": "Merge M3 code/test, reconcile mac backend/doctor parity with the spec, and gate with fmt/clippy/tests/make preflight.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",

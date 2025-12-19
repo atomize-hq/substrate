@@ -187,9 +187,20 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Plan: align world deps host detection with manager init semantics on macOS (bash-first), surface degraded detection reasons in status/sync outputs, avoid user dotfile mutation, run `cargo fmt`/`cargo clippy --workspace --all-targets -- -D warnings`, commit via worktree, update docs/tasks/log at end
 - Blockers: none
 
+## [2025-12-19 17:02 UTC] Code Agent – M5b-code – END
+- Worktree `wt/mp-m5b-world-deps-host-detect-code` on branch `mp-m5b-world-deps-host-detect-code` (commit a9fea57) updates world deps host detection to use the manager env on macOS (bash + BASH_ENV), surfaces skipped detection reasons in status/sync/install output, and reuses host detection reasons in health parity summaries
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass)
+- Result: mac host detection now matches Substrate-managed bash init without sourcing user dotfiles; host detection skips are explicit in status/sync output (and won’t claim all tools synced when detection was skipped)
+- Blockers: none
+
 ## [2025-12-19 16:48 UTC] Test Agent – M5b-test – START
 - Checked out `feat/p0-platform-stability-macOS-parity`, `git pull --ff-only` (already up to date)
 - Read plan/tasks/session log/M5b-spec/kickoff prompt; updated tasks.json (M5b-test → in_progress)
 - Scope: add tests/fixtures validating world deps host detection runs under manager init semantics and sees manager-provided tools
 - Next steps: commit docs with `docs: start M5b-test`, create branch/worktree `mp-m5b-world-deps-host-detect-test`/`wt/mp-m5b-world-deps-host-detect-test`, add deterministic fixtures/tests, run `cargo fmt` + targeted `cargo test ...`, capture outputs for END log
 - Blockers: none
+
+## [2025-12-19 17:02 UTC] Test Agent – M5b-test – END
+- Worktree `wt/mp-m5b-world-deps-host-detect-test` on branch `mp-m5b-world-deps-host-detect-test` (commit 80beebe) adds a manager-init host detection fixture plus a status test for manager-provided tools
+- Commands: `cargo fmt` (pass); `cargo test -p substrate-shell --test world_deps -- --nocapture` (fail – `world_deps_status_detects_tools_from_manager_init_env` reports `host_detected=false` for `m5b-manager-tool`, expected manager init env to be used)
+- Blockers: pending M5b-code updates to run host detection under manager init env so host tools surface as present
