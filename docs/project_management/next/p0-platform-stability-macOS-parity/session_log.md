@@ -129,3 +129,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Commands: `cargo fmt` (pass); `cargo test -p substrate-shell --test world_deps -- --nocapture` (fail – expected until M4-code: `world_deps_uses_versioned_manifest_when_running_from_installed_layout` asserts base manifest resolves to the installed prefix, but current behavior resolves to the repo manifest at `scripts/substrate/world-deps.yaml`).
 - Result: new test coverage pins the M4-spec path resolution behavior and should flip green once M4-code updates `world_deps_manifest_base_path` to prefer installed manifests by default.
 - Blockers: pending M4-code implementation to satisfy the new installed-layout resolution assertion.
+
+## [2025-12-19 14:55 UTC] Integration Agent – M4-integ – START
+- Checked out `feat/p0-platform-stability-macOS-parity`, ran `git pull --ff-only` (already up to date), read plan/tasks/session log/M4-spec/kickoff prompt per checklist
+- Updated `tasks.json` (`M4-integ` → `in_progress`); integration scope confirmed: merge `M4-code` + `M4-test`, reconcile manifest resolution behavior to M4-spec, gate with `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, `make preflight`
+- Next steps: commit this START docs update (`docs: start M4-integ`), create branch/worktree `mp-m4-world-deps-manifest-integ`/`wt/mp-m4-world-deps-manifest-integ`, merge upstream branches, resolve conflicts/failures, then run required commands and record outputs in END entry
+- Blockers: none
