@@ -57,6 +57,20 @@ touch "$guest_bin/{marker}"
 echo "install complete for {tool}"
 "#;
 
+const MANAGER_INIT_MARKER_ENV: &str = "SUBSTRATE_M5B_MANAGER_INIT_MARKER";
+const MANAGER_INIT_MARKER_VALUE: &str = "manager-init-loaded";
+
+const HOST_MANAGER_INIT_SCRIPT_TEMPLATE: &str = r#"#!/usr/bin/env bash
+set -euo pipefail
+
+log="${SUBSTRATE_WORLD_DEPS_HOST_LOG:?missing host log}"
+echo "host-detect:{tool}:m5b-marker=${SUBSTRATE_M5B_MANAGER_INIT_MARKER:-}" >>"$log"
+if [ "${SUBSTRATE_M5B_MANAGER_INIT_MARKER:-}" != "{marker}" ]; then
+  exit 1
+fi
+command -v "{tool}" >/dev/null 2>&1
+"#;
+
 struct WorldDepsFixture {
     _temp: TempDir,
     home: PathBuf,
@@ -72,6 +86,7 @@ struct WorldDepsFixture {
     executor_log_path: PathBuf,
     fake_socket_path: PathBuf,
     guest_bin_dir: PathBuf,
+    manager_bin_dir: PathBuf,
 }
 
 impl WorldDepsFixture {
@@ -96,6 +111,7 @@ impl WorldDepsFixture {
         let executor_log_path = logs_dir.join("executor.log");
         let fake_socket_path = root.join("fake-world.sock");
         let guest_bin_dir = root.join("guest-bin");
+        let manager_bin_dir = root.join("manager-bin");
 
         fs::create_dir_all(&home).expect("fixture home");
         fs::create_dir_all(&substrate_home).expect("fixture substrate home");
@@ -105,6 +121,7 @@ impl WorldDepsFixture {
         fs::create_dir_all(&scripts_dir).expect("scripts dir");
         fs::create_dir_all(&logs_dir).expect("logs dir");
         fs::create_dir_all(&guest_bin_dir).expect("guest bin dir");
+        fs::create_dir_all(&manager_bin_dir).expect("manager bin dir");
 
         write_minimal_manifest(&manager_manifest_path);
 
@@ -123,6 +140,7 @@ impl WorldDepsFixture {
             executor_log_path,
             fake_socket_path,
             guest_bin_dir,
+            manager_bin_dir,
         }
     }
 
@@ -191,6 +209,47 @@ impl WorldDepsFixture {
         .expect("write manifest");
     }
 
+    fn write_manifest_with_host_command(&self, tool: &str, host_command: &str) {
+        let mut managers: Map<String, Value> = Map::new();
+        managers.insert(
+            tool.to_string(),
+            json!({
+                "detect": {
+                    "commands": [host_command]
+                },
+                "guest_detect": {
+                    "command": self.guest_script(tool)
+                },
+                "guest_install": {
+                    "custom": self.install_script(tool, tool)
+                }
+            }),
+        );
+
+        let manifest = Value::Object({
+            let mut root = Map::new();
+            root.insert("version".into(), json!(1));
+            root.insert("managers".into(), Value::Object(managers));
+            root
+        });
+
+        fs::write(
+            &self.manifest_path,
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )
+        .expect("write manifest");
+    }
+
+    fn write_manager_manifest_for_init(&self) {
+        let contents = format!(
+            "version: 1\nmanagers:\n  - name: manager-init-test\n    detect:\n      script: \"exit 0\"\n    init:\n      shell: |\n        export {marker_env}=\"{marker_value}\"\n        export PATH=\"{manager_bin}:$PATH\"\n",
+            marker_env = MANAGER_INIT_MARKER_ENV,
+            marker_value = MANAGER_INIT_MARKER_VALUE,
+            manager_bin = self.manager_bin_dir.display()
+        );
+        fs::write(&self.manager_manifest_path, contents).expect("write manager manifest");
+    }
+
     fn write_overlay_install_override(&self, tool: &str) {
         let marker_name = format!("overlay-{tool}");
         let script = self.install_script(tool, &marker_name);
@@ -239,6 +298,17 @@ impl WorldDepsFixture {
         path.to_string_lossy().into_owned()
     }
 
+    fn host_script_requires_manager_init(&self, tool: &str) -> String {
+        let path = self
+            .scripts_dir
+            .join(format!("host-manager-init-{tool}.sh"));
+        let contents = HOST_MANAGER_INIT_SCRIPT_TEMPLATE
+            .replace("{tool}", tool)
+            .replace("{marker}", MANAGER_INIT_MARKER_VALUE);
+        self.write_script(&path, &contents);
+        path.to_string_lossy().into_owned()
+    }
+
     fn guest_script(&self, tool: &str) -> String {
         self.guest_script_with_marker(tool, tool, "")
     }
@@ -272,6 +342,11 @@ impl WorldDepsFixture {
         let mut perms = fs::metadata(path).expect("script metadata").permissions();
         perms.set_mode(0o755);
         fs::set_permissions(path, perms).expect("chmod script");
+    }
+
+    fn write_manager_tool(&self, tool: &str) {
+        let path = self.manager_bin_dir.join(tool);
+        self.write_script(&path, "#!/usr/bin/env bash\nexit 0\n");
     }
 
     fn mark_host_tool(&self, tool: &str) {
@@ -353,6 +428,15 @@ fn extract_user_overlay(report: &Value) -> Option<PathBuf> {
     report["manifest"]["overlays"]["user"]
         .as_str()
         .map(PathBuf::from)
+}
+
+fn find_tool<'a>(report: &'a Value, name: &str) -> &'a Value {
+    report["tools"]
+        .as_array()
+        .expect("tools array missing")
+        .iter()
+        .find(|entry| entry["name"].as_str() == Some(name))
+        .unwrap_or_else(|| panic!("tool {name} missing from report: {report}"))
 }
 
 struct InstalledLayoutFixture {
@@ -463,6 +547,55 @@ fn world_deps_status_warns_when_world_disabled_but_reports_host_info() {
     assert!(
         fixture.host_log().contains("host-detect:git"),
         "host detection should still run when world disabled"
+    );
+}
+
+#[test]
+fn world_deps_status_detects_tools_from_manager_init_env() {
+    let fixture = WorldDepsFixture::new();
+    let tool = "m5b-manager-tool";
+    fixture.write_manager_manifest_for_init();
+    fixture.write_manager_tool(tool);
+    let host_command = fixture.host_script_requires_manager_init(tool);
+    fixture.write_manifest_with_host_command(tool, &host_command);
+
+    let manager_bin = fixture.manager_bin_dir.display().to_string();
+    let current_path = std::env::var("PATH").unwrap_or_default();
+    let mut path_parts: Vec<&str> = current_path
+        .split(':')
+        .filter(|entry| *entry != manager_bin)
+        .collect();
+    if path_parts.is_empty() {
+        path_parts = vec!["/usr/bin", "/bin"];
+    }
+    let sanitized_path = path_parts.join(":");
+    let path = format!("{}:{}", fixture.guest_bin_dir.display(), sanitized_path);
+
+    let assert = fixture
+        .command()
+        .env("PATH", path)
+        .env_remove(MANAGER_INIT_MARKER_ENV)
+        .arg("status")
+        .arg("--json")
+        .assert()
+        .success();
+
+    let report = parse_world_deps_status_json(&assert.get_output().stdout);
+    let entry = find_tool(&report, tool);
+    assert_eq!(
+        entry.get("host_detected").and_then(Value::as_bool),
+        Some(true),
+        "expected host detection to use manager init env: {report}"
+    );
+
+    let host_log = fixture.host_log();
+    assert!(
+        host_log.contains("host-detect:m5b-manager-tool"),
+        "host detection log missing tool entry: {host_log}"
+    );
+    assert!(
+        host_log.contains(&format!("m5b-marker={MANAGER_INIT_MARKER_VALUE}")),
+        "host detection log missing manager init marker: {host_log}"
     );
 }
 
