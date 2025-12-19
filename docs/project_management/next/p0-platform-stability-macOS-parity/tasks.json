@@ -635,7 +635,7 @@
     "name": "Host detection parity (code)",
     "type": "code",
     "phase": "M5b",
-    "status": "pending",
+    "status": "in_progress",
     "description": "Make world deps host detection reflect the Substrate-managed host environment per M5b-spec.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",

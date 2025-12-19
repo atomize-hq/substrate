@@ -179,3 +179,10 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Reconciliation: fixed `world deps sync --all` test hang by constraining the test fixture inventory via `SUBSTRATE_MANAGER_MANIFEST` (so sync only covers the intended tools), and updated shim doctor/health world deps fixtures to the new `WorldDepsStatusReport` schema (`manifest.inventory`/`manifest.overlays` + `manifest.layers`)
 - Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `cargo test -p substrate-shell --test world_deps_layering -- --nocapture` (pass – 3 tests); `cargo test -p substrate-shell --test world_deps -- --nocapture` (pass – 10 tests); `make preflight` (pass – ran fmt/clippy/clean/check/test; `cargo clean` removed 18270 files, 7.7GiB)
 - Blockers: none
+
+## [2025-12-19 16:46 UTC] Code Agent – M5b-code – START
+- Checked out `feat/p0-platform-stability-macOS-parity`, `git pull --ff-only` (already up to date)
+- Read plan/tasks/session log/M5b-spec/kickoff prompt; updated tasks.json (M5b-code → in_progress)
+- Worktree pending (`mp-m5b-world-deps-host-detect-code` to be added after docs commit)
+- Plan: align world deps host detection with manager init semantics on macOS (bash-first), surface degraded detection reasons in status/sync outputs, avoid user dotfile mutation, run `cargo fmt`/`cargo clippy --workspace --all-targets -- -D warnings`, commit via worktree, update docs/tasks/log at end
+- Blockers: none
