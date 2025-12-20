@@ -1,9 +1,10 @@
 use crate::execution::{build_agent_client_and_request, stream_non_pty_via_agent};
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use std::env;
 use std::error::Error as StdError;
+use std::fmt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -12,6 +13,29 @@ use tokio::runtime::Runtime;
 use which::which;
 
 static WORLD_EXEC_FALLBACK: AtomicBool = AtomicBool::new(false);
+
+#[derive(Debug)]
+pub(crate) struct WorldBackendUnavailable {
+    reason: String,
+}
+
+impl WorldBackendUnavailable {
+    fn new(reason: String) -> Self {
+        Self { reason }
+    }
+
+    pub(crate) fn reason(&self) -> &str {
+        &self.reason
+    }
+}
+
+impl fmt::Display for WorldBackendUnavailable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "world backend unavailable: {}", self.reason)
+    }
+}
+
+impl StdError for WorldBackendUnavailable {}
 
 pub(crate) struct HostDetectionResult {
     pub detected: bool,
@@ -49,12 +73,18 @@ pub(crate) fn detect_host(commands: &[String]) -> HostDetectionResult {
 }
 
 pub(crate) fn detect_guest(commands: &[String]) -> Result<bool> {
+    let fallback_allowed = host_fallback_allowed();
     for cmd in commands {
         if WORLD_EXEC_FALLBACK.load(Ordering::SeqCst) {
-            if run_host_command(cmd) {
-                return Ok(true);
+            if fallback_allowed {
+                if run_host_command(cmd) {
+                    return Ok(true);
+                }
+                continue;
             }
-            continue;
+            return Err(anyhow!(WorldBackendUnavailable::new(
+                "host fallback disabled on macOS".to_string()
+            )));
         }
 
         let wrapped = wrap_for_bash(cmd, false);
@@ -65,9 +95,13 @@ pub(crate) fn detect_guest(commands: &[String]) -> Result<bool> {
                 }
             }
             Err(err) if should_fallback_to_host(&err) => {
-                mark_world_exec_unavailable(&err);
-                if run_host_command(cmd) {
-                    return Ok(true);
+                if fallback_allowed {
+                    mark_world_exec_unavailable(&err);
+                    if run_host_command(cmd) {
+                        return Ok(true);
+                    }
+                } else {
+                    return Err(anyhow!(WorldBackendUnavailable::new(format!("{:#}", err))));
                 }
             }
             Err(err) => return Err(err),
@@ -141,8 +175,14 @@ fn resolve_manager_env_path() -> std::result::Result<PathBuf, String> {
 }
 
 pub(crate) fn install_in_guest(script: &str, verbose: bool) -> Result<()> {
+    let fallback_allowed = host_fallback_allowed();
     if WORLD_EXEC_FALLBACK.load(Ordering::SeqCst) {
-        return run_host_install(script, verbose);
+        if fallback_allowed {
+            return run_host_install(script, verbose);
+        }
+        return Err(macos_world_deps_unavailable_error(
+            "host fallback disabled on macOS",
+        ));
     }
 
     let command = wrap_for_bash(&wrap_guest_install_script(script), true);
@@ -156,8 +196,12 @@ pub(crate) fn install_in_guest(script: &str, verbose: bool) -> Result<()> {
                 }
             }
             Err(err) if should_fallback_to_host(&err) => {
-                mark_world_exec_unavailable(&err);
-                run_host_install(script, verbose)
+                if fallback_allowed {
+                    mark_world_exec_unavailable(&err);
+                    run_host_install(script, verbose)
+                } else {
+                    Err(macos_world_deps_unavailable_error(&format!("{:#}", err)))
+                }
             }
             Err(err) => Err(err),
         }
@@ -179,8 +223,12 @@ pub(crate) fn install_in_guest(script: &str, verbose: bool) -> Result<()> {
                 }
             }
             Err(err) if should_fallback_to_host(&err) => {
-                mark_world_exec_unavailable(&err);
-                run_host_install(script, verbose)
+                if fallback_allowed {
+                    mark_world_exec_unavailable(&err);
+                    run_host_install(script, verbose)
+                } else {
+                    Err(macos_world_deps_unavailable_error(&format!("{:#}", err)))
+                }
             }
             Err(err) => Err(err),
         }
@@ -315,6 +363,17 @@ fn build_bash_body(script: &str, strict: bool) -> String {
     }
     body.push_str(script);
     body
+}
+
+pub(crate) fn macos_world_deps_unavailable_error(reason: &str) -> anyhow::Error {
+    anyhow!(
+        "world backend unavailable for world deps on macOS; run `substrate world doctor --json` to inspect forwarding and backend status, then retry. Underlying error: {}",
+        reason
+    )
+}
+
+fn host_fallback_allowed() -> bool {
+    !cfg!(target_os = "macos")
 }
 
 fn should_fallback_to_host(err: &anyhow::Error) -> bool {
