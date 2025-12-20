@@ -393,6 +393,7 @@ fn should_fallback_to_host(err: &anyhow::Error) -> bool {
             || message.contains("connection refused")
             || message.contains("timed out")
             || message.contains("No such file or directory")
+            || message.contains("SUN_LEN")
         {
             return true;
         }

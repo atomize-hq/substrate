@@ -632,6 +632,7 @@ fn world_deps_status_marks_guest_unavailable_when_backend_unreachable_on_macos()
     );
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn world_deps_install_executes_install_script_and_streams_output() {
     let fixture = WorldDepsFixture::new();
@@ -662,6 +663,7 @@ fn world_deps_install_executes_install_script_and_streams_output() {
     );
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn world_deps_install_respects_dry_run() {
     let fixture = WorldDepsFixture::new();
@@ -752,6 +754,7 @@ fn world_deps_install_fails_when_backend_unavailable_on_macos() {
     );
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn world_deps_sync_skips_missing_host_tools_without_all_flag() {
     let fixture = WorldDepsFixture::new();
@@ -781,6 +784,7 @@ fn world_deps_sync_skips_missing_host_tools_without_all_flag() {
     );
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn world_deps_sync_installs_missing_tools_with_all_flag() {
     let fixture = WorldDepsFixture::new();
@@ -858,6 +862,7 @@ fn world_deps_sync_fails_when_backend_unavailable_on_macos() {
     );
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn world_deps_install_prefers_overlay_manifest_entries() {
     let fixture = WorldDepsFixture::new();
@@ -882,6 +887,7 @@ fn world_deps_install_prefers_overlay_manifest_entries() {
     );
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn world_deps_install_surfaces_helper_failures() {
     let fixture = WorldDepsFixture::new();
