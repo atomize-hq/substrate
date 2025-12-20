@@ -599,6 +599,39 @@ fn world_deps_status_detects_tools_from_manager_init_env() {
     );
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn world_deps_status_marks_guest_unavailable_when_backend_unreachable_on_macos() {
+    let fixture = WorldDepsFixture::new();
+    fixture.write_manifest(&["git"]);
+    fixture.mark_host_tool("git");
+
+    let assert = fixture
+        .command()
+        .arg("status")
+        .arg("--json")
+        .assert()
+        .success();
+
+    let report = parse_world_deps_status_json(&assert.get_output().stdout);
+    let entry = find_tool(&report, "git");
+    assert_eq!(
+        entry["guest"]["status"].as_str(),
+        Some("unavailable"),
+        "expected guest status unavailable when backend missing: {report}"
+    );
+    let reason = entry["guest"]["reason"].as_str().unwrap_or_default();
+    assert!(
+        reason.contains("backend unavailable"),
+        "expected guest unavailable reason, got: {reason}"
+    );
+    assert!(
+        fixture.guest_log().is_empty(),
+        "guest detection should not fall back to host: {}",
+        fixture.guest_log()
+    );
+}
+
 #[test]
 fn world_deps_install_executes_install_script_and_streams_output() {
     let fixture = WorldDepsFixture::new();
@@ -679,6 +712,46 @@ fn world_deps_install_fails_when_world_disabled() {
     );
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn world_deps_install_fails_when_backend_unavailable_on_macos() {
+    let fixture = WorldDepsFixture::new();
+    fixture.write_manifest(&["git"]);
+    fixture.mark_host_tool("git");
+
+    let assert = fixture
+        .command()
+        .arg("install")
+        .arg("git")
+        .assert()
+        .failure();
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    assert!(
+        stderr.contains("world backend unavailable for world deps on macOS"),
+        "stderr missing macOS backend unavailable guidance: {}",
+        stderr
+    );
+    assert!(
+        stderr.contains("substrate world doctor --json"),
+        "stderr missing world doctor guidance: {}",
+        stderr
+    );
+    assert!(
+        !fixture.guest_marker_exists("git"),
+        "install should not mutate guest markers when backend is unavailable"
+    );
+    assert!(
+        fixture.executor_log().is_empty(),
+        "install should not execute guest recipes on the host: {}",
+        fixture.executor_log()
+    );
+    assert!(
+        fixture.guest_log().is_empty(),
+        "guest detection should not fall back to host: {}",
+        fixture.guest_log()
+    );
+}
+
 #[test]
 fn world_deps_sync_skips_missing_host_tools_without_all_flag() {
     let fixture = WorldDepsFixture::new();
@@ -742,6 +815,46 @@ fn world_deps_sync_installs_missing_tools_with_all_flag() {
         !log.contains("install:node"),
         "sync should skip guest-complete tools: {}",
         log
+    );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn world_deps_sync_fails_when_backend_unavailable_on_macos() {
+    let fixture = WorldDepsFixture::new();
+    fixture.write_manifest(&["git"]);
+    fixture.mark_host_tool("git");
+
+    let assert = fixture
+        .command()
+        .arg("sync")
+        .arg("--all")
+        .assert()
+        .failure();
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    assert!(
+        stderr.contains("world backend unavailable for world deps on macOS"),
+        "stderr missing macOS backend unavailable guidance: {}",
+        stderr
+    );
+    assert!(
+        stderr.contains("substrate world doctor --json"),
+        "stderr missing world doctor guidance: {}",
+        stderr
+    );
+    assert!(
+        !fixture.guest_marker_exists("git"),
+        "sync should not mutate guest markers when backend is unavailable"
+    );
+    assert!(
+        fixture.executor_log().is_empty(),
+        "sync should not execute guest recipes on the host: {}",
+        fixture.executor_log()
+    );
+    assert!(
+        fixture.guest_log().is_empty(),
+        "guest detection should not fall back to host: {}",
+        fixture.guest_log()
     );
 }
 
