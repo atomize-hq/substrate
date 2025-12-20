@@ -138,6 +138,12 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Plan: tighten macOS world deps backend availability handling to fail install/sync without guest, surface guest-unavailable status details, keep output actionable (doctor/forwarding hints), run `cargo fmt`/`cargo clippy --workspace --all-targets -- -D warnings`, commit via worktree, update docs/tasks/log at end
 - Blockers: none
 
+## [2025-12-20 02:52 UTC] Code Agent – M6-code – END
+- Worktree `wt/mp-m6-world-deps-safety-code` on branch `mp-m6-world-deps-safety-code` (commit 0467902)
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass)
+- Results: macOS world deps install/sync now error when the world backend is unreachable (no host fallback); status marks guest probes as backend unavailable with reason; errors include `substrate world doctor --json` + forwarding guidance while non-mac fallback behavior remains unchanged
+- Blockers: none
+
 ## [2025-12-19 14:39 UTC] Test Agent – M4-test – START
 - Checked out `feat/p0-platform-stability-macOS-parity`, ran `git pull --ff-only` (up to date), read plan/tasks/session log/M4-spec/kickoff prompt
 - Updated `tasks.json` (`M4-test` → `in_progress`) per checklist; scope confirmed: tests/fixtures only for world-deps manifest resolution (installed vs workspace) and `SUBSTRATE_WORLD_DEPS_MANIFEST` override behavior
