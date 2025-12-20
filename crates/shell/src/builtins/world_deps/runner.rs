@@ -1,4 +1,7 @@
-use super::guest::{detect_guest, detect_host, run_guest_install, world_exec_fallback_active};
+use super::guest::{
+    detect_guest, detect_host, macos_world_deps_unavailable_error, run_guest_install,
+    world_exec_fallback_active, WorldBackendUnavailable,
+};
 use super::models::{
     sanitize_reason, GuestProbe, ManifestLayerInfo, WorldDepGuestStatus, WorldDepStatusEntry,
     WorldDepsManifestInfo, WorldDepsOverlayInfo, WorldDepsStatusReport,
@@ -498,14 +501,33 @@ impl WorldDepsRunner {
 
         match detect_guest(&tool.guest.commands) {
             Ok(result) => GuestProbe::Available(result),
-            Err(err) => GuestProbe::Skipped(format!("{:#}", err)),
+            Err(err) => {
+                if let Some(unavailable) = err.downcast_ref::<WorldBackendUnavailable>() {
+                    GuestProbe::Unavailable(format!(
+                        "backend unavailable: {}",
+                        unavailable.reason()
+                    ))
+                } else {
+                    GuestProbe::Skipped(format!("{:#}", err))
+                }
+            }
         }
     }
 
     fn ensure_guest_state(&self, tool: &WorldDepTool) -> Result<bool> {
         detect_guest(&tool.guest.commands)
+            .map_err(map_guest_unavailable_error)
             .with_context(|| format!("failed to detect `{}` inside the world backend", tool.name))
     }
+}
+
+fn map_guest_unavailable_error(err: anyhow::Error) -> anyhow::Error {
+    if cfg!(target_os = "macos") {
+        if let Some(unavailable) = err.downcast_ref::<WorldBackendUnavailable>() {
+            return macos_world_deps_unavailable_error(unavailable.reason());
+        }
+    }
+    err
 }
 
 fn print_status_table(entries: &[WorldDepStatusEntry]) {
