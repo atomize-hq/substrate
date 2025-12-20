@@ -284,3 +284,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Read plan/tasks/session log/M6-spec/kickoff prompt; updated `tasks.json` (`M6-integ` → `in_progress`)
 - Next steps: commit this START docs update (`docs: start M6-integ`), create branch/worktree `mp-m6-world-deps-safety-integ`/`wt/mp-m6-world-deps-safety-integ`, merge `mp-m6-world-deps-safety-code` + `mp-m6-world-deps-safety-test`, reconcile to M6-spec, run required commands, record outputs in END entry
 - Blockers: none
+
+## [2025-12-20 03:06 UTC] Integration Agent – M6-integ – END
+- Worktree `wt/mp-m6-world-deps-safety-integ` merged `mp-m6-world-deps-safety-code` + `mp-m6-world-deps-safety-test`, reconciled to M6-spec, and fast-forwarded `feat/p0-platform-stability-macOS-parity` (integration head commit bab1725)
+- Reconciliation: macOS install/sync now error when backend unreachable with doctor guidance; status marks guest unavailable with backend reason; host fallback warnings remain for other platforms
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass – `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in 10.46s`); `cargo test -p substrate-shell --test world_deps -- --nocapture` (pass – 12 tests); `make preflight` (pass – ran fmt/clippy/clean/check/test; `cargo clean` removed 8748 files, 2.9GiB)
+- Blockers: none
