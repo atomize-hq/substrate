@@ -924,7 +924,7 @@
     "name": "World deps failure safety (test)",
     "type": "test",
     "phase": "M6",
-    "status": "pending",
+    "status": "in_progress",
     "description": "Add tests/fixtures validating macOS world deps does not silently fall back to host execution for install/sync, per M6-spec.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
