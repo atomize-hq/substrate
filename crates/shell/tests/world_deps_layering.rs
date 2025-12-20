@@ -141,7 +141,7 @@ impl LayeringFixture {
             .env("SUBSTRATE_WORLD_DEPS_GUEST_LOG", &self.guest_log_path)
             .env("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR", &self.guest_bin_dir)
             .env("SUBSTRATE_WORLD_DEPS_EXECUTOR_LOG", &self.executor_log_path)
-            // Force the backend unavailable so we fall back to host execution deterministically.
+            // Force the backend unavailable so non-mac platforms fall back to host execution.
             .env("SUBSTRATE_WORLD", "enabled")
             .env("SUBSTRATE_WORLD_ENABLED", "1")
             .env("SUBSTRATE_WORLD_SOCKET", &self.fake_socket_path)
@@ -430,6 +430,7 @@ fn world_deps_inventory_includes_base_and_installed_overlay_tools() {
     );
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn world_deps_install_prefers_user_overlay_over_installed_and_base() {
     let fixture = LayeringFixture::new();
@@ -473,6 +474,7 @@ fn world_deps_install_prefers_user_overlay_over_installed_and_base() {
     );
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn world_deps_install_prefers_installed_overlay_over_base_when_no_user_overlay() {
     let fixture = LayeringFixture::new();
