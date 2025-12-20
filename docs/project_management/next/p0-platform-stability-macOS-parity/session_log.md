@@ -207,6 +207,12 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Next steps: commit docs (`docs: start M6-test`), create branch/worktree `mp-m6-world-deps-safety-test`/`wt/mp-m6-world-deps-safety-test`, add deterministic fixtures/tests for backend-unavailable flows, run `cargo fmt` + targeted `cargo test ...`, capture outputs for END log
 - Blockers: none
 
+## [2025-12-20 03:00 UTC] Test Agent – M6-test – END
+- Worktree `wt/mp-m6-world-deps-safety-test` on branch `mp-m6-world-deps-safety-test` (commit 941b480) adds macOS-only world deps tests covering backend-unavailable status plus install/sync failure without host fallback
+- Commands: `cargo fmt` (pass); `cargo test -p substrate-shell --test world_deps` (pass – 12 tests; mac-only tests are `#[cfg(target_os = "macos")]` and do not execute on Linux)
+- Results: new coverage asserts `world deps status --json` reports guest `unavailable` when the backend cannot be reached on macOS and `world deps install/sync` fails with doctor/forwarding guidance while leaving guest markers/logs untouched
+- Blockers: none
+
 ## [2025-12-19 16:11 UTC] Integration Agent – M5a-integ – END
 - Worktree `wt/mp-m5a-world-deps-inventory-integ` merged `mp-m5a-world-deps-inventory-code` + `mp-m5a-world-deps-inventory-test`, reconciled to M5a-spec, and fast-forwarded `feat/p0-platform-stability-macOS-parity` (integration head commit a660722)
 - Reconciliation: fixed `world deps sync --all` test hang by constraining the test fixture inventory via `SUBSTRATE_MANAGER_MANIFEST` (so sync only covers the intended tools), and updated shim doctor/health world deps fixtures to the new `WorldDepsStatusReport` schema (`manifest.inventory`/`manifest.overlays` + `manifest.layers`)
