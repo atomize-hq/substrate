@@ -278,3 +278,9 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Worktree `wt/mp-m5c-world-deps-first-run-test` on branch `mp-m5c-world-deps-first-run-test` (commit d4808df) adds a sync-deps installer fixture scenario, a world deps sync skip regression, and health recommendation parity assertions.
 - Commands: `cargo fmt` (pass); `cargo test -p substrate-shell --test shim_health -- --nocapture` (pass); `cargo test -p substrate-shell --test world_deps -- --nocapture` (fail – `world_deps_sync_skips_missing_host_tools_without_all_flag` expects an explicit skip message but output says “All tracked tools are already available inside the guest.” plus backend fallback warning); `tests/mac/installer_parity_fixture.sh --scenario sync-deps` (pass – logs at `/tmp/substrate-mac-installer-sync-deps.26D4Cl`).
 - Blockers: M5c-code should update `world deps sync` messaging to avoid claiming all tools are present when host detection skips missing tools; rerun world_deps test after integration.
+
+## [2025-12-20 03:02 UTC] Integration Agent – M6-integ – START
+- Checked out `feat/p0-platform-stability-macOS-parity`, `git pull --ff-only` (already up to date)
+- Read plan/tasks/session log/M6-spec/kickoff prompt; updated `tasks.json` (`M6-integ` → `in_progress`)
+- Next steps: commit this START docs update (`docs: start M6-integ`), create branch/worktree `mp-m6-world-deps-safety-integ`/`wt/mp-m6-world-deps-safety-integ`, merge `mp-m6-world-deps-safety-code` + `mp-m6-world-deps-safety-test`, reconcile to M6-spec, run required commands, record outputs in END entry
+- Blockers: none

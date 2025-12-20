@@ -966,7 +966,7 @@
     "name": "World deps failure safety (integration)",
     "type": "integration",
     "phase": "M6",
-    "status": "pending",
+    "status": "in_progress",
     "description": "Merge M6 code/test, reconcile macOS world deps failure safety to M6-spec, and gate with fmt/clippy/tests/make preflight.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
