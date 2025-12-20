@@ -131,6 +131,13 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 - Result: first-run sync wiring uses safe defaults; health/installer guidance aligned to world deps sync semantics while keeping host-missing installs gated behind `--all`.
 - Blockers: none
 
+## [2025-12-20 02:41 UTC] Code Agent – M6-code – START
+- Checked out `feat/p0-platform-stability-macOS-parity`, `git pull --ff-only` (up to date), read plan/tasks/session log/M6-spec/kickoff prompt
+- Updated `tasks.json` (`M6-code` → `in_progress`)
+- Worktree pending (`mp-m6-world-deps-safety-code` to be added after docs commit)
+- Plan: tighten macOS world deps backend availability handling to fail install/sync without guest, surface guest-unavailable status details, keep output actionable (doctor/forwarding hints), run `cargo fmt`/`cargo clippy --workspace --all-targets -- -D warnings`, commit via worktree, update docs/tasks/log at end
+- Blockers: none
+
 ## [2025-12-19 14:39 UTC] Test Agent – M4-test – START
 - Checked out `feat/p0-platform-stability-macOS-parity`, ran `git pull --ff-only` (up to date), read plan/tasks/session log/M4-spec/kickoff prompt
 - Updated `tasks.json` (`M4-test` → `in_progress`) per checklist; scope confirmed: tests/fixtures only for world-deps manifest resolution (installed vs workspace) and `SUBSTRATE_WORLD_DEPS_MANIFEST` override behavior

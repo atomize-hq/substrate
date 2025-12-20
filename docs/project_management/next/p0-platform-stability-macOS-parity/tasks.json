@@ -882,7 +882,7 @@
     "name": "World deps failure safety (code)",
     "type": "code",
     "phase": "M6",
-    "status": "pending",
+    "status": "in_progress",
     "description": "Ensure macOS world deps install/sync fail when the backend is unavailable (no silent host fallback) and status clearly reports guest unavailability, per M6-spec.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
