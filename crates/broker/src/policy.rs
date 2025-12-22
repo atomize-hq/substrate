@@ -2,25 +2,37 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use substrate_common::WorldFsMode;
 
+fn default_fs_read() -> Vec<String> {
+    vec!["*".to_string()]
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Policy {
     pub id: String,
     pub name: String,
 
     // Filesystem
-    pub fs_read: Vec<String>,  // Paths that can be read
+    #[serde(default = "default_fs_read")]
+    pub fs_read: Vec<String>, // Paths that can be read
+    #[serde(default)]
     pub fs_write: Vec<String>, // Paths that can be written
 
     // Network
+    #[serde(default)]
     pub net_allowed: Vec<String>, // Allowed hosts/domains
 
     // Commands
-    pub cmd_allowed: Vec<String>,  // Allowed command patterns
-    pub cmd_denied: Vec<String>,   // Denied command patterns
+    #[serde(default)]
+    pub cmd_allowed: Vec<String>, // Allowed command patterns
+    #[serde(default)]
+    pub cmd_denied: Vec<String>, // Denied command patterns
+    #[serde(default)]
     pub cmd_isolated: Vec<String>, // Commands to run in isolated world
 
     // Behavior
+    #[serde(default)]
     pub require_approval: bool,
+    #[serde(default = "default_allow_shell_operators")]
     pub allow_shell_operators: bool,
     #[serde(default)]
     pub world_fs_mode: WorldFsMode,
@@ -60,6 +72,10 @@ impl Default for Policy {
             metadata: None,
         }
     }
+}
+
+fn default_allow_shell_operators() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

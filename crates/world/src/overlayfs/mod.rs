@@ -9,6 +9,7 @@ use std::process::Child;
 
 use anyhow::{Context, Result};
 use substrate_common::FsDiff;
+use world_api::WorldFsMode;
 
 mod layering;
 mod utils;
@@ -69,6 +70,10 @@ impl OverlayFs {
             return Ok(self.merged_dir.clone());
         }
 
+        // Ensure stale mount state does not leak across unmount/remount cycles.
+        self.using_fuse = false;
+        self.fuse_child = None;
+
         layering::prepare_overlay_dirs(&self.upper_dir, &self.work_dir, &self.merged_dir)?;
 
         #[cfg(target_os = "linux")]
@@ -93,6 +98,10 @@ impl OverlayFs {
         if self.is_mounted {
             return Ok(self.merged_dir.clone());
         }
+
+        // Ensure stale mount state does not leak across unmount/remount cycles.
+        self.using_fuse = false;
+        self.fuse_child = None;
 
         #[cfg(target_os = "linux")]
         {
@@ -159,6 +168,8 @@ impl OverlayFs {
         layering::unmount_linux(self)?;
 
         self.is_mounted = false;
+        self.using_fuse = false;
+        self.fuse_child = None;
         Ok(())
     }
 
@@ -254,23 +265,47 @@ pub fn execute_with_overlay(
 
     let merged_dir = overlay.mount(project_dir)?;
 
-    let mut rel = if cwd.starts_with(project_dir) {
-        cwd.strip_prefix(project_dir)
-            .unwrap_or_else(|_| Path::new("."))
-            .to_path_buf()
-    } else {
-        PathBuf::from(".")
-    };
-    if rel.as_os_str().is_empty() {
-        rel = PathBuf::from(".");
-    }
-    let target_dir = merged_dir.join(&rel);
     let mut command_to_run = cmd.to_string();
     if should_guard_anchor(env) {
-        command_to_run = wrap_with_anchor_guard(cmd, &merged_dir);
+        command_to_run = wrap_with_anchor_guard(cmd, project_dir);
     }
-    let output = crate::exec::execute_shell_command(&command_to_run, &target_dir, env, true)
-        .context("Failed to execute command in overlay")?;
+    let desired_cwd = if cwd.starts_with(project_dir) {
+        cwd.to_path_buf()
+    } else {
+        project_dir.to_path_buf()
+    };
+    let output = match crate::exec::execute_shell_command_with_project_bind_mount(
+        &command_to_run,
+        crate::exec::ProjectBindMount {
+            merged_dir: &merged_dir,
+            project_dir,
+            desired_cwd: &desired_cwd,
+            fs_mode: WorldFsMode::Writable,
+        },
+        env,
+        true,
+    ) {
+        Ok(output) => output,
+        Err(err) => {
+            let mut rel = if cwd.starts_with(project_dir) {
+                cwd.strip_prefix(project_dir)
+                    .unwrap_or_else(|_| Path::new("."))
+                    .to_path_buf()
+            } else {
+                PathBuf::from(".")
+            };
+            if rel.as_os_str().is_empty() {
+                rel = PathBuf::from(".");
+            }
+            let target_dir = merged_dir.join(&rel);
+            crate::exec::execute_shell_command(&command_to_run, &target_dir, env, true)
+                .with_context(|| {
+                    format!(
+                        "Failed to execute command in overlay after mount-namespace bind failed: {err:#}"
+                    )
+                })?
+        }
+    };
 
     let diff = overlay.compute_diff()?;
 
@@ -290,23 +325,33 @@ pub fn execute_read_only(
     let mut overlay = OverlayFs::new(world_id)?;
     let merged_dir = overlay.mount_read_only(project_dir)?;
 
-    let mut rel = if cwd.starts_with(project_dir) {
-        cwd.strip_prefix(project_dir)
-            .unwrap_or_else(|_| Path::new("."))
-            .to_path_buf()
-    } else {
-        PathBuf::from(".")
-    };
-    if rel.as_os_str().is_empty() {
-        rel = PathBuf::from(".");
-    }
-    let target_dir = merged_dir.join(&rel);
     let mut command_to_run = cmd.to_string();
     if should_guard_anchor(env) {
-        command_to_run = wrap_with_anchor_guard(cmd, &merged_dir);
+        command_to_run = wrap_with_anchor_guard(cmd, project_dir);
     }
-    let output = crate::exec::execute_shell_command(&command_to_run, &target_dir, env, true)
-        .context("Failed to execute command in read-only overlay")?;
+    let desired_cwd = if cwd.starts_with(project_dir) {
+        cwd.to_path_buf()
+    } else {
+        project_dir.to_path_buf()
+    };
+    let output = match crate::exec::execute_shell_command_with_project_bind_mount(
+        &command_to_run,
+        crate::exec::ProjectBindMount {
+            merged_dir: &merged_dir,
+            project_dir,
+            desired_cwd: &desired_cwd,
+            fs_mode: WorldFsMode::ReadOnly,
+        },
+        env,
+        true,
+    ) {
+        Ok(output) => output,
+        Err(err) => {
+            return Err(err).context(
+                "failed to enforce read-only overlay via mount-namespace bind; refusing to run with possible absolute-path escape",
+            );
+        }
+    };
 
     overlay.cleanup()?;
 
@@ -466,6 +511,42 @@ mod tests {
                 .unwrap_or(None)
                 .is_none(),
             "bind mount should be detached during cleanup"
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn read_only_mount_blocks_writes_without_root() {
+        if !nix::unistd::Uid::current().is_root() {
+            println!("Skipping read-only overlay mount test (requires root)");
+            return;
+        }
+
+        let temp_dir = TempDir::new().unwrap();
+        let lower_dir = temp_dir.path();
+
+        let mut overlay = OverlayFs::new("test_ro_mount").unwrap();
+        let merged = match overlay.mount_read_only(lower_dir) {
+            Ok(path) => path,
+            Err(err) => {
+                let message = err.to_string();
+                if message.contains("fuse-overlayfs") || message.contains("/dev/fuse") {
+                    println!("Skipping read-only overlay mount test: {}", message);
+                    return;
+                }
+                // Some CI environments disallow mounts entirely.
+                if message.contains("Operation not permitted") || message.contains("EPERM") {
+                    println!("Skipping read-only overlay mount test (EPERM): {}", message);
+                    return;
+                }
+                panic!("Unexpected error mounting read-only overlay: {:#}", err);
+            }
+        };
+
+        let write_attempt = std::fs::write(merged.join("should_not_write.txt"), b"nope");
+        assert!(
+            write_attempt.is_err(),
+            "expected write to fail on read-only overlay mount"
         );
     }
 }

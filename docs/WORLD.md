@@ -187,6 +187,27 @@ Notes
 - Fallback
   - Exactly one warning is printed if the world cannot be reached; execution continues on the host in that situation.
 
+### World Dependencies (`world deps`)
+
+`substrate world deps` mirrors common dev tool managers (nvm/pyenv/bun/etc) into
+the guest so commands behave the same way in-world as they do on the host.
+
+- `substrate world deps status [--all] [TOOL...]` shows host/guest availability.
+  With no tool arguments, it defaults to host-present inventory entries; use
+  `--all` to include host-missing entries.
+- `substrate world deps sync [--all]` installs missing guest tools.
+  Default behavior only installs tools detected on the host; `--all` forces
+  installs even when the tool is host-missing.
+- `substrate world deps install <TOOL...>` installs specific tools inside the
+  guest using the manifest recipes (provider label `custom` means “run the
+  bundled shell recipe”, not that Substrate updates the tool automatically).
+
+Manifests:
+- Inventory base: `.../config/manager_hooks.yaml` (or workspace `config/manager_hooks.yaml`)
+- Overlays: `~/.substrate/manager_hooks.local.yaml`, `.../config/world-deps.yaml`
+  (or workspace `scripts/substrate/world-deps.yaml`), `~/.substrate/world-deps.local.yaml`
+  (`*.local.yaml` may be missing; the bundled `world-deps.yaml` may be empty).
+
 ---
 
 ## 7) Logging & Telemetry

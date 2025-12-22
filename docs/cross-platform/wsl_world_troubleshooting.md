@@ -36,7 +36,8 @@ world_only_managers        : {bun}
 ```
 
 `attention_required_managers` lists host-present/world-missing managers (fix by
-running `substrate world deps sync --all` once WSL is healthy). `world_only_managers`
+running `substrate world deps sync` once WSL is healthy; add `--all` only if you
+want to force guest installs for tools missing on the host). `world_only_managers`
 shows tools that exist only in the guest (install them on Windows via
 `substrate shim repair --manager <name> --yes` or your preferred package
 manager).

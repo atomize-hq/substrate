@@ -233,10 +233,9 @@ impl MacLimaBackend {
             .lock()
             .map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
         if forwarding.is_none() {
-            eprintln!("DEBUG: Setting up forwarding for VM '{}'", self.vm_name);
-            tracing::info!("Setting up forwarding for VM '{}'", self.vm_name);
+            tracing::debug!("Setting up forwarding for VM '{}'", self.vm_name);
             let handle = forwarding::auto_select(&self.vm_name)?;
-            eprintln!("DEBUG: Forwarding established: {:?}", handle.kind());
+            tracing::debug!("Forwarding established: {:?}", handle.kind());
             *forwarding = Some(handle);
         }
         Ok(())

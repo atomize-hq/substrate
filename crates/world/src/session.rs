@@ -175,23 +175,55 @@ impl SessionWorld {
             || self.should_isolate_command(cmd)
         {
             let merged_dir = self.ensure_overlay_mounted()?;
-            let mut rel = if cwd.starts_with(&self.project_dir) {
-                cwd.strip_prefix(&self.project_dir)
-                    .unwrap_or_else(|_| Path::new("."))
-                    .to_path_buf()
+            let desired_cwd = if cwd.starts_with(&self.project_dir) {
+                cwd.to_path_buf()
             } else {
-                PathBuf::from(".")
+                self.project_dir.clone()
             };
-            if rel.as_os_str().is_empty() {
-                rel = PathBuf::from(".");
-            }
-            let target_dir = merged_dir.join(&rel);
             let mut command_to_run = cmd.to_string();
             if crate::guard::should_guard_anchor(&env) {
-                command_to_run = crate::guard::wrap_with_anchor_guard(cmd, &merged_dir);
+                command_to_run = crate::guard::wrap_with_anchor_guard(cmd, &self.project_dir);
             }
-            output = crate::exec::execute_shell_command(&command_to_run, &target_dir, &env, true)
-                .context("Failed to execute command in overlay")?;
+            output = match crate::exec::execute_shell_command_with_project_bind_mount(
+                &command_to_run,
+                crate::exec::ProjectBindMount {
+                    merged_dir: &merged_dir,
+                    project_dir: &self.project_dir,
+                    desired_cwd: &desired_cwd,
+                    fs_mode: self.spec.fs_mode,
+                },
+                &env,
+                true,
+            ) {
+                Ok(output) => output,
+                Err(err) => {
+                    // If mount namespaces are unavailable (e.g., user namespaces disabled),
+                    // enforce safety for read-only mode by failing closed (otherwise the
+                    // caller could bypass read-only by using absolute paths).
+                    if self.spec.fs_mode == WorldFsMode::ReadOnly {
+                        return Err(err).context(
+                            "failed to enforce read-only world via mount-namespace bind; refusing to run with possible absolute-path escape",
+                        );
+                    }
+
+                    // Otherwise, fall back to the older behavior (cwd inside the overlay root).
+                    // This preserves functionality but may allow absolute-path escapes into the
+                    // host project directory.
+                    let mut rel = if cwd.starts_with(&self.project_dir) {
+                        cwd.strip_prefix(&self.project_dir)
+                            .unwrap_or_else(|_| Path::new("."))
+                            .to_path_buf()
+                    } else {
+                        PathBuf::from(".")
+                    };
+                    if rel.as_os_str().is_empty() {
+                        rel = PathBuf::from(".");
+                    }
+                    let target_dir = merged_dir.join(&rel);
+                    crate::exec::execute_shell_command(&command_to_run, &target_dir, &env, true)
+                        .with_context(|| format!("Failed to execute command in overlay after mount-namespace bind failed: {err:#}"))?
+                }
+            };
 
             if self.spec.fs_mode == WorldFsMode::ReadOnly {
                 diff_opt = Some(FsDiff::default());
@@ -273,28 +305,47 @@ impl SessionWorld {
             .expect("overlay should be initialized above");
 
         if !overlay.is_mounted() {
-            overlay.mount(&self.project_dir)?;
+            if desired_mode == WorldFsMode::ReadOnly {
+                overlay.mount_read_only(&self.project_dir)?;
+            } else {
+                overlay.mount(&self.project_dir)?;
+            }
+            self.overlay_mode = Some(desired_mode);
+            return Ok(overlay.merged_dir_path().to_path_buf());
         }
 
-        if self.overlay_mode != Some(desired_mode)
-            && (desired_mode == WorldFsMode::ReadOnly || self.overlay_mode.is_some())
-        {
+        if self.overlay_mode != Some(desired_mode) {
             if desired_mode == WorldFsMode::ReadOnly {
-                #[cfg(target_os = "linux")]
-                overlay
-                    .remount_read_only()
-                    .context("Failed to remount overlay read-only")?;
-                #[cfg(not(target_os = "linux"))]
-                anyhow::bail!("read-only overlay remount is only supported on Linux");
+                // fuse-overlayfs does not reliably honor MS_RDONLY remount semantics, so rebuild the mount.
+                if overlay.is_using_fuse() {
+                    overlay.unmount().context("Failed to unmount overlay")?;
+                    overlay
+                        .mount_read_only(&self.project_dir)
+                        .context("Failed to mount read-only overlay")?;
+                } else {
+                    #[cfg(target_os = "linux")]
+                    overlay
+                        .remount_read_only()
+                        .context("Failed to remount overlay read-only")?;
+                    #[cfg(not(target_os = "linux"))]
+                    anyhow::bail!("read-only overlay remount is only supported on Linux");
+                }
             } else {
-                #[cfg(target_os = "linux")]
-                overlay
-                    .remount_writable()
-                    .context("Failed to remount overlay writable")?;
+                // Switching from a read-only lower-only mount back to writable requires a full remount.
+                if self.overlay_mode == Some(WorldFsMode::ReadOnly) {
+                    overlay.unmount().context("Failed to unmount overlay")?;
+                    overlay
+                        .mount(&self.project_dir)
+                        .context("Failed to mount writable overlay")?;
+                } else {
+                    #[cfg(target_os = "linux")]
+                    overlay
+                        .remount_writable()
+                        .context("Failed to remount overlay writable")?;
+                }
             }
             self.overlay_mode = Some(desired_mode);
         } else if self.overlay_mode.is_none() {
-            // Record the initial mode without forcing an extra remount.
             self.overlay_mode = Some(desired_mode);
         }
 

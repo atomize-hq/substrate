@@ -83,6 +83,22 @@ allow_shell_operators: true
 }
 
 #[test]
+fn minimal_profile_parses_with_defaults() {
+    let raw = r#"
+id: minimal
+name: Minimal Profile
+world_fs_mode: read_only
+cmd_denied: ["ls"]
+"#;
+
+    let policy: Policy = serde_yaml::from_str(raw).expect("policy should parse");
+    assert_eq!(policy.id, "minimal");
+    assert_eq!(policy.world_fs_mode, WorldFsMode::ReadOnly);
+    assert_eq!(policy.fs_read, vec!["*".to_string()]);
+    assert!(policy.fs_write.is_empty());
+}
+
+#[test]
 fn poisoned_policy_lock_returns_error_in_evaluate() {
     let broker = Broker::new();
     poison_rwlock(&broker.policy);

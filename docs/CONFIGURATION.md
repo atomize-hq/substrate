@@ -46,10 +46,11 @@ Environment variables and advanced configuration options for Substrate.
 | `SUBSTRATE_SHIM_HINTS` | Disable/enable shim hint emission | `1` | `0` |
 | `SUBSTRATE_POLICY_GIT_CACHE` | Cache policy repo git hash across commands (`0`/`false` disables caching per process) | `1` | `0` |
 
-Release bundles place the base manifests under
-`<prefix>/versions/<version>/config/` (`manager_hooks.yaml` and
-`world-deps.yaml`). Workspace builds fall back to `config/manager_hooks.yaml`
-and `scripts/substrate/world-deps.yaml` in the repository root.
+Release bundles place the manager inventory under
+`<prefix>/versions/<version>/config/manager_hooks.yaml`, plus a `world deps`
+overlay manifest at `<prefix>/versions/<version>/config/world-deps.yaml`.
+Workspace builds fall back to `config/manager_hooks.yaml` and
+`scripts/substrate/world-deps.yaml` in the repository root.
 
 ## World Configuration
 

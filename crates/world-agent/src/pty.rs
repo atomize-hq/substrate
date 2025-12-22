@@ -11,8 +11,6 @@ use portable_pty::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
-#[cfg(target_os = "linux")]
-use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -192,7 +190,7 @@ pub async fn handle_ws_pty(
         None => return, // Connection closed
     };
 
-    let (cmd, cwd, env, _span_id, cols, rows) = start_msg;
+    let (cmd, cwd, mut env, _span_id, cols, rows) = start_msg;
     #[cfg(target_os = "linux")]
     let mut command_to_run = cmd.clone();
     #[cfg(not(target_os = "linux"))]
@@ -255,8 +253,9 @@ pub async fn handle_ws_pty(
             fs_mode,
         };
 
+        let merged_dir: PathBuf;
         match service.ensure_session_overlay_root(&spec) {
-            Ok((world, merged_dir)) => {
+            Ok((world, merged)) => {
                 world_id_for_logs = Some(world.id.clone());
                 let ns_name = format!("substrate-{}", world.id);
                 let ns_path = format!("/var/run/netns/{}", ns_name);
@@ -266,16 +265,7 @@ pub async fn handle_ws_pty(
                 let cg = std::path::PathBuf::from("/sys/fs/cgroup/substrate").join(&world.id);
                 cgroup_path_opt = Some(cg);
                 in_world = true;
-
-                let rel = if cwd.starts_with(&project_dir) {
-                    cwd.strip_prefix(&project_dir)
-                        .unwrap_or_else(|_| Path::new("."))
-                        .to_path_buf()
-                } else {
-                    PathBuf::from(".")
-                };
-                cwd_for_child = merged_dir.join(rel);
-                anchor_root = merged_dir;
+                merged_dir = merged;
             }
             Err(err) => {
                 let _ = send_ws_message(
@@ -289,9 +279,48 @@ pub async fn handle_ws_pty(
             }
         }
 
+        // Avoid inode escapes: don't start the PTY child inside the project dir before the bind mount.
+        cwd_for_child = PathBuf::from("/");
+        anchor_root = project_dir.clone();
+
+        // Bind-mount overlay root onto the real project path so absolute paths see the overlay.
+        let desired_cwd = if cwd.starts_with(&project_dir) {
+            cwd.clone()
+        } else {
+            project_dir.clone()
+        };
+        env.insert(
+            "SUBSTRATE_MOUNT_MERGED_DIR".to_string(),
+            merged_dir.display().to_string(),
+        );
+        env.insert(
+            "SUBSTRATE_MOUNT_PROJECT_DIR".to_string(),
+            project_dir.display().to_string(),
+        );
+        env.insert(
+            "SUBSTRATE_MOUNT_CWD".to_string(),
+            desired_cwd.display().to_string(),
+        );
+        env.insert(
+            "SUBSTRATE_MOUNT_FS_MODE".to_string(),
+            fs_mode.as_str().to_string(),
+        );
+
         if should_guard_anchor(&env) {
             command_to_run = wrap_with_anchor_guard(&command_to_run, &anchor_root);
         }
+        env.insert("SUBSTRATE_INNER_CMD".to_string(), command_to_run.clone());
+
+        command_to_run = r#"set -eu
+mount --make-rprivate /
+mount --bind "$SUBSTRATE_MOUNT_MERGED_DIR" "$SUBSTRATE_MOUNT_PROJECT_DIR"
+if [ "${SUBSTRATE_MOUNT_FS_MODE:-writable}" = "read_only" ]; then
+  mount -o remount,bind,ro "$SUBSTRATE_MOUNT_PROJECT_DIR"
+fi
+cd "$SUBSTRATE_MOUNT_CWD"
+exec sh -lc "$SUBSTRATE_INNER_CMD"
+"#
+        .to_string();
     }
 
     // Create PTY
@@ -315,19 +344,33 @@ pub async fn handle_ws_pty(
         }
     };
 
-    // Spawn command (under netns when available)
-    let mut cmd_builder = CommandBuilder::new("sh");
     #[cfg(target_os = "linux")]
-    if let Some(ref ns_name) = ns_name_opt {
-        cmd_builder = CommandBuilder::new("ip");
-        cmd_builder.args(["netns", "exec", ns_name, "sh", "-lc", &command_to_run]);
+    let mut cmd_builder = if let Some(ref ns_name) = ns_name_opt {
+        let mut builder = CommandBuilder::new("ip");
+        builder.args([
+            "netns",
+            "exec",
+            ns_name,
+            "unshare",
+            "--mount",
+            "--fork",
+            "--",
+            "sh",
+            "-c",
+            &command_to_run,
+        ]);
+        builder
     } else {
-        cmd_builder.args(["-lc", &command_to_run]);
-    }
+        let mut builder = CommandBuilder::new("unshare");
+        builder.args(["--mount", "--fork", "--", "sh", "-c", &command_to_run]);
+        builder
+    };
     #[cfg(not(target_os = "linux"))]
-    {
-        cmd_builder.args(["-lc", &command_to_run]);
-    }
+    let mut cmd_builder = {
+        let mut builder = CommandBuilder::new("sh");
+        builder.args(["-lc", &command_to_run]);
+        builder
+    };
     cmd_builder.cwd(&cwd_for_child);
     for (key, value) in env {
         cmd_builder.env(key, value);
