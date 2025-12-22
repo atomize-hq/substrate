@@ -8,7 +8,6 @@ use std::path::Path;
 use std::process::{Command, Output, Stdio};
 use std::thread;
 use tracing::warn;
-#[cfg(target_os = "linux")]
 use world_api::WorldFsMode;
 
 /// Execute `cmd` via `sh -lc` in the provided directory/environment, pushing
@@ -62,7 +61,6 @@ pub fn execute_shell_command(
     })
 }
 
-#[cfg(target_os = "linux")]
 pub struct ProjectBindMount<'a> {
     pub merged_dir: &'a Path,
     pub project_dir: &'a Path,
@@ -70,21 +68,34 @@ pub struct ProjectBindMount<'a> {
     pub fs_mode: WorldFsMode,
 }
 
-#[cfg(target_os = "linux")]
 pub fn execute_shell_command_with_project_bind_mount(
     cmd: &str,
     mount: ProjectBindMount<'_>,
     env: &HashMap<String, String>,
     login_shell: bool,
 ) -> Result<Output> {
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = cmd;
+        let _ = mount;
+        let _ = env;
+        let _ = login_shell;
+        return Err(anyhow!(
+            "project bind mount enforcement is only supported on Linux"
+        ));
+    }
+
+    #[cfg(target_os = "linux")]
     use nix::unistd::Uid;
 
+    #[cfg(target_os = "linux")]
     // Outer script: establish a private mount namespace, bind the overlay root onto the
     // project path, optionally remount read-only, then cd into the desired cwd and exec the
     // requested command via sh.
     //
     // We avoid setting the child's cwd via Command::current_dir() because holding an inode
     // reference into the host project dir would bypass the bind mount (absolute-path escape).
+    #[cfg(target_os = "linux")]
     let script = r#"set -eu
 mount --make-rprivate /
 mount --bind "$SUBSTRATE_MOUNT_MERGED_DIR" "$SUBSTRATE_MOUNT_PROJECT_DIR"
@@ -99,24 +110,31 @@ else
 fi
 "#;
 
+    #[cfg(target_os = "linux")]
     let mut env_map = env.clone();
+    #[cfg(target_os = "linux")]
     env_map.insert(
         "SUBSTRATE_MOUNT_MERGED_DIR".to_string(),
         mount.merged_dir.display().to_string(),
     );
+    #[cfg(target_os = "linux")]
     env_map.insert(
         "SUBSTRATE_MOUNT_PROJECT_DIR".to_string(),
         mount.project_dir.display().to_string(),
     );
+    #[cfg(target_os = "linux")]
     env_map.insert(
         "SUBSTRATE_MOUNT_CWD".to_string(),
         mount.desired_cwd.display().to_string(),
     );
+    #[cfg(target_os = "linux")]
     env_map.insert(
         "SUBSTRATE_MOUNT_FS_MODE".to_string(),
         mount.fs_mode.as_str().to_string(),
     );
+    #[cfg(target_os = "linux")]
     env_map.insert("SUBSTRATE_INNER_CMD".to_string(), cmd.to_string());
+    #[cfg(target_os = "linux")]
     env_map.insert(
         "SUBSTRATE_INNER_LOGIN_SHELL".to_string(),
         if login_shell {
@@ -126,9 +144,13 @@ fi
         },
     );
 
+    #[cfg(target_os = "linux")]
     let mut command = Command::new("unshare");
+    #[cfg(target_os = "linux")]
     command.arg("--mount");
+    #[cfg(target_os = "linux")]
     command.arg("--fork");
+    #[cfg(target_os = "linux")]
     if !Uid::effective().is_root() {
         // Best-effort: try to acquire mount privileges via user namespaces when unprivileged.
         // If user namespaces are disabled on the host, the command will fail and the caller
@@ -136,38 +158,55 @@ fi
         command.arg("--user");
         command.arg("--map-root-user");
     }
+    #[cfg(target_os = "linux")]
     command.arg("--");
+    #[cfg(target_os = "linux")]
     command.arg("sh");
+    #[cfg(target_os = "linux")]
     command.arg("-c");
+    #[cfg(target_os = "linux")]
     command.arg(script);
+    #[cfg(target_os = "linux")]
     command.current_dir("/");
+    #[cfg(target_os = "linux")]
     command.envs(env_map);
+    #[cfg(target_os = "linux")]
     command.stdout(Stdio::piped());
+    #[cfg(target_os = "linux")]
     command.stderr(Stdio::piped());
 
+    #[cfg(target_os = "linux")]
     let mut child = command
         .spawn()
         .with_context(|| format!("Failed to spawn command: {cmd}"))?;
 
+    #[cfg(target_os = "linux")]
     let stdout = child
         .stdout
         .take()
         .ok_or_else(|| anyhow!("Failed to capture stdout pipe"))?;
+    #[cfg(target_os = "linux")]
     let stderr = child
         .stderr
         .take()
         .ok_or_else(|| anyhow!("Failed to capture stderr pipe"))?;
 
+    #[cfg(target_os = "linux")]
     let stdout_handle = spawn_reader(stdout, StreamKind::Stdout);
+    #[cfg(target_os = "linux")]
     let stderr_handle = spawn_reader(stderr, StreamKind::Stderr);
 
+    #[cfg(target_os = "linux")]
     let status = child
         .wait()
         .context("Failed to wait for child process completion")?;
 
+    #[cfg(target_os = "linux")]
     let stdout_buf = join_reader(stdout_handle, "stdout");
+    #[cfg(target_os = "linux")]
     let stderr_buf = join_reader(stderr_handle, "stderr");
 
+    #[cfg(target_os = "linux")]
     Ok(Output {
         status,
         stdout: stdout_buf,
