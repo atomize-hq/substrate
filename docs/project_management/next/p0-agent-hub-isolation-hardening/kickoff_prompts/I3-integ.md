@@ -1,0 +1,31 @@
+# Task I3-integ (Full cage PTY parity) – INTEGRATION
+
+## Start Checklist (feat/p0-agent-hub-isolation-hardening)
+1. `git checkout feat/p0-agent-hub-isolation-hardening && git pull --ff-only`
+2. Read `plan.md`, `tasks.json`, `session_log.md`, `I3-spec.md`, and this prompt.
+3. Set `I3-integ` to `in_progress`, append START entry to `session_log.md`, commit docs (`docs: start I3-integ`).
+4. Create branch/worktree:
+   ```
+   git checkout -b ahih-i3-full-cage-pty-integ
+   git worktree add wt/ahih-i3-full-cage-pty-integ ahih-i3-full-cage-pty-integ
+   cd wt/ahih-i3-full-cage-pty-integ
+   ```
+
+## Duties
+- Merge `ahih-i3-full-cage-pty-code` and `ahih-i3-full-cage-pty-test`.
+- Reconcile any drift so behavior matches `I3-spec.md`.
+
+## Required Commands
+```
+cargo fmt
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test -p world-agent --tests -- --nocapture
+make preflight
+```
+
+## End Checklist
+1. Commit integration changes.
+2. Merge back to `feat/p0-agent-hub-isolation-hardening` (ff-only).
+3. Update `tasks.json` + `session_log.md` (END entry) and commit docs (`docs: finish I3-integ`).
+4. Remove worktree.
+
