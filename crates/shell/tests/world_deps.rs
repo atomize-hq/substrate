@@ -77,6 +77,7 @@ struct WorldDepsFixture {
     substrate_home: PathBuf,
     manager_manifest_path: PathBuf,
     manifest_path: PathBuf,
+    #[cfg(not(target_os = "macos"))]
     overlay_path: PathBuf,
     host_marker_dir: PathBuf,
     guest_marker_dir: PathBuf,
@@ -101,6 +102,7 @@ impl WorldDepsFixture {
         let substrate_home = home.join(".substrate");
         let manager_manifest_path = root.join("manifests/manager_hooks.yaml");
         let manifest_path = root.join("manifests/world-deps.yaml");
+        #[cfg(not(target_os = "macos"))]
         let overlay_path = substrate_home.join("world-deps.local.yaml");
         let host_marker_dir = root.join("markers/host");
         let guest_marker_dir = root.join("markers/guest");
@@ -131,6 +133,7 @@ impl WorldDepsFixture {
             substrate_home,
             manager_manifest_path,
             manifest_path,
+            #[cfg(not(target_os = "macos"))]
             overlay_path,
             host_marker_dir,
             guest_marker_dir,
@@ -250,6 +253,7 @@ impl WorldDepsFixture {
         fs::write(&self.manager_manifest_path, contents).expect("write manager manifest");
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn write_overlay_install_override(&self, tool: &str) {
         let marker_name = format!("overlay-{tool}");
         let script = self.install_script(tool, &marker_name);
@@ -353,6 +357,7 @@ impl WorldDepsFixture {
         fs::write(self.host_marker_path(tool), "host").expect("host marker write");
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn mark_guest_tool(&self, tool: &str) {
         fs::write(self.guest_marker_path(tool), "guest").expect("guest marker write");
     }
@@ -365,6 +370,7 @@ impl WorldDepsFixture {
         self.guest_marker_dir.join(tool)
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn overlay_marker_path(&self, tool: &str) -> PathBuf {
         self.guest_marker_dir.join(format!("overlay-{tool}"))
     }
@@ -373,6 +379,7 @@ impl WorldDepsFixture {
         self.guest_marker_path(tool).exists()
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn overlay_marker_exists(&self, tool: &str) -> bool {
         self.overlay_marker_path(tool).exists()
     }

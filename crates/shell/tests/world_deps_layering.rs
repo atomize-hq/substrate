@@ -159,10 +159,12 @@ impl LayeringFixture {
         cmd
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn mark_host_tool(&self, tool: &str) {
         fs::write(self.host_marker_dir.join(tool), "host").expect("host marker write");
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn marker_exists(&self, marker_name: &str) -> bool {
         self.guest_marker_dir.join(marker_name).exists()
     }
@@ -175,6 +177,7 @@ impl LayeringFixture {
         self.write_manifest(&self.installed_overlay_manifest, tools);
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn write_user_overlay_manifest(&self, tools: &[(&str, &str)]) {
         self.write_manifest(&self.user_overlay_manifest, tools);
     }
