@@ -1,6 +1,6 @@
 use super::guest::{
-    detect_guest, detect_host, macos_world_deps_unavailable_error, run_guest_install,
-    world_exec_fallback_active, WorldBackendUnavailable,
+    detect_guest, detect_host, detect_host_bulk, macos_world_deps_unavailable_error,
+    run_guest_install, world_exec_fallback_active, HostBulkDetection, WorldBackendUnavailable,
 };
 use super::models::{
     sanitize_reason, GuestProbe, ManifestLayerInfo, WorldDepGuestStatus, WorldDepStatusEntry,
@@ -23,7 +23,7 @@ pub(crate) fn status_report_for_health(
     tools: &[String],
 ) -> Result<WorldDepsStatusReport> {
     let runner = build_runner(cli_no_world, cli_force_world)?;
-    runner.status_report(tools)
+    runner.status_report(tools, false)
 }
 
 pub fn run(cmd: &WorldDepsCmd, cli_no_world: bool, cli_force_world: bool) -> Result<()> {
@@ -238,16 +238,25 @@ impl WorldDepsRunner {
     }
 
     fn run_status(&self, args: &WorldDepsStatusArgs) -> Result<()> {
-        let report = self.status_report(&args.tools)?;
+        let report = self.status_report(&args.tools, args.all)?;
         if args.json {
             println!("{}", serde_json::to_string_pretty(&report)?);
             return Ok(());
         }
 
-        if report.tools.is_empty() {
+        if self.world.cli_disabled() {
+            if let Some(message) = &report.world_disabled_reason {
+                println!("substrate: warn: world deps status skipped ({message})");
+            } else {
+                println!("substrate: warn: world deps status skipped");
+            }
+            return Ok(());
+        }
+
+        if self.manifest.tools.is_empty() {
             println!(
                 "No tools defined in inventory {}",
-                report.manifest.inventory.base.display()
+                self.paths.inventory_base.display()
             );
             return Ok(());
         }
@@ -283,11 +292,33 @@ impl WorldDepsRunner {
             println!("substrate: warn: world backend disabled ({message})");
         }
 
+        if report.tools.is_empty() && args.tools.is_empty() && !args.all {
+            let host_probe = self
+                .manifest
+                .tools
+                .first()
+                .map(|tool| detect_host(&tool.host.commands));
+            if let Some(reason) = host_probe.and_then(|probe| probe.reason) {
+                println!(
+                    "No host-present tools detected (host detection skipped or degraded: {}).",
+                    sanitize_reason(&reason)
+                );
+            } else {
+                println!("No host-present tools detected.");
+            }
+            println!("Re-run `substrate world deps status --all` to include host-missing tools.");
+            return Ok(());
+        }
+
         print_status_table(&report.tools);
         Ok(())
     }
 
-    fn status_report(&self, tool_names: &[String]) -> Result<WorldDepsStatusReport> {
+    fn status_report(
+        &self,
+        tool_names: &[String],
+        include_all: bool,
+    ) -> Result<WorldDepsStatusReport> {
         if self.world.cli_disabled() {
             return Ok(WorldDepsStatusReport {
                 manifest: self.manifest_info(),
@@ -306,10 +337,32 @@ impl WorldDepsRunner {
         }
 
         let mut entries = Vec::with_capacity(tools.len());
-        for tool in tools {
-            let host_probe = detect_host(&tool.host.commands);
-            let host_detected = host_probe.detected;
-            let host_reason = host_probe.reason.map(|reason| sanitize_reason(&reason));
+        let filter_host_present = tool_names.is_empty() && !include_all;
+        let host_bulk: Option<HostBulkDetection> = filter_host_present.then(|| {
+            detect_host_bulk(
+                &tools
+                    .iter()
+                    .map(|tool| tool.host.commands.clone())
+                    .collect::<Vec<_>>(),
+            )
+        });
+        for (idx, tool) in tools.into_iter().enumerate() {
+            let (host_detected, host_reason) = if let Some(summary) = host_bulk.as_ref() {
+                let detected = summary.detected.get(idx).copied().unwrap_or(false);
+                let reason = (!detected)
+                    .then(|| summary.degraded_reason.as_deref().map(sanitize_reason))
+                    .flatten();
+                (detected, reason)
+            } else {
+                let host_probe = detect_host(&tool.host.commands);
+                (
+                    host_probe.detected,
+                    host_probe.reason.map(|reason| sanitize_reason(&reason)),
+                )
+            };
+            if filter_host_present && !host_detected {
+                continue;
+            }
             let guest_status = self.probe_guest(tool);
             let provider = tool.install.first().map(|recipe| recipe.provider.clone());
             entries.push(WorldDepStatusEntry {

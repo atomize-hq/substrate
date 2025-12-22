@@ -34,13 +34,14 @@ managers:
         [ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"
       fi
     guest_detect:
-      command: "bash -lc '[ -s \"$HOME/.nvm/nvm.sh\" ]'"
+      command: "bash -lc '[ -s \"${NVM_DIR:-$HOME/.nvm}/nvm.sh\" ] || [ -s \"$HOME/.config/nvm/nvm.sh\" ]'"
     guest_install:
       custom: |
-        if [ ! -d "$HOME/.nvm" ]; then
+        export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+        if [ ! -d "$NVM_DIR" ]; then
           curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
         else
-          cd "$HOME/.nvm" && git pull --ff-only
+          cd "$NVM_DIR" && git pull --ff-only
         fi
 
   - name: pyenv

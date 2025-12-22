@@ -74,7 +74,7 @@ Once you type `graph`, `world`, `shim`, or `health`, the parser stops accepting 
 | --- | --- | --- | --- |
 | `substrate world doctor` | — | `--json` | Host readiness report (`cli.rs:187`). |
 | `substrate world enable` | — | `--prefix`, `--profile`, `--dry-run`, `--verbose`, `--force`, `--timeout` | Provisioning control per `cli.rs:197`. |
-| `substrate world deps status [TOOL...]` | Optional `tools` list (order matters) | `--json` | No tools vs explicit names, JSON toggle. |
+| `substrate world deps status [--all] [TOOL...]` | Optional `tools` list (order matters) | `--all`, `--json` | Defaults to host-present tools; `--all` includes host-missing inventory entries. |
 | `substrate world deps install <TOOL...>` | One or more tool names | `--dry-run`, `--verbose` | Ensure installers respect permutations. |
 | `substrate world deps sync` | — | `--all`, `--verbose` | Cover all flag combinations (up to 4 permutations). |
 

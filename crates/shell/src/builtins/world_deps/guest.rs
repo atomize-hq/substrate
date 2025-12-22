@@ -42,6 +42,11 @@ pub(crate) struct HostDetectionResult {
     pub reason: Option<String>,
 }
 
+pub(crate) struct HostBulkDetection {
+    pub(crate) detected: Vec<bool>,
+    pub(crate) degraded_reason: Option<String>,
+}
+
 enum HostDetectionContext {
     Bash(HostBashContext),
     Legacy { reason: Option<String> },
@@ -69,6 +74,20 @@ pub(crate) fn detect_host(commands: &[String]) -> HostDetectionResult {
                 .any(|cmd| run_host_detection_command(cmd, bash_ctx)),
             reason: None,
         },
+    }
+}
+
+pub(crate) fn detect_host_bulk(host_commands: &[Vec<String>]) -> HostBulkDetection {
+    let context = resolve_host_detection_context();
+    match &context {
+        HostDetectionContext::Legacy { reason } => HostBulkDetection {
+            detected: host_commands
+                .iter()
+                .map(|commands| commands.iter().any(|cmd| run_host_command(cmd)))
+                .collect(),
+            degraded_reason: reason.clone(),
+        },
+        HostDetectionContext::Bash(bash_ctx) => detect_host_bulk_bash(host_commands, bash_ctx),
     }
 }
 
@@ -263,6 +282,132 @@ fn run_host_detection_command(command: &str, bash_ctx: &HostBashContext) -> bool
     cmd.stdout(Stdio::null());
     cmd.stderr(Stdio::null());
     cmd.status().map(|status| status.success()).unwrap_or(false)
+}
+
+fn detect_host_bulk_bash(
+    host_commands: &[Vec<String>],
+    bash_ctx: &HostBashContext,
+) -> HostBulkDetection {
+    // Fast path: if every command is a simple `command -v <name>` probe, evaluate them in a
+    // single bash invocation so manager init is sourced once.
+    let mut all_probe_targets: Vec<Vec<Option<String>>> = Vec::with_capacity(host_commands.len());
+    let mut all_simple = true;
+    for commands in host_commands {
+        let mut targets = Vec::with_capacity(commands.len());
+        for command in commands {
+            let target = parse_command_v_target(command);
+            if target.is_none() {
+                all_simple = false;
+            }
+            targets.push(target);
+        }
+        all_probe_targets.push(targets);
+    }
+
+    if all_simple {
+        if let Some(result) = run_bash_bulk_command_v(&all_probe_targets, bash_ctx) {
+            return HostBulkDetection {
+                detected: result,
+                degraded_reason: None,
+            };
+        }
+    }
+
+    // Fallback: per-tool evaluation (still uses bash+manager env, but avoids incorrect results).
+    HostBulkDetection {
+        detected: host_commands
+            .iter()
+            .map(|commands| {
+                commands
+                    .iter()
+                    .any(|cmd| run_host_detection_command(cmd, bash_ctx))
+            })
+            .collect(),
+        degraded_reason: None,
+    }
+}
+
+fn parse_command_v_target(command: &str) -> Option<String> {
+    let trimmed = command.trim();
+    let target = trimmed.strip_prefix("command -v ")?;
+    let target = target.trim();
+    is_simple_command_name(target).then(|| target.to_string())
+}
+
+fn is_simple_command_name(value: &str) -> bool {
+    !value.is_empty()
+        && !value.contains(|c: char| c.is_whitespace() || c == '/' || c == '\\')
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '+'))
+}
+
+fn run_bash_bulk_command_v(
+    probes: &[Vec<Option<String>>],
+    bash_ctx: &HostBashContext,
+) -> Option<Vec<bool>> {
+    let mut script = String::new();
+    script.push_str("set +e\n");
+
+    // Emit stable, parseable markers even if the sourced init scripts print noise.
+    for (idx, commands) in probes.iter().enumerate() {
+        script.push_str("if ");
+        let mut first = true;
+        for target in commands.iter().flatten() {
+            if !first {
+                script.push_str(" || ");
+            }
+            first = false;
+            script.push_str("command -v ");
+            script.push_str(target);
+            script.push_str(" >/dev/null 2>&1");
+        }
+        if first {
+            // No commands for tool (shouldn't happen); treat as missing.
+            script.push_str("false");
+        }
+        script.push_str("; then printf '__SUBSTRATE_WORLD_DEPS_HOST__ ");
+        script.push_str(&idx.to_string());
+        script.push_str(" 1\\n'; else printf '__SUBSTRATE_WORLD_DEPS_HOST__ ");
+        script.push_str(&idx.to_string());
+        script.push_str(" 0\\n'; fi\n");
+    }
+    script.push_str("exit 0\n");
+
+    let mut cmd = Command::new(&bash_ctx.bash_path);
+    cmd.arg("-c").arg(script);
+    cmd.env("BASH_ENV", &bash_ctx.manager_env_path);
+    cmd.env("SUBSTRATE_MANAGER_ENV", &bash_ctx.manager_env_path);
+    if let Some(original) = &bash_ctx.original_bash_env {
+        cmd.env("SUBSTRATE_ORIGINAL_BASH_ENV", original);
+    } else {
+        cmd.env_remove("SUBSTRATE_ORIGINAL_BASH_ENV");
+    }
+    cmd.stdin(Stdio::null());
+    let output = cmd.output().ok()?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut results: Vec<Option<bool>> = vec![None; probes.len()];
+    for line in stdout.lines() {
+        let Some(rest) = line.strip_prefix("__SUBSTRATE_WORLD_DEPS_HOST__ ") else {
+            continue;
+        };
+        let mut parts = rest.split_whitespace();
+        let idx = parts.next().and_then(|v| v.parse::<usize>().ok());
+        let val = parts.next();
+        let Some(idx) = idx else { continue };
+        if idx >= results.len() {
+            continue;
+        }
+        let detected = matches!(val, Some("1"));
+        results[idx] = Some(detected);
+    }
+
+    if results.iter().any(|v| v.is_none()) {
+        return None;
+    }
+
+    Some(results.into_iter().map(|v| v.unwrap_or(false)).collect())
 }
 
 pub(crate) fn run_host_command(command: &str) -> bool {

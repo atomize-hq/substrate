@@ -62,7 +62,7 @@ Keep concise, actionable, and security-focused.
   -  Plan: '/home/spenser/__Active_code/substrate/docs/project_management/next/json-mode/json_mode_plan.md'
 
 - **P2 – World deps install UX cleanup**
-  - `substrate world deps install` only works for the curated tools listed in `scripts/substrate/world-deps.yaml` (rustup, go, pyenv, uv, etc.). Users who try to install language-level packages (pip/npm) or tools missing from the manifest get confusing errors, especially on dev installs where `$HOME` is read-only inside the world.
+  - `substrate world deps install` only works for tools defined in the world-deps inventory (canonical manager list in `config/manager_hooks.yaml`, plus the layered overrides under `world-deps.yaml` / `world-deps.local.yaml`). Users who try to install language-level packages (pip/npm) or tools missing from the inventory get confusing errors, especially on dev installs where `$HOME` is read-only inside the world.
   - Improvements:
     - Document exactly what the manifest covers and how to install unsupported packages safely (e.g., virtualenv/pip --target).
     - Consider adding backends for common package managers so commands like `substrate world deps install pip:package` can proxy installations into the writable anchor.

@@ -406,6 +406,7 @@ fn world_deps_inventory_includes_base_and_installed_overlay_tools() {
     let assert = fixture
         .command()
         .arg("status")
+        .arg("--all")
         .arg("--json")
         .assert()
         .success();
@@ -442,6 +443,7 @@ fn world_deps_install_prefers_user_overlay_over_installed_and_base() {
     let assert = fixture
         .command()
         .arg("status")
+        .arg("--all")
         .arg("--json")
         .assert()
         .success();
@@ -485,6 +487,7 @@ fn world_deps_install_prefers_installed_overlay_over_base_when_no_user_overlay()
     let assert = fixture
         .command()
         .arg("status")
+        .arg("--all")
         .arg("--json")
         .assert()
         .success();

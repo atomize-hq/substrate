@@ -46,6 +46,60 @@ run_privileged() {
   return 1
 }
 
+write_install_metadata() {
+  local enabled="$1"
+  local flag="false"
+  if [[ "${enabled}" -eq 1 ]]; then
+    flag="true"
+  fi
+
+  cat > "${INSTALL_CONFIG_PATH}.tmp" <<EOF
+[install]
+world_enabled = ${flag}
+
+[world]
+anchor_mode = "${ANCHOR_MODE}"
+anchor_path = "${ANCHOR_PATH}"
+root_mode = "${ANCHOR_MODE}"
+root_path = "${ANCHOR_PATH}"
+caged = $([[ "${WORLD_CAGED}" -eq 1 ]] && echo "true" || echo "false")
+EOF
+  mv "${INSTALL_CONFIG_PATH}.tmp" "${INSTALL_CONFIG_PATH}"
+  chmod 0644 "${INSTALL_CONFIG_PATH}" || true
+}
+
+write_manager_env_script() {
+  local enabled="$1"
+  local today
+  today="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  local manager_env_literal
+  manager_env_literal="$(printf '%q' "${MANAGER_ENV_PATH}")"
+  local manager_init_literal
+  manager_init_literal="$(printf '%q' "${MANAGER_INIT_PATH}")"
+
+  cat > "${MANAGER_ENV_PATH}.tmp" <<EOF
+#!/usr/bin/env bash
+# Managed by ${SCRIPT_NAME} on ${today}
+export SUBSTRATE_WORLD=$([[ "${enabled}" -eq 1 ]] && echo "enabled" || echo "disabled")
+export SUBSTRATE_WORLD_ENABLED=$([[ "${enabled}" -eq 1 ]] && echo "1" || echo "0")
+export SUBSTRATE_CAGED=$([[ "${WORLD_CAGED}" -eq 1 ]] && echo "1" || echo "0")
+export SUBSTRATE_ANCHOR_MODE="${ANCHOR_MODE}"
+export SUBSTRATE_ANCHOR_PATH="${ANCHOR_PATH}"
+export SUBSTRATE_WORLD_ROOT_MODE="${ANCHOR_MODE}"
+export SUBSTRATE_WORLD_ROOT_PATH="${ANCHOR_PATH}"
+export SUBSTRATE_MANAGER_ENV=${manager_env_literal}
+export SUBSTRATE_MANAGER_INIT=${manager_init_literal}
+
+manager_init_path=${manager_init_literal}
+if [[ -f "\${manager_init_path}" ]]; then
+  # shellcheck disable=SC1090
+  source "\${manager_init_path}"
+fi
+EOF
+  mv "${MANAGER_ENV_PATH}.tmp" "${MANAGER_ENV_PATH}"
+  chmod 0644 "${MANAGER_ENV_PATH}" || true
+}
+
 detect_invoking_user() {
   if [[ -n "${SUDO_USER:-}" ]]; then
     printf '%s\n' "${SUDO_USER}"
@@ -588,21 +642,6 @@ if [[ ! -f "${VERSION_CONFIG_DIR}/world-deps.yaml" ]]; then
   fatal "world-deps manifest missing (expected ${VERSION_CONFIG_DIR}/world-deps.yaml)"
 fi
 
-# Write install metadata (install + world tables) like the production installer.
-cat > "${INSTALL_CONFIG_PATH}.tmp" <<EOF
-[install]
-world_enabled = $([[ "${WORLD_ENABLED}" -eq 1 ]] && echo "true" || echo "false")
-
-[world]
-anchor_mode = "${ANCHOR_MODE}"
-anchor_path = "${ANCHOR_PATH}"
-root_mode = "${ANCHOR_MODE}"
-root_path = "${ANCHOR_PATH}"
-caged = $([[ "${WORLD_CAGED}" -eq 1 ]] && echo "true" || echo "false")
-EOF
-mv "${INSTALL_CONFIG_PATH}.tmp" "${INSTALL_CONFIG_PATH}"
-chmod 0644 "${INSTALL_CONFIG_PATH}" || true
-
 # Write manager init placeholder + env exporter.
 cat > "${MANAGER_INIT_PATH}.tmp" <<'EOF'
 #!/usr/bin/env bash
@@ -613,30 +652,9 @@ EOF
 mv "${MANAGER_INIT_PATH}.tmp" "${MANAGER_INIT_PATH}"
 chmod 0644 "${MANAGER_INIT_PATH}" || true
 
-today="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-manager_env_literal="$(printf '%q' "${MANAGER_ENV_PATH}")"
-manager_init_literal="$(printf '%q' "${MANAGER_INIT_PATH}")"
-cat > "${MANAGER_ENV_PATH}.tmp" <<EOF
-#!/usr/bin/env bash
-# Managed by ${SCRIPT_NAME} on ${today}
-export SUBSTRATE_WORLD=$([[ "${WORLD_ENABLED}" -eq 1 ]] && echo "enabled" || echo "disabled")
-export SUBSTRATE_WORLD_ENABLED=$([[ "${WORLD_ENABLED}" -eq 1 ]] && echo "1" || echo "0")
-export SUBSTRATE_CAGED=$([[ "${WORLD_CAGED}" -eq 1 ]] && echo "1" || echo "0")
-export SUBSTRATE_ANCHOR_MODE="${ANCHOR_MODE}"
-export SUBSTRATE_ANCHOR_PATH="${ANCHOR_PATH}"
-export SUBSTRATE_WORLD_ROOT_MODE="${ANCHOR_MODE}"
-export SUBSTRATE_WORLD_ROOT_PATH="${ANCHOR_PATH}"
-export SUBSTRATE_MANAGER_ENV=${manager_env_literal}
-export SUBSTRATE_MANAGER_INIT=${manager_init_literal}
-
-manager_init_path=${manager_init_literal}
-if [[ -f "\${manager_init_path}" ]]; then
-  # shellcheck disable=SC1090
-  source "\${manager_init_path}"
-fi
-EOF
-mv "${MANAGER_ENV_PATH}.tmp" "${MANAGER_ENV_PATH}"
-chmod 0644 "${MANAGER_ENV_PATH}" || true
+# Write install metadata (install + world tables) like the production installer.
+write_install_metadata "${WORLD_ENABLED}"
+write_manager_env_script "${WORLD_ENABLED}"
 
 shim_note=""
 if [[ ${DEPLOY_SHIMS} -eq 1 ]]; then
@@ -674,17 +692,42 @@ if [[ -d "${REPO_ROOT}/target" ]]; then
 fi
 
 if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
+  if [[ ${EUID} -ne 0 ]] && command -v sudo >/dev/null 2>&1; then
+    log "Caching sudo credentials for world provisioning (you may be prompted)..."
+    if ! sudo -v; then
+      WORLD_PROVISION_FAILED=1
+      WORLD_ENABLED=0
+      write_install_metadata "${WORLD_ENABLED}"
+      write_manager_env_script "${WORLD_ENABLED}"
+      warn "Unable to cache sudo credentials; world-agent service not provisioned."
+      warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run `substrate world enable` to flip it back on."
+    fi
+  fi
+  if [[ "${WORLD_ENABLED}" -eq 0 ]]; then
+    : # world provisioning failed above; skip the remainder of the provisioning block.
+  else
   ensure_substrate_group_membership
   PROVISION_SCRIPT="${REPO_ROOT}/scripts/linux/world-provision.sh"
   if [[ -x "${PROVISION_SCRIPT}" ]]; then
     log "Provisioning Linux world-agent service via ${PROVISION_SCRIPT} (sudo may prompt)..."
     if ! "${PROVISION_SCRIPT}" --profile "${PROFILE}" --skip-build; then
+      WORLD_PROVISION_FAILED=1
+      WORLD_ENABLED=0
+      write_install_metadata "${WORLD_ENABLED}"
+      write_manager_env_script "${WORLD_ENABLED}"
       warn "world-provision script reported an error; rerun ${PROVISION_SCRIPT} manually to enable the world-agent service."
+      warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run `substrate world enable` to flip it back on."
     fi
   else
+    WORLD_PROVISION_FAILED=1
+    WORLD_ENABLED=0
+    write_install_metadata "${WORLD_ENABLED}"
+    write_manager_env_script "${WORLD_ENABLED}"
     warn "Linux world-provision script missing at ${PROVISION_SCRIPT}; world-agent service not configured."
+    warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures."
   fi
   ensure_socket_group_alignment
+  fi
 elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
   log "Provisioning macOS Lima world-agent service..."
   if ! command -v limactl >/dev/null 2>&1; then
@@ -848,6 +891,9 @@ To add the dev binaries/shims to PATH for this shell, run:
   source ${ENV_FILE}
 
 MSG
+if [[ "${WORLD_PROVISION_FAILED:-0}" -eq 1 ]]; then
+  fatal "Substrate dev install finished, but world provisioning failed. Re-run with an interactive sudo session (or pass --no-world to skip provisioning)."
+fi
 log "Substrate dev install complete."
 log "manager_init placeholder: ${MANAGER_INIT_PATH}"
 log "manager_env script: ${MANAGER_ENV_PATH}"

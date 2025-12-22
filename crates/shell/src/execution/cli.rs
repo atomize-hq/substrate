@@ -284,9 +284,12 @@ pub enum WorldDepsAction {
 
 #[derive(Args, Debug, Clone)]
 pub struct WorldDepsStatusArgs {
-    /// Specific tools to inspect (defaults to all manifest entries)
+    /// Specific tools to inspect (defaults to host-present tools; use --all to include host-missing)
     #[arg(value_name = "TOOL")]
     pub tools: Vec<String>,
+    /// Include every manifest entry, even when missing on the host
+    #[arg(long = "all")]
+    pub all: bool,
     /// Emit JSON summary for automation
     #[arg(long)]
     pub json: bool,

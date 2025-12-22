@@ -195,7 +195,7 @@ snippet (plus a `.bak` backup) to `~/.substrate_bashenv`.
 | `--prefix <path>` | Override the installation prefix (default: `~/.substrate`) |
 | `--no-world` | Skip provisioning the world backend (use `substrate world enable` later) |
 | `--no-shims` | Skip shim deployment (useful for CI images) |
-| `--sync-deps` | Run `substrate world deps sync --all --verbose` after provisioning completes |
+| `--sync-deps` | Run `substrate world deps sync` after provisioning completes (installs guest tools detected on the host; use `--all` later to force installs) |
 | `--dry-run` | Print all actions without executing them |
 | `--archive <path>` | Install from a local tarball instead of downloading |
 
@@ -264,7 +264,7 @@ whether `loginctl enable-linger <user>` still needs to be run.
   new parity block plus `substrate health --json | jq '.summary | {attention_required_managers, world_only_managers}'`
   whenever a world sync looks stale. `attention_required_managers` maps directly
   to the host-only list and `world_only_managers` surfaces tools that only exist
-  in the guest. Follow the printed recommendations (run `substrate world deps sync --all`
+  in the guest. Follow the printed recommendations (run `substrate world deps sync`
   for host-only entries, `substrate shim repair --manager <name> --yes` for
   world-only entries) before re-running doctor.
 - **Doctor failures**: capture `substrate shim doctor --json` and
