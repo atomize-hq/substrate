@@ -190,7 +190,11 @@ pub async fn handle_ws_pty(
         None => return, // Connection closed
     };
 
-    let (cmd, cwd, mut env, _span_id, cols, rows) = start_msg;
+    let (cmd, cwd, env_map, _span_id, cols, rows) = start_msg;
+    #[cfg(target_os = "linux")]
+    let mut env = env_map;
+    #[cfg(not(target_os = "linux"))]
+    let env = env_map;
     #[cfg(target_os = "linux")]
     let mut command_to_run = cmd.clone();
     #[cfg(not(target_os = "linux"))]

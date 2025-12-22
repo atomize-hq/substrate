@@ -123,6 +123,10 @@ fi
 doctor_path="${PREFIX}/bin:${ORIGINAL_PATH}"
 PATH="${doctor_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" run_world_checks "${substrate_bin}"
 
-PATH="${doctor_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" sync_world_deps "${substrate_bin}"
+if [[ ${SYNC_DEPS} -eq 1 ]]; then
+  PATH="${doctor_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" sync_world_deps "${substrate_bin}"
+else
+  log "Skipping world deps sync (--no-sync-deps)"
+fi
 
 log "World provisioning complete via world-enable helper"

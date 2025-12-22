@@ -114,7 +114,7 @@ run sudo systemctl status substrate-world-agent.socket --no-pager --lines=20 >"$
 run sudo systemctl status substrate-world-agent.service --no-pager --lines=20 >"${SYSTEMCTL_SERVICE_LOG}"
 
 log "Recording ${SOCKET_FS_PATH} ownership/perms"
-if ! sudo stat -c 'path:%n mode:%a user:%U group:%G' "${SOCKET_FS_PATH}" >"${SOCKET_STAT_LOG}"; then
+if ! sudo sh -c 'stat -c "path:%n mode:%a user:%U group:%G" "$1" >"$2"' _ "${SOCKET_FS_PATH}" "${SOCKET_STAT_LOG}"; then
   echo "Failed to stat ${SOCKET_FS_PATH}; see ${SOCKET_STAT_LOG}" >&2
   exit 1
 fi
