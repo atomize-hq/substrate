@@ -44,11 +44,13 @@ Environment variables and advanced configuration options for Substrate.
 | `SUBSTRATE_SKIP_MANAGER_INIT_LIST` | Comma-separated managers to skip | *none* | `nvm,pyenv` |
 | `SUBSTRATE_MANAGER_INIT_DEBUG` | Verbose detection logging | `0` | `1` |
 | `SUBSTRATE_SHIM_HINTS` | Disable/enable shim hint emission | `1` | `0` |
+| `SUBSTRATE_POLICY_GIT_CACHE` | Cache policy repo git hash across commands (`0`/`false` disables caching per process) | `1` | `0` |
 
-Release bundles place the base manifests under
-`<prefix>/versions/<version>/config/` (`manager_hooks.yaml` and
-`world-deps.yaml`). Workspace builds fall back to `config/manager_hooks.yaml`
-and `scripts/substrate/world-deps.yaml` in the repository root.
+Release bundles place the manager inventory under
+`<prefix>/versions/<version>/config/manager_hooks.yaml`, plus a `world deps`
+overlay manifest at `<prefix>/versions/<version>/config/world-deps.yaml`.
+Workspace builds fall back to `config/manager_hooks.yaml` and
+`scripts/substrate/world-deps.yaml` in the repository root.
 
 ## World Configuration
 
@@ -58,6 +60,7 @@ and `scripts/substrate/world-deps.yaml` in the repository root.
 | `SUBSTRATE_WORLD_ENABLED` | Cached world enablement flag (installer) | `1` | `0` |
 | `SUBSTRATE_ANCHOR_MODE` | Anchor selection (`project`, `follow-cwd`, `custom`) | `project` | `follow-cwd` |
 | `SUBSTRATE_ANCHOR_PATH` | Custom anchor directory (paired with `custom` mode) | shell launch directory | `/workspaces/substrate` |
+| `SUBSTRATE_WORLD_FS_MODE` | Active world filesystem mode (policy-controlled: `writable` or `read_only`) | `writable` | `read_only` |
 | `SUBSTRATE_CAGED` | Enforce staying inside the resolved world root (`1`/`0`) | `1` | `0` |
 | `SUBSTRATE_WORLD_DEPS_MANIFEST` | Override manifest for `world deps` | `<prefix>/versions/<version>/config/world-deps.yaml` | `/tmp/world_deps.yaml` |
 | `SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE` | Force socket activation mode reporting (`socket_activation`, `manual`, or `unknown`) for diagnostics/tests | auto-detect via systemd | `socket_activation` |
@@ -132,6 +135,14 @@ Unknown keys and extra tables are preserved for future expansion.
   a consistent view of this metadata even before the CLI runs.
 - Directory configs live at `.substrate/settings.toml` under the launch
   directory and only carry the `[world]` table shown above.
+
+### World filesystem mode
+
+Policies control whether the world filesystem is writable (overlay/copy-diff) or forced to
+`read_only`. Set `world_fs_mode` to `read_only` in your global policy (`~/.substrate/policy.yaml`)
+or per-project `.substrate-profile*` to disable upper/work overlays so writes fail cleanly. The
+shell exports `SUBSTRATE_WORLD_FS_MODE` with the resolved value for telemetry/replay and surfaces
+it in `substrate world doctor --json` to make policy enforcement visible without extra flags.
 
 ### Bootstrapping the config file
 

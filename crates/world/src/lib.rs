@@ -33,6 +33,19 @@ impl LinuxLocalBackend {
         Self::default()
     }
 
+    /// Ensure the overlay for a world is mounted and return its merged root.
+    pub fn ensure_overlay_root(&self, world: &WorldHandle) -> Result<std::path::PathBuf> {
+        let mut cache = self
+            .session_cache
+            .write()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire session cache write lock: {}", e))?;
+        let session_world = cache
+            .get_mut(&world.id)
+            .context("World not found in cache")?;
+
+        session_world.ensure_overlay_root()
+    }
+
     #[cfg(not(target_os = "linux"))]
     fn check_platform(&self) -> Result<()> {
         anyhow::bail!("LinuxLocal backend is only supported on Linux")
@@ -49,12 +62,11 @@ impl WorldBackend for LinuxLocalBackend {
         self.check_platform()?;
 
         if spec.reuse_session {
-            // Try to find existing session
-            let cache = self
-                .session_cache
-                .read()
-                .map_err(|e| anyhow::anyhow!("Failed to acquire session cache read lock: {}", e))?;
-            if let Some(world) = cache.values().next() {
+            let mut cache = self.session_cache.write().map_err(|e| {
+                anyhow::anyhow!("Failed to acquire session cache write lock: {}", e)
+            })?;
+            if let Some(world) = cache.values_mut().find(|world| world.compatible_with(spec)) {
+                world.spec.fs_mode = spec.fs_mode;
                 return Ok(WorldHandle {
                     id: world.id.clone(),
                 });

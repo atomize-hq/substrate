@@ -3,7 +3,9 @@
 #[path = "common.rs"]
 mod common;
 
+use assert_cmd::Command;
 use common::doctor_fixture::DoctorFixture;
+use common::{binary_path, ensure_substrate_built, shared_tmpdir};
 use serde_json::{json, Value};
 use std::fs;
 
@@ -71,9 +73,23 @@ managers:
 fn parity_world_deps_report(fixture: &DoctorFixture) -> Value {
     json!({
         "manifest": {
-            "base": fixture.home().join(".substrate/world-deps.yaml"),
-            "overlay": null,
-            "overlay_exists": false
+            "inventory": {
+                "base": fixture.home().join("manager_hooks.yaml"),
+                "overlay": fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                "overlay_exists": false
+            },
+            "overlays": {
+                "installed": fixture.home().join(".substrate/world-deps.yaml"),
+                "installed_exists": false,
+                "user": fixture.home().join(".substrate/world-deps.local.yaml"),
+                "user_exists": false
+            },
+            "layers": [
+                fixture.home().join("manager_hooks.yaml"),
+                fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                fixture.home().join(".substrate/world-deps.yaml"),
+                fixture.home().join(".substrate/world-deps.local.yaml")
+            ]
         },
         "world_disabled_reason": null,
         "tools": [
@@ -125,9 +141,23 @@ fn health_json_reports_summary_details() {
     }));
     fixture.write_world_deps_fixture(json!({
         "manifest": {
-            "base": fixture.home().join(".substrate/world-deps.yaml"),
-            "overlay": null,
-            "overlay_exists": false
+            "inventory": {
+                "base": fixture.home().join("manager_hooks.yaml"),
+                "overlay": fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                "overlay_exists": false
+            },
+            "overlays": {
+                "installed": fixture.home().join(".substrate/world-deps.yaml"),
+                "installed_exists": false,
+                "user": fixture.home().join(".substrate/world-deps.local.yaml"),
+                "user_exists": false
+            },
+            "layers": [
+                fixture.home().join("manager_hooks.yaml"),
+                fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                fixture.home().join(".substrate/world-deps.yaml"),
+                fixture.home().join(".substrate/world-deps.local.yaml")
+            ]
         },
         "world_disabled_reason": null,
         "tools": [
@@ -190,9 +220,23 @@ fn health_human_summary_highlights_failures() {
     }));
     fixture.write_world_deps_fixture(json!({
         "manifest": {
-            "base": fixture.home().join(".substrate/world-deps.yaml"),
-            "overlay": null,
-            "overlay_exists": false
+            "inventory": {
+                "base": fixture.home().join("manager_hooks.yaml"),
+                "overlay": fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                "overlay_exists": false
+            },
+            "overlays": {
+                "installed": fixture.home().join(".substrate/world-deps.yaml"),
+                "installed_exists": false,
+                "user": fixture.home().join(".substrate/world-deps.local.yaml"),
+                "user_exists": false
+            },
+            "layers": [
+                fixture.home().join("manager_hooks.yaml"),
+                fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                fixture.home().join(".substrate/world-deps.yaml"),
+                fixture.home().join(".substrate/world-deps.local.yaml")
+            ]
         },
         "world_disabled_reason": "install metadata reports world disabled",
         "tools": [
@@ -239,9 +283,23 @@ fn health_json_marks_skip_manager_init_and_world_disabled_reason() {
     let fixture = DoctorFixture::new(sample_manifest());
     fixture.write_world_deps_fixture(json!({
         "manifest": {
-            "base": fixture.home().join(".substrate/world-deps.yaml"),
-            "overlay": fixture.home().join(".substrate/world-deps.local.yaml"),
-            "overlay_exists": false
+            "inventory": {
+                "base": fixture.home().join("manager_hooks.yaml"),
+                "overlay": fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                "overlay_exists": false
+            },
+            "overlays": {
+                "installed": fixture.home().join(".substrate/world-deps.yaml"),
+                "installed_exists": false,
+                "user": fixture.home().join(".substrate/world-deps.local.yaml"),
+                "user_exists": false
+            },
+            "layers": [
+                fixture.home().join("manager_hooks.yaml"),
+                fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                fixture.home().join(".substrate/world-deps.yaml"),
+                fixture.home().join(".substrate/world-deps.local.yaml")
+            ]
         },
         "world_disabled_reason": "install metadata reports world disabled",
         "tools": []
@@ -302,9 +360,23 @@ fn health_json_reports_world_backend_error_and_guest_missing_tools() {
     .expect("failed to corrupt world doctor fixture");
     fixture.write_world_deps_fixture(json!({
         "manifest": {
-            "base": fixture.home().join(".substrate/world-deps.yaml"),
-            "overlay": null,
-            "overlay_exists": false
+            "inventory": {
+                "base": fixture.home().join("manager_hooks.yaml"),
+                "overlay": fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                "overlay_exists": false
+            },
+            "overlays": {
+                "installed": fixture.home().join(".substrate/world-deps.yaml"),
+                "installed_exists": false,
+                "user": fixture.home().join(".substrate/world-deps.local.yaml"),
+                "user_exists": false
+            },
+            "layers": [
+                fixture.home().join("manager_hooks.yaml"),
+                fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                fixture.home().join(".substrate/world-deps.yaml"),
+                fixture.home().join(".substrate/world-deps.local.yaml")
+            ]
         },
         "world_disabled_reason": null,
         "tools": [
@@ -496,6 +568,82 @@ fn health_summary_classifies_manager_parity_states() {
 }
 
 #[test]
+fn health_json_recommendations_align_with_parity_states() {
+    let fixture = DoctorFixture::new(parity_manifest());
+    fixture.write_world_deps_fixture(parity_world_deps_report(&fixture));
+
+    let output = fixture
+        .command()
+        .arg("health")
+        .arg("--json")
+        .output()
+        .expect("failed to run substrate health --json");
+    assert!(output.status.success(), "health --json should succeed");
+
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("valid JSON payload");
+    let states = payload["summary"]["manager_states"]
+        .as_array()
+        .expect("manager states missing");
+
+    let asdf_state = states
+        .iter()
+        .find(|entry| entry["name"] == "asdf")
+        .expect("asdf entry missing");
+    let asdf_reco = asdf_state["recommendation"]
+        .as_str()
+        .expect("asdf recommendation missing");
+    assert!(
+        asdf_reco.contains("substrate world enable"),
+        "asdf recommendation should mention world enable: {asdf_reco}"
+    );
+    assert!(
+        asdf_reco.contains("substrate world deps sync"),
+        "asdf recommendation should mention world deps sync: {asdf_reco}"
+    );
+
+    let direnv_state = states
+        .iter()
+        .find(|entry| entry["name"] == "direnv")
+        .expect("direnv entry missing");
+    let direnv_reco = direnv_state["recommendation"]
+        .as_str()
+        .expect("direnv recommendation missing");
+    assert!(
+        direnv_reco.contains("Install direnv on the host first"),
+        "direnv recommendation should mention host install: {direnv_reco}"
+    );
+    assert!(
+        direnv_reco.contains("substrate world deps sync"),
+        "direnv recommendation should mention world deps sync: {direnv_reco}"
+    );
+
+    let conda_state = states
+        .iter()
+        .find(|entry| entry["name"] == "conda")
+        .expect("conda entry missing");
+    let conda_reco = conda_state["recommendation"]
+        .as_str()
+        .expect("conda recommendation missing");
+    assert!(
+        conda_reco.contains("Install conda on the host"),
+        "conda recommendation should mention host install: {conda_reco}"
+    );
+    assert!(
+        conda_reco.contains("substrate shim repair --manager conda"),
+        "conda recommendation should mention shim repair: {conda_reco}"
+    );
+
+    let pyenv_state = states
+        .iter()
+        .find(|entry| entry["name"] == "pyenv")
+        .expect("pyenv entry missing");
+    assert!(
+        pyenv_state.get("recommendation").is_none(),
+        "synced managers should omit recommendations: {pyenv_state:?}"
+    );
+}
+
+#[test]
 fn health_human_summary_respects_manager_parity_states() {
     let fixture = DoctorFixture::new(parity_manifest());
     fixture.write_world_deps_fixture(parity_world_deps_report(&fixture));
@@ -534,5 +682,61 @@ fn health_human_summary_respects_manager_parity_states() {
     assert!(
         stdout.contains("Overall status: attention required"),
         "overall attention summary missing: {stdout}"
+    );
+}
+
+#[test]
+fn health_json_surfaces_world_fs_mode_details() {
+    let fixture = DoctorFixture::new(sample_manifest());
+    fixture.write_world_doctor_fixture(json!({
+        "platform": "fixture-macos",
+        "ok": true,
+        "world_fs_mode": "read_only"
+    }));
+
+    let output = fixture
+        .command()
+        .arg("health")
+        .arg("--json")
+        .output()
+        .expect("failed to run substrate health --json");
+    assert!(output.status.success(), "health --json should succeed");
+
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("valid JSON payload");
+    assert_eq!(
+        payload["shim"]["world"]["details"]["world_fs_mode"],
+        json!("read_only"),
+        "health JSON should preserve world_fs_mode from shim/world doctor snapshot"
+    );
+}
+
+#[test]
+fn health_json_is_valid_when_world_deps_falls_back() {
+    ensure_substrate_built();
+
+    let mut cmd = Command::new(binary_path());
+    cmd.env("TMPDIR", shared_tmpdir());
+    cmd.env_remove("SHIM_ORIGINAL_PATH");
+    cmd.env("SUBSTRATE_WORLD", "enabled");
+    cmd.env("SUBSTRATE_WORLD_ENABLED", "1");
+    cmd.env_remove("SUBSTRATE_WORLD_ID");
+    cmd.env("SUBSTRATE_WORLD_SOCKET", "/tmp/substrate-test-missing.sock");
+    cmd.arg("health").arg("--json");
+
+    let output = cmd.output().expect("failed to run substrate health --json");
+    assert!(
+        output.status.success(),
+        "health --json should succeed even when world deps falls back: stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let payload: Value = serde_json::from_slice(&output.stdout)
+        .expect("health --json should emit valid JSON to stdout");
+    assert!(
+        payload.get("shim").is_some(),
+        "expected shim report in payload"
+    );
+    assert!(
+        payload.get("summary").is_some(),
+        "expected summary report in payload"
     );
 }

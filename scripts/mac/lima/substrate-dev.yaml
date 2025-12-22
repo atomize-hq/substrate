@@ -30,7 +30,7 @@ provision:
       apt-get update
       DEBIAN_FRONTEND=noninteractive apt-get install -y \
         nftables iproute2 libseccomp-dev curl jq git \
-        openssh-server dnsmasq unzip
+        openssh-server dnsmasq unzip build-essential pkg-config libssl-dev python3 python3-pip
       # Optional dev conveniences (safe to remove for runtime)
       DEBIAN_FRONTEND=noninteractive apt-get install -y tmux
       systemctl disable --now systemd-resolved || true
@@ -89,7 +89,7 @@ provision:
       ListenStream=/run/substrate.sock
       SocketMode=0660
       SocketUser=root
-      SocketGroup=root
+      SocketGroup=substrate
       DirectoryMode=0750
       RemoveOnStop=yes
       Service=substrate-world-agent.service

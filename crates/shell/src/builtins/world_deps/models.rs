@@ -11,6 +11,13 @@ pub(crate) struct WorldDepsStatusReport {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct WorldDepsManifestInfo {
+    pub inventory: ManifestLayerInfo,
+    pub overlays: WorldDepsOverlayInfo,
+    pub layers: Vec<PathBuf>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct ManifestLayerInfo {
     pub base: PathBuf,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub overlay: Option<PathBuf>,
@@ -18,9 +25,20 @@ pub(crate) struct WorldDepsManifestInfo {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct WorldDepsOverlayInfo {
+    pub installed: PathBuf,
+    pub installed_exists: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<PathBuf>,
+    pub user_exists: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct WorldDepStatusEntry {
     pub name: String,
     pub host_detected: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_reason: Option<String>,
     pub guest: WorldDepGuestStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,

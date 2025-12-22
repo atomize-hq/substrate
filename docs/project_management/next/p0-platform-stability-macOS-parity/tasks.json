@@ -1,0 +1,1004 @@
+[
+  {
+    "id": "M1-code",
+    "name": "Lima socket parity (code)",
+    "type": "code",
+    "phase": "M1",
+    "status": "completed",
+    "description": "Replace/re-provision Lima with the socket-activated world-agent layout, ensure the agent binary + units + socket perms are installed/healthy, and make warm/provision idempotent.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M1-spec.md",
+      "docs/project_management/next/p0-platform-stability/plan.md",
+      "docs/project_management/next/p0-platform-stability/manual_testing_playbook.md"
+    ],
+    "acceptance_criteria": [
+      "Warm/provision flow replaces any existing Lima environment with socket-activated world-agent units and an installed agent binary.",
+      "Socket ownership/permissions align with the documented mac model and allow SSH user access via group/forwarding.",
+      "Lima provisioning ensures `SocketGroup=substrate`, adds the user to the substrate group (or documented equivalent), and carries linger guidance so socket activation persists post-login.",
+      "Provisioning can be re-run idempotently (including tearing down/recreating the VM) and emits actionable errors when prerequisites are missing.",
+      "Doctor/logging surfaces provisioning status and next steps."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M1-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M1-code'",
+      "Create branch mp-m1-sockets-code from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m1-sockets-code mp-m1-sockets-code`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings.",
+      "Inside wt/mp-m1-sockets-code, commit M1-code changes to branch mp-m1-sockets-code (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m1-sockets-code contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M1-code'.",
+      "Remove worktree wt/mp-m1-sockets-code."
+    ],
+    "worktree": "wt/mp-m1-sockets-code",
+    "integration_task": "M1-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M1-code.md",
+    "depends_on": [],
+    "concurrent_with": [
+      "M1-test"
+    ]
+  },
+  {
+    "id": "M1-test",
+    "name": "Lima socket parity (test)",
+    "type": "test",
+    "phase": "M1",
+    "status": "completed",
+    "description": "Add tests/fixtures/harnesses validating mac Lima socket parity replacement/provisioning per M1-spec.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M1-spec.md",
+      "docs/project_management/next/p0-platform-stability/manual_testing_playbook.md"
+    ],
+    "acceptance_criteria": [
+      "Tests cover replacement/provisioning detection/remediation logic and socket state reporting where platform-agnostic.",
+      "Fixtures/log harnesses capture doctor/provisioning outputs for verification (including rebuild-required states).",
+      "Required commands executed (fmt + targeted tests) and recorded in session_log.md.",
+      "No production code changes."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M1-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M1-test'",
+      "Create branch mp-m1-sockets-test from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m1-sockets-test mp-m1-sockets-test`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Run required commands (capture outputs): cargo fmt; targeted cargo test commands for suites added/updated.",
+      "Inside wt/mp-m1-sockets-test, commit M1-test changes to branch mp-m1-sockets-test (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m1-sockets-test contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M1-test'.",
+      "Remove worktree wt/mp-m1-sockets-test."
+    ],
+    "worktree": "wt/mp-m1-sockets-test",
+    "integration_task": "M1-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M1-test.md",
+    "depends_on": [],
+    "concurrent_with": [
+      "M1-code"
+    ]
+  },
+  {
+    "id": "M1-integ",
+    "name": "Lima socket parity (integration)",
+    "type": "integration",
+    "phase": "M1",
+    "status": "completed",
+    "description": "Merge M1 code/test, reconcile to spec, and ensure mac socket parity replacement/provisioning is green.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M1-spec.md",
+      "docs/project_management/next/p0-platform-stability/manual_testing_playbook.md"
+    ],
+    "acceptance_criteria": [
+      "Code + tests merged and aligned to M1-spec.",
+      "cargo fmt + clippy + relevant tests + make preflight executed and logged.",
+      "Integration branch merged fast-forward into orchestration; tasks/logs updated."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M1-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M1-integ'",
+      "Create branch mp-m1-sockets-integ from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m1-sockets-integ mp-m1-sockets-integ`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Merge upstream code/test branches for M1 into mp-m1-sockets-integ inside wt/mp-m1-sockets-integ and reconcile behavior to the spec.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Commit integration changes on branch mp-m1-sockets-integ.",
+      "Fast-forward merge mp-m1-sockets-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M1-integ'.",
+      "Remove worktree wt/mp-m1-sockets-integ."
+    ],
+    "worktree": "wt/mp-m1-sockets-integ",
+    "integration_task": "M1-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M1-integ.md",
+    "depends_on": [
+      "M1-code",
+      "M1-test"
+    ],
+    "concurrent_with": []
+  },
+  {
+    "id": "M2-code",
+    "name": "Installer parity (macOS) \u2013 code",
+    "type": "code",
+    "phase": "M2",
+    "status": "completed",
+    "description": "Align mac dev/prod installers with Linux parity: build/copy agent/CLI in Lima when missing, honor cleanup-state metadata, and keep uninstall parity.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M2-spec.md",
+      "docs/project_management/next/p0-platform-stability/plan.md"
+    ],
+    "acceptance_criteria": [
+      "Dev/prod mac installers install a usable agent even when no Linux binary is bundled (build-in-VM fallback or explicit fail with guidance).",
+      "Prod path copies a valid bundled Linux agent into Lima; in-guest build occurs only as a logged fallback when the bundle is missing/invalid.",
+      "Dev path may build in-guest; logging distinguishes copy vs build flows.",
+      "Optional CLI shim behavior is consistent across dev/prod and documented.",
+      "Cleanup-state and metadata handling mirror Linux semantics; uninstall removes guest/host artifacts accordingly.",
+      "Logs clearly differentiate copy vs build flows and surface actionable errors."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M2-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M2-code'",
+      "Create branch mp-m2-installer-code from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m2-installer-code mp-m2-installer-code`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings.",
+      "Inside wt/mp-m2-installer-code, commit M2-code changes to branch mp-m2-installer-code (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m2-installer-code contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M2-code'.",
+      "Remove worktree wt/mp-m2-installer-code."
+    ],
+    "worktree": "wt/mp-m2-installer-code",
+    "integration_task": "M2-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M2-code.md",
+    "depends_on": [
+      "M1-integ"
+    ],
+    "concurrent_with": [
+      "M2-test"
+    ]
+  },
+  {
+    "id": "M2-test",
+    "name": "Installer parity (macOS) \u2013 test",
+    "type": "test",
+    "phase": "M2",
+    "status": "completed",
+    "description": "Add tests/harnesses covering mac installer/uninstaller parity (build-in-VM fallback, cleanup-state, metadata) per M2-spec.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M2-spec.md"
+    ],
+    "acceptance_criteria": [
+      "Tests validate mac install/uninstall flows including missing-agent fallback and cleanup-state metadata where platform-agnostic.",
+      "Coverage includes prod copy-first path vs build fallback (document skips where platform-specific).",
+      "Harness captures logs/outputs for guidance verification.",
+      "Required commands executed (fmt + targeted tests) and recorded in session_log.md.",
+      "No production code changes."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M2-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M2-test'",
+      "Create branch mp-m2-installer-test from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m2-installer-test mp-m2-installer-test`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Run required commands (capture outputs): cargo fmt; targeted cargo test commands for suites added/updated.",
+      "Inside wt/mp-m2-installer-test, commit M2-test changes to branch mp-m2-installer-test (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m2-installer-test contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M2-test'.",
+      "Remove worktree wt/mp-m2-installer-test."
+    ],
+    "worktree": "wt/mp-m2-installer-test",
+    "integration_task": "M2-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M2-test.md",
+    "depends_on": [
+      "M1-integ"
+    ],
+    "concurrent_with": [
+      "M2-code"
+    ]
+  },
+  {
+    "id": "M2-integ",
+    "name": "Installer parity (macOS) \u2013 integration",
+    "type": "integration",
+    "phase": "M2",
+    "status": "completed",
+    "description": "Merge M2 code/test, align mac installer/uninstaller parity with spec, and gate with fmt/clippy/tests/make preflight.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M2-spec.md"
+    ],
+    "acceptance_criteria": [
+      "Installer parity changes merged and match M2-spec (dev/prod mac).",
+      "cargo fmt + clippy + relevant tests + make preflight executed and logged.",
+      "Integration merged fast-forward; tasks/logs updated."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M2-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M2-integ'",
+      "Create branch mp-m2-installer-integ from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m2-installer-integ mp-m2-installer-integ`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Merge upstream code/test branches for M2 into mp-m2-installer-integ inside wt/mp-m2-installer-integ and reconcile behavior to the spec.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Commit integration changes on branch mp-m2-installer-integ.",
+      "Fast-forward merge mp-m2-installer-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M2-integ'.",
+      "Remove worktree wt/mp-m2-installer-integ."
+    ],
+    "worktree": "wt/mp-m2-installer-integ",
+    "integration_task": "M2-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M2-integ.md",
+    "depends_on": [
+      "M2-code",
+      "M2-test"
+    ],
+    "concurrent_with": []
+  },
+  {
+    "id": "M3-code",
+    "name": "Backend & doctor parity \u2013 code",
+    "type": "code",
+    "phase": "M3",
+    "status": "completed",
+    "description": "Propagate policy fs_mode to mac backend, fix readiness/forwarding ordering, align socket/group expectations, and update doctor/doc/shim/health flows per M3-spec.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M3-spec.md",
+      "docs/project_management/next/p0-platform-stability/manual_testing_playbook.md"
+    ],
+    "acceptance_criteria": [
+      "Mac backend honors WorldSpec.fs_mode across PTY/non-PTY and replay paths.",
+      "Agent readiness establishes forwarding before probing; no spurious failures from missing pre-forward UDS.",
+      "Socket/group expectations are aligned or documented, and doctor reflects fs_mode/socket activation status with mac guidance.",
+      "Shim status (text/JSON) on mac reports socket activation and fs_mode in parity with Linux P0 outputs (document mac-only exceptions if any).",
+      "Health CLI (text/JSON) mirrors Linux manager parity/socket signaling on mac or clearly documents deviations.",
+      "Docs/manual flows updated where code changes alter behavior."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M3-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M3-code'",
+      "Create branch mp-m3-backend-code from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m3-backend-code mp-m3-backend-code`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings.",
+      "Inside wt/mp-m3-backend-code, commit M3-code changes to branch mp-m3-backend-code (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m3-backend-code contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M3-code'.",
+      "Remove worktree wt/mp-m3-backend-code."
+    ],
+    "worktree": "wt/mp-m3-backend-code",
+    "integration_task": "M3-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M3-code.md",
+    "depends_on": [
+      "M2-integ"
+    ],
+    "concurrent_with": [
+      "M3-test"
+    ]
+  },
+  {
+    "id": "M3-test",
+    "name": "Backend & doctor parity \u2013 test",
+    "type": "test",
+    "phase": "M3",
+    "status": "completed",
+    "description": "Add tests/fixtures for mac backend fs_mode propagation, doctor/shim-status/health outputs, and readiness/forwarding ordering per M3-spec.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M3-spec.md"
+    ],
+    "acceptance_criteria": [
+      "Tests validate fs_mode propagation and doctor JSON/text outputs (platform-agnostic portions).",
+      "Readiness ordering and socket activation behaviors are covered by unit/integration fixtures where feasible.",
+      "Shim-status and health outputs include mac parity checks for socket activation/fs_mode/manager states (platform-agnostic portions), with skips documented.",
+      "Required commands executed (fmt + targeted tests) and recorded in session_log.md.",
+      "No production code changes."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M3-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M3-test'",
+      "Create branch mp-m3-backend-test from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m3-backend-test mp-m3-backend-test`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Run required commands (capture outputs): cargo fmt; targeted cargo test commands for suites added/updated.",
+      "Inside wt/mp-m3-backend-test, commit M3-test changes to branch mp-m3-backend-test (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m3-backend-test contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M3-test'.",
+      "Remove worktree wt/mp-m3-backend-test."
+    ],
+    "worktree": "wt/mp-m3-backend-test",
+    "integration_task": "M3-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M3-test.md",
+    "depends_on": [
+      "M2-integ"
+    ],
+    "concurrent_with": [
+      "M3-code"
+    ]
+  },
+  {
+    "id": "M3-integ",
+    "name": "Backend & doctor parity \u2013 integration",
+    "type": "integration",
+    "phase": "M3",
+    "status": "completed",
+    "description": "Merge M3 code/test, reconcile mac backend/doctor parity with the spec, and gate with fmt/clippy/tests/make preflight.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M3-spec.md"
+    ],
+    "acceptance_criteria": [
+      "Backend/doctor parity changes merged and match M3-spec.",
+      "cargo fmt + clippy + relevant tests (including shim-status/health parity coverage) + make preflight executed and logged.",
+      "Integration merged fast-forward; tasks/logs updated."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M3-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M3-integ'",
+      "Create branch mp-m3-backend-integ from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m3-backend-integ mp-m3-backend-integ`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Merge upstream code/test branches for M3 into mp-m3-backend-integ inside wt/mp-m3-backend-integ and reconcile behavior to the spec.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Commit integration changes on branch mp-m3-backend-integ.",
+      "Fast-forward merge mp-m3-backend-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M3-integ'.",
+      "Remove worktree wt/mp-m3-backend-integ."
+    ],
+    "worktree": "wt/mp-m3-backend-integ",
+    "integration_task": "M3-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M3-integ.md",
+    "depends_on": [
+      "M3-code",
+      "M3-test"
+    ],
+    "concurrent_with": []
+  }
+  ,
+  {
+    "id": "M4-code",
+    "name": "World deps base manifest parity (code)",
+    "type": "code",
+    "phase": "M4",
+    "status": "completed",
+    "description": "Make `substrate world deps` prefer the installed/bundled world-deps manifest by default (with explicit env overrides preserved), per M4-spec.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M4-spec.md",
+      "docs/CONFIGURATION.md",
+      "docs/INSTALLATION.md"
+    ],
+    "acceptance_criteria": [
+      "`substrate world deps status` reports an installed `<prefix>/versions/<version>/config/world-deps.yaml` base manifest after installation (unless overridden).",
+      "Workspace builds retain a functional repo fallback for contributors.",
+      "`SUBSTRATE_WORLD_DEPS_MANIFEST` continues to override the base manifest path.",
+      "Human + JSON outputs surface the resolved base + overlay paths."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M4-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M4-code'",
+      "Create branch mp-m4-world-deps-manifest-code from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m4-world-deps-manifest-code mp-m4-world-deps-manifest-code`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings.",
+      "Inside wt/mp-m4-world-deps-manifest-code, commit M4-code changes to branch mp-m4-world-deps-manifest-code (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m4-world-deps-manifest-code contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M4-code'.",
+      "Remove worktree wt/mp-m4-world-deps-manifest-code."
+    ],
+    "worktree": "wt/mp-m4-world-deps-manifest-code",
+    "integration_task": "M4-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M4-code.md",
+    "depends_on": [
+      "M3-integ"
+    ],
+    "concurrent_with": [
+      "M4-test"
+    ]
+  },
+  {
+    "id": "M4-test",
+    "name": "World deps base manifest parity (test)",
+    "type": "test",
+    "phase": "M4",
+    "status": "completed",
+    "description": "Add tests/fixtures validating installed-vs-workspace world-deps manifest resolution and env override behavior per M4-spec.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M4-spec.md"
+    ],
+    "acceptance_criteria": [
+      "Tests cover default manifest resolution for installed layouts, workspace fallback behavior, and SUBSTRATE_WORLD_DEPS_MANIFEST override.",
+      "Required commands executed (fmt + targeted tests) and recorded in session_log.md.",
+      "No production code changes."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M4-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M4-test'",
+      "Create branch mp-m4-world-deps-manifest-test from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m4-world-deps-manifest-test mp-m4-world-deps-manifest-test`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Run required commands (capture outputs): cargo fmt; targeted cargo test commands for suites added/updated.",
+      "Inside wt/mp-m4-world-deps-manifest-test, commit M4-test changes to branch mp-m4-world-deps-manifest-test (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m4-world-deps-manifest-test contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M4-test'.",
+      "Remove worktree wt/mp-m4-world-deps-manifest-test."
+    ],
+    "worktree": "wt/mp-m4-world-deps-manifest-test",
+    "integration_task": "M4-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M4-test.md",
+    "depends_on": [
+      "M3-integ"
+    ],
+    "concurrent_with": [
+      "M4-code"
+    ]
+  },
+  {
+    "id": "M4-integ",
+    "name": "World deps base manifest parity (integration)",
+    "type": "integration",
+    "phase": "M4",
+    "status": "completed",
+    "description": "Merge M4 code/test, reconcile manifest resolution behavior to M4-spec, and gate with fmt/clippy/tests/make preflight.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M4-spec.md"
+    ],
+    "acceptance_criteria": [
+      "Manifest resolution behavior matches M4-spec across installed and workspace layouts.",
+      "cargo fmt + clippy + relevant tests + make preflight executed and logged.",
+      "Integration merged fast-forward; tasks/logs updated."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M4-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M4-integ'",
+      "Create branch mp-m4-world-deps-manifest-integ from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m4-world-deps-manifest-integ mp-m4-world-deps-manifest-integ`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Merge upstream code/test branches for M4 into mp-m4-world-deps-manifest-integ inside wt/mp-m4-world-deps-manifest-integ and reconcile behavior to the spec.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Commit integration changes on branch mp-m4-world-deps-manifest-integ.",
+      "Fast-forward merge mp-m4-world-deps-manifest-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M4-integ'.",
+      "Remove worktree wt/mp-m4-world-deps-manifest-integ."
+    ],
+    "worktree": "wt/mp-m4-world-deps-manifest-integ",
+    "integration_task": "M4-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M4-integ.md",
+    "depends_on": [
+      "M4-code",
+      "M4-test"
+    ],
+    "concurrent_with": []
+  },
+  {
+    "id": "M5a-code",
+    "name": "World deps inventory & layering (code)",
+    "type": "code",
+    "phase": "M5a",
+    "status": "completed",
+    "description": "Align world deps tool inventory with shim doctor/health and ensure world-deps manifests behave as override layers per M5a-spec.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M5a-spec.md",
+      "docs/USAGE.md",
+      "docs/CONFIGURATION.md"
+    ],
+    "acceptance_criteria": [
+      "World deps inventory is aligned with shim doctor/health inventory semantics (no contradictory tool sets).",
+      "Installed world-deps.yaml and user overlay act as override layers on top of the base inventory.",
+      "world deps status --json surfaces the resolved manifests used to compute the inventory."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M5a-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M5a-code'",
+      "Create branch mp-m5a-world-deps-inventory-code from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m5a-world-deps-inventory-code mp-m5a-world-deps-inventory-code`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings.",
+      "Inside wt/mp-m5a-world-deps-inventory-code, commit M5a-code changes to branch mp-m5a-world-deps-inventory-code (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m5a-world-deps-inventory-code contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M5a-code'.",
+      "Remove worktree wt/mp-m5a-world-deps-inventory-code."
+    ],
+    "worktree": "wt/mp-m5a-world-deps-inventory-code",
+    "integration_task": "M5a-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M5a-code.md",
+    "depends_on": [
+      "M4-integ"
+    ],
+    "concurrent_with": [
+      "M5a-test"
+    ]
+  },
+  {
+    "id": "M5a-test",
+    "name": "World deps inventory & layering (test)",
+    "type": "test",
+    "phase": "M5a",
+    "status": "completed",
+    "description": "Add tests/fixtures validating world deps inventory alignment and manifest layering per M5a-spec.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M5a-spec.md"
+    ],
+    "acceptance_criteria": [
+      "Tests validate base inventory + installed overlay + user overlay layering behavior under fixtures.",
+      "Required commands executed (fmt + targeted tests) and recorded in session_log.md.",
+      "No production code changes."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M5a-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M5a-test'",
+      "Create branch mp-m5a-world-deps-inventory-test from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m5a-world-deps-inventory-test mp-m5a-world-deps-inventory-test`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Run required commands (capture outputs): cargo fmt; targeted cargo test commands for suites added/updated.",
+      "Inside wt/mp-m5a-world-deps-inventory-test, commit M5a-test changes to branch mp-m5a-world-deps-inventory-test (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m5a-world-deps-inventory-test contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M5a-test'.",
+      "Remove worktree wt/mp-m5a-world-deps-inventory-test."
+    ],
+    "worktree": "wt/mp-m5a-world-deps-inventory-test",
+    "integration_task": "M5a-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M5a-test.md",
+    "depends_on": [
+      "M4-integ"
+    ],
+    "concurrent_with": [
+      "M5a-code"
+    ]
+  },
+  {
+    "id": "M5a-integ",
+    "name": "World deps inventory & layering (integration)",
+    "type": "integration",
+    "phase": "M5a",
+    "status": "completed",
+    "description": "Merge M5a code/test, reconcile inventory + layering behavior to M5a-spec, and gate with fmt/clippy/tests/make preflight.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M5a-spec.md"
+    ],
+    "acceptance_criteria": [
+      "Inventory and layering behavior matches M5a-spec.",
+      "cargo fmt + clippy + relevant tests + make preflight executed and logged.",
+      "Integration merged fast-forward; tasks/logs updated."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M5a-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M5a-integ'",
+      "Create branch mp-m5a-world-deps-inventory-integ from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m5a-world-deps-inventory-integ mp-m5a-world-deps-inventory-integ`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Merge upstream code/test branches for M5a into mp-m5a-world-deps-inventory-integ inside wt/mp-m5a-world-deps-inventory-integ and reconcile behavior to the spec.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Commit integration changes on branch mp-m5a-world-deps-inventory-integ.",
+      "Fast-forward merge mp-m5a-world-deps-inventory-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M5a-integ'.",
+      "Remove worktree wt/mp-m5a-world-deps-inventory-integ."
+    ],
+    "worktree": "wt/mp-m5a-world-deps-inventory-integ",
+    "integration_task": "M5a-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M5a-integ.md",
+    "depends_on": [
+      "M5a-code",
+      "M5a-test"
+    ],
+    "concurrent_with": []
+  },
+  {
+    "id": "M5b-code",
+    "name": "Host detection parity (code)",
+    "type": "code",
+    "phase": "M5b",
+    "status": "completed",
+    "description": "Make world deps host detection reflect the Substrate-managed host environment per M5b-spec.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M5b-spec.md"
+    ],
+    "acceptance_criteria": [
+      "Host detection for world deps runs under the same manager init semantics as Substrate-managed shells/commands.",
+      "Detection remains deterministic and does not mutate user dotfiles.",
+      "Degraded detection modes are explicit and actionable."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M5b-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M5b-code'",
+      "Create branch mp-m5b-world-deps-host-detect-code from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m5b-world-deps-host-detect-code mp-m5b-world-deps-host-detect-code`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings.",
+      "Inside wt/mp-m5b-world-deps-host-detect-code, commit M5b-code changes to branch mp-m5b-world-deps-host-detect-code (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m5b-world-deps-host-detect-code contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M5b-code'.",
+      "Remove worktree wt/mp-m5b-world-deps-host-detect-code."
+    ],
+    "worktree": "wt/mp-m5b-world-deps-host-detect-code",
+    "integration_task": "M5b-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M5b-code.md",
+    "depends_on": [
+      "M5a-integ"
+    ],
+    "concurrent_with": [
+      "M5b-test"
+    ]
+  },
+  {
+    "id": "M5b-test",
+    "name": "Host detection parity (test)",
+    "type": "test",
+    "phase": "M5b",
+    "status": "completed",
+    "description": "Add tests/fixtures validating world deps host detection runs under manager init semantics per M5b-spec.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M5b-spec.md"
+    ],
+    "acceptance_criteria": [
+      "Tests validate host detection can observe tools provided by manager init under controlled fixtures.",
+      "Required commands executed (fmt + targeted tests) and recorded in session_log.md.",
+      "No production code changes."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M5b-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M5b-test'",
+      "Create branch mp-m5b-world-deps-host-detect-test from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m5b-world-deps-host-detect-test mp-m5b-world-deps-host-detect-test`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Run required commands (capture outputs): cargo fmt; targeted cargo test commands for suites added/updated.",
+      "Inside wt/mp-m5b-world-deps-host-detect-test, commit M5b-test changes to branch mp-m5b-world-deps-host-detect-test (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m5b-world-deps-host-detect-test contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M5b-test'.",
+      "Remove worktree wt/mp-m5b-world-deps-host-detect-test."
+    ],
+    "worktree": "wt/mp-m5b-world-deps-host-detect-test",
+    "integration_task": "M5b-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M5b-test.md",
+    "depends_on": [
+      "M5a-integ"
+    ],
+    "concurrent_with": [
+      "M5b-code"
+    ]
+  },
+  {
+    "id": "M5b-integ",
+    "name": "Host detection parity (integration)",
+    "type": "integration",
+    "phase": "M5b",
+    "status": "completed",
+    "description": "Merge M5b code/test, reconcile host detection semantics to M5b-spec, and gate with fmt/clippy/tests/make preflight.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M5b-spec.md"
+    ],
+    "acceptance_criteria": [
+      "Host detection behavior matches M5b-spec.",
+      "cargo fmt + clippy + relevant tests + make preflight executed and logged.",
+      "Integration merged fast-forward; tasks/logs updated."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M5b-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M5b-integ'",
+      "Create branch mp-m5b-world-deps-host-detect-integ from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m5b-world-deps-host-detect-integ mp-m5b-world-deps-host-detect-integ`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Merge upstream code/test branches for M5b into mp-m5b-world-deps-host-detect-integ inside wt/mp-m5b-world-deps-host-detect-integ and reconcile behavior to the spec.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Commit integration changes on branch mp-m5b-world-deps-host-detect-integ.",
+      "Fast-forward merge mp-m5b-world-deps-host-detect-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M5b-integ'.",
+      "Remove worktree wt/mp-m5b-world-deps-host-detect-integ."
+    ],
+    "worktree": "wt/mp-m5b-world-deps-host-detect-integ",
+    "integration_task": "M5b-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M5b-integ.md",
+    "depends_on": [
+      "M5b-code",
+      "M5b-test"
+    ],
+    "concurrent_with": []
+  },
+  {
+    "id": "M5c-code",
+    "name": "First-run UX wiring (code)",
+    "type": "code",
+    "phase": "M5c",
+    "status": "completed",
+    "description": "Wire first-run/provision flows and recommendations so macOS installs feel like host out of the box per M5c-spec.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M5c-spec.md",
+      "docs/INSTALLATION.md",
+      "docs/USAGE.md"
+    ],
+    "acceptance_criteria": [
+      "Installer/provision flows invoke the correct world deps sync behavior after provisioning succeeds (e.g., --sync-deps).",
+      "Health/doctor recommendations remain coherent and actionable (no contradictions).",
+      "Default sync does not attempt installs for tools that are not host-present unless explicitly requested."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M5c-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M5c-code'",
+      "Create branch mp-m5c-world-deps-first-run-code from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m5c-world-deps-first-run-code mp-m5c-world-deps-first-run-code`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings.",
+      "Inside wt/mp-m5c-world-deps-first-run-code, commit M5c-code changes to branch mp-m5c-world-deps-first-run-code (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m5c-world-deps-first-run-code contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M5c-code'.",
+      "Remove worktree wt/mp-m5c-world-deps-first-run-code."
+    ],
+    "worktree": "wt/mp-m5c-world-deps-first-run-code",
+    "integration_task": "M5c-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M5c-code.md",
+    "depends_on": [
+      "M5b-integ"
+    ],
+    "concurrent_with": [
+      "M5c-test"
+    ]
+  },
+  {
+    "id": "M5c-test",
+    "name": "First-run UX wiring (test)",
+    "type": "test",
+    "phase": "M5c",
+    "status": "completed",
+    "description": "Add tests/fixtures validating first-run wiring and coherent recommendations per M5c-spec.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M5c-spec.md"
+    ],
+    "acceptance_criteria": [
+      "Tests validate --sync-deps/first-run wiring under fixtures where feasible.",
+      "Tests validate health/doctor guidance does not contradict world deps status.",
+      "Required commands executed (fmt + targeted tests) and recorded in session_log.md.",
+      "No production code changes."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M5c-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M5c-test'",
+      "Create branch mp-m5c-world-deps-first-run-test from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m5c-world-deps-first-run-test mp-m5c-world-deps-first-run-test`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Run required commands (capture outputs): cargo fmt; targeted cargo test commands for suites added/updated.",
+      "Inside wt/mp-m5c-world-deps-first-run-test, commit M5c-test changes to branch mp-m5c-world-deps-first-run-test (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m5c-world-deps-first-run-test contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M5c-test'.",
+      "Remove worktree wt/mp-m5c-world-deps-first-run-test."
+    ],
+    "worktree": "wt/mp-m5c-world-deps-first-run-test",
+    "integration_task": "M5c-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M5c-test.md",
+    "depends_on": [
+      "M5b-integ"
+    ],
+    "concurrent_with": [
+      "M5c-code"
+    ]
+  },
+  {
+    "id": "M5c-integ",
+    "name": "First-run UX wiring (integration)",
+    "type": "integration",
+    "phase": "M5c",
+    "status": "completed",
+    "description": "Merge M5c code/test, reconcile first-run wiring and recommendations to M5c-spec, and gate with fmt/clippy/tests/make preflight.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M5c-spec.md"
+    ],
+    "acceptance_criteria": [
+      "First-run wiring and recommendations match M5c-spec.",
+      "cargo fmt + clippy + relevant tests + make preflight executed and logged.",
+      "Integration merged fast-forward; tasks/logs updated."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M5c-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M5c-integ'",
+      "Create branch mp-m5c-world-deps-first-run-integ from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m5c-world-deps-first-run-integ mp-m5c-world-deps-first-run-integ`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Merge upstream code/test branches for M5c into mp-m5c-world-deps-first-run-integ inside wt/mp-m5c-world-deps-first-run-integ and reconcile behavior to the spec.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Commit integration changes on branch mp-m5c-world-deps-first-run-integ.",
+      "Fast-forward merge mp-m5c-world-deps-first-run-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M5c-integ'.",
+      "Remove worktree wt/mp-m5c-world-deps-first-run-integ."
+    ],
+    "worktree": "wt/mp-m5c-world-deps-first-run-integ",
+    "integration_task": "M5c-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M5c-integ.md",
+    "depends_on": [
+      "M5c-code",
+      "M5c-test"
+    ],
+    "concurrent_with": []
+  },
+  {
+    "id": "M6-code",
+    "name": "World deps failure safety (code)",
+    "type": "code",
+    "phase": "M6",
+    "status": "completed",
+    "description": "Ensure macOS world deps install/sync fail when the backend is unavailable (no silent host fallback) and status clearly reports guest unavailability, per M6-spec.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M6-spec.md",
+      "docs/USAGE.md"
+    ],
+    "acceptance_criteria": [
+      "On macOS, world deps install/sync exit non-zero when the world backend is unavailable.",
+      "world deps status differentiates guest missing vs guest unavailable and surfaces a reason.",
+      "No run can claim guest installs succeeded by executing Linux recipes on the host."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M6-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M6-code'",
+      "Create branch mp-m6-world-deps-safety-code from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m6-world-deps-safety-code mp-m6-world-deps-safety-code`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings.",
+      "Inside wt/mp-m6-world-deps-safety-code, commit M6-code changes to branch mp-m6-world-deps-safety-code (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m6-world-deps-safety-code contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M6-code'.",
+      "Remove worktree wt/mp-m6-world-deps-safety-code."
+    ],
+    "worktree": "wt/mp-m6-world-deps-safety-code",
+    "integration_task": "M6-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M6-code.md",
+    "depends_on": [
+      "M4-integ"
+    ],
+    "concurrent_with": [
+      "M6-test"
+    ]
+  },
+  {
+    "id": "M6-test",
+    "name": "World deps failure safety (test)",
+    "type": "test",
+    "phase": "M6",
+    "status": "completed",
+    "description": "Add tests/fixtures validating macOS world deps does not silently fall back to host execution for install/sync, per M6-spec.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M6-spec.md"
+    ],
+    "acceptance_criteria": [
+      "Tests simulate backend unavailability and assert install/sync fails with actionable messaging on macOS.",
+      "Status output indicates guest unavailable (not merely missing).",
+      "Required commands executed (fmt + targeted tests) and recorded in session_log.md.",
+      "No production code changes."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M6-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M6-test'",
+      "Create branch mp-m6-world-deps-safety-test from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m6-world-deps-safety-test mp-m6-world-deps-safety-test`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Run required commands (capture outputs): cargo fmt; targeted cargo test commands for suites added/updated.",
+      "Inside wt/mp-m6-world-deps-safety-test, commit M6-test changes to branch mp-m6-world-deps-safety-test (no docs/tasks/session_log edits).",
+      "Outside the worktree, ensure branch mp-m6-world-deps-safety-test contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability-macOS-parity.",
+      "Checkout feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish M6-test'.",
+      "Remove worktree wt/mp-m6-world-deps-safety-test."
+    ],
+    "worktree": "wt/mp-m6-world-deps-safety-test",
+    "integration_task": "M6-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M6-test.md",
+    "depends_on": [
+      "M4-integ"
+    ],
+    "concurrent_with": [
+      "M6-code"
+    ]
+  },
+  {
+    "id": "M6-integ",
+    "name": "World deps failure safety (integration)",
+    "type": "integration",
+    "phase": "M6",
+    "status": "completed",
+    "description": "Merge M6 code/test, reconcile macOS world deps failure safety to M6-spec, and gate with fmt/clippy/tests/make preflight.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "docs/project_management/next/p0-platform-stability-macOS-parity/M6-spec.md"
+    ],
+    "acceptance_criteria": [
+      "macOS world deps failure safety matches M6-spec.",
+      "cargo fmt + clippy + relevant tests + make preflight executed and logged.",
+      "Integration merged fast-forward; tasks/logs updated."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only",
+      "Read plan, tasks.json, session_log.md, M6-spec.md, kickoff prompt",
+      "Set task status to in_progress in tasks.json (orchestration branch)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start M6-integ'",
+      "Create branch mp-m6-world-deps-safety-integ from feat/p0-platform-stability-macOS-parity; run `git worktree add wt/mp-m6-world-deps-safety-integ mp-m6-world-deps-safety-integ`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Merge upstream code/test branches for M6 into mp-m6-world-deps-safety-integ inside wt/mp-m6-world-deps-safety-integ and reconcile behavior to the spec.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Commit integration changes on branch mp-m6-world-deps-safety-integ.",
+      "Fast-forward merge mp-m6-world-deps-safety-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M6-integ'.",
+      "Remove worktree wt/mp-m6-world-deps-safety-integ."
+    ],
+    "worktree": "wt/mp-m6-world-deps-safety-integ",
+    "integration_task": "M6-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability-macOS-parity/kickoff_prompts/M6-integ.md",
+    "depends_on": [
+      "M6-code",
+      "M6-test"
+    ],
+    "concurrent_with": []
+  }
+]

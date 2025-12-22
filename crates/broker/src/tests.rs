@@ -1,5 +1,6 @@
 use super::*;
 use std::sync::{Arc, Barrier, RwLock};
+use substrate_common::WorldFsMode;
 use tempfile::tempdir;
 
 fn poison_rwlock<T: Send + Sync + 'static>(lock: &Arc<RwLock<T>>) {
@@ -41,6 +42,7 @@ fn test_quick_check_allow() {
 fn test_load_policy() {
     let dir = tempdir().unwrap();
     let policy_path = dir.path().join("policy.yaml");
+    let broker = Broker::new();
 
     let policy_content = r#"
 id: test-policy
@@ -64,8 +66,10 @@ allow_shell_operators: true
 "#;
     std::fs::write(&policy_path, policy_content).unwrap();
 
-    let broker = Broker::new();
-    broker.load_policy(&policy_path).unwrap();
+    broker.load_policy(&policy_path).expect("load policy");
+
+    let policy = broker.policy.read().unwrap();
+    assert_eq!(policy.world_fs_mode, WorldFsMode::Writable);
 
     // Test that denied command is blocked (in enforce mode)
     broker.set_observe_only(false);
@@ -76,6 +80,22 @@ allow_shell_operators: true
         )
         .unwrap();
     assert!(matches!(result, Decision::Deny(_)));
+}
+
+#[test]
+fn minimal_profile_parses_with_defaults() {
+    let raw = r#"
+id: minimal
+name: Minimal Profile
+world_fs_mode: read_only
+cmd_denied: ["ls"]
+"#;
+
+    let policy: Policy = serde_yaml::from_str(raw).expect("policy should parse");
+    assert_eq!(policy.id, "minimal");
+    assert_eq!(policy.world_fs_mode, WorldFsMode::ReadOnly);
+    assert_eq!(policy.fs_read, vec!["*".to_string()]);
+    assert!(policy.fs_write.is_empty());
 }
 
 #[test]
@@ -217,4 +237,26 @@ allow_shell_operators: true
             .expect("evaluate alpha on broker_b"),
         Decision::Deny(_)
     ));
+}
+
+#[test]
+fn invalid_world_fs_mode_in_policy_surfaces_error() {
+    let dir = tempdir().unwrap();
+    let policy_path = dir.path().join("policy.yaml");
+    std::fs::write(
+        &policy_path,
+        r#"
+id: bad-fs-mode
+name: Invalid fs mode
+world_fs_mode: invalid
+"#,
+    )
+    .unwrap();
+
+    let broker = Broker::new();
+    let result = broker.load_policy(&policy_path);
+    assert!(
+        result.is_err(),
+        "expected invalid world_fs_mode to fail parsing"
+    );
 }

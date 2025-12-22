@@ -3,6 +3,7 @@
 use crate::execution::settings;
 use anyhow::{Context, Result};
 use std::env;
+use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
@@ -63,6 +64,32 @@ pub(crate) fn world_deps_manifest_base_path() -> PathBuf {
         return PathBuf::from(override_path);
     }
 
+    if let Some(path) = installed_world_deps_manifest_base_path() {
+        return canonicalize_or(&path);
+    }
+
+    repo_world_deps_manifest_base_path()
+}
+
+fn installed_world_deps_manifest_base_path() -> Option<PathBuf> {
+    let exe_path = env::current_exe().ok()?;
+    let canonical = canonicalize_or(&exe_path);
+
+    let bin_dir = canonical.parent()?;
+    if bin_dir.file_name() != Some(OsStr::new("bin")) {
+        return None;
+    }
+
+    let version_dir = bin_dir.parent()?;
+    let versions_dir = version_dir.parent()?;
+    if versions_dir.file_name() != Some(OsStr::new("versions")) {
+        return None;
+    }
+
+    Some(version_dir.join("config").join("world-deps.yaml"))
+}
+
+fn repo_world_deps_manifest_base_path() -> PathBuf {
     let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     crate_dir
         .parent()

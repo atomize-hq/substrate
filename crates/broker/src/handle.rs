@@ -5,6 +5,7 @@ use crate::policy::Decision;
 use anyhow::Result;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
+use substrate_common::WorldFsMode;
 
 #[derive(Clone, Default)]
 pub struct BrokerHandle {
@@ -76,6 +77,13 @@ impl BrokerHandle {
             .read()
             .map(|b| b.allowed_domains())
             .unwrap_or_default()
+    }
+
+    pub fn world_fs_mode(&self) -> WorldFsMode {
+        self.broker
+            .read()
+            .map(|b| b.world_fs_mode())
+            .unwrap_or(WorldFsMode::Writable)
     }
 
     fn apply_enforcement_env(&self) {

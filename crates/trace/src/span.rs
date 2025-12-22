@@ -8,6 +8,29 @@ use std::env;
 use tracing::trace;
 use uuid::Uuid;
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionOrigin {
+    Host,
+    World,
+}
+
+impl ExecutionOrigin {
+    pub fn flipped(self) -> Self {
+        match self {
+            ExecutionOrigin::Host => ExecutionOrigin::World,
+            ExecutionOrigin::World => ExecutionOrigin::Host,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ExecutionOrigin::Host => "host",
+            ExecutionOrigin::World => "world",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Span {
     pub ts: DateTime<Utc>,
@@ -27,6 +50,8 @@ pub struct Span {
     pub replay_context: Option<ReplayContext>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transport: Option<TransportMeta>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub execution_origin: Option<ExecutionOrigin>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub graph_edges: Option<Vec<GraphEdge>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -52,6 +77,32 @@ pub struct ReplayContext {
     pub policy_id: String,
     pub policy_commit: Option<String>,
     pub world_image_version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hostname: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shell: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub term: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub world_image: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub execution_origin: Option<ExecutionOrigin>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transport: Option<TransportMeta>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub anchor_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub anchor_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub world_root_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub world_root_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub caged: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub world_fs_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,6 +171,7 @@ impl SpanBuilder {
                 fs_diff: None,
                 replay_context: None,
                 transport: None,
+                execution_origin: None,
                 graph_edges: None,
                 policy_decision: None,
             },
@@ -169,6 +221,7 @@ impl SpanBuilder {
             command: self.span.cmd,
             cwd: self.span.cwd,
             transport: None,
+            execution_origin: Some(ExecutionOrigin::Host),
             context: self.context,
         })
     }
@@ -179,6 +232,7 @@ pub struct ActiveSpan {
     command: String,
     cwd: String,
     transport: Option<TransportMeta>,
+    execution_origin: Option<ExecutionOrigin>,
     context: TraceContext,
 }
 
@@ -187,13 +241,28 @@ impl ActiveSpan {
         self.transport = Some(transport);
     }
 
+    pub fn clear_transport(&mut self) {
+        self.transport = None;
+    }
+
+    pub fn set_execution_origin(&mut self, origin: ExecutionOrigin) {
+        self.execution_origin = Some(origin);
+    }
+
+    pub fn execution_origin(&self) -> ExecutionOrigin {
+        self.execution_origin.unwrap_or(ExecutionOrigin::Host)
+    }
+
     pub fn finish(
         self,
         exit_code: i32,
         scopes: Vec<String>,
         fs_diff: Option<FsDiff>,
     ) -> Result<()> {
-        let replay_context = self.context.build_replay_context()?;
+        let origin = self.execution_origin.unwrap_or(ExecutionOrigin::Host);
+        let replay_context = self
+            .context
+            .build_replay_context(self.transport.clone(), origin)?;
 
         let span = Span {
             ts: Utc::now(),
@@ -218,6 +287,7 @@ impl ActiveSpan {
             fs_diff,
             replay_context: Some(replay_context),
             transport: self.transport,
+            execution_origin: Some(origin),
             graph_edges: None,
             policy_decision: None,
         };

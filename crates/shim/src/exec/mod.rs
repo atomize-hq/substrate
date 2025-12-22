@@ -15,7 +15,7 @@ use std::env;
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime};
 use substrate_broker::{set_global_broker, BrokerHandle};
-use substrate_trace::{set_global_trace_context, TraceContext};
+use substrate_trace::{create_span_builder, init_trace, set_global_trace_context, TraceContext};
 
 /// Main shim execution function
 pub fn run_shim() -> Result<i32> {
@@ -61,6 +61,25 @@ pub fn run_shim() -> Result<i32> {
             PolicyResult::Deny(exit_code) => {
                 return Ok(exit_code);
             }
+        }
+    } else {
+        let _ = init_trace(None);
+        if let Ok(mut builder) = create_span_builder() {
+            builder = builder
+                .with_command(&command_str)
+                .with_cwd(cwd.to_str().unwrap_or("."));
+
+            match builder.start() {
+                Ok(span) => {
+                    env::set_var("SHIM_PARENT_SPAN", span.get_span_id());
+                    active_span = Some(span);
+                }
+                Err(e) => {
+                    eprintln!("substrate: failed to create span: {}", e);
+                }
+            }
+        } else {
+            eprintln!("substrate: failed to create span builder");
         }
     }
 

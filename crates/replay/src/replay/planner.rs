@@ -2,8 +2,11 @@ use anyhow::Result;
 use substrate_broker::{set_global_broker, BrokerHandle};
 
 use super::{ExecutionResult, ExecutionState};
-use crate::replay::executor::{execute_direct, execute_with_world_backends};
+use crate::replay::executor::{
+    execute_direct, execute_with_world_backends, record_replay_strategy,
+};
 use crate::replay::helpers::{replay_verbose, world_isolation_available};
+use serde_json::json;
 
 /// Execute a command in an isolated world when possible.
 pub async fn execute_in_world(
@@ -14,8 +17,15 @@ pub async fn execute_in_world(
 
     if !world_isolation_available() {
         if replay_verbose() {
-            eprintln!("[replay] world strategy: direct");
+            eprintln!("[replay] world strategy: direct (world isolation unavailable)");
         }
+        record_replay_strategy(
+            state,
+            "direct",
+            None,
+            Some("world isolation unavailable"),
+            json!({"requested_origin": state.target_origin.as_str()}),
+        );
         return execute_direct(state, timeout_secs).await;
     }
 

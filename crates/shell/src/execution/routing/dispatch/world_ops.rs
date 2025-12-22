@@ -4,6 +4,8 @@ use super::shim_ops::build_world_env_map;
 use crate::execution::agent_events::publish_agent_event;
 #[cfg(target_os = "macos")]
 use crate::execution::pw;
+#[cfg(all(test, any(target_os = "linux", target_os = "windows")))]
+use crate::execution::world_env_guard;
 #[cfg(target_os = "linux")]
 use crate::execution::{
     routing::{get_term_size, RawModeGuard},
@@ -11,13 +13,14 @@ use crate::execution::{
 };
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use agent_api_client::AgentClient;
-use agent_api_types::{ExecuteRequest, ExecuteStreamFrame};
+use agent_api_types::{ExecuteRequest, ExecuteStreamFrame, WorldFsMode};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use std::env;
 use std::io;
 #[cfg(target_os = "linux")]
 use substrate_broker::allowed_domains;
+use substrate_broker::world_fs_mode;
 use substrate_common::agent_events::AgentEvent;
 #[cfg(unix)]
 use tokio::net::UnixStream;
@@ -29,6 +32,33 @@ use tokio_tungstenite as tungs;
 use world::LinuxLocalBackend;
 #[cfg(target_os = "linux")]
 use world_api::{ResourceLimits, WorldBackend, WorldSpec};
+
+#[cfg(target_os = "macos")]
+fn normalize_env_for_linux_guest(env_map: &mut std::collections::HashMap<String, String>) {
+    // macOS host PATH often contains directories that are mounted into the guest (e.g. /Users/...),
+    // which can lead to confusing behavior where `which node` points at a macOS binary that cannot
+    // run inside the Linux VM. Prefer a stable Linux guest PATH.
+    const GUEST_BASE_PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+    const WORLD_DEPS_BIN: &str = "/var/lib/substrate/world-deps/bin";
+    env_map.insert(
+        "PATH".to_string(),
+        format!("{WORLD_DEPS_BIN}:{GUEST_BASE_PATH}"),
+    );
+
+    // Avoid leaking macOS host HOME into the Linux guest. This both reduces
+    // accidental use of macOS toolchains (nvm/pyenv) and keeps guest-only state
+    // in a predictable location.
+    if env_map
+        .get("HOME")
+        .is_none_or(|home| home.is_empty() || home.starts_with("/Users/"))
+    {
+        env_map.insert("HOME".to_string(), "/root".to_string());
+    }
+
+    env_map
+        .entry("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR".to_string())
+        .or_insert_with(|| WORLD_DEPS_BIN.to_string());
+}
 
 /// Collect filesystem diff and network scopes from world backend
 #[allow(unused_variables)]
@@ -81,9 +111,12 @@ pub(super) fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Res
     // Connect UDS and do WS handshake
     let rt = tokio::runtime::Runtime::new()?;
     let code = rt.block_on(async move {
-        let stream = UnixStream::connect("/run/substrate.sock")
+        let socket_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("/run/substrate.sock"));
+        let stream = UnixStream::connect(&socket_path)
             .await
-            .map_err(|e| anyhow::anyhow!("connect UDS: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("connect UDS ({}): {}", socket_path.display(), e))?;
         let url = url::Url::parse("ws://localhost/v1/stream").unwrap();
         let (ws, _resp) = tungs::client_async(url, stream)
             .await
@@ -303,15 +336,24 @@ pub(super) fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Res
 #[cfg(target_os = "linux")]
 fn ensure_world_agent_ready() -> anyhow::Result<()> {
     use std::path::Path;
+    use std::path::PathBuf;
     use std::thread;
     use std::time::{Duration, Instant};
-    const SOCK: &str = "/run/substrate.sock";
     const ACTIVATION_WAIT_MS: u64 = 2_000;
+    const DEFAULT_SOCKET_PATH: &str = "/run/substrate.sock";
+
+    let socket_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_SOCKET_PATH));
+
+    let socket_override_active = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
+        .map(|p| p != std::ffi::OsStr::new(DEFAULT_SOCKET_PATH))
+        .unwrap_or(false);
 
     // Helper: quick readiness probe via HTTP-over-UDS
-    fn probe_caps() -> bool {
+    fn probe_caps(sock: &Path) -> bool {
         use std::io::{Read, Write};
-        match std::os::unix::net::UnixStream::connect(SOCK) {
+        match std::os::unix::net::UnixStream::connect(sock) {
             Ok(mut s) => {
                 let _ = s.set_read_timeout(Some(std::time::Duration::from_millis(150)));
                 let _ = s.set_write_timeout(Some(std::time::Duration::from_millis(150)));
@@ -332,7 +374,7 @@ fn ensure_world_agent_ready() -> anyhow::Result<()> {
     }
 
     // Fast path: already ready
-    if probe_caps() {
+    if probe_caps(&socket_path) {
         return Ok(());
     }
 
@@ -341,20 +383,28 @@ fn ensure_world_agent_ready() -> anyhow::Result<()> {
     if activation_report.is_socket_activated() {
         let deadline = Instant::now() + Duration::from_millis(ACTIVATION_WAIT_MS);
         while Instant::now() < deadline {
-            if probe_caps() {
+            if probe_caps(&socket_path) {
                 return Ok(());
             }
             thread::sleep(Duration::from_millis(100));
         }
         anyhow::bail!(
-            "world-agent socket activation detected but /run/substrate.sock did not respond. \
-             Run 'systemctl status substrate-world-agent.socket' for details."
+            "world-agent socket activation detected but {} did not respond. \
+             Run 'systemctl status substrate-world-agent.socket' for details.",
+            socket_path.display()
         );
     }
 
     // Clean up stale socket if present (no responding server)
-    if !activation_report.is_socket_activated() && Path::new(SOCK).exists() {
-        let _ = std::fs::remove_file(SOCK);
+    if !activation_report.is_socket_activated() && Path::new(&socket_path).exists() {
+        let _ = std::fs::remove_file(&socket_path);
+    }
+
+    if socket_override_active {
+        anyhow::bail!(
+            "world backend unavailable (SUBSTRATE_WORLD_SOCKET override): {} did not respond",
+            socket_path.display()
+        );
     }
 
     // Try to spawn agent
@@ -382,7 +432,7 @@ fn ensure_world_agent_ready() -> anyhow::Result<()> {
     // Wait up to ~1s for readiness
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1000);
     while std::time::Instant::now() < deadline {
-        if probe_caps() {
+        if probe_caps(&socket_path) {
             return Ok(());
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
@@ -413,6 +463,9 @@ where
         return LinuxWorldInit::Disabled;
     }
 
+    #[cfg(test)]
+    let _env_guard = world_env_guard();
+
     match agent_probe() {
         Ok(()) => {
             env::set_var("SUBSTRATE_WORLD", "enabled");
@@ -435,6 +488,7 @@ where
                 allowed_domains: allowed_domains(),
                 project_dir: crate::execution::settings::world_root_from_env().path,
                 always_isolate: false,
+                fs_mode: world_fs_mode(),
             };
             let backend = LinuxLocalBackend::new();
             match backend.ensure_session(&spec) {
@@ -462,6 +516,11 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
     use tungs::tungstenite::Message;
 
     let ctx = pw::get_context().ok_or_else(|| anyhow::anyhow!("no platform world context"))?;
+
+    // Put the host terminal into raw mode so interactive programs (nano/vim/top)
+    // receive keystrokes immediately (not line-buffered until Enter).
+    let _terminal_guard = crate::execution::pty::MinimalTerminalGuard::new()?;
+
     let rt = tokio::runtime::Runtime::new()?;
     let code = rt.block_on(async move {
         async fn handle_ws<S>(
@@ -473,7 +532,10 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
             S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
         {
             use futures::SinkExt;
-            let (mut sink, mut stream) = ws.split();
+            use std::sync::Arc;
+            use tokio::sync::Mutex;
+            let (sink, mut stream) = ws.split();
+            let sink = Arc::new(Mutex::new(sink));
 
             let cmd_sanitized = if let Some(rest) = cmd.strip_prefix(":pty ") {
                 rest
@@ -481,8 +543,21 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
                 cmd
             };
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-            let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
-            let (cols, rows) = (80u16, 24u16);
+            let mut env_map = build_world_env_map();
+            normalize_env_for_linux_guest(&mut env_map);
+            env_map
+                .entry("XDG_DATA_HOME".to_string())
+                .or_insert_with(|| "/root/.local/share".to_string());
+
+            // Ensure a few common XDG dirs exist to avoid noisy TUI warnings (e.g. nano history).
+            // This is best-effort and does not fail the session in read-only modes.
+            let cmd_sanitized = format!(
+                "mkdir -p \"${{XDG_DATA_HOME:-$HOME/.local/share}}\" >/dev/null 2>&1 || true; {cmd_sanitized}"
+            );
+            let (cols, rows) = match crate::execution::pty::get_terminal_size() {
+                Ok(sz) => (sz.cols, sz.rows),
+                Err(_) => (80u16, 24u16),
+            };
             let start = serde_json::json!({
                 "type": "start",
                 "cmd": cmd_sanitized,
@@ -492,12 +567,15 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
                 "cols": cols,
                 "rows": rows,
             });
-            sink.send(Message::Text(start.to_string()))
+            sink.lock()
+                .await
+                .send(Message::Text(start.to_string()))
                 .await
                 .map_err(|e| anyhow::anyhow!("ws send start: {}", e))?;
 
             // stdin forwarder
             let mut stdin = tokio::io::stdin();
+            let sink_for_stdin = sink.clone();
             let stdin_task = tokio::spawn(async move {
                 use tokio::io::AsyncReadExt;
                 let mut buf = [0u8; 8192];
@@ -507,11 +585,45 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
                         Ok(n) => {
                             let b64 = base64::engine::general_purpose::STANDARD.encode(&buf[..n]);
                             let frame = serde_json::json!({"type":"stdin", "data_b64": b64});
-                            if sink.send(Message::Text(frame.to_string())).await.is_err() {
+                            if sink_for_stdin
+                                .lock()
+                                .await
+                                .send(Message::Text(frame.to_string()))
+                                .await
+                                .is_err()
+                            {
                                 break;
                             }
                         }
                         Err(_) => break,
+                    }
+                }
+            });
+
+            // Terminal resize forwarder (SIGWINCH => WS "resize" frame).
+            let sink_for_resize = sink.clone();
+            let resize_task = tokio::spawn(async move {
+                #[cfg(unix)]
+                {
+                    use tokio::signal::unix::{signal, SignalKind};
+                    if let Ok(mut sigwinch) = signal(SignalKind::window_change()) {
+                        while sigwinch.recv().await.is_some() {
+                            let (cols, rows) = match crate::execution::pty::get_terminal_size() {
+                                Ok(sz) => (sz.cols, sz.rows),
+                                Err(_) => continue,
+                            };
+                            let frame =
+                                serde_json::json!({"type":"resize", "cols": cols, "rows": rows});
+                            if sink_for_resize
+                                .lock()
+                                .await
+                                .send(Message::Text(frame.to_string()))
+                                .await
+                                .is_err()
+                            {
+                                break;
+                            }
+                        }
                     }
                 }
             });
@@ -551,6 +663,7 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
             }
 
             stdin_task.abort();
+            resize_task.abort();
             Ok::<i32, anyhow::Error>(exit_code)
         }
 
@@ -602,6 +715,13 @@ pub(crate) fn build_agent_client_and_request(
     build_agent_client_and_request_impl(cmd)
 }
 
+fn current_world_fs_mode() -> WorldFsMode {
+    std::env::var("SUBSTRATE_WORLD_FS_MODE")
+        .ok()
+        .and_then(|value| WorldFsMode::parse(&value))
+        .unwrap_or_else(world_fs_mode)
+}
+
 #[cfg(target_os = "linux")]
 fn build_agent_client_and_request_impl(
     cmd: &str,
@@ -612,7 +732,11 @@ fn build_agent_client_and_request_impl(
 )> {
     ensure_world_agent_ready()?;
 
-    let client = AgentClient::unix_socket("/run/substrate.sock")?;
+    let socket_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("/run/substrate.sock"));
+
+    let client = AgentClient::unix_socket(&socket_path)?;
     let cwd = std::env::current_dir()
         .unwrap_or_else(|_| std::path::PathBuf::from("."))
         .display()
@@ -628,6 +752,7 @@ fn build_agent_client_and_request_impl(
         pty: false,
         agent_id: agent_id.clone(),
         budget: None,
+        world_fs_mode: Some(current_world_fs_mode()),
     };
 
     Ok((client, request, agent_id))
@@ -641,7 +766,44 @@ fn build_agent_client_and_request_impl(
     agent_api_types::ExecuteRequest,
     String,
 )> {
-    let ctx = pw::get_context().ok_or_else(|| anyhow::anyhow!("no platform world context"))?;
+    // Allow explicit socket overrides (used by tests/fixtures and advanced setups).
+    // When set, we bypass Lima detection/startup and connect directly.
+    if let Some(socket_path) = std::env::var_os("SUBSTRATE_WORLD_SOCKET") {
+        let socket_path = std::path::PathBuf::from(socket_path);
+        let client = AgentClient::unix_socket(&socket_path)?;
+        let cwd = std::env::current_dir()
+            .unwrap_or_else(|_| std::path::PathBuf::from("."))
+            .display()
+            .to_string();
+        let mut env_map = build_world_env_map();
+        normalize_env_for_linux_guest(&mut env_map);
+        let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+
+        let request = ExecuteRequest {
+            profile: None,
+            cmd: cmd.to_string(),
+            cwd: Some(cwd),
+            env: Some(env_map),
+            pty: false,
+            agent_id: agent_id.clone(),
+            budget: None,
+            world_fs_mode: Some(current_world_fs_mode()),
+        };
+
+        return Ok((client, request, agent_id));
+    }
+
+    let ctx = match pw::get_context() {
+        Some(ctx) => ctx,
+        None => {
+            // Subcommands like `substrate health` may execute without going through the full shell
+            // initialization path, so the platform world context might not be populated yet.
+            let detected =
+                pw::detect().map_err(|e| anyhow::anyhow!("platform world detect failed: {e:#}"))?;
+            pw::store_context_globally(detected);
+            pw::get_context().ok_or_else(|| anyhow::anyhow!("no platform world context"))?
+        }
+    };
     (ctx.ensure_ready.as_ref())()?;
 
     let client = match &ctx.transport {
@@ -654,7 +816,8 @@ fn build_agent_client_and_request_impl(
         .unwrap_or_else(|_| std::path::PathBuf::from("."))
         .display()
         .to_string();
-    let env_map = build_world_env_map();
+    let mut env_map = build_world_env_map();
+    normalize_env_for_linux_guest(&mut env_map);
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
 
     let request = ExecuteRequest {
@@ -665,6 +828,7 @@ fn build_agent_client_and_request_impl(
         pty: false,
         agent_id: agent_id.clone(),
         budget: None,
+        world_fs_mode: Some(current_world_fs_mode()),
     };
 
     Ok((client, request, agent_id))
@@ -681,6 +845,10 @@ fn build_agent_client_and_request_impl(
     use crate::execution::platform_world::windows;
     let backend = windows::get_backend()?;
     let handle = backend.ensure_session(&windows::world_spec())?;
+
+    #[cfg(test)]
+    let _env_guard = world_env_guard();
+
     std::env::set_var("SUBSTRATE_WORLD", "enabled");
     std::env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
 
@@ -697,6 +865,7 @@ fn build_agent_client_and_request_impl(
         pty: false,
         agent_id: agent_id.clone(),
         budget: None,
+        world_fs_mode: Some(current_world_fs_mode()),
     };
 
     Ok((client, request, agent_id))

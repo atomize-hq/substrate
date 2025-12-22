@@ -89,6 +89,25 @@ fn socket_field(payload: &Value) -> &Value {
         .expect("socket activation field missing in payload")
 }
 
+fn assert_socket_metadata(socket: &Value, expected_path: &Path) {
+    let expected = expected_path.to_string_lossy();
+    assert_eq!(
+        socket.get("path").and_then(Value::as_str),
+        Some(expected.as_ref()),
+        "socket JSON missing path"
+    );
+    assert_eq!(
+        socket.get("socket_path").and_then(Value::as_str),
+        Some(expected.as_ref()),
+        "socket JSON missing socket_path"
+    );
+    assert_eq!(
+        socket.get("socket_exists").and_then(Value::as_bool),
+        Some(true),
+        "socket JSON should report socket_exists=true"
+    );
+}
+
 #[test]
 fn world_doctor_reports_socket_activation_in_json() {
     let fixture = ActivationFixture::new();
@@ -108,11 +127,7 @@ fn world_doctor_reports_socket_activation_in_json() {
         Some("socket_activation"),
         "doctor output missing socket activation mode: {payload:?}"
     );
-    assert_eq!(
-        socket.get("path").and_then(Value::as_str),
-        Some(fixture.socket_path().to_string_lossy().as_ref()),
-        "doctor output missing socket path"
-    );
+    assert_socket_metadata(socket, fixture.socket_path());
 }
 
 #[test]
@@ -175,11 +190,7 @@ fn shim_status_json_reports_socket_activation_mode() {
         Some("socket_activation"),
         "shim status JSON missing activation mode"
     );
-    assert_eq!(
-        socket.get("path").and_then(Value::as_str),
-        Some(fixture.socket_path().to_string_lossy().as_ref()),
-        "shim status JSON missing socket path"
-    );
+    assert_socket_metadata(socket, fixture.socket_path());
 }
 
 #[test]
@@ -198,5 +209,23 @@ fn shim_status_json_marks_manual_mode_when_socket_absent() {
         socket.get("mode").and_then(Value::as_str),
         Some("manual"),
         "shim status JSON should report manual mode when no socket is present"
+    );
+}
+
+#[test]
+fn world_doctor_text_reports_socket_activation_summary() {
+    let fixture = ActivationFixture::new();
+    let _socket = AgentSocket::start(fixture.socket_path(), SocketResponse::Capabilities);
+
+    let assert = fixture
+        .command_with_mode("socket_activation")
+        .arg("world")
+        .arg("doctor")
+        .assert()
+        .success();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    assert!(
+        stdout.contains("agent socket: systemd-managed"),
+        "doctor text output missing socket activation summary: {stdout}"
     );
 }

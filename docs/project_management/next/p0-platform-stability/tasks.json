@@ -2,9 +2,9 @@
   "tasks": [
     {
       "id": "S1a-code",
-      "name": "Socket activation – agent plumbing (code)",
+      "name": "Socket activation \u2013 agent plumbing (code)",
       "type": "code",
-      "phase": "S1a – Agent Socket Activation",
+      "phase": "S1a \u2013 Agent Socket Activation",
       "status": "completed",
       "description": "Teach world-agent to consume LISTEN_FDS sockets, emit telemetry about inherited listeners, and preserve the direct-bind fallback path.",
       "references": [
@@ -46,9 +46,9 @@
     },
     {
       "id": "S1a-test",
-      "name": "Socket activation – agent plumbing (test)",
+      "name": "Socket activation \u2013 agent plumbing (test)",
       "type": "test",
-      "phase": "S1a – Agent Socket Activation",
+      "phase": "S1a \u2013 Agent Socket Activation",
       "status": "completed",
       "description": "Add unit/integration tests that simulate LISTEN_FDS activation, verify telemetry, and guard the direct-bind fallback.",
       "references": [
@@ -87,9 +87,9 @@
     },
     {
       "id": "S1a-integ",
-      "name": "Socket activation – agent plumbing (integration)",
+      "name": "Socket activation \u2013 agent plumbing (integration)",
       "type": "integration",
-      "phase": "S1a – Agent Socket Activation",
+      "phase": "S1a \u2013 Agent Socket Activation",
       "status": "completed",
       "description": "Merge the S1a code/test branches, re-run fmt/lint/tests, and update docs/logs before unlocking shell work.",
       "references": [
@@ -126,9 +126,9 @@
     },
     {
       "id": "S1b-code",
-      "name": "Socket activation – shell readiness (code)",
+      "name": "Socket activation \u2013 shell readiness (code)",
       "type": "code",
-      "phase": "S1b – Shell Readiness & Telemetry",
+      "phase": "S1b \u2013 Shell Readiness & Telemetry",
       "status": "completed",
       "description": "Update shell/world orchestration (ensure_world_agent_ready, world_enable, shim status) to tolerate pre-bound sockets and emit socket-activation telemetry.",
       "references": [
@@ -170,9 +170,9 @@
     },
     {
       "id": "S1b-test",
-      "name": "Socket activation – shell readiness (test)",
+      "name": "Socket activation \u2013 shell readiness (test)",
       "type": "test",
-      "phase": "S1b – Shell Readiness & Telemetry",
+      "phase": "S1b \u2013 Shell Readiness & Telemetry",
       "status": "completed",
       "description": "Extend shell/world doctor tests to cover socket-activated readiness, telemetry output, and shim status flows.",
       "references": [
@@ -213,9 +213,9 @@
     },
     {
       "id": "S1b-integ",
-      "name": "Socket activation – shell readiness (integration)",
+      "name": "Socket activation \u2013 shell readiness (integration)",
       "type": "integration",
-      "phase": "S1b – Shell Readiness & Telemetry",
+      "phase": "S1b \u2013 Shell Readiness & Telemetry",
       "status": "completed",
       "description": "Merge S1b code/test worktrees, re-run fmt/lint/tests, and update docs/logs before provisioning changes begin.",
       "references": [
@@ -252,9 +252,9 @@
     },
     {
       "id": "S1c-code",
-      "name": "Socket activation – provisioning & docs (code)",
+      "name": "Socket activation \u2013 provisioning & docs (code)",
       "type": "code",
-      "phase": "S1c – Provisioning & Docs",
+      "phase": "S1c \u2013 Provisioning & Docs",
       "status": "completed",
       "description": "Update Linux/Lima/WSL provisioning + uninstall scripts and documentation to deploy/manage .service + .socket units.",
       "references": [
@@ -298,9 +298,9 @@
     },
     {
       "id": "S1c-test",
-      "name": "Socket activation – provisioning & docs (test)",
+      "name": "Socket activation \u2013 provisioning & docs (test)",
       "type": "test",
-      "phase": "S1c – Provisioning & Docs",
+      "phase": "S1c \u2013 Provisioning & Docs",
       "status": "completed",
       "description": "Author harness coverage/dry-run verification for Linux/Lima/WSL installers/uninstallers plus world doctor scripts under socket activation.",
       "references": [
@@ -342,9 +342,9 @@
     },
     {
       "id": "S1c-integ",
-      "name": "Socket activation – provisioning & docs (integration)",
+      "name": "Socket activation \u2013 provisioning & docs (integration)",
       "type": "integration",
-      "phase": "S1c – Provisioning & Docs",
+      "phase": "S1c \u2013 Provisioning & Docs",
       "status": "completed",
       "description": "Merge S1c code/test branches, verify fmt/lint/tests, and close out the socket activation program before replay work proceeds.",
       "references": [
@@ -386,8 +386,8 @@
       "id": "S1c-windows-dry-run",
       "name": "Windows WSL warm WhatIf capture",
       "type": "ops",
-      "phase": "S1c – Provisioning & Docs",
-      "status": "queued",
+      "phase": "S1c \u2013 Provisioning & Docs",
+      "status": "completed",
       "description": "Re-run `pwsh -File scripts/windows/wsl-warm.ps1 -WhatIf` on a Windows host with PowerShell 7 to capture the socket-activation provisioning dry-run that was skipped on Linux.",
       "references": [
         "scripts/windows/wsl-warm.ps1",
@@ -425,7 +425,7 @@
       "id": "R1a-code",
       "name": "Replay isolation fallback (code)",
       "type": "code",
-      "phase": "R1a – Isolation Fallback & Diagnostics",
+      "phase": "R1a \u2013 Isolation Fallback & Diagnostics",
       "status": "completed",
       "description": "Implement nft cgroup fallback, cleanup tooling for leftover netns/rules, and tie diagnostics into replay logs/docs.",
       "references": [
@@ -471,7 +471,7 @@
       "id": "R1a-test",
       "name": "Replay isolation fallback (test)",
       "type": "test",
-      "phase": "R1a – Isolation Fallback & Diagnostics",
+      "phase": "R1a \u2013 Isolation Fallback & Diagnostics",
       "status": "completed",
       "description": "Add replay/world tests covering nft cgroup fallback paths, cleanup diagnostics, and regression coverage for existing isolation behavior.",
       "references": [
@@ -514,7 +514,7 @@
       "id": "R1a-integ",
       "name": "Replay isolation fallback (integration)",
       "type": "integration",
-      "phase": "R1a – Isolation Fallback & Diagnostics",
+      "phase": "R1a \u2013 Isolation Fallback & Diagnostics",
       "status": "completed",
       "description": "Merge R1a code/test branches, re-run fmt/lint/tests, and document readiness for verbose scope work.",
       "references": [
@@ -554,7 +554,7 @@
       "id": "R1b-code",
       "name": "Replay verbose scopes & warnings (code)",
       "type": "code",
-      "phase": "R1b – Verbose Scopes & Warning Clarity",
+      "phase": "R1b \u2013 Verbose Scopes & Warning Clarity",
       "status": "completed",
       "description": "Implement the `scopes: [...]` verbose output, differentiate shell vs replay warnings, and update docs/help text.",
       "references": [
@@ -566,7 +566,7 @@
       ],
       "acceptance_criteria": [
         "`substrate --replay --replay-verbose` prints scope arrays adjacent to world strategy output (text + JSON).",
-        "Warnings referencing shell transport explicitly say “shell world-agent path”; replay warnings retain `[replay]` prefix.",
+        "Warnings referencing shell transport explicitly say \u201cshell world-agent path\u201d; replay warnings retain `[replay]` prefix.",
         "Docs/help text mention verbose scopes and warning semantics across POSIX + PowerShell examples.",
         "`cargo fmt`; `cargo clippy -p substrate-replay -- -D warnings`; targeted CLI smoke recorded."
       ],
@@ -598,7 +598,7 @@
       "id": "R1b-test",
       "name": "Replay verbose scopes & warnings (test)",
       "type": "test",
-      "phase": "R1b – Verbose Scopes & Warning Clarity",
+      "phase": "R1b \u2013 Verbose Scopes & Warning Clarity",
       "status": "completed",
       "description": "Add replay CLI tests verifying verbose scope output, absence when flag disabled, and warning prefixes for shell vs replay contexts.",
       "references": [
@@ -641,7 +641,7 @@
       "id": "R1b-integ",
       "name": "Replay verbose scopes & warnings (integration)",
       "type": "integration",
-      "phase": "R1b – Verbose Scopes & Warning Clarity",
+      "phase": "R1b \u2013 Verbose Scopes & Warning Clarity",
       "status": "completed",
       "description": "Merge R1b code/test branches, rerun fmt/lint/tests, and prepare for the replay coverage phase.",
       "references": [
@@ -682,7 +682,7 @@
       "id": "R1c-code",
       "name": "Replay world coverage (code)",
       "type": "code",
-      "phase": "R1c – Replay World Coverage",
+      "phase": "R1c \u2013 Replay World Coverage",
       "status": "completed",
       "description": "Add CLI/config plumbing to expose default world-on, `--no-world`, and env opt-out toggles to the test harness plus docs about their interactions.",
       "references": [
@@ -726,7 +726,7 @@
       "id": "R1c-test",
       "name": "Replay world coverage (test)",
       "type": "test",
-      "phase": "R1c – Replay World Coverage",
+      "phase": "R1c \u2013 Replay World Coverage",
       "status": "completed",
       "description": "Expand integration suites covering default world-on, `--no-world`, and env opt-out toggles plus verbose scope output expectations.",
       "references": [
@@ -769,7 +769,7 @@
       "id": "R1c-integ",
       "name": "Replay world coverage (integration)",
       "type": "integration",
-      "phase": "R1c – Replay World Coverage",
+      "phase": "R1c \u2013 Replay World Coverage",
       "status": "completed",
       "description": "Merge R1c code/test branches, re-run fmt/lint/tests, and document readiness for the health manager fixes.",
       "references": [
@@ -808,9 +808,9 @@
     },
     {
       "id": "H1a-code",
-      "name": "Health manager parity – aggregation logic (code)",
+      "name": "Health manager parity \u2013 aggregation logic (code)",
       "type": "code",
-      "phase": "H1a – Detection & Aggregation",
+      "phase": "H1a \u2013 Detection & Aggregation",
       "status": "completed",
       "description": "Refine manager detection data structures and health aggregator logic so only host-present/world-missing managers trigger attention, with structured telemetry output.",
       "references": [
@@ -852,9 +852,9 @@
     },
     {
       "id": "H1a-test",
-      "name": "Health manager parity – aggregation logic (test)",
+      "name": "Health manager parity \u2013 aggregation logic (test)",
       "type": "test",
-      "phase": "H1a – Detection & Aggregation",
+      "phase": "H1a \u2013 Detection & Aggregation",
       "status": "completed",
       "description": "Add targeted tests for the refined health aggregator covering host/world presence combinations and telemetry serialization.",
       "references": [
@@ -893,9 +893,9 @@
     },
     {
       "id": "H1a-integ",
-      "name": "Health manager parity – aggregation logic (integration)",
+      "name": "Health manager parity \u2013 aggregation logic (integration)",
       "type": "integration",
-      "phase": "H1a – Detection & Aggregation",
+      "phase": "H1a \u2013 Detection & Aggregation",
       "status": "completed",
       "description": "Merge H1a code/test branches, rerun fmt/lint/tests, and prep for the CLI/doc UX phase.",
       "references": [
@@ -932,9 +932,9 @@
     },
     {
       "id": "H1b-code",
-      "name": "Health manager parity – UX & docs (code)",
+      "name": "Health manager parity \u2013 UX & docs (code)",
       "type": "code",
-      "phase": "H1b – CLI/Doctor UX & Docs",
+      "phase": "H1b \u2013 CLI/Doctor UX & Docs",
       "status": "completed",
       "description": "Polish CLI/JSON output, doctor summaries, and documentation so the refined manager logic is visible and actionable across platforms.",
       "references": [
@@ -975,9 +975,9 @@
     },
     {
       "id": "H1b-test",
-      "name": "Health manager parity – UX & docs (test)",
+      "name": "Health manager parity \u2013 UX & docs (test)",
       "type": "test",
-      "phase": "H1b – CLI/Doctor UX & Docs",
+      "phase": "H1b \u2013 CLI/Doctor UX & Docs",
       "status": "completed",
       "description": "Add CLI/integration tests ensuring doctor + health commands emit the refined messages in both text and JSON modes across mocked manager scenarios.",
       "references": [
@@ -1016,9 +1016,9 @@
     },
     {
       "id": "H1b-integ",
-      "name": "Health manager parity – UX & docs (integration)",
+      "name": "Health manager parity \u2013 UX & docs (integration)",
       "type": "integration",
-      "phase": "H1b – CLI/Doctor UX & Docs",
+      "phase": "H1b \u2013 CLI/Doctor UX & Docs",
       "status": "completed",
       "description": "Merge H1b code/test branches, re-run fmt/lint/tests, and close the P0 program with updated docs/logs/tasks.",
       "references": [
@@ -1054,6 +1054,1375 @@
       "worktree": "wt/ps-h1b-healthux-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/H1b-integ.md"
+    },
+    {
+      "id": "S1d-code",
+      "name": "Installer socket-activation parity (code)",
+      "type": "code",
+      "phase": "S1d \u2013 Installer Socket-Activation Parity",
+      "status": "completed",
+      "description": "Update dev/prod installer scripts plus docs so socket-activated installs consistently provision the substrate group, apply lingering guidance, and reload the systemd units before prompting operators.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "scripts/substrate/dev-install-substrate.sh",
+        "scripts/substrate/dev-uninstall-substrate.sh",
+        "scripts/substrate/install-substrate.sh",
+        "scripts/substrate/uninstall-substrate.sh",
+        "docs/AGENTS.md",
+        "docs/INSTALLATION.md",
+        "docs/WORLD.md"
+      ],
+      "acceptance_criteria": [
+        "Dev and production installers create the substrate group when missing, add the invoking user on Linux hosts (with sudo guidance for curl-based installs), and leave macOS/WSL behavior unchanged.",
+        "Installers reload the socket/service units so `/run/substrate.sock` ends up owned by `root:substrate` with `0660` permissions, matching the provisioning scripts.",
+        "Install output highlights lingering requirements (`loginctl enable-linger <user>`) including detection of the current linger state.",
+        "Uninstall scripts remove the socket/service units and remind operators about lingering and group cleanup when appropriate.",
+        "Docs (AGENTS.md, INSTALLATION.md, WORLD.md) describe the group/linger expectations for dev + production setups.",
+        "`cargo fmt`; `shellcheck scripts/substrate/dev-install-substrate.sh scripts/substrate/dev-uninstall-substrate.sh scripts/substrate/install-substrate.sh scripts/substrate/uninstall-substrate.sh` executed or skips logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Read p0_platform_stability_plan.md, tasks.json, session_log.md, and the kickoff prompt",
+        "Set S1d-code to in_progress, append START entry to the session log, commit doc update",
+        "Create branch ps-s1d-devinstall-code, add worktree wt/ps-s1d-devinstall-code, and switch into it"
+      ],
+      "end_checklist": [
+        "Ensure fmt/shellcheck completed (document skips if any)",
+        "Commit worktree changes (script/doc updates) with descriptive message",
+        "Merge ps-s1d-devinstall-code back into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm S1d-integ prompt remains accurate (edit if scope changed)",
+        "Commit docs/task/log updates on feat/p0-platform-stability-follow-up"
+      ],
+      "depends_on": [
+        "S1c-integ"
+      ],
+      "concurrent_with": [
+        "S1d-test"
+      ],
+      "worktree": "wt/ps-s1d-devinstall-code",
+      "integration_task": "S1d-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-code.md"
+    },
+    {
+      "id": "S1d-test",
+      "name": "Installer socket-activation parity (test)",
+      "type": "test",
+      "phase": "S1d \u2013 Installer Socket-Activation Parity",
+      "status": "completed",
+      "description": "Extend the installer smoke harness with dev/prod scenarios that verify socket activation parity, record lingering guidance, and gracefully skip when systemd prerequisites are missing.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "tests/installers/install_smoke.sh",
+        "scripts/substrate/dev-install-substrate.sh",
+        "scripts/substrate/install-substrate.sh",
+        "docs/WORLD.md"
+      ],
+      "acceptance_criteria": [
+        "Smoke script (or sibling harness) covers dev + prod installer flows, asserting `/run/substrate.sock` ownership (`root:substrate 0660`) after each run or capturing sudo output for curl installs.",
+        "Harness verifies the invoking user belongs to the `substrate` group (or warns when running as root/curl context) and records lingering guidance plus whether `loginctl enable-linger` is already configured.",
+        "Fixtures/log capture updated so non-systemd hosts record a structured skip with reasoning instead of failing.",
+        "Session log documents platform constraints (e.g., containerized CI) that prevent executing privileged commands.",
+        "`cargo fmt`; `./tests/installers/install_smoke.sh --scenario dev`; `./tests/installers/install_smoke.sh --scenario prod` executed or skips logged."
+      ],
+      "start_checklist": [
+        "git checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Read p0_platform_stability_plan.md, tasks.json, session_log.md, S1d-code scope, and the S1d-test prompt",
+        "Set S1d-test to in_progress, append START entry, commit doc update (`git commit -am \"docs: start S1d-test\"`)",
+        "Create branch/worktree: `git checkout -b ps-s1d-devinstall-test`, `git worktree add wt/ps-s1d-devinstall-test ps-s1d-devinstall-test`, `cd wt/ps-s1d-devinstall-test`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests/scripts completed; log skips or blockers with detail",
+        "Commit worktree changes (e.g., `test: add installer socket parity smoke`)",
+        "Merge ps-s1d-devinstall-test into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md (END entry with command results, skip rationales, lingering guidance notes)",
+        "Confirm S1d-integ prompt reflects the new smoke coverage expectations",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish S1d-test\"`), remove worktree, hand off on feat/p0-platform-stability-follow-up"
+      ],
+      "depends_on": [
+        "S1d-code"
+      ],
+      "concurrent_with": [
+        "S1d-code"
+      ],
+      "worktree": "wt/ps-s1d-devinstall-test",
+      "integration_task": "S1d-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-test.md"
+    },
+    {
+      "id": "S1d-integ",
+      "name": "Installer socket-activation parity (integration)",
+      "type": "integration",
+      "phase": "S1d \u2013 Installer Socket-Activation Parity",
+      "status": "completed",
+      "description": "Merge the S1d installer code/test work, re-run fmt/shellcheck plus both installer smoke scenarios, and document the group creation + lingering guidance for dev/prod installers before fast-forwarding feat/p0-platform-stability-follow-up.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "scripts/substrate/dev-install-substrate.sh",
+        "scripts/substrate/install-substrate.sh",
+        "scripts/substrate/dev-uninstall-substrate.sh",
+        "scripts/substrate/uninstall-substrate.sh",
+        "tests/installers/install_smoke.sh",
+        "docs/AGENTS.md",
+        "docs/INSTALLATION.md",
+        "docs/WORLD.md"
+      ],
+      "acceptance_criteria": [
+        "ps-s1d-devinstall-integ merges ps-s1d-devinstall-code/test cleanly and fast-forwards back onto feat/p0-platform-stability-follow-up.",
+        "`cargo fmt`; `shellcheck scripts/substrate/dev-install-substrate.sh scripts/substrate/dev-uninstall-substrate.sh scripts/substrate/install-substrate.sh scripts/substrate/uninstall-substrate.sh`; `./tests/installers/install_smoke.sh --scenario dev`; `./tests/installers/install_smoke.sh --scenario prod` executed or skips/logged output.",
+        "Session log and docs capture installer parity guidance (substrate group creation + loginctl lingering for dev/prod paths) along with smoke command outcomes/skips.",
+        "tasks.json reflects `S1d-code`, `S1d-test`, and `S1d-integ` completion, worktree removed, and stakeholders notified of parity readiness."
+      ],
+      "start_checklist": [
+        "git checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Confirm S1d-code and S1d-test branches are ready/merged into feat/p0-platform-stability-follow-up",
+        "Set S1d-integ to in_progress, append START entry, commit doc update (`git commit -am \"docs: start S1d-integ\"`)",
+        "Create branch/worktree: `git checkout -b ps-s1d-devinstall-integ`, `git worktree add wt/ps-s1d-devinstall-integ ps-s1d-devinstall-integ`, `cd wt/ps-s1d-devinstall-integ`"
+      ],
+      "end_checklist": [
+        "Confirm commands succeeded; log skips with justification",
+        "Merge integration branch back into feat/p0-platform-stability-follow-up (fast-forward)",
+        "Update tasks.json (S1d-* statuses), append END entry with smoke results + lingering/group notes + Windows hand-off",
+        "Document installer guidance updates/next steps in session log and notify stakeholders that dev installer parity is met",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish S1d-integ\"`), remove worktree"
+      ],
+      "depends_on": [
+        "S1d-code",
+        "S1d-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-s1d-devinstall-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1d-integ.md"
+    },
+    {
+      "id": "S1e-code",
+      "name": "Installer state tracking & cleanup (code)",
+      "type": "code",
+      "phase": "S1e \u2013 Installer State Tracking",
+      "status": "completed",
+      "description": "Persist install-time host tweaks (substrate group membership, loginctl lingering, future interactive choices) and add opt-in uninstall cleanup so Substrate can restore the host to its prior state.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "scripts/substrate/install-substrate.sh",
+        "scripts/substrate/dev-install-substrate.sh",
+        "scripts/substrate/uninstall-substrate.sh",
+        "scripts/substrate/dev-uninstall-substrate.sh",
+        "docs/INSTALLATION.md",
+        "docs/WORLD.md",
+        "docs/CONFIGURATION.md"
+      ],
+      "acceptance_criteria": [
+        "Installers detect/record whether the substrate group existed, which users were added, and each user\u2019s prior loginctl lingering state (metadata stored under ~/.substrate).",
+        "Uninstallers offer a flag (and future interactive mode hook) that removes group membership and disables lingering only when Substrate previously enabled them; default behavior continues to print guidance when provenance is unknown.",
+        "Metadata schema/versioning documented so future installers can add new host-state toggles without breaking older entries.",
+        "Docs describe the new cleanup flag, metadata location, and how interactive install/uninstall flow will surface these options.",
+        "`cargo fmt`; `shellcheck scripts/substrate/dev-install-substrate.sh scripts/substrate/install-substrate.sh scripts/substrate/dev-uninstall-substrate.sh scripts/substrate/uninstall-substrate.sh` executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Read the S1d results, plan/tasks/session log, and this kickoff prompt",
+        "Set S1e-code to in_progress, append START entry, commit doc update (`git commit -am \"docs: start S1e-code\"`)",
+        "Create branch/worktree: `git checkout -b ps-s1e-installer-code`, `git worktree add wt/ps-s1e-installer-code ps-s1e-installer-code`, `cd wt/ps-s1e-installer-code`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/shellcheck completed (note skips with justification)",
+        "Commit worktree changes with descriptive message",
+        "Merge ps-s1e-installer-code into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry",
+        "Confirm S1e-integ prompt contents (or add it if missing)",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish S1e-code\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "S1d-code"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-s1e-installer-code",
+      "integration_task": "S1e-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1e-code.md"
+    },
+    {
+      "id": "S1e-test",
+      "name": "Installer state tracking & cleanup (test)",
+      "type": "test",
+      "phase": "S1e \u2013 Installer State Tracking",
+      "status": "completed",
+      "description": "Add installer harness coverage to validate the metadata schema, cleanup flag behavior, and edge cases (missing/corrupt files, multi-user entries) introduced in S1e-code.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "scripts/substrate/install-substrate.sh",
+        "scripts/substrate/dev-install-substrate.sh",
+        "scripts/substrate/uninstall-substrate.sh",
+        "scripts/substrate/dev-uninstall-substrate.sh",
+        "tests/installers"
+      ],
+      "acceptance_criteria": [
+        "Unit/integration tests cover metadata creation/upgrade paths, fallback behavior when the file is missing, and cleanup-flag behavior when Substrate previously toggled lingering/group membership.",
+        "Harness scripts simulate multi-user metadata so we verify only recorded users/groups are modified.",
+        "Test docs/logs describe how to exercise the cleanup flag on real hosts vs hermetic mocks.",
+        "`cargo fmt`; installer harness/tests executed (or skips logged) with command output captured in the session log."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Review S1e-code implementation, plan/tasks/session log, and this prompt",
+        "Set S1e-test to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-s1e-installer-test`, `git worktree add wt/ps-s1e-installer-test ps-s1e-installer-test`, `cd wt/ps-s1e-installer-test`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests/scripts completed; document skips with justification",
+        "Commit worktree changes (tests/harness updates)",
+        "Merge ps-s1e-installer-test into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include command results)",
+        "Confirm S1e-integ prompt reflects new harness coverage",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish S1e-test\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "S1e-code"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-s1e-installer-test",
+      "integration_task": "S1e-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1e-test.md"
+    },
+    {
+      "id": "S1e-integ",
+      "name": "Installer state tracking & cleanup (integration)",
+      "type": "integration",
+      "phase": "S1e \u2013 Installer State Tracking",
+      "status": "completed",
+      "description": "Merge the S1e code/test branches, re-run fmt/shellcheck/tests, and land the installer metadata feature on feat/p0-platform-stability-follow-up with updated docs/logs.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "scripts/substrate",
+        "docs/INSTALLATION.md",
+        "docs/WORLD.md"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-s1e-installer-integ merges ps-s1e-installer-code/test cleanly and fast-forwards feat/p0-platform-stability-follow-up.",
+        "`cargo fmt`; `shellcheck` on installer/uninstaller scripts; installer harness/tests re-run (or skips logged) with results recorded.",
+        "tasks.json + session_log.md updated with END entry; next prompts (interactive installer work) referenced."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Confirm S1e-code/test completed",
+        "Set S1e-integ to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-s1e-installer-integ`, `git worktree add wt/ps-s1e-installer-integ ps-s1e-installer-integ`, `cd wt/ps-s1e-installer-integ`"
+      ],
+      "end_checklist": [
+        "Merge code/test branches, resolve conflicts",
+        "Run required fmt/shellcheck/tests; capture output",
+        "Fast-forward merge into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish S1e-integ\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "S1e-code",
+        "S1e-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-s1e-installer-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/S1e-integ.md"
+    },
+    {
+      "id": "R2a-code",
+      "name": "Replay agent-backed execution \u2013 agent path (code)",
+      "type": "code",
+      "phase": "R2 \u2013 Agent-backed Replay",
+      "status": "completed",
+      "description": "Add an agent-backed replay path with defaults/flags so replay prefers the world-agent when healthy.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/replay",
+        "crates/shell",
+        "crates/world-agent",
+        "docs/TRACE.md",
+        "docs/WORLD.md"
+      ],
+      "acceptance_criteria": [
+        "Replay prefers the agent path when `/run/substrate.sock` is healthy; `--no-world`/`SUBSTRATE_REPLAY_USE_WORLD=disabled` forces host-only.",
+        "An explicit opt-in flag/env enables the legacy local-backend fallback without changing the default agent-first behavior.",
+        "Docs/help + telemetry/log output describe the chosen replay path and controls.",
+        "`cargo fmt`; `cargo clippy -p substrate-replay -- -D warnings`; `cargo test -p substrate-replay -- --nocapture` executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Review R1 outputs, plan/tasks/session log, and this prompt",
+        "Set R2a-code to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2a-replay-agent-code`, `git worktree add wt/ps-r2a-replay-agent-code ps-r2a-replay-agent-code`, `cd wt/ps-r2a-replay-agent-code`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests/manual agent/host/no-world smoke completed; note skips",
+        "Commit replay/shell/world-agent changes + docs",
+        "Merge ps-r2a-replay-agent-code into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Confirm R2a-integ prompt accuracy",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2a-code\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "S1e-integ"
+      ],
+      "concurrent_with": [
+        "R2a-test"
+      ],
+      "worktree": "wt/ps-r2a-replay-agent-code",
+      "integration_task": "R2a-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2a-code.md"
+    },
+    {
+      "id": "R2a-test",
+      "name": "Replay agent-backed execution \u2013 agent path (test)",
+      "type": "test",
+      "phase": "R2 \u2013 Agent-backed Replay",
+      "status": "completed",
+      "description": "Add tests covering agent-backed replay toggles, caging propagation, and host-only mode.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/replay",
+        "crates/shell/tests",
+        "docs/TRACE.md"
+      ],
+      "acceptance_criteria": [
+        "Tests assert replay chooses the agent path when the socket probe is healthy (mocked client).",
+        "Fixtures cover `--no-world`/`SUBSTRATE_REPLAY_USE_WORLD=disabled` host-only behavior plus caged/uncaged cwd propagation.",
+        "Warning output remains unchanged for host-only runs; telemetry records agent path usage.",
+        "`cargo fmt`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world` executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Review R2a-code scope, plan/tasks/session log, and this prompt",
+        "Set R2a-test to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2a-replay-agent-test`, `git worktree add wt/ps-r2a-replay-agent-test ps-r2a-replay-agent-test`, `cd wt/ps-r2a-replay-agent-test`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests completed; document skips with justification",
+        "Commit worktree changes (tests/fixtures)",
+        "Merge ps-r2a-replay-agent-test into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include command results)",
+        "Confirm R2a-integ prompt contents",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2a-test\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "S1e-integ"
+      ],
+      "concurrent_with": [
+        "R2a-code"
+      ],
+      "worktree": "wt/ps-r2a-replay-agent-test",
+      "integration_task": "R2a-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2a-test.md"
+    },
+    {
+      "id": "R2a-integ",
+      "name": "Replay agent-backed execution \u2013 agent path (integration)",
+      "type": "integration",
+      "phase": "R2 \u2013 Agent-backed Replay",
+      "status": "completed",
+      "description": "Merge the R2a code/test branches, rerun fmt/lint/tests, and document agent-backed defaults before fallback work begins.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/replay",
+        "crates/shell",
+        "crates/world-agent"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-r2a-replay-agent-integ merges ps-r2a-replay-agent-code/test and fast-forwards feat/p0-platform-stability-follow-up.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world` executed/logged.",
+        "tasks.json + session_log.md updated with END entry; R2b prompts confirmed."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Confirm R2a-code/test completed",
+        "Set R2a-integ to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2a-replay-agent-integ`, `git worktree add wt/ps-r2a-replay-agent-integ ps-r2a-replay-agent-integ`, `cd wt/ps-r2a-replay-agent-integ`"
+      ],
+      "end_checklist": [
+        "Merge code/test branches, resolve conflicts",
+        "Run required fmt/lint/tests; capture output",
+        "Fast-forward merge into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2a-integ\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2a-code",
+        "R2a-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-r2a-replay-agent-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2a-integ.md"
+    },
+    {
+      "id": "R2b-code",
+      "name": "Replay agent-backed execution \u2013 fallbacks & warnings (code)",
+      "type": "code",
+      "phase": "R2 \u2013 Agent-backed Replay",
+      "status": "completed",
+      "description": "Improve warning output and copy-diff fallback behavior (root retries, overrides, telemetry).",
+      "references": [
+        "docs/project_management/next/p0-platform_stability/p0_platform_stability_plan.md",
+        "crates/replay",
+        "crates/shell",
+        "crates/world-agent",
+        "docs/TRACE.md"
+      ],
+      "acceptance_criteria": [
+        "Agent fallback warnings emit once per replay with actionable guidance.",
+        "Copy-diff fallback retries `/run`, `/tmp`, `/var/tmp` (or override) and logs selected root.",
+        "Docs/help highlight warning text, overrides, and cleanup guidance.",
+        "`cargo fmt`; `cargo clippy -p substrate-replay -- -D warnings`; targeted replay warning/fallback tests executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Review R2a-integ outputs, plan/tasks/session log, and this prompt",
+        "Set R2b-code to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2b-replay-fallback-code`, `git worktree add wt/ps-r2b-replay-fallback-code ps-r2b-replay-fallback-code`, `cd wt/ps-r2b-replay-fallback-code`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests/manual warnings replay completed; note skips",
+        "Commit warning/fallback changes + docs",
+        "Merge ps-r2b-replay-fallback-code into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include command results)",
+        "Confirm R2b-integ prompt contents",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2b-code\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2a-integ"
+      ],
+      "concurrent_with": [
+        "R2b-test"
+      ],
+      "worktree": "wt/ps-r2b-replay-fallback-code",
+      "integration_task": "R2b-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2b-code.md"
+    },
+    {
+      "id": "R2b-test",
+      "name": "Replay agent-backed execution \u2013 fallbacks & warnings (test)",
+      "type": "test",
+      "phase": "R2 \u2013 Agent-backed Replay",
+      "status": "completed",
+      "description": "Add tests covering warning de-duplication, copy-diff overrides, and ENOSPC retries.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/replay",
+        "crates/shell/tests"
+      ],
+      "acceptance_criteria": [
+        "Tests assert only a single warning is emitted when falling back from agent to local backend.",
+        "Copy-diff override env/flag ensures custom root selection is logged and honored.",
+        "ENOSPC retry behavior verified using constrained scratch fixtures.",
+        "`cargo fmt`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world` executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Review R2b-code scope, plan/tasks/session log, and this prompt",
+        "Set R2b-test to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2b-replay-fallback-test`, `git worktree add wt/ps-r2b-replay-fallback-test ps-r2b-replay-fallback-test`, `cd wt/ps-r2b-replay-fallback-test`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests completed; document skips with justification",
+        "Commit worktree changes (tests/fixtures)",
+        "Merge ps-r2b-replay-fallback-test into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include command results)",
+        "Confirm R2b-integ prompt contents",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2b-test\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2a-integ"
+      ],
+      "concurrent_with": [
+        "R2b-code"
+      ],
+      "worktree": "wt/ps-r2b-replay-fallback-test",
+      "integration_task": "R2b-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2b-test.md"
+    },
+    {
+      "id": "R2b-integ",
+      "name": "Replay agent-backed execution \u2013 fallbacks & warnings (integration)",
+      "type": "integration",
+      "phase": "R2 \u2013 Agent-backed Replay",
+      "status": "completed",
+      "description": "Merge the R2b code/test branches, rerun fmt/lint/tests, and document fallback behavior before coverage work begins.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/replay",
+        "crates/shell"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-r2b-replay-fallback-integ merges ps-r2b-replay-fallback-code/test and fast-forwards feat/p0-platform-stability-follow-up.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world` executed/logged.",
+        "tasks.json + session_log.md updated with END entry; R2c prompts confirmed."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Confirm R2b-code/test completed",
+        "Set R2b-integ to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2b-replay-fallback-integ`, `git worktree add wt/ps-r2b-replay-fallback-integ ps-r2b-replay-fallback-integ`, `cd wt/ps-r2b-replay-fallback-integ`"
+      ],
+      "end_checklist": [
+        "Merge code/test branches, resolve conflicts",
+        "Run required fmt/lint/tests; capture output",
+        "Fast-forward merge into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2b-integ\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2b-code",
+        "R2b-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-r2b-replay-fallback-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2b-integ.md"
+    },
+    {
+      "id": "R2c-code",
+      "name": "Replay agent-backed execution \u2013 coverage polish (code)",
+      "type": "code",
+      "phase": "R2 \u2013 Agent-backed Replay",
+      "status": "completed",
+      "description": "Polish CLI/docs/telemetry for replay toggles, capture manual agent vs no-world samples, and ensure warnings align with docs.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/TRACE.md",
+        "docs/WORLD.md",
+        "crates/replay",
+        "crates/shell"
+      ],
+      "acceptance_criteria": [
+        "Replay CLI help/docs explain agent vs host-only vs local fallback (warning samples included).",
+        "Telemetry/docs show new replay fields; manual `substrate --replay --replay-verbose` samples captured for agent vs no-world.",
+        "Warnings introduced in R2b are referenced consistently in docs and CLI output.",
+        "`cargo fmt`; `cargo clippy -p substrate-shell -- -D warnings`; `cargo test -p substrate-shell replay_world` executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Review R2b-integ outputs, plan/tasks/session log, and this prompt",
+        "Set R2c-code to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2c-replay-coverage-code`, `git worktree add wt/ps-r2c-replay-coverage-code ps-r2c-replay-coverage-code`, `cd wt/ps-r2c-replay-coverage-code`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests/manual replay demos completed; note skips",
+        "Commit CLI/doc/telemetry updates",
+        "Merge ps-r2c-replay-coverage-code into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Confirm R2c-integ prompt contents",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2c-code\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2b-integ"
+      ],
+      "concurrent_with": [
+        "R2c-test"
+      ],
+      "worktree": "wt/ps-r2c-replay-coverage-code",
+      "integration_task": "R2c-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2c-code.md"
+    },
+    {
+      "id": "R2c-test",
+      "name": "Replay agent-backed execution (tests)",
+      "type": "test",
+      "phase": "R2 \u2013 Agent-backed Replay",
+      "status": "completed",
+      "description": "Full coverage for agent path vs local fallback vs host-only, including ENOSPC retry and caged alignment.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/replay",
+        "crates/shell/tests",
+        "crates/world/tests",
+        "docs/TRACE.md"
+      ],
+      "acceptance_criteria": [
+        "Tests assert agent path chosen when socket probe healthy; telemetry/warnings verified.",
+        "Tests assert fallback to local backend/copy-diff when agent unavailable, including ENOSPC retry/override.",
+        "Fixtures ensure cwd/anchor/caging/env alignment between spans and replayed commands (caged + uncaged).",
+        "`cargo fmt`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world` executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Review R2c-code scope, plan/tasks/session log, and this prompt",
+        "Set R2c-test to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2c-replay-agent-test`, `git worktree add wt/ps-r2c-replay-agent-test ps-r2c-replay-agent-test`, `cd wt/ps-r2c-replay-agent-test`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests completed; document skips with justification",
+        "Commit worktree changes (tests/fixtures)",
+        "Merge ps-r2c-replay-agent-test into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include command results)",
+        "Confirm R2c-integ prompt contents",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2c-test\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2b-integ"
+      ],
+      "concurrent_with": [
+        "R2c-code"
+      ],
+      "worktree": "wt/ps-r2c-replay-agent-test",
+      "integration_task": "R2c-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2c-test.md"
+    },
+    {
+      "id": "R2c-integ",
+      "name": "Replay agent-backed execution (integration)",
+      "type": "integration",
+      "phase": "R2 \u2013 Agent-backed Replay",
+      "status": "completed",
+      "description": "Merge the R2c code/test branches, rerun fmt/lint/tests, and finalize agent-backed replay rollout.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/replay",
+        "crates/shell",
+        "crates/world-agent",
+        "docs/TRACE.md"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-r2c-replay-agent-integ merges ps-r2c-replay-coverage-code/test and fast-forwards feat/p0-platform-stability-follow-up.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world` executed/logged.",
+        "tasks.json + session_log.md updated with END entry; handoff noted."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Confirm R2c-code/test completed",
+        "Set R2c-integ to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2c-replay-agent-integ`, `git worktree add wt/ps-r2c-replay-agent-integ ps-r2c-replay-agent-integ`, `cd wt/ps-r2c-replay-agent-integ`"
+      ],
+      "end_checklist": [
+        "Merge code/test branches, resolve conflicts",
+        "Run required fmt/lint/tests; capture output",
+        "Fast-forward merge into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2c-integ\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2c-code",
+        "R2c-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-r2c-replay-agent-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2c-integ.md"
+    },
+    {
+      "id": "R2c-buffer",
+      "name": "Buffer: stabilize after R2c",
+      "type": "ops",
+      "phase": "R2 \u2013 Agent-backed Replay",
+      "status": "completed",
+      "description": "Short buffer to resolve conflicts/skips after R2c-integ before starting R2d.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/project_management/next/p0-platform-stability/session_log.md"
+      ],
+      "acceptance_criteria": [
+        "R2c-integ merged into feat/p0-platform-stability-follow-up; no pending fmt/lint/test failures or unresolved skips.",
+        "tasks.json + session_log.md updated to reflect buffer completion and readiness for R2d."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Confirm R2c-integ completed",
+        "Set R2c-buffer to in_progress, append START entry, commit doc update"
+      ],
+      "end_checklist": [
+        "Resolve any outstanding conflicts/skips from R2c-integ",
+        "Update tasks.json + session_log.md with END entry",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2c-buffer\"`)"
+      ],
+      "depends_on": [
+        "R2c-integ"
+      ],
+      "concurrent_with": [],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": null
+    },
+    {
+      "id": "R2d-code",
+      "name": "Replay origin-aware defaults & agent routing (code)",
+      "type": "code",
+      "phase": "R2 \u2013 Agent-backed Replay",
+      "status": "completed",
+      "description": "Record execution origin/transport in spans, default replays to the recorded origin, add a flip flag, and make world-mode replays prefer the agent socket with a clean fallback to the local backend.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/replay",
+        "crates/shell",
+        "crates/world-agent",
+        "crates/trace",
+        "docs/REPLAY.md",
+        "docs/TRACE.md"
+      ],
+      "acceptance_criteria": [
+        "Spans record execution_origin (host/world) and world transport at command_complete; replay reconstruction consumes it (greenfield schema, no compat needed).",
+        "Default replay honors recorded origin; --flip-world (alias --flip) inverts it; --world/--no-world still override.",
+        "World-mode replay uses the agent socket first and falls back once with a single warning to the local backend (overlay/fuse/copy-diff) while preserving cwd/anchor/caging/env from the span.",
+        "Verbose output and telemetry document origin, flip reason, selected strategy, endpoint, and copy-diff root (including override env).",
+        "`cargo fmt`; `cargo clippy -p substrate-replay -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world` executed/logged; manual agent+host/no-world smoke noted."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Review R2a/R2b/R2c outputs, plan/tasks/session log, and this prompt",
+        "Set R2d-code to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2d-replay-origin-code`, `git worktree add wt/ps-r2d-replay-origin-code ps-r2d-replay-origin-code`, `cd wt/ps-r2d-replay-origin-code`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests/manual replay (agent vs host vs flipped) completed; note skips",
+        "Commit schema/replay/shell/world-agent changes + docs",
+        "Merge ps-r2d-replay-origin-code into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Confirm R2d-integ prompt accuracy",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2d-code\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2c-integ"
+      ],
+      "concurrent_with": [
+        "R2d-test"
+      ],
+      "worktree": "wt/ps-r2d-replay-origin-code",
+      "integration_task": "R2d-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2d-code.md"
+    },
+    {
+      "id": "R2d-test",
+      "name": "Replay origin-aware defaults & agent routing (test)",
+      "type": "test",
+      "phase": "R2 \u2013 Agent-backed Replay",
+      "status": "completed",
+      "description": "Add tests for recorded-origin defaults, flip flag, agent-first world path with fallback, and copy-diff override/warning behavior.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/replay",
+        "crates/shell/tests",
+        "crates/world/tests",
+        "docs/REPLAY.md"
+      ],
+      "acceptance_criteria": [
+        "Fixtures cover recorded-world spans defaulting to agent path, recorded-host spans defaulting to host, and --flip-world inversion for both.",
+        "Agent socket success/failure is exercised via stubs; on failure replay falls back once to local backend with a single warning and preserved cwd/anchor/caging/env.",
+        "Copy-diff fallback retries/override (`SUBSTRATE_COPYDIFF_ROOT`) are asserted with deduped warning text; verbose output captures chosen strategy and endpoint/root.",
+        "`cargo fmt`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world` executed/logged; platform skips documented."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Review R2d-code scope, plan/tasks/session log, and this prompt",
+        "Set R2d-test to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2d-replay-origin-test`, `git worktree add wt/ps-r2d-replay-origin-test ps-r2d-replay-origin-test`, `cd wt/ps-r2d-replay-origin-test`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests completed; document skips with justification",
+        "Commit worktree changes (tests/fixtures)",
+        "Merge ps-r2d-replay-origin-test into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include command results)",
+        "Confirm R2d-integ prompt contents",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2d-test\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2c-integ"
+      ],
+      "concurrent_with": [
+        "R2d-code"
+      ],
+      "worktree": "wt/ps-r2d-replay-origin-test",
+      "integration_task": "R2d-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2d-test.md"
+    },
+    {
+      "id": "R2d-integ",
+      "name": "Replay origin-aware defaults & agent routing (integration)",
+      "type": "integration",
+      "phase": "R2 \u2013 Agent-backed Replay",
+      "status": "completed",
+      "description": "Merge the R2d code/test branches, rerun fmt/lint/tests, and finalize the origin-aware agent-first replay rollout.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/replay",
+        "crates/shell",
+        "crates/world-agent",
+        "crates/trace",
+        "docs/TRACE.md"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-r2d-replay-origin-integ merges ps-r2d-replay-origin-code/test and fast-forwards feat/p0-platform-stability-follow-up.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world` executed/logged; manual agent vs host/flip smoke captured or skipped with reason.",
+        "tasks.json + session_log.md updated with END entry; handoff noted."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Confirm R2d-code/test completed",
+        "Set R2d-integ to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2d-replay-origin-integ`, `git worktree add wt/ps-r2d-replay-origin-integ ps-r2d-replay-origin-integ`, `cd wt/ps-r2d-replay-origin-integ`"
+      ],
+      "end_checklist": [
+        "Merge code/test branches, resolve conflicts",
+        "Run required fmt/lint/tests; capture output",
+        "Fast-forward merge into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2d-integ\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2d-code",
+        "R2d-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-r2d-replay-origin-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2d-integ.md"
+    },
+    {
+      "id": "R2e-code",
+      "name": "Policy-driven world fs mode (code)",
+      "type": "code",
+      "phase": "R2e \u2013 Policy-driven World FS Mode",
+      "status": "completed",
+      "description": "Add a broker policy toggle for read-only vs writable worlds, thread it through shell/world-agent, and document the knob so per-project/global policy controls world mutability.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/CONFIGURATION.md",
+        "crates/broker",
+        "crates/shell",
+        "crates/world-agent",
+        "crates/world"
+      ],
+      "acceptance_criteria": [
+        "Policy schema exposes world fs mode (read_only/writable) with default writable; invalid values produce clear errors.",
+        "Shell passes the resolved policy into PTY + non-PTY world requests and surfaces the active mode via traces/doctor.",
+        "World-agent/backends honor the mode (read-only disables copy-diff/upper writes; writable matches current behavior).",
+        "Docs describe the knob and systemd expectations; doctor output highlights the active mode with remediation guidance.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; targeted suites (`cargo test -p substrate-shell world_enable`, `cargo test -p world-agent` or justified skips) executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Read plan, tasks.json, session_log.md, and this prompt",
+        "Set R2e-code to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2e-world-fs-code`, `git worktree add wt/ps-r2e-world-fs-code ps-r2e-world-fs-code`, `cd wt/ps-r2e-world-fs-code`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests completed (note skips)",
+        "Commit code/doc changes",
+        "Merge ps-r2e-world-fs-code into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Confirm R2e-integ prompt contents",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2e-code\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2d-integ"
+      ],
+      "concurrent_with": [
+        "R2e-test"
+      ],
+      "worktree": "wt/ps-r2e-world-fs-code",
+      "integration_task": "R2e-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2e-code.md"
+    },
+    {
+      "id": "R2e-test",
+      "name": "Policy-driven world fs mode (test)",
+      "type": "test",
+      "phase": "R2e \u2013 Policy-driven World FS Mode",
+      "status": "completed",
+      "description": "Add fixtures asserting policy-controlled read-only vs writable worlds (PTY + non-PTY) with trace/doctor coverage.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/CONFIGURATION.md",
+        "crates/shell/tests",
+        "crates/world/tests"
+      ],
+      "acceptance_criteria": [
+        "Read-only policy tests ensure writes fail cleanly and telemetry/doctor show read_only mode.",
+        "Writable policy tests ensure overlay/copy-diff writes succeed and telemetry/doctor show writable mode.",
+        "Coverage includes PTY path where feasible and documents skips when overlay/cgroup unavailable.",
+        "`cargo fmt`; targeted suites (`cargo test -p substrate-shell world_enable`, `cargo test -p world-agent` or justified skips) executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Review plan, tasks.json, session_log.md, and R2e-code scope",
+        "Set R2e-test to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2e-world-fs-test`, `git worktree add wt/ps-r2e-world-fs-test ps-r2e-world-fs-test`, `cd wt/ps-r2e-world-fs-test`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests completed; document skips with justification",
+        "Commit test/fixture updates",
+        "Merge ps-r2e-world-fs-test into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Confirm R2e-integ prompt contents",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2e-test\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2d-integ"
+      ],
+      "concurrent_with": [
+        "R2e-code"
+      ],
+      "worktree": "wt/ps-r2e-world-fs-test",
+      "integration_task": "R2e-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2e-test.md"
+    },
+    {
+      "id": "R2e-integ",
+      "name": "Policy-driven world fs mode (integration)",
+      "type": "integration",
+      "phase": "R2e \u2013 Policy-driven World FS Mode",
+      "status": "queued",
+      "description": "Merge the policy-driven world fs mode code/test branches, rerun fmt/lint/tests, and document read-only vs writable policy behavior.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/CONFIGURATION.md",
+        "crates/broker",
+        "crates/shell",
+        "crates/world-agent"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-r2e-world-fs-integ merges ps-r2e-world-fs-code/test and fast-forwards feat/p0-platform-stability-follow-up.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; targeted suites (`cargo test -p substrate-shell world_enable`, `cargo test -p world-agent` or justified skips) executed/logged.",
+        "tasks.json + session_log.md capture END entry; docs mention the new policy knob/systemd expectations."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Confirm R2e-code/test completed",
+        "Set R2e-integ to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2e-world-fs-integ`, `git worktree add wt/ps-r2e-world-fs-integ ps-r2e-world-fs-integ`, `cd wt/ps-r2e-world-fs-integ`"
+      ],
+      "end_checklist": [
+        "Merge code/test branches, resolve conflicts",
+        "Run required fmt/lint/tests; capture output",
+        "Fast-forward merge into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2e-integ\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2e-code",
+        "R2e-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-r2e-world-fs-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2e-integ.md"
+    },
+    {
+      "id": "R2e-code",
+      "name": "Policy-driven world fs mode (code)",
+      "type": "code",
+      "phase": "R2e \u2013 Policy-driven World FS Mode",
+      "status": "completed",
+      "description": "Add a broker policy toggle for read-only vs writable worlds, thread it through shell requests, and teach world-agent/backends to honor it so per-project/global policy controls world mutability.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/CONFIGURATION.md",
+        "crates/broker",
+        "crates/shell",
+        "crates/world-agent",
+        "crates/world"
+      ],
+      "acceptance_criteria": [
+        "Policy schema exposes world fs mode (read_only/writable) with default writable; validation errors surface clearly.",
+        "Shell uses the resolved policy for PTY + non-PTY world requests and records the active mode in traces/doctor output.",
+        "World-agent/backends honor the mode (read-only disables copy-diff/upper writes; writable keeps current behavior).",
+        "Docs describe the new knob (CONFIGURATION/WORLD) and doctor output highlights the active mode with remediation tips.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; targeted suites (`cargo test -p substrate-shell world_enable`, `cargo test -p world-agent` or justified skips) executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Read plan, tasks.json, session_log.md, and this prompt",
+        "Set R2e-code to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2e-world-fs-code`, `git worktree add wt/ps-r2e-world-fs-code ps-r2e-world-fs-code`, `cd wt/ps-r2e-world-fs-code`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests completed (note skips)",
+        "Commit code/doc changes",
+        "Merge ps-r2e-world-fs-code into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Confirm R2e-integ prompt contents",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2e-code\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2d-integ"
+      ],
+      "concurrent_with": [
+        "R2e-test"
+      ],
+      "worktree": "wt/ps-r2e-world-fs-code",
+      "integration_task": "R2e-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2e-code.md"
+    },
+    {
+      "id": "R2e-test",
+      "name": "Policy-driven world fs mode (test)",
+      "type": "test",
+      "phase": "R2e \u2013 Policy-driven World FS Mode",
+      "status": "queued",
+      "description": "Add tests/fixtures that assert policy-controlled read-only vs writable world behavior (PTY + non-PTY) with trace/doctor coverage.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/CONFIGURATION.md",
+        "crates/shell/tests",
+        "crates/world/tests"
+      ],
+      "acceptance_criteria": [
+        "Fixtures cover read-only policy (writes fail cleanly, telemetry/doctor show ro) and writable policy (writes succeed via overlay/copy-diff).",
+        "Coverage includes PTY/REPL path where feasible and documents skips on hosts lacking overlay/cgroup permissions.",
+        "`cargo fmt`; targeted suites (`cargo test -p substrate-shell world_enable`, `cargo test -p world-agent` or justified skips) executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Review plan, tasks.json, session_log.md, and R2e-code scope",
+        "Set R2e-test to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2e-world-fs-test`, `git worktree add wt/ps-r2e-world-fs-test ps-r2e-world-fs-test`, `cd wt/ps-r2e-world-fs-test`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests completed; document skips with justification",
+        "Commit test/fixture updates",
+        "Merge ps-r2e-world-fs-test into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Confirm R2e-integ prompt contents",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2e-test\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2d-integ"
+      ],
+      "concurrent_with": [
+        "R2e-code"
+      ],
+      "worktree": "wt/ps-r2e-world-fs-test",
+      "integration_task": "R2e-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2e-test.md"
+    },
+    {
+      "id": "R2e-integ",
+      "name": "Policy-driven world fs mode (integration)",
+      "type": "integration",
+      "phase": "R2e \u2013 Policy-driven World FS Mode",
+      "status": "queued",
+      "description": "Merge the policy-driven world fs mode code/test branches, run fmt/lint/tests, and document RO vs writable policy behavior before moving on.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "docs/CONFIGURATION.md",
+        "crates/broker",
+        "crates/shell",
+        "crates/world-agent"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-r2e-world-fs-integ merges ps-r2e-world-fs-code/test cleanly and fast-forwards feat/p0-platform-stability-follow-up.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; targeted suites (`cargo test -p substrate-shell world_enable`, `cargo test -p world-agent` or justified skips) executed/logged.",
+        "tasks.json + session_log.md updated with END entry; docs note the policy knob/systemd expectations."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Confirm R2e-code/test completed",
+        "Set R2e-integ to in_progress, append START entry, commit doc update",
+        "Create branch/worktree: `git checkout -b ps-r2e-world-fs-integ`, `git worktree add wt/ps-r2e-world-fs-integ ps-r2e-world-fs-integ`, `cd wt/ps-r2e-world-fs-integ`"
+      ],
+      "end_checklist": [
+        "Merge code/test branches, resolve conflicts",
+        "Run required fmt/lint/tests; capture output",
+        "Fast-forward merge into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2e-integ\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2e-code",
+        "R2e-test"
+      ],
+      "concurrent_with": [],
+      "worktree": "wt/ps-r2e-world-fs-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2e-integ.md"
+    },
+    {
+      "id": "R2f-code",
+      "name": "Host replay span parity (code)",
+      "type": "code",
+      "phase": "R2f \u2013 Host Replay Parity",
+      "status": "completed",
+      "description": "Emit replayable spans for host-only executions so host commands can be replayed with the same fidelity as world spans without probing the world backend.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/shell",
+        "crates/shim",
+        "crates/replay",
+        "crates/trace"
+      ],
+      "acceptance_criteria": [
+        "Host-only executions (--no-world, SUBSTRATE_REPLAY_USE_WORLD=disabled, or policy-host paths) still emit span_ids and replay_context with execution_origin=host.",
+        "Shell/shim avoid agent/world socket probes in host-only mode while preserving policy decisions and telemetry fields; trace schema remains backward compatible.",
+        "Replay consumes host spans and defaults to host execution; overrides (--world/--no-world, flip) continue to work with clear warnings when forced.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; targeted suites (`cargo test -p substrate-shell replay_world`, `cargo test -p substrate-replay -- --nocapture`) executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Read p0_platform_stability_plan.md, tasks.json, session_log.md, and this prompt",
+        "Set R2f-code to in_progress; append START entry; commit doc update (`git commit -am \"docs: start R2f-code\"`)",
+        "Create branch/worktree: `git checkout -b ps-r2f-host-replay-code`, `git worktree add wt/ps-r2f-host-replay-code ps-r2f-host-replay-code`, `cd wt/ps-r2f-host-replay-code`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/clippy/tests completed (note skips)",
+        "Commit code/doc changes",
+        "Merge ps-r2f-host-replay-code into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Confirm R2f-integ prompt contents",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2f-code\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2e-integ"
+      ],
+      "concurrent_with": [
+        "R2f-test"
+      ],
+      "worktree": "wt/ps-r2f-host-replay-code",
+      "integration_task": "R2f-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2f-code.md"
+    },
+    {
+      "id": "R2f-test",
+      "name": "Host replay span parity (test)",
+      "type": "test",
+      "phase": "R2f \u2013 Host Replay Parity",
+      "status": "completed",
+      "description": "Add coverage ensuring host-only commands emit replayable spans and that replay defaults to host execution without touching the world backend.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/shell/tests",
+        "crates/replay",
+        "crates/trace"
+      ],
+      "acceptance_criteria": [
+        "Tests assert span_ids + replay_context exist for host-only commands (--no-world, env opt-out) and mark execution_origin=host.",
+        "Replay fixtures run host spans on the host with no agent/world socket probes; warnings are single-shot when overrides force world use.",
+        "Coverage includes async REPL commands and non-PTY replay entrypoints; skips justified when host prerequisites differ.",
+        "`cargo fmt`; targeted suites (`cargo test -p substrate-shell replay_world`, `cargo test -p substrate-replay -- --nocapture`) executed/logged."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Review plan/tasks/session_log.md and R2f-code scope",
+        "Set R2f-test to in_progress; append START entry; commit doc update (`git commit -am \"docs: start R2f-test\"`)",
+        "Create branch/worktree: `git checkout -b ps-r2f-host-replay-test`, `git worktree add wt/ps-r2f-host-replay-test ps-r2f-host-replay-test`, `cd wt/ps-r2f-host-replay-test`"
+      ],
+      "end_checklist": [
+        "Ensure fmt/tests completed; document skips with justification",
+        "Commit test/fixture updates",
+        "Merge ps-r2f-host-replay-test into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Confirm R2f-integ prompt contents",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2f-test\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2e-integ"
+      ],
+      "concurrent_with": [
+        "R2f-code"
+      ],
+      "worktree": "wt/ps-r2f-host-replay-test",
+      "integration_task": "R2f-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2f-test.md"
+    },
+    {
+      "id": "R2f-integ",
+      "name": "Host replay span parity (integration)",
+      "type": "integration",
+      "phase": "R2f \u2013 Host Replay Parity",
+      "status": "completed",
+      "description": "Merge the host span replay parity code/test branches, rerun fmt/lint/tests, and ensure host-only spans are replayable without world dependencies.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+        "crates/shell",
+        "crates/shim",
+        "crates/replay",
+        "crates/trace"
+      ],
+      "acceptance_criteria": [
+        "wt/ps-r2f-host-replay-integ merges ps-r2f-host-replay-code/test cleanly and fast-forwards feat/p0-platform-stability-follow-up.",
+        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo test -p substrate-replay -- --nocapture`; `cargo test -p substrate-shell replay_world` executed/logged (note skips if world socket absent).",
+        "tasks.json + session_log.md updated with END entry; docs mention host span replay parity."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
+        "Confirm R2f-code/test completed",
+        "Set R2f-integ to in_progress; append START entry; commit doc update (`git commit -am \"docs: start R2f-integ\"`)",
+        "Create branch/worktree: `git checkout -b ps-r2f-host-replay-integ`, `git worktree add wt/ps-r2f-host-replay-integ ps-r2f-host-replay-integ`, `cd wt/ps-r2f-host-replay-integ`"
+      ],
+      "end_checklist": [
+        "Merge code/test branches, resolve conflicts",
+        "Run required fmt/lint/tests; capture output",
+        "Fast-forward merge into feat/p0-platform-stability-follow-up",
+        "Update tasks.json + session_log.md with END entry (include commands run)",
+        "Commit doc/task/log updates (`git commit -am \"docs: finish R2f-integ\"`), remove worktree, hand off"
+      ],
+      "depends_on": [
+        "R2f-code",
+        "R2f-test"
+      ],
+    "concurrent_with": [],
+    "worktree": "wt/ps-r2f-host-replay-integ",
+    "integration_task": null,
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2f-integ.md"
+  },
+  {
+    "id": "LP1-code",
+    "name": "Linux world provision parity fix (code)",
+    "type": "code",
+    "phase": "LP1 \u2013 Linux Provision Parity",
+    "status": "completed",
+    "description": "Align scripts/linux/world-provision.sh with installer behavior (SocketGroup=substrate, group add, linger guidance) so standalone provisioning yields usable sockets without dev-installer fixups.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+      "docs/project_management/next/p0-platform-stability/LP1-spec.md",
+      "scripts/linux/world-provision.sh",
+      "scripts/linux/world-socket-verify.sh",
+      "docs/WORLD.md",
+      "docs/INSTALLATION.md",
+      "scripts/substrate/dev-install-substrate.sh"
+    ],
+    "acceptance_criteria": [
+      "scripts/linux/world-provision.sh installs socket/service units with SocketGroup=substrate and recreates /run/substrate.sock as root:substrate 0660.",
+      "Provisioner ensures the substrate group exists and adds the invoking user when possible (or emits clear guidance when it cannot) and prints linger guidance.",
+      "Script remains idempotent, honors --skip-build/profile flags, and retains non-root invocation (self-escalates via sudo).",
+      "Docs/helpers referencing the provisioner reflect the corrected behavior (world-socket-verify, WORLD/INSTALLATION notes).",
+      "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings` executed/logged."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability && git pull --ff-only",
+      "Read plan.md, tasks.json, session_log.md, LP1-spec.md, kickoff prompt",
+      "Set LP1-code to in_progress in tasks.json (orchestration branch only)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start LP1-code'",
+      "Create branch ps-lp1-provision-code from feat/p0-platform-stability; run `git worktree add wt/ps-lp1-provision-code ps-lp1-provision-code`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings.",
+      "Inside wt/ps-lp1-provision-code, commit LP1-code changes to branch ps-lp1-provision-code (no docs/tasks/session_log.md edits).",
+      "Outside the worktree, ensure branch ps-lp1-provision-code contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability.",
+      "Checkout feat/p0-platform-stability; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish LP1-code'.",
+      "Remove worktree wt/ps-lp1-provision-code."
+    ],
+    "depends_on": [],
+    "concurrent_with": [
+      "LP1-test"
+    ],
+    "worktree": "wt/ps-lp1-provision-code",
+    "integration_task": "LP1-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/LP1-code.md"
+  },
+  {
+    "id": "LP1-test",
+    "name": "Linux world provision parity fix (test)",
+    "type": "test",
+    "phase": "LP1 \u2013 Linux Provision Parity",
+    "status": "completed",
+    "description": "Add tests/fixtures/harness coverage verifying the provisioner emits SocketGroup=substrate, group/linger guidance, and correct socket metadata without relying on installer fixups.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+      "docs/project_management/next/p0-platform-stability/LP1-spec.md",
+      "scripts/linux/world-provision.sh",
+      "scripts/linux/world-socket-verify.sh",
+      "tests/installers/install_smoke.sh"
+    ],
+    "acceptance_criteria": [
+      "Tests/fixtures assert the provisioner writes SocketGroup=substrate and surfaces group/linger guidance (stub/dry-run acceptable with documented skips for privileged actions).",
+      "Coverage captures expected socket path/ownership fields in doctor/shim-status outputs or helper artifacts where platform-agnostic.",
+      "`cargo fmt`; targeted tests/shellcheck or harness runs executed/logged (record skips/justification if privileged).",
+      "No production code changes."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability && git pull --ff-only",
+      "Read plan.md, tasks.json, session_log.md, LP1-spec.md, kickoff prompt",
+      "Set LP1-test to in_progress in tasks.json (orchestration branch only)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start LP1-test'",
+      "Create branch ps-lp1-provision-test from feat/p0-platform-stability; run `git worktree add wt/ps-lp1-provision-test ps-lp1-provision-test`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Run required commands (capture outputs): cargo fmt; targeted cargo test commands for suites added/updated.",
+      "Inside wt/ps-lp1-provision-test, commit LP1-test changes to branch ps-lp1-provision-test (no docs/tasks/session_log.md edits).",
+      "Outside the worktree, ensure branch ps-lp1-provision-test contains the new commit (fast-forward if needed); do not merge into feat/p0-platform-stability.",
+      "Checkout feat/p0-platform-stability; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; create downstream prompts if missing; commit docs with 'docs: finish LP1-test'.",
+      "Remove worktree wt/ps-lp1-provision-test."
+    ],
+    "depends_on": [],
+    "concurrent_with": [
+      "LP1-code"
+    ],
+    "worktree": "wt/ps-lp1-provision-test",
+    "integration_task": "LP1-integ",
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/LP1-test.md"
+  },
+  {
+    "id": "LP1-integ",
+    "name": "Linux world provision parity fix (integration)",
+    "type": "integration",
+    "phase": "LP1 \u2013 Linux Provision Parity",
+    "status": "completed",
+    "description": "Merge LP1 code/test branches, reconcile to spec, and gate with fmt/clippy/tests + make preflight so standalone provisioning matches installer behavior.",
+    "references": [
+      "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
+      "docs/project_management/next/p0-platform-stability/LP1-spec.md",
+      "scripts/linux/world-provision.sh",
+      "scripts/linux/world-socket-verify.sh"
+    ],
+    "acceptance_criteria": [
+      "wt/ps-lp1-provision-integ merges ps-lp1-provision-code/test and fast-forwards feat/p0-platform-stability.",
+      "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; relevant tests/harnesses (including provisioner coverage) executed/logged; `make preflight` run.",
+      "tasks.json + session_log.md updated with END entry; docs reflect corrected provisioner behavior."
+    ],
+    "start_checklist": [
+      "git checkout feat/p0-platform-stability && git pull --ff-only",
+      "Read plan.md, tasks.json, session_log.md, LP1-spec.md, kickoff prompt",
+      "Set LP1-integ to in_progress in tasks.json (orchestration branch only)",
+      "Add START entry to session_log.md; commit docs with message 'docs: start LP1-integ'",
+      "Create branch ps-lp1-provision-integ from feat/p0-platform-stability; run `git worktree add wt/ps-lp1-provision-integ ps-lp1-provision-integ`.",
+      "Do not edit docs/tasks/session_log.md from the worktree."
+    ],
+    "end_checklist": [
+      "Merge the upstream LP1 code/test branches into ps-lp1-provision-integ inside wt/ps-lp1-provision-integ and reconcile behavior to the spec.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Commit integration changes on branch ps-lp1-provision-integ.",
+      "Fast-forward merge ps-lp1-provision-integ into feat/p0-platform-stability; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish LP1-integ'.",
+      "Remove worktree wt/ps-lp1-provision-integ."
+    ],
+    "depends_on": [
+      "LP1-code",
+      "LP1-test"
+    ],
+    "concurrent_with": [],
+    "worktree": "wt/ps-lp1-provision-integ",
+    "integration_task": null,
+    "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/LP1-integ.md"
+  },
+  {
+    "id": "INV-overlay-consistency",
+    "name": "Investigate PTY vs non-PTY world FS consistency",
+    "type": "investigation",
+    "phase": "Follow-up",
+      "status": "queued",
+      "description": "Root-cause inconsistent world state across fs_mode toggles (read_only vs writable) and PTY vs non-PTY execution; writable PTY writes leak to host while non-PTY uses overlay, causing divergent views.",
+      "references": [
+        "docs/project_management/next/p0-platform-stability/INV-overlay-consistency.md",
+        "crates/world-agent/src/pty.rs",
+        "crates/world/src/session.rs",
+        "crates/shell/src/execution/routing/dispatch/exec.rs",
+        "crates/shell/src/execution/routing/dispatch/world_ops.rs",
+        "docs/CONFIGURATION.md"
+      ],
+      "acceptance_criteria": [
+        "Documented repro and root-cause for PTY writable path running on host while non-PTY uses overlay; confirmed by trace/mount logs.",
+        "Agreed plan to unify PTY/non-PTY isolation (e.g., writable overlay for PTY) and avoid host leaks across fs_mode switches.",
+        "Test plan drafted covering PTY/non-PTY read_only+writable and mode switches; spans/telemetry updated to report fs_mode + overlay use."
+      ],
+      "start_checklist": [
+        "Set INV-overlay-consistency to in_progress and append START entry to session_log.md.",
+        "Review INV-overlay-consistency.md and recent repro traces; gather fresh logs if needed."
+      ],
+      "end_checklist": [
+        "Update INV-overlay-consistency.md with root cause, decisions, and proposed code changes.",
+        "Log END entry in session_log.md with findings and next actions; set task to completed in tasks.json."
+      ],
+      "depends_on": [],
+      "concurrent_with": [],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": null
     }
   ]
 }

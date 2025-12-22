@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::{anyhow, Context, Result};
 
-use crate::manager_manifest::{InstallSpec, ManagerManifest, ManagerSpec};
+use crate::manager_manifest::{InstallSpec, ManagerManifest, ManagerSpec, Platform};
 
 /// Wrapper around the shared manager manifest that exposes world-deps specific
 /// helpers (host detection commands + guest install recipes).
@@ -13,11 +13,20 @@ pub struct WorldDepsManifest {
 }
 
 impl WorldDepsManifest {
-    pub fn load(base: &Path, overlay: Option<&Path>) -> Result<Self> {
-        let manifest = ManagerManifest::load(base, overlay)
-            .with_context(|| format!("failed to load manager manifest from {}", base.display()))?;
+    pub fn load_layered(
+        platform: Platform,
+        inventory_base: &Path,
+        overlays: &[std::path::PathBuf],
+    ) -> Result<Self> {
+        let manifest =
+            ManagerManifest::load_layered(inventory_base, overlays).with_context(|| {
+                format!(
+                    "failed to load layered manager manifest from {}",
+                    inventory_base.display()
+                )
+            })?;
         let tools = manifest
-            .managers
+            .resolve_for_platform(platform)
             .iter()
             .map(WorldDepTool::from_manager)
             .collect::<Result<Vec<_>>>()?;
@@ -83,8 +92,34 @@ fn build_host_commands(name: &str, commands: &[String]) -> Vec<String> {
     if commands.is_empty() {
         vec![format!("command -v {}", name)]
     } else {
-        commands.to_vec()
+        commands
+            .iter()
+            .map(|command| normalize_host_detect_command(command))
+            .collect()
     }
+}
+
+fn normalize_host_detect_command(command: &str) -> String {
+    let trimmed = command.trim();
+    if trimmed.is_empty() {
+        return trimmed.to_string();
+    }
+
+    // When a manifest lists a bare command name (e.g. `pyenv`, `asdf`), probing via `command -v`
+    // is more reliable than executing it (some CLIs exit non-zero when run with no args).
+    if is_simple_command_name(trimmed) && !trimmed.starts_with("command -v ") {
+        format!("command -v {}", trimmed)
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn is_simple_command_name(value: &str) -> bool {
+    !value.is_empty()
+        && !value.contains(|c: char| c.is_whitespace() || c == '/' || c == '\\')
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '+'))
 }
 
 fn build_guest_commands(name: &str, detect_cmd: Option<&str>) -> Vec<String> {

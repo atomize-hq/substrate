@@ -1,5 +1,7 @@
 //! World initialization flows for routing, including platform-gated defaults and agent bridging.
 
+#[cfg(all(test, any(target_os = "windows", target_os = "macos")))]
+use crate::execution::world_env_guard;
 use crate::execution::ShellConfig;
 use std::env;
 
@@ -34,6 +36,9 @@ fn init_windows_world(config: &ShellConfig) {
         return;
     }
 
+    #[cfg(test)]
+    let _env_guard = world_env_guard();
+
     match pw::detect() {
         Ok(ctx) => {
             if let Err(e) = (ctx.ensure_ready)() {
@@ -54,12 +59,15 @@ fn init_windows_world(config: &ShellConfig) {
 
 #[cfg(target_os = "macos")]
 fn init_macos_world(config: &ShellConfig) {
-    use substrate_broker::allowed_domains;
+    use substrate_broker::{allowed_domains, world_fs_mode};
     use world_api::{ResourceLimits, WorldSpec};
 
     if world_disabled(config) {
         return;
     }
+
+    #[cfg(test)]
+    let _env_guard = world_env_guard();
 
     match pw::detect() {
         Ok(ctx) => {
@@ -79,6 +87,7 @@ fn init_macos_world(config: &ShellConfig) {
                     allowed_domains: allowed_domains(),
                     project_dir: config.world_root.effective_root(),
                     always_isolate: false,
+                    fs_mode: world_fs_mode(),
                 };
                 if let Ok(handle) = ctx.backend.ensure_session(&spec) {
                     env::set_var("SUBSTRATE_WORLD_ID", handle.id);

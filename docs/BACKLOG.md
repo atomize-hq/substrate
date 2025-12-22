@@ -26,6 +26,11 @@ Keep concise, actionable, and security-focused.
   - `substrate health` currently reports “attention required” whenever optional manager detection hooks (direnv, asdf, conda, etc.) aren’t found on the host, even though the host never had them. We only care when the world and host detection disagree (host has a manager, world doesn’t), not when both sides are missing a manager entirely.
   - Fix: adjust health summary logic to only flag mismatches when the host reports a manager and the world fails to mirror it. Missing managers that the host doesn’t have should not trigger an “attention required” status.
 
+- **P1 – Policy-driven world fs mode**
+  - Problem: write permissions inside worlds currently depend on systemd hardening + overlay success, not on broker policy. Sensitive repos need a policy bit to force read-only worlds while other projects remain writable, without editing unit files manually.
+  - Work: extend broker schema to accept `world.fs_mode = read_only|writable` (global + per-project), plumb into shell/world-agent so PTY + non-PTY sessions honor it, and update docs/doctor to surface the active mode. Systemd units must allow `/home` writes so policy can enforce RO vs writable deterministically.
+  - Acceptance: policy defaults to writable; flipping to read-only blocks writes (clear errors, trace telemetry); installers/docs explain the knob and tests cover both modes (with skip notes for hosts lacking overlay/cgroup permissions).
+
 - **P1 fs_diff parity (agent HTTP + PTY)**
   - *Agent HTTP path:* Today only replay/local backends attach `fs_diff`; agent-routed non-PTY commands drop the diff. Extend `agent-api-types::ExecuteResponse` / `world-agent` so `/v1/execute` returns `fs_diff: Option<FsDiff>` and update the shell to record it in completion spans. Acceptance: `fs_diff` shows up in `trace.jsonl` for agent HTTP runs.
   - *PTY sessions:* Interactive runs still lack filesystem diffs. Explore capturing post-exit diffs via overlayfs/copydiff and plumb the result through the PTY telemetry path so REPL + `substrate -i` sessions produce the same audit artifacts as non-PTY commands. Document caveats (long-running PTYs, partial diffs) and add tests to prove PTY diffs land in spans.
@@ -36,6 +41,11 @@ Keep concise, actionable, and security-focused.
   - Considerations:
     - Plumb the ID through `ShellConfig`/`WorldRootSettings` so the logging layer can access it regardless of execution path.
     - Update tests to assert the field is set when worlds are enabled, and note the behavior change in tracing docs so operators know how to interpret the new data.
+
+- **P1 – Capture caging/anchor in spans + replay verbose**
+  - Problem: replay verbose output can’t show whether the recorded command was caged or what anchor was used because spans don’t persist that state.
+  - Work: persist `caged` (bool) and `anchor_cwd` (string) in the span/replay_context, thread into replay reconstruction, and print in `--replay-verbose` with a warning when the replayed environment can’t honor the recorded caging/anchor.
+  - Acceptance: trace entries include the new fields for caged sessions; replay verbose shows caging/anchor and warns on mismatch; docs/tests updated to cover the fields.
 
 - **P1 - TCP bridge for agent (Cross-platform: Linux/macOS/Windows)**
   - Goal: Provide an optional loopback TCP endpoint that bridges to the agent UDS for environments/tools requiring TCP.
@@ -52,12 +62,13 @@ Keep concise, actionable, and security-focused.
   -  Plan: '/home/spenser/__Active_code/substrate/docs/project_management/next/json-mode/json_mode_plan.md'
 
 - **P2 – World deps install UX cleanup**
-  - `substrate world deps install` only works for the curated tools listed in `scripts/substrate/world-deps.yaml` (rustup, go, pyenv, uv, etc.). Users who try to install language-level packages (pip/npm) or tools missing from the manifest get confusing errors, especially on dev installs where `$HOME` is read-only inside the world.
+  - `substrate world deps install` only works for tools defined in the world-deps inventory (canonical manager list in `config/manager_hooks.yaml`, plus the layered overrides under `world-deps.yaml` / `world-deps.local.yaml`). Users who try to install language-level packages (pip/npm) or tools missing from the inventory get confusing errors, especially on dev installs where `$HOME` is read-only inside the world.
   - Improvements:
     - Document exactly what the manifest covers and how to install unsupported packages safely (e.g., virtualenv/pip --target).
     - Consider adding backends for common package managers so commands like `substrate world deps install pip:package` can proxy installations into the writable anchor.
     - Ensure dev-install paths and env detection work inside the world so the helper can locate binaries/scripts.
   - Goal: make `world deps` a predictable way to provision world tooling or gracefully direct users to the correct workflow when an item isn’t supported yet.
+  - Parity gap: health/doctor currently reports `parity: "unknown"` for optional managers (nvm/pyenv/bun/direnv/asdf/etc.) because world-side detectors are missing. Add world detection (or consume doctor world data) so parity can report synced vs. attention-required when the agent is healthy.
 
 - **P2 – Session listing/resume UX**
   - Pain: Each `substrate` invocation mints a fresh session ID recorded in `trace.jsonl`. Users who want to resume a previous REPL session or correlate spans currently have to parse that file manually or export `SHIM_SESSION_ID` themselves.
@@ -68,6 +79,14 @@ Keep concise, actionable, and security-focused.
     - The trace log can grow; listing needs to be efficient (maybe keep an index or show the last N sessions).
     - Handle missing/invalid directories gracefully when resuming and document what context is restored (only tracing metadata, not the world state).
     - Update docs to explain session IDs vs. span IDs and the new resume workflow.
+
+- **P2 – World-disabled UX (no-world installs)**
+  - Pain: When Substrate is installed with `--no-world`, commands still probe systemd/agent sockets and emit warnings (inactive socket, agent replay unavailable, cgroup/netns/overlay fallbacks) even though the world backend is intentionally disabled.
+  - Improvements:
+    - `substrate world doctor` should short-circuit when world is disabled and report a clear “world disabled/not provisioned” status (JSON/text) without probing systemd/socket.
+    - Replay should detect disabled/missing world early and emit a single “world disabled/no agent installed; staying host-only” message instead of attempting world creation and logging cgroup/netns/overlay warnings.
+    - `world deps` and related subcommands should surface that the world is disabled by install/config/env before implying a broken agent.
+  - Goal: make host-only installs quiet and explicit, avoiding misleading “agent unavailable” warnings when the world was intentionally skipped.
 
 - **P3 – Interactive configuration commands**
   - Add shell built-ins/commands (`:config`, `:profile load`, `:world status`,
@@ -85,6 +104,14 @@ Keep concise, actionable, and security-focused.
 - **P4 – macOS installer dependency automation**
   - Enhance `scripts/substrate/install-substrate.sh` to auto-install required macOS tools (e.g., `envsubst` via Homebrew `gettext`) when missing, falling back to clear guidance if no supported package manager is detected.
   - Acceptance: Fresh macOS host without gettext can run the installer end-to-end without manual prerequisite setup. 
+
+- **P4 – Cleanup skips for already-removed worlds**
+  - `substrate world cleanup` still enumerates every historical `wld_*` entry and prints “manual” nft/cgroup commands even when those resources no longer exist (the helper treats ENOENT as failure). Users who already deleted the leftovers get spammed with scary warnings on each run.
+  - Improvements:
+    - Probe nft tables, netns entries, and cgroup directories before attempting removal; skip entries that are already absent.
+    - Treat ENOENT from `nft delete`/`rm -rf` as success so the CLI reports “all clear” when nothing remains.
+    - Summarize results with a clean “nothing to clean” message instead of reprinting stale IDs.
+  - Acceptance: running `substrate world cleanup` on a host with no lingering worlds produces a success summary with no manual commands; lingering resources still result in actionable instructions.
 
 - **P5 – Doctor/health output UX**
   - The current `substrate world doctor`, `substrate shim doctor`, and `substrate health` outputs are verbose but not well structured: actionable issues are buried in large sections (e.g., listing every missing manager even when the host never had them), and the ordering makes it hard to see what needs attention.
@@ -126,6 +153,11 @@ Keep concise, actionable, and security-focused.
   - Finish the Kuzu-backed implementation outlined in `docs/project_management/future/PHASE_4_5_ADVANCED_FEATURES_PLAN.md`:
     ingestion pipeline, schema, query interface, and CLI.
   - Replace the current mock-only `substrate-graph` crate with a real backend.
+
+- **Later – CLI help/flag audit**
+  - Several subcommands inherit global flags that don’t make sense in context (e.g., `substrate world cleanup --help` shows `--world/--no-world` despite being world-only). Audit command help/flag surfaces, hide or override irrelevant globals, and ensure summaries/examples reflect intended usage.
+  - Scope: review top-level/global flags vs per-command applicability, adjust clap definitions to suppress noise, and refresh docs/USAGE snippets with cleaned help output.
+  - Acceptance: per-command help only shows relevant options; cleanup/help examples confirm noisy flags are removed or clearly explained.
 
 
 
@@ -273,4 +305,3 @@ Risks / considerations
   - Implemented `world-mac-lima` agent calls via `agent-api-client` with VSock/SSH fallbacks.
   - Shell now routes macOS commands through Lima, ensures VM/forwarding, and mirrors Linux telemetry.
   - Acceptance met: `scripts/mac/smoke.sh` validates non-PTY, PTY, and replay; docs refreshed (`docs/WORLD.md`, `docs/dev/mac_world_setup.md`, `docs/INSTALLATION.md`).
-

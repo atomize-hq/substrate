@@ -45,9 +45,23 @@ managers:
     }));
     fixture.write_world_deps_fixture(json!({
         "manifest": {
-            "base": fixture.home().join(".substrate/world-deps.yaml"),
-            "overlay": null,
-            "overlay_exists": false
+            "inventory": {
+                "base": fixture.home().join("manager_hooks.yaml"),
+                "overlay": fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                "overlay_exists": false
+            },
+            "overlays": {
+                "installed": fixture.home().join(".substrate/world-deps.yaml"),
+                "installed_exists": false,
+                "user": fixture.home().join(".substrate/world-deps.local.yaml"),
+                "user_exists": false
+            },
+            "layers": [
+                fixture.home().join("manager_hooks.yaml"),
+                fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                fixture.home().join(".substrate/world-deps.yaml"),
+                fixture.home().join(".substrate/world-deps.local.yaml")
+            ]
         },
         "world_disabled_reason": "install metadata reports world disabled",
         "tools": [
@@ -362,9 +376,23 @@ managers:
     }));
     fixture.write_world_deps_fixture(json!({
         "manifest": {
-            "base": fixture.home().join(".substrate/world-deps.yaml"),
-            "overlay": null,
-            "overlay_exists": false
+            "inventory": {
+                "base": fixture.home().join("manager_hooks.yaml"),
+                "overlay": fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                "overlay_exists": false
+            },
+            "overlays": {
+                "installed": fixture.home().join(".substrate/world-deps.yaml"),
+                "installed_exists": false,
+                "user": fixture.home().join(".substrate/world-deps.local.yaml"),
+                "user_exists": false
+            },
+            "layers": [
+                fixture.home().join("manager_hooks.yaml"),
+                fixture.home().join(".substrate/manager_hooks.local.yaml"),
+                fixture.home().join(".substrate/world-deps.yaml"),
+                fixture.home().join(".substrate/world-deps.local.yaml")
+            ]
         },
         "world_disabled_reason": null,
         "tools": "invalid"
@@ -572,5 +600,41 @@ managers:
             .and_then(|value| value.as_array())
             .map(|tools| tools.len()),
         Some(0)
+    );
+}
+
+#[test]
+fn shim_doctor_json_surfaces_world_fs_mode_details() {
+    let manifest = r#"version: 1
+managers:
+  - name: DetectedManager
+    priority: 1
+    detect:
+      script: "exit 0"
+    init:
+      shell: |
+        export DETECTED_MARKER=1
+"#;
+    let fixture = DoctorFixture::new(manifest);
+    fixture.write_world_doctor_fixture(json!({
+        "platform": "fixture-macos",
+        "ok": true,
+        "world_fs_mode": "read_only"
+    }));
+
+    let output = fixture
+        .command()
+        .arg("shim")
+        .arg("doctor")
+        .arg("--json")
+        .output()
+        .expect("failed to run shim doctor --json");
+    assert!(output.status.success(), "shim doctor --json should succeed");
+
+    let report: Value = serde_json::from_slice(&output.stdout).expect("doctor output JSON");
+    assert_eq!(
+        report["world"]["details"]["world_fs_mode"],
+        json!("read_only"),
+        "shim doctor should surface world_fs_mode from world doctor details"
     );
 }

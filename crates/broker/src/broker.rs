@@ -8,6 +8,7 @@ use anyhow::Result;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
+use substrate_common::WorldFsMode;
 use tracing::{debug, info, warn};
 
 pub struct Broker {
@@ -161,6 +162,13 @@ impl Broker {
             return Vec::new();
         };
         policy.net_allowed.clone()
+    }
+
+    pub fn world_fs_mode(&self) -> WorldFsMode {
+        let Ok(policy) = self.policy.read() else {
+            return WorldFsMode::Writable;
+        };
+        policy.world_fs_mode
     }
 
     fn check_approval(&self, cmd: &str) -> Result<ApprovalStatus> {

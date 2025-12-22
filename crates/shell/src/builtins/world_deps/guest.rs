@@ -1,30 +1,109 @@
 use crate::execution::{build_agent_client_and_request, stream_non_pty_via_agent};
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
+use std::env;
 use std::error::Error as StdError;
+use std::fmt;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
+use substrate_common::paths as substrate_paths;
 use tokio::runtime::Runtime;
+use which::which;
 
 static WORLD_EXEC_FALLBACK: AtomicBool = AtomicBool::new(false);
 
-pub(crate) fn detect_host(commands: &[String]) -> bool {
-    for cmd in commands {
-        if run_host_command(cmd) {
-            return true;
-        }
+#[derive(Debug)]
+pub(crate) struct WorldBackendUnavailable {
+    reason: String,
+}
+
+impl WorldBackendUnavailable {
+    fn new(reason: String) -> Self {
+        Self { reason }
     }
-    false
+
+    pub(crate) fn reason(&self) -> &str {
+        &self.reason
+    }
+}
+
+impl fmt::Display for WorldBackendUnavailable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "world backend unavailable: {}", self.reason)
+    }
+}
+
+impl StdError for WorldBackendUnavailable {}
+
+pub(crate) struct HostDetectionResult {
+    pub detected: bool,
+    pub reason: Option<String>,
+}
+
+pub(crate) struct HostBulkDetection {
+    pub(crate) detected: Vec<bool>,
+    pub(crate) degraded_reason: Option<String>,
+}
+
+enum HostDetectionContext {
+    Bash(HostBashContext),
+    Legacy { reason: Option<String> },
+}
+
+struct HostBashContext {
+    bash_path: PathBuf,
+    manager_env_path: PathBuf,
+    original_bash_env: Option<String>,
+}
+
+pub(crate) fn detect_host(commands: &[String]) -> HostDetectionResult {
+    let context = resolve_host_detection_context();
+    match &context {
+        HostDetectionContext::Legacy { reason } => {
+            let detected = commands.iter().any(|cmd| run_host_command(cmd));
+            HostDetectionResult {
+                detected,
+                reason: if detected { None } else { reason.clone() },
+            }
+        }
+        HostDetectionContext::Bash(bash_ctx) => HostDetectionResult {
+            detected: commands
+                .iter()
+                .any(|cmd| run_host_detection_command(cmd, bash_ctx)),
+            reason: None,
+        },
+    }
+}
+
+pub(crate) fn detect_host_bulk(host_commands: &[Vec<String>]) -> HostBulkDetection {
+    let context = resolve_host_detection_context();
+    match &context {
+        HostDetectionContext::Legacy { reason } => HostBulkDetection {
+            detected: host_commands
+                .iter()
+                .map(|commands| commands.iter().any(|cmd| run_host_command(cmd)))
+                .collect(),
+            degraded_reason: reason.clone(),
+        },
+        HostDetectionContext::Bash(bash_ctx) => detect_host_bulk_bash(host_commands, bash_ctx),
+    }
 }
 
 pub(crate) fn detect_guest(commands: &[String]) -> Result<bool> {
+    let fallback_allowed = host_fallback_allowed();
     for cmd in commands {
         if WORLD_EXEC_FALLBACK.load(Ordering::SeqCst) {
-            if run_host_command(cmd) {
-                return Ok(true);
+            if fallback_allowed {
+                if run_host_command(cmd) {
+                    return Ok(true);
+                }
+                continue;
             }
-            continue;
+            return Err(anyhow!(WorldBackendUnavailable::new(
+                "host fallback disabled on macOS".to_string()
+            )));
         }
 
         let wrapped = wrap_for_bash(cmd, false);
@@ -35,9 +114,13 @@ pub(crate) fn detect_guest(commands: &[String]) -> Result<bool> {
                 }
             }
             Err(err) if should_fallback_to_host(&err) => {
-                mark_world_exec_unavailable(&err);
-                if run_host_command(cmd) {
-                    return Ok(true);
+                if fallback_allowed {
+                    mark_world_exec_unavailable(&err);
+                    if run_host_command(cmd) {
+                        return Ok(true);
+                    }
+                } else {
+                    return Err(anyhow!(WorldBackendUnavailable::new(format!("{:#}", err))));
                 }
             }
             Err(err) => return Err(err),
@@ -46,12 +129,82 @@ pub(crate) fn detect_guest(commands: &[String]) -> Result<bool> {
     Ok(false)
 }
 
-pub(crate) fn install_in_guest(script: &str, verbose: bool) -> Result<()> {
-    if WORLD_EXEC_FALLBACK.load(Ordering::SeqCst) {
-        return run_host_install(script, verbose);
+fn resolve_host_detection_context() -> HostDetectionContext {
+    if cfg!(windows) {
+        return HostDetectionContext::Legacy { reason: None };
     }
 
-    let command = wrap_for_bash(script, true);
+    let bash_path = match which("bash") {
+        Ok(path) => path,
+        Err(_) => {
+            return HostDetectionContext::Legacy {
+                reason: Some(
+                    "bash not found; host detection requires bash to load manager init".to_string(),
+                ),
+            };
+        }
+    };
+
+    let manager_env_path = match resolve_manager_env_path() {
+        Ok(path) => path,
+        Err(err) => return HostDetectionContext::Legacy { reason: Some(err) },
+    };
+
+    if !manager_env_path.exists() {
+        return HostDetectionContext::Legacy {
+            reason: Some(format!(
+                "manager env script missing at {}",
+                manager_env_path.display()
+            )),
+        };
+    }
+
+    let original_bash_env = env::var("BASH_ENV").ok().and_then(|value| {
+        let manager_env = manager_env_path.display().to_string();
+        if value == manager_env {
+            None
+        } else {
+            Some(value)
+        }
+    });
+
+    HostDetectionContext::Bash(HostBashContext {
+        bash_path,
+        manager_env_path,
+        original_bash_env,
+    })
+}
+
+fn resolve_manager_env_path() -> std::result::Result<PathBuf, String> {
+    if let Ok(path) = env::var("SUBSTRATE_MANAGER_ENV") {
+        if path.trim().is_empty() {
+            return Err("SUBSTRATE_MANAGER_ENV is set but empty".to_string());
+        }
+        return Ok(PathBuf::from(path));
+    }
+
+    substrate_paths::substrate_home()
+        .map(|home| home.join("manager_env.sh"))
+        .map_err(|err| {
+            format!(
+                "failed to resolve Substrate home for manager env: {:#}",
+                err
+            )
+        })
+}
+
+pub(crate) fn install_in_guest(script: &str, verbose: bool) -> Result<()> {
+    let fallback_allowed = host_fallback_allowed();
+    if WORLD_EXEC_FALLBACK.load(Ordering::SeqCst) {
+        if fallback_allowed {
+            return run_host_install(script, verbose);
+        }
+        return Err(macos_world_deps_unavailable_error(
+            "host fallback disabled on macOS",
+        ));
+    }
+
+    let command = wrap_for_bash(&wrap_guest_install_script(script), true);
     if verbose {
         match stream_non_pty_via_agent(&command) {
             Ok(outcome) => {
@@ -62,8 +215,12 @@ pub(crate) fn install_in_guest(script: &str, verbose: bool) -> Result<()> {
                 }
             }
             Err(err) if should_fallback_to_host(&err) => {
-                mark_world_exec_unavailable(&err);
-                run_host_install(script, verbose)
+                if fallback_allowed {
+                    mark_world_exec_unavailable(&err);
+                    run_host_install(script, verbose)
+                } else {
+                    Err(macos_world_deps_unavailable_error(&format!("{:#}", err)))
+                }
             }
             Err(err) => Err(err),
         }
@@ -85,8 +242,12 @@ pub(crate) fn install_in_guest(script: &str, verbose: bool) -> Result<()> {
                 }
             }
             Err(err) if should_fallback_to_host(&err) => {
-                mark_world_exec_unavailable(&err);
-                run_host_install(script, verbose)
+                if fallback_allowed {
+                    mark_world_exec_unavailable(&err);
+                    run_host_install(script, verbose)
+                } else {
+                    Err(macos_world_deps_unavailable_error(&format!("{:#}", err)))
+                }
             }
             Err(err) => Err(err),
         }
@@ -100,11 +261,153 @@ pub(crate) fn world_exec_fallback_active() -> bool {
 pub(crate) fn mark_world_exec_unavailable(err: &anyhow::Error) {
     let previously = WORLD_EXEC_FALLBACK.swap(true, Ordering::SeqCst);
     if !previously {
-        println!(
+        eprintln!(
             "substrate: warn: world backend unavailable for world deps (falling back to host execution): {:#}",
             err
         );
     }
+}
+
+fn run_host_detection_command(command: &str, bash_ctx: &HostBashContext) -> bool {
+    let mut cmd = Command::new(&bash_ctx.bash_path);
+    cmd.arg("-c").arg(command);
+    // Use BASH_ENV to source the manager env without touching user rc files.
+    cmd.env("BASH_ENV", &bash_ctx.manager_env_path);
+    cmd.env("SUBSTRATE_MANAGER_ENV", &bash_ctx.manager_env_path);
+    if let Some(original) = &bash_ctx.original_bash_env {
+        cmd.env("SUBSTRATE_ORIGINAL_BASH_ENV", original);
+    } else {
+        cmd.env_remove("SUBSTRATE_ORIGINAL_BASH_ENV");
+    }
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::null());
+    cmd.status().map(|status| status.success()).unwrap_or(false)
+}
+
+fn detect_host_bulk_bash(
+    host_commands: &[Vec<String>],
+    bash_ctx: &HostBashContext,
+) -> HostBulkDetection {
+    // Fast path: if every command is a simple `command -v <name>` probe, evaluate them in a
+    // single bash invocation so manager init is sourced once.
+    let mut all_probe_targets: Vec<Vec<Option<String>>> = Vec::with_capacity(host_commands.len());
+    let mut all_simple = true;
+    for commands in host_commands {
+        let mut targets = Vec::with_capacity(commands.len());
+        for command in commands {
+            let target = parse_command_v_target(command);
+            if target.is_none() {
+                all_simple = false;
+            }
+            targets.push(target);
+        }
+        all_probe_targets.push(targets);
+    }
+
+    if all_simple {
+        if let Some(result) = run_bash_bulk_command_v(&all_probe_targets, bash_ctx) {
+            return HostBulkDetection {
+                detected: result,
+                degraded_reason: None,
+            };
+        }
+    }
+
+    // Fallback: per-tool evaluation (still uses bash+manager env, but avoids incorrect results).
+    HostBulkDetection {
+        detected: host_commands
+            .iter()
+            .map(|commands| {
+                commands
+                    .iter()
+                    .any(|cmd| run_host_detection_command(cmd, bash_ctx))
+            })
+            .collect(),
+        degraded_reason: None,
+    }
+}
+
+fn parse_command_v_target(command: &str) -> Option<String> {
+    let trimmed = command.trim();
+    let target = trimmed.strip_prefix("command -v ")?;
+    let target = target.trim();
+    is_simple_command_name(target).then(|| target.to_string())
+}
+
+fn is_simple_command_name(value: &str) -> bool {
+    !value.is_empty()
+        && !value.contains(|c: char| c.is_whitespace() || c == '/' || c == '\\')
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '+'))
+}
+
+fn run_bash_bulk_command_v(
+    probes: &[Vec<Option<String>>],
+    bash_ctx: &HostBashContext,
+) -> Option<Vec<bool>> {
+    let mut script = String::new();
+    script.push_str("set +e\n");
+
+    // Emit stable, parseable markers even if the sourced init scripts print noise.
+    for (idx, commands) in probes.iter().enumerate() {
+        script.push_str("if ");
+        let mut first = true;
+        for target in commands.iter().flatten() {
+            if !first {
+                script.push_str(" || ");
+            }
+            first = false;
+            script.push_str("command -v ");
+            script.push_str(target);
+            script.push_str(" >/dev/null 2>&1");
+        }
+        if first {
+            // No commands for tool (shouldn't happen); treat as missing.
+            script.push_str("false");
+        }
+        script.push_str("; then printf '__SUBSTRATE_WORLD_DEPS_HOST__ ");
+        script.push_str(&idx.to_string());
+        script.push_str(" 1\\n'; else printf '__SUBSTRATE_WORLD_DEPS_HOST__ ");
+        script.push_str(&idx.to_string());
+        script.push_str(" 0\\n'; fi\n");
+    }
+    script.push_str("exit 0\n");
+
+    let mut cmd = Command::new(&bash_ctx.bash_path);
+    cmd.arg("-c").arg(script);
+    cmd.env("BASH_ENV", &bash_ctx.manager_env_path);
+    cmd.env("SUBSTRATE_MANAGER_ENV", &bash_ctx.manager_env_path);
+    if let Some(original) = &bash_ctx.original_bash_env {
+        cmd.env("SUBSTRATE_ORIGINAL_BASH_ENV", original);
+    } else {
+        cmd.env_remove("SUBSTRATE_ORIGINAL_BASH_ENV");
+    }
+    cmd.stdin(Stdio::null());
+    let output = cmd.output().ok()?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut results: Vec<Option<bool>> = vec![None; probes.len()];
+    for line in stdout.lines() {
+        let Some(rest) = line.strip_prefix("__SUBSTRATE_WORLD_DEPS_HOST__ ") else {
+            continue;
+        };
+        let mut parts = rest.split_whitespace();
+        let idx = parts.next().and_then(|v| v.parse::<usize>().ok());
+        let val = parts.next();
+        let Some(idx) = idx else { continue };
+        if idx >= results.len() {
+            continue;
+        }
+        let detected = matches!(val, Some("1"));
+        results[idx] = Some(detected);
+    }
+
+    if results.iter().any(|v| v.is_none()) {
+        return None;
+    }
+
+    Some(results.into_iter().map(|v| v.unwrap_or(false)).collect())
 }
 
 pub(crate) fn run_host_command(command: &str) -> bool {
@@ -134,7 +437,7 @@ fn run_world_command(command: &str) -> Result<agent_api_types::ExecuteResponse> 
 }
 
 fn run_host_install(script: &str, verbose: bool) -> Result<()> {
-    println!("substrate: warn: world backend unavailable; running installer on the host.");
+    eprintln!("substrate: warn: world backend unavailable; running installer on the host.");
     let body = build_bash_body(script, true);
     let mut cmd = Command::new("bash");
     cmd.arg("-lc").arg(&body);
@@ -169,6 +472,35 @@ fn wrap_for_bash(script: &str, strict: bool) -> String {
     format!("bash -lc '{}'", escaped)
 }
 
+fn wrap_guest_install_script(script: &str) -> String {
+    // `sudo` can fail inside some world environments (e.g. userns where only uid 0 is mapped).
+    // For guest installs we prefer to run commands directly when already root, and otherwise
+    // fall back to invoking the real sudo.
+    //
+    // Must handle common sudo flags used by recipes (e.g. `sudo -E bash -`, `sudo -n`).
+    let prelude = r#"
+substrate_sudo() {
+  if [ "$(id -u)" -eq 0 ]; then
+    # Strip common sudo flags when we're already root (options are for sudo, not the target cmd).
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        -E|-n|-S|-k|-H) shift ;;
+        --) shift; break ;;
+        -*) shift ;;
+        *) break ;;
+      esac
+    done
+    "$@"
+  else
+    command sudo "$@"
+  fi
+}
+sudo() { substrate_sudo "$@"; }
+"#;
+
+    format!("{prelude}\n{script}")
+}
+
 fn build_bash_body(script: &str, strict: bool) -> String {
     let mut body = String::new();
     if strict {
@@ -176,6 +508,17 @@ fn build_bash_body(script: &str, strict: bool) -> String {
     }
     body.push_str(script);
     body
+}
+
+pub(crate) fn macos_world_deps_unavailable_error(reason: &str) -> anyhow::Error {
+    anyhow!(
+        "world backend unavailable for world deps on macOS; run `substrate world doctor --json` to inspect forwarding and backend status, then retry. Underlying error: {}",
+        reason
+    )
+}
+
+fn host_fallback_allowed() -> bool {
+    !cfg!(target_os = "macos")
 }
 
 fn should_fallback_to_host(err: &anyhow::Error) -> bool {
@@ -188,6 +531,14 @@ fn should_fallback_to_host(err: &anyhow::Error) -> bool {
         if message.contains("world-agent")
             || message.contains("platform world context")
             || message.contains("world backend")
+            // Connectivity/transport failures should degrade to host execution.
+            || message.contains("connect UDS")
+            || message.contains("unix socket")
+            || message.contains("Connection refused")
+            || message.contains("connection refused")
+            || message.contains("timed out")
+            || message.contains("No such file or directory")
+            || message.contains("SUN_LEN")
         {
             return true;
         }

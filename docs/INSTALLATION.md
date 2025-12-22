@@ -46,6 +46,11 @@ The installer will:
 7. Install `substrate-world-agent` under `/usr/local/bin` and manage the
    systemd `.service` + `.socket` units (`/etc/systemd/system/substrate-world-agent.{service,socket}`)
 8. Run `substrate world doctor --json` for a final readiness report
+9. Ensure the `substrate` group exists on Linux hosts, add the invoking user,
+   and reload the socket/service units so `/run/substrate.sock` is recreated as
+   `root:substrate` with `0660` permissions. The installer prints
+   `loginctl enable-linger <user>` guidance so socket activation survives
+   logout/reboots.
 
 Add `~/.substrate/bin` (or your custom `--prefix` bin directory) to PATH—or
 invoke `~/.substrate/bin/substrate` directly—because the installer no longer
@@ -54,6 +59,22 @@ edits shell rc files. Supplying `--no-world` skips step 6, writes
 the exact `substrate world enable` command to run when you are ready to
 provision the backend. You can still force a single world-isolated run later
 with `substrate --world ...` without changing the stored metadata.
+
+### Installer Metadata & Cleanup
+
+- Both installers (`install-substrate.sh` + `dev-install-substrate.sh`) record
+  host-state details in `<prefix>/install_state.json` (default:
+  `~/.substrate/install_state.json`). Schema `version = 1` tracks whether the
+  `substrate` group existed, which users the installer added, and the observed
+  `loginctl` lingering state under `host_state.{group,linger}`.
+- Metadata writes are idempotent; missing or corrupted files only emit warnings
+  and never block install/uninstall runs.
+- Uninstallers accept `--cleanup-state`/`--auto-cleanup` to remove recorded
+  group memberships, drop the `substrate` group when the installer created it
+  and no members remain, and disable lingering only when Substrate previously
+  enabled it. Without the flag the existing guidance-only behavior remains.
+- Upcoming interactive install/uninstall flows will use the same metadata to
+  surface opt-in prompts before altering group membership or lingering.
 
 ### Prerequisites
 
@@ -70,6 +91,12 @@ During installation the script:
 - Installs `substrate-world-agent` as a systemd service plus socket and runs
   `substrate world doctor --json` (inspect the `world_socket` block) without
   adding the shim directory to PATH to avoid self-referential lookups.
+- Ensures the Linux `substrate` group exists, adds the invoking user when
+  possible (printing manual steps otherwise), and restarts the socket/service
+  units so `/run/substrate.sock` is owned by `root:substrate` with `0660`
+  permissions. The script reports the current `loginctl` lingering status and
+  reminds you to run `loginctl enable-linger <user>` so socket activation stays
+  live after logout or reboot.
 
 ### Offline install
 
@@ -168,7 +195,7 @@ snippet (plus a `.bak` backup) to `~/.substrate_bashenv`.
 | `--prefix <path>` | Override the installation prefix (default: `~/.substrate`) |
 | `--no-world` | Skip provisioning the world backend (use `substrate world enable` later) |
 | `--no-shims` | Skip shim deployment (useful for CI images) |
-| `--sync-deps` | Run `substrate world deps sync --all --verbose` after provisioning completes |
+| `--sync-deps` | Run `substrate world deps sync` after provisioning completes (installs guest tools detected on the host; use `--all` later to force installs) |
 | `--dry-run` | Print all actions without executing them |
 | `--archive <path>` | Install from a local tarball instead of downloading |
 
@@ -221,6 +248,12 @@ the bin and shim directories to `PATH` while preserving `SHIM_ORIGINAL_PATH`, so
 interactive sessions and the world backend see the same clean view of your
 tooling.
 
+On Linux, the dev installer also mirrors the production socket-activation
+requirements: it creates the `substrate` group if needed, adds the invoking
+user (or prints the `sudo usermod -aG substrate <user>` command), rewrites the
+socket unit so `/run/substrate.sock` is `root:substrate 0660`, and reports
+whether `loginctl enable-linger <user>` still needs to be run.
+
 ## Troubleshooting Highlights
 
 - **No shim interception**: run `substrate --shim-status` and compare
@@ -231,7 +264,7 @@ tooling.
   new parity block plus `substrate health --json | jq '.summary | {attention_required_managers, world_only_managers}'`
   whenever a world sync looks stale. `attention_required_managers` maps directly
   to the host-only list and `world_only_managers` surfaces tools that only exist
-  in the guest. Follow the printed recommendations (run `substrate world deps sync --all`
+  in the guest. Follow the printed recommendations (run `substrate world deps sync`
   for host-only entries, `substrate shim repair --manager <name> --yes` for
   world-only entries) before re-running doctor.
 - **Doctor failures**: capture `substrate shim doctor --json` and
@@ -240,8 +273,12 @@ tooling.
 - **World agent inactive (Linux/WSL)**: confirm `systemctl status
   substrate-world-agent.socket` reports `listening`, `systemctl status
   substrate-world-agent.service` reports `active` (or restarts cleanly), and that `/run/substrate.sock`
-  exists (`sudo ls -l /run/substrate.sock`). `substrate world doctor --json | jq '.world_socket'`
-  and `substrate --shim-status` both spell out whether socket activation is healthy.
+  exists as `root substrate 0660` (`sudo ls -l /run/substrate.sock`). If the socket
+  shows another group, rerun the installer to refresh the units. Permission issues
+  usually mean your user is missing from the `substrate` group—check with
+  `id -nG "$USER"`—or lingering is still disabled (`loginctl enable-linger "$USER"`).
+  `substrate world doctor --json | jq '.world_socket'` and `substrate --shim-status`
+  both spell out whether socket activation is healthy.
 - **WSL systemd disabled**: edit `/etc/wsl.conf`, set `[boot]
 systemd=true`, run
   `wsl --shutdown`, and reopen the distribution.

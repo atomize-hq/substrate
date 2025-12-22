@@ -13,41 +13,47 @@ use std::{
 impl ManagerManifest {
     /// Load and merge the base manifest plus an optional overlay.
     pub fn load(base: &Path, overlay: Option<&Path>) -> Result<Self> {
+        let overlays = overlay
+            .map(|path| vec![path.to_path_buf()])
+            .unwrap_or_default();
+        Self::load_layered(base, &overlays)
+    }
+
+    /// Load and merge the base manifest plus zero or more overlay manifests.
+    ///
+    /// Overlay manifests are applied in the order provided, so later overlays
+    /// override earlier ones.
+    pub fn load_layered(base: &Path, overlays: &[PathBuf]) -> Result<Self> {
         let base_value = read_yaml_value(expand_path(base)?)
             .with_context(|| format!("failed to load manager manifest from {}", base.display()))?;
         let base_manifest: RawManifest =
             serde_yaml::from_value(base_value).context("manager manifest schema is invalid")?;
 
-        let overlay_manifest = if let Some(overlay_path) = overlay {
-            let overlay_path = expand_path(overlay_path)?;
-            match read_yaml_value_optional(overlay_path.clone())? {
-                Some(value) => Some(
-                    serde_yaml::from_value(value)
-                        .context("overlay manager manifest schema is invalid")?,
-                ),
-                None => None,
-            }
-        } else {
-            None
-        };
-
-        Self::from_raw(base_manifest, overlay_manifest)
-    }
-
-    fn from_raw(base: RawManifest, overlay: Option<RawManifest>) -> Result<Self> {
         let mut merged: HashMap<String, RawManagerSpec> = HashMap::new();
         insert_entries(
             &mut merged,
-            parse_manager_entries(base.managers)?,
+            parse_manager_entries(base_manifest.managers)?,
             "base manifest",
         )?;
 
-        if let Some(overlay_manifest) = overlay {
-            if overlay_manifest.version != base.version {
+        for overlay_path in overlays {
+            let overlay_path = expand_path(overlay_path)?;
+            let Some(value) = read_yaml_value_optional(overlay_path.clone())? else {
+                continue;
+            };
+            let overlay_manifest: RawManifest =
+                serde_yaml::from_value(value).with_context(|| {
+                    format!(
+                        "overlay manager manifest schema is invalid: {}",
+                        overlay_path.display()
+                    )
+                })?;
+
+            if overlay_manifest.version != base_manifest.version {
                 bail!(
                     "overlay manifest version {} does not match base {}",
                     overlay_manifest.version,
-                    base.version
+                    base_manifest.version
                 );
             }
 
@@ -70,7 +76,7 @@ impl ManagerManifest {
         });
 
         Ok(Self {
-            version: base.version,
+            version: base_manifest.version,
             managers,
         })
     }

@@ -12,8 +12,8 @@ This document mirrors the mental model of the CLI parser in `crates/shell/src/ex
 | Script execution | `-f/--file <SCRIPT>` | Same add-ons as `-c` | `-c`, `--version-json`, shim mgmt, trace/replay | Invokes REPL state preservation per `cli.rs:37`. |
 | Version metadata | `--version-json` | `--world`, `--no-world`, `--shim-skip` | `-c`, `-f`, shim mgmt, trace/replay | Information-only request (`cli.rs:62`). |
 | Trace inspect | `--trace <SPAN>` | `--world`, `--no-world`, anchor/caging flags | `-c`, `-f`, shim mgmt, `--replay` | Pull span metadata (`cli.rs:94`). |
-| Replay | `--replay <SPAN>` | `--replay-verbose`, world + anchor toggles | `-c`, `-f`, `--trace`, shim mgmt | Deterministic replay (`cli.rs:98`). Defaults to world isolation even when the rest of the CLI is host-only; use `--no-world` or `SUBSTRATE_REPLAY_USE_WORLD=disabled` for host pass-through. |
-| Replay verbose | `--replay <SPAN> --replay-verbose` | Same as replay | Requires `--replay` | Adds command/cwd/mode diagnostics, the active world toggle summary, capability warnings, and the `scopes: [...]` line. Shell warnings continue to use the `shell world-agent path` prefix so they can be distinguished from `[replay] warn:` entries. |
+| Replay | `--replay <SPAN>` | `--replay-verbose`, world + anchor toggles | `-c`, `-f`, `--trace`, shim mgmt | Agent-first replay on Linux with a single `[replay] warn: agent replay unavailable (<cause>); falling back to local backend. Run \`substrate world doctor --json\` or set SUBSTRATE_WORLD_SOCKET to point at a healthy agent socket` warning before switching to the local backend/copy-diff. Defaults to world isolation even when the rest of the CLI is host-only; use `--no-world` or `SUBSTRATE_REPLAY_USE_WORLD=disabled` for host pass-through. |
+| Replay verbose | `--replay <SPAN> --replay-verbose` | Same as replay | Requires `--replay` | Adds command/cwd/mode diagnostics, the active world toggle summary, strategy/scopes lines, and replay warnings (agent fallback, copy-diff retries). Shell transport probes still use the `shell world-agent path ...` prefix so you can distinguish them from `[replay] warn:` entries. |
 
 ## Root Command: Order-Independent Flags
 
@@ -74,7 +74,7 @@ Once you type `graph`, `world`, `shim`, or `health`, the parser stops accepting 
 | --- | --- | --- | --- |
 | `substrate world doctor` | — | `--json` | Host readiness report (`cli.rs:187`). |
 | `substrate world enable` | — | `--prefix`, `--profile`, `--dry-run`, `--verbose`, `--force`, `--timeout` | Provisioning control per `cli.rs:197`. |
-| `substrate world deps status [TOOL...]` | Optional `tools` list (order matters) | `--json` | No tools vs explicit names, JSON toggle. |
+| `substrate world deps status [--all] [TOOL...]` | Optional `tools` list (order matters) | `--all`, `--json` | Defaults to host-present tools; `--all` includes host-missing inventory entries. |
 | `substrate world deps install <TOOL...>` | One or more tool names | `--dry-run`, `--verbose` | Ensure installers respect permutations. |
 | `substrate world deps sync` | — | `--all`, `--verbose` | Cover all flag combinations (up to 4 permutations). |
 

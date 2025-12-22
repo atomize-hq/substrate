@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use substrate_common::agent_events::AgentEvent;
-pub use substrate_common::FsDiff;
+pub use substrate_common::{FsDiff, WorldFsMode};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Budget {
@@ -21,6 +21,8 @@ pub struct ExecuteRequest {
     pub pty: bool,
     pub agent_id: String,
     pub budget: Option<Budget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_fs_mode: Option<WorldFsMode>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -106,5 +108,27 @@ mod tests {
             }
             other => panic!("unexpected frame: {:?}", other),
         }
+    }
+
+    #[test]
+    fn execute_request_world_fs_mode_round_trip() {
+        let req = ExecuteRequest {
+            profile: None,
+            cmd: "echo hi".into(),
+            cwd: Some("/tmp".into()),
+            env: None,
+            pty: false,
+            agent_id: "tester".into(),
+            budget: None,
+            world_fs_mode: Some(WorldFsMode::ReadOnly),
+        };
+
+        let json = serde_json::to_string(&req).expect("serialize request");
+        assert!(
+            json.contains("read_only"),
+            "expected world_fs_mode to serialize"
+        );
+        let back: ExecuteRequest = serde_json::from_str(&json).expect("deserialize request");
+        assert_eq!(back.world_fs_mode, Some(WorldFsMode::ReadOnly));
     }
 }

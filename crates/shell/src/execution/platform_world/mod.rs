@@ -98,6 +98,7 @@ pub fn detect() -> Result<PlatformWorldContext> {
             allowed_domains: substrate_broker::allowed_domains(),
             project_dir: settings::world_root_from_env().path,
             always_isolate: false,
+            fs_mode: substrate_broker::world_fs_mode(),
         };
         ensure_ready_backend.ensure_session(&spec).map(|_| ())
     });
@@ -127,6 +128,7 @@ pub fn detect() -> Result<PlatformWorldContext> {
             allowed_domains: substrate_broker::allowed_domains(),
             project_dir: settings::world_root_from_env().path,
             always_isolate: false,
+            fs_mode: substrate_broker::world_fs_mode(),
         };
         ensure_ready_backend.ensure_session(&spec).map(|_| ())
     });

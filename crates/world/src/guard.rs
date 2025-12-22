@@ -37,6 +37,7 @@ pub fn wrap_with_anchor_guard(command: &str, anchor_root: &Path) -> String {
     } else {
         "[Substrate Host]"
     };
+    let display_name = shell_escape_literal(display_name);
     let mut guarded = format!(
         "__substrate_anchor_root={anchor}; \
          __substrate_anchor_display={display}; \
@@ -65,6 +66,14 @@ fn parse_bool(raw: &str) -> Option<bool> {
 
 fn shell_escape_for_sh(path: &Path) -> String {
     let raw = path.to_string_lossy();
+    if raw.contains('\'') {
+        format!("'{}'", raw.replace('\'', "'\"'\"'"))
+    } else {
+        format!("'{raw}'")
+    }
+}
+
+fn shell_escape_literal(raw: &str) -> String {
     if raw.contains('\'') {
         format!("'{}'", raw.replace('\'', "'\"'\"'"))
     } else {
@@ -108,5 +117,15 @@ mod tests {
             "wrapped command missing anchor path: {wrapped}"
         );
         assert!(wrapped.ends_with(command));
+    }
+
+    #[test]
+    fn guard_display_value_is_quoted() {
+        let temp = tempdir().unwrap();
+        let wrapped = wrap_with_anchor_guard("true", temp.path());
+        assert!(
+            wrapped.contains("__substrate_anchor_display='[Substrate Host]'"),
+            "display string should be single-quoted for safe evaluation: {wrapped}"
+        );
     }
 }

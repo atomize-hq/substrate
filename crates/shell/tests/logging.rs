@@ -242,6 +242,7 @@ fn command_logs_mark_manual_mode_without_socket_activation() {
 
     get_substrate_binary()
         .env("SHIM_TRACE_LOG", &log_file)
+        .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
         .arg("-c")
         .arg("true")
         .assert()

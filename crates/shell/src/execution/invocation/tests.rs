@@ -1,4 +1,5 @@
 use super::*;
+use crate::execution::world_env_guard;
 use crate::Cli;
 use clap::Parser;
 use serial_test::serial;
@@ -7,12 +8,14 @@ use std::path::PathBuf;
 use tempfile::tempdir;
 
 fn set_env(key: &str, value: &str) -> Option<String> {
+    let _guard = world_env_guard();
     let previous = std::env::var(key).ok();
     std::env::set_var(key, value);
     previous
 }
 
 fn restore_env(key: &str, previous: Option<String>) {
+    let _guard = world_env_guard();
     if let Some(value) = previous {
         std::env::set_var(key, value);
     } else {
@@ -23,6 +26,8 @@ fn restore_env(key: &str, previous: Option<String>) {
 #[test]
 #[serial]
 fn wrap_mode_uses_cli_shell_and_shimmed_path() {
+    let _env_guard = world_env_guard();
+
     let temp = tempdir().unwrap();
     let home = temp.path().join("home");
     let substrate_home = home.join(".substrate");
@@ -86,6 +91,8 @@ fn wrap_mode_uses_cli_shell_and_shimmed_path() {
 #[test]
 #[serial]
 fn skip_shims_and_no_world_disable_shimmed_path() {
+    let _env_guard = world_env_guard();
+
     let temp = tempdir().unwrap();
     let home = temp.path().join("home");
     let substrate_home = home.join(".substrate");

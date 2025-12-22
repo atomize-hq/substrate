@@ -1,10 +1,13 @@
 use super::{PlatformWorldContext, WorldTransport};
 use crate::execution::settings;
+#[cfg(test)]
+use crate::execution::world_env_guard;
 use crate::Cli;
 use agent_api_client::{AgentClient, Transport};
 use anyhow::Result;
 use std::path::PathBuf;
 use std::sync::{Arc, Once, OnceLock};
+use substrate_broker::world_fs_mode;
 use world_api::{ResourceLimits, WorldBackend, WorldSpec};
 use world_windows_wsl::WindowsWslBackend;
 
@@ -66,6 +69,9 @@ where
         return Ok(None);
     }
 
+    #[cfg(test)]
+    let _env_guard = world_env_guard();
+
     let backend = backend_provider()?;
     let spec = world_spec();
     match backend.ensure_session(&spec) {
@@ -96,6 +102,7 @@ pub fn world_spec() -> WorldSpec {
         allowed_domains: substrate_broker::allowed_domains(),
         project_dir: settings::world_root_from_env().path,
         always_isolate: false,
+        fs_mode: world_fs_mode(),
     }
 }
 

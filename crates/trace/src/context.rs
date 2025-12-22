@@ -1,5 +1,5 @@
 use crate::output::TraceOutput;
-use crate::span::{ReplayContext, Span, SpanBuilder};
+use crate::span::{ExecutionOrigin, ReplayContext, Span, SpanBuilder, TransportMeta};
 use crate::util::{get_policy_git_hash, get_umask, hash_env_vars};
 use anyhow::{anyhow, Result};
 use parking_lot::{RwLock, RwLockWriteGuard};
@@ -144,7 +144,12 @@ impl TraceContext {
         Err(anyhow!("Span {} not found", span_id))
     }
 
-    pub(crate) fn build_replay_context(&self) -> Result<ReplayContext> {
+    pub(crate) fn build_replay_context(
+        &self,
+        transport: Option<TransportMeta>,
+        execution_origin: ExecutionOrigin,
+    ) -> Result<ReplayContext> {
+        let recorded_user = env::var("USER").ok().or_else(|| env::var("USERNAME").ok());
         Ok(ReplayContext {
             path: env::var("PATH").ok(),
             env_hash: hash_env_vars()?,
@@ -152,8 +157,27 @@ impl TraceContext {
             locale: env::var("LANG").ok(),
             cwd: env::current_dir()?.to_string_lossy().to_string(),
             policy_id: self.policy_id(),
-            policy_commit: get_policy_git_hash().ok(),
+            policy_commit: get_policy_git_hash()?,
             world_image_version: WORLD_IMAGE_VERSION.to_string(),
+            hostname: env::var("HOSTNAME").ok(),
+            user: recorded_user,
+            shell: env::var("SHELL").ok(),
+            term: env::var("TERM").ok(),
+            world_image: Some(WORLD_IMAGE_VERSION.to_string()),
+            execution_origin: Some(execution_origin),
+            transport,
+            anchor_mode: env::var("SUBSTRATE_ANCHOR_MODE").ok(),
+            anchor_path: env::var("SUBSTRATE_ANCHOR_PATH").ok(),
+            world_root_mode: env::var("SUBSTRATE_WORLD_ROOT_MODE").ok(),
+            world_root_path: env::var("SUBSTRATE_WORLD_ROOT_PATH").ok(),
+            world_fs_mode: env::var("SUBSTRATE_WORLD_FS_MODE").ok(),
+            caged: env::var("SUBSTRATE_CAGED")
+                .ok()
+                .and_then(|value| match value.as_str() {
+                    "1" => Some(true),
+                    "0" => Some(false),
+                    _ => None,
+                }),
         })
     }
 

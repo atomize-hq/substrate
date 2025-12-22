@@ -28,11 +28,11 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
-use substrate_broker::{detect_profile, evaluate, Decision};
+use substrate_broker::{detect_profile, evaluate, world_fs_mode, Decision};
 use substrate_common::{log_schema, redact_sensitive, WorldRootMode};
 #[cfg(target_os = "linux")]
 use substrate_trace::TransportMeta;
-use substrate_trace::{create_span_builder, PolicyDecision};
+use substrate_trace::{create_span_builder, ExecutionOrigin, PolicyDecision};
 
 pub(crate) fn execute_command(
     config: &ShellConfig,
@@ -41,6 +41,13 @@ pub(crate) fn execute_command(
     running_child_pid: Arc<AtomicI32>,
 ) -> Result<ExitStatus> {
     let trimmed = command.trim();
+
+    // Always refresh policy/profile for this cwd before we read fs_mode.
+    let cwd_for_profile = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let _ = detect_profile(&cwd_for_profile);
+
+    let fs_mode = world_fs_mode();
+    std::env::set_var("SUBSTRATE_WORLD_FS_MODE", fs_mode.as_str());
 
     // Prepare redacted command once (used for span + logging)
     let redacted_for_logging = if std::env::var("SHIM_LOG_OPTS").as_deref() == Ok("raw") {
@@ -112,9 +119,20 @@ pub(crate) fn execute_command(
         out.join(" ")
     };
 
+    let world_env = std::env::var("SUBSTRATE_WORLD").unwrap_or_default();
+    let world_enabled = world_env == "enabled";
+    let world_disabled = world_env == "disabled" || config.no_world;
+    let world_required = fs_mode != substrate_common::WorldFsMode::Writable && !world_disabled;
+    if world_required && world_disabled {
+        anyhow::bail!(
+            "world execution required (fs_mode={}) but world is disabled (SUBSTRATE_WORLD=disabled or --no-world)",
+            fs_mode.as_str()
+        );
+    }
+
     // Start span for command execution
     let policy_decision;
-    let mut span = if std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
+    let mut span = if world_enabled {
         // Policy evaluation (Phase 4)
         let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
@@ -200,7 +218,24 @@ pub(crate) fn execute_command(
             eprintln!("substrate: failed to create span builder");
             None
         }
+    } else if let Ok(mut builder) = create_span_builder() {
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        builder = builder
+            .with_command(&redacted_for_logging)
+            .with_cwd(cwd.to_str().unwrap_or("."));
+
+        match builder.start() {
+            Ok(span) => {
+                std::env::set_var("SHIM_PARENT_SPAN", span.get_span_id());
+                Some(span)
+            }
+            Err(e) => {
+                eprintln!("substrate: failed to create span: {}", e);
+                None
+            }
+        }
     } else {
+        eprintln!("substrate: failed to create span builder");
         None
     };
 
@@ -213,18 +248,25 @@ pub(crate) fn execute_command(
         // Attempt world-agent PTY WS route on Linux when world is enabled or agent socket exists
         #[cfg(target_os = "linux")]
         {
-            let world_enabled = std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
             let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
-            if world_enabled || uds_exists {
+            let world_available = !world_disabled && (world_enabled || uds_exists);
+            if world_required && !world_available {
+                anyhow::bail!(
+                    "world execution required (fs_mode={}) but world-agent is unavailable (/run/substrate.sock missing)",
+                    fs_mode.as_str()
+                );
+            }
+            if world_available {
+                let transport_meta = TransportMeta {
+                    mode: "unix".to_string(),
+                    endpoint: Some("/run/substrate.sock".to_string()),
+                    socket_activation: Some(
+                        socket_activation::socket_activation_report().is_socket_activated(),
+                    ),
+                };
                 // Use span id if we have a span, otherwise fall back to cmd_id as a correlation hint
                 if let Some(active_span) = span.as_mut() {
-                    active_span.set_transport(TransportMeta {
-                        mode: "unix".to_string(),
-                        endpoint: Some("/run/substrate.sock".to_string()),
-                        socket_activation: Some(
-                            socket_activation::socket_activation_report().is_socket_activated(),
-                        ),
-                    });
+                    active_span.set_transport(transport_meta.clone());
                 }
                 let span_id_for_ws = span
                     .as_ref()
@@ -233,6 +275,9 @@ pub(crate) fn execute_command(
                 match execute_world_pty_over_ws(trimmed, &span_id_for_ws) {
                     Ok(code) => {
                         if let Some(active_span) = span.take() {
+                            let mut active_span = active_span;
+                            active_span.set_execution_origin(ExecutionOrigin::World);
+                            active_span.set_transport(transport_meta);
                             let (scopes_used, fs_diff) =
                                 collect_world_telemetry(active_span.get_span_id());
                             let _ = active_span.finish(code, scopes_used, fs_diff);
@@ -249,7 +294,17 @@ pub(crate) fn execute_command(
                         }
                     }
                     Err(e) => {
-                        eprintln!("substrate: warn: world PTY over WS failed, falling back to host PTY: {}", e);
+                        if world_required {
+                            anyhow::bail!(
+                                "world execution required (fs_mode={}); PTY world path failed: {}",
+                                fs_mode.as_str(),
+                                e
+                            );
+                        }
+                        eprintln!(
+                            "substrate: warn: world PTY over WS failed, falling back to host PTY: {}",
+                            e
+                        );
                         // fall through to host PTY
                     }
                 }
@@ -259,14 +314,25 @@ pub(crate) fn execute_command(
         // Attempt world-agent PTY WS route on mac when world is enabled
         #[cfg(target_os = "macos")]
         {
-            let world_enabled = std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
-            let uds_exists = pw::get_context()
+            let context = pw::get_context();
+            let uds_exists = context
+                .as_ref()
                 .map(|c| match &c.transport {
                     pw::WorldTransport::Unix(p) => p.exists(),
                     _ => false,
                 })
                 .unwrap_or(false);
-            if world_enabled || uds_exists {
+            let world_available = !world_disabled && (world_enabled || uds_exists);
+            if world_required && !world_available {
+                anyhow::bail!(
+                    "world execution required (fs_mode={}) but world-agent is unavailable",
+                    fs_mode.as_str()
+                );
+            }
+            if world_available {
+                let transport_meta = context
+                    .as_ref()
+                    .map(|ctx| world_transport_to_meta(&ctx.transport));
                 let span_id_for_ws = span
                     .as_ref()
                     .map(|s| s.get_span_id().to_string())
@@ -274,6 +340,11 @@ pub(crate) fn execute_command(
                 match execute_world_pty_over_ws_macos(trimmed, &span_id_for_ws) {
                     Ok(code) => {
                         if let Some(active_span) = span.take() {
+                            let mut active_span = active_span;
+                            if let Some(meta) = transport_meta {
+                                active_span.set_transport(meta);
+                            }
+                            active_span.set_execution_origin(ExecutionOrigin::World);
                             let (scopes_used, fs_diff) =
                                 collect_world_telemetry(active_span.get_span_id());
                             let _ = active_span.finish(code, scopes_used, fs_diff);
@@ -290,6 +361,13 @@ pub(crate) fn execute_command(
                         }
                     }
                     Err(e) => {
+                        if world_required {
+                            anyhow::bail!(
+                                "world execution required (fs_mode={}); PTY world path failed: {}",
+                                fs_mode.as_str(),
+                                e
+                            );
+                        }
                         static WARNED: std::sync::Once = std::sync::Once::new();
                         WARNED.call_once(|| {
                             eprintln!("substrate: warn: world PTY over WS failed on mac, falling back to host PTY: {}", e);
@@ -310,12 +388,12 @@ pub(crate) fn execute_command(
                 .or_else(|| pty_status.success().then_some(0))
                 .unwrap_or(-1);
             // Collect scopes and fs_diff from world backend if enabled
-            let (scopes_used, fs_diff) =
-                if env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
-                    collect_world_telemetry(active_span.get_span_id())
-                } else {
-                    (vec![], None)
-                };
+            let origin_is_world = active_span.execution_origin() == ExecutionOrigin::World;
+            let (scopes_used, fs_diff) = if origin_is_world {
+                collect_world_telemetry(active_span.get_span_id())
+            } else {
+                (vec![], None)
+            };
             let _ = active_span.finish(exit_code, scopes_used, fs_diff);
         }
 
@@ -371,18 +449,22 @@ pub(crate) fn execute_command(
 
     #[cfg(target_os = "macos")]
     {
-        let world_enabled = std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled";
         let context = pw::get_context();
         let uds_exists = context
             .as_ref()
             .map(|c| matches!(&c.transport, pw::WorldTransport::Unix(path) if path.exists()))
             .unwrap_or(false);
-        if world_enabled || uds_exists {
-            if let Some(active_span) = span.as_mut() {
-                if let Some(ctx) = context.clone() {
-                    active_span.set_transport(world_transport_to_meta(&ctx.transport));
-                }
-            }
+        let world_available = !world_disabled && (world_enabled || uds_exists);
+        if world_required && !world_available {
+            anyhow::bail!(
+                "world execution required (fs_mode={}) but world-agent is unavailable",
+                fs_mode.as_str()
+            );
+        }
+        if world_available {
+            let transport_meta = context
+                .as_ref()
+                .map(|ctx| world_transport_to_meta(&ctx.transport));
             let mut agent_command = trimmed.to_string();
             if config.ci_mode && !config.no_exit_on_error {
                 let shell_name = Path::new(&config.shell_path)
@@ -395,8 +477,23 @@ pub(crate) fn execute_command(
                 }
             }
             match stream_non_pty_via_agent(&agent_command) {
-                Ok(outcome) => agent_result = Some(outcome),
+                Ok(outcome) => {
+                    if let Some(active_span) = span.as_mut() {
+                        active_span.set_execution_origin(ExecutionOrigin::World);
+                        if let Some(meta) = transport_meta.clone() {
+                            active_span.set_transport(meta);
+                        }
+                    }
+                    agent_result = Some(outcome);
+                }
                 Err(e) => {
+                    if world_required {
+                        anyhow::bail!(
+                            "world execution required (fs_mode={}); world-agent exec failed: {}",
+                            fs_mode.as_str(),
+                            e
+                        );
+                    }
                     static WARN_ONCE: std::sync::Once = std::sync::Once::new();
                     let path_hint = context
                         .as_ref()
@@ -417,14 +514,18 @@ pub(crate) fn execute_command(
 
     #[cfg(target_os = "windows")]
     {
-        let world_env = std::env::var("SUBSTRATE_WORLD").unwrap_or_default();
         let context = pw::get_context();
-        if (world_env == "enabled" || context.is_some()) && !config.no_world {
-            if let Some(active_span) = span.as_mut() {
-                if let Some(ctx) = context.clone() {
-                    active_span.set_transport(world_transport_to_meta(&ctx.transport));
-                }
-            }
+        let world_available = !world_disabled && (world_enabled || context.is_some());
+        if world_required && !world_available {
+            anyhow::bail!(
+                "world execution required (fs_mode={}) but world-agent is unavailable",
+                fs_mode.as_str()
+            );
+        }
+        if world_available {
+            let transport_meta = context
+                .as_ref()
+                .map(|ctx| world_transport_to_meta(&ctx.transport));
             let mut agent_command = trimmed.to_string();
             if config.ci_mode && !config.no_exit_on_error {
                 let shell_name = Path::new(&config.shell_path)
@@ -437,8 +538,23 @@ pub(crate) fn execute_command(
                 }
             }
             match stream_non_pty_via_agent(&agent_command) {
-                Ok(outcome) => agent_result = Some(outcome),
+                Ok(outcome) => {
+                    if let Some(active_span) = span.as_mut() {
+                        active_span.set_execution_origin(ExecutionOrigin::World);
+                        if let Some(meta) = transport_meta.clone() {
+                            active_span.set_transport(meta);
+                        }
+                    }
+                    agent_result = Some(outcome);
+                }
                 Err(e) => {
+                    if world_required {
+                        anyhow::bail!(
+                            "world execution required (fs_mode={}); world-agent exec failed: {}",
+                            fs_mode.as_str(),
+                            e
+                        );
+                    }
                     static WARN_ONCE: std::sync::Once = std::sync::Once::new();
                     let path_hint = context
                         .as_ref()
@@ -457,25 +573,62 @@ pub(crate) fn execute_command(
         }
     }
 
+    // Handle lightweight builtins first (cd/pwd/export/unset) so stateful changes
+    // like cwd take effect before we hand off to the agent path.
+    if !needs_shell(trimmed) {
+        if let Some(status) = handle_builtin(config, trimmed, cmd_id)? {
+            if let Some(active_span) = span {
+                let _ = active_span.finish(status.code().unwrap_or(-1), vec![], None);
+            }
+            let completion_extra = json!({
+                log_schema::EXIT_CODE: status.code().unwrap_or(-1),
+                log_schema::DURATION_MS: start_time.elapsed().as_millis()
+            });
+            log_command_event(
+                config,
+                "command_complete",
+                &redacted_command,
+                cmd_id,
+                Some(completion_extra),
+            )?;
+            return Ok(status);
+        }
+    }
+
     #[cfg(target_os = "linux")]
     {
-        let world_env = env::var("SUBSTRATE_WORLD").unwrap_or_default();
-        let world_enabled = world_env == "enabled";
-        let world_disabled = world_env == "disabled" || config.no_world;
         let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
-        if world_enabled || (!world_disabled && uds_exists) {
-            if let Some(active_span) = span.as_mut() {
-                active_span.set_transport(TransportMeta {
-                    mode: "unix".to_string(),
-                    endpoint: Some("/run/substrate.sock".to_string()),
-                    socket_activation: Some(
-                        socket_activation::socket_activation_report().is_socket_activated(),
-                    ),
-                });
-            }
+        let world_available = !world_disabled && (world_enabled || uds_exists);
+        if world_required && !world_available {
+            anyhow::bail!(
+                "world execution required (fs_mode={}) but world-agent is unavailable (/run/substrate.sock missing)",
+                fs_mode.as_str()
+            );
+        }
+        if world_available {
+            let transport_meta = TransportMeta {
+                mode: "unix".to_string(),
+                endpoint: Some("/run/substrate.sock".to_string()),
+                socket_activation: Some(
+                    socket_activation::socket_activation_report().is_socket_activated(),
+                ),
+            };
             match stream_non_pty_via_agent(trimmed) {
-                Ok(outcome) => agent_result = Some(outcome),
+                Ok(outcome) => {
+                    if let Some(active_span) = span.as_mut() {
+                        active_span.set_execution_origin(ExecutionOrigin::World);
+                        active_span.set_transport(transport_meta);
+                    }
+                    agent_result = Some(outcome);
+                }
                 Err(e) => {
+                    if world_required {
+                        anyhow::bail!(
+                            "world execution required (fs_mode={}); world-agent exec failed: {}",
+                            fs_mode.as_str(),
+                            e
+                        );
+                    }
                     eprintln!(
                         "substrate: warn: shell world-agent path (/run/substrate.sock) exec failed, running direct: {}",
                         e
@@ -516,18 +669,8 @@ pub(crate) fn execute_command(
         }
     }
 
-    // Check for built-in commands only in interactive mode or for simple commands
-    // Complex commands with shell operators must be handled by the external shell
-    let status = if !needs_shell(trimmed) {
-        if let Some(status) = handle_builtin(config, trimmed, cmd_id)? {
-            status
-        } else {
-            execute_external(config, trimmed, running_child_pid, cmd_id)?
-        }
-    } else {
-        // Execute external command through shell for complex commands
-        execute_external(config, trimmed, running_child_pid, cmd_id)?
-    };
+    // Execute external command through shell for complex commands or when no builtin matched.
+    let status = execute_external(config, trimmed, running_child_pid, cmd_id)?;
 
     // Log command completion with redacted command
     let duration = start_time.elapsed();
@@ -561,8 +704,8 @@ pub(crate) fn execute_command(
     // Finish span if we created one
     if let Some(active_span) = span {
         let exit_code = status.code().unwrap_or(-1);
-        let (scopes_used, fs_diff) = if env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled"
-        {
+        let origin_is_world = active_span.execution_origin() == ExecutionOrigin::World;
+        let (scopes_used, fs_diff) = if origin_is_world {
             collect_world_telemetry(active_span.get_span_id())
         } else {
             (vec![], None)

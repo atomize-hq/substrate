@@ -54,6 +54,11 @@ Windows currently degrades to host execution with a friendly notice.
   world-agent under `/usr/local/bin`, write the `.service` **and** `.socket` units,
   and enable socket activation. The script uses `sudo` for filesystem and systemd operations and
   will prompt if elevated credentials are required.
+- The helper ensures the Linux `substrate` group exists, adds the invoking user when possible,
+  and rewrites the socket unit so `/run/substrate.sock` is created as `root:substrate 0660`.
+  If it cannot add you automatically it prints `sudo usermod -aG substrate <user>`. Run
+  `loginctl enable-linger <user>` on hosts with systemd/logind (the script reports the current
+  status) so socket activation survives logout or reboot.
 - After provisioning, verify the listener, units, and capabilities:
   ```bash
   systemctl status substrate-world-agent.socket --no-pager
@@ -63,6 +68,8 @@ Windows currently degrades to host execution with a friendly notice.
   substrate world doctor --json | jq '.world_socket'
   substrate --shim-status | grep 'World socket'
   ```
+  The socket listing should show `root substrate 0660`. If it does not, rerun the provisioning
+  helper or the installer to refresh the socket unit and group membership.
   The doctor JSON now surfaces a `world_socket` block:
   ```json
   {
@@ -81,7 +88,9 @@ Windows currently degrades to host execution with a friendly notice.
   }
   ```
   `substrate --shim-status[ --json]` prints the same detection so operators immediately know
-  when socket activation is managing the transport instead of a manual bind.
+  when socket activation is managing the transport instead of a manual bind. The doctor payload
+  also includes `world_fs_mode` (`writable` or `read_only`) so policy-driven filesystem settings are
+  visible without digging through trace logs.
 - Need to hand off a reproducible verification run? Execute `scripts/linux/world-socket-verify.sh`
   (see `docs/manual_verification/linux_world_socket.md`) to provision the socket, capture
   doctor/shim-status JSON, and optionally uninstall the units afterward.
@@ -177,6 +186,27 @@ Notes
   - Windows triggers the forwarder warm routine; see `docs/cross-platform/wsl_world_setup.md` for the underlying PowerShell flow.
 - Fallback
   - Exactly one warning is printed if the world cannot be reached; execution continues on the host in that situation.
+
+### World Dependencies (`world deps`)
+
+`substrate world deps` mirrors common dev tool managers (nvm/pyenv/bun/etc) into
+the guest so commands behave the same way in-world as they do on the host.
+
+- `substrate world deps status [--all] [TOOL...]` shows host/guest availability.
+  With no tool arguments, it defaults to host-present inventory entries; use
+  `--all` to include host-missing entries.
+- `substrate world deps sync [--all]` installs missing guest tools.
+  Default behavior only installs tools detected on the host; `--all` forces
+  installs even when the tool is host-missing.
+- `substrate world deps install <TOOL...>` installs specific tools inside the
+  guest using the manifest recipes (provider label `custom` means “run the
+  bundled shell recipe”, not that Substrate updates the tool automatically).
+
+Manifests:
+- Inventory base: `.../config/manager_hooks.yaml` (or workspace `config/manager_hooks.yaml`)
+- Overlays: `~/.substrate/manager_hooks.local.yaml`, `.../config/world-deps.yaml`
+  (or workspace `scripts/substrate/world-deps.yaml`), `~/.substrate/world-deps.local.yaml`
+  (`*.local.yaml` may be missing; the bundled `world-deps.yaml` may be empty).
 
 ---
 
@@ -292,6 +322,7 @@ Implemented features:
   - If the host refuses `ip netns add`, the code falls back to socket cgroup matching and scopes nft rules to `/sys/fs/cgroup/substrate/<WORLD_ID>` so host processes are not impacted.
   - When neither netns nor writable cgroups are available, nft scoping is disabled and warnings point to `substrate world cleanup --purge` to remove leftovers before retrying.
 - These logs surface in `--replay-verbose` output (`[replay] warn: using socket cgroup fallback...`) and in world-agent traces (`[agent] netns ... unavailable`).
+- Replay stays agent-first on Linux; when `/run/substrate.sock` is unhealthy it emits a single `[replay] warn: agent replay unavailable (<cause>); falling back to local backend. Run `substrate world doctor --json` or set SUBSTRATE_WORLD_SOCKET to point at a healthy agent socket before switching to the local backend/copy-diff. Copy-diff retries log `[replay] warn: copy-diff ...` with the attempted scratch root so you can adjust disk space or set `SUBSTRATE_COPYDIFF_ROOT`.
 
 ---
 
@@ -312,6 +343,7 @@ Implemented features:
 - Netfilter log prefix: `substrate-dropped-<WORLD_ID>:`
 - Cgroup: `/sys/fs/cgroup/substrate/<WORLD_ID>`
 - Socket: `/run/substrate.sock`
+  - Replay prefers this agent socket when it responds and emits a single `[replay] warn: agent replay unavailable (<cause>); falling back to local backend. Run `substrate world doctor --json` or set SUBSTRATE_WORLD_SOCKET to point at a healthy agent socket before switching to the local backend/copy-diff when unavailable.
 
 ---
 

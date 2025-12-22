@@ -19,6 +19,7 @@ PROFILE="release"
 DRY_RUN=0
 VERBOSE=0
 FORCE=0
+SYNC_DEPS=1
 
 usage() {
   cat <<'USAGE'
@@ -32,6 +33,7 @@ Options:
   --dry-run          Show the provisioning commands without executing
   --verbose          Print verbose execution details
   --force            Rerun provisioning even if metadata reports enabled
+  --no-sync-deps     Skip 'substrate world deps sync' after provisioning
   -h, --help         Show this help message
 USAGE
 }
@@ -58,6 +60,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --force)
       FORCE=1
+      shift
+      ;;
+    --no-sync-deps)
+      SYNC_DEPS=0
       shift
       ;;
     -h|--help)
@@ -116,5 +122,11 @@ fi
 
 doctor_path="${PREFIX}/bin:${ORIGINAL_PATH}"
 PATH="${doctor_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" run_world_checks "${substrate_bin}"
+
+if [[ ${SYNC_DEPS} -eq 1 ]]; then
+  PATH="${doctor_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" sync_world_deps "${substrate_bin}"
+else
+  log "Skipping world deps sync (--no-sync-deps)"
+fi
 
 log "World provisioning complete via world-enable helper"

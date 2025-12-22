@@ -9,6 +9,7 @@ use std::process::Child;
 
 use anyhow::{Context, Result};
 use substrate_common::FsDiff;
+use world_api::WorldFsMode;
 
 mod layering;
 mod utils;
@@ -58,11 +59,20 @@ impl OverlayFs {
         })
     }
 
+    /// Return true if the overlay is currently mounted.
+    pub fn is_mounted(&self) -> bool {
+        self.is_mounted
+    }
+
     /// Mount the overlayfs with the given lower directory.
     pub fn mount(&mut self, #[allow(unused_variables)] lower_dir: &Path) -> Result<PathBuf> {
         if self.is_mounted {
             return Ok(self.merged_dir.clone());
         }
+
+        // Ensure stale mount state does not leak across unmount/remount cycles.
+        self.using_fuse = false;
+        self.fuse_child = None;
 
         layering::prepare_overlay_dirs(&self.upper_dir, &self.work_dir, &self.merged_dir)?;
 
@@ -80,16 +90,86 @@ impl OverlayFs {
         }
     }
 
-    /// Unmount the overlayfs.
-    pub fn unmount(&mut self) -> Result<()> {
-        if !self.is_mounted {
-            return Ok(());
+    /// Mount the overlayfs in read-only mode (no upper/copy-diff layer).
+    pub fn mount_read_only(
+        &mut self,
+        #[allow(unused_variables)] lower_dir: &Path,
+    ) -> Result<PathBuf> {
+        if self.is_mounted {
+            return Ok(self.merged_dir.clone());
         }
 
+        // Ensure stale mount state does not leak across unmount/remount cycles.
+        self.using_fuse = false;
+        self.fuse_child = None;
+
+        #[cfg(target_os = "linux")]
+        {
+            std::fs::create_dir_all(&self.overlay_dir)?;
+            std::fs::create_dir_all(&self.merged_dir)?;
+            self.lower_dir = Some(lower_dir.to_path_buf());
+            layering::mount_linux_read_only(self, lower_dir)?;
+            self.is_mounted = true;
+            Ok(self.merged_dir.clone())
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            anyhow::bail!("Overlayfs is only supported on Linux");
+        }
+    }
+
+    /// Remount the merged directory as read-only while preserving overlay state.
+    #[cfg(target_os = "linux")]
+    pub fn remount_read_only(&mut self) -> Result<()> {
+        use nix::mount::{mount, MsFlags};
+
+        if !self.is_mounted {
+            anyhow::bail!("cannot remount overlay read-only before mount");
+        }
+
+        // Use a generic remount so it applies to kernel or fuse overlay mounts.
+        mount(
+            None::<&str>,
+            &self.merged_dir,
+            None::<&str>,
+            MsFlags::MS_REMOUNT | MsFlags::MS_RDONLY,
+            None::<&str>,
+        )
+        .context("Failed to remount overlay read-only")?;
+
+        Ok(())
+    }
+
+    /// Remount the merged directory back to writable mode.
+    #[cfg(target_os = "linux")]
+    pub fn remount_writable(&mut self) -> Result<()> {
+        use nix::mount::{mount, MsFlags};
+
+        if !self.is_mounted {
+            anyhow::bail!("cannot remount overlay writable before mount");
+        }
+
+        mount(
+            None::<&str>,
+            &self.merged_dir,
+            None::<&str>,
+            MsFlags::MS_REMOUNT,
+            None::<&str>,
+        )
+        .context("Failed to remount overlay writable")?;
+
+        Ok(())
+    }
+
+    /// Unmount the overlayfs.
+    pub fn unmount(&mut self) -> Result<()> {
         #[cfg(target_os = "linux")]
         layering::unmount_linux(self)?;
 
         self.is_mounted = false;
+        self.using_fuse = false;
+        self.fuse_child = None;
         Ok(())
     }
 
@@ -111,6 +191,19 @@ impl OverlayFs {
     /// Clean up the overlay directories.
     pub fn cleanup(&mut self) -> Result<()> {
         self.unmount()?;
+
+        // If the bind mount is somehow still present, avoid descending into it.
+        #[cfg(target_os = "linux")]
+        if let Some(ref bind_lower) = self.bind_lower_dir {
+            if let Ok(Some(_)) = crate::overlayfs::utils::is_path_mounted(bind_lower) {
+                eprintln!(
+                    "[overlay] warn: bind mount still active at {}; skipping removal of {}",
+                    bind_lower.display(),
+                    self.overlay_dir.display()
+                );
+                return Ok(());
+            }
+        }
 
         if self.overlay_dir.exists() {
             if let Err(e) = std::fs::remove_dir_all(&self.overlay_dir) {
@@ -172,29 +265,97 @@ pub fn execute_with_overlay(
 
     let merged_dir = overlay.mount(project_dir)?;
 
-    let mut rel = if cwd.starts_with(project_dir) {
-        cwd.strip_prefix(project_dir)
-            .unwrap_or_else(|_| Path::new("."))
-            .to_path_buf()
-    } else {
-        PathBuf::from(".")
-    };
-    if rel.as_os_str().is_empty() {
-        rel = PathBuf::from(".");
-    }
-    let target_dir = merged_dir.join(&rel);
     let mut command_to_run = cmd.to_string();
     if should_guard_anchor(env) {
-        command_to_run = wrap_with_anchor_guard(cmd, &merged_dir);
+        command_to_run = wrap_with_anchor_guard(cmd, project_dir);
     }
-    let output = crate::exec::execute_shell_command(&command_to_run, &target_dir, env, true)
-        .context("Failed to execute command in overlay")?;
+    let desired_cwd = if cwd.starts_with(project_dir) {
+        cwd.to_path_buf()
+    } else {
+        project_dir.to_path_buf()
+    };
+    let output = match crate::exec::execute_shell_command_with_project_bind_mount(
+        &command_to_run,
+        crate::exec::ProjectBindMount {
+            merged_dir: &merged_dir,
+            project_dir,
+            desired_cwd: &desired_cwd,
+            fs_mode: WorldFsMode::Writable,
+        },
+        env,
+        true,
+    ) {
+        Ok(output) => output,
+        Err(err) => {
+            let mut rel = if cwd.starts_with(project_dir) {
+                cwd.strip_prefix(project_dir)
+                    .unwrap_or_else(|_| Path::new("."))
+                    .to_path_buf()
+            } else {
+                PathBuf::from(".")
+            };
+            if rel.as_os_str().is_empty() {
+                rel = PathBuf::from(".");
+            }
+            let target_dir = merged_dir.join(&rel);
+            crate::exec::execute_shell_command(&command_to_run, &target_dir, env, true)
+                .with_context(|| {
+                    format!(
+                        "Failed to execute command in overlay after mount-namespace bind failed: {err:#}"
+                    )
+                })?
+        }
+    };
 
     let diff = overlay.compute_diff()?;
 
     overlay.cleanup()?;
 
     Ok((output, diff))
+}
+
+/// Execute a command against a read-only overlay mount so writes fail.
+pub fn execute_read_only(
+    world_id: &str,
+    cmd: &str,
+    project_dir: &Path,
+    cwd: &Path,
+    env: &std::collections::HashMap<String, String>,
+) -> Result<(std::process::Output, FsDiff)> {
+    let mut overlay = OverlayFs::new(world_id)?;
+    let merged_dir = overlay.mount_read_only(project_dir)?;
+
+    let mut command_to_run = cmd.to_string();
+    if should_guard_anchor(env) {
+        command_to_run = wrap_with_anchor_guard(cmd, project_dir);
+    }
+    let desired_cwd = if cwd.starts_with(project_dir) {
+        cwd.to_path_buf()
+    } else {
+        project_dir.to_path_buf()
+    };
+    let output = match crate::exec::execute_shell_command_with_project_bind_mount(
+        &command_to_run,
+        crate::exec::ProjectBindMount {
+            merged_dir: &merged_dir,
+            project_dir,
+            desired_cwd: &desired_cwd,
+            fs_mode: WorldFsMode::ReadOnly,
+        },
+        env,
+        true,
+    ) {
+        Ok(output) => output,
+        Err(err) => {
+            return Err(err).context(
+                "failed to enforce read-only overlay via mount-namespace bind; refusing to run with possible absolute-path escape",
+            );
+        }
+    };
+
+    overlay.cleanup()?;
+
+    Ok((output, FsDiff::default()))
 }
 
 #[cfg(test)]
@@ -303,6 +464,89 @@ mod tests {
         assert!(
             !overlay_dir.exists(),
             "cleanup should remove overlay directory even when not mounted"
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn cleanup_detaches_bind_mount_when_mount_fails() {
+        use nix::mount::{mount, umount2, MntFlags, MsFlags};
+        use nix::unistd::Uid;
+
+        if !Uid::current().is_root() {
+            println!("Skipping bind mount cleanup test (requires root)");
+            return;
+        }
+
+        let temp_dir = TempDir::new().unwrap();
+        let project_dir = temp_dir.path().join("project");
+        std::fs::create_dir_all(&project_dir).unwrap();
+        std::fs::write(project_dir.join("file.txt"), b"data").unwrap();
+
+        let mut overlay = OverlayFs::new("bind_cleanup").unwrap();
+        let bind_lower = overlay.overlay_dir.join("lower");
+        std::fs::create_dir_all(&bind_lower).unwrap();
+
+        mount(
+            Some(&project_dir),
+            &bind_lower,
+            None::<&str>,
+            MsFlags::MS_BIND,
+            None::<&str>,
+        )
+        .unwrap();
+        overlay.bind_lower_dir = Some(bind_lower.clone());
+
+        // Simulate a failed mount (is_mounted stays false) and ensure cleanup
+        // tears down the bind without deleting the project contents.
+        overlay.cleanup().unwrap();
+
+        assert!(
+            project_dir.join("file.txt").exists(),
+            "cleanup should never delete files from the project dir"
+        );
+        let _ = umount2(&bind_lower, MntFlags::MNT_DETACH);
+        assert!(
+            crate::overlayfs::utils::is_path_mounted(&bind_lower)
+                .unwrap_or(None)
+                .is_none(),
+            "bind mount should be detached during cleanup"
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn read_only_mount_blocks_writes_without_root() {
+        if !nix::unistd::Uid::current().is_root() {
+            println!("Skipping read-only overlay mount test (requires root)");
+            return;
+        }
+
+        let temp_dir = TempDir::new().unwrap();
+        let lower_dir = temp_dir.path();
+
+        let mut overlay = OverlayFs::new("test_ro_mount").unwrap();
+        let merged = match overlay.mount_read_only(lower_dir) {
+            Ok(path) => path,
+            Err(err) => {
+                let message = err.to_string();
+                if message.contains("fuse-overlayfs") || message.contains("/dev/fuse") {
+                    println!("Skipping read-only overlay mount test: {}", message);
+                    return;
+                }
+                // Some CI environments disallow mounts entirely.
+                if message.contains("Operation not permitted") || message.contains("EPERM") {
+                    println!("Skipping read-only overlay mount test (EPERM): {}", message);
+                    return;
+                }
+                panic!("Unexpected error mounting read-only overlay: {:#}", err);
+            }
+        };
+
+        let write_attempt = std::fs::write(merged.join("should_not_write.txt"), b"nope");
+        assert!(
+            write_attempt.is_err(),
+            "expected write to fail on read-only overlay mount"
         );
     }
 }

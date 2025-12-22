@@ -182,6 +182,7 @@ cmd_isolated:
 # Behavior settings
 require_approval: false          # Ask before running commands
 allow_shell_operators: true      # Allow pipes, redirects, etc.
+world_fs_mode: writable          # writable (default) or read_only
 
 # Resource limits (optional)
 limits:

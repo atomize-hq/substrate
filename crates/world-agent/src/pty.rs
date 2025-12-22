@@ -1,8 +1,8 @@
 //! PTY WebSocket handler for world-agent implementing JSON frame protocol
 
-#[cfg(target_os = "linux")]
-use crate::service::resolve_project_dir;
 use crate::service::WorldAgentService;
+#[cfg(target_os = "linux")]
+use crate::service::{resolve_project_dir, WORLD_FS_MODE_ENV};
 use axum::extract::ws::{Message, WebSocket};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use futures_util::stream::SplitSink;
@@ -18,6 +18,32 @@ use tracing::{error, info};
 // no atomic imports needed here
 #[cfg(target_os = "linux")]
 use world::guard::{should_guard_anchor, wrap_with_anchor_guard};
+#[cfg(target_os = "linux")]
+use world_api::WorldFsMode;
+
+fn ensure_xdg_dirs(env: &mut HashMap<String, String>) {
+    // Some minimal images don't ship with pre-created XDG dirs (e.g. /root/.local/share),
+    // and TUIs like `nano` expect them to exist.
+    let home = env
+        .get("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/root"));
+    let data_home = env
+        .get("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".local").join("share"));
+
+    if std::fs::create_dir_all(&data_home).is_err() {
+        // If the caller provided a HOME/XDG path that doesn't exist in-world (e.g. host HOME),
+        // fall back to a stable, writable location.
+        let fallback = PathBuf::from("/tmp/substrate-xdg");
+        let _ = std::fs::create_dir_all(&fallback);
+        env.insert(
+            "XDG_DATA_HOME".to_string(),
+            fallback.to_string_lossy().to_string(),
+        );
+    }
+}
 
 #[cfg(unix)]
 fn parse_signal(sig: &str) -> Option<i32> {
@@ -108,6 +134,8 @@ pub async fn handle_ws_pty(
                 cols,
                 rows,
             }) => {
+                let mut env = env;
+                ensure_xdg_dirs(&mut env);
                 info!(
                     %cmd,
                     cwd = %cwd.display(),
@@ -162,17 +190,27 @@ pub async fn handle_ws_pty(
         None => return, // Connection closed
     };
 
-    let (cmd, cwd, env, _span_id, cols, rows) = start_msg;
+    let (cmd, cwd, env_map, _span_id, cols, rows) = start_msg;
+    #[cfg(target_os = "linux")]
+    let mut env = env_map;
+    #[cfg(not(target_os = "linux"))]
+    let env = env_map;
     #[cfg(target_os = "linux")]
     let mut command_to_run = cmd.clone();
     #[cfg(not(target_os = "linux"))]
     let command_to_run = cmd.clone();
+    #[cfg(target_os = "linux")]
+    let cwd_for_child: PathBuf;
+    #[cfg(not(target_os = "linux"))]
+    let cwd_for_child = cwd.clone();
+    #[cfg(target_os = "linux")]
+    let anchor_root: PathBuf;
 
     // Prepare in-world session context (best-effort)
     #[cfg(target_os = "linux")]
-    let mut world_id_for_logs: String = "-".to_string();
+    let world_id_for_logs: Option<String>;
     #[cfg(not(target_os = "linux"))]
-    let world_id_for_logs: String = "-".to_string();
+    let world_id_for_logs: Option<String> = None;
 
     #[cfg(target_os = "linux")]
     let mut ns_name_opt: Option<String> = None;
@@ -180,12 +218,12 @@ pub async fn handle_ws_pty(
     let ns_name_opt: Option<String> = None;
 
     #[cfg(target_os = "linux")]
-    let mut cgroup_path_opt: Option<std::path::PathBuf> = None;
+    let cgroup_path_opt: Option<std::path::PathBuf>;
     #[cfg(not(target_os = "linux"))]
     let cgroup_path_opt: Option<std::path::PathBuf> = None;
 
     #[cfg(target_os = "linux")]
-    let mut in_world = false;
+    let in_world: bool;
     #[cfg(not(target_os = "linux"))]
     let in_world = false;
     #[cfg(target_os = "linux")]
@@ -204,6 +242,10 @@ pub async fn handle_ws_pty(
                 return;
             }
         };
+        let fs_mode = env
+            .get(WORLD_FS_MODE_ENV)
+            .and_then(|value| WorldFsMode::parse(value))
+            .unwrap_or(WorldFsMode::Writable);
         let spec = WorldSpec {
             reuse_session: true,
             isolate_network: true,
@@ -211,23 +253,78 @@ pub async fn handle_ws_pty(
             enable_preload: false,
             allowed_domains: substrate_broker::allowed_domains(),
             project_dir: project_dir.clone(),
-            always_isolate: false, // Default: use heuristic-based isolation
+            always_isolate: true,
+            fs_mode,
         };
-        if should_guard_anchor(&env) {
-            command_to_run = wrap_with_anchor_guard(&command_to_run, &project_dir);
+
+        let merged_dir: PathBuf;
+        match service.ensure_session_overlay_root(&spec) {
+            Ok((world, merged)) => {
+                world_id_for_logs = Some(world.id.clone());
+                let ns_name = format!("substrate-{}", world.id);
+                let ns_path = format!("/var/run/netns/{}", ns_name);
+                if std::path::Path::new(&ns_path).exists() {
+                    ns_name_opt = Some(ns_name);
+                }
+                let cg = std::path::PathBuf::from("/sys/fs/cgroup/substrate").join(&world.id);
+                cgroup_path_opt = Some(cg);
+                in_world = true;
+                merged_dir = merged;
+            }
+            Err(err) => {
+                let _ = send_ws_message(
+                    &tx,
+                    &ServerMessage::Error {
+                        message: format!("Failed to prepare world overlay: {}", err),
+                    },
+                )
+                .await;
+                return;
+            }
         }
 
-        if let Ok(world) = service.ensure_session_world(&spec) {
-            world_id_for_logs = world.id.clone();
-            let ns_name = format!("substrate-{}", world.id);
-            let ns_path = format!("/var/run/netns/{}", ns_name);
-            if std::path::Path::new(&ns_path).exists() {
-                ns_name_opt = Some(ns_name);
-            }
-            let cg = std::path::PathBuf::from("/sys/fs/cgroup/substrate").join(&world.id);
-            cgroup_path_opt = Some(cg);
-            in_world = true;
+        // Avoid inode escapes: don't start the PTY child inside the project dir before the bind mount.
+        cwd_for_child = PathBuf::from("/");
+        anchor_root = project_dir.clone();
+
+        // Bind-mount overlay root onto the real project path so absolute paths see the overlay.
+        let desired_cwd = if cwd.starts_with(&project_dir) {
+            cwd.clone()
+        } else {
+            project_dir.clone()
+        };
+        env.insert(
+            "SUBSTRATE_MOUNT_MERGED_DIR".to_string(),
+            merged_dir.display().to_string(),
+        );
+        env.insert(
+            "SUBSTRATE_MOUNT_PROJECT_DIR".to_string(),
+            project_dir.display().to_string(),
+        );
+        env.insert(
+            "SUBSTRATE_MOUNT_CWD".to_string(),
+            desired_cwd.display().to_string(),
+        );
+        env.insert(
+            "SUBSTRATE_MOUNT_FS_MODE".to_string(),
+            fs_mode.as_str().to_string(),
+        );
+
+        if should_guard_anchor(&env) {
+            command_to_run = wrap_with_anchor_guard(&command_to_run, &anchor_root);
         }
+        env.insert("SUBSTRATE_INNER_CMD".to_string(), command_to_run.clone());
+
+        command_to_run = r#"set -eu
+mount --make-rprivate /
+mount --bind "$SUBSTRATE_MOUNT_MERGED_DIR" "$SUBSTRATE_MOUNT_PROJECT_DIR"
+if [ "${SUBSTRATE_MOUNT_FS_MODE:-writable}" = "read_only" ]; then
+  mount -o remount,bind,ro "$SUBSTRATE_MOUNT_PROJECT_DIR"
+fi
+cd "$SUBSTRATE_MOUNT_CWD"
+exec sh -lc "$SUBSTRATE_INNER_CMD"
+"#
+        .to_string();
     }
 
     // Create PTY
@@ -251,20 +348,34 @@ pub async fn handle_ws_pty(
         }
     };
 
-    // Spawn command (under netns when available)
-    let mut cmd_builder = CommandBuilder::new("sh");
     #[cfg(target_os = "linux")]
-    if let Some(ref ns_name) = ns_name_opt {
-        cmd_builder = CommandBuilder::new("ip");
-        cmd_builder.args(["netns", "exec", ns_name, "sh", "-lc", &command_to_run]);
+    let mut cmd_builder = if let Some(ref ns_name) = ns_name_opt {
+        let mut builder = CommandBuilder::new("ip");
+        builder.args([
+            "netns",
+            "exec",
+            ns_name,
+            "unshare",
+            "--mount",
+            "--fork",
+            "--",
+            "sh",
+            "-c",
+            &command_to_run,
+        ]);
+        builder
     } else {
-        cmd_builder.args(["-lc", &command_to_run]);
-    }
+        let mut builder = CommandBuilder::new("unshare");
+        builder.args(["--mount", "--fork", "--", "sh", "-c", &command_to_run]);
+        builder
+    };
     #[cfg(not(target_os = "linux"))]
-    {
-        cmd_builder.args(["-lc", &command_to_run]);
-    }
-    cmd_builder.cwd(cwd);
+    let mut cmd_builder = {
+        let mut builder = CommandBuilder::new("sh");
+        builder.args(["-lc", &command_to_run]);
+        builder
+    };
+    cmd_builder.cwd(&cwd_for_child);
     for (key, value) in env {
         cmd_builder.env(key, value);
     }
@@ -296,8 +407,9 @@ pub async fn handle_ws_pty(
     drop(pair.slave);
 
     // Log start with in-world context
+    let world_id_log = world_id_for_logs.as_deref().unwrap_or("-");
     info!(
-        world_id = %world_id_for_logs,
+        world_id = %world_id_log,
         ns = %ns_name_opt.clone().unwrap_or_else(|| "-".into()),
         cgroup = %cgroup_path_opt
             .as_ref()
@@ -436,6 +548,47 @@ pub async fn handle_ws_pty(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ensure_xdg_dirs_creates_default_data_home_under_home() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut env = HashMap::new();
+        env.insert("HOME".to_string(), tmp.path().display().to_string());
+
+        ensure_xdg_dirs(&mut env);
+
+        assert!(tmp.path().join(".local/share").is_dir());
+    }
+
+    #[test]
+    fn ensure_xdg_dirs_creates_explicit_xdg_data_home() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data_home = tmp.path().join("xdg-data");
+        let mut env = HashMap::new();
+        env.insert("HOME".to_string(), tmp.path().display().to_string());
+        env.insert("XDG_DATA_HOME".to_string(), data_home.display().to_string());
+
+        ensure_xdg_dirs(&mut env);
+
+        assert!(data_home.is_dir());
+    }
+
+    #[test]
+    fn ensure_xdg_dirs_falls_back_when_data_home_uncreatable() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut env = HashMap::new();
+
+        let home = tmp.path().join("home-as-file");
+        std::fs::write(&home, "not a dir").unwrap();
+        env.insert("HOME".to_string(), home.display().to_string());
+
+        ensure_xdg_dirs(&mut env);
+
+        assert_eq!(
+            env.get("XDG_DATA_HOME").map(String::as_str),
+            Some("/tmp/substrate-xdg")
+        );
+    }
 
     #[test]
     fn test_client_message_start_serialization() {

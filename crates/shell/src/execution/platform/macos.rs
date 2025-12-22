@@ -1,4 +1,5 @@
 use serde_json::json;
+use substrate_broker::world_fs_mode;
 
 pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
     world_doctor_macos::run(json_mode, &world_doctor_macos::SystemRunner)
@@ -40,6 +41,7 @@ mod world_doctor_macos {
         let mut ok = true;
 
         let mut lima_info = LimaInfo::default();
+        let fs_mode = world_fs_mode();
 
         let pass = |msg: &str| println!("PASS  | {}", msg);
         let warn = |msg: &str| println!("WARN  | {}", msg);
@@ -79,6 +81,7 @@ mod world_doctor_macos {
             } else {
                 warn("vsock-proxy: not found (SSH forwarding will be used)");
             }
+            info(&format!("world_fs_mode: {}", fs_mode.as_str()));
         }
 
         // VM checks
@@ -155,6 +158,29 @@ mod world_doctor_macos {
                 }
             }
             ok &= lima_info.service_active;
+
+            if !cfg!(test) {
+                let socket_active = runner
+                    .run(
+                        "limactl",
+                        &[
+                            "shell",
+                            "substrate",
+                            "systemctl",
+                            "is-active",
+                            "substrate-world-agent.socket",
+                        ],
+                    )
+                    .success;
+                lima_info.socket_unit_active = Some(socket_active);
+                if !json_mode {
+                    if socket_active {
+                        pass("substrate-world-agent.socket active (socket activation)");
+                    } else {
+                        warn("substrate-world-agent.socket inactive");
+                    }
+                }
+            }
 
             // Agent socket exists
             lima_info.agent_socket = runner
@@ -257,9 +283,42 @@ mod world_doctor_macos {
                 lima["disk_usage"] = json!(lima_info.disk_usage);
             }
 
+            let socket_json = json!({
+                "mode": if lima_info.socket_unit_active == Some(true) {
+                    "socket_activation"
+                } else {
+                    "manual"
+                },
+                "path": "/run/substrate.sock",
+                "socket_path": "/run/substrate.sock",
+                "socket_exists": lima_info.agent_socket,
+                "systemd_error": serde_json::Value::Null,
+                "systemd_socket": lima_info.socket_unit_active.map(|active| json!({
+                    "name": "substrate-world-agent.socket",
+                    "active_state": if active { "active" } else { "inactive" },
+                    "unit_file_state": serde_json::Value::Null,
+                    "listens": serde_json::Value::Null,
+                })),
+                "systemd_service": if lima_info.vm_status == "Running" {
+                    Some(json!({
+                        "name": "substrate-world-agent.service",
+                        "active_state": if lima_info.service_active { "active" } else { "inactive" },
+                        "unit_file_state": serde_json::Value::Null,
+                        "listens": serde_json::Value::Null,
+                    }))
+                } else {
+                    None
+                },
+                "probe_ok": lima_info.agent_caps_ok,
+                "probe_error": serde_json::Value::Null,
+            });
+
             let out = json!({
                 "platform": "macos",
                 "lima": lima,
+                "world_fs_mode": fs_mode.as_str(),
+                "agent_socket": socket_json.clone(),
+                "world_socket": socket_json,
                 "ok": ok,
             });
             println!("{}", serde_json::to_string_pretty(&out).unwrap());
@@ -279,6 +338,7 @@ mod world_doctor_macos {
         vm_status: String,
         ssh_ok: bool,
         service_active: bool,
+        socket_unit_active: Option<bool>,
         agent_socket: bool,
         agent_caps_ok: bool,
         vsock_proxy: bool,
@@ -454,7 +514,7 @@ mod world_doctor_macos {
 
 #[cfg(test)]
 mod platform_tests {
-    use crate::execution::update_world_env;
+    use crate::execution::{update_world_env, world_env_guard};
     use std::env;
 
     fn snapshot(keys: &[&str]) -> Vec<Option<String>> {
@@ -472,6 +532,7 @@ mod platform_tests {
 
     #[test]
     fn update_world_env_sets_enabled_flags() {
+        let _guard = world_env_guard();
         let keys = ["SUBSTRATE_WORLD", "SUBSTRATE_WORLD_ENABLED"];
         let prev = snapshot(&keys);
 
@@ -485,6 +546,7 @@ mod platform_tests {
 
     #[test]
     fn update_world_env_sets_disabled_flags() {
+        let _guard = world_env_guard();
         let keys = ["SUBSTRATE_WORLD", "SUBSTRATE_WORLD_ENABLED"];
         let prev = snapshot(&keys);
 

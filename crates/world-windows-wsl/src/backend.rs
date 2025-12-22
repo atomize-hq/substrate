@@ -2,7 +2,7 @@ use crate::paths::{normalize_diff, to_wsl_path};
 use crate::transport::{detect_tcp_forwarder, DEFAULT_AGENT_PIPE, DEFAULT_DISTRO};
 use crate::warm::WarmCmd;
 use agent_api_client::{AgentClient, Transport};
-use agent_api_types::{ExecuteRequest, ExecuteResponse};
+use agent_api_types::{ExecuteRequest, ExecuteResponse, WorldFsMode};
 use anyhow::{anyhow, Context, Result};
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine as _;
@@ -193,6 +193,7 @@ impl WindowsWslBackend {
             pty: req.pty,
             agent_id: self.agent_id.clone(),
             budget: None,
+            world_fs_mode: Some(self.resolve_fs_mode()),
         })
     }
 
@@ -221,6 +222,13 @@ impl WindowsWslBackend {
         WorldHandle {
             id: format!("wsl:{}:{}", self.distro, Uuid::now_v7()),
         }
+    }
+
+    fn resolve_fs_mode(&self) -> WorldFsMode {
+        std::env::var("SUBSTRATE_WORLD_FS_MODE")
+            .ok()
+            .and_then(|value| WorldFsMode::parse(&value))
+            .unwrap_or(WorldFsMode::Writable)
     }
 }
 

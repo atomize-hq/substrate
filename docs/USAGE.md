@@ -169,11 +169,11 @@ World backend: healthy
 Guest tool sync: missing 1 (asdf)
 Manager parity:
   Host-only (world sync required): asdf
-    Next steps: Enable the world backend (`substrate world enable`) and run `substrate world deps sync --all` to mirror these managers into the guest.
+    Next steps: Enable the world backend (`substrate world enable`) and run `substrate world deps sync` to mirror these managers into the guest.
   World-only (host missing): bun
     Next steps: Install the listed managers on the host (for example `substrate shim repair --manager <name>`) so shells can load the same snippets.
   Missing everywhere (info): direnv
-    Next steps: Install these managers on the host first; the next `substrate world deps sync --all` run will copy them into the guest once they exist.
+    Next steps: Install these managers on the host first; the next `substrate world deps sync` run will copy them into the guest once they exist.
 Hints recorded: 0
 Overall status: attention required
   - managers require world sync: asdf
@@ -186,7 +186,7 @@ $ substrate health --json | jq '.summary.manager_states[] | {name, parity, recom
 {
   "name": "asdf",
   "parity": "host_only",
-  "recommendation": "Enable the world backend (`substrate world enable`) then run `substrate world deps sync --all --verbose` so asdf exists inside the guest."
+  "recommendation": "Enable the world backend (`substrate world enable`) then run `substrate world deps sync` so asdf exists inside the guest."
 }
 {
   "name": "bun",
@@ -196,7 +196,7 @@ $ substrate health --json | jq '.summary.manager_states[] | {name, parity, recom
 {
   "name": "direnv",
   "parity": "absent",
-  "recommendation": "Install direnv on the host first, then rerun `substrate world deps sync --all` after provisioning to copy it into the guest."
+  "recommendation": "Install direnv on the host first, then rerun `substrate world deps sync` after provisioning to copy it into the guest."
 }
 ```
 
@@ -254,8 +254,13 @@ manager and point `BASH_ENV` at `~/.substrate_bashenv` explicitly.
 
 - `substrate world enable` – provision the backend later if `--no-world` was
   used at install time
-- `substrate world deps status|install|sync` – inspect and copy host toolchains
-  into the guest once B3 reach parity (CLI scaffolding is already wired up)
+- `substrate world deps status [--all] [TOOL...]` – inspect host/guest tool availability.
+  - With no tool arguments, defaults to host-present inventory entries; use `--all` to include host-missing entries.
+  - Provide explicit tool names to override the filter.
+- `substrate world deps sync [--all] [--verbose]` – install missing tools inside the guest.
+  - Default behavior installs tools that are detected on the host (safe first-run behavior).
+  - Use `--all` to force guest installs even when a tool is missing on the host.
+- `substrate world deps install <TOOL...> [--dry-run] [--verbose]` – install specific tools inside the guest.
 
 World root (anchor) precedence, highest wins: CLI flags
 (`--anchor-mode/--anchor-path`, legacy `--world-root-mode/--world-root-path`),

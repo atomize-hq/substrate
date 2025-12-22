@@ -165,16 +165,31 @@ fn print_world_deps_section(section: Option<&WorldDepsDoctorSection>) {
                 println!("  Source: {}", source);
             }
             if let Some(report) = &section.report {
-                println!("  Manifest: {}", report.manifest.base.display());
-                if let Some(overlay) = &report.manifest.overlay {
-                    let status = if report.manifest.overlay_exists {
+                println!("  Inventory: {}", report.manifest.inventory.base.display());
+                if let Some(overlay) = &report.manifest.inventory.overlay {
+                    let status = if report.manifest.inventory.overlay_exists {
                         "present"
                     } else {
                         "missing"
                     };
-                    println!("  Overlay: {} ({status})", overlay.display());
+                    println!("  Inventory overlay: {} ({status})", overlay.display());
+                }
+                let installed_status = if report.manifest.overlays.installed_exists {
+                    "present"
                 } else {
-                    println!("  Overlay: <not configured>");
+                    "missing"
+                };
+                println!(
+                    "  Installed overlay: {} ({installed_status})",
+                    report.manifest.overlays.installed.display()
+                );
+                if let Some(user) = &report.manifest.overlays.user {
+                    let status = if report.manifest.overlays.user_exists {
+                        "present"
+                    } else {
+                        "missing"
+                    };
+                    println!("  User overlay: {} ({status})", user.display());
                 }
                 if let Some(reason) = &report.world_disabled_reason {
                     println!("  Backend: disabled ({reason})");

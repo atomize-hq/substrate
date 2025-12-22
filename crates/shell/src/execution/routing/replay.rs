@@ -1,81 +1,121 @@
 //! Trace and replay helpers for routing.
 
 use crate::execution::cli::Cli;
+use crate::execution::settings::world_root_from_env;
+#[cfg(test)]
+use crate::execution::world_env_guard;
 use anyhow::Result;
+use serde_json::json;
 use std::collections::HashMap;
 use std::env;
 use std::path::PathBuf;
 use std::process::Stdio;
-use uuid::Uuid;
+use substrate_replay::replay::record_replay_strategy;
+use substrate_replay::state::{load_span_from_trace, reconstruct_state};
+use substrate_trace::ExecutionOrigin;
 
 #[derive(Debug)]
 enum ReplayWorldSource {
-    Default,
+    Recorded,
     ForceWorldFlag,
     NoWorldFlag,
     EnvDisabled { raw: String },
 }
 
 impl ReplayWorldSource {
-    fn summary(&self, use_world: bool) -> String {
-        let state = if use_world { "enabled" } else { "disabled" };
-        let reason = match self {
-            ReplayWorldSource::Default => "default",
-            ReplayWorldSource::ForceWorldFlag => "--world flag",
-            ReplayWorldSource::NoWorldFlag => "--no-world flag",
-            ReplayWorldSource::EnvDisabled { .. } => "SUBSTRATE_REPLAY_USE_WORLD override",
-        };
-        format!("[replay] world toggle: {state} ({reason})")
-    }
-
-    fn warn_reason(&self) -> Option<String> {
+    fn reason_code(&self, flipped: bool) -> &'static str {
         match self {
-            ReplayWorldSource::NoWorldFlag => Some("--no-world flag".to_string()),
-            ReplayWorldSource::EnvDisabled { raw } => {
-                Some(format!("SUBSTRATE_REPLAY_USE_WORLD={raw}"))
+            ReplayWorldSource::ForceWorldFlag => "flag_world",
+            ReplayWorldSource::NoWorldFlag => "flag_no_world",
+            ReplayWorldSource::EnvDisabled { .. } => "env_disabled",
+            ReplayWorldSource::Recorded => {
+                if flipped {
+                    "flip_world"
+                } else {
+                    "recorded_origin"
+                }
             }
-            _ => None,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum RecordedOriginSource {
+    Span,
+    ReplayContext,
+    DefaultWorld,
 }
 
 #[derive(Debug)]
 struct ReplayWorldMode {
-    use_world: bool,
+    recorded: ExecutionOrigin,
+    recorded_source: RecordedOriginSource,
+    selected: ExecutionOrigin,
     source: ReplayWorldSource,
+    flipped: bool,
 }
 
 impl ReplayWorldMode {
-    fn from_cli(cli: &Cli) -> Self {
+    fn from_inputs(
+        recorded: ExecutionOrigin,
+        recorded_source: RecordedOriginSource,
+        flip_requested: bool,
+        cli: &Cli,
+    ) -> Self {
+        let env_override = env::var("SUBSTRATE_REPLAY_USE_WORLD").ok();
         if cli.world {
             return Self {
-                use_world: true,
+                recorded,
+                recorded_source,
+                selected: ExecutionOrigin::World,
                 source: ReplayWorldSource::ForceWorldFlag,
+                flipped: flip_requested,
             };
         }
         if cli.no_world {
             return Self {
-                use_world: false,
+                recorded,
+                recorded_source,
+                selected: ExecutionOrigin::Host,
                 source: ReplayWorldSource::NoWorldFlag,
+                flipped: flip_requested,
             };
         }
-        if let Ok(raw) = env::var("SUBSTRATE_REPLAY_USE_WORLD") {
+
+        let mut selected = recorded;
+        let mut flipped = false;
+        if flip_requested {
+            selected = selected.flipped();
+            flipped = true;
+        }
+
+        let mut source = ReplayWorldSource::Recorded;
+        if let Some(raw) = env_override.clone() {
             let lowered = raw.to_ascii_lowercase();
             if lowered == "0" || lowered == "disabled" || lowered == "false" {
-                return Self {
-                    use_world: false,
-                    source: ReplayWorldSource::EnvDisabled { raw },
-                };
+                selected = ExecutionOrigin::Host;
+                source = ReplayWorldSource::EnvDisabled { raw };
             }
         }
+
         Self {
-            use_world: true,
-            source: ReplayWorldSource::Default,
+            recorded,
+            recorded_source,
+            selected,
+            source,
+            flipped,
         }
     }
 
+    fn selected_origin(&self) -> ExecutionOrigin {
+        self.selected
+    }
+
     fn apply_env(&self) {
-        if self.use_world {
+        #[cfg(test)]
+        let _env_guard = world_env_guard();
+
+        if self.selected == ExecutionOrigin::World {
             env::set_var("SUBSTRATE_WORLD", "enabled");
             env::set_var("SUBSTRATE_WORLD_ENABLED", "1");
             env::remove_var("SUBSTRATE_REPLAY_USE_WORLD");
@@ -85,6 +125,124 @@ impl ReplayWorldMode {
             env::set_var("SUBSTRATE_REPLAY_USE_WORLD", "disabled");
         }
     }
+
+    fn reason_text(&self) -> String {
+        match &self.source {
+            ReplayWorldSource::ForceWorldFlag => "--world flag".to_string(),
+            ReplayWorldSource::NoWorldFlag => "--no-world flag".to_string(),
+            ReplayWorldSource::EnvDisabled { raw } => {
+                format!("SUBSTRATE_REPLAY_USE_WORLD={raw}")
+            }
+            ReplayWorldSource::Recorded => {
+                if self.flipped {
+                    "--flip-world".to_string()
+                } else {
+                    match self.recorded_source {
+                        RecordedOriginSource::Span => "recorded origin (span)".to_string(),
+                        RecordedOriginSource::ReplayContext => {
+                            "recorded origin (replay_context)".to_string()
+                        }
+                        RecordedOriginSource::DefaultWorld => "default origin".to_string(),
+                    }
+                }
+            }
+        }
+    }
+
+    fn reason_code(&self) -> &'static str {
+        self.source.reason_code(self.flipped)
+    }
+
+    fn summary(&self) -> String {
+        let recorded_label = match self.recorded_source {
+            RecordedOriginSource::DefaultWorld => format!("{} (default)", self.recorded.as_str()),
+            _ => format!("{} (recorded)", self.recorded.as_str()),
+        };
+
+        if self.recorded == self.selected
+            && !self.flipped
+            && !matches!(self.source, ReplayWorldSource::EnvDisabled { .. })
+        {
+            return format!("[replay] origin: {}", recorded_label);
+        }
+
+        let direction = format!("{} -> {}", self.recorded.as_str(), self.selected.as_str());
+        let mut reason = self.reason_text();
+        if self.flipped && matches!(self.source, ReplayWorldSource::EnvDisabled { .. }) {
+            reason.push_str("; flip requested");
+        }
+        format!("[replay] origin: {direction} ({reason})")
+    }
+
+    fn warn_reason(&self) -> Option<String> {
+        if self.selected == ExecutionOrigin::World {
+            return match &self.source {
+                ReplayWorldSource::ForceWorldFlag => Some("--world flag".to_string()),
+                ReplayWorldSource::Recorded
+                    if self.flipped && self.recorded == ExecutionOrigin::Host =>
+                {
+                    Some("--flip-world".to_string())
+                }
+                _ => None,
+            };
+        }
+        match &self.source {
+            ReplayWorldSource::NoWorldFlag => Some("--no-world flag".to_string()),
+            ReplayWorldSource::EnvDisabled { raw } => {
+                Some(format!("SUBSTRATE_REPLAY_USE_WORLD={raw}"))
+            }
+            ReplayWorldSource::Recorded if self.flipped => Some("--flip-world".to_string()),
+            ReplayWorldSource::Recorded if self.recorded == ExecutionOrigin::World => {
+                Some("recorded origin=world".to_string())
+            }
+            _ => None,
+        }
+    }
+}
+
+fn apply_replay_world_mode_env(env: &mut HashMap<String, String>, mode: &ReplayWorldMode) {
+    if mode.selected_origin() == ExecutionOrigin::World {
+        env.insert("SUBSTRATE_WORLD".to_string(), "enabled".to_string());
+        env.insert("SUBSTRATE_WORLD_ENABLED".to_string(), "1".to_string());
+        env.remove("SUBSTRATE_REPLAY_USE_WORLD");
+    } else {
+        env.insert("SUBSTRATE_WORLD".to_string(), "disabled".to_string());
+        env.insert("SUBSTRATE_WORLD_ENABLED".to_string(), "0".to_string());
+        env.insert(
+            "SUBSTRATE_REPLAY_USE_WORLD".to_string(),
+            "disabled".to_string(),
+        );
+    }
+}
+
+fn recorded_origin_source(
+    state: &substrate_replay::replay::ExecutionState,
+) -> RecordedOriginSource {
+    match state
+        .recorded_origin_source
+        .as_deref()
+        .unwrap_or("default_world")
+    {
+        "span" => RecordedOriginSource::Span,
+        "replay_context" => RecordedOriginSource::ReplayContext,
+        _ => RecordedOriginSource::DefaultWorld,
+    }
+}
+
+fn inject_world_root_env(env: &mut HashMap<String, String>) {
+    let world_root = world_root_from_env();
+    let mode = world_root.mode.as_str().to_string();
+    let path = world_root.path.to_string_lossy().to_string();
+    env.entry("SUBSTRATE_ANCHOR_MODE".to_string())
+        .or_insert_with(|| mode.clone());
+    env.entry("SUBSTRATE_WORLD_ROOT_MODE".to_string())
+        .or_insert(mode);
+    env.entry("SUBSTRATE_ANCHOR_PATH".to_string())
+        .or_insert_with(|| path.clone());
+    env.entry("SUBSTRATE_WORLD_ROOT_PATH".to_string())
+        .or_insert(path);
+    env.entry("SUBSTRATE_CAGED".to_string())
+        .or_insert_with(|| if world_root.caged { "1" } else { "0" }.to_string());
 }
 
 pub(crate) fn handle_trace_command(span_id: &str) -> Result<()> {
@@ -102,7 +260,7 @@ pub(crate) fn handle_trace_command(span_id: &str) -> Result<()> {
 
     if !trace_file.exists() {
         eprintln!("Trace file not found: {}", trace_file.display());
-        eprintln!("Make sure tracing is enabled with SUBSTRATE_WORLD=enabled");
+        eprintln!("Make sure tracing is enabled (set SHIM_TRACE_LOG or avoid disabling tracing via SUBSTRATE_WORLD)");
         std::process::exit(1);
     }
 
@@ -147,11 +305,10 @@ pub(crate) fn handle_trace_command(span_id: &str) -> Result<()> {
 
 /// Handle replay command - replay a traced command by span ID
 pub(crate) fn handle_replay_command(span_id: &str, cli: &Cli) -> Result<()> {
-    use std::fs::File;
-    use std::io::{BufRead, BufReader};
+    let verbose_requested =
+        std::env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1" || cli.replay_verbose;
 
-    // Get trace file location
-    let trace_file = env::var("SHIM_TRACE_LOG")
+    let trace_file = std::env::var("SHIM_TRACE_LOG")
         .map(PathBuf::from)
         .unwrap_or_else(|_| {
             dirs::home_dir()
@@ -161,104 +318,46 @@ pub(crate) fn handle_replay_command(span_id: &str, cli: &Cli) -> Result<()> {
 
     if !trace_file.exists() {
         eprintln!("Trace file not found: {}", trace_file.display());
-        eprintln!("Make sure tracing is enabled with SUBSTRATE_WORLD=enabled");
+        eprintln!("Make sure tracing is enabled (set SHIM_TRACE_LOG or avoid disabling tracing via SUBSTRATE_WORLD)");
         std::process::exit(1);
     }
 
-    // Load the trace for the span
-    let file = File::open(&trace_file)?;
-    let reader = BufReader::new(file);
-    let mut trace_entry = None;
+    let runtime = tokio::runtime::Runtime::new()?;
 
-    for line in reader.lines() {
-        let line = line?;
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
-            if let Some(id) = json.get("span_id").and_then(|v| v.as_str()) {
-                if id == span_id {
-                    trace_entry = Some(json);
-                    break;
-                }
-            }
-        }
-    }
-
-    let entry = trace_entry.ok_or_else(|| anyhow::anyhow!("Span ID not found: {}", span_id))?;
-
-    // Extract command information from the trace
-    let command = entry
-        .get("cmd")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| anyhow::anyhow!("No command found in trace"))?;
-
-    let cwd = entry
-        .get("cwd")
-        .and_then(|v| v.as_str())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| env::current_dir().unwrap());
-
-    let session_id = entry
-        .get("session_id")
-        .and_then(|v| v.as_str())
-        .map(String::from)
-        .unwrap_or_else(|| Uuid::now_v7().to_string());
-
-    let verbose_requested =
-        env::var("SUBSTRATE_REPLAY_VERBOSE").unwrap_or_default() == "1" || cli.replay_verbose;
+    // Reconstruct state from the trace entry (includes PATH/user/env metadata when captured)
+    let span = runtime.block_on(async { load_span_from_trace(&trace_file, span_id).await })?;
+    let mut state = reconstruct_state(&span, &HashMap::new())?;
 
     // Verbose header
     if verbose_requested {
         eprintln!("[replay] span_id: {}", span_id);
-        eprintln!("[replay] command: {}", command);
-        eprintln!("[replay] cwd: {}", cwd.display());
+        eprintln!("[replay] command: {}", state.raw_cmd);
+        eprintln!("[replay] cwd: {}", state.cwd.display());
         eprintln!("[replay] mode: bash -lc");
     }
 
-    // Parse command into command and args
-    let parts: Vec<&str> = command.split_whitespace().collect();
-    let (cmd, args) = if !parts.is_empty() {
-        (
-            parts[0].to_string(),
-            parts[1..].iter().map(|s| s.to_string()).collect(),
-        )
-    } else {
-        (command.to_string(), Vec::new())
-    };
-
-    // Create execution state
-    let state = substrate_replay::replay::ExecutionState {
-        raw_cmd: command.to_string(),
-        command: cmd,
-        args,
-        cwd,
-        env: HashMap::new(), // Could extract from trace if captured
-        stdin: None,
-        session_id,
-        span_id: span_id.to_string(),
-    };
-
-    // Execute with replay (choose world isolation; default enabled, allow opt-out)
-    let runtime = tokio::runtime::Runtime::new()?;
     // Respect replay toggle precedence: --world > --no-world > SUBSTRATE_REPLAY_USE_WORLD
-    let replay_world_mode = ReplayWorldMode::from_cli(cli);
+    let recorded_source = recorded_origin_source(&state);
+    let replay_world_mode =
+        ReplayWorldMode::from_inputs(state.recorded_origin, recorded_source, cli.flip_world, cli);
+    state.target_origin = replay_world_mode.selected_origin();
+    state.origin_reason = Some(replay_world_mode.reason_text());
+    state.origin_reason_code = Some(replay_world_mode.reason_code().to_string());
+
+    apply_replay_world_mode_env(&mut state.env, &replay_world_mode);
+    inject_world_root_env(&mut state.env);
     replay_world_mode.apply_env();
 
     if verbose_requested {
-        eprintln!(
-            "{}",
-            replay_world_mode
-                .source
-                .summary(replay_world_mode.use_world)
-        );
+        eprintln!("{}", replay_world_mode.summary());
     }
-    if !replay_world_mode.use_world && verbose_requested {
-        if let Some(reason) = replay_world_mode.source.warn_reason() {
-            eprintln!("[replay] warn: running without world isolation ({reason})");
-        } else {
-            eprintln!("[replay] warn: running without world isolation");
+    if replay_world_mode.selected_origin() == ExecutionOrigin::Host && verbose_requested {
+        if let Some(reason) = replay_world_mode.warn_reason() {
+            eprintln!("[replay] warn: running on host ({reason})");
         }
     }
 
-    let use_world = replay_world_mode.use_world;
+    let use_world = replay_world_mode.selected_origin() == ExecutionOrigin::World;
     // Best-effort capability warnings when world isolation requested but not available
     if cfg!(target_os = "linux") && use_world {
         // cgroup v2
@@ -299,6 +398,18 @@ pub(crate) fn handle_replay_command(span_id: &str, cli: &Cli) -> Result<()> {
                 }
             }
         }
+    }
+
+    if !use_world {
+        record_replay_strategy(
+            &state,
+            "host",
+            None,
+            replay_world_mode.warn_reason().as_deref(),
+            json!({
+                "origin_summary": replay_world_mode.summary(),
+            }),
+        );
     }
 
     let result = if use_world {

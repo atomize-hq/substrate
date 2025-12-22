@@ -1,0 +1,23 @@
+# Kickoff: C7-integ (Rollback CLI)
+
+## Scope
+- Merge C7-code and C7-test; ensure rollback behavior matches `C7-spec`.
+
+## Start Checklist
+1. Confirm C7-code and C7-test are completed.
+2. `git checkout feat/world-sync && git pull --ff-only`
+3. Read: plan.md, tasks.json, session_log.md, C7-spec.md, this prompt.
+4. Set C7-integ status to `in_progress` in tasks.json; add START entry to session_log.md; commit docs (`docs: start C7-integ`).
+5. Create branch `ws-c7-rollback-integ`; worktree `wt/ws-c7-rollback-integ`.
+6. Do not edit docs/tasks/logs inside the worktree.
+
+## Requirements
+- Merge code+tests; resolve drift; ensure rollback semantics match spec and remain safe.
+- Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make preflight`.
+
+## End Checklist
+1. Ensure fmt/clippy/tests pass; run `make preflight`; capture outputs.
+2. Commit integration worktree changes.
+3. Merge back to feat/world-sync (ff-only).
+4. Update tasks.json (C7-integ status), add END entry to session_log.md (commands/results/blockers).
+5. Commit docs (`docs: finish C7-integ`). Remove worktree if done.

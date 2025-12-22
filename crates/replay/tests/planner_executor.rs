@@ -53,6 +53,12 @@ fn make_state(raw_cmd: &str) -> ExecutionState {
         stdin: None,
         session_id: "session".to_string(),
         span_id: "span".to_string(),
+        recorded_origin: substrate_trace::ExecutionOrigin::Host,
+        recorded_origin_source: None,
+        recorded_transport: None,
+        target_origin: substrate_trace::ExecutionOrigin::Host,
+        origin_reason: None,
+        origin_reason_code: None,
     }
 }
 
@@ -73,6 +79,15 @@ async fn execute_direct_streams_stdin() {
     let result = execute_direct(&state, 5).await.unwrap();
     assert_eq!(result.exit_code, 0);
     assert_eq!(result.stdout, b"hello world");
+}
+
+#[tokio::test]
+async fn execute_direct_defaults_stdin_to_null_when_missing() {
+    let state = make_state("cat");
+
+    let result = execute_direct(&state, 1).await.unwrap();
+    assert_eq!(result.exit_code, 0);
+    assert!(result.stdout.is_empty());
 }
 
 #[tokio::test]

@@ -15,6 +15,7 @@ once_cell = "1.20"
 dirs = "5.0"
 notify = "7.0"
 crossbeam = "0.8"
+substrate-common = { path = "../common" }
 
 # For interactive approvals
 dialoguer = "0.11"
@@ -31,3 +32,4 @@ tokio = { version = "1.38", features = ["rt", "macros", "test-util"] }
 default = []
 hot-reload = ["inotify"]
 policy-watcher = []
+

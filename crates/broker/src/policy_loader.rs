@@ -9,5 +9,5 @@ pub fn load_policy_from_path(path: &Path) -> Result<Policy> {
         .with_context(|| format!("Failed to read policy from {:?}", path))?;
 
     serde_yaml::from_str(&content)
-        .with_context(|| format!("Failed to parse policy from {:?}", path))
+        .map_err(|err| anyhow::anyhow!("Failed to parse policy from {:?}: {}", path, err))
 }

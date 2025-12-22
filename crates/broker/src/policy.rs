@@ -1,5 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use substrate_common::WorldFsMode;
+
+fn default_fs_read() -> Vec<String> {
+    vec!["*".to_string()]
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Policy {
@@ -7,20 +12,30 @@ pub struct Policy {
     pub name: String,
 
     // Filesystem
-    pub fs_read: Vec<String>,  // Paths that can be read
+    #[serde(default = "default_fs_read")]
+    pub fs_read: Vec<String>, // Paths that can be read
+    #[serde(default)]
     pub fs_write: Vec<String>, // Paths that can be written
 
     // Network
+    #[serde(default)]
     pub net_allowed: Vec<String>, // Allowed hosts/domains
 
     // Commands
-    pub cmd_allowed: Vec<String>,  // Allowed command patterns
-    pub cmd_denied: Vec<String>,   // Denied command patterns
+    #[serde(default)]
+    pub cmd_allowed: Vec<String>, // Allowed command patterns
+    #[serde(default)]
+    pub cmd_denied: Vec<String>, // Denied command patterns
+    #[serde(default)]
     pub cmd_isolated: Vec<String>, // Commands to run in isolated world
 
     // Behavior
+    #[serde(default)]
     pub require_approval: bool,
+    #[serde(default = "default_allow_shell_operators")]
     pub allow_shell_operators: bool,
+    #[serde(default)]
+    pub world_fs_mode: WorldFsMode,
 
     // Resource limits (optional)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -52,10 +67,15 @@ impl Default for Policy {
             ],
             require_approval: false,
             allow_shell_operators: true,
+            world_fs_mode: WorldFsMode::Writable,
             limits: None,
             metadata: None,
         }
     }
+}
+
+fn default_allow_shell_operators() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,6 +160,10 @@ impl Policy {
         // Take the more restrictive settings
         self.require_approval = self.require_approval || other.require_approval;
         self.allow_shell_operators = self.allow_shell_operators && other.allow_shell_operators;
+        self.world_fs_mode = match (self.world_fs_mode, other.world_fs_mode) {
+            (WorldFsMode::ReadOnly, _) | (_, WorldFsMode::ReadOnly) => WorldFsMode::ReadOnly,
+            _ => WorldFsMode::Writable,
+        };
 
         // Merge resource limits (take the more restrictive)
         if let Some(other_limits) = &other.limits {

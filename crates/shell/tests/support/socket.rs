@@ -1,5 +1,8 @@
 #![cfg(unix)]
 
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
+use serde_json::json;
 use std::fs;
 use std::io::{Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -12,11 +15,18 @@ use std::thread;
 use std::time::Duration;
 
 /// Behavior for socket stubs spawned during tests.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub enum SocketResponse {
     /// Responds to `/v1/capabilities` requests with a JSON payload that
     /// advertises socket activation mode.
     Capabilities,
+    /// Handles capabilities and execute calls with canned payloads.
+    CapabilitiesAndExecute {
+        stdout: String,
+        stderr: String,
+        exit: i32,
+        scopes: Vec<String>,
+    },
     /// Accepts connections but never returns a response (simulates a stuck
     /// systemd-managed socket where the service failed to start).
     Silent,
@@ -51,28 +61,41 @@ impl AgentSocket {
             while !shutdown_flag.load(Ordering::SeqCst) {
                 match listener.accept() {
                     Ok((mut stream, _addr)) => {
+                        let mut buf = [0u8; 4096];
+                        let read = stream.read(&mut buf).unwrap_or(0);
+                        let request = String::from_utf8_lossy(&buf[..read]);
+                        let first_line = request.lines().next().unwrap_or("");
                         match response {
-                            SocketResponse::Capabilities => {
-                                let mut buf = [0u8; 2048];
-                                let _ = stream.read(&mut buf);
-                                let body = concat!(
-                                    r#"{"version":"v1","features":["execute"],"#,
-                                    r#"\"backend\":\"world-agent\",\"platform\":\"linux\","#,
-                                    r#"\"listener_mode\":\"socket_activation\"}"#
-                                );
-                                let reply = format!(
-                                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                                    body.len(),
-                                    body
-                                );
-                                let _ = stream.write_all(reply.as_bytes());
+                            SocketResponse::Capabilities => write_capabilities(&mut stream),
+                            SocketResponse::CapabilitiesAndExecute {
+                                ref stdout,
+                                ref stderr,
+                                exit,
+                                ref scopes,
+                            } => {
+                                if first_line.starts_with("GET /v1/capabilities") {
+                                    write_capabilities(&mut stream);
+                                } else if first_line.starts_with("POST /v1/execute") {
+                                    let payload = json!({
+                                        "exit": exit,
+                                        "span_id": "agent-span",
+                                        "stdout_b64": BASE64.encode(stdout.as_bytes()),
+                                        "stderr_b64": BASE64.encode(stderr.as_bytes()),
+                                        "scopes_used": scopes,
+                                        "fs_diff": serde_json::Value::Null
+                                    })
+                                    .to_string();
+                                    write_response(&mut stream, &payload);
+                                } else {
+                                    let _ = stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n");
+                                }
                             }
                             SocketResponse::Silent => {
                                 // Read and drop the request to simulate a hung service.
-                                let mut buf = [0u8; 512];
-                                let _ = stream.read(&mut buf);
+                                let mut discard = [0u8; 512];
+                                let _ = stream.read(&mut discard);
                             }
-                        }
+                        };
                     }
                     Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
                         thread::sleep(Duration::from_millis(10));
@@ -107,4 +130,25 @@ impl Drop for AgentSocket {
             let _ = handle.join();
         }
     }
+}
+
+fn write_capabilities(stream: &mut UnixStream) {
+    let body = json!({
+        "version": "v1",
+        "features": ["execute"],
+        "backend": "world-agent",
+        "platform": "linux",
+        "listener_mode": "socket_activation"
+    })
+    .to_string();
+    write_response(stream, &body);
+}
+
+fn write_response(stream: &mut UnixStream, body: &str) {
+    let reply = format!(
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    );
+    let _ = stream.write_all(reply.as_bytes());
 }

@@ -2,6 +2,7 @@
 set -euo pipefail
 
 failures=0
+LAYOUT_EXPECTED="socket-parity-v1"
 
 # Function to check a condition
 check() {
@@ -69,6 +70,27 @@ if limactl list substrate >/dev/null 2>&1; then
             else
                 printf '\033[31m[FAIL]\033[0m Agent not responding (service may not be running)\n'
                 failures=$((failures+1))
+            fi
+
+            socket_meta=$(limactl shell substrate sudo -n stat -c '%U:%G %a' /run/substrate.sock 2>/dev/null || true)
+            if [[ "${socket_meta}" == "root:substrate 660" ]]; then
+                printf '\033[32m[PASS]\033[0m Socket ownership root:substrate (0660)\n'
+            else
+                printf '\033[33m[WARN]\033[0m Socket metadata %s (expected root:substrate 660). Run scripts/mac/lima-warm.sh to repair.\n' "${socket_meta:-unknown}"
+            fi
+
+            vm_user=$(limactl shell substrate id -un 2>/dev/null | tr -d '\r' || true)
+            if [[ -n "${vm_user}" ]] && limactl shell substrate id -nG "${vm_user}" 2>/dev/null | tr ' ' '\n' | grep -qx substrate; then
+                printf '\033[32m[PASS]\033[0m %s belongs to substrate group\n' "${vm_user}"
+            else
+                printf '\033[33m[WARN]\033[0m Unable to confirm substrate group membership for %s. Run scripts/mac/lima-warm.sh.\n' "${vm_user:-guest}"
+            fi
+
+            layout_version=$(limactl shell substrate sudo -n cat /etc/substrate-lima-layout 2>/dev/null | tr -d '\r' || true)
+            if [[ "${layout_version}" == "${LAYOUT_EXPECTED}" ]]; then
+                printf '\033[32m[PASS]\033[0m Socket parity layout detected (%s)\n' "${layout_version}"
+            else
+                printf '\033[33m[WARN]\033[0m Layout sentinel %s (expected %s). Run scripts/mac/lima-warm.sh to rebuild.\n' "${layout_version:-missing}" "${LAYOUT_EXPECTED}"
             fi
         else
             printf '\033[33m[WARN]\033[0m Agent socket not found (agent may not be installed)\n'

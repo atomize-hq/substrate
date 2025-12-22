@@ -5,6 +5,7 @@ use crate::policy::Decision;
 use anyhow::Result;
 use std::path::Path;
 use std::sync::OnceLock;
+use substrate_common::WorldFsMode;
 use tracing::warn;
 
 static GLOBAL_BROKER: OnceLock<BrokerHandle> = OnceLock::new();
@@ -71,6 +72,19 @@ pub fn allowed_domains() -> Vec<String> {
                 err
             );
             Vec::new()
+        }
+    }
+}
+
+pub fn world_fs_mode() -> WorldFsMode {
+    match global_broker() {
+        Ok(broker) => broker.world_fs_mode(),
+        Err(err) => {
+            warn!(
+                "world_fs_mode requested before broker initialization: {}",
+                err
+            );
+            WorldFsMode::Writable
         }
     }
 }

@@ -5,7 +5,7 @@ mod executor;
 mod helpers;
 mod planner;
 
-pub use executor::execute_direct;
+pub use executor::{execute_direct, record_replay_strategy};
 pub use helpers::{parse_command, world_isolation_available};
 pub use planner::{execute_in_world, replay_sequence};
 
@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use substrate_common::FsDiff;
+use substrate_trace::{ExecutionOrigin, TransportMeta};
 
 /// State required to execute a command
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,6 +27,12 @@ pub struct ExecutionState {
     pub stdin: Option<Vec<u8>>,
     pub session_id: String,
     pub span_id: String,
+    pub recorded_origin: ExecutionOrigin,
+    pub recorded_origin_source: Option<String>,
+    pub recorded_transport: Option<TransportMeta>,
+    pub target_origin: ExecutionOrigin,
+    pub origin_reason: Option<String>,
+    pub origin_reason_code: Option<String>,
 }
 
 /// Result of executing a command
@@ -68,6 +75,12 @@ mod tests {
             stdin: None,
             session_id: "test-session".to_string(),
             span_id: "test-span".to_string(),
+            recorded_origin: ExecutionOrigin::Host,
+            recorded_origin_source: None,
+            recorded_transport: None,
+            target_origin: ExecutionOrigin::Host,
+            origin_reason: None,
+            origin_reason_code: None,
         };
 
         let result = execute_direct(&state, 10).await.unwrap();
@@ -89,6 +102,12 @@ mod tests {
             stdin: None,
             session_id: "s".to_string(),
             span_id: "sp".to_string(),
+            recorded_origin: ExecutionOrigin::Host,
+            recorded_origin_source: None,
+            recorded_transport: None,
+            target_origin: ExecutionOrigin::Host,
+            origin_reason: None,
+            origin_reason_code: None,
         };
         let res = execute_direct(&state, 10).await.unwrap();
         assert_eq!(res.exit_code, 0);

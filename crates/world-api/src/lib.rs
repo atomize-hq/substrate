@@ -26,6 +26,9 @@ pub struct WorldSpec {
     pub project_dir: PathBuf,
     /// Whether to force isolation for all commands.
     pub always_isolate: bool,
+    /// World filesystem mode (writable overlay/copy-diff vs read-only).
+    #[serde(default)]
+    pub fs_mode: WorldFsMode,
 }
 
 impl Default for WorldSpec {
@@ -43,6 +46,7 @@ impl Default for WorldSpec {
             ],
             project_dir: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             always_isolate: false,
+            fs_mode: WorldFsMode::Writable,
         }
     }
 }
@@ -104,8 +108,8 @@ pub struct ExecResult {
     pub fs_diff: Option<FsDiff>,
 }
 
-// Re-export FsDiff from substrate_common
-pub use substrate_common::FsDiff;
+// Re-export shared types from substrate_common
+pub use substrate_common::{FsDiff, WorldFsMode};
 
 /// Backend implementations for different platforms.
 pub enum Backend {
@@ -167,6 +171,7 @@ mod tests {
         assert!(!spec.enable_preload);
         assert!(spec.allowed_domains.contains(&"github.com".to_string()));
         assert!(!spec.always_isolate);
+        assert_eq!(spec.fs_mode, WorldFsMode::Writable);
     }
 
     #[test]
