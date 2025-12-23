@@ -10,6 +10,12 @@ curl or from the release archive.
 curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/substrate/uninstall.sh | bash
 ```
 
+The `uninstall.sh` script is a thin wrapper that prefers the uninstaller shipped
+inside your installed Substrate version (under `~/.substrate/versions/<version>/scripts/substrate/`).
+If Substrate is not installed or the local uninstaller is missing, the wrapper
+downloads `uninstall-substrate.sh` (and the loader UI when available) pinned to
+the **latest GitHub release tag** (not `main`) to avoid drift.
+
 ## Common Cleanup Steps
 
 Regardless of platform, the script:
