@@ -44,7 +44,12 @@ pub(crate) fn execute_command(
 
     // Always refresh policy/profile for this cwd before we read fs_mode.
     let cwd_for_profile = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let _ = detect_profile(&cwd_for_profile);
+    detect_profile(&cwd_for_profile).with_context(|| {
+        format!(
+            "failed to load Substrate profile for cwd {}",
+            cwd_for_profile.display()
+        )
+    })?;
 
     let fs_mode = world_fs_mode();
     std::env::set_var("SUBSTRATE_WORLD_FS_MODE", fs_mode.as_str());
@@ -137,18 +142,21 @@ pub(crate) fn execute_command(
         let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
         // Detect and load .substrate-profile if present
-        let _ = detect_profile(&cwd);
+        detect_profile(&cwd).with_context(|| {
+            format!("failed to load Substrate profile for cwd {}", cwd.display())
+        })?;
 
-        let decision = evaluate(trimmed, cwd.to_str().unwrap_or("."), None);
+        let decision = evaluate(trimmed, cwd.to_str().unwrap_or("."), None)
+            .with_context(|| format!("policy check failed for command: {trimmed}"))?;
 
         // Convert broker Decision to trace PolicyDecision
         policy_decision = match &decision {
-            Ok(Decision::Allow) => Some(PolicyDecision {
+            Decision::Allow => Some(PolicyDecision {
                 action: "allow".to_string(),
                 reason: None,
                 restrictions: None,
             }),
-            Ok(Decision::AllowWithRestrictions(restrictions)) => {
+            Decision::AllowWithRestrictions(restrictions) => {
                 eprintln!(
                     "substrate: command requires restrictions: {:?}",
                     restrictions
@@ -164,7 +172,7 @@ pub(crate) fn execute_command(
                     restrictions: Some(restriction_strings),
                 })
             }
-            Ok(Decision::Deny(reason)) => {
+            Decision::Deny(reason) => {
                 eprintln!("substrate: command denied by policy: {}", reason);
                 Some(PolicyDecision {
                     action: "deny".to_string(),
@@ -172,14 +180,10 @@ pub(crate) fn execute_command(
                     restrictions: None,
                 })
             }
-            Err(e) => {
-                eprintln!("substrate: policy check failed: {}", e);
-                None
-            }
         };
 
         // Handle denial
-        if let Ok(Decision::Deny(_)) = decision {
+        if let Decision::Deny(_) = decision {
             // Return failure status
             #[cfg(unix)]
             {
