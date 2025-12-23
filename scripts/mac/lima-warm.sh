@@ -328,7 +328,9 @@ build_missing_components_inside_vm() {
             fatal "Linux world-agent missing and ${PROJECT_PATH} does not contain Cargo sources. Provide bin/linux/world-agent or rerun from a source checkout."
         fi
         warn "Skipping guest CLI build; ${PROJECT_PATH} lacks Cargo sources."
-        return 1
+        # The guest CLI is optional (diagnostics only) and release bundles don't ship Cargo sources.
+        # Do not abort provisioning when only the guest CLI is missing.
+        return 0
     fi
 
     if ! limactl shell "${VM_NAME}" env BUILD_PROFILE="${BUILD_PROFILE}" BUILD_GUEST_CLI="${build_cli}" BUILD_GUEST_AGENT="${build_agent}" bash <<'EOF'; then
@@ -431,8 +433,12 @@ install_guest_binaries() {
     if [[ -n "${cli_candidate:-}" ]]; then
         install_cli_from_host "${cli_candidate}"
     else
-        log "Linux substrate CLI not found in ${PROJECT_PATH}; attempting in-guest build for diagnostics."
-        need_cli_build=1
+        if [[ -f "${PROJECT_PATH}/Cargo.toml" ]]; then
+            log "Linux substrate CLI not found in ${PROJECT_PATH}; attempting in-guest build for diagnostics."
+            need_cli_build=1
+        else
+            warn "Linux substrate CLI not found in ${PROJECT_PATH}; skipping guest CLI install (no Cargo sources in bundle). Diagnostics will fall back to host CLI."
+        fi
     fi
 
     agent_candidate="$(host_agent_candidate)" || true

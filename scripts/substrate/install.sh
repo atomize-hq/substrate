@@ -16,7 +16,42 @@ if [[ -z "${ASSET_ROOT}" || ! -f "${ASSET_ROOT}/install-substrate.sh" ]]; then
     exit 1
   fi
   ASSET_TMP_DIR="$(mktemp -d -t substrate-install-assets.XXXXXX)"
-  INSTALL_REF="${SUBSTRATE_INSTALL_REF:-main}"
+  INSTALL_REF="${SUBSTRATE_INSTALL_REF:-}"
+  if [[ -z "${INSTALL_REF}" ]]; then
+    # If the caller specified a version, pin helper scripts to that tag.
+    VERSION_PIN=""
+    for arg in "$@"; do
+      case "${arg}" in
+        --version=*)
+          VERSION_PIN="${arg#--version=}"
+          ;;
+      esac
+    done
+    if [[ -z "${VERSION_PIN}" ]]; then
+      for ((i=1; i<=$#; i++)); do
+        if [[ "${!i}" == "--version" ]]; then
+          j=$((i+1))
+          VERSION_PIN="${!j:-}"
+          break
+        fi
+      done
+    fi
+
+    if [[ -n "${VERSION_PIN}" ]]; then
+      VERSION_PIN="${VERSION_PIN#v}"
+      INSTALL_REF="v${VERSION_PIN}"
+    else
+      # No version requested: default to latest GitHub release tag (not main) to avoid drift.
+      latest_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/atomize-hq/substrate/releases/latest || true)"
+      if [[ "${latest_url}" =~ /tag/([^/]+)$ ]]; then
+        INSTALL_REF="${BASH_REMATCH[1]}"
+      else
+        INSTALL_REF="main"
+        echo "[substrate-install][WARN] Unable to resolve latest release tag; falling back to '${INSTALL_REF}' for installer helpers." >&2
+      fi
+    fi
+  fi
+
   ASSET_BASE="${SUBSTRATE_INSTALL_WRAPPER_BASE_URL:-https://raw.githubusercontent.com/atomize-hq/substrate/${INSTALL_REF}/scripts/substrate}"
   mkdir -p "${ASSET_TMP_DIR}/loader"
   curl -fsSL "${ASSET_BASE}/install-substrate.sh" -o "${ASSET_TMP_DIR}/install-substrate.sh"

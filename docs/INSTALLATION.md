@@ -26,6 +26,12 @@ GitHub Releases (`https://github.com/atomize-hq/substrate/releases`).
 curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/substrate/install.sh | bash
 ```
 
+The `install.sh` script is a thin wrapper that downloads the full installer
+(`install-substrate.sh`) plus a loader UI. When no `--version` is provided it
+pins those helper downloads to the **latest GitHub release tag** (not `main`)
+to avoid drift while still defaulting to the latest release. Use
+`SUBSTRATE_INSTALL_REF` only for development overrides.
+
 The installer will:
 
 1. Download `substrate-v<version>-linux_<arch>.tar.gz` from the release bucket
