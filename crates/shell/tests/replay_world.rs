@@ -1636,7 +1636,10 @@ fn replay_logs_copydiff_override_root_and_telemetry() {
     );
     // Force agent unavailability so this test doesn't accidentally bind to a host-installed
     // world-agent at /run/substrate.sock (developer machines), which would bypass copy-diff.
-    cmd.env("SUBSTRATE_WORLD_SOCKET", fixture.home().join("missing-agent.sock"));
+    cmd.env(
+        "SUBSTRATE_WORLD_SOCKET",
+        fixture.home().join("missing-agent.sock"),
+    );
     cmd.env("SUBSTRATE_COPYDIFF_ROOT", &override_root);
 
     let output = cmd.output().expect("failed to run replay command");
