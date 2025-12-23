@@ -1,6 +1,6 @@
 [package]
 name = "substrate-shim"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2021"
 rust-version = "1.89"
 authors = ["Atomize"]
@@ -25,11 +25,11 @@ uuid = { workspace = true }
 atty = { workspace = true }
 sha2 = { workspace = true }
 substrate-broker = { version = "0.1.0", path = "../broker" }
-substrate-trace = { version = "0.2.4", path = "../trace" }
+substrate-trace = { version = "0.2.5", path = "../trace" }
 world = { version = "0.1.1", path = "../world" }
 world-api = { version = "0.1.0", path = "../world-api" }
 world-backend-factory = { path = "../world-backend-factory" }
-substrate-common = { version = "0.2.4", path = "../common" }
+substrate-common = { version = "0.2.5", path = "../common" }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.29", features = ["fs", "process"] }
