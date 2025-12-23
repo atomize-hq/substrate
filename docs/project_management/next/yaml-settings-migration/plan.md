@@ -13,6 +13,14 @@ Most Substrate-owned runtime artifacts are already YAML (policies + manifests). 
 This track migrates only the **settings stack** from TOML to YAML (smaller footprint than converting all
 policies/manifests to TOML).
 
+## Why this is safe to tack on
+
+This is primarily a refactor of:
+- file naming (`config.toml` → `config.yaml`, `settings.toml` → `settings.yaml`)
+- serialization/deserialization (TOML → YAML)
+
+The runtime precedence model and semantics should remain unchanged (see `Y0-spec.md`).
+
 ## Guardrails
 
 - Orchestration branch: `feat/yaml-settings-migration`
@@ -38,6 +46,21 @@ Single triad (kept intentionally small):
 
 1) **Y0 — Migrate config/settings stack to YAML**
 
+## Primary Code Touchpoints (expected)
+
+- Paths:
+  - `crates/common/src/paths.rs` (config filename)
+- Config CLI:
+  - `crates/shell/src/execution/config_cmd.rs`
+  - `crates/shell/src/execution/cli.rs` (help strings mentioning config.toml)
+- Settings loader:
+  - `crates/shell/src/execution/settings/builder.rs`
+- World enable install metadata:
+  - `crates/shell/src/builtins/world_enable/config.rs`
+- Tests likely to update:
+  - `crates/shell/tests/config_init.rs`, `config_show.rs`, `config_set.rs`, `world_enable.rs`
+  - `crates/shell/src/execution/settings/tests.rs`
+
 ## Start Checklist (all tasks)
 
 1. `git checkout feat/yaml-settings-migration && git pull --ff-only`
@@ -60,4 +83,3 @@ Single triad (kept intentionally small):
 2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make preflight`.
 3. Commit integration changes; fast-forward into orchestration branch.
 4. Update `tasks.json` + `session_log.md`; commit docs; remove worktree.
-
