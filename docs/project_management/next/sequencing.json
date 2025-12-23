@@ -1,64 +1,74 @@
 {
-  "version": 1,
+  "version": 2,
   "principle": "sequenced_only",
+  "decisions": {
+    "runtime_config_format": "yaml_only",
+    "backward_compat_policy": "greenfield_breaking_ok"
+  },
   "notes": [
-    "This file defines the preferred execution order for upcoming feature sprints/tracks.",
-    "Items are intentionally sequenced (no parallel work) to minimize merge/conflict risk and schema churn."
+    "This file defines the preferred execution order for upcoming feature sprints.",
+    "Work is sequenced sprint-by-sprint; within a sprint, execute triads per docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md (code + test can run concurrently; integration lands).",
+    "Avoid interleaving work across sprints to minimize merge/conflict risk and schema churn."
   ],
-  "tracks": [
+  "sprints": [
     {
-      "id": "agent_hub_isolation",
-      "name": "Agent Hub Isolation Hardening",
-      "source": "docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md",
-      "phases": [
-        {
-          "id": "A",
-          "name": "Fail-closed semantics + enforce guarantees",
-          "goals": [
-            "No silent fallback when a requested security guarantee cannot be enforced",
-            "Close known escapes into the project root (absolute-path mapping to overlay)"
-          ],
-          "deliverables": [
-            "Policy semantics doc + implementation",
-            "Cross-path parity between non-PTY and PTY execution for enforcement checks"
-          ]
-        },
-        {
-          "id": "B",
-          "name": "Full caging (pivot_root/min-rootfs) + optional Landlock later",
-          "goals": [
-            "Prevent access outside the workspace/project unless explicitly allowed",
-            "Align real isolation guarantees with docs/vision and agent-hub expectations"
-          ],
-          "deliverables": [
-            "Linux full-cage execution mode (PTY + non-PTY parity)",
-            "Clear detection + fail-closed behavior when full-cage is required but unavailable"
-          ]
-        }
+      "order": 10,
+      "id": "yaml_settings_migration",
+      "title": "Runtime settings migration: TOML → YAML",
+      "branch": "feat/yaml-settings-migration",
+      "directory": "docs/project_management/next/yaml-settings-migration",
+      "plan": "docs/project_management/next/yaml-settings-migration/plan.md",
+      "sequence": [{ "id": "Y0", "spec": "docs/project_management/next/yaml-settings-migration/Y0-spec.md" }],
+      "notes": [
+        "This is the smallest migration needed to reach YAML-only for Substrate-owned runtime config.",
+        "Land before any work that adds new settings keys (world-sync, world-deps selection, agent-hub config extensions)."
       ]
     },
     {
+      "order": 20,
+      "id": "agent_hub_isolation_hardening",
+      "title": "Agent hub isolation hardening",
+      "branch": "feat/p0-agent-hub-isolation-hardening",
+      "directory": "docs/project_management/next/p0-agent-hub-isolation-hardening",
+      "plan": "docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md",
+      "sequence": [
+        { "id": "A", "name": "Fail-closed semantics + enforce guarantees" },
+        { "id": "B", "name": "Full caging (pivot_root/min-rootfs), optional Landlock later" }
+      ]
+    },
+    {
+      "order": 30,
       "id": "world_sync",
-      "name": "World Sync + .substrate-git",
-      "source": "docs/project_management/next/world-sync/plan.md",
-      "phases": [
-        { "id": "C0", "name": "Init + gating", "spec": "docs/project_management/next/world-sync/C0-spec.md" },
-        { "id": "C1", "name": "Config/CLI surface", "spec": "docs/project_management/next/world-sync/C1-spec.md" },
-        { "id": "C2", "name": "Manual world→host (non-PTY)", "spec": "docs/project_management/next/world-sync/C2-spec.md" },
-        { "id": "C3", "name": "Auto-sync (non-PTY)", "spec": "docs/project_management/next/world-sync/C3-spec.md" },
-        { "id": "C4", "name": "PTY diff + world→host", "spec": "docs/project_management/next/world-sync/C4-spec.md" },
-        { "id": "C5", "name": "Host→world pre-sync", "spec": "docs/project_management/next/world-sync/C5-spec.md" },
-        { "id": "C6", "name": ".substrate-git integration", "spec": "docs/project_management/next/world-sync/C6-spec.md" },
-        { "id": "C7", "name": "Rollback CLI", "spec": "docs/project_management/next/world-sync/C7-spec.md" },
-        { "id": "C8", "name": "World-side .substrate-git bridge", "spec": "docs/project_management/next/world-sync/C8-spec.md" },
-        { "id": "C9", "name": "Init UX + migration", "spec": "docs/project_management/next/world-sync/C9-spec.md" }
+      "title": "World sync + .substrate-git",
+      "branch": "feat/world-sync",
+      "directory": "docs/project_management/next/world-sync",
+      "plan": "docs/project_management/next/world-sync/plan.md",
+      "sequence": [
+        { "id": "C0", "spec": "docs/project_management/next/world-sync/C0-spec.md" },
+        { "id": "C1", "spec": "docs/project_management/next/world-sync/C1-spec.md" },
+        { "id": "world_deps_selection_layer", "name": "World-deps selection/allowlist + default filter (+ `--all`)" },
+        { "id": "C2", "spec": "docs/project_management/next/world-sync/C2-spec.md" },
+        { "id": "C3", "spec": "docs/project_management/next/world-sync/C3-spec.md" },
+        { "id": "C4", "spec": "docs/project_management/next/world-sync/C4-spec.md" },
+        { "id": "C5", "spec": "docs/project_management/next/world-sync/C5-spec.md" },
+        { "id": "C6", "spec": "docs/project_management/next/world-sync/C6-spec.md" },
+        { "id": "C7", "spec": "docs/project_management/next/world-sync/C7-spec.md" },
+        { "id": "C8", "spec": "docs/project_management/next/world-sync/C8-spec.md" },
+        { "id": "C9", "spec": "docs/project_management/next/world-sync/C9-spec.md" }
+      ],
+      "notes": [
+        "`world_deps_selection_layer` needs its own triad directory/spec before execution; this is a placeholder so we don't lose the thread.",
+        "Keep this scoped to filtering/selection UX + config, not general world-sync semantics."
       ]
     },
     {
+      "order": 40,
       "id": "json_mode",
-      "name": "JSON Mode (Structured CLI I/O)",
-      "source": "docs/project_management/future/json-mode/json_mode_plan.md",
-      "phases": [
+      "title": "JSON mode (structured CLI I/O)",
+      "branch": "feat/json-mode",
+      "directory": "docs/project_management/future/json-mode",
+      "plan": "docs/project_management/future/json-mode/json_mode_plan.md",
+      "sequence": [
         { "id": "J1", "name": "Structured mode scaffolding" },
         { "id": "J2a", "name": "Command coverage: core/root" },
         { "id": "J2b", "name": "Command coverage: world/shim/health" },
@@ -66,168 +76,6 @@
         { "id": "J3a", "name": "JSON input plumbing (simple consumers)" },
         { "id": "J3b", "name": "JSON input for complex workflows" }
       ]
-    }
-  ],
-  "sequence": [
-    {
-      "order": 10,
-      "id": "agent_hub_isolation:A",
-      "title": "Agent hub isolation sprint A",
-      "depends_on": [],
-      "blocks": ["world_sync:C4", "world_sync:C5", "json_mode:J2b", "json_mode:J2c"]
-    },
-    {
-      "order": 20,
-      "id": "world_sync:C0",
-      "title": "World sync C0 (workspace init + gating)",
-      "depends_on": ["agent_hub_isolation:A"],
-      "blocks": ["world_sync:C1", "world_sync:C2", "world_sync:C3", "world_sync:C4", "world_sync:C5"]
-    },
-    {
-      "order": 30,
-      "id": "runtime_config_format:yaml_only",
-      "title": "Decision: YAML-only for runtime config/manifests/policies",
-      "depends_on": ["world_sync:C0"],
-      "blocks": [],
-      "notes": [
-        "Decision: standardize Substrate-owned runtime config to YAML.",
-        "Rationale: manifests/policies are already YAML; converting the TOML settings stack is the smaller migration.",
-        "No dual-format support; migration is a breaking change but acceptable (greenfield)."
-      ]
-    },
-    {
-      "order": 40,
-      "id": "runtime_config_format:migrate_settings_stack_to_yaml",
-      "title": "Migrate settings/config stack from TOML to YAML",
-      "depends_on": ["runtime_config_format:yaml_only"],
-      "blocks": ["world_sync:C1", "world_deps:selection_layer"],
-      "notes": [
-        "Convert ~/.substrate/config.toml and .substrate/settings.toml to YAML equivalents.",
-        "Update substrate config init/show/set and settings loader; update docs/tests accordingly.",
-        "This should land before world-sync C1 so the new sync settings are added to the final YAML stack."
-      ]
-    },
-    {
-      "order": 50,
-      "id": "world_sync:C1",
-      "title": "World sync C1 (settings surface, no behavior change)",
-      "depends_on": ["runtime_config_format:migrate_settings_stack_to_yaml"],
-      "blocks": ["world_sync:C2", "world_sync:C3", "world_sync:C4", "world_sync:C5"]
-    },
-    {
-      "order": 60,
-      "id": "world_deps:selection_layer",
-      "title": "World-deps selection/allowlist + no-op when unconfigured",
-      "depends_on": ["world_sync:C0", "runtime_config_format:migrate_settings_stack_to_yaml"],
-      "blocks": ["json_mode:J2b", "json_mode:J2c"],
-      "notes": [
-        "Prefer storing selection under the initialized workspace (.substrate/) rather than only in ~/.substrate/."
-      ]
-    },
-    {
-      "order": 70,
-      "id": "world_sync:C2",
-      "title": "World sync C2 (manual world→host, non-PTY)",
-      "depends_on": ["world_sync:C1"],
-      "blocks": ["world_sync:C3", "world_sync:C4", "world_sync:C5"]
-    },
-    {
-      "order": 80,
-      "id": "world_sync:C3",
-      "title": "World sync C3 (auto-sync, non-PTY)",
-      "depends_on": ["world_sync:C2"],
-      "blocks": ["world_sync:C4", "world_sync:C5"]
-    },
-    {
-      "order": 90,
-      "id": "agent_hub_isolation:B",
-      "title": "Agent hub isolation sprint B (full caging)",
-      "depends_on": ["world_sync:C3"],
-      "blocks": ["world_sync:C4", "world_sync:C5", "world_sync:C6", "json_mode:J2b", "json_mode:J2c"]
-    },
-    {
-      "order": 100,
-      "id": "world_sync:C4",
-      "title": "World sync C4 (PTY diff + world→host)",
-      "depends_on": ["agent_hub_isolation:B"],
-      "blocks": ["world_sync:C5", "world_sync:C6"]
-    },
-    {
-      "order": 110,
-      "id": "world_sync:C5",
-      "title": "World sync C5 (host→world pre-sync)",
-      "depends_on": ["world_sync:C4"],
-      "blocks": ["world_sync:C6"]
-    },
-    {
-      "order": 120,
-      "id": "world_sync:C6",
-      "title": "World sync C6 (.substrate-git integration)",
-      "depends_on": ["world_sync:C5"],
-      "blocks": ["world_sync:C7", "world_sync:C8", "world_sync:C9"]
-    },
-    {
-      "order": 130,
-      "id": "world_sync:C7",
-      "title": "World sync C7 (rollback CLI)",
-      "depends_on": ["world_sync:C6"],
-      "blocks": ["world_sync:C8", "world_sync:C9"]
-    },
-    {
-      "order": 140,
-      "id": "world_sync:C8",
-      "title": "World sync C8 (world-side .substrate-git bootstrap/bridge)",
-      "depends_on": ["world_sync:C7"],
-      "blocks": ["world_sync:C9"]
-    },
-    {
-      "order": 150,
-      "id": "world_sync:C9",
-      "title": "World sync C9 (init UX + migration)",
-      "depends_on": ["world_sync:C8"],
-      "blocks": ["json_mode:J1"]
-    },
-    {
-      "order": 160,
-      "id": "json_mode:J1",
-      "title": "JSON mode J1 (global structured flags + envelope)",
-      "depends_on": ["world_sync:C9", "world_deps:selection_layer"],
-      "blocks": ["json_mode:J2a", "json_mode:J2b", "json_mode:J2c", "json_mode:J3a", "json_mode:J3b"]
-    },
-    {
-      "order": 170,
-      "id": "json_mode:J2a",
-      "title": "JSON mode J2a (core/root command coverage)",
-      "depends_on": ["json_mode:J1"],
-      "blocks": ["json_mode:J2b", "json_mode:J2c"]
-    },
-    {
-      "order": 180,
-      "id": "json_mode:J2b",
-      "title": "JSON mode J2b (world/shim/health coverage)",
-      "depends_on": ["json_mode:J2a"],
-      "blocks": ["json_mode:J2c"]
-    },
-    {
-      "order": 190,
-      "id": "json_mode:J2c",
-      "title": "JSON mode J2c (graph/advanced + world-deps sync/install coverage)",
-      "depends_on": ["json_mode:J2b"],
-      "blocks": ["json_mode:J3a", "json_mode:J3b"]
-    },
-    {
-      "order": 200,
-      "id": "json_mode:J3a",
-      "title": "JSON mode J3a (JSON input plumbing, simple consumers)",
-      "depends_on": ["json_mode:J2c"],
-      "blocks": ["json_mode:J3b"]
-    },
-    {
-      "order": 210,
-      "id": "json_mode:J3b",
-      "title": "JSON mode J3b (complex workflow JSON input)",
-      "depends_on": ["json_mode:J3a"],
-      "blocks": []
     }
   ]
 }
