@@ -18,17 +18,25 @@ echo "[verify_profile_fail_fast] Writing invalid profile..."
 printf 'not: [valid: yaml' >"${tmpdir}/proj/.substrate-profile"
 
 echo "[verify_profile_fail_fast] Running with invalid profile (expect failure)..."
+invalid_out="${tmpdir}/invalid.out"
 set +e
 (
   cd "${tmpdir}/proj" || exit 1
   HOME="${tmpdir}/home" USERPROFILE="${tmpdir}/home" SUBSTRATE_WORLD=disabled SUBSTRATE_WORLD_ENABLED=0 \
     "${substrate_bin}" -c 'true'
-)
+) >"${invalid_out}" 2>&1
 status=$?
 set -e
 
 if [[ ${status} -eq 0 ]]; then
   echo "[verify_profile_fail_fast][FAIL] Expected non-zero exit with invalid profile, got exit=0"
+  echo "[verify_profile_fail_fast][FAIL] Output:"
+  cat "${invalid_out}"
+  exit 1
+fi
+if ! grep -q "failed to load Substrate profile" "${invalid_out}"; then
+  echo "[verify_profile_fail_fast][FAIL] Expected profile load error in output"
+  cat "${invalid_out}"
   exit 1
 fi
 echo "[verify_profile_fail_fast][OK] Invalid profile failed as expected (exit=${status})"
@@ -47,10 +55,25 @@ allow_shell_operators: true
 YAML
 
 echo "[verify_profile_fail_fast] Running with valid profile (expect success)..."
+valid_out="${tmpdir}/valid.out"
+set +e
 (
   cd "${tmpdir}/proj" || exit 1
   HOME="${tmpdir}/home" USERPROFILE="${tmpdir}/home" SUBSTRATE_WORLD=disabled SUBSTRATE_WORLD_ENABLED=0 \
     "${substrate_bin}" -c 'true'
-)
+) >"${valid_out}" 2>&1
+status=$?
+set -e
+
+if [[ ${status} -ne 0 ]]; then
+  echo "[verify_profile_fail_fast][FAIL] Expected exit=0 with valid profile, got exit=${status}"
+  cat "${valid_out}"
+  exit 1
+fi
+if grep -q "^Error:" "${valid_out}"; then
+  echo "[verify_profile_fail_fast][FAIL] Valid run output contains an Error:"
+  cat "${valid_out}"
+  exit 1
+fi
 
 echo "[verify_profile_fail_fast][OK] Valid profile succeeded"
