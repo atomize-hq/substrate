@@ -12,6 +12,7 @@
         "docs/project_management/next/yaml-settings-migration/Y0-spec.md",
         "docs/CONFIGURATION.md",
         "crates/common/src/paths.rs",
+        "crates/shell/src/execution/cli.rs",
         "crates/shell/src/execution/settings/builder.rs",
         "crates/shell/src/execution/config_cmd.rs",
         "crates/shell/src/builtins/world_enable/config.rs",
@@ -52,6 +53,10 @@
       "description": "Update and extend tests for YAML settings load/persist behavior and config CLI behavior.",
       "references": [
         "docs/project_management/next/yaml-settings-migration/Y0-spec.md",
+        "crates/shell/tests/config_init.rs",
+        "crates/shell/tests/config_show.rs",
+        "crates/shell/tests/config_set.rs",
+        "crates/shell/tests/world_enable.rs",
         "crates/shell/src/execution/settings/tests.rs",
         "crates/shell/src/execution/routing/builtin/tests.rs",
         "crates/shell/src/execution/invocation/tests.rs"
@@ -123,4 +128,3 @@
     }
   ]
 }
-
