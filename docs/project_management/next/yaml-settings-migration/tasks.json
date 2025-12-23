@@ -1,0 +1,126 @@
+{
+  "tasks": [
+    {
+      "id": "Y0-code",
+      "name": "Settings stack TOML→YAML (code)",
+      "type": "code",
+      "phase": "YAML Settings Migration",
+      "status": "pending",
+      "description": "Convert the layered config/settings stack from TOML to YAML and update the `substrate config` subcommand.",
+      "references": [
+        "docs/project_management/next/yaml-settings-migration/plan.md",
+        "docs/project_management/next/yaml-settings-migration/Y0-spec.md",
+        "docs/CONFIGURATION.md",
+        "crates/common/src/paths.rs",
+        "crates/shell/src/execution/settings/builder.rs",
+        "crates/shell/src/execution/config_cmd.rs",
+        "crates/shell/src/builtins/world_enable/config.rs",
+        "crates/shell/src/execution/invocation/plan.rs"
+      ],
+      "acceptance_criteria": [
+        "YAML settings are loaded and persisted correctly via existing precedence rules.",
+        "substrate config init/show/set operate on YAML files and produce actionable errors if TOML is present.",
+        "cargo fmt and cargo clippy --workspace --all-targets -- -D warnings are green."
+      ],
+      "start_checklist": [
+        "Checkout feat/yaml-settings-migration, pull latest",
+        "Set Y0-code to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ysm-y0-settings-code",
+        "Create worktree wt/ysm-y0-settings-code from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Commit worktree changes",
+        "Merge branch back to feat/yaml-settings-migration",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ysm-y0-settings-code",
+      "integration_task": "Y0-integ",
+      "kickoff_prompt": "docs/project_management/next/yaml-settings-migration/kickoff_prompts/Y0-code.md",
+      "depends_on": [],
+      "concurrent_with": [
+        "Y0-test"
+      ]
+    },
+    {
+      "id": "Y0-test",
+      "name": "Settings stack TOML→YAML (test)",
+      "type": "test",
+      "phase": "YAML Settings Migration",
+      "status": "pending",
+      "description": "Update and extend tests for YAML settings load/persist behavior and config CLI behavior.",
+      "references": [
+        "docs/project_management/next/yaml-settings-migration/Y0-spec.md",
+        "crates/shell/src/execution/settings/tests.rs",
+        "crates/shell/src/execution/routing/builtin/tests.rs",
+        "crates/shell/src/execution/invocation/tests.rs"
+      ],
+      "acceptance_criteria": [
+        "Tests cover init/show/set for YAML.",
+        "Tests cover failure messaging when TOML is present but unsupported.",
+        "Targeted test suites are green."
+      ],
+      "start_checklist": [
+        "Checkout feat/yaml-settings-migration, pull latest",
+        "Set Y0-test to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ysm-y0-settings-test",
+        "Create worktree wt/ysm-y0-settings-test from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run targeted cargo test suites touched",
+        "Commit worktree changes",
+        "Merge branch back to feat/yaml-settings-migration",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ysm-y0-settings-test",
+      "integration_task": "Y0-integ",
+      "kickoff_prompt": "docs/project_management/next/yaml-settings-migration/kickoff_prompts/Y0-test.md",
+      "depends_on": [],
+      "concurrent_with": [
+        "Y0-code"
+      ]
+    },
+    {
+      "id": "Y0-integ",
+      "name": "Settings stack TOML→YAML (integration)",
+      "type": "integration",
+      "phase": "YAML Settings Migration",
+      "status": "pending",
+      "description": "Merge Y0 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
+      "references": [
+        "docs/project_management/next/yaml-settings-migration/plan.md",
+        "docs/project_management/next/yaml-settings-migration/Y0-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Behavior matches Y0-spec.",
+        "cargo fmt/clippy green; relevant tests green; make preflight green."
+      ],
+      "start_checklist": [
+        "Checkout feat/yaml-settings-migration, pull latest",
+        "Set Y0-integ to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ysm-y0-settings-integ",
+        "Create worktree wt/ysm-y0-settings-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge ysm-y0-settings-code and ysm-y0-settings-test into integration worktree",
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant cargo test suites",
+        "Run make preflight",
+        "Commit integration changes and merge back to feat/yaml-settings-migration",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ysm-y0-settings-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/yaml-settings-migration/kickoff_prompts/Y0-integ.md",
+      "depends_on": [
+        "Y0-code",
+        "Y0-test"
+      ],
+      "concurrent_with": []
+    }
+  ]
+}
+
