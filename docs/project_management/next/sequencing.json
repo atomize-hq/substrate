@@ -85,132 +85,145 @@
     },
     {
       "order": 30,
-      "id": "runtime_config_format:decision",
-      "title": "Decide single runtime config format (YAML-only vs TOML-only)",
+      "id": "runtime_config_format:yaml_only",
+      "title": "Decision: YAML-only for runtime config/manifests/policies",
       "depends_on": ["world_sync:C0"],
-      "blocks": ["world_sync:C1"],
+      "blocks": [],
       "notes": [
-        "Make this decision before implementing world-sync C1, otherwise C1 will be rewritten.",
+        "Decision: standardize Substrate-owned runtime config to YAML.",
+        "Rationale: manifests/policies are already YAML; converting the TOML settings stack is the smaller migration.",
         "No dual-format support; migration is a breaking change but acceptable (greenfield)."
       ]
     },
     {
       "order": 40,
-      "id": "world_sync:C1",
-      "title": "World sync C1 (settings surface, no behavior change)",
-      "depends_on": ["runtime_config_format:decision"],
-      "blocks": ["world_sync:C2", "world_sync:C3", "world_sync:C4", "world_sync:C5"]
+      "id": "runtime_config_format:migrate_settings_stack_to_yaml",
+      "title": "Migrate settings/config stack from TOML to YAML",
+      "depends_on": ["runtime_config_format:yaml_only"],
+      "blocks": ["world_sync:C1", "world_deps:selection_layer"],
+      "notes": [
+        "Convert ~/.substrate/config.toml and .substrate/settings.toml to YAML equivalents.",
+        "Update substrate config init/show/set and settings loader; update docs/tests accordingly.",
+        "This should land before world-sync C1 so the new sync settings are added to the final YAML stack."
+      ]
     },
     {
       "order": 50,
+      "id": "world_sync:C1",
+      "title": "World sync C1 (settings surface, no behavior change)",
+      "depends_on": ["runtime_config_format:migrate_settings_stack_to_yaml"],
+      "blocks": ["world_sync:C2", "world_sync:C3", "world_sync:C4", "world_sync:C5"]
+    },
+    {
+      "order": 60,
       "id": "world_deps:selection_layer",
       "title": "World-deps selection/allowlist + no-op when unconfigured",
-      "depends_on": ["world_sync:C0", "runtime_config_format:decision"],
+      "depends_on": ["world_sync:C0", "runtime_config_format:migrate_settings_stack_to_yaml"],
       "blocks": ["json_mode:J2b", "json_mode:J2c"],
       "notes": [
         "Prefer storing selection under the initialized workspace (.substrate/) rather than only in ~/.substrate/."
       ]
     },
     {
-      "order": 60,
+      "order": 70,
       "id": "world_sync:C2",
       "title": "World sync C2 (manual world→host, non-PTY)",
       "depends_on": ["world_sync:C1"],
       "blocks": ["world_sync:C3", "world_sync:C4", "world_sync:C5"]
     },
     {
-      "order": 70,
+      "order": 80,
       "id": "world_sync:C3",
       "title": "World sync C3 (auto-sync, non-PTY)",
       "depends_on": ["world_sync:C2"],
       "blocks": ["world_sync:C4", "world_sync:C5"]
     },
     {
-      "order": 80,
+      "order": 90,
       "id": "agent_hub_isolation:B",
       "title": "Agent hub isolation sprint B (full caging)",
       "depends_on": ["world_sync:C3"],
       "blocks": ["world_sync:C4", "world_sync:C5", "world_sync:C6", "json_mode:J2b", "json_mode:J2c"]
     },
     {
-      "order": 90,
+      "order": 100,
       "id": "world_sync:C4",
       "title": "World sync C4 (PTY diff + world→host)",
       "depends_on": ["agent_hub_isolation:B"],
       "blocks": ["world_sync:C5", "world_sync:C6"]
     },
     {
-      "order": 100,
+      "order": 110,
       "id": "world_sync:C5",
       "title": "World sync C5 (host→world pre-sync)",
       "depends_on": ["world_sync:C4"],
       "blocks": ["world_sync:C6"]
     },
     {
-      "order": 110,
+      "order": 120,
       "id": "world_sync:C6",
       "title": "World sync C6 (.substrate-git integration)",
       "depends_on": ["world_sync:C5"],
       "blocks": ["world_sync:C7", "world_sync:C8", "world_sync:C9"]
     },
     {
-      "order": 120,
+      "order": 130,
       "id": "world_sync:C7",
       "title": "World sync C7 (rollback CLI)",
       "depends_on": ["world_sync:C6"],
       "blocks": ["world_sync:C8", "world_sync:C9"]
     },
     {
-      "order": 130,
+      "order": 140,
       "id": "world_sync:C8",
       "title": "World sync C8 (world-side .substrate-git bootstrap/bridge)",
       "depends_on": ["world_sync:C7"],
       "blocks": ["world_sync:C9"]
     },
     {
-      "order": 140,
+      "order": 150,
       "id": "world_sync:C9",
       "title": "World sync C9 (init UX + migration)",
       "depends_on": ["world_sync:C8"],
       "blocks": ["json_mode:J1"]
     },
     {
-      "order": 150,
+      "order": 160,
       "id": "json_mode:J1",
       "title": "JSON mode J1 (global structured flags + envelope)",
       "depends_on": ["world_sync:C9", "world_deps:selection_layer"],
       "blocks": ["json_mode:J2a", "json_mode:J2b", "json_mode:J2c", "json_mode:J3a", "json_mode:J3b"]
     },
     {
-      "order": 160,
+      "order": 170,
       "id": "json_mode:J2a",
       "title": "JSON mode J2a (core/root command coverage)",
       "depends_on": ["json_mode:J1"],
       "blocks": ["json_mode:J2b", "json_mode:J2c"]
     },
     {
-      "order": 170,
+      "order": 180,
       "id": "json_mode:J2b",
       "title": "JSON mode J2b (world/shim/health coverage)",
       "depends_on": ["json_mode:J2a"],
       "blocks": ["json_mode:J2c"]
     },
     {
-      "order": 180,
+      "order": 190,
       "id": "json_mode:J2c",
       "title": "JSON mode J2c (graph/advanced + world-deps sync/install coverage)",
       "depends_on": ["json_mode:J2b"],
       "blocks": ["json_mode:J3a", "json_mode:J3b"]
     },
     {
-      "order": 190,
+      "order": 200,
       "id": "json_mode:J3a",
       "title": "JSON mode J3a (JSON input plumbing, simple consumers)",
       "depends_on": ["json_mode:J2c"],
       "blocks": ["json_mode:J3b"]
     },
     {
-      "order": 200,
+      "order": 210,
       "id": "json_mode:J3b",
       "title": "JSON mode J3b (complex workflow JSON input)",
       "depends_on": ["json_mode:J3a"],
@@ -218,4 +231,3 @@
     }
   ]
 }
-
