@@ -3,6 +3,33 @@ set -euo pipefail
 
 log() { printf '[substrate-uninstall] %s\n' "$1"; }
 
+PATH_SNIPPET_START="# >>> substrate >>>"
+PATH_SNIPPET_END="# <<< substrate <<<"
+
+remove_path_snippet() {
+  local target="$1"
+  if [[ -z "${target}" || ! -f "${target}" ]]; then
+    return 0
+  fi
+  if ! grep -Fq "${PATH_SNIPPET_START}" "${target}" || ! grep -Fq "${PATH_SNIPPET_END}" "${target}"; then
+    return 0
+  fi
+
+  local tmp
+  tmp="$(mktemp)"
+  sed "\#^${PATH_SNIPPET_START}\$#,\#^${PATH_SNIPPET_END}\$#d" "${target}" > "${tmp}"
+  mv "${tmp}" "${target}"
+}
+
+remove_shell_path_snippets() {
+  remove_path_snippet "${HOME}/.bashrc"
+  remove_path_snippet "${HOME}/.bash_profile"
+  remove_path_snippet "${HOME}/.profile"
+  remove_path_snippet "${HOME}/.zshrc"
+  remove_path_snippet "${HOME}/.zprofile"
+  remove_path_snippet "${HOME}/.config/fish/config.fish"
+}
+
 usage() {
   cat <<'USAGE'
 Substrate Uninstaller
@@ -374,6 +401,9 @@ pkill -x substrate || true
 pkill -f '/substrate/bin/substrate-shim' || true
 pkill -f '/substrate-forwarder' || true
 pkill -f '/substrate-world-agent' || true
+
+log "Removing PATH snippet from shell rc files (if present)..."
+remove_shell_path_snippets || true
 
 log "Removing substrate directories..."
 run_python - <<'PY'

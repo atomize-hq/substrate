@@ -82,7 +82,7 @@ _BLA_make_braille_fill_animation() {
 
   frames+=("${flash_frame}")
   frames+=("${flash_frame}")
-  frames+=("$(printf '%.0s${complete_color}' $(seq 1 "${total_slots}"))")
+  frames+=("$(printf '%.0s%s' $(seq 1 "${total_slots}") "${complete_color}")")
   BLA_braille_fill_bar=( "${interval}" "${frames[@]}" )
 }
 _BLA_make_braille_fill_animation
@@ -106,10 +106,15 @@ BLA::start_loading_animation() {
   tput civis # Hide the terminal cursor
   BLA::play_loading_animation_loop &
   BLA_loading_animation_pid="${!}"
+  disown "${BLA_loading_animation_pid}" 2>/dev/null || true
 }
 
 BLA::stop_loading_animation() {
-  kill "${BLA_loading_animation_pid}" &> /dev/null
+  if [[ -n "${BLA_loading_animation_pid:-}" ]]; then
+    kill "${BLA_loading_animation_pid}" &> /dev/null || true
+    wait "${BLA_loading_animation_pid}" 2>/dev/null || true
+    unset BLA_loading_animation_pid
+  fi
   printf "\n"
   tput cnorm # Restore the terminal cursor
 }

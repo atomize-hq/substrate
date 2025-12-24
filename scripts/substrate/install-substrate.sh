@@ -1520,6 +1520,108 @@ sync_world_deps() {
   print_world_deps_summary "${substrate_bin}"
 }
 
+PATH_SNIPPET_START="# >>> substrate >>>"
+PATH_SNIPPET_END="# <<< substrate <<<"
+
+render_path_snippet_sh() {
+  local bin_dir="$1"
+
+  cat <<EOF
+${PATH_SNIPPET_START}
+if [ -d "${bin_dir}" ]; then
+  case ":\${PATH}:" in
+    *":${bin_dir}:"*) ;;
+    *) export PATH="${bin_dir}:\${PATH}" ;;
+  esac
+fi
+${PATH_SNIPPET_END}
+EOF
+}
+
+render_path_snippet_fish() {
+  local bin_dir="$1"
+
+  cat <<EOF
+${PATH_SNIPPET_START}
+if test -d "${bin_dir}"
+  if type -q fish_add_path
+    fish_add_path -m "${bin_dir}"
+  else
+    set -gx PATH "${bin_dir}" \$PATH
+  end
+end
+${PATH_SNIPPET_END}
+EOF
+}
+
+upsert_path_snippet() {
+  local target="$1"
+  local snippet="$2"
+
+  local dir
+  dir="$(dirname "${target}")"
+  mkdir -p "${dir}"
+
+  local tmp
+  tmp="$(mktemp)"
+
+  if [[ -f "${target}" ]] && grep -Fq "${PATH_SNIPPET_START}" "${target}" && grep -Fq "${PATH_SNIPPET_END}" "${target}"; then
+    # Remove existing block (if present) so we can append a fresh one.
+    sed "\#^${PATH_SNIPPET_START}\$#,\#^${PATH_SNIPPET_END}\$#d" "${target}" > "${tmp}"
+  else
+    [[ -f "${target}" ]] && cat "${target}" > "${tmp}"
+  fi
+
+  {
+    if [[ -s "${tmp}" ]]; then
+      printf '\n'
+    fi
+    printf '%s\n' "${snippet}"
+  } >> "${tmp}"
+
+  mv "${tmp}" "${target}"
+}
+
+update_shell_path() {
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    return 0
+  fi
+
+  if [[ "${SUBSTRATE_INSTALL_NO_PATH:-}" == "1" ]]; then
+    log "Skipping PATH update because SUBSTRATE_INSTALL_NO_PATH=1."
+    return 0
+  fi
+
+  local bin_dir="$1"
+  local shell_basename
+  shell_basename="$(basename "${SHELL:-}")"
+
+  case "${shell_basename}" in
+    zsh)
+      local snippet
+      snippet="$(render_path_snippet_sh "${bin_dir}")"
+      upsert_path_snippet "${HOME}/.zprofile" "${snippet}"
+      upsert_path_snippet "${HOME}/.zshrc" "${snippet}"
+      ;;
+    bash)
+      local snippet
+      snippet="$(render_path_snippet_sh "${bin_dir}")"
+      upsert_path_snippet "${HOME}/.bashrc" "${snippet}"
+      upsert_path_snippet "${HOME}/.bash_profile" "${snippet}"
+      ;;
+    fish)
+      local snippet
+      snippet="$(render_path_snippet_fish "${bin_dir}")"
+      upsert_path_snippet "${HOME}/.config/fish/config.fish" "${snippet}"
+      ;;
+    *)
+      local snippet
+      snippet="$(render_path_snippet_sh "${bin_dir}")"
+      upsert_path_snippet "${HOME}/.profile" "${snippet}"
+      ;;
+  esac
+}
+
 install_macos() {
   ensure_macos_prereqs
   ensure_version_selected
@@ -1572,11 +1674,12 @@ install_macos() {
   PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" sync_world_deps "${substrate_bin}"
 
   finalize_install_metadata "${world_enabled}"
+  update_shell_path "${bin_dir}"
 
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     log "Installation complete (dry run). After a real install add ${bin_dir} to your PATH or run ${bin_dir}/substrate directly."
   else
-    log "Installation complete. Add ${bin_dir} to your PATH or invoke ${bin_dir}/substrate directly."
+    log "Installation complete. ${bin_dir} was added to your shell PATH."
   fi
   log "manager_init placeholder: ${MANAGER_INIT_PATH}"
   log "manager_env script: ${MANAGER_ENV_PATH}"
@@ -1655,6 +1758,7 @@ install_linux() {
   PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" sync_world_deps "${substrate_bin}"
 
   finalize_install_metadata "${world_enabled}"
+  update_shell_path "${bin_dir}"
 
   if [[ "${IS_WSL}" -eq 1 ]]; then
     log "Detected WSL environment. Windows host components (forwarder, uninstall) must be managed via PowerShell scripts."
@@ -1663,7 +1767,7 @@ install_linux() {
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     log "Installation complete (dry run). After a real install add ${bin_dir} to your PATH or run ${bin_dir}/substrate directly."
   else
-    log "Installation complete. Add ${bin_dir} to your PATH or invoke ${bin_dir}/substrate directly."
+    log "Installation complete. ${bin_dir} was added to your shell PATH."
   fi
   log "manager_init placeholder: ${MANAGER_INIT_PATH}"
   log "manager_env script: ${MANAGER_ENV_PATH}"

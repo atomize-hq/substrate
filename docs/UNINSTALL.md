@@ -10,6 +10,12 @@ curl or from the release archive.
 curl -fsSL https://raw.githubusercontent.com/atomize-hq/substrate/main/scripts/substrate/uninstall.sh | bash
 ```
 
+The `uninstall.sh` script is a thin wrapper that prefers the uninstaller shipped
+inside your installed Substrate version (under `~/.substrate/versions/<version>/scripts/substrate/`).
+If Substrate is not installed or the local uninstaller is missing, the wrapper
+downloads `uninstall-substrate.sh` (and the loader UI when available) pinned to
+the **latest GitHub release tag** (not `main`) to avoid drift.
+
 ## Common Cleanup Steps
 
 Regardless of platform, the script:
@@ -20,9 +26,9 @@ Regardless of platform, the script:
    history, locks, etc.).
 3. Clears the shell command hash table (`hash -r`).
 
-Since the installer no longer edits `.bashrc`, `.zshrc`, or other rc files, no
-shell snippets are touched during removal. If you previously added custom PATH
-entries or aliases, remove them manually after running the script.
+The uninstaller removes the PATH snippet block (between `# >>> substrate >>>`
+markers) from common shell rc files (`.bashrc`, `.bash_profile`, `.profile`,
+`.zshrc`, `.zprofile`, and `~/.config/fish/config.fish`) when present.
 
 ## Linux & Windows (WSL)
 
