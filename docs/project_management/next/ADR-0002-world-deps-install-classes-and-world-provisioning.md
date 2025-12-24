@@ -177,6 +177,11 @@ Constraints:
   Linux, and Windows WSL where technically possible; otherwise fail with explicit, actionable errors.
 
 Required inputs to read:
+0) This document end-to-end:
+   - `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md` (all sections + Appendix A)
+   - `docs/project_management/next/world_deps_selection_layer/decision_register.md`
+   - `docs/project_management/next/world_deps_selection_layer/integration_map.md`
+   - `docs/project_management/next/world_deps_selection_layer/manual_testing_playbook.md`
 1) `docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md`
 2) `docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md` through `I5-spec.md`
 3) `docs/project_management/next/yaml-settings-migration/Y0-spec.md` and its plan/tasks
