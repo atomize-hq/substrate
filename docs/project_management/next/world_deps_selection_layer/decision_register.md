@@ -402,7 +402,7 @@ Specs (this triad):
 **Related docs:** I2/I3 (full cage), `normalize_env_for_linux_guest` (macOS)
 
 **Problem / Context**
-- User-space installs must be compatible with full caging (pivot_root) and optional Landlock.
+  - User-space installs must be compatible with full caging (pivot_root) and Landlock (when enabled).
 - Installs must not pollute the project tree nor depend on host-specific `$HOME` behavior.
 
 **Option A — Fixed world-owned prefix: `/var/lib/substrate/world-deps`**
@@ -707,3 +707,58 @@ Specs (this triad):
 **Follow-up tasks (explicit)**
 - Update `S0` to explicitly state that `sync/provision` make **no world-agent calls** when selection is empty (unless `--all` is used).
 - Add tests + smoke checks that assert no backend calls / exit `0` in this state.
+
+---
+
+### DR-0014 — `system_packages` “present” detection strategy (package-aware vs probe-based)
+
+**Decision owner(s):** Shell + manifest maintainers  
+**Date:** 2025-12-24  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md`, `docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
+
+**Problem / Context**
+- We need one unambiguous, testable contract for when a `system_packages` tool is considered “present” in the guest.
+- This contract drives `world deps status` output and determines whether `world deps sync` is blocked by missing system prerequisites.
+
+**Option A — Package-aware detection (dpkg-query/dpkg -s for apt guests)**
+- **Pros:**
+  - Direct: verifies the exact package set is installed.
+  - Independent of whether any specific binary is on PATH.
+- **Cons:**
+  - Couples “present” semantics to a specific package manager and guest OS family.
+  - Requires implementing and maintaining multiple query strategies for different distros/package managers.
+- **Cascading implications:**
+  - `system_packages` class would need per-provider detection logic and explicit behavior on unsupported guests.
+- **Risks:**
+  - Drifts toward ad-hoc per-platform behavior, reducing “worlds should feel the same”.
+- **Unlocks:**
+  - Precise “package parity” checks in the future (if we ever need them).
+- **Quick wins / low-hanging fruit:**
+  - Works quickly for Ubuntu guests only, but does not generalize cleanly.
+
+**Option B — Probe-based detection (guest_detect is authoritative and deterministic)**
+- **Pros:**
+  - Cross-platform contract: “present” means the probe command succeeds.
+  - Simple to implement and reason about; no package-manager coupling.
+  - Makes `system_packages` satisfaction align with real-world needs (binaries needed by recipes).
+- **Cons:**
+  - Indirect: a package could be installed but the chosen probe might not reflect it if misconfigured.
+- **Cascading implications:**
+  - `system_packages` tools must define `guest_detect.command` explicitly (no default).
+  - Manifest review must ensure the probe covers the packages’ intended effect.
+- **Risks:**
+  - If the probe is too weak, `sync` may proceed even though some packages are missing; mitigated by requiring probes that cover the actual prerequisites.
+- **Unlocks:**
+  - Keeps provisioning logic (S2) and detection logic (S1) decoupled and stable as we add more platforms.
+- **Quick wins / low-hanging fruit:**
+  - Immediate: for apt guests, use probes like `command -v gcc && command -v make` to validate toolchain prerequisites.
+
+**Recommendation**
+- **Selected:** Option B — Probe-based detection (`guest_detect.command` is authoritative)
+- **Rationale (crisp):** It provides one portable contract across worlds without entangling `present` semantics with distro/package-manager specifics, and it is directly automatable via `status --json` assertions.
+
+**Follow-up tasks (explicit)**
+- Update `S1` to require `guest_detect.command` for `system_packages` tools and to define sync satisfaction based on it.
+- Update `S2` to state that provisioning does not define “present”; detection remains probe-based.
+- Update the manual testing playbook to assert `system_packages` becomes `present` after `provision` by checking `status --json` fields.

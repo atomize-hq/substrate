@@ -70,6 +70,10 @@ Algorithm:
 4) If the resulting package list is empty:
    - Print: “No system packages required for the current selection.” and exit `0`.
 
+Postcondition contract (required for consistency with S1):
+- `provision` does not decide whether a `system_packages` tool is “present”.
+- “Present” is determined solely by that tool’s `guest_detect.command` probe (see `S1` and `decision_register.md` DR-0014).
+
 ---
 
 ## Output requirements

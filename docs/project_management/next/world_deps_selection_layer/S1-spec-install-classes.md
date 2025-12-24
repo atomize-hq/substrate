@@ -27,6 +27,7 @@ This spec is greenfield:
 - Represents OS-level packages that must be installed in the world environment.
 - Must **never** be installed by runtime `world deps sync/install`.
 - Must be fulfilled via the explicit provisioning route (`S2`: `substrate world deps provision`) on platforms where it is supported.
+- **Present contract:** the tool is `present` iff `guest_detect.command` exits `0` inside the world (see `decision_register.md` DR-0014).
 
 ### `manual`
 - Substrate will never automate installation.
@@ -66,6 +67,7 @@ Validation rules (must be enforced at manifest load time):
 - `class=system_packages` requires `system_packages` and forbids `custom` and `manual_instructions`.
 - `class=manual` requires `manual_instructions` and forbids `custom` and `system_packages`.
 - `class=copy_from_host` is allowed by schema but must fail at runtime with “unsupported” until implemented.
+- `class=system_packages` requires an explicit `guest_detect.command` probe that deterministically checks the prerequisite binaries are available (see `decision_register.md` DR-0014).
 
 Notes:
 - Existing `guest_install.apt` is removed in v2. All OS-level package needs must be expressed as structured packages (DR-0007).
@@ -80,6 +82,8 @@ Example fragment inside `config/manager_hooks.yaml` (v2):
 version: 2
 managers:
   - name: pyenv
+    guest_detect:
+      command: "command -v gcc >/dev/null 2>&1 && command -v make >/dev/null 2>&1"
     guest_install:
       class: system_packages
       system_packages:
@@ -133,8 +137,11 @@ For each tool in scope:
 - `user_space`:
   - If missing in guest, run its `custom` recipe inside the world-deps environment.
 - `system_packages`:
-  - Do not attempt install.
-  - Mark as blocked and instruct to run `world deps provision`.
+  - If `guest_detect` reports present: treat as satisfied and do not block or fail due to this tool.
+  - If `guest_detect` reports missing:
+    - Do not attempt install.
+    - Print fixed guidance to run `substrate world deps provision`.
+    - Exit `4` after evaluating the full scope (same as other unmet prerequisites).
 - `manual`:
   - Do not attempt install.
   - Print manual instructions.

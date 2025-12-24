@@ -160,6 +160,9 @@ Expected:
 
 ### 3.1 macOS (Lima) and Windows (WSL): provisioning succeeds
 
+Precondition:
+- The active selection includes at least one tool whose `install_class` is `system_packages`.
+
 1) Run:
 ```bash
 substrate world deps provision
@@ -179,7 +182,26 @@ echo "exit=$?"
 Expected:
 - Exit `0` again (repair/upgrade is “re-run provision”).
 
-3) Follow-up:
+3) Concrete “becomes present” assertion (system_packages)
+
+This is the required proof that `system_packages` tools become satisfied after provisioning:
+- The tool’s `guest_detect.command` must succeed (per `decision_register.md` DR-0014), and `status` must show `guest.status="present"`.
+
+Run:
+```bash
+substrate world deps status --json | jq -e '
+  .tools[]
+  | select(.selected==true)
+  | select(.install_class=="system_packages")
+  | select(.guest.status=="present")
+' >/dev/null
+echo "exit=$?"
+```
+
+Expected:
+- Exit `0`.
+
+4) Follow-up:
 ```bash
 substrate world deps sync
 echo "exit=$?"
