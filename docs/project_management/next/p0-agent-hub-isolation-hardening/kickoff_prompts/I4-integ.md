@@ -1,4 +1,4 @@
-# Task I4-integ (Landlock optional layer) – INTEGRATION
+# Task I4-integ (Landlock additive hardening) – INTEGRATION
 
 ## Start Checklist (feat/p0-agent-hub-isolation-hardening)
 1. `git checkout feat/p0-agent-hub-isolation-hardening && git pull --ff-only`
@@ -28,4 +28,3 @@ make preflight
 2. Merge back to `feat/p0-agent-hub-isolation-hardening` (ff-only).
 3. Update `tasks.json` + `session_log.md` (END entry) and commit docs (`docs: finish I4-integ`).
 4. Remove worktree.
-

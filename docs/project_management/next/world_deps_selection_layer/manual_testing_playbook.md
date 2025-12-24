@@ -37,10 +37,14 @@ mkdir -p /tmp/substrate-wdl-smoke
 cd /tmp/substrate-wdl-smoke
 ```
 
-If the world-sync init gate is active (C0), initialize the workspace:
+5) Initialize the workspace (C0):
 ```bash
 substrate init
+echo "exit=$?"
 ```
+
+Expected:
+- Exit `0`.
 
 ---
 
@@ -148,11 +152,51 @@ Expected:
 ### 2.3 `manual` tools are never installed
 
 Precondition:
-- Add/select a known `manual` tool (depends on the manifest once WDL1 lands).
+- Add a manual tool via the user manifest overlay and select it.
+
+1) Create a manual tool entry in the user overlay (`~/.substrate/manager_hooks.local.yaml`):
+```bash
+cat > ~/.substrate/manager_hooks.local.yaml <<'YAML'
+version: 2
+managers:
+  - name: wdl-manual-demo
+    guest_detect:
+      command: "command -v wdl-manual-demo >/dev/null 2>&1"
+    guest_install:
+      class: manual
+      manual_instructions: |
+        Create a shim inside the world-deps prefix:
+          /var/lib/substrate/world-deps/bin/wdl-manual-demo
+        Example (run inside the world):
+          printf '#!/bin/sh\necho wdl-manual-demo\n' > /var/lib/substrate/world-deps/bin/wdl-manual-demo
+          chmod +x /var/lib/substrate/world-deps/bin/wdl-manual-demo
+YAML
+```
+
+2) Update the workspace selection to include the manual tool:
+```bash
+cat > .substrate/world-deps.selection.yaml <<'YAML'
+version: 1
+selected:
+  - nvm
+  - pyenv
+  - bun
+  - wdl-manual-demo
+YAML
+```
+
+3) Run:
+```bash
+substrate world deps status --json | jq '.tools[] | select(.name=="wdl-manual-demo")'
+```
+
+Expected:
+- `selected=true`
+- `install_class="manual"`
 
 Expected:
 - If the manual tool is missing in the guest, `sync` prints manual instructions, does not install, and exits `4`.
-- `install <manual-tool>` exits `4` and prints the manual instructions.
+- `install wdl-manual-demo` exits `4` and prints the manual instructions.
 
 ---
 
@@ -225,11 +269,26 @@ Expected:
 
 ---
 
-## 4) Full-cage compatibility spot check (when available)
+## 4) Full-cage compatibility spot check (Linux only)
 
-If I2/I3 full cage is available and the policy requests `world_fs.cage=full`:
+Preconditions:
+- Linux host with I2/I3 implemented and enabled.
+- A world backend is available (`substrate world doctor --json` reports the backend as available).
 
-1) Ensure full cage is active (exact mechanism depends on the hardening implementation).
+1) Request full cage via a per-workspace policy file (`.substrate-profile`):
+```bash
+cat > .substrate-profile <<'YAML'
+world_fs:
+  require_world: true
+  mode: writable
+  cage: full
+  read_allowlist:
+    - "**"
+  write_allowlist:
+    - "**"
+YAML
+```
+
 2) Run:
 ```bash
 substrate world deps sync
@@ -237,8 +296,8 @@ echo "exit=$?"
 ```
 
 Expected:
-- If `/var/lib/substrate/world-deps` is writable inside the cage, user-space installs succeed.
-- Otherwise `sync` exits `5` and prints the required mount/path guidance.
+- If the full cage is created successfully and `/var/lib/substrate/world-deps` is writable inside the cage, user-space installs succeed and exit code is `0`.
+- If full cage cannot be created, `sync` exits non-zero and prints an actionable error.
 
 ---
 

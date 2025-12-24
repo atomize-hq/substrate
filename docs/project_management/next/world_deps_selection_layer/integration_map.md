@@ -109,7 +109,7 @@ Explicitly not covered:
 
 ### Y0 (YAML settings migration)
 Dependency:
-- S0 introduces **new YAML runtime config** (`world-deps.selection.yaml`); this must not land before Y0 to avoid creating a mixed-format world of “settings are TOML but other runtime config is YAML”.
+- WDL slices depend on Y0. Runtime settings are YAML-only, and `world-deps.selection.yaml` is a YAML runtime artifact by design.
 
 Composition:
 - Selection config is **not** stored in `config.yaml` / `settings.yaml`; it is a dedicated YAML file by design (avoids mixing “world roots” and “tool selection” concerns).
@@ -128,7 +128,7 @@ Dependencies:
 - Workspace selection file is under `.substrate/`; C0 establishes `.substrate/` and sets precedent that it is a protected path.
 
 Composition:
-- World-deps should not store managed tooling inside the project tree; it uses `/var/lib/substrate/world-deps` to avoid sync interactions.
+- World-deps must not store managed tooling inside the project tree; it uses `/var/lib/substrate/world-deps` to avoid sync interactions.
 - If any world-deps artifacts appear in fs diffs, world-sync filters must treat `.substrate/` and `.substrate-git/` as protected, but **world-deps does not rely on those paths**.
 
 ---
@@ -155,4 +155,3 @@ Exact sequence entries (implemented in `docs/project_management/next/sequencing.
 - WDL0 (S0): Shell maintainers (CLI UX, selection parsing, exit codes)
 - WDL1 (S1): Shell + common manifest maintainers (schema + routing + manifest edits)
 - WDL2 (S2): Shell + installer/script maintainers (provision command + smoke coverage)
-

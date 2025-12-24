@@ -13,15 +13,13 @@
 
 Keep the same logical structure as today’s TOML (minimal behavior change; only the serialization format changes).
 
-Global config (`~/.substrate/config.yaml`) should be equivalent to the current `default_config_tables()`:
+Global config (`~/.substrate/config.yaml`) must be equivalent to the current `default_config_tables()`:
 ```yaml
 install:
   world_enabled: true
 world:
   anchor_mode: project   # project | follow-cwd | custom
   anchor_path: ""        # required when anchor_mode=custom
-  root_mode: project     # legacy alias (may be accepted short-term; see below)
-  root_path: ""          # legacy alias (may be accepted short-term; see below)
   caged: true
 ```
 
@@ -40,18 +38,19 @@ This is the current `resolve_world_root()` behavior in `crates/shell/src/executi
 remain consistent after the migration.
 
 Migration policy (greenfield, no dual-format support):
-- No dual-format parsing long-term.
-- Provide a clear failure message if TOML files exist but YAML is required (and a suggested migration path).
+- No dual-format parsing.
+- Provide a clear failure message if TOML files exist but YAML is required (and a concrete remediation path).
 
 Explicit requirements:
 - If `config.toml` or `settings.toml` exist, treat them as **unsupported** and fail with an actionable message.
+- YAML settings files must be validated strictly; unknown keys are a configuration error with an actionable message.
 - Message must include at least:
   - the unsupported file path(s),
   - the new YAML path(s),
-  - a suggested next step (e.g., delete old file(s) and run `substrate config init --force`, then reapply config via `substrate config set ...`).
-
-Note: if we decide to support a one-time conversion command later, it must live behind an explicit command
-(`substrate config migrate`) and not be “silent dual-format support”.
+  - exact next steps:
+    - delete the TOML files
+    - run `substrate config init --force`
+    - reapply settings via `substrate config set ...`
 
 ## Acceptance
 - All existing commands that read settings work with YAML equivalents.

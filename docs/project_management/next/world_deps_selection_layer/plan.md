@@ -4,8 +4,8 @@
 `substrate world deps` must become:
 - selection-driven (no surprise installs) and no-op when unconfigured (ADR-0001 D1),
 - explicit about what is installable at runtime vs what requires provisioning (`system_packages`) (ADR-0002),
-- compatible with upcoming full-cage hardening (pivot_root + optional Landlock) (I2–I4),
-- consistent across Linux, macOS (Lima), and Windows (WSL) where technically possible (“worlds should feel the same”).
+- compatible with upcoming full-cage hardening (pivot_root + Landlock additive hardening) (I2–I4),
+- consistent across Linux, macOS (Lima), and Windows (WSL) where technically possible (“worlds must feel the same”).
 
 Hard constraints:
 - YAML-only runtime config (Y0); no new TOML.
@@ -78,5 +78,4 @@ Final sequencing changes are recorded in:
 - Unconfigured selection → no-op, exit 0, with one crisp instruction line.
 - Errors are explicit and actionable, including platform-specific “why” and “what to do next”.
 - Install classes are visible in `status` output (human + JSON).
-- “Worlds should feel the same”: if a workflow cannot work on a platform, it must fail with an explicit, actionable error (not silent fallback).
-
+- “Worlds must feel the same”: if a workflow cannot work on a platform, it must fail with an explicit, actionable error (not silent fallback).

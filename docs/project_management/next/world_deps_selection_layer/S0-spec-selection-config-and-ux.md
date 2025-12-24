@@ -10,7 +10,7 @@ This spec is **greenfield**:
 ## Non-negotiable requirements
 - Selection is required; missing selection → **no-op** for `status|sync|install|provision`, exit 0, no side effects.
 - YAML-only runtime config (no TOML surfaces; requires Y0 landed).
-- Worlds should feel the same across platforms: where technically possible the same workflow succeeds; otherwise it fails with explicit, actionable errors.
+- Worlds must feel the same across platforms: where technically possible the same workflow succeeds; otherwise it fails with explicit, actionable errors.
 - `--all` semantics are explicit and consistent across subcommands (see DR-0005).
 
 ---
@@ -31,7 +31,7 @@ Precedence:
 
 ### Related manifests (unchanged by S0; used by later slices)
 - Canonical inventory: `config/manager_hooks.yaml` (+ `~/.substrate/manager_hooks.local.yaml`)
-- Installed overlay: `scripts/substrate/world-deps.yaml` (or installed `<prefix>/…/config/world-deps.yaml` depending on installer)
+- Installed overlay: `scripts/substrate/world-deps.yaml`
 - User overlay: `~/.substrate/world-deps.local.yaml`
 
 ---
@@ -205,11 +205,11 @@ All world-deps subcommands use these exit codes:
 - `0`: success, including intentional “no-op” due to missing selection
 - `2`: configuration / usage error (invalid YAML, unknown tool name, schema mismatch)
 - `3`: world backend unavailable when required for the operation (e.g., `sync/install/provision`)
-- `4`: operation could not complete due to unmet prerequisites (e.g., `system_packages` required but not provisioned/supported)
+- `4`: operation did not complete due to unmet prerequisites (e.g., `system_packages` required but not provisioned/supported)
 - `5`: hardening/cage prevents the operation (policy/cage conflict; requires explicit operator action)
 
 Notes:
-- `status` should avoid returning non-zero for backend unavailability; instead surface `guest.status=unavailable` so diagnostics remain usable in scripts.
+- `status` must avoid returning non-zero for backend unavailability; instead surface `guest.status=unavailable` so diagnostics remain usable in scripts.
 - `sync/install/provision` are “action” commands and must return non-zero when they cannot make progress due to backend/prereq/hardening constraints.
 
 ---

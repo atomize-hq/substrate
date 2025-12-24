@@ -10,7 +10,7 @@
       "worktree": "wt/wdl0-selection-code",
       "integration_task": "WDL0-integ",
       "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL0-code.md",
-      "depends_on": [],
+      "depends_on": ["Y0-integ", "C1-integ"],
       "concurrent_with": ["WDL0-test"]
     },
     {
@@ -23,7 +23,7 @@
       "worktree": "wt/wdl0-selection-test",
       "integration_task": "WDL0-integ",
       "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL0-test.md",
-      "depends_on": [],
+      "depends_on": ["Y0-integ", "C1-integ"],
       "concurrent_with": ["WDL0-code"]
     },
     {
@@ -119,4 +119,3 @@
     }
   ]
 }
-

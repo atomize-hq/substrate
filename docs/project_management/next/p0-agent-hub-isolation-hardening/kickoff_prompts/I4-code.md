@@ -1,4 +1,4 @@
-# Task I4-code (Landlock optional layer) – CODE
+# Task I4-code (Landlock additive hardening) – CODE
 
 ## Start Checklist (feat/p0-agent-hub-isolation-hardening)
 1. `git checkout feat/p0-agent-hub-isolation-hardening && git pull --ff-only`
@@ -16,7 +16,7 @@
 
 ## Scope & Guardrails
 - Production code only (no tests).
-- Add Landlock detection + enforcement as optional layer/fallback per spec; surface in doctor output.
+- Add Landlock detection + enforcement as additive hardening per spec; surface in doctor output.
 
 ## Suggested Commands
 ```
@@ -30,4 +30,3 @@ cargo clippy --workspace --all-targets -- -D warnings
 3. Merge back to `feat/p0-agent-hub-isolation-hardening` (ff-only).
 4. Update `tasks.json` + `session_log.md` (END entry) and commit docs (`docs: finish I4-code`).
 5. Remove worktree.
-

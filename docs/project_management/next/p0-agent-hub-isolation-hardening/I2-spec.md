@@ -7,16 +7,18 @@
 - Minimum viable “full cage” rootfs:
   - project root mounted at a stable location (e.g., `/project`)
   - required system mounts for typical dev tools:
-    - `/usr`, `/bin`, `/lib*`, `/etc` as read-only binds (or documented minimal set)
+    - `/usr`, `/bin`, `/lib`, `/lib64`, `/etc` as read-only bind mounts
   - `/proc` mounted fresh
-  - `/tmp` writable (tmpfs or bind)
-  - minimal `/dev` requirements documented (or bind `/dev` read-only if needed)
+  - `/tmp` mounted as tmpfs (writable)
+  - `/dev` bind-mounted read-only
+  - `/var/lib/substrate/world-deps` bind-mounted read-write
 - Enforce `world_fs.mode`:
   - `read_only` must prevent writes to the project (and to any other non-whitelisted paths).
-- Enforce allowlists (if present in schema) at least for project writes (full allowlist enforcement may be Landlock-based in I4; this spec must be explicit about what is enforced by pivot_root alone).
+- Enforce allowlists for the project mount:
+  - Mount the project as read-only by default.
+  - For each `world_fs.write_allowlist` entry that resolves under the project root, bind-mount the matching path as writable inside the cage.
 - Capability/privilege detection:
-  - If full cage is required and cannot be created → fail closed with a clear diagnostic.
-  - If full cage is optional and cannot be created → degrade with a warning (only if policy allows).
+  - If `world_fs.cage=full` cannot be created, Substrate must fail closed with a clear diagnostic (I1).
 
 ## Acceptance
 - With `world_fs.cage=full`, commands cannot write to or read from arbitrary host paths outside the allowed mounts.
@@ -26,4 +28,3 @@
 ## Out of Scope
 - PTY/interactive parity — I3.
 - Landlock allowlist enforcement — I4.
-

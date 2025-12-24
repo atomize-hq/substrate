@@ -4,7 +4,7 @@ This log records planning and execution sessions for the `world_deps_selection_l
 
 Rules:
 - Log entries are append-only.
-- Record commands run (for verification) and any deviations from the spec (should be rare; prefer updating the spec instead).
+- Record commands run (for verification) and any deviations from the spec (must be rare; prefer updating the spec instead).
 
 ---
 
@@ -39,4 +39,3 @@ Rules:
 - Install classes are embedded into the layered manager manifest schema (no secondary mapping file).
 - `system_packages` are represented as structured package lists (apt-first), installed only via explicit `world deps provision` on Lima/WSL; Linux host is manual-only.
 - User-space installs live under `/var/lib/substrate/world-deps` and must remain compatible with full cage.
-

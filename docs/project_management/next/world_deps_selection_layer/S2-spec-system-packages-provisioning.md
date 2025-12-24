@@ -86,8 +86,8 @@ Human output:
   - whether `--dry-run` is active
   - on supported platforms: a summary line on success
 
-JSON output (future-proofing):
-- `provision` should support `--json` once JSON mode lands; until then, it may be human-only.
+JSON output:
+- `provision` does not support `--json` in this track.
 
 ---
 
@@ -144,9 +144,9 @@ Next: substrate world deps sync
 
 ---
 
-## Automation hooks (recommended; must be automatable)
+## Automation hooks (required)
 
-## Acceptance matrix (automatable)
+## Acceptance matrix (automatable; required)
 
 Each row must be runnable by a script (no manual interpretation beyond viewing logs). “Pass checks” are concrete assertions.
 
@@ -158,11 +158,11 @@ Each row must be runnable by a script (no manual interpretation beyond viewing l
 | D: Sync blocked until provision | ✅ | ✅ | ✅ | With a selection including a `system_packages` tool: `sync` exits `4` and references `provision` |
 | E: Sync succeeds after provision | N/A (manual deps) | ✅ | ✅ | After `provision`, `sync` no longer reports `system_packages` tools as blocked (tool-specific state depends on class) |
 
-Automation approach (preferred):
-- Extend existing scripts rather than inventing a bespoke harness:
+Automation approach (required):
+- Extend existing scripts:
   - macOS: `scripts/mac/smoke.sh` gains a “world-deps selection/provision/sync” section.
   - Windows: `scripts/windows/wsl-smoke.ps1` gains a similar section.
-  - Linux: extend `scripts/linux/world-socket-verify.sh` or add `scripts/linux/world-deps-smoke.sh` invoked by CI to assert the unsupported Linux `provision` failure mode and exit code.
+  - Linux: extend `scripts/linux/world-socket-verify.sh` to assert the unsupported Linux `provision` failure mode and exit code.
 
 Add smoke coverage by extending existing scripts:
 - macOS: extend `scripts/mac/smoke.sh` to:
@@ -170,7 +170,7 @@ Add smoke coverage by extending existing scripts:
   - run `substrate world deps provision` (expect success),
   - run `substrate world deps sync` (expect user_space installs succeed and system_packages tools are no longer blocked).
 - Windows: extend `scripts/windows/wsl-smoke.ps1` similarly.
-- Linux: extend `scripts/linux/world-socket-verify.sh` (or add a new `scripts/linux/world-deps-smoke.sh` invoked by CI) to assert:
+- Linux: extend `scripts/linux/world-socket-verify.sh` to assert:
   - `provision` fails with exit `4` and prints manual guidance.
 
 Unit/integration tests (Rust):
@@ -183,4 +183,4 @@ Unit/integration tests (Rust):
 ## Out of scope (S2)
 - Supporting non-apt package managers in guests.
 - Any privileged host package mutation flows on Linux.
-- Implementing JSON output for `provision` prior to JSON mode track.
+- Implementing JSON output for `provision`.

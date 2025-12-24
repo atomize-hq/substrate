@@ -40,7 +40,7 @@ Triads are numbered `I0..I5` (Isolation track). Each triad has a `*-spec.md` and
 2) **I1 — Fail-closed semantics (no host fallback when required)**
 3) **I2 — Full cage (non-PTY): mount namespace + pivot_root**
 4) **I3 — Full cage (PTY): parity with non-PTY**
-5) **I4 — Landlock (optional layer / fallback)**
+5) **I4 — Landlock (additive hardening)**
 6) **I5 — Docs alignment + verification tooling**
 
 ## Start Checklist (all tasks)
@@ -66,4 +66,3 @@ Triads are numbered `I0..I5` (Isolation track). Each triad has a `*-spec.md` and
 2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make preflight`.
 3. Commit integration changes; fast-forward into orchestration branch.
 4. Update `tasks.json` + `session_log.md`; commit docs; remove worktree.
-

@@ -17,7 +17,7 @@
 ## Scope & Guardrails
 - Production code only (no tests).
 - Implement required-world routing semantics (no host fallback) for both non-PTY and PTY paths.
-- Keep “optional world” behavior unchanged (warn once + host fallback).
+- Keep `world_fs.require_world=false` behavior unchanged (warn once + host fallback).
 
 ## Suggested Commands
 ```
@@ -31,4 +31,3 @@ cargo clippy --workspace --all-targets -- -D warnings
 3. Merge back to `feat/p0-agent-hub-isolation-hardening` (ff-only).
 4. Update `tasks.json` + `session_log.md` (END entry) and commit docs (`docs: finish I1-code`).
 5. Remove worktree.
-

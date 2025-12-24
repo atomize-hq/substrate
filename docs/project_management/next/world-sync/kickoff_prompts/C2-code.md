@@ -13,7 +13,7 @@
 
 ## Requirements
 - Implement `substrate sync` world→host path for non-PTY, respecting conflict policy, filters, size guard, protected paths, and direction handling per spec.
-- `from_host` path should error clearly; `both` runs world→host then reports host→world unimplemented.
+- With `sync.direction=from_host` and `sync.direction=both`, `substrate sync` must exit `4` with a clear “not implemented until C5” message and must not mutate host state.
 - No tests added/modified.
 - Not required to run unit/integration suites; do run `cargo fmt` and `cargo clippy --workspace --all-targets -- -D warnings`. Manually sanity-check command behavior.
 

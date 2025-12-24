@@ -89,7 +89,7 @@
       "worktree": "wt/ws-c2-sync-code",
       "integration_task": "C2-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C2-code.md",
-      "depends_on": ["C1-integ"],
+      "depends_on": ["WDL2-integ"],
       "concurrent_with": ["C2-test"]
     },
     {
@@ -102,7 +102,7 @@
       "worktree": "wt/ws-c2-sync-test",
       "integration_task": "C2-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C2-test.md",
-      "depends_on": ["C1-integ"],
+      "depends_on": ["WDL2-integ"],
       "concurrent_with": ["C2-code"]
     },
     {

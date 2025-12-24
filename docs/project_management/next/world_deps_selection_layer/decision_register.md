@@ -4,7 +4,7 @@ This is the single source of truth for **all** architectural decisions required 
 
 ## Non-negotiable rules
 - Every decision below has **exactly two** viable options (Option A / Option B).
-- Each decision ends with **one** selected option (no TBDs, no “optional” framing).
+- Each decision ends with **one** selected option (no TBDs, no “non-required” framing).
 - Each option includes: pros, cons, cascading implications, risks, unlocks, and quick wins.
 
 Related docs (authoritative inputs):
@@ -113,11 +113,11 @@ Specs (this triad):
 - **Cons:**
   - Slightly longer filename.
 - **Cascading implications:**
-  - CLI/docs should consistently refer to this name.
+  - CLI/docs must consistently refer to this name.
 - **Risks:**
   - Minimal.
 - **Unlocks:**
-  - Enables future additional surfaces (`world-deps.classes.yaml`, etc.) without confusion.
+  - Enables future additional surfaces (`world-deps.classes.yaml` and future companion manifests) without confusion.
 - **Quick wins / low-hanging fruit:**
   - Cleaner error messages and support instructions.
 
@@ -204,7 +204,7 @@ Specs (this triad):
   - CLI must always show “how to configure selection” in this state.
   - JSON output must represent “not configured” explicitly (not as empty tool list only).
 - **Risks:**
-  - Users might miss that nothing happened if output is too subtle; mitigated via a single prominent line.
+  - Users can miss that nothing happened if output is too subtle; mitigated via a single prominent line.
 - **Unlocks:**
   - Enables safe auto-invocation by tools/agents without causing system changes.
 - **Quick wins / low-hanging fruit:**
@@ -386,7 +386,7 @@ Specs (this triad):
   - Faster initial migration, but at unacceptable security cost.
 
 **Recommendation**
-- **Selected:** Option A — Structured lists (`system_packages.apt: [..]`, etc.)
+- **Selected:** Option A — Structured lists (`system_packages.apt: [..]`)
 - **Rationale (crisp):** It is the only safe, reviewable representation aligned with an agent-hub threat model and hardening.
 
 **Follow-up tasks (explicit)**
@@ -487,7 +487,7 @@ Specs (this triad):
 - **Cascading implications:**
   - Requires script plumbing to read selection files and compute packages—messy and error-prone.
 - **Risks:**
-  - Encourages per-platform ad-hoc behavior; violates “worlds should feel the same”.
+  - Encourages per-platform ad-hoc behavior; violates “worlds must feel the same”.
 - **Unlocks:**
   - None that can’t be achieved with the CLI.
 - **Quick wins / low-hanging fruit:**
@@ -574,7 +574,7 @@ Specs (this triad):
 - **Cascading implications:**
   - Future JSON mode would still need an error taxonomy; pushing this later creates churn.
 - **Risks:**
-  - “Worlds should feel the same” degrades when automation can’t tell what failed.
+  - “Worlds must feel the same” degrades when automation can’t tell what failed.
 - **Unlocks:**
   - None.
 - **Quick wins / low-hanging fruit:**
@@ -590,7 +590,7 @@ Specs (this triad):
 - **Cascading implications:**
   - Specs must define when we warn+continue vs fail-closed, and codes for each.
 - **Risks:**
-  - If poorly documented, could confuse; mitigated by including the mapping in `S0` and in `status --json`.
+  - If poorly documented, can confuse; mitigated by including the mapping in `S0` and in `status --json`.
 - **Unlocks:**
   - Automatable acceptance matrix (see `S2` automation section).
 - **Quick wins / low-hanging fruit:**
@@ -702,7 +702,7 @@ Specs (this triad):
 
 **Recommendation**
 - **Selected:** Option B — No-op + explicit message
-- **Rationale (crisp):** An empty selection is valid configuration and should not force backend work; “do nothing but explain” is the lowest-risk, most predictable contract.
+- **Rationale (crisp):** An empty selection is valid configuration and must not force backend work; “do nothing but explain” is the lowest-risk, most predictable contract.
 
 **Follow-up tasks (explicit)**
 - Update `S0` to explicitly state that `sync/provision` make **no world-agent calls** when selection is empty (unless `--all` is used).
@@ -731,7 +731,7 @@ Specs (this triad):
 - **Cascading implications:**
   - `system_packages` class would need per-provider detection logic and explicit behavior on unsupported guests.
 - **Risks:**
-  - Drifts toward ad-hoc per-platform behavior, reducing “worlds should feel the same”.
+  - Drifts toward ad-hoc per-platform behavior, reducing “worlds must feel the same”.
 - **Unlocks:**
   - Precise “package parity” checks in the future (if we ever need them).
 - **Quick wins / low-hanging fruit:**
@@ -743,7 +743,7 @@ Specs (this triad):
   - Simple to implement and reason about; no package-manager coupling.
   - Makes `system_packages` satisfaction align with real-world needs (binaries needed by recipes).
 - **Cons:**
-  - Indirect: a package could be installed but the chosen probe might not reflect it if misconfigured.
+  - Indirect: a package can be installed but the chosen probe may not reflect it if misconfigured.
 - **Cascading implications:**
   - `system_packages` tools must define `guest_detect.command` explicitly (no default).
   - Manifest review must ensure the probe covers the packages’ intended effect.

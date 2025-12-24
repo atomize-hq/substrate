@@ -1,4 +1,4 @@
-# Task I4-test (Landlock optional layer) – TEST
+# Task I4-test (Landlock additive hardening) – TEST
 
 ## Start Checklist (feat/p0-agent-hub-isolation-hardening)
 1. `git checkout feat/p0-agent-hub-isolation-hardening && git pull --ff-only`
@@ -30,4 +30,3 @@ cargo test -p world --tests -- --nocapture
 3. Merge back to `feat/p0-agent-hub-isolation-hardening` (ff-only).
 4. Update `tasks.json` + `session_log.md` (END entry) and commit docs (`docs: finish I4-test`).
 5. Remove worktree.
-

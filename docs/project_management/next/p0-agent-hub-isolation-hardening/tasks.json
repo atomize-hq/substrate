@@ -136,7 +136,7 @@
       ],
       "acceptance_criteria": [
         "When world is required and backend unavailable, shell refuses to execute on host with a clear error.",
-        "When world is optional and backend unavailable, existing warn-once host fallback remains."
+        "When `world_fs.require_world=false` and backend unavailable, existing warn-once host fallback remains."
       ],
       "start_checklist": [
         "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
@@ -175,7 +175,7 @@
         "docs/WORLD.md"
       ],
       "acceptance_criteria": [
-        "Tests cover: required world + backend unavailable -> error; optional world + backend unavailable -> warning + fallback."
+        "Tests cover: `world_fs.require_world=true` + backend unavailable -> error; `world_fs.require_world=false` + backend unavailable -> warning + fallback."
       ],
       "start_checklist": [
         "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
@@ -483,7 +483,7 @@
 
     {
       "id": "I4-code",
-      "name": "Landlock optional layer (code)",
+      "name": "Landlock additive hardening (code)",
       "type": "code",
       "phase": "Agent Hub Isolation",
       "status": "pending",
@@ -522,7 +522,7 @@
     },
     {
       "id": "I4-test",
-      "name": "Landlock optional layer (test)",
+      "name": "Landlock additive hardening (test)",
       "type": "test",
       "phase": "Agent Hub Isolation",
       "status": "pending",
@@ -560,7 +560,7 @@
     },
     {
       "id": "I4-integ",
-      "name": "Landlock optional layer (integration)",
+      "name": "Landlock additive hardening (integration)",
       "type": "integration",
       "phase": "Agent Hub Isolation",
       "status": "pending",
@@ -722,4 +722,3 @@
     }
   ]
 }
-

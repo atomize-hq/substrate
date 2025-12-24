@@ -19,7 +19,7 @@ This is primarily a refactor of:
 - file naming (`config.toml` → `config.yaml`, `settings.toml` → `settings.yaml`)
 - serialization/deserialization (TOML → YAML)
 
-The runtime precedence model and semantics should remain unchanged (see `Y0-spec.md`).
+The runtime precedence model and semantics must remain unchanged (see `Y0-spec.md`).
 
 ## Guardrails
 

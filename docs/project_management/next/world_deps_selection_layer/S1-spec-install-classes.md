@@ -34,7 +34,7 @@ This spec is greenfield:
 - `status` shows explicit instructions; `sync` reports as blocked; `install` fails with actionable guidance.
 
 ### `copy_from_host` (reserved; not implemented in Increment 1)
-- Schema may allow the value, but behavior is “unsupported” (exit `4`) until implemented.
+- Schema allows the value, but behavior is “unsupported” (exit `4`) until implemented.
 
 ---
 
