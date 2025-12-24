@@ -1,138 +1,234 @@
-# World Deps Selection Layer — Manual Validation Playbook
+# World Deps Selection Layer — Manual Testing Playbook
 
-This document is the human-run validation checklist for the “world-deps selection layer” and install-class routing described in ADR-0002.
+This is the human-run validation checklist for the selection-driven world-deps model and ADR-0002 install-class + provisioning routing.
 
-This playbook is intended to be:
-- end-to-end (install → configure selection → status → sync),
-- cross-platform (Linux/macOS Lima/Windows WSL where applicable),
-- explicit about expected behavior (including failures),
-- and easy to copy into PR descriptions as testing evidence.
+Authoritative specs:
+- `docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`
+- `docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md`
+- `docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
+
+Goal:
+- Validate end-to-end behavior across Linux, macOS (Lima), and Windows (WSL) where technically possible.
+- Where a journey is not supported, validate explicit, actionable failure messages and exit codes.
+
+---
 
 ## 0) Preconditions (all platforms)
 
-1) Install Substrate and ensure `substrate` is on PATH:
-   ```bash
-   substrate --version
-   which substrate
-   ```
-2) Ensure the world backend is healthy:
-   ```bash
-   substrate world doctor --json | jq .
-   ```
+1) Verify the CLI:
+```bash
+substrate --version
+which substrate
+```
+
+2) Capture world readiness:
+```bash
+substrate world doctor --json | jq .
+```
+
 3) Capture baseline health:
-   ```bash
-   substrate health --json | jq .
-   ```
+```bash
+substrate health --json | jq .
+```
 
-## 1) Selection gating (required behavior)
+4) Create a clean test workspace:
+```bash
+mkdir -p /tmp/substrate-wdl-smoke
+cd /tmp/substrate-wdl-smoke
+```
 
-### 1.1 Unconfigured selection is a no-op with actionable guidance
+If the world-sync init gate is active (C0), initialize the workspace:
+```bash
+substrate init
+```
 
-1) Confirm selection is absent (workspace + global as specified by the spec):
-   - Remove/rename the selection file(s) for the test workspace.
+---
+
+## 1) Selection gating (required)
+
+### 1.1 Unconfigured selection is a no-op (all subcommands)
+
+1) Ensure selection files are absent:
+```bash
+rm -f .substrate/world-deps.selection.yaml
+rm -f ~/.substrate/world-deps.selection.yaml
+```
+
 2) Run:
-   ```bash
-   substrate world deps status
-   substrate world deps sync
-   ```
-3) Expectation:
-   - No installs performed.
-   - Clear guidance on how to configure selection.
-   - Exit codes match the spec (warn vs fail-closed semantics).
+```bash
+substrate world deps status
+echo "exit=$?"
+substrate world deps sync
+echo "exit=$?"
+substrate world deps install nvm
+echo "exit=$?"
+substrate world deps provision
+echo "exit=$?"
+```
 
-### 1.2 Configured selection drives the tool set
+Expected:
+- Each command prints one prominent “not configured (selection file missing)” line plus next steps.
+- Each command exits `0`.
+- No guest installs occur and no provisioning attempts occur.
 
-1) Configure a minimal selection (example path per spec).
+### 1.2 Configure selection (workspace) and verify precedence output
+
+1) Create a minimal workspace selection:
+```bash
+mkdir -p .substrate
+cat > .substrate/world-deps.selection.yaml <<'YAML'
+version: 1
+selected:
+  - nvm
+  - pyenv
+  - bun
+YAML
+```
+
 2) Run:
-   ```bash
-   substrate world deps status --json | jq .
-   ```
-3) Expectation:
-   - Only selected tools are considered “in scope” for status/sync.
-   - Output explicitly lists unselected-but-detected tools (if that’s part of the UX spec) as “not selected”.
+```bash
+substrate world deps status --json | jq '.selection'
+```
 
-## 2) Install class enforcement (required behavior)
+Expected:
+- `configured=true`
+- `active_scope="workspace"`
+- `active_path=".substrate/world-deps.selection.yaml"`
+
+### 1.3 `--all` ignores selection (discovery + debugging)
+
+1) Run:
+```bash
+substrate world deps status --all --json | jq '.selection.ignored_due_to_all'
+```
+
+Expected:
+- `ignored_due_to_all=true`
+- Tool scope expands to inventory (tools list includes entries not in `selected`).
+
+---
+
+## 2) Install class enforcement (required)
 
 ### 2.1 `user_space` installs succeed (prefix writable)
 
-1) Choose a tool declared as `user_space` in the inventory (e.g., a curl/tarball installer into `SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR`).
+Precondition:
+- Pick at least one selected tool that is `user_space` (expected: `bun`).
+
+1) Run:
+```bash
+substrate world deps sync
+echo "exit=$?"
+substrate world deps status --json | jq '.tools[] | select(.name=="bun")'
+```
+
+Expected:
+- Exit `0` if all in-scope tools are satisfied (per S1).
+- `bun` transitions to guest `present`.
+- No runtime OS package installation is attempted.
+
+### 2.2 `system_packages` never installs at runtime (must route to provisioning)
+
+Precondition:
+- Pick at least one selected tool that is `system_packages` (expected: `pyenv`).
+
+1) Run:
+```bash
+substrate world deps sync
+echo "exit=$?"
+substrate world deps status --json | jq '.tools[] | select(.name=="pyenv")'
+```
+
+Expected:
+- `sync` does not run any OS package manager.
+- `pyenv` remains blocked and output references:
+  - `substrate world deps provision`
+- Exit code reflects “unmet prerequisites” (`4`) if any selected `system_packages` tool is not satisfied.
+
+### 2.3 `manual` tools are never installed
+
+Precondition:
+- Add/select a known `manual` tool (depends on the manifest once WDL1 lands).
+
+Expected:
+- `sync` prints manual instructions, does not install, and exits non-zero if manual tools are considered “unsatisfied” for the journey (per S1).
+- `install <manual-tool>` exits `4` and prints the manual instructions.
+
+---
+
+## 3) Provisioning system packages (`world deps provision`)
+
+### 3.1 macOS (Lima) and Windows (WSL): provisioning succeeds
+
+1) Run:
+```bash
+substrate world deps provision
+echo "exit=$?"
+```
+
+Expected:
+- Exit `0`.
+- Output lists computed apt packages and confirms success.
+
+2) Re-run (idempotency):
+```bash
+substrate world deps provision
+echo "exit=$?"
+```
+
+Expected:
+- Exit `0` again (repair/upgrade is “re-run provision”).
+
+3) Follow-up:
+```bash
+substrate world deps sync
+echo "exit=$?"
+```
+
+Expected:
+- Tools that were blocked on `system_packages` can now proceed (depending on their class/routing rules).
+
+### 3.2 Linux host backend: provisioning is explicitly unsupported
+
+1) Run:
+```bash
+substrate world deps provision
+echo "exit=$?"
+```
+
+Expected:
+- Exit `4`.
+- Message: “unsupported on Linux host backend (would mutate host system packages)”.
+- Output includes the required package list and manual install guidance.
+
+---
+
+## 4) Full-cage compatibility spot check (when available)
+
+If I2/I3 full cage is available and the policy requests `world_fs.cage=full`:
+
+1) Ensure full cage is active (exact mechanism depends on the hardening implementation).
 2) Run:
-   ```bash
-   substrate world deps sync
-   substrate world deps status --json | jq .
-   ```
-3) Expectation:
-   - Tool transitions to “guest=present” (or equivalent status).
-   - No writes to OS package databases.
+```bash
+substrate world deps sync
+echo "exit=$?"
+```
 
-### 2.2 `system_packages` never installs at runtime via world-deps
+Expected:
+- If `/var/lib/substrate/world-deps` is writable inside the cage, user-space installs succeed.
+- Otherwise `sync` exits `5` and prints the required mount/path guidance.
 
-1) Choose a tool declared as `system_packages`.
-2) Run:
-   ```bash
-   substrate world deps sync
-   ```
-3) Expectation:
-   - No attempt to call `apt`, `dnf`, `brew`, etc. as part of world-deps sync.
-   - The CLI either:
-     - routes you to the explicit provisioning-time command, or
-     - fails with an explicit, actionable error if provisioning is unsupported on the platform.
+---
 
-### 2.3 `manual` installs never run
+## 5) Evidence to capture in PRs (copy/paste checklist)
 
-1) Choose a tool declared as `manual`.
-2) Run:
-   ```bash
-   substrate world deps sync
-   ```
-3) Expectation:
-   - No install attempt.
-   - Output contains explicit manual steps and where to put the resulting binaries so Substrate detects them.
-
-## 3) Platform-specific parity checks
-
-### 3.1 macOS (Lima guest)
-
-1) Verify Lima provisioning state:
-   ```bash
-   substrate world doctor --json | jq '.lima'
-   ```
-2) Run the selection + sync flows from sections 1–2.
-3) Expectation:
-   - `system_packages` behavior is handled via the provisioning-time route; no runtime apt/dpkg mutation from world-deps.
-   - Status output is consistent with Linux/WSL for the same selection.
-
-### 3.2 Linux (host world-agent)
-
-1) Run the selection + sync flows from sections 1–2.
-2) Expectation:
-   - Host OS package mutation is not performed by default.
-   - Any opt-in flow is explicit and aligned with policy/approval requirements.
-
-### 3.3 Windows (WSL)
-
-1) Warm/verify WSL backend per the WSL docs/scripts.
-2) Run the selection + sync flows from sections 1–2.
-3) Expectation:
-   - Same UX semantics as macOS/Linux for selection gating and install classes.
-
-## 4) Trace / logging expectations (spot checks)
-
-1) Run one successful `world deps sync` and one `system_packages`-blocked attempt.
-2) Inspect trace for clear, non-sensitive status fields:
-   ```bash
-   tail -n 50 ~/.substrate/trace.jsonl | jq .
-   ```
-3) Expectation:
-   - Install-class decision and routing are observable (at least in CLI output; trace fields per spec).
-   - No secrets recorded.
-
-## 5) Evidence to capture in PRs (copy/paste)
-
-- `substrate world doctor --json` (platform-specific section)
-- `substrate world deps status --json`
-- The outputs from:
-  - unconfigured selection no-op
-  - successful `user_space` install
-  - `system_packages` runtime block + explicit routing guidance
+- `substrate world doctor --json` (platform-specific proof of backend availability)
+- `substrate world deps status --json | jq '.selection'`
+- `substrate world deps status --json | jq '.tools'`
+- Logs/outputs for:
+  - unconfigured selection no-op (`status`, `sync`, `install`, `provision`)
+  - `--all` ignoring selection
+  - `system_packages` runtime block + provisioning route
+  - provisioning success (Lima/WSL) or explicit unsupported error (Linux)
+  - full-cage spot check (if applicable)
 

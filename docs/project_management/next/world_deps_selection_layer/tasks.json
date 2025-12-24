@@ -1,0 +1,122 @@
+{
+  "tasks": [
+    {
+      "id": "WDL0-code",
+      "name": "Selection config + UX (code)",
+      "type": "code",
+      "phase": "World Deps Selection Layer",
+      "status": "pending",
+      "description": "Implement YAML selection config loading, precedence, `--all` semantics, CLI UX, and exit codes per S0 (production code only).",
+      "worktree": "wt/wdl0-selection-code",
+      "integration_task": "WDL0-integ",
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL0-code.md",
+      "depends_on": [],
+      "concurrent_with": ["WDL0-test"]
+    },
+    {
+      "id": "WDL0-test",
+      "name": "Selection config + UX (test)",
+      "type": "test",
+      "phase": "World Deps Selection Layer",
+      "status": "pending",
+      "description": "Add tests for selection parsing/precedence, tool scoping, and exit-code taxonomy per S0.",
+      "worktree": "wt/wdl0-selection-test",
+      "integration_task": "WDL0-integ",
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL0-test.md",
+      "depends_on": [],
+      "concurrent_with": ["WDL0-code"]
+    },
+    {
+      "id": "WDL0-integ",
+      "name": "Selection config + UX (integration)",
+      "type": "integration",
+      "phase": "World Deps Selection Layer",
+      "status": "pending",
+      "description": "Merge WDL0 code+tests, reconcile to S0, and run fmt/clippy/tests/preflight.",
+      "worktree": "wt/wdl0-selection-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL0-integ.md",
+      "depends_on": ["WDL0-code", "WDL0-test"],
+      "concurrent_with": []
+    },
+    {
+      "id": "WDL1-code",
+      "name": "Install classes (code)",
+      "type": "code",
+      "phase": "World Deps Selection Layer",
+      "status": "pending",
+      "description": "Extend manifest schema to declare install class metadata and enforce class routing in world-deps status/sync/install per S1.",
+      "worktree": "wt/wdl1-classes-code",
+      "integration_task": "WDL1-integ",
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL1-code.md",
+      "depends_on": ["WDL0-integ"],
+      "concurrent_with": ["WDL1-test"]
+    },
+    {
+      "id": "WDL1-test",
+      "name": "Install classes (test)",
+      "type": "test",
+      "phase": "World Deps Selection Layer",
+      "status": "pending",
+      "description": "Add manifest validation and routing tests for install classes per S1.",
+      "worktree": "wt/wdl1-classes-test",
+      "integration_task": "WDL1-integ",
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL1-test.md",
+      "depends_on": ["WDL0-integ"],
+      "concurrent_with": ["WDL1-code"]
+    },
+    {
+      "id": "WDL1-integ",
+      "name": "Install classes (integration)",
+      "type": "integration",
+      "phase": "World Deps Selection Layer",
+      "status": "pending",
+      "description": "Merge WDL1 code+tests, reconcile to S1, and run fmt/clippy/tests/preflight.",
+      "worktree": "wt/wdl1-classes-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL1-integ.md",
+      "depends_on": ["WDL1-code", "WDL1-test"],
+      "concurrent_with": []
+    },
+    {
+      "id": "WDL2-code",
+      "name": "System packages provisioning (code)",
+      "type": "code",
+      "phase": "World Deps Selection Layer",
+      "status": "pending",
+      "description": "Implement `substrate world deps provision` (apt-only in guests) and platform gating per S2; update platform smoke scripts accordingly (production code + scripts only).",
+      "worktree": "wt/wdl2-provision-code",
+      "integration_task": "WDL2-integ",
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL2-code.md",
+      "depends_on": ["WDL1-integ"],
+      "concurrent_with": ["WDL2-test"]
+    },
+    {
+      "id": "WDL2-test",
+      "name": "System packages provisioning (test)",
+      "type": "test",
+      "phase": "World Deps Selection Layer",
+      "status": "pending",
+      "description": "Add tests for deterministic package list computation, platform gating, and exit codes per S2.",
+      "worktree": "wt/wdl2-provision-test",
+      "integration_task": "WDL2-integ",
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL2-test.md",
+      "depends_on": ["WDL1-integ"],
+      "concurrent_with": ["WDL2-code"]
+    },
+    {
+      "id": "WDL2-integ",
+      "name": "System packages provisioning (integration)",
+      "type": "integration",
+      "phase": "World Deps Selection Layer",
+      "status": "pending",
+      "description": "Merge WDL2 code+tests, reconcile to S2, run fmt/clippy/tests, then run platform smoke scripts as applicable.",
+      "worktree": "wt/wdl2-provision-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL2-integ.md",
+      "depends_on": ["WDL2-code", "WDL2-test"],
+      "concurrent_with": []
+    }
+  ]
+}
+

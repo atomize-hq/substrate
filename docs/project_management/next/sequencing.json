@@ -32,8 +32,15 @@
       "directory": "docs/project_management/next/p0-agent-hub-isolation-hardening",
       "plan": "docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md",
       "sequence": [
-        { "id": "A", "name": "Fail-closed semantics + enforce guarantees" },
-        { "id": "B", "name": "Full caging (pivot_root/min-rootfs), optional Landlock later" }
+        { "id": "I0", "spec": "docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md" },
+        { "id": "I1", "spec": "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md" },
+        { "id": "I2", "spec": "docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md" },
+        { "id": "I3", "spec": "docs/project_management/next/p0-agent-hub-isolation-hardening/I3-spec.md" },
+        { "id": "I4", "spec": "docs/project_management/next/p0-agent-hub-isolation-hardening/I4-spec.md" },
+        { "id": "I5", "spec": "docs/project_management/next/p0-agent-hub-isolation-hardening/I5-spec.md" }
+      ],
+      "notes": [
+        "I2/I3 full cage must mount `/var/lib/substrate/world-deps` read-write so ADR-0002 user-space world-deps installs remain compatible under pivot_root (see docs/project_management/next/world_deps_selection_layer/decision_register.md DR-0008)."
       ]
     },
     {
@@ -46,7 +53,18 @@
       "sequence": [
         { "id": "C0", "spec": "docs/project_management/next/world-sync/C0-spec.md" },
         { "id": "C1", "spec": "docs/project_management/next/world-sync/C1-spec.md" },
-        { "id": "world_deps_selection_layer", "name": "World-deps selection/allowlist + default filter (+ `--all`)" },
+        {
+          "id": "WDL0",
+          "spec": "docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md"
+        },
+        {
+          "id": "WDL1",
+          "spec": "docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md"
+        },
+        {
+          "id": "WDL2",
+          "spec": "docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md"
+        },
         { "id": "C2", "spec": "docs/project_management/next/world-sync/C2-spec.md" },
         { "id": "C3", "spec": "docs/project_management/next/world-sync/C3-spec.md" },
         { "id": "C4", "spec": "docs/project_management/next/world-sync/C4-spec.md" },
@@ -57,8 +75,7 @@
         { "id": "C9", "spec": "docs/project_management/next/world-sync/C9-spec.md" }
       ],
       "notes": [
-        "`world_deps_selection_layer` needs its own triad directory/spec before execution; this is a placeholder so we don't lose the thread.",
-        "Keep this scoped to filtering/selection UX + config, not general world-sync semantics."
+        "WDL0–WDL2 implement ADR-0002 world-deps selection + install classes + provisioning, sequenced here to avoid CLI conflicts with C1 and to reuse the `.substrate/` workspace model established by C0."
       ]
     },
     {
