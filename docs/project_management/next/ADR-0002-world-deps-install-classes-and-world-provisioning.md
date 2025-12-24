@@ -189,6 +189,15 @@ Required inputs to read:
 
 Deliverables to produce:
 
+### 0) Research artifacts (required)
+- Produce two standalone artifacts (new Markdown docs under the proposed triad directory):
+  - **Decision register**: every architectural decision captured using the “2 options → pros/cons/implications/risks/unlocks/quick-wins → recommended option + rationale” format.
+  - **Integration map**: an explicit, end-to-end map of affected components/surfaces (installer, shell `world deps`, world backends, policy/broker, world-agent) and how the chosen design composes with Y0 (YAML settings), I0–I5 (hardening), and C0–C9 (world-sync).
+    - This must call out any required sequencing adjustments and where the work lands (triad/spec/task ownership).
+  - These artifacts must be persisted as:
+    - `docs/project_management/next/world_deps_selection_layer/decision_register.md`
+    - `docs/project_management/next/world_deps_selection_layer/integration_map.md`
+
 ### 1) Spec + triad structure
 - Propose a new “world_deps_selection_layer” triad directory under `docs/project_management/next/` with:
   - `plan.md`, `tasks.json`, `session_log.md`
@@ -236,12 +245,28 @@ Deliverables to produce:
   - full cage requested and prevents some install behavior.
 - For each, specify exit code expectations and whether behavior is warn+continue vs fail-closed.
 
-### 6) Migration and compatibility
-- Address how to transition from today’s “inventory contains guest_install scripts” to the new model:
-  - what changes are needed in `config/manager_hooks.yaml` vs overlays,
-  - whether legacy behavior is supported temporarily and how it is phased out.
+### 6) Acceptance matrix + automation (optional, recommended)
+- If you include an acceptance matrix, it must be automatable:
+  - Provide a matrix of user journeys × platforms with concrete pass/fail checks.
+  - Propose corresponding smoke-check shell scripts (not manual steps) that validate the matrix rows, in addition to unit/integration tests.
+  - Prefer extending existing smoke/doctor scripts in `scripts/` rather than inventing bespoke ad-hoc harnesses.
+
+### 7) Greenfield constraint (hard requirement)
+- Assume we are greenfield for this work: do not plan migration/backwards-compatibility layers.
+- If a breaking change to an existing workflow is required, record it explicitly as a breaking change (with the new expected behavior) rather than proposing compatibility shims.
 
 Output format requirements:
 - Write the plan as if it will be pasted into a PR description and a set of new spec files.
 - Be explicit about what is in-scope/out-of-scope for the first shipping increment.
 - Avoid vague language; propose concrete file paths, flags, schemas, and acceptance tests.
+- Treat cross-sprint alignment as a hard requirement:
+  - Inventory all adjacent/queued work that touches world-deps/world-sync/hardening/installer flows (at minimum: Y0, I0–I5, C0–C9, and `docs/project_management/next/sequencing.json`).
+  - Identify any sequencing conflicts, missing prerequisites, or spec overlaps; propose the exact sequencing adjustments needed and why.
+  - Record the final, aligned sequencing outcome explicitly (no “maybe”; no open dependencies).
+- Persist the research from this session as new documents (not just prose in a chat response):
+  - Write new Markdown files under the proposed triad directory (e.g., `docs/project_management/next/world_deps_selection_layer/…`) that capture findings with exhaustive detail.
+  - Ensure the docs are self-contained and reviewable (a teammate should be able to implement from them without interpretation).
+- Record every architectural decision with zero ambiguity and no open questions/TBDs:
+  - For each decision, present exactly 2 viable solutions (Option A / Option B).
+  - For each option, include: pros, cons, cascading/ripple implications, risks, what the option unlocks, and any low-hanging fruit/quick wins it enables.
+  - Conclude with the recommended option and a crisp rationale for why it is selected (trade-offs acknowledged; no “optional” framing).
