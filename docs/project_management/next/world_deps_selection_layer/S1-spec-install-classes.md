@@ -6,7 +6,7 @@ Introduce an explicit install-class model for world-deps and enforce it in `subs
 Primary objectives:
 - Make install behavior explicit and auditable (“what kind of install is this?”).
 - Prevent runtime OS package mutation from `world deps sync/install`.
-- Ensure compatibility with full caging (pivot_root) and optional Landlock by constraining where installs can write.
+- Ensure compatibility with full caging (pivot_root) and Landlock (when enabled) by constraining where installs can write.
 
 This spec is greenfield:
 - Breaking schema changes are allowed and are recorded explicitly.
@@ -44,7 +44,7 @@ Install class metadata lives in the existing layered manager manifest (DR-0006):
 - overlays: `~/.substrate/manager_hooks.local.yaml`, `scripts/substrate/world-deps.yaml`, `~/.substrate/world-deps.local.yaml`
 
 ### Required schema changes
-Manager manifest `version` must bump to `2` (breaking; greenfield).
+Manager manifest `version` must bump to `2` (breaking; greenfield; see `decision_register.md` DR-0012).
 
 For each `managers[]` entry, `guest_install` gains new required fields when present:
 ```yaml
@@ -121,8 +121,12 @@ For each tool in scope (selection or `--all`):
 - `install_class` is displayed.
 - `guest.status` behavior by class:
   - `user_space`: normal present/missing probe.
-  - `system_packages`: show `missing` (or `skipped`) with reason: “requires system packages; run `substrate world deps provision`”.
-  - `manual`: show `skipped` with reason: “manual”.
+  - `system_packages`:
+    - If `guest_detect` reports present: show `present`.
+    - If `guest_detect` reports missing: show `skipped` with reason: “requires system packages; run `substrate world deps provision`”.
+  - `manual`:
+    - If `guest_detect` reports present: show `present`.
+    - If `guest_detect` reports missing: show `skipped` with reason: “manual install required”.
 
 ### `sync`
 For each tool in scope:
@@ -138,11 +142,11 @@ For each tool in scope:
   - Exit `4` with explicit “unsupported in this increment” (do not attempt partial behavior).
 
 Exit code rule:
-- `sync` exits `0` only if every in-scope tool is either:
-  - `present`, or
-  - `manual` (and instructions were printed), or
-  - `skipped` because the tool is not selected (S0).
-- Otherwise, exit `4` when any tool remains blocked due to unmet prerequisites (`system_packages`) or unsupported class.
+- `sync` exits `0` only if every in-scope tool is `present` (or `skipped` because the tool is not selected (S0)).
+- `sync` exits `4` if any in-scope tool is not `present` due to:
+  - `system_packages` (requires `provision`),
+  - `manual` (manual install required),
+  - `copy_from_host` (unsupported in Increment 1).
 
 ### `install TOOL...`
 - Requires tool(s) are selected unless `--all` is used (S0).
@@ -179,4 +183,3 @@ If full cage is enabled/required and the world-deps prefix is not writable:
 - Implementing `world deps provision` (S2).
 - `copy_from_host` implementation (explicitly unsupported in Increment 1).
 - Migration/back-compat for manifest v1 or selection-less flows (greenfield).
-

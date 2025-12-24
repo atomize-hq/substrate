@@ -104,6 +104,24 @@ Configured selection:
   - `--all`: ignore selection and use full inventory scope (DR-0005)
   - explicit `TOOL ...` args: filter the active scope down to the named tools
 
+### Configured but empty selection (`selected: []`)
+This state is created by `substrate world deps init` and is **valid configuration** (see `decision_register.md` DR-0013).
+
+Semantics when `selected` is empty and `--all` is not used:
+- `status`:
+  - Prints: “Selection configured but empty; no tools selected.”
+  - Exits `0`.
+  - Makes **no world-agent calls** (no guest probes) because scope is empty.
+- `sync` and `provision`:
+  - Print: “No tools selected; nothing to do.”
+  - Exit `0`.
+  - Make **no world-agent calls**.
+- `install TOOL...`:
+  - Fails with exit `2` unless `--all` is used, because named tools are not selected.
+  - Message: “tool not selected; add it to selection or pass --all”.
+
+When `--all` is used, selection is ignored and normal behavior applies (including world-agent calls for `sync/provision`).
+
 ### Explicit tool args behavior
 - `status TOOL...`:
   - If a tool is not selected (and `--all` not used), it is still shown but marked `selected=false` and `guest.status=skipped` with reason “not selected”.
@@ -223,6 +241,11 @@ Notes:
   - `substrate world deps status` prints “not configured” guidance and exits `0`.
   - `substrate world deps sync` exits `0` and performs no installs.
   - `substrate world deps install nvm` exits `0` and performs no installs.
+
+- With a selection file that is configured but empty (`selected: []`) and `--all` is not used:
+  - `substrate world deps status` exits `0` and makes no guest probes.
+  - `substrate world deps sync` exits `0` and makes no world-agent calls.
+  - `substrate world deps provision` exits `0` and makes no world-agent calls.
 
 - With a valid selection file:
   - `status --json` includes the required `selection.*` fields.

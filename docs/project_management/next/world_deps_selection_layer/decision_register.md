@@ -603,3 +603,107 @@ Specs (this triad):
 **Follow-up tasks (explicit)**
 - Implement exit codes as specified in `S0`/`S2` and add smoke tests that assert them.
 
+---
+
+### DR-0012 — Manifest schema version bump strategy (inventory/overlays → v2)
+
+**Decision owner(s):** Common manifest + Shell maintainers  
+**Date:** 2025-12-24  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md`
+
+**Problem / Context**
+- Install classes (and provisioning-time system packages) must be expressed in the layered manager manifest so routing/enforcement is deterministic and reviewable (DR-0006/DR-0007).
+- We are greenfield for this track: no backwards-compat layers or “dual schema” shims are allowed.
+
+**Option A — Bump manifest `version` to `2` and require new keys**
+- **Pros:**
+  - Enforces correctness: every tool with `guest_install` must declare its class explicitly.
+  - Prevents silent misclassification of legacy recipes (e.g., hidden `apt-get` mutation).
+  - Simplifies implementation and validation (single schema; fail fast with actionable errors).
+- **Cons:**
+  - Requires updating Substrate-owned manifests in the same change window (breaking).
+- **Cascading implications:**
+  - `crates/common/src/manager_manifest/schema.rs` validation must reject `version: 1` manifests when used by the new world-deps codepath.
+  - Installer/shipped manifests must be updated in lockstep.
+- **Risks:**
+  - If a user has an old overlay, world-deps will fail to load it; mitigated by explicit error messages and the greenfield policy (no migration).
+- **Unlocks:**
+  - Clean foundation for future classes and safe provisioning metadata without adding compat debt.
+- **Quick wins / low-hanging fruit:**
+  - Immediate “unsafe manifest” detection at load time instead of runtime surprises.
+
+**Option B — Keep manifest `version: 1` and add optional keys**
+- **Pros:**
+  - Smaller apparent diff in the manifest files.
+- **Cons:**
+  - Violates greenfield constraint in practice: optional keys imply implicit defaults and ambiguous behavior.
+  - Makes it hard to guarantee “no OS mutation at runtime” because legacy keys remain valid.
+- **Cascading implications:**
+  - Requires complex fallback rules and continuous support burden.
+- **Risks:**
+  - “Ad-hoc patch” pressure when legacy + new fields combine in unexpected ways.
+- **Unlocks:**
+  - None consistent with the stated constraints.
+- **Quick wins / low-hanging fruit:**
+  - None worth the ambiguity introduced.
+
+**Recommendation**
+- **Selected:** Option A — Bump manifest to `version: 2` and require new keys
+- **Rationale (crisp):** Greenfield means we prefer a clean, strict schema that fails fast over a permissive schema that accumulates ambiguity and security risk.
+
+**Follow-up tasks (explicit)**
+- Update `S1` to reference this decision explicitly and to define the v2 validation rules.
+- Update Substrate-owned manifests (`config/manager_hooks.yaml`, `scripts/substrate/world-deps.yaml`) to `version: 2` during WDL1.
+
+---
+
+### DR-0013 — Semantics for “configured but empty selection” (post `world deps init`)
+
+**Decision owner(s):** Shell maintainers  
+**Date:** 2025-12-24  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`
+
+**Problem / Context**
+- `substrate world deps init` creates a valid selection file with an empty `selected: []`.
+- We must define whether this state triggers any world/backend work and what user-visible behavior is.
+
+**Option A — Treat “configured + empty” as an error**
+- **Pros:**
+  - Forces users to immediately select tools; prevents “I ran sync and nothing happened” confusion.
+- **Cons:**
+  - Makes `init` immediately create a failing state (bad UX).
+  - Adds noise in automation where repos intentionally keep selection empty by default.
+- **Cascading implications:**
+  - `status/sync/provision` would return non-zero even though configuration is valid.
+- **Risks:**
+  - Encourages bypass flags or ad-hoc file edits to “fix” the error.
+- **Unlocks:**
+  - None needed for ADR-0002.
+- **Quick wins / low-hanging fruit:**
+  - None (it creates friction, not value).
+
+**Option B — Treat “configured + empty” as a no-op with explicit message**
+- **Pros:**
+  - `init` is immediately safe and useful (creates a valid scaffold).
+  - Avoids unnecessary world-agent calls when there is no work to do.
+  - Matches the “selection-driven/no surprises” posture.
+- **Cons:**
+  - Users may wonder why nothing happened; mitigated by a clear message and next steps (`select`, `status --all`).
+- **Cascading implications:**
+  - `sync/provision` can succeed (`exit 0`) without requiring backend readiness in this state.
+- **Risks:**
+  - Minimal; messaging is sufficient.
+- **Unlocks:**
+  - Enables teams to commit an empty selection scaffold and let individuals opt in.
+- **Quick wins / low-hanging fruit:**
+  - Simplest implementation and easiest to test (no backend calls).
+
+**Recommendation**
+- **Selected:** Option B — No-op + explicit message
+- **Rationale (crisp):** An empty selection is valid configuration and should not force backend work; “do nothing but explain” is the lowest-risk, most predictable contract.
+
+**Follow-up tasks (explicit)**
+- Update `S0` to explicitly state that `sync/provision` make **no world-agent calls** when selection is empty (unless `--all` is used).
+- Add tests + smoke checks that assert no backend calls / exit `0` in this state.

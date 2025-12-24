@@ -151,7 +151,7 @@ Precondition:
 - Add/select a known `manual` tool (depends on the manifest once WDL1 lands).
 
 Expected:
-- `sync` prints manual instructions, does not install, and exits non-zero if manual tools are considered “unsatisfied” for the journey (per S1).
+- If the manual tool is missing in the guest, `sync` prints manual instructions, does not install, and exits `4`.
 - `install <manual-tool>` exits `4` and prints the manual instructions.
 
 ---
@@ -231,4 +231,3 @@ Expected:
   - `system_packages` runtime block + provisioning route
   - provisioning success (Lima/WSL) or explicit unsupported error (Linux)
   - full-cage spot check (if applicable)
-
