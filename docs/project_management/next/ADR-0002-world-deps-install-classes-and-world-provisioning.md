@@ -190,13 +190,15 @@ Required inputs to read:
 Deliverables to produce:
 
 ### 0) Research artifacts (required)
-- Produce two standalone artifacts (new Markdown docs under the proposed triad directory):
+- Produce standalone artifacts (new Markdown docs under the proposed triad directory):
   - **Decision register**: every architectural decision captured using the “2 options → pros/cons/implications/risks/unlocks/quick-wins → recommended option + rationale” format.
   - **Integration map**: an explicit, end-to-end map of affected components/surfaces (installer, shell `world deps`, world backends, policy/broker, world-agent) and how the chosen design composes with Y0 (YAML settings), I0–I5 (hardening), and C0–C9 (world-sync).
     - This must call out any required sequencing adjustments and where the work lands (triad/spec/task ownership).
+  - **Manual testing playbook**: a step-by-step validation checklist (similar in spirit to `docs/project_management/next/p0-platform-stability/manual_testing_playbook.md`) that a human can run to validate the new work end-to-end across platforms.
   - These artifacts must be persisted as:
     - `docs/project_management/next/world_deps_selection_layer/decision_register.md`
     - `docs/project_management/next/world_deps_selection_layer/integration_map.md`
+    - `docs/project_management/next/world_deps_selection_layer/manual_testing_playbook.md`
 
 ### 1) Spec + triad structure
 - Propose a new “world_deps_selection_layer” triad directory under `docs/project_management/next/` with:
