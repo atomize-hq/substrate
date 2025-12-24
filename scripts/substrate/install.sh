@@ -83,6 +83,34 @@ detect_rc_file() {
 }
 RC_TARGET="$(detect_rc_file)"
 
+detect_prefix() {
+  local prefix=""
+  for arg in "$@"; do
+    case "${arg}" in
+      --prefix=*)
+        prefix="${arg#--prefix=}"
+        ;;
+    esac
+  done
+  if [[ -z "${prefix}" ]]; then
+    for ((i=1; i<=$#; i++)); do
+      if [[ "${!i}" == "--prefix" ]]; then
+        j=$((i+1))
+        prefix="${!j:-}"
+        break
+      fi
+    done
+  fi
+
+  if [[ -z "${prefix}" ]]; then
+    prefix="${HOME}/.substrate"
+  fi
+  printf '%s\n' "${prefix%/}"
+}
+
+PREFIX="$(detect_prefix "$@")"
+BIN_DIR="${PREFIX}/bin"
+
 TMP_LOG="$(mktemp -t substrate-install-log.XXXXXX)"
 LOADER_STARTED=0
 stop_loader() {
@@ -101,13 +129,14 @@ cleanup() {
 trap cleanup EXIT
 
 printf "\033[32mSubstrate installer running…\033[0m\n"
-if [[ -n "${BLA_braille_fill_bar[*]}" ]]; then
+if [[ -t 1 && -n "${BLA_braille_fill_bar[*]}" ]]; then
   BLA::start_loading_animation "${BLA_braille_fill_bar[@]}"
   LOADER_STARTED=1
 fi
 if "${UPSTREAM_INSTALL}" "$@" >"${TMP_LOG}" 2>&1; then
   stop_loader
   printf "\033[32mSubstrate install successful!\033[0m\n"
+  printf "Added %s to PATH via %s.\n" "${BIN_DIR}" "${RC_TARGET}"
   printf "Open a new shell or run 'source %s' so PATH changes take effect.\n" "${RC_TARGET}"
 else
   stop_loader

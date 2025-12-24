@@ -58,9 +58,10 @@ The installer will:
    `loginctl enable-linger <user>` guidance so socket activation survives
    logout/reboots.
 
-Add `~/.substrate/bin` (or your custom `--prefix` bin directory) to PATH—or
-invoke `~/.substrate/bin/substrate` directly—because the installer no longer
-edits shell rc files. Supplying `--no-world` skips step 6, writes
+By default the installer adds `<prefix>/bin` (default: `~/.substrate/bin`) to
+your shell PATH by appending a small, idempotent snippet to your rc files
+(bash/zsh/fish). Set `SUBSTRATE_INSTALL_NO_PATH=1` to skip this behavior and
+invoke `~/.substrate/bin/substrate` directly instead. Supplying `--no-world` skips step 6, writes
 `~/.substrate/config.toml` with `[install] world_enabled = false`, and prints
 the exact `substrate world enable` command to run when you are ready to
 provision the backend. You can still force a single world-isolated run later
@@ -91,9 +92,8 @@ with `substrate --world ...` without changing the stored metadata.
 During installation the script:
 
 - Records the host PATH (for use as `SHIM_ORIGINAL_PATH`) without mutating it.
-- Deploys fresh shims but leaves `.bashrc`, `.zshrc`, `BASH_ENV`, and PowerShell
-  profiles alone—runtime helpers source the generated manager snippets only when
-  `substrate` is executed.
+- Deploys fresh shims and appends a small PATH snippet (between `# >>> substrate >>>`
+  markers) so `substrate` is callable from your terminal.
 - Installs `substrate-world-agent` as a systemd service plus socket and runs
   `substrate world doctor --json` (inspect the `world_socket` block) without
   adding the shim directory to PATH to avoid self-referential lookups.

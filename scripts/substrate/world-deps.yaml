@@ -5,4 +5,64 @@
 # guest detection/install recipes or add extra guest-only tools when needed.
 
 version: 1
-managers: {}
+managers:
+  - name: bun
+    guest_install:
+      custom: |
+        set -euo pipefail
+
+        if [ -n "${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:-}" ]; then
+          world_deps_bin="${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR}"
+          world_deps_root="$(dirname "${world_deps_bin}")"
+          bun_root="${world_deps_root}/bun"
+          export BUN_INSTALL="${bun_root}"
+
+          mkdir -p "${world_deps_bin}"
+          mkdir -p "${bun_root}"
+
+          if [ -x "${bun_root}/bin/bun" ]; then
+            "${bun_root}/bin/bun" upgrade
+          else
+            curl -fsSL https://bun.sh/install | bash
+          fi
+
+          ln -sf "${bun_root}/bin/bun" "${world_deps_bin}/bun"
+        else
+          if [ ! -d "$HOME/.bun" ]; then
+            curl -fsSL https://bun.sh/install | bash
+          else
+            "$HOME/.bun/bin/bun" upgrade
+          fi
+        fi
+
+  - name: pyenv
+    guest_install:
+      custom: |
+        set -euo pipefail
+
+        if [ -n "${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:-}" ]; then
+          world_deps_bin="${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR}"
+          world_deps_root="$(dirname "${world_deps_bin}")"
+          pyenv_root="${world_deps_root}/pyenv"
+
+          mkdir -p "${world_deps_bin}"
+          if [ ! -d "${pyenv_root}/.git" ]; then
+            git clone https://github.com/pyenv/pyenv.git "${pyenv_root}"
+          else
+            cd "${pyenv_root}" && git pull --ff-only
+          fi
+
+          {
+            printf '%s\n' '#!/usr/bin/env bash'
+            printf 'export PYENV_ROOT=%q\n' "${pyenv_root}"
+            printf '%s\n' 'exec "$PYENV_ROOT/bin/pyenv" "$@"'
+          } > "${world_deps_bin}/pyenv.tmp"
+          mv "${world_deps_bin}/pyenv.tmp" "${world_deps_bin}/pyenv"
+          chmod 0755 "${world_deps_bin}/pyenv"
+        else
+          if [ ! -d "$HOME/.pyenv" ]; then
+            git clone https://github.com/pyenv/pyenv.git "$HOME/.pyenv"
+          else
+            cd "$HOME/.pyenv" && git pull --ff-only
+          fi
+        fi

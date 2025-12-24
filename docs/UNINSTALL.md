@@ -26,9 +26,9 @@ Regardless of platform, the script:
    history, locks, etc.).
 3. Clears the shell command hash table (`hash -r`).
 
-Since the installer no longer edits `.bashrc`, `.zshrc`, or other rc files, no
-shell snippets are touched during removal. If you previously added custom PATH
-entries or aliases, remove them manually after running the script.
+The uninstaller removes the PATH snippet block (between `# >>> substrate >>>`
+markers) from common shell rc files (`.bashrc`, `.bash_profile`, `.profile`,
+`.zshrc`, `.zprofile`, and `~/.config/fish/config.fish`) when present.
 
 ## Linux & Windows (WSL)
 
