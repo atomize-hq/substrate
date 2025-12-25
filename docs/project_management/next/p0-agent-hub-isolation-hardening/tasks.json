@@ -390,7 +390,7 @@
       "name": "Full cage (PTY) parity (code)",
       "type": "code",
       "phase": "Agent Hub Isolation",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Extend full cage mechanics to PTY execution paths (world-agent stream/REPL).",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/I3-spec.md",

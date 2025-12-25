@@ -217,3 +217,14 @@ Template (START/END only):
 - Results: pass (full-cage PTY tests self-skip when overlay support/privileges missing)
 - Docs commit: (this commit)
 - Next steps / blockers: none
+
+## [2025-12-25 22:37 UTC] Codex – I3-code – END
+- Worktree commits: 628e6da
+- Commands:
+  - cargo fmt
+  - cargo clippy --workspace --all-targets -- -D warnings
+- Results: pass
+- Scripts executed: n/a
+- Kickoff prompts created/verified: n/a
+- Docs commit: (this commit)
+- Next steps / blockers: I3-integ can merge with I3-test (ready)
