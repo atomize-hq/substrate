@@ -150,3 +150,14 @@ Template (START/END only):
 - Worktree (next): wt/ahih-i2-full-cage-nonpty-test
 - Plan: add tests for Linux non-PTY full-cage enforcement and read_only semantics (skip when privileges unavailable)
 - Blockers: none
+
+## [2025-12-25 21:56 UTC] Codex – I2-test – END
+- Worktree commits: f0ecbc0
+- Commands:
+  - cargo fmt
+  - cargo test -p world -p world-agent -- --nocapture
+- Results: pass (full-cage tests skip when overlay support/privileges missing)
+- Scripts executed: n/a
+- Kickoff prompts created/verified: n/a
+- Docs commit: (this commit)
+- Next steps / blockers: I2-integ can merge with I2-code when ready
