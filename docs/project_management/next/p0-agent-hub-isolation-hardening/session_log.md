@@ -92,6 +92,17 @@ Template (START/END only):
 - Plan: add integration tests proving require_world fail-closed (no host fallback) and require_world=false warns then falls back
 - Blockers: none
 
+## [2025-12-25 21:09 UTC] Codex – I1-test – END
+- Worktree commits: bfa80b8
+- Commands:
+  - cargo fmt
+  - cargo test -p substrate-shell --tests -- --nocapture
+- Results: pass
+- Scripts executed: n/a
+- Kickoff prompts created/verified: n/a
+- Docs commit: (this commit)
+- Next steps / blockers: I1-integ can merge I1-code + I1-test and run full validation
+
 ## [2025-12-25 21:07 UTC] Codex – I1-code – END
 - Worktree commits: c8d6bc1
 - Commands:
