@@ -143,3 +143,10 @@ Template (START/END only):
 - Worktree (next): wt/ahih-i2-full-cage-nonpty-code
 - Plan: implement Linux non-PTY full cage via mount ns + pivot_root; add capability detection + fail-closed semantics
 - Blockers: none
+
+## [2025-12-25 21:47 UTC] Codex – I2-test – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md
+- Worktree (next): wt/ahih-i2-full-cage-nonpty-test
+- Plan: add tests for Linux non-PTY full-cage enforcement and read_only semantics (skip when privileges unavailable)
+- Blockers: none
