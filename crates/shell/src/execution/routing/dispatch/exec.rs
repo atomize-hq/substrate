@@ -312,10 +312,14 @@ pub(crate) fn execute_command(
                                 e
                             );
                         }
-                        eprintln!(
-                            "substrate: warn: world PTY over WS failed, falling back to host PTY: {}",
-                            e
-                        );
+                        static WARN_ONCE: std::sync::Once = std::sync::Once::new();
+                        let err_msg = e.to_string();
+                        WARN_ONCE.call_once(move || {
+                            eprintln!(
+                                "substrate: warn: world PTY over WS failed, falling back to host PTY: {}",
+                                err_msg
+                            );
+                        });
                         // fall through to host PTY
                     }
                 }
@@ -647,10 +651,14 @@ pub(crate) fn execute_command(
                             e
                         );
                     }
-                    eprintln!(
-                        "substrate: warn: shell world-agent path (/run/substrate.sock) exec failed, running direct: {}",
-                        e
-                    );
+                    static WARN_ONCE: std::sync::Once = std::sync::Once::new();
+                    let err_msg = e.to_string();
+                    WARN_ONCE.call_once(move || {
+                        eprintln!(
+                            "substrate: warn: shell world-agent path (/run/substrate.sock) exec failed, running direct: {}",
+                            err_msg
+                        );
+                    });
                 }
             }
         }
