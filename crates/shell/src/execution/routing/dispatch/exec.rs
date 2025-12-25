@@ -28,7 +28,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
-use substrate_broker::{detect_profile, evaluate, world_fs_mode, Decision};
+use substrate_broker::{detect_profile, evaluate, world_fs_policy, Decision};
 use substrate_common::{log_schema, redact_sensitive, WorldRootMode};
 #[cfg(target_os = "linux")]
 use substrate_trace::TransportMeta;
@@ -42,7 +42,7 @@ pub(crate) fn execute_command(
 ) -> Result<ExitStatus> {
     let trimmed = command.trim();
 
-    // Always refresh policy/profile for this cwd before we read fs_mode.
+    // Always refresh policy/profile for this cwd before we read world_fs.
     let cwd_for_profile = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     detect_profile(&cwd_for_profile).with_context(|| {
         format!(
@@ -51,8 +51,14 @@ pub(crate) fn execute_command(
         )
     })?;
 
-    let fs_mode = world_fs_mode();
+    let world_fs = world_fs_policy();
+    let fs_mode = world_fs.mode;
     std::env::set_var("SUBSTRATE_WORLD_FS_MODE", fs_mode.as_str());
+    std::env::set_var("SUBSTRATE_WORLD_FS_CAGE", world_fs.cage.as_str());
+    std::env::set_var(
+        "SUBSTRATE_WORLD_REQUIRE_WORLD",
+        if world_fs.require_world { "1" } else { "0" },
+    );
 
     // Prepare redacted command once (used for span + logging)
     let redacted_for_logging = if std::env::var("SHIM_LOG_OPTS").as_deref() == Ok("raw") {
@@ -127,11 +133,12 @@ pub(crate) fn execute_command(
     let world_env = std::env::var("SUBSTRATE_WORLD").unwrap_or_default();
     let world_enabled = world_env == "enabled";
     let world_disabled = world_env == "disabled" || config.no_world;
-    let world_required = fs_mode != substrate_common::WorldFsMode::Writable && !world_disabled;
-    if world_required && world_disabled {
+    let world_required = world_fs.require_world && !world_disabled;
+    if world_fs.require_world && world_disabled {
         anyhow::bail!(
-            "world execution required (fs_mode={}) but world is disabled (SUBSTRATE_WORLD=disabled or --no-world)",
-            fs_mode.as_str()
+            "world execution required (world_fs.require_world=true, mode={}, cage={}) but world is disabled (SUBSTRATE_WORLD=disabled or --no-world)",
+            world_fs.mode.as_str(),
+            world_fs.cage.as_str()
         );
     }
 

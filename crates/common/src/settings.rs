@@ -40,7 +40,7 @@ impl FromStr for WorldFsMode {
             "writable" | "writeable" => Ok(Self::Writable),
             "read-only" | "readonly" | "ro" => Ok(Self::ReadOnly),
             other => Err(format!(
-                "invalid world fs mode: {} (expected writable or read-only)",
+                "invalid world fs mode: {} (expected writable or read_only)",
                 other
             )),
         }

@@ -2,6 +2,7 @@
 
 use crate::broker::Broker;
 use crate::policy::Decision;
+use crate::policy::WorldFsPolicy;
 use anyhow::Result;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
@@ -84,6 +85,13 @@ impl BrokerHandle {
             .read()
             .map(|b| b.world_fs_mode())
             .unwrap_or(WorldFsMode::Writable)
+    }
+
+    pub fn world_fs_policy(&self) -> WorldFsPolicy {
+        self.broker
+            .read()
+            .map(|b| b.world_fs_policy())
+            .unwrap_or_else(|_| crate::Policy::default().world_fs_policy())
     }
 
     fn apply_enforcement_env(&self) {

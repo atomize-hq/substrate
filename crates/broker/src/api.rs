@@ -2,6 +2,7 @@
 
 use crate::handle::BrokerHandle;
 use crate::policy::Decision;
+use crate::policy::WorldFsPolicy;
 use anyhow::Result;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -85,6 +86,19 @@ pub fn world_fs_mode() -> WorldFsMode {
                 err
             );
             WorldFsMode::Writable
+        }
+    }
+}
+
+pub fn world_fs_policy() -> WorldFsPolicy {
+    match global_broker() {
+        Ok(broker) => broker.world_fs_policy(),
+        Err(err) => {
+            warn!(
+                "world_fs_policy requested before broker initialization: {}",
+                err
+            );
+            crate::Policy::default().world_fs_policy()
         }
     }
 }

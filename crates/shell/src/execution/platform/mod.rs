@@ -4,7 +4,7 @@ use crate::builtins as commands;
 use crate::execution::world_env_guard;
 use anyhow::Result;
 use std::env;
-use substrate_broker::world_fs_mode;
+use substrate_broker::world_fs_policy;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -33,10 +33,10 @@ use windows::world_doctor_main;
 ))]
 mod fallback {
     use serde_json::json;
-    use substrate_broker::world_fs_mode;
+    use substrate_broker::world_fs_policy;
 
     pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
-        let fs_mode = world_fs_mode();
+        let world_fs = world_fs_policy();
         if json_mode {
             let out = json!({
                 "platform": std::env::consts::OS,
@@ -47,7 +47,7 @@ mod fallback {
                 "dmesg_restrict": serde_json::Value::Null,
                 "overlay_root": serde_json::Value::Null,
                 "copydiff_root": serde_json::Value::Null,
-                "world_fs_mode": fs_mode.as_str(),
+                "world_fs_mode": world_fs.mode.as_str(),
                 "ok": true
             });
             println!("{}", serde_json::to_string_pretty(&out).unwrap());
@@ -58,7 +58,7 @@ mod fallback {
             println!("cgroup v2: N/A");
             println!("nft: N/A");
             println!("dmesg_restrict: N/A");
-            println!("world_fs_mode: {}", fs_mode.as_str());
+            println!("world_fs_mode: {}", world_fs.mode.as_str());
         }
         0
     }
@@ -75,8 +75,13 @@ pub(crate) fn update_world_env(no_world: bool) {
         env::set_var("SUBSTRATE_WORLD_ENABLED", "1");
         env::set_var("SUBSTRATE_WORLD", "enabled");
     }
-    let fs_mode = world_fs_mode();
-    env::set_var("SUBSTRATE_WORLD_FS_MODE", fs_mode.as_str());
+    let world_fs = world_fs_policy();
+    env::set_var("SUBSTRATE_WORLD_FS_MODE", world_fs.mode.as_str());
+    env::set_var("SUBSTRATE_WORLD_FS_CAGE", world_fs.cage.as_str());
+    env::set_var(
+        "SUBSTRATE_WORLD_REQUIRE_WORLD",
+        if world_fs.require_world { "1" } else { "0" },
+    );
 }
 
 pub(crate) fn handle_world_command(cmd: &WorldCmd, cli: &Cli) -> Result<()> {
