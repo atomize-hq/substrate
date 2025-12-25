@@ -23,3 +23,9 @@ Template (START/END only):
 - Next steps / blockers: <handoff notes>
 ```
 
+## [2025-12-25 11:24 UTC] Codex – Y0-code – START
+- Checked out `feat/yaml-settings-migration`; `git pull --ff-only` not possible (no upstream / no matching remote ref)
+- Updated `docs/project_management/next/yaml-settings-migration/tasks.json` + `docs/project_management/next/yaml-settings-migration/session_log.md` (commit: pending)
+- Worktree: `wt/ysm-y0-settings-code` (to create)
+- Plan: migrate paths + loaders to YAML; update `substrate config init/show/set`; add actionable TOML-present errors
+- Blockers: none

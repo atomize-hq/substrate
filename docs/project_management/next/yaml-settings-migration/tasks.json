@@ -5,7 +5,7 @@
       "name": "Settings stack TOML→YAML (code)",
       "type": "code",
       "phase": "YAML Settings Migration",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Convert the layered config/settings stack from TOML to YAML and update the `substrate config` subcommand.",
       "references": [
         "docs/project_management/next/yaml-settings-migration/plan.md",
