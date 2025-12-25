@@ -2,13 +2,13 @@
 
 use super::{ANCHOR_MODE_ENV, ANCHOR_PATH_ENV, LEGACY_ROOT_MODE_ENV, LEGACY_ROOT_PATH_ENV};
 use anyhow::{anyhow, bail, Context, Result};
+use serde_yaml::Value as YamlValue;
 use std::env;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use substrate_common::paths as substrate_paths;
 use substrate_common::WorldRootMode;
-use toml::value::{Table as TomlTable, Value as TomlValue};
 
 #[derive(Debug, Clone)]
 pub struct WorldRootSettings {
@@ -95,12 +95,16 @@ pub(crate) fn resolve_world_root(
 }
 
 fn load_directory_settings(base_dir: &Path) -> Result<PartialWorldRoot> {
-    let settings_path = base_dir.join(".substrate/settings.toml");
+    let legacy_path = base_dir.join(".substrate/settings.toml");
+    let settings_path = base_dir.join(".substrate/settings.yaml");
+    ensure_no_legacy_toml_files(&[legacy_path], &[settings_path.clone()])?;
     load_world_settings_file(&settings_path)
 }
 
 fn load_global_settings() -> Result<PartialWorldRoot> {
     let path = substrate_paths::config_file()?;
+    let legacy = substrate_paths::substrate_home()?.join("config.toml");
+    ensure_no_legacy_toml_files(&[legacy], &[path.clone()])?;
     load_world_settings_file(&path)
 }
 
@@ -113,77 +117,85 @@ fn load_world_settings_file(path: &Path) -> Result<PartialWorldRoot> {
 }
 
 fn parse_world_settings(path: &Path, contents: &str) -> Result<PartialWorldRoot> {
-    let mut raw: TomlTable =
-        toml::from_str(contents).with_context(|| format!("invalid TOML in {}", path.display()))?;
-    let Some(world) = raw.remove("world") else {
+    let raw: YamlValue = serde_yaml::from_str(contents)
+        .with_context(|| format!("invalid YAML in {}", path.display()))?;
+
+    let root = match raw {
+        YamlValue::Mapping(map) => map,
+        other => bail!(
+            "settings in {} must be a mapping (found {})",
+            path.display(),
+            yaml_type_name(&other)
+        ),
+    };
+
+    let Some(world) = root.get(&YamlValue::String("world".to_string())) else {
         return Ok(PartialWorldRoot::default());
     };
 
     let table = match world {
-        TomlValue::Table(table) => table,
-        other => {
-            bail!(
-                "world section in {} must be a table (found {})",
-                path.display(),
-                toml_type_name(&other)
-            );
-        }
+        YamlValue::Mapping(map) => map,
+        other => bail!(
+            "world section in {} must be a mapping (found {})",
+            path.display(),
+            yaml_type_name(other)
+        ),
     };
 
-    let (mode_value, mode_key) = match table.get("anchor_mode") {
+    let (mode_value, mode_key) = match table.get(&YamlValue::String("anchor_mode".to_string())) {
         Some(value) => (Some(value), "world.anchor_mode"),
-        None => match table.get("root_mode") {
+        None => match table.get(&YamlValue::String("root_mode".to_string())) {
             Some(value) => (Some(value), "world.root_mode"),
             None => (None, ""),
         },
     };
 
     let mode = match mode_value {
-        Some(TomlValue::String(value)) => Some(parse_mode(value, path, mode_key)?),
-        Some(other) => {
-            bail!(
+        Some(value) => match value.as_str() {
+            Some(raw) => Some(parse_mode(raw, path, mode_key)?),
+            None => bail!(
                 "{} in {} must be a string (found {})",
                 mode_key,
                 path.display(),
-                toml_type_name(other)
-            );
-        }
+                yaml_type_name(value)
+            ),
+        },
         None => None,
     };
 
-    let (path_value, path_key) = match table.get("anchor_path") {
+    let (path_value, path_key) = match table.get(&YamlValue::String("anchor_path".to_string())) {
         Some(value) => (Some(value), "world.anchor_path"),
-        None => match table.get("root_path") {
+        None => match table.get(&YamlValue::String("root_path".to_string())) {
             Some(value) => (Some(value), "world.root_path"),
             None => (None, ""),
         },
     };
 
     let path_value = match path_value {
-        Some(TomlValue::String(value)) => {
-            let trimmed = value.trim();
-            (!trimmed.is_empty()).then(|| PathBuf::from(trimmed))
-        }
-        Some(other) => {
-            bail!(
+        Some(value) => match value.as_str() {
+            Some(raw) => {
+                let trimmed = raw.trim();
+                (!trimmed.is_empty()).then(|| PathBuf::from(trimmed))
+            }
+            None => bail!(
                 "{} in {} must be a string (found {})",
                 path_key,
                 path.display(),
-                toml_type_name(other)
-            );
-        }
+                yaml_type_name(value)
+            ),
+        },
         None => None,
     };
 
-    let caged = match table.get("caged") {
-        Some(TomlValue::Boolean(value)) => Some(*value),
-        Some(other) => {
-            bail!(
+    let caged = match table.get(&YamlValue::String("caged".to_string())) {
+        Some(value) => match value.as_bool() {
+            Some(flag) => Some(flag),
+            None => bail!(
                 "world.caged in {} must be a boolean (found {})",
                 path.display(),
-                toml_type_name(other)
-            );
-        }
+                yaml_type_name(value)
+            ),
+        },
         None => None,
     };
 
@@ -245,16 +257,37 @@ pub(crate) fn parse_bool_flag(raw: &str) -> Option<bool> {
     }
 }
 
-fn toml_type_name(value: &TomlValue) -> &'static str {
+fn yaml_type_name(value: &YamlValue) -> &'static str {
     match value {
-        TomlValue::Array(_) => "array",
-        TomlValue::Boolean(_) => "boolean",
-        TomlValue::Datetime(_) => "datetime",
-        TomlValue::Float(_) => "float",
-        TomlValue::Integer(_) => "integer",
-        TomlValue::String(_) => "string",
-        TomlValue::Table(_) => "table",
+        YamlValue::Null => "null",
+        YamlValue::Bool(_) => "boolean",
+        YamlValue::Number(_) => "number",
+        YamlValue::String(_) => "string",
+        YamlValue::Sequence(_) => "sequence",
+        YamlValue::Mapping(_) => "mapping",
+        YamlValue::Tagged(_) => "tagged",
     }
+}
+
+fn ensure_no_legacy_toml_files(legacy_paths: &[PathBuf], yaml_paths: &[PathBuf]) -> Result<()> {
+    let present: Vec<&PathBuf> = legacy_paths.iter().filter(|path| path.exists()).collect();
+    if present.is_empty() {
+        return Ok(());
+    }
+
+    let mut message = "substrate: unsupported legacy TOML settings detected:\n".to_string();
+    for path in present {
+        message.push_str(&format!("  - {}\n", path.display()));
+    }
+    message.push_str("YAML settings are now required:\n");
+    for path in yaml_paths {
+        message.push_str(&format!("  - {}\n", path.display()));
+    }
+    message.push_str("Next steps:\n");
+    message.push_str("  - Delete or rename the TOML file(s)\n");
+    message
+        .push_str("  - Create the YAML file(s) (global config: `substrate config init --force`)\n");
+    bail!("{message}");
 }
 
 pub(super) fn first_env_value(keys: &[&'static str]) -> Option<(&'static str, String)> {

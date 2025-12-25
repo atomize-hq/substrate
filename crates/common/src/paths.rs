@@ -42,7 +42,7 @@ pub fn lock_file() -> Result<PathBuf> {
 }
 
 pub fn config_file() -> Result<PathBuf> {
-    Ok(substrate_home()?.join("config.toml"))
+    Ok(substrate_home()?.join("config.yaml"))
 }
 
 #[cfg(test)]
