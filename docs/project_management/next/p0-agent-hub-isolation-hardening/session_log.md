@@ -194,3 +194,10 @@ Template (START/END only):
   - windows-smoke.ps1 (SKIP: agent hub hardening windows smoke (pwsh not installed))
 - Docs commit: (this commit)
 - Next steps / blockers: none
+
+## [2025-12-25 22:21 UTC] Codex – I3-code – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md
+- Worktree (next): wt/ahih-i3-full-cage-pty-code
+- Plan: extend full-cage (I2) to PTY stream child spawn paths, ensuring no pre-cage cwd/inode escapes; preserve signal forwarding and resize behavior
+- Blockers: none
