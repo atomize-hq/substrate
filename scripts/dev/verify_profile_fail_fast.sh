@@ -45,7 +45,12 @@ echo "[verify_profile_fail_fast] Writing valid minimal profile..."
 cat >"${tmpdir}/proj/.substrate-profile" <<'YAML'
 id: ok
 name: ok
-world_fs_mode: writable
+world_fs:
+  mode: writable
+  cage: project
+  require_world: false
+  read_allowlist: ["*"]
+  write_allowlist: []
 net_allowed: []
 cmd_allowed: []
 cmd_denied: []
