@@ -21,6 +21,8 @@ Inputs (must read end-to-end):
 - `docs/project_management/next/sequencing.json`
 - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
 - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+- `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
+- `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
 
 Review checklist (pass/fail):
 1) Decision quality:
@@ -39,6 +41,13 @@ Review checklist (pass/fail):
 5) Auditability:
    - Decisions map to triad task IDs via `references` and follow-up tasks.
 
+Required reviewer actions (non-negotiable):
+1) Run the mechanical checks in `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md` for the feature directory.
+2) Create an auditable report in the feature Planning Pack:
+   - `docs/project_management/next/<feature>/quality_gate_report.md`
+   - using `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
+3) If any mechanical lint check fails, the recommendation must be `FLAG FOR HUMAN REVIEW`.
+
 Output format:
 - Start with one line: `RECOMMENDATION: ACCEPT` or `RECOMMENDATION: FLAG FOR HUMAN REVIEW`
 - Then list findings in this structure (no prose essays):
@@ -47,5 +56,7 @@ Output format:
   - Impact: <why this matters>
   - Fix: <exact change required, or if accepted: “none”>
   - Alternative: <only if flagging; propose one viable alternative and why>
-```
 
+Additionally:
+- Append the full findings to `docs/project_management/next/<feature>/quality_gate_report.md` with the required evidence.
+```

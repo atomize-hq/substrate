@@ -40,6 +40,14 @@ If you already have crisp specs and only need to implement them, use the executi
 When you run a docs-first planning pass for a feature/track, you must produce a Planning Pack under:
 `docs/project_management/next/<feature>/`
 
+### 3.0 Supporting workflow docs (required references)
+
+Planning work must use these standards:
+- `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
+- `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
+- `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
+- `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`
+
 ### 3.1 Always required (minimum)
 
 1) `plan.md`
@@ -99,6 +107,18 @@ If the scope spans multiple tracks (or you are reconciling a backlog), produce:
 - Sequencing is the execution spine; if tasks and sequencing disagree, fix one and record it.
 
 ---
+
+### 3.4 Quality gate artifact (required before execution triads begin)
+
+Before any execution triad begins, a third-party quality gate reviewer must review the Planning Pack and produce an auditable report.
+
+Required output:
+- `docs/project_management/next/<feature>/quality_gate_report.md`
+  - must follow `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
+  - must include evidence that `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md` was run
+
+Gating rule:
+- Execution triads must not begin unless the quality gate recommendation is `ACCEPT`.
 
 ## 4) Decision Register Standard (Exact Format)
 
