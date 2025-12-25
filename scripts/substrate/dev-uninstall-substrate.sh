@@ -393,7 +393,8 @@ VERSION_DIR="${PREFIX%/}/versions/${VERSION_LABEL}"
 VERSIONS_ROOT="${PREFIX%/}/versions"
 MANAGER_ENV_PATH="${PREFIX%/}/manager_env.sh"
 MANAGER_INIT_PATH="${PREFIX%/}/manager_init.sh"
-INSTALL_CONFIG_PATH="${PREFIX%/}/config.toml"
+INSTALL_CONFIG_PATH="${PREFIX%/}/config.yaml"
+LEGACY_INSTALL_CONFIG_PATH="${PREFIX%/}/config.toml"
 HOST_STATE_PATH="${PREFIX%/}/install_state.json"
 SHIMS_DIR="${PREFIX%/}/shims"
 ENV_FILE="${PREFIX%/}/dev-shim-env.sh"
@@ -457,6 +458,11 @@ fi
 if [[ -f "${INSTALL_CONFIG_PATH}" ]]; then
   log "Removing ${INSTALL_CONFIG_PATH}"
   rm -f "${INSTALL_CONFIG_PATH}"
+fi
+
+if [[ -f "${LEGACY_INSTALL_CONFIG_PATH}" ]]; then
+  log "Removing ${LEGACY_INSTALL_CONFIG_PATH}"
+  rm -f "${LEGACY_INSTALL_CONFIG_PATH}"
 fi
 
 if [[ -f "${MANAGER_ENV_PATH}" ]]; then

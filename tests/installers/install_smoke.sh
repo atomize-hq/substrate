@@ -568,7 +568,7 @@ build_fake_release() {
 }
 
 assert_install_config() {
-  local config="${PREFIX}/config.toml"
+  local config="${PREFIX}/config.yaml"
   local expected_flag="true"
   if [[ "${SCENARIO_WORLD_ENABLED}" -eq 0 ]]; then
     expected_flag="false"
@@ -576,7 +576,7 @@ assert_install_config() {
 
   if [[ ! -f "${config}" ]]; then
     if [[ -f "${PREFIX}/config.json" ]]; then
-      fatal "expected ${config} but found legacy config.json; installer should emit TOML"
+      fatal "expected ${config} but found legacy config.json; installer should emit YAML"
     fi
     fatal "install config missing after install: ${config}"
   fi
@@ -594,6 +594,7 @@ anchor_path = None
 root_mode = None
 root_path = None
 caged = None
+
 section = None
 
 
@@ -608,21 +609,40 @@ def parse_string(raw):
     val = raw.strip()
     if val.startswith('"') and val.endswith('"') and len(val) >= 2:
         return val[1:-1]
+    if val.startswith("'") and val.endswith("'") and len(val) >= 2:
+        inner = val[1:-1]
+        return inner.replace("''", "'")
     return val
 
 
-for raw in body.splitlines():
-    line = raw.split("#", 1)[0].strip()
-    if not line:
-        continue
-    if line.startswith("[") and line.endswith("]"):
-        section = line[1:-1].strip()
-        continue
-    if "=" not in line or section is None:
-        continue
-    key, value = line.split("=", 1)
+def parse_kv_line(raw_line):
+    key, _, value = raw_line.partition(":")
     key = key.strip()
     value = value.strip()
+    if not key:
+        return None, None
+    return key, value
+
+
+for raw in body.splitlines():
+    line = raw.split("#", 1)[0].rstrip()
+    if not line.strip():
+        continue
+
+    if not line.startswith(" ") and line.endswith(":"):
+        section = line.strip()[:-1]
+        continue
+
+    if section is None:
+        continue
+
+    if not line.startswith("  "):
+        continue
+
+    key, value = parse_kv_line(line)
+    if key is None:
+        continue
+
     if section == "install" and key == "world_enabled":
         world_enabled = parse_bool(value)
     elif section == "world":
@@ -638,27 +658,27 @@ for raw in body.splitlines():
             caged = parse_bool(value)
 
 if world_enabled is None:
-    raise SystemExit("world_enabled missing under [install]")
+    raise SystemExit("install.world_enabled missing in config.yaml")
 if world_enabled != expected_enabled:
     raise SystemExit(f"world_enabled={world_enabled} (expected {expected_enabled})")
 if anchor_mode is None:
-    raise SystemExit("world.anchor_mode missing under [world]")
+    raise SystemExit("world.anchor_mode missing in config.yaml")
 if anchor_mode != "project":
     raise SystemExit(f"world.anchor_mode={anchor_mode} (expected project)")
 if anchor_path is None:
-    raise SystemExit("world.anchor_path missing under [world]")
+    raise SystemExit("world.anchor_path missing in config.yaml")
 if anchor_path != "":
     raise SystemExit(f"world.anchor_path={anchor_path!r} (expected empty string)")
 if root_mode is None:
-    raise SystemExit("world.root_mode missing under [world] (expected backward compatibility)")
+    raise SystemExit("world.root_mode missing in config.yaml (expected backward compatibility)")
 if root_mode != anchor_mode:
     raise SystemExit(f"world.root_mode={root_mode} (expected {anchor_mode})")
 if root_path is None:
-    raise SystemExit("world.root_path missing under [world] (expected backward compatibility)")
+    raise SystemExit("world.root_path missing in config.yaml (expected backward compatibility)")
 if root_path != anchor_path:
     raise SystemExit(f"world.root_path={root_path!r} (expected {anchor_path!r})")
 if caged is None:
-    raise SystemExit("world.caged missing under [world]")
+    raise SystemExit("world.caged missing in config.yaml")
 if caged is not True:
     raise SystemExit(f"world.caged={caged} (expected true)")
 PY
