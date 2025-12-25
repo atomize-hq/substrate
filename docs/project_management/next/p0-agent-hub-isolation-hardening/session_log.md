@@ -64,3 +64,18 @@ Template (START/END only):
 - Created worktree: wt/ahih-i0-policy-schema-integ
 - Plan: merge I0 code+test branches; reconcile broker schema vs I0-spec; run fmt/clippy/broker tests/preflight
 - Blockers: none
+
+## [2025-12-25 20:53 UTC] Codex – I0-integ – END
+- Worktree commits: 0031d7a
+- Commands:
+  - cargo fmt
+  - cargo clippy --workspace --all-targets -- -D warnings
+  - cargo test -p substrate-broker -- --nocapture
+  - make preflight
+- Results: pass
+- Scripts executed:
+  - linux-smoke.sh (OK: agent hub hardening linux smoke (preflight); required PATH+=target/debug)
+  - macos-smoke.sh (SKIP: agent hub hardening macOS smoke (not macOS))
+  - windows-smoke.ps1 (SKIP: pwsh not installed on this host)
+- Docs commit: (this commit)
+- Next steps / blockers: none
