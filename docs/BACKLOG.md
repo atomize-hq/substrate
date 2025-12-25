@@ -273,7 +273,7 @@ Risks / considerations
 ## DONE -- IMPLEMENTED
 
 - ~~Top Priority – Global configuration UX~~ **(Done)**
-  - Implementation: `substrate config init` scaffolds `~/.substrate/config.toml`, `config show` renders TOML/JSON with redaction hooks, and `config set` applies multi-key updates atomically with schema validation.
+  - Implementation: `substrate config init` scaffolds `~/.substrate/config.yaml`, `config show` renders YAML/JSON with redaction hooks, and `config set` applies multi-key updates atomically with schema validation.
   - Docs/installer output highlight the new subcommands across Linux/macOS/Windows, and the precedence stack (flags → directory config → global config → env) remains unchanged.
 
 - ~~Auto-start world-agent on shell startup (Linux)~~ **(Done)**

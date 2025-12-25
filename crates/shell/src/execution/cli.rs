@@ -196,9 +196,9 @@ pub struct ConfigCmd {
 
 #[derive(Subcommand, Debug)]
 pub enum ConfigAction {
-    /// Initialize or regenerate ~/.substrate/config.toml
+    /// Initialize or regenerate ~/.substrate/config.yaml
     Init(ConfigInitArgs),
-    /// Print the global config (TOML by default, JSON with --json)
+    /// Print the global config (YAML by default, JSON with --json)
     Show(ConfigShowArgs),
     /// Update config keys via dotted key=value assignments
     Set(ConfigSetArgs),
@@ -213,7 +213,7 @@ pub struct ConfigInitArgs {
 
 #[derive(Args, Debug)]
 pub struct ConfigShowArgs {
-    /// Emit JSON instead of TOML
+    /// Emit JSON instead of YAML
     #[arg(long)]
     pub json: bool,
 }

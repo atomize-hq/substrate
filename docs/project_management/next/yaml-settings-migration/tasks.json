@@ -5,7 +5,7 @@
       "name": "Settings stack TOML→YAML (code)",
       "type": "code",
       "phase": "YAML Settings Migration",
-      "status": "pending",
+      "status": "completed",
       "description": "Convert the layered config/settings stack from TOML to YAML and update the `substrate config` subcommand.",
       "references": [
         "docs/project_management/next/yaml-settings-migration/plan.md",
@@ -49,7 +49,7 @@
       "name": "Settings stack TOML→YAML (test)",
       "type": "test",
       "phase": "YAML Settings Migration",
-      "status": "pending",
+      "status": "completed",
       "description": "Update and extend tests for YAML settings load/persist behavior and config CLI behavior.",
       "references": [
         "docs/project_management/next/yaml-settings-migration/Y0-spec.md",
@@ -92,7 +92,7 @@
       "name": "Settings stack TOML→YAML (integration)",
       "type": "integration",
       "phase": "YAML Settings Migration",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge Y0 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
         "docs/project_management/next/yaml-settings-migration/plan.md",

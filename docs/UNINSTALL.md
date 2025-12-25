@@ -21,7 +21,7 @@ the **latest GitHub release tag** (not `main`) to avoid drift.
 Regardless of platform, the script:
 
 1. Stops running `substrate` processes (`pkill -f substrate`).
-2. Deletes `~/.substrate*` state (manager env/init files, `config.toml`,
+2. Deletes `~/.substrate*` state (manager env/init files, `config.yaml`,
    bundled manifests under `~/.substrate/versions/<version>/config/`, shims,
    history, locks, etc.).
 3. Clears the shell command hash table (`hash -r`).

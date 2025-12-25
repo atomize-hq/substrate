@@ -54,13 +54,13 @@ fn write_world_settings(path: &Path, mode: &str, root_path: Option<&Path>, caged
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).expect("create settings parent");
     }
-    let mut body = format!("[world]\nroot_mode = \"{mode}\"\n");
+    let mut body = format!("world:\n  root_mode: {mode}\n");
     if let Some(root) = root_path {
-        body.push_str(&format!("root_path = \"{}\"\n", root.display()));
+        body.push_str(&format!("  root_path: \"{}\"\n", root.display()));
     }
     if let Some(flag) = caged {
         body.push_str(&format!(
-            "caged = {}\n",
+            "  caged: {}\n",
             if flag { "true" } else { "false" }
         ));
     }
@@ -78,19 +78,19 @@ fn write_anchor_world_settings(
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).expect("create anchor settings parent");
     }
-    let mut body = format!("[world]\nanchor_mode = \"{anchor_mode}\"\n");
+    let mut body = format!("world:\n  anchor_mode: {anchor_mode}\n");
     if let Some(anchor) = anchor_path {
-        body.push_str(&format!("anchor_path = \"{}\"\n", anchor.display()));
+        body.push_str(&format!("  anchor_path: \"{}\"\n", anchor.display()));
     }
     if let Some(mode) = legacy_mode {
-        body.push_str(&format!("root_mode = \"{mode}\"\n"));
+        body.push_str(&format!("  root_mode: {mode}\n"));
     }
     if let Some(root) = legacy_path {
-        body.push_str(&format!("root_path = \"{}\"\n", root.display()));
+        body.push_str(&format!("  root_path: \"{}\"\n", root.display()));
     }
     if let Some(flag) = caged {
         body.push_str(&format!(
-            "caged = {}\n",
+            "  caged: {}\n",
             if flag { "true" } else { "false" }
         ));
     }
@@ -122,8 +122,8 @@ fn resolve_world_root_defaults_to_launch_dir_project() {
     assert!(std::env::var("SUBSTRATE_WORLD_ROOT_PATH").is_err());
     let launch_dir = temp.path().join("workspace");
     std::fs::create_dir_all(&launch_dir).unwrap();
-    let dir_settings = launch_dir.join(".substrate/settings.toml");
-    let global_settings = home.join("config.toml");
+    let dir_settings = launch_dir.join(".substrate/settings.yaml");
+    let global_settings = home.join("config.yaml");
     assert!(
         !dir_settings.exists(),
         "unexpected directory settings file at {}",
@@ -145,6 +145,41 @@ fn resolve_world_root_defaults_to_launch_dir_project() {
     assert_eq!(settings.mode, WorldRootMode::Project);
     assert_eq!(settings.path, launch_dir);
     assert!(settings.caged);
+}
+
+#[test]
+#[serial]
+fn resolve_world_root_refuses_legacy_settings_toml() {
+    let temp = TempDir::new().unwrap();
+    let home = setup_substrate_home(&temp);
+    let _env = EnvGuard::new(vec![("SUBSTRATE_HOME", Some(home.display().to_string()))]);
+
+    let launch_dir = temp.path().join("workspace");
+    std::fs::create_dir_all(launch_dir.join(".substrate")).unwrap();
+    let legacy_settings = launch_dir.join(".substrate/settings.toml");
+    std::fs::write(&legacy_settings, "[world]\nroot_mode = \"project\"\n").unwrap();
+
+    let err = resolve_world_root(None, None, None, &launch_dir)
+        .expect_err("legacy settings.toml should be rejected");
+    let message = err.to_string();
+
+    assert!(
+        message.contains("unsupported legacy TOML settings detected"),
+        "unexpected error message: {message}"
+    );
+    assert!(
+        message.contains(&legacy_settings.display().to_string()),
+        "error message missing legacy path: {message}"
+    );
+    assert!(
+        message.contains(
+            &launch_dir
+                .join(".substrate/settings.yaml")
+                .display()
+                .to_string()
+        ),
+        "error message missing yaml path: {message}"
+    );
 }
 
 #[test]
@@ -172,8 +207,8 @@ fn resolve_world_root_respects_env_when_no_configs() {
     );
     let launch_dir = temp.path().join("project");
     std::fs::create_dir_all(&launch_dir).unwrap();
-    let dir_settings = launch_dir.join(".substrate/settings.toml");
-    let global_settings = home.join("config.toml");
+    let dir_settings = launch_dir.join(".substrate/settings.yaml");
+    let global_settings = home.join("config.yaml");
     assert!(
         !dir_settings.exists(),
         "unexpected directory settings file at {}",
@@ -225,7 +260,7 @@ fn world_root_from_env_prefers_anchor_over_legacy_keys() {
 fn resolve_world_root_prefers_global_config_over_env() {
     let temp = TempDir::new().unwrap();
     let home = setup_substrate_home(&temp);
-    let config_path = home.join("config.toml");
+    let config_path = home.join("config.yaml");
     write_world_settings(&config_path, "follow-cwd", None, Some(true));
     let _env = EnvGuard::new(vec![
         ("SUBSTRATE_HOME", Some(home.display().to_string())),
@@ -250,7 +285,7 @@ fn resolve_world_root_prefers_global_config_over_env() {
 fn resolve_world_root_prefers_directory_config_over_global_and_env() {
     let temp = TempDir::new().unwrap();
     let home = setup_substrate_home(&temp);
-    let config_path = home.join("config.toml");
+    let config_path = home.join("config.yaml");
     write_world_settings(
         &config_path,
         "project",
@@ -267,7 +302,7 @@ fn resolve_world_root_prefers_directory_config_over_global_and_env() {
     ]);
     let launch_dir = temp.path().join("project");
     std::fs::create_dir_all(launch_dir.join(".substrate")).unwrap();
-    let dir_settings = launch_dir.join(".substrate/settings.toml");
+    let dir_settings = launch_dir.join(".substrate/settings.yaml");
     write_world_settings(
         &dir_settings,
         "custom",
@@ -287,7 +322,7 @@ fn resolve_world_root_prefers_directory_config_over_global_and_env() {
 fn resolve_world_root_prefers_cli_over_all_other_sources() {
     let temp = TempDir::new().unwrap();
     let home = setup_substrate_home(&temp);
-    let config_path = home.join("config.toml");
+    let config_path = home.join("config.yaml");
     write_world_settings(
         &config_path,
         "project",
@@ -304,7 +339,7 @@ fn resolve_world_root_prefers_cli_over_all_other_sources() {
     ]);
     let launch_dir = temp.path().join("project");
     std::fs::create_dir_all(launch_dir.join(".substrate")).unwrap();
-    let dir_settings = launch_dir.join(".substrate/settings.toml");
+    let dir_settings = launch_dir.join(".substrate/settings.yaml");
     write_world_settings(
         &dir_settings,
         "custom",
@@ -331,7 +366,7 @@ fn resolve_world_root_prefers_cli_over_all_other_sources() {
 fn resolve_world_root_honors_anchor_keys_and_legacy_precedence() {
     let temp = TempDir::new().unwrap();
     let home = setup_substrate_home(&temp);
-    let global_path = home.join("config.toml");
+    let global_path = home.join("config.yaml");
     let launch_dir = temp.path().join("project");
     std::fs::create_dir_all(&launch_dir).unwrap();
     write_anchor_world_settings(
@@ -357,7 +392,7 @@ fn resolve_world_root_honors_anchor_keys_and_legacy_precedence() {
     assert_eq!(settings.path, PathBuf::from("/global/anchor"));
     assert!(settings.caged);
 
-    let dir_settings = launch_dir.join(".substrate/settings.toml");
+    let dir_settings = launch_dir.join(".substrate/settings.yaml");
     write_world_settings(
         &dir_settings,
         "custom",
@@ -391,8 +426,8 @@ fn resolve_world_root_requires_path_for_custom_mode() {
     assert!(std::env::var("SUBSTRATE_WORLD_ROOT_PATH").is_err());
     let launch_dir = temp.path().join("project");
     std::fs::create_dir_all(&launch_dir).unwrap();
-    let dir_settings = launch_dir.join(".substrate/settings.toml");
-    let global_settings = home.join("config.toml");
+    let dir_settings = launch_dir.join(".substrate/settings.yaml");
+    let global_settings = home.join("config.yaml");
     assert!(
         !dir_settings.exists(),
         "unexpected directory settings file at {}",

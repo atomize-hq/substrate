@@ -94,9 +94,9 @@ mod tests {
         fs::create_dir_all(substrate_home).expect("config parent");
         let flag = if enabled { "true" } else { "false" };
         fs::write(
-            substrate_home.join("config.toml"),
+            substrate_home.join("config.yaml"),
             format!(
-                "[install]\nworld_enabled = {flag}\n[world]\nroot_mode = \"project\"\nroot_path = \"\"\ncaged = true\n"
+                "install:\n  world_enabled: {flag}\nworld:\n  root_mode: project\n  root_path: \"\"\n  caged: true\n"
             ),
         )
         .expect("write config");
