@@ -37,7 +37,10 @@ world:
   caged: true
 YAML
 cd "$Y0_TEST_WS"
-HOME="$Y0_TEST_HOME" substrate config show --json | jq -e '.world.anchor_mode=="project"' >/dev/null
+expected_ws="$(pwd -P)"
+resolved="$(HOME="$Y0_TEST_HOME" substrate --no-world -c 'printf "%s|%s" "$SUBSTRATE_ANCHOR_MODE" "$SUBSTRATE_ANCHOR_PATH"')"
+test "${resolved%%|*}" = "project"
+test "${resolved#*|}" = "$expected_ws"
 
 mkdir -p "$Y0_TEST_HOME/.substrate"
 cat > "$Y0_TEST_HOME/.substrate/config.toml" <<'TOML'
@@ -45,10 +48,13 @@ cat > "$Y0_TEST_HOME/.substrate/config.toml" <<'TOML'
 anchor_mode = "project"
 TOML
 set +e
-HOME="$Y0_TEST_HOME" substrate config show >/dev/null 2>&1
+stderr="$(HOME="$Y0_TEST_HOME" substrate config show 2>&1 >/dev/null)"
 code=$?
 set -e
-test "$code" -eq 2
+test "$code" -ne 0
+echo "$stderr" | grep -q "unsupported legacy TOML"
+echo "$stderr" | grep -q "config.toml"
+echo "$stderr" | grep -q "config.yaml"
+echo "$stderr" | grep -q "substrate config init --force"
 
 echo "OK: yaml-settings-migration linux smoke"
-
