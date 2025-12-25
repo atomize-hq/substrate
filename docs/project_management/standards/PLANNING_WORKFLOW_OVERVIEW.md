@@ -8,22 +8,37 @@ This diagram shows the intended handoff flow:
 
 ```mermaid
 flowchart TD
-  A[Brainstorming / Noodling Session] --> B[ADR Authoring Agent<br/>Read: docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md];
-  B --> C[ADR Draft Created];
-  C --> D{ADR Ready?};
-  D -->|No| E[Revise ADR (repeat)];
-  E --> C;
-  D -->|Yes| F[ADR Accepted];
+  A[Brainstorming session]
+  B["ADR authoring agent reads: docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md"]
+  C[ADR draft created]
+  D{ADR accepted}
+  D_NO[ADR not accepted]
+  D_YES[ADR accepted]
 
-  F --> G[Planning Agent<br/>Read: docs/project_management/standards/PLANNING_README.md];
-  G --> H[Planning Pack Created<br/>docs/project_management/next/&lt;feature&gt;/<br/>plan.md, tasks.json, session_log.md, specs, kickoff_prompts/,<br/>+ decision_register/integration_map/manual_playbook/smoke/ if required];
+  P["Planning agent reads: docs/project_management/standards/PLANNING_README.md"]
+  PACK[Planning Pack created under docs/project_management/next/<feature>/]
 
-  H --> I[Quality Gate Reviewer (3rd party)<br/>Read: docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md];
-  I --> J[Run Mechanical Checks<br/>docs/project_management/standards/PLANNING_LINT_CHECKLIST.md];
-  J --> K[Write Gate Report<br/>docs/project_management/next/&lt;feature&gt;/quality_gate_report.md<br/>(template: docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md)];
+  Q["Quality gate reviewer reads: docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md"]
+  LINT["Run mechanical checks: docs/project_management/standards/PLANNING_LINT_CHECKLIST.md"]
+  REPORT["Write: docs/project_management/next/<feature>/quality_gate_report.md using docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md"]
+  GATE{RECOMMENDATION ACCEPT}
+  GATE_NO[Fix Planning Pack]
+  GATE_YES["Execution triads start: docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"]
 
-  K --> L{RECOMMENDATION: ACCEPT?};
-  L -->|No| M[Fix Planning Pack (repeat)];
-  M --> H;
-  L -->|Yes| N[Execution Triads Start<br/>Read: docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md];
+  A --> B
+  B --> C
+  C --> D
+  D --> D_NO
+  D --> D_YES
+  D_NO --> B
+
+  D_YES --> P
+  P --> PACK
+  PACK --> Q
+  Q --> LINT
+  LINT --> REPORT
+  REPORT --> GATE
+  GATE --> GATE_NO
+  GATE --> GATE_YES
+  GATE_NO --> P
 ```
