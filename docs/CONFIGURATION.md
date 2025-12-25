@@ -162,6 +162,8 @@ machine-friendly payload for automation. Both commands honor
 `SUBSTRATE_HOME`/`%USERPROFILE%` overrides and exit non-zero with a reminder to
 run `substrate config init` if the file is missing.
 
+Note: `config show` renders only the global config file (`~/.substrate/config.yaml`); per-directory overrides from `.substrate/settings.yaml` are applied when running Substrate (settings stack), not merged into `config show` output.
+
 ```bash
 $ substrate config show
 install:
