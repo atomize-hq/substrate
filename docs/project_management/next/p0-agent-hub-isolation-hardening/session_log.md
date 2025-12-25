@@ -85,3 +85,9 @@ Template (START/END only):
 - Updated tasks.json + session_log.md
 - Plan: enforce required-world fail-closed routing for non-PTY + PTY; preserve warn-once host fallback when world is not required
 - Blockers: none
+
+## [2025-12-25 20:58 UTC] Codex – I1-test – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md
+- Plan: add integration tests proving require_world fail-closed (no host fallback) and require_world=false warns then falls back
+- Blockers: none

@@ -174,7 +174,7 @@
       "name": "Fail-closed semantics (test)",
       "type": "test",
       "phase": "Agent Hub Isolation",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add integration tests proving no host fallback occurs when world is required.",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md",
