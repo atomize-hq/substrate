@@ -5,7 +5,7 @@
       "name": "Strict policy schema (world_fs v1) (code)",
       "type": "code",
       "phase": "Agent Hub Isolation",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Implement a strict, versioned world_fs policy schema with strong validation and broker outputs required for enforcement.",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
