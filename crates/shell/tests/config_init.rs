@@ -64,24 +64,24 @@ impl ConfigInitFixture {
 fn assert_default_config(config: &YamlValue) {
     let root = config.as_mapping().expect("config must be a mapping");
     let install = root
-        .get(&YamlValue::String("install".to_string()))
+        .get(YamlValue::String("install".to_string()))
         .and_then(|value| value.as_mapping())
         .expect("install mapping present");
     assert_eq!(
         install
-            .get(&YamlValue::String("world_enabled".to_string()))
+            .get(YamlValue::String("world_enabled".to_string()))
             .and_then(|value| value.as_bool()),
         Some(true),
         "install.world_enabled should default to true"
     );
 
     let world = root
-        .get(&YamlValue::String("world".to_string()))
+        .get(YamlValue::String("world".to_string()))
         .and_then(|value| value.as_mapping())
         .expect("world mapping present");
     assert_eq!(
         world
-            .get(&YamlValue::String("anchor_mode".to_string()))
+            .get(YamlValue::String("anchor_mode".to_string()))
             .and_then(|value| value.as_str())
             .map(str::to_string),
         Some("project".to_string()),
@@ -89,7 +89,7 @@ fn assert_default_config(config: &YamlValue) {
     );
     assert_eq!(
         world
-            .get(&YamlValue::String("anchor_path".to_string()))
+            .get(YamlValue::String("anchor_path".to_string()))
             .and_then(|value| value.as_str())
             .map(str::to_string),
         Some(String::new()),
@@ -97,7 +97,7 @@ fn assert_default_config(config: &YamlValue) {
     );
     assert_eq!(
         world
-            .get(&YamlValue::String("root_mode".to_string()))
+            .get(YamlValue::String("root_mode".to_string()))
             .and_then(|value| value.as_str())
             .map(str::to_string),
         Some("project".to_string()),
@@ -105,7 +105,7 @@ fn assert_default_config(config: &YamlValue) {
     );
     assert_eq!(
         world
-            .get(&YamlValue::String("root_path".to_string()))
+            .get(YamlValue::String("root_path".to_string()))
             .and_then(|value| value.as_str())
             .map(str::to_string),
         Some(String::new()),
@@ -113,7 +113,7 @@ fn assert_default_config(config: &YamlValue) {
     );
     assert_eq!(
         world
-            .get(&YamlValue::String("caged".to_string()))
+            .get(YamlValue::String("caged".to_string()))
             .and_then(|value| value.as_bool()),
         Some(true),
         "world.caged default mismatch"

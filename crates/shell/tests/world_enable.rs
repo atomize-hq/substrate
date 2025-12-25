@@ -184,11 +184,11 @@ impl WorldEnableFixture {
         let config = self.read_config();
         let root = config.as_mapping().expect("config root mapping");
         let install = root
-            .get(&YamlValue::String("install".to_string()))
+            .get(YamlValue::String("install".to_string()))
             .and_then(|value| value.as_mapping())
             .expect("install mapping missing");
         install
-            .get(&YamlValue::String("world_enabled".to_string()))
+            .get(YamlValue::String("world_enabled".to_string()))
             .and_then(|value| value.as_bool())
             .expect("install.world_enabled missing")
     }

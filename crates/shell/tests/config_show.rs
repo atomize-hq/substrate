@@ -174,31 +174,31 @@ fn config_show_redacts_sensitive_paths_in_outputs() {
 
     let root = cli_value.as_mapping().expect("yaml root mapping");
     let install_table = root
-        .get(&YamlValue::String("install".to_string()))
+        .get(YamlValue::String("install".to_string()))
         .and_then(|value| value.as_mapping())
         .expect("install mapping present");
     assert_eq!(
         install_table
-            .get(&YamlValue::String("api_token".to_string()))
+            .get(YamlValue::String("api_token".to_string()))
             .and_then(|value| value.as_str()),
         Some(REDACTED_PLACEHOLDER),
         "install.api_token should be redacted"
     );
     assert_eq!(
         install_table
-            .get(&YamlValue::String("auth_token".to_string()))
+            .get(YamlValue::String("auth_token".to_string()))
             .and_then(|value| value.as_str()),
         Some(REDACTED_PLACEHOLDER),
         "install.auth_token should be redacted"
     );
 
     let world_table = root
-        .get(&YamlValue::String("world".to_string()))
+        .get(YamlValue::String("world".to_string()))
         .and_then(|value| value.as_mapping())
         .expect("world mapping present");
     assert_eq!(
         world_table
-            .get(&YamlValue::String("api_token".to_string()))
+            .get(YamlValue::String("api_token".to_string()))
             .and_then(|value| value.as_str()),
         Some(REDACTED_PLACEHOLDER),
         "world.api_token should be redacted"
@@ -239,30 +239,30 @@ fn config_show_redacts_sensitive_paths_in_outputs() {
     let stored = fixture.read_config_value();
     let stored_root = stored.as_mapping().expect("stored yaml root mapping");
     let stored_install = stored_root
-        .get(&YamlValue::String("install".to_string()))
+        .get(YamlValue::String("install".to_string()))
         .and_then(|value| value.as_mapping())
         .expect("stored install mapping");
     assert_eq!(
         stored_install
-            .get(&YamlValue::String("api_token".to_string()))
+            .get(YamlValue::String("api_token".to_string()))
             .and_then(|value| value.as_str()),
         Some("install-secret"),
         "redaction should not mutate the stored config"
     );
     assert_eq!(
         stored_install
-            .get(&YamlValue::String("auth_token".to_string()))
+            .get(YamlValue::String("auth_token".to_string()))
             .and_then(|value| value.as_str()),
         Some("install-another"),
         "redaction should not mutate install.auth_token on disk"
     );
     let stored_world = stored_root
-        .get(&YamlValue::String("world".to_string()))
+        .get(YamlValue::String("world".to_string()))
         .and_then(|value| value.as_mapping())
         .expect("stored world mapping");
     assert_eq!(
         stored_world
-            .get(&YamlValue::String("api_token".to_string()))
+            .get(YamlValue::String("api_token".to_string()))
             .and_then(|value| value.as_str()),
         Some("world-secret"),
         "redaction should not mutate world.api_token on disk"

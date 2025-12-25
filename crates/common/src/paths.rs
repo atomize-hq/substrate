@@ -90,7 +90,7 @@ mod tests {
     #[test]
     fn test_config_file() {
         let path = config_file().unwrap();
-        assert!(path.ends_with("config.toml"));
+        assert!(path.ends_with("config.yaml"));
         assert!(path.parent().unwrap().ends_with(SUBSTRATE_DIR_NAME));
     }
 

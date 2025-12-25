@@ -101,7 +101,7 @@ fn config_set_updates_anchor_mode() {
     let world = world_table(&config);
     assert_eq!(
         world
-            .get(&YamlValue::String("anchor_mode".to_string()))
+            .get(YamlValue::String("anchor_mode".to_string()))
             .and_then(|value| value.as_str()),
         Some("follow-cwd"),
         "world.anchor_mode should reflect config set change"
@@ -128,7 +128,7 @@ fn config_set_updates_anchor_path() {
     let world = world_table(&config);
     assert_eq!(
         world
-            .get(&YamlValue::String("anchor_path".to_string()))
+            .get(YamlValue::String("anchor_path".to_string()))
             .and_then(|value| value.as_str()),
         Some(expected_path),
         "world.anchor_path should update to requested path"
@@ -154,7 +154,7 @@ fn config_set_updates_world_caged_flag() {
     let world = world_table(&config);
     assert_eq!(
         world
-            .get(&YamlValue::String("caged".to_string()))
+            .get(YamlValue::String("caged".to_string()))
             .and_then(|value| value.as_bool()),
         Some(false),
         "world.caged should follow config set boolean"
@@ -180,7 +180,7 @@ fn config_set_updates_install_world_enabled_flag() {
     let install = install_table(&config);
     assert_eq!(
         install
-            .get(&YamlValue::String("world_enabled".to_string()))
+            .get(YamlValue::String("world_enabled".to_string()))
             .and_then(|value| value.as_bool()),
         Some(false),
         "install.world_enabled should update to requested boolean"
@@ -208,14 +208,14 @@ fn config_set_updates_multiple_keys_atomically() {
     let world = world_table(&config);
     assert_eq!(
         world
-            .get(&YamlValue::String("anchor_mode".to_string()))
+            .get(YamlValue::String("anchor_mode".to_string()))
             .and_then(|value| value.as_str()),
         Some("custom"),
         "world.anchor_mode should match multi-key update"
     );
     assert_eq!(
         world
-            .get(&YamlValue::String("anchor_path".to_string()))
+            .get(YamlValue::String("anchor_path".to_string()))
             .and_then(|value| value.as_str()),
         Some("/tmp/multi-anchor"),
         "world.anchor_path should match multi-key update"
@@ -223,7 +223,7 @@ fn config_set_updates_multiple_keys_atomically() {
     let install = install_table(&config);
     assert_eq!(
         install
-            .get(&YamlValue::String("world_enabled".to_string()))
+            .get(YamlValue::String("world_enabled".to_string()))
             .and_then(|value| value.as_bool()),
         Some(false),
         "install.world_enabled should reflect the combined run"
@@ -440,14 +440,14 @@ fn cli_flags_still_override_config_after_config_set() {
 
 fn world_table(config: &YamlValue) -> &YamlMapping {
     let root = config.as_mapping().expect("config must be a mapping");
-    root.get(&YamlValue::String("world".to_string()))
+    root.get(YamlValue::String("world".to_string()))
         .and_then(|value| value.as_mapping())
         .expect("world mapping present")
 }
 
 fn install_table(config: &YamlValue) -> &YamlMapping {
     let root = config.as_mapping().expect("config must be a mapping");
-    root.get(&YamlValue::String("install".to_string()))
+    root.get(YamlValue::String("install".to_string()))
         .and_then(|value| value.as_mapping())
         .expect("install mapping present")
 }
