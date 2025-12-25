@@ -16,6 +16,8 @@
 
 ## Exit codes (stable taxonomy)
 
+Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+
 World-sync commands use these exit codes:
 - `0`: success, including intentional no-op (no diffs, auto-sync disabled)
 - `2`: configuration or usage error (including “workspace not initialized; run substrate init”)

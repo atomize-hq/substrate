@@ -4,6 +4,7 @@ This playbook validates the Y0 TOML→YAML runtime settings migration (`substrat
 
 Authoritative spec:
 - `docs/project_management/next/yaml-settings-migration/Y0-spec.md`
+- Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Automated smoke scripts
 

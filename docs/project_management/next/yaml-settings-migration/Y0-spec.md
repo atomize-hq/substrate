@@ -42,7 +42,7 @@ Migration policy (greenfield, no dual-format support):
 - Provide a clear failure message if TOML files exist but YAML is required (and a concrete remediation path).
 
 Explicit requirements:
-- If `config.toml` or `settings.toml` exist, treat them as **unsupported** and fail with an actionable message.
+- If `config.toml` or `settings.toml` exist, treat them as **invalid configuration** and fail with an actionable message (exit code `2`).
 - YAML settings files must be validated strictly; unknown keys are a configuration error with an actionable message.
 - Message must include at least:
   - the unsupported file path(s),
@@ -51,6 +51,16 @@ Explicit requirements:
     - delete the TOML files
     - run `substrate config init --force`
     - reapply settings via `substrate config set ...`
+
+## Exit codes
+
+Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+
+- `0`: success
+- `2`: configuration/usage error, including:
+  - TOML config files present (`config.toml` / `settings.toml`)
+  - invalid YAML
+  - unknown keys
 
 ## Acceptance
 - All existing commands that read settings work with YAML equivalents.

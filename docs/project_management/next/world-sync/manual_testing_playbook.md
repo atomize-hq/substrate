@@ -5,6 +5,7 @@ This playbook validates the world-sync workspace model (`substrate init`) and th
 Authoritative docs:
 - Plan: `docs/project_management/next/world-sync/plan.md`
 - Specs: `docs/project_management/next/world-sync/C0-spec.md` through `docs/project_management/next/world-sync/C9-spec.md`
+- Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Automated smoke scripts
 

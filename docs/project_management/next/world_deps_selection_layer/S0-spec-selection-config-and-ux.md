@@ -201,6 +201,8 @@ This is intentionally additive to existing JSON output; JSON-mode track (J*) wil
 
 ## Exit codes (stable taxonomy)
 
+Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+
 All world-deps subcommands use these exit codes:
 - `0`: success, including intentional “no-op” due to missing selection
 - `2`: configuration / usage error (invalid YAML, unknown tool name, schema mismatch)

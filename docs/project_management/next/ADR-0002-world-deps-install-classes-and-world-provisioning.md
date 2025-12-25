@@ -6,6 +6,15 @@ Last updated: 2025-12-24
 
 Owners: Shell / World / Installer maintainers
 
+Planning Pack directory:
+- `docs/project_management/next/world_deps_selection_layer/`
+
+Intended execution branch:
+- `feat/world-sync`
+
+Exit code taxonomy:
+- `docs/project_management/standards/EXIT_CODE_TAXONOMY.md` (this ADR’s exit-code meanings must remain consistent with this taxonomy)
+
 Authoritative implementation docs:
 - Decision register: `docs/project_management/next/world_deps_selection_layer/decision_register.md`
 - Integration map: `docs/project_management/next/world_deps_selection_layer/integration_map.md`

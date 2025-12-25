@@ -5,6 +5,7 @@ This playbook validates the I0–I5 policy schema and Linux isolation semantics 
 Authoritative docs:
 - ADR: `docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md`
 - Specs: `docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md` through `docs/project_management/next/p0-agent-hub-isolation-hardening/I5-spec.md`
+- Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Automated smoke scripts
 

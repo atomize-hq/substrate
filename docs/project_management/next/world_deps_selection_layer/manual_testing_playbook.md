@@ -6,6 +6,7 @@ Authoritative specs:
 - `docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`
 - `docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md`
 - `docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
+- Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Automated smoke scripts
 

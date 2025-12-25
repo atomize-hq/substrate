@@ -43,6 +43,13 @@ Triads are numbered `I0..I5` (Isolation track). Each triad has a `*-spec.md` and
 5) **I4 — Landlock (additive hardening)**
 6) **I5 — Docs alignment + verification tooling**
 
+## Exit codes
+
+Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+
+This track uses the canonical exit code meanings. Each `I*-spec.md` and the manual playbook define the exact
+per-command mappings and messages.
+
 ## Start Checklist (all tasks)
 
 1. `git checkout feat/p0-agent-hub-isolation-hardening && git pull --ff-only`
