@@ -297,37 +297,38 @@ mod tests {
         let saved = read_yaml(&path);
         let root = saved.as_mapping().expect("root mapping missing after save");
 
+        let install_key = YamlValue::String("install".to_string());
+        let world_enabled_key = YamlValue::String("world_enabled".to_string());
+        let mode_key = YamlValue::String("mode".to_string());
+        let world_key = YamlValue::String("world".to_string());
+        let root_mode_key = YamlValue::String("root_mode".to_string());
+        let root_path_key = YamlValue::String("root_path".to_string());
+
         let install = root
-            .get(&YamlValue::String("install".to_string()))
+            .get(&install_key)
             .and_then(|value| value.as_mapping())
             .expect("install mapping missing after save");
         assert_eq!(
             install
-                .get(&YamlValue::String("world_enabled".to_string()))
+                .get(&world_enabled_key)
                 .and_then(|value| value.as_bool()),
             Some(true)
         );
         assert_eq!(
-            install
-                .get(&YamlValue::String("mode".to_string()))
-                .and_then(|value| value.as_str()),
+            install.get(&mode_key).and_then(|value| value.as_str()),
             Some("keep-me")
         );
 
         let world = root
-            .get(&YamlValue::String("world".to_string()))
+            .get(&world_key)
             .and_then(|value| value.as_mapping())
             .expect("world mapping missing after save");
         assert_eq!(
-            world
-                .get(&YamlValue::String("root_mode".to_string()))
-                .and_then(|value| value.as_str()),
+            world.get(&root_mode_key).and_then(|value| value.as_str()),
             Some("follow-cwd")
         );
         assert_eq!(
-            world
-                .get(&YamlValue::String("root_path".to_string()))
-                .and_then(|value| value.as_str()),
+            world.get(&root_path_key).and_then(|value| value.as_str()),
             Some("/tmp/custom")
         );
     }
@@ -348,25 +349,28 @@ mod tests {
         let saved = read_yaml(&path);
         let root = saved.as_mapping().expect("root mapping missing after save");
 
+        let install_key = YamlValue::String("install".to_string());
+        let world_enabled_key = YamlValue::String("world_enabled".to_string());
+        let world_key = YamlValue::String("world".to_string());
+        let root_mode_key = YamlValue::String("root_mode".to_string());
+
         let install = root
-            .get(&YamlValue::String("install".to_string()))
+            .get(&install_key)
             .and_then(|value| value.as_mapping())
             .expect("install mapping missing after save");
         assert_eq!(
             install
-                .get(&YamlValue::String("world_enabled".to_string()))
+                .get(&world_enabled_key)
                 .and_then(|value| value.as_bool()),
             Some(false)
         );
 
         let world = root
-            .get(&YamlValue::String("world".to_string()))
+            .get(&world_key)
             .and_then(|value| value.as_mapping())
             .expect("world mapping missing after save");
         assert_eq!(
-            world
-                .get(&YamlValue::String("root_mode".to_string()))
-                .and_then(|value| value.as_str()),
+            world.get(&root_mode_key).and_then(|value| value.as_str()),
             Some("project")
         );
     }

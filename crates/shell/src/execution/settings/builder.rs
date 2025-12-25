@@ -97,14 +97,14 @@ pub(crate) fn resolve_world_root(
 fn load_directory_settings(base_dir: &Path) -> Result<PartialWorldRoot> {
     let legacy_path = base_dir.join(".substrate/settings.toml");
     let settings_path = base_dir.join(".substrate/settings.yaml");
-    ensure_no_legacy_toml_files(&[legacy_path], &[settings_path.clone()])?;
+    ensure_no_legacy_toml_files(&[legacy_path.as_path()], &[settings_path.as_path()])?;
     load_world_settings_file(&settings_path)
 }
 
 fn load_global_settings() -> Result<PartialWorldRoot> {
     let path = substrate_paths::config_file()?;
     let legacy = substrate_paths::substrate_home()?.join("config.toml");
-    ensure_no_legacy_toml_files(&[legacy], &[path.clone()])?;
+    ensure_no_legacy_toml_files(&[legacy.as_path()], &[path.as_path()])?;
     load_world_settings_file(&path)
 }
 
@@ -129,7 +129,8 @@ fn parse_world_settings(path: &Path, contents: &str) -> Result<PartialWorldRoot>
         ),
     };
 
-    let Some(world) = root.get(&YamlValue::String("world".to_string())) else {
+    let world_key = YamlValue::String("world".to_string());
+    let Some(world) = root.get(&world_key) else {
         return Ok(PartialWorldRoot::default());
     };
 
@@ -142,9 +143,11 @@ fn parse_world_settings(path: &Path, contents: &str) -> Result<PartialWorldRoot>
         ),
     };
 
-    let (mode_value, mode_key) = match table.get(&YamlValue::String("anchor_mode".to_string())) {
+    let anchor_mode_key = YamlValue::String("anchor_mode".to_string());
+    let root_mode_key = YamlValue::String("root_mode".to_string());
+    let (mode_value, mode_key) = match table.get(&anchor_mode_key) {
         Some(value) => (Some(value), "world.anchor_mode"),
-        None => match table.get(&YamlValue::String("root_mode".to_string())) {
+        None => match table.get(&root_mode_key) {
             Some(value) => (Some(value), "world.root_mode"),
             None => (None, ""),
         },
@@ -163,9 +166,11 @@ fn parse_world_settings(path: &Path, contents: &str) -> Result<PartialWorldRoot>
         None => None,
     };
 
-    let (path_value, path_key) = match table.get(&YamlValue::String("anchor_path".to_string())) {
+    let anchor_path_key = YamlValue::String("anchor_path".to_string());
+    let root_path_key = YamlValue::String("root_path".to_string());
+    let (path_value, path_key) = match table.get(&anchor_path_key) {
         Some(value) => (Some(value), "world.anchor_path"),
-        None => match table.get(&YamlValue::String("root_path".to_string())) {
+        None => match table.get(&root_path_key) {
             Some(value) => (Some(value), "world.root_path"),
             None => (None, ""),
         },
@@ -187,7 +192,8 @@ fn parse_world_settings(path: &Path, contents: &str) -> Result<PartialWorldRoot>
         None => None,
     };
 
-    let caged = match table.get(&YamlValue::String("caged".to_string())) {
+    let caged_key = YamlValue::String("caged".to_string());
+    let caged = match table.get(&caged_key) {
         Some(value) => match value.as_bool() {
             Some(flag) => Some(flag),
             None => bail!(
@@ -269,8 +275,8 @@ fn yaml_type_name(value: &YamlValue) -> &'static str {
     }
 }
 
-fn ensure_no_legacy_toml_files(legacy_paths: &[PathBuf], yaml_paths: &[PathBuf]) -> Result<()> {
-    let present: Vec<&PathBuf> = legacy_paths.iter().filter(|path| path.exists()).collect();
+fn ensure_no_legacy_toml_files(legacy_paths: &[&Path], yaml_paths: &[&Path]) -> Result<()> {
+    let present: Vec<&&Path> = legacy_paths.iter().filter(|path| path.exists()).collect();
     if present.is_empty() {
         return Ok(());
     }
