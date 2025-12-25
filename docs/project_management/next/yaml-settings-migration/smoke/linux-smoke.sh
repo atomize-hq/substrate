@@ -39,7 +39,8 @@ YAML
 cd "$Y0_TEST_WS"
 # Directory settings are part of the runtime settings stack; `substrate config show` prints only the global config file.
 expected_ws="$(pwd -P)"
-resolved="$(HOME="$Y0_TEST_HOME" substrate --no-world -c 'printf "%s|%s" "$SUBSTRATE_ANCHOR_MODE" "$SUBSTRATE_ANCHOR_PATH"')"
+# Pin the shell to avoid user dotfiles interfering with smoke output.
+resolved="$(HOME="$Y0_TEST_HOME" BASH_ENV=/dev/null substrate --shell /bin/bash --no-world -c 'printf "%s|%s" "$SUBSTRATE_ANCHOR_MODE" "$SUBSTRATE_ANCHOR_PATH"')"
 test "${resolved%%|*}" = "project"
 test "${resolved#*|}" = "$expected_ws"
 

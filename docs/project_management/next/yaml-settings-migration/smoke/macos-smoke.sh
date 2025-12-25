@@ -38,7 +38,8 @@ world:
 YAML
 cd "$Y0_TEST_WS"
 expected_ws="$(pwd -P)"
-resolved="$(HOME="$Y0_TEST_HOME" substrate --no-world -c 'printf "%s|%s" "$SUBSTRATE_ANCHOR_MODE" "$SUBSTRATE_ANCHOR_PATH"')"
+# Pin the shell to avoid user dotfiles (e.g., ~/.zshenv) interfering with smoke output.
+resolved="$(HOME="$Y0_TEST_HOME" BASH_ENV=/dev/null substrate --shell /bin/bash --no-world -c 'printf "%s|%s" "$SUBSTRATE_ANCHOR_MODE" "$SUBSTRATE_ANCHOR_PATH"')"
 test "${resolved%%|*}" = "project"
 test "${resolved#*|}" = "$expected_ws"
 
