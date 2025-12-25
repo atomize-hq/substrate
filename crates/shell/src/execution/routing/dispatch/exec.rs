@@ -389,6 +389,13 @@ pub(crate) fn execute_command(
             }
         }
 
+        if world_required {
+            anyhow::bail!(
+	                "world execution required (fs_mode={}) but no world PTY execution path is available on this platform",
+	                fs_mode.as_str()
+	            );
+        }
+
         // Use host PTY execution path as fallback
         let pty_status = pty::execute_with_pty(config, trimmed, cmd_id, running_child_pid)?;
 
@@ -678,6 +685,13 @@ pub(crate) fn execute_command(
             use std::os::windows::process::ExitStatusExt;
             return Ok(ExitStatus::from_raw(outcome.exit_code as u32));
         }
+    }
+
+    if world_required {
+        anyhow::bail!(
+	            "world execution required (fs_mode={}) but no world execution path is available on this platform",
+	            fs_mode.as_str()
+	        );
     }
 
     // Execute external command through shell for complex commands or when no builtin matched.
