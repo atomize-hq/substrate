@@ -208,3 +208,12 @@ Template (START/END only):
 - Worktree (next): wt/ahih-i3-full-cage-pty-test
 - Plan: add PTY-path tests for full cage enforcement + world_fs.read_only semantics; skip when privileges/features are unavailable
 - Blockers: none
+
+## [2025-12-25 22:30 UTC] Codex – I3-test – END
+- Worktree commits: 3f8b873
+- Commands:
+  - cargo fmt
+  - cargo test -p world-agent --tests -- --nocapture
+- Results: pass (full-cage PTY tests self-skip when overlay support/privileges missing)
+- Docs commit: (this commit)
+- Next steps / blockers: none
