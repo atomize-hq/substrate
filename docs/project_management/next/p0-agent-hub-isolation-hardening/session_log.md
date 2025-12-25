@@ -113,3 +113,10 @@ Template (START/END only):
 - Kickoff prompts created/verified: docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I1-code.md
 - Docs commit: (this commit)
 - Next steps / blockers: I1-integ can merge when I1-test is ready
+
+## [2025-12-25 21:11 UTC] Codex – I1-integ – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md
+- Worktree (next): wt/ahih-i1-fail-closed-integ
+- Plan: merge I1 code+test branches; reconcile routing vs I1-spec; run fmt/clippy/shell tests/preflight + smoke scripts
+- Blockers: none
