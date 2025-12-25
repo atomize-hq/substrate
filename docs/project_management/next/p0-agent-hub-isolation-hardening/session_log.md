@@ -37,3 +37,13 @@ Template (START/END only):
 - Created worktree: wt/ahih-i0-policy-schema-test
 - Plan: add tests for world_fs parsing/validation/error messaging
 - Blockers: none
+
+## [2025-12-25 20:14 UTC] Codex – I0-test – END
+- Worktree commits: 47868f9
+- Commands:
+  - cargo fmt
+  - cargo test -p substrate-broker -- --nocapture
+- Results: pass (31 tests)
+- Scripts executed: n/a
+- Docs commit: (this commit)
+- Next steps / blockers: I0-integ can merge with I0-code when ready

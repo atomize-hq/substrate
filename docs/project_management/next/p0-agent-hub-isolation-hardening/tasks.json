@@ -47,7 +47,7 @@
       "name": "Strict policy schema (world_fs v1) (test)",
       "type": "test",
       "phase": "Agent Hub Isolation",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add unit/integration tests covering world_fs parsing, validation, and error messaging.",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md",
