@@ -201,3 +201,10 @@ Template (START/END only):
 - Worktree (next): wt/ahih-i3-full-cage-pty-code
 - Plan: extend full-cage (I2) to PTY stream child spawn paths, ensuring no pre-cage cwd/inode escapes; preserve signal forwarding and resize behavior
 - Blockers: none
+
+## [2025-12-25 22:23 UTC] Codex – I3-test – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md
+- Worktree (next): wt/ahih-i3-full-cage-pty-test
+- Plan: add PTY-path tests for full cage enforcement + world_fs.read_only semantics; skip when privileges/features are unavailable
+- Blockers: none
