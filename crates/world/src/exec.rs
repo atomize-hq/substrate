@@ -68,38 +68,7 @@ pub struct ProjectBindMount<'a> {
     pub fs_mode: WorldFsMode,
 }
 
-pub fn execute_shell_command_with_project_bind_mount(
-    cmd: &str,
-    mount: ProjectBindMount<'_>,
-    env: &HashMap<String, String>,
-    login_shell: bool,
-) -> Result<Output> {
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = cmd;
-        let _ = mount;
-        let _ = env;
-        let _ = login_shell;
-        Err(anyhow!(
-            "project bind mount enforcement is only supported on Linux"
-        ))
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        use nix::unistd::Uid;
-        #[cfg(unix)]
-        use std::os::unix::process::ExitStatusExt;
-
-        // Outer script: establish a private mount namespace, then either:
-        // - cage=project: bind the overlay merged root onto the host project path to prevent
-        //   absolute-path escapes back into the host project, or
-        // - cage=full: build a minimal rootfs, bind-mount only the allowed paths, then pivot_root
-        //   so host paths are no longer nameable.
-        //
-        // We avoid setting the child's cwd via Command::current_dir() because holding an inode
-        // reference into the host project dir would bypass the bind mount (absolute-path escape).
-        let script = r#"set -eu
+pub const PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT: &str = r#"set -eu
 set -f
 
 mount --make-rprivate / 2>/dev/null || mount --make-private / 2>/dev/null || true
@@ -223,6 +192,39 @@ else
   exec sh -c "$SUBSTRATE_INNER_CMD"
 fi
 "#;
+
+pub fn execute_shell_command_with_project_bind_mount(
+    cmd: &str,
+    mount: ProjectBindMount<'_>,
+    env: &HashMap<String, String>,
+    login_shell: bool,
+) -> Result<Output> {
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = cmd;
+        let _ = mount;
+        let _ = env;
+        let _ = login_shell;
+        Err(anyhow!(
+            "project bind mount enforcement is only supported on Linux"
+        ))
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        use nix::unistd::Uid;
+        #[cfg(unix)]
+        use std::os::unix::process::ExitStatusExt;
+
+        // Outer script: establish a private mount namespace, then either:
+        // - cage=project: bind the overlay merged root onto the host project path to prevent
+        //   absolute-path escapes back into the host project, or
+        // - cage=full: build a minimal rootfs, bind-mount only the allowed paths, then pivot_root
+        //   so host paths are no longer nameable.
+        //
+        // We avoid setting the child's cwd via Command::current_dir() because holding an inode
+        // reference into the host project dir would bypass the bind mount (absolute-path escape).
+        let script = PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT;
 
         let mut env_map = env.clone();
         env_map.insert(

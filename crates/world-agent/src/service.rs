@@ -488,7 +488,7 @@ fn first_env_value<'a>(
         .find_map(|key| env.get(*key).map(|value| (*key, value.as_str())))
 }
 
-fn is_full_cage(env: Option<&HashMap<String, String>>) -> bool {
+pub(crate) fn is_full_cage(env: Option<&HashMap<String, String>>) -> bool {
     if let Some(env) = env {
         if let Some(raw) = env.get(WORLD_FS_CAGE_ENV) {
             return raw.trim().eq_ignore_ascii_case("full");
@@ -499,7 +499,7 @@ fn is_full_cage(env: Option<&HashMap<String, String>>) -> bool {
         .is_some_and(|raw| raw.trim().eq_ignore_ascii_case("full"))
 }
 
-fn resolve_project_write_allowlist_prefixes(
+pub(crate) fn resolve_project_write_allowlist_prefixes(
     project_dir: &Path,
     write_allowlist: &[String],
 ) -> Vec<String> {
