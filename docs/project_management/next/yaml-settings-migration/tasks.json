@@ -49,7 +49,7 @@
       "name": "Settings stack TOML→YAML (test)",
       "type": "test",
       "phase": "YAML Settings Migration",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Update and extend tests for YAML settings load/persist behavior and config CLI behavior.",
       "references": [
         "docs/project_management/next/yaml-settings-migration/Y0-spec.md",
