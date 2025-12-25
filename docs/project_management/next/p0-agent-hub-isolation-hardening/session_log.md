@@ -172,3 +172,10 @@ Template (START/END only):
 - Kickoff prompts created/verified: n/a
 - Docs commit: (this commit)
 - Next steps / blockers: I2-integ can merge with I2-test (ready)
+
+## [2025-12-25 22:05 UTC] Codex – I2-integ – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md
+- Worktree (next): wt/ahih-i2-full-cage-nonpty-integ
+- Plan: merge I2 code+test branches; reconcile cage behavior vs I2-spec; run fmt/clippy/world(+agent) tests/preflight + smoke scripts
+- Blockers: none
