@@ -24,3 +24,9 @@ Template (START/END only):
 - Next steps / blockers: <handoff notes>
 ```
 
+## [2025-12-25 20:06 UTC] Codex – I0-code – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md
+- Created worktree: wt/ahih-i0-policy-schema-code
+- Plan: implement strict world_fs schema + validation + broker output fields
+- Blockers: none
