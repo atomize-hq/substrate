@@ -18,6 +18,7 @@
       "branch": "feat/yaml-settings-migration",
       "directory": "docs/project_management/next/yaml-settings-migration",
       "plan": "docs/project_management/next/yaml-settings-migration/plan.md",
+      "status": "completed",
       "sequence": [{ "id": "Y0", "spec": "docs/project_management/next/yaml-settings-migration/Y0-spec.md" }],
       "notes": [
         "This is the smallest migration needed to reach YAML-only for Substrate-owned runtime config.",
@@ -31,6 +32,7 @@
       "branch": "feat/p0-agent-hub-isolation-hardening",
       "directory": "docs/project_management/next/p0-agent-hub-isolation-hardening",
       "plan": "docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md",
+      "status": "in_progress",
       "sequence": [
         { "id": "I0", "spec": "docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md" },
         { "id": "I1", "spec": "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md" },
@@ -50,6 +52,7 @@
       "branch": "feat/world-sync",
       "directory": "docs/project_management/next/world-sync",
       "plan": "docs/project_management/next/world-sync/plan.md",
+      "status": "not_started",
       "sequence": [
         { "id": "C0", "spec": "docs/project_management/next/world-sync/C0-spec.md" },
         { "id": "C1", "spec": "docs/project_management/next/world-sync/C1-spec.md" },
@@ -85,6 +88,7 @@
       "branch": "feat/json-mode",
       "directory": "docs/project_management/future/json-mode",
       "plan": "docs/project_management/future/json-mode/json_mode_plan.md",
+      "status": "not_started",
       "sequence": [
         { "id": "J1", "name": "Structured mode scaffolding" },
         { "id": "J2a", "name": "Command coverage: core/root" },
