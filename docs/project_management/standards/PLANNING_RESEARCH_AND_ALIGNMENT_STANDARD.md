@@ -31,6 +31,7 @@ If you already have crisp specs and only need to implement them, use the executi
 - **Exactly two options per decision.** Every decision must compare two viable solutions and pick one.
 - **Cross-sprint alignment is required.** Plans must reconcile with adjacent queued work and the repository’s sequencing spine.
 - **Greenfield by default.** Do not plan migrations/backwards-compat unless an ADR explicitly mandates it.
+- **Execution workflow stays strict.** This standard must never weaken or contradict `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`.
 
 ---
 
@@ -56,6 +57,14 @@ When you run a docs-first planning pass for a feature/track, you must produce a 
 5) Kickoff prompts (`kickoff_prompts/<task>-{code,test,integ}.md`)
 - Each prompt must clearly bound role responsibilities and required commands.
 
+### 3.1.1 Strict task-triad interoperability (required)
+
+Planning outputs must be directly executable under the triad workflow. Therefore:
+- `tasks.json` must conform to the required task shape defined in `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md` (including required fields, checklists, and conventions).
+- Docs discipline must match the triad standard:
+  - docs/tasks/session logs are edited only on the orchestration branch,
+  - docs/tasks/session logs are never edited from inside worktrees.
+
 ### 3.2 Required for “decision-heavy” or “cross-platform” work
 
 Add these files when the work introduces new user contracts, config, or platform behaviors:
@@ -68,6 +77,15 @@ Add these files when the work introduces new user contracts, config, or platform
 
 3) `manual_testing_playbook.md`
 - A human-run checklist with explicit commands and expected exit codes/output. No “verify it works” steps.
+
+4) Playbook automation scripts (required alongside the manual playbook)
+- Every `manual_testing_playbook.md` must be paired with runnable smoke script(s) so agents can execute validation automatically and humans can re-run without typing every command.
+- Scripts must be platform-scoped (separate scripts per platform when necessary):
+  - Linux: `scripts/linux/<feature>-smoke.sh`
+  - macOS: `scripts/mac/<feature>-smoke.sh`
+  - Windows: `scripts/windows/<feature>-smoke.ps1`
+- The manual playbook must reference the scripts and describe how to run them, plus how to manually run subsections.
+- Triad integration tasks must run the relevant smoke scripts (where applicable) and record results in `session_log.md`.
 
 ### 3.3 Required for “multi-track alignment” work
 
@@ -132,6 +150,14 @@ Every decision must be recorded as a Decision Register entry. Each entry must:
 - No “A and B” selection; pick one.
 - No “or” in behavior statements outside the Option A/Option B comparison.
 
+### 4.3 Required traceability to execution tasks
+
+Every Decision Register entry must be executable, not just readable. Therefore:
+- Every decision must have follow-up tasks that map to concrete triad task IDs in `tasks.json`.
+- Every triad task that implements a decision must list that decision in its `references` (by file path and DR id), e.g.:
+  - `docs/project_management/next/<feature>/decision_register.md (DR-00XX)`
+- The integration task for the slice must confirm (in its END session log entry) that all referenced DR items are implemented and tested.
+
 ---
 
 ## 5) Integration Map Standard
@@ -159,6 +185,20 @@ If the work affects UX or provisioning, the playbook must:
 - include explicit commands and **expected exit codes/output**,
 - cover success + failure modes,
 - include cross-platform sections when applicable (Linux/macOS/WSL).
+
+### 6.1 Automation pairing (required)
+
+To make validation repeatable and auditable:
+- Every manual playbook must have one or more corresponding smoke scripts (see section 3.2).
+- Smoke scripts must:
+  - use temp workspaces/homes by default (no destructive behavior),
+  - accept env overrides (so CI or humans can point them at a specific prefix/version),
+  - exit non-zero on failure and print actionable diagnostics,
+  - be runnable without interactive prompts where possible.
+- The manual playbook must state:
+  - the exact command(s) to run the script(s),
+  - what success looks like (exit code and key expected output),
+  - how to run sections manually for debugging.
 
 Prohibited:
 - “Verify it works”
@@ -190,6 +230,9 @@ Rules:
 ## 8) Lint-Like Rubric (Enforceable Text Rules)
 
 You must scan the scoped planning docs and remove violations. These are enforcement rules for *planning outputs*.
+
+Scope note:
+- Apply this rubric to feature planning outputs (ADRs/specs/plan/tasks/prompts/playbooks/reports) under `docs/project_management/next/…`, not to standards docs under `docs/project_management/standards/…`.
 
 ### 8.1 Hard bans (never allowed)
 
@@ -289,6 +332,57 @@ Deliverables:
 - updated tasks.json dependencies and/or sequencing.json as required (final, no placeholders)
 ```
 
+### 9.3 Planning Quality Gate Prompt Template (third-party reviewer)
+
+Use this prompt after a planning/research agent finishes its Planning Pack, before execution begins.
+
+```md
+You are a fresh, third-party reviewer of a Planning Pack. You did not author the plan.
+
+Goal:
+- Validate whether the plan is implementation-ready and whether the decisions are sound, complete, and consistent.
+- Either recommend ACCEPT (ready to execute) or FLAG FOR HUMAN REVIEW (not ready).
+
+Constraints:
+- Do not write production code.
+- Do not “improve” the plan by adding new scope.
+- You may propose alternatives only as part of review findings (do not rewrite the entire plan unless required to fix a contradiction).
+
+Inputs (must read end-to-end):
+- The ADR(s) for the feature/track
+- The feature’s `decision_register.md`, `integration_map.md`, `plan.md`, `tasks.json`, `session_log.md`
+- All specs in the track
+- `docs/project_management/next/sequencing.json`
+- `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+- `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+
+Review checklist (pass/fail):
+1) Decision quality:
+   - Every major decision has exactly 2 viable options, both actually viable.
+   - Pros/cons/implications/risks/unlocks/quick wins are complete and non-hand-wavy.
+   - The selected option is justified and matches the constraints (security posture, platform parity, config format).
+2) Contract consistency:
+   - CLI commands/flags/defaults and exit codes are consistent across ADR/specs/playbooks.
+   - Config filenames/paths/precedence are consistent everywhere.
+3) Sequencing readiness:
+   - No task can start before prerequisites are integrated (tasks.json deps match sequencing.json).
+4) Testability:
+   - Acceptance criteria are runnable and include expected exit codes/output.
+   - Manual playbooks exist where required.
+   - Smoke scripts exist where required and are referenced by the manual playbook.
+5) Auditability:
+   - Decisions map to triad task IDs via `references` and follow-up tasks.
+
+Output format:
+- Start with one line: `RECOMMENDATION: ACCEPT` or `RECOMMENDATION: FLAG FOR HUMAN REVIEW`
+- Then list findings in this structure (no prose essays):
+  - Finding: <what is wrong or verified>
+  - Evidence: <exact file path + relevant snippet/line description>
+  - Impact: <why this matters>
+  - Fix: <exact change required, or if accepted: “none”>
+  - Alternative: <only if flagging; propose one viable alternative and why>
+```
+
 ---
 
 ## 10) “Ready For Implementation” Checklist (Planning Sign-Off)
@@ -298,7 +392,7 @@ The Planning Pack is implementation-ready only when all are true:
 - Decision register exists and covers all major decisions (two options each, one selection).
 - Integration map exists and explicitly resolves cross-track dependencies and sequencing.
 - Manual testing playbook exists (if UX/provisioning) with runnable commands and expected results.
+- Smoke scripts exist (if UX/provisioning) for each required platform, and are referenced by the manual playbook.
 - `tasks.json` has code/test/integration tasks with dependencies aligned to `sequencing.json`.
 - Kickoff prompts exist for every task and reference the correct specs and required commands.
 - Rubric checks pass (no banned ambiguity language in behavioral contracts).
-
