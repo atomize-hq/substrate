@@ -323,7 +323,19 @@ fi
             .context("Failed to wait for child process completion")?;
 
         let stdout_buf = join_reader(stdout_handle, "stdout");
-        let stderr_buf = join_reader(stderr_handle, "stderr");
+        let mut stderr_buf = join_reader(stderr_handle, "stderr");
+
+        if cage_full && !status.success() {
+            if let Ok(stderr_str) = std::str::from_utf8(&stderr_buf) {
+                if stderr_str.starts_with("unshare:") {
+                    let mut wrapped = Vec::new();
+                    wrapped.extend_from_slice(b"substrate: error: world_fs.cage=full requested but failed to enter a mount namespace (unshare).\n");
+                    wrapped.extend_from_slice(b"substrate: hint: run with CAP_SYS_ADMIN (root) or enable unprivileged user namespaces (kernel.unprivileged_userns_clone=1).\n");
+                    wrapped.extend_from_slice(stderr_buf.as_slice());
+                    stderr_buf = wrapped;
+                }
+            }
+        }
 
         Ok(Output {
             status,
