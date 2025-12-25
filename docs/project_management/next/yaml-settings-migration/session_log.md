@@ -46,3 +46,13 @@ Template (START/END only):
 - Worktree: `wt/ysm-y0-settings-test` (to create)
 - Plan: update config init/show/set tests for YAML; cover TOML-present actionable failures
 - Blockers: none
+
+## [2025-12-25 16:48 UTC] Codex – Y0-test – END
+- Worktree commits: `289718f`
+- Commands:
+  - `cargo fmt` (pass)
+  - `cargo test -p substrate-shell --tests -- --nocapture` (pass)
+- Results: tests cover YAML init/show/set + actionable failures when legacy `config.toml`/`.substrate/settings.toml` are present
+- Kickoff prompts created/verified: n/a
+- Docs commit: pending
+- Next steps / blockers: run Y0-integ for full clippy + preflight
