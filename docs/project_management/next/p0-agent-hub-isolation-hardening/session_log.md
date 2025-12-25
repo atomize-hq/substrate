@@ -30,3 +30,10 @@ Template (START/END only):
 - Created worktree: wt/ahih-i0-policy-schema-code
 - Plan: implement strict world_fs schema + validation + broker output fields
 - Blockers: none
+
+## [2025-12-25 20:08 UTC] Codex – I0-test – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md
+- Created worktree: wt/ahih-i0-policy-schema-test
+- Plan: add tests for world_fs parsing/validation/error messaging
+- Blockers: none
