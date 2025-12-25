@@ -70,8 +70,8 @@ fn world_flag_overrides_disabled_config_and_env() {
     let substrate_home = home.join(".substrate");
     fs::create_dir_all(substrate_home.join("shims")).unwrap();
     fs::write(
-        substrate_home.join("config.toml"),
-        "[install]\nworld_enabled = false\n",
+        substrate_home.join("config.yaml"),
+        "install:\n  world_enabled: false\n",
     )
     .unwrap();
 
@@ -123,15 +123,15 @@ fn world_flag_honors_directory_world_root_settings() {
     fs::create_dir_all(workdir.join(".substrate")).unwrap();
     fs::create_dir_all(&custom_root).unwrap();
     fs::write(
-        substrate_home.join("config.toml"),
-        "[install]\nworld_enabled = false\n[world]\nroot_mode = \"project\"\nroot_path = \"\"\ncaged = true\n",
+        substrate_home.join("config.yaml"),
+        "install:\n  world_enabled: false\nworld:\n  root_mode: project\n  root_path: \"\"\n  caged: true\n",
     )
     .unwrap();
     let settings_body = format!(
-        "[world]\nroot_mode = \"custom\"\nroot_path = \"{}\"\ncaged = false\n",
+        "world:\n  root_mode: custom\n  root_path: \"{}\"\n  caged: false\n",
         custom_root.display().to_string().replace('\\', "\\\\")
     );
-    fs::write(workdir.join(".substrate/settings.toml"), settings_body).unwrap();
+    fs::write(workdir.join(".substrate/settings.yaml"), settings_body).unwrap();
 
     let prev_home = set_env("HOME", &home.display().to_string());
     let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
@@ -187,15 +187,15 @@ fn anchor_flags_override_configs_and_export_legacy_env() {
     fs::create_dir_all(&cli_anchor).unwrap();
     fs::create_dir_all(&dir_anchor).unwrap();
     fs::write(
-        substrate_home.join("config.toml"),
-        "[world]\nanchor_mode = \"project\"\nanchor_path = \"/config/root\"\ncaged = false\n",
+        substrate_home.join("config.yaml"),
+        "world:\n  anchor_mode: project\n  anchor_path: /config/root\n  caged: false\n",
     )
     .unwrap();
     let settings_body = format!(
-        "[world]\nanchor_mode = \"custom\"\nanchor_path = \"{}\"\ncaged = false\n",
+        "world:\n  anchor_mode: custom\n  anchor_path: \"{}\"\n  caged: false\n",
         dir_anchor.display().to_string().replace('\\', "\\\\")
     );
-    fs::write(workdir.join(".substrate/settings.toml"), settings_body).unwrap();
+    fs::write(workdir.join(".substrate/settings.yaml"), settings_body).unwrap();
 
     let prev_home = set_env("HOME", &home.display().to_string());
     let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
@@ -254,8 +254,8 @@ fn no_world_flag_disables_world_and_sets_root_exports() {
     fs::create_dir_all(substrate_home.join("shims")).unwrap();
     fs::create_dir_all(&workdir).unwrap();
     fs::write(
-        substrate_home.join("config.toml"),
-        "[install]\nworld_enabled = true\n[world]\nroot_mode = \"project\"\nroot_path = \"\"\ncaged = true\n",
+        substrate_home.join("config.yaml"),
+        "install:\n  world_enabled: true\nworld:\n  root_mode: project\n  root_path: \"\"\n  caged: true\n",
     )
     .unwrap();
 
