@@ -136,3 +136,10 @@ Template (START/END only):
 - Kickoff prompts created/verified: n/a
 - Docs commit: (this commit)
 - Next steps / blockers: none
+
+## [2025-12-25 21:42 UTC] Codex – I2-code – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md
+- Worktree (next): wt/ahih-i2-full-cage-nonpty-code
+- Plan: implement Linux non-PTY full cage via mount ns + pivot_root; add capability detection + fail-closed semantics
+- Blockers: none

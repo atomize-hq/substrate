@@ -261,7 +261,7 @@
       "name": "Full cage (non-PTY) pivot_root (code)",
       "type": "code",
       "phase": "Agent Hub Isolation",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Implement full caging for non-PTY execution using mount namespace + pivot_root (Linux).",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md",
