@@ -133,7 +133,7 @@
       "name": "Fail-closed semantics (code)",
       "type": "code",
       "phase": "Agent Hub Isolation",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Implement fail-closed routing when policy requires world enforcement (no host fallback).",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md",

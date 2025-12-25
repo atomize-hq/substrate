@@ -91,3 +91,14 @@ Template (START/END only):
 - Updated tasks.json + session_log.md
 - Plan: add integration tests proving require_world fail-closed (no host fallback) and require_world=false warns then falls back
 - Blockers: none
+
+## [2025-12-25 21:07 UTC] Codex – I1-code – END
+- Worktree commits: c8d6bc1
+- Commands:
+  - cargo fmt
+  - cargo clippy --workspace --all-targets -- -D warnings
+- Results: pass
+- Scripts executed: n/a
+- Kickoff prompts created/verified: docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I1-code.md
+- Docs commit: (this commit)
+- Next steps / blockers: I1-integ can merge when I1-test is ready
