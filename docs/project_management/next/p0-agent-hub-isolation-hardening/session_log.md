@@ -79,3 +79,9 @@ Template (START/END only):
   - windows-smoke.ps1 (SKIP: pwsh not installed on this host)
 - Docs commit: (this commit)
 - Next steps / blockers: none
+
+## [2025-12-25 20:56 UTC] Codex – I1-code – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md
+- Plan: enforce required-world fail-closed routing for non-PTY + PTY; preserve warn-once host fallback when world is not required
+- Blockers: none
