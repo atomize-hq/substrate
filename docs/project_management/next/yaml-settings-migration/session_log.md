@@ -30,6 +30,16 @@ Template (START/END only):
 - Plan: migrate paths + loaders to YAML; update `substrate config init/show/set`; add actionable TOML-present errors
 - Blockers: none
 
+## [2025-12-25 16:43 UTC] Codex – Y0-code – END
+- Worktree commits: `0b77566`
+- Commands:
+  - `cargo fmt` (pass)
+  - `cargo clippy --workspace --all-targets -- -D warnings` (pass)
+- Results: YAML settings are required; legacy `config.toml`/`.substrate/settings.toml` now error with actionable guidance
+- Kickoff prompts created/verified: n/a
+- Docs commit: pending
+- Next steps / blockers: run Y0-test then Y0-integ to update/validate tests + docs references
+
 ## [2025-12-25 16:23 UTC] Codex – Y0-test – START
 - Checked out `feat/yaml-settings-migration`; `git pull --ff-only` not possible (no upstream / no matching remote ref)
 - Updated `docs/project_management/next/yaml-settings-migration/tasks.json` + `docs/project_management/next/yaml-settings-migration/session_log.md` (commit: pending)
