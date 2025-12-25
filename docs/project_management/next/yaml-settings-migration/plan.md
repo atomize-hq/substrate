@@ -2,7 +2,7 @@
 
 ## Context
 
-Substrate currently uses TOML for the layered runtime settings stack:
+Substrate historically used TOML for the layered runtime settings stack (legacy, now unsupported):
 - `~/.substrate/config.toml`
 - `.substrate/settings.toml`
 - CLI: `substrate config init/show/set`

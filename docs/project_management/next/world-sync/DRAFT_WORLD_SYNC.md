@@ -16,7 +16,7 @@ This is a user-focused guide to Substrate’s world sync capabilities. It assume
 - Sockets, device nodes, and other special files
 
 ## Configuration surfaces
-Precedence: CLI flag > directory config (.substrate/settings.toml) > global config (~/.substrate/config.toml) > env vars > defaults.
+Precedence: CLI flag > directory config (.substrate/settings.yaml) > global config (~/.substrate/config.yaml) > env vars > defaults.
 
 Key settings:
 - `auto_sync` (default: false)

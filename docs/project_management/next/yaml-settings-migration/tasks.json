@@ -92,7 +92,7 @@
       "name": "Settings stack TOML→YAML (integration)",
       "type": "integration",
       "phase": "YAML Settings Migration",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge Y0 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
         "docs/project_management/next/yaml-settings-migration/plan.md",

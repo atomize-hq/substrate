@@ -39,8 +39,8 @@ The installer will:
    `~/.substrate/manager_env.sh`) so Substrate-owned shells can source managers
    on demand. The manager env script also exports `SUBSTRATE_WORLD` and
    `SUBSTRATE_WORLD_ENABLED` so shims know whether isolation is active.
-6. Write install metadata to `~/.substrate/config.toml`
-   (`[install] world_enabled = true` unless `--no-world` is provided). The
+6. Write install metadata to `~/.substrate/config.yaml`
+   (`install.world_enabled: true` unless `--no-world` is provided). The
    metadata is consumed by `substrate world enable` and shims/CLI commands that
    need to detect pass-through mode.
 7. Install `substrate-world-agent` under `/usr/local/bin` and manage the
@@ -55,7 +55,7 @@ The installer will:
 Add `~/.substrate/bin` (or your custom `--prefix` bin directory) to PATH—or
 invoke `~/.substrate/bin/substrate` directly—because the installer no longer
 edits shell rc files. Supplying `--no-world` skips step 6, writes
-`~/.substrate/config.toml` with `[install] world_enabled = false`, and prints
+`~/.substrate/config.yaml` with `install.world_enabled: false`, and prints
 the exact `substrate world enable` command to run when you are ready to
 provision the backend. You can still force a single world-isolated run later
 with `substrate --world ...` without changing the stored metadata.

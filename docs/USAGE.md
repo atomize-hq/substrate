@@ -264,28 +264,28 @@ manager and point `BASH_ENV` at `~/.substrate_bashenv` explicitly.
 
 World root (anchor) precedence, highest wins: CLI flags
 (`--anchor-mode/--anchor-path`, legacy `--world-root-mode/--world-root-path`),
-`.substrate/settings.toml` in the launch directory, `~/.substrate/config.toml`
-`[world]`, environment variables `SUBSTRATE_ANCHOR_MODE/PATH` (legacy
+`.substrate/settings.yaml` in the launch directory, `~/.substrate/config.yaml`
+`world:`, environment variables `SUBSTRATE_ANCHOR_MODE/PATH` (legacy
 `SUBSTRATE_WORLD_ROOT_MODE/PATH`), then the default `project` mode (rooted at
 the launch directory). Modes: `project` anchors to the launch directory,
 `follow-cwd` tracks your working directory, and `custom` uses the path supplied
 via `anchor_path` or `--anchor-path`.
 
-The installer and `substrate world enable` keep `~/.substrate/config.toml`
-(`[install].world_enabled = true/false`) and rewrite `~/.substrate/manager_env.sh`
+The installer and `substrate world enable` keep `~/.substrate/config.yaml`
+(`install.world_enabled: true/false`) and rewrite `~/.substrate/manager_env.sh`
 so `SUBSTRATE_WORLD`/`SUBSTRATE_WORLD_ENABLED` reflect the latest state without
 needing to source dotfiles manually.
 
 ## Configuration CLI
 
 Before the REPL starts, Substrate exposes a `config` command group for managing
-`~/.substrate/config.toml` (or `%USERPROFILE%\.substrate\config.toml` on
+`~/.substrate/config.yaml` (or `%USERPROFILE%\.substrate\config.yaml` on
 Windows). The current verbs are `config init`, which scaffolds/regenerates the
-file, `config show`, which prints it in TOML (or JSON) form, and `config set`,
+file, `config show`, which prints it in YAML (or JSON) form, and `config set`,
 which edits dotted keys without opening an editor:
 
 ```bash
-# Create ~/.substrate/config.toml if it does not exist
+# Create ~/.substrate/config.yaml if it does not exist
 substrate config init
 
 # Regenerate the file even if it exists already
@@ -299,19 +299,18 @@ the command is the supported remediation when the metadata is missing or
 corrupted.
 
 After the file exists, `substrate config show` prints the full contents with
-redaction hooks for any future sensitive values. TOML is the default view:
+redaction hooks for any future sensitive values. YAML is the default view:
 
 ```bash
 $ substrate config show
-[install]
-world_enabled = true
-
-[world]
-anchor_mode = "project"
-anchor_path = ""
-root_mode = "project"
-root_path = ""
-caged = true
+install:
+  world_enabled: true
+world:
+  anchor_mode: project
+  anchor_path: ""
+  root_mode: project
+  root_path: ""
+  caged: true
 ```
 
 Use `--json` for automation (the same flag works on macOS/Linux and respects
@@ -351,7 +350,7 @@ fields at once:
 
 ```bash
 $ substrate config set world.anchor_mode=follow-cwd world.caged=false
-substrate: updated config at /Users/alice/.substrate/config.toml
+substrate: updated config at /Users/alice/.substrate/config.yaml
   - world.anchor_mode: "project" -> "follow-cwd"
   - world.root_mode (alias): "project" -> "follow-cwd"
   - world.caged: true -> false
@@ -362,7 +361,7 @@ Pass `--json` for automation; the payload summarizes every field that changed:
 ```bash
 $ substrate config set --json install.world_enabled=false
 {
-  "config_path": "/Users/alice/.substrate/config.toml",
+  "config_path": "/Users/alice/.substrate/config.yaml",
   "changed": true,
   "changes": [
     {

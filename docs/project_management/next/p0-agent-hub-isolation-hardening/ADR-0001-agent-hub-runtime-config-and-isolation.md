@@ -62,9 +62,9 @@ Desired behavior going forward:
 ### 1.3 Runtime config format split (TOML vs YAML)
 
 Current reality:
-- TOML for the layered runtime config stack:
-  - `~/.substrate/config.toml`
-  - `.substrate/settings.toml`
+- YAML for the layered runtime config stack:
+  - `~/.substrate/config.yaml`
+  - `.substrate/settings.yaml`
   - CLI `substrate config init/show/set`
 - YAML for runtime manifests and policies:
   - `config/manager_hooks.yaml`, `~/.substrate/manager_hooks.local.yaml`

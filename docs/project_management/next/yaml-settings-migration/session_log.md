@@ -59,7 +59,19 @@ Template (START/END only):
 
 ## [2025-12-25 16:55 UTC] Codex – Y0-integ – START
 - Checked out `feat/yaml-settings-migration`; `git pull --ff-only` not possible (no upstream / no matching remote ref)
-- Updated `docs/project_management/next/yaml-settings-migration/tasks.json` + `docs/project_management/next/yaml-settings-migration/session_log.md` (commit: pending)
+- Updated `docs/project_management/next/yaml-settings-migration/tasks.json` + `docs/project_management/next/yaml-settings-migration/session_log.md` (commit: 66dcdea)
 - Created worktree: `wt/ysm-y0-settings-integ` (to create)
 - Plan: merge ysm-y0-settings-code + ysm-y0-settings-test; reconcile to Y0-spec; run fmt/clippy/tests/preflight
 - Blockers: none
+
+## [2025-12-25 17:04 UTC] Codex – Y0-integ – END
+- Worktree commits: `58a2b7f`
+- Commands:
+  - `cargo fmt` (pass)
+  - `cargo clippy --workspace --all-targets -- -D warnings` (pass)
+  - `cargo test -p substrate-shell --tests -- --nocapture` (pass)
+  - `make preflight` (pass)
+- Results: merged code+test branches; CI gate commands green
+- Kickoff prompts created/verified: n/a
+- Docs commit: pending
+- Next steps / blockers: none
