@@ -80,10 +80,11 @@ Add these files when the work introduces new user contracts, config, or platform
 
 4) Playbook automation scripts (required alongside the manual playbook)
 - Every `manual_testing_playbook.md` must be paired with runnable smoke script(s) so agents can execute validation automatically and humans can re-run without typing every command.
-- Scripts must be platform-scoped (separate scripts per platform when necessary):
-  - Linux: `scripts/linux/<feature>-smoke.sh`
-  - macOS: `scripts/mac/<feature>-smoke.sh`
-  - Windows: `scripts/windows/<feature>-smoke.ps1`
+- Scripts must live inside the feature directory they validate (not in the repo root `scripts/` tree):
+  - Directory: `docs/project_management/next/<feature>/smoke/`
+  - Linux: `docs/project_management/next/<feature>/smoke/linux-smoke.sh`
+  - macOS: `docs/project_management/next/<feature>/smoke/macos-smoke.sh`
+  - Windows: `docs/project_management/next/<feature>/smoke/windows-smoke.ps1`
 - The manual playbook must reference the scripts and describe how to run them, plus how to manually run subsections.
 - Triad integration tasks must run the relevant smoke scripts (where applicable) and record results in `session_log.md`.
 
