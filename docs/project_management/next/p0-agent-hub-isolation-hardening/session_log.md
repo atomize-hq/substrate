@@ -179,3 +179,18 @@ Template (START/END only):
 - Worktree (next): wt/ahih-i2-full-cage-nonpty-integ
 - Plan: merge I2 code+test branches; reconcile cage behavior vs I2-spec; run fmt/clippy/world(+agent) tests/preflight + smoke scripts
 - Blockers: none
+
+## [2025-12-25 22:16 UTC] Codex – I2-integ – END
+- Worktree commits: a5f070b
+- Commands:
+  - cargo fmt
+  - cargo clippy --workspace --all-targets -- -D warnings
+  - cargo test -p world -p world-agent -- --nocapture
+  - make preflight
+- Results: pass (full-cage tests self-skip when overlay support/privileges missing)
+- Scripts executed:
+  - linux-smoke.sh (OK: agent hub hardening linux smoke (preflight); required PATH+=target/debug)
+  - macos-smoke.sh (SKIP: agent hub hardening macOS smoke (not macOS))
+  - windows-smoke.ps1 (SKIP: agent hub hardening windows smoke (pwsh not installed))
+- Docs commit: (this commit)
+- Next steps / blockers: none
