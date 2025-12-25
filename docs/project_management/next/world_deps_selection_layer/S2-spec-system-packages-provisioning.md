@@ -159,19 +159,13 @@ Each row must be runnable by a script (no manual interpretation beyond viewing l
 | E: Sync succeeds after provision | N/A (manual deps) | ✅ | ✅ | After `provision`, `sync` no longer reports `system_packages` tools as blocked (tool-specific state depends on class) |
 
 Automation approach (required):
-- Extend existing scripts:
-  - macOS: `scripts/mac/smoke.sh` gains a “world-deps selection/provision/sync” section.
-  - Windows: `scripts/windows/wsl-smoke.ps1` gains a similar section.
-  - Linux: extend `scripts/linux/world-socket-verify.sh` to assert the unsupported Linux `provision` failure mode and exit code.
+- Add and maintain feature-local smoke scripts (no repo-root `scripts/` changes required for this triad):
+  - Linux: `bash docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh`
+  - macOS: `bash docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh`
+  - Windows: `pwsh -File docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1`
 
-Add smoke coverage by extending existing scripts:
-- macOS: extend `scripts/mac/smoke.sh` to:
-  - create a temp workspace with `.substrate/world-deps.selection.yaml`,
-  - run `substrate world deps provision` (expect success),
-  - run `substrate world deps sync` (expect user_space installs succeed and system_packages tools are no longer blocked).
-- Windows: extend `scripts/windows/wsl-smoke.ps1` similarly.
-- Linux: extend `scripts/linux/world-socket-verify.sh` to assert:
-  - `provision` fails with exit `4` and prints manual guidance.
+Notes:
+- These feature-local smoke entrypoints may call existing warm/provision helpers as prerequisites (e.g., `scripts/mac/lima-warm.sh`, `scripts/windows/wsl-warm.ps1`), but the smoke entrypoints live in the feature directory and must remain runnable and auditable on their own.
 
 Unit/integration tests (Rust):
 - Add parsing/validation tests for system package metadata.

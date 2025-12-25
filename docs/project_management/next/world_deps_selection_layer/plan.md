@@ -26,7 +26,7 @@ Authoritative decision log:
 - Add install classes schema + enforcement (`S1`).
 - Add explicit provisioning path for `system_packages` on macOS Lima + Windows WSL, and explicit “unsupported on Linux host” with manual guidance (`S2`).
 - Update Substrate-owned manager inventory/overlays to declare install class metadata and to remove runtime OS-package installs from `sync/install` paths (breaking but required by ADR-0002).
-- Add automatable smoke coverage hooks (extend existing scripts; do not invent a one-off harness).
+- Add automatable smoke coverage via feature-local smoke scripts under `docs/project_management/next/world_deps_selection_layer/smoke/`.
 
 Out of scope for Increment 1 (deferred, explicitly)
 - `copy_from_host` implementation (schema may reserve the class; behavior remains “unsupported”).

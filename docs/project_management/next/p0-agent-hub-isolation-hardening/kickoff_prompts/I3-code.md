@@ -10,6 +10,7 @@
    git worktree add wt/ahih-i3-full-cage-pty-code ahih-i3-full-cage-pty-code
    cd wt/ahih-i3-full-cage-pty-code
    ```
+5. Do not edit docs/tasks/session_log.md inside the worktree.
 
 ## Spec (shared with I3-test)
 - `docs/project_management/next/p0-agent-hub-isolation-hardening/I3-spec.md`
@@ -30,4 +31,3 @@ cargo clippy --workspace --all-targets -- -D warnings
 3. Merge back to `feat/p0-agent-hub-isolation-hardening` (ff-only).
 4. Update `tasks.json` + `session_log.md` (END entry) and commit docs (`docs: finish I3-code`).
 5. Remove worktree.
-

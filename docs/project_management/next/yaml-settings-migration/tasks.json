@@ -96,11 +96,18 @@
       "description": "Merge Y0 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
         "docs/project_management/next/yaml-settings-migration/plan.md",
-        "docs/project_management/next/yaml-settings-migration/Y0-spec.md"
+        "docs/project_management/next/yaml-settings-migration/Y0-spec.md",
+        "docs/project_management/next/yaml-settings-migration/manual_testing_playbook.md",
+        "docs/project_management/next/yaml-settings-migration/smoke/linux-smoke.sh",
+        "docs/project_management/next/yaml-settings-migration/smoke/macos-smoke.sh",
+        "docs/project_management/next/yaml-settings-migration/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+        "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
       ],
       "acceptance_criteria": [
         "Behavior matches Y0-spec.",
-        "cargo fmt/clippy green; relevant tests green; make preflight green."
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
       ],
       "start_checklist": [
         "Checkout feat/yaml-settings-migration, pull latest",
@@ -114,6 +121,7 @@
         "Run cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant cargo test suites",
         "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
         "Commit integration changes and merge back to feat/yaml-settings-migration",
         "Update tasks.json + session_log.md with END entry, commit docs"
       ],

@@ -10,6 +10,7 @@
    git worktree add wt/ahih-i4-landlock-integ ahih-i4-landlock-integ
    cd wt/ahih-i4-landlock-integ
    ```
+5. Do not edit docs/tasks/session_log.md inside the worktree.
 
 ## Duties
 - Merge `ahih-i4-landlock-code` and `ahih-i4-landlock-test`.
@@ -23,8 +24,14 @@ cargo test -p world --tests -- --nocapture
 make preflight
 ```
 
+## Smoke Scripts (required)
+- Linux: `bash docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh`
+- macOS: `bash docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh`
+- Windows: `pwsh -File docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1`
+
 ## End Checklist
 1. Commit integration changes.
 2. Merge back to `feat/p0-agent-hub-isolation-hardening` (ff-only).
-3. Update `tasks.json` + `session_log.md` (END entry) and commit docs (`docs: finish I4-integ`).
-4. Remove worktree.
+3. Run the feature-local smoke script for your platform; capture output for the END entry.
+4. Update `tasks.json` + `session_log.md` (END entry) and commit docs (`docs: finish I4-integ`).
+5. Remove worktree.

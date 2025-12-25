@@ -6,6 +6,13 @@ Authoritative docs:
 - Plan: `docs/project_management/next/world-sync/plan.md`
 - Specs: `docs/project_management/next/world-sync/C0-spec.md` through `docs/project_management/next/world-sync/C9-spec.md`
 
+## Automated smoke scripts
+
+Run the platform smoke script first:
+- Linux: `bash docs/project_management/next/world-sync/smoke/linux-smoke.sh`
+- macOS: `bash docs/project_management/next/world-sync/smoke/macos-smoke.sh`
+- Windows: `pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1`
+
 ## 0) Preconditions
 
 1) Verify tools:

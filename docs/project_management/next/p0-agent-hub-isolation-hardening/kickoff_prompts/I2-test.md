@@ -10,6 +10,7 @@
    git worktree add wt/ahih-i2-full-cage-nonpty-test ahih-i2-full-cage-nonpty-test
    cd wt/ahih-i2-full-cage-nonpty-test
    ```
+5. Do not edit docs/tasks/session_log.md inside the worktree.
 
 ## Spec (shared with I2-code)
 - `docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md`
@@ -30,4 +31,3 @@ cargo test -p world -p world-agent -- --nocapture
 3. Merge back to `feat/p0-agent-hub-isolation-hardening` (ff-only).
 4. Update `tasks.json` + `session_log.md` (END entry) and commit docs (`docs: finish I2-test`).
 5. Remove worktree.
-

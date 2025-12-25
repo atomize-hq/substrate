@@ -7,6 +7,33 @@
       "phase": "World Deps Selection Layer",
       "status": "pending",
       "description": "Implement YAML selection config loading, precedence, `--all` semantics, CLI UX, and exit codes per S0 (production code only).",
+      "references": [
+        "docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md",
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md",
+        "docs/project_management/next/world_deps_selection_layer/decision_register.md (DR-0001, DR-0004, DR-0005, DR-0013)",
+        "docs/project_management/next/world_deps_selection_layer/integration_map.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+        "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "Selection is required and missing selection is a no-op with exit 0 and no world calls",
+        "Workspace/global selection paths and precedence match S0",
+        "`--all` ignores selection and expands scope to inventory",
+        "Exit code taxonomy matches S0 (0/2/3/4/5) for the defined failure modes"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read plan/spec/decision_register for WDL0; confirm dependencies Y0 and C1 are integrated",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/wdl0-selection-code; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and cargo clippy (workspace, -D warnings) in the worktree",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/wdl0-selection-code",
       "integration_task": "WDL0-integ",
       "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL0-code.md",
@@ -20,6 +47,28 @@
       "phase": "World Deps Selection Layer",
       "status": "pending",
       "description": "Add tests for selection parsing/precedence, tool scoping, and exit-code taxonomy per S0.",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md",
+        "docs/project_management/next/world_deps_selection_layer/decision_register.md (DR-0001, DR-0004, DR-0005, DR-0013)",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover selection parsing, precedence, and empty-selection semantics",
+        "Tests cover `--all` semantics and configured/unconfigured behavior",
+        "Tests assert exit codes for config errors and backend-unavailable behavior per S0"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read S0; identify target test modules and fixtures",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/wdl0-selection-test; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and targeted cargo test commands for the tests added/changed",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/wdl0-selection-test",
       "integration_task": "WDL0-integ",
       "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL0-test.md",
@@ -33,6 +82,32 @@
       "phase": "World Deps Selection Layer",
       "status": "pending",
       "description": "Merge WDL0 code+tests, reconcile to S0, and run fmt/clippy/tests/preflight.",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md",
+        "docs/project_management/next/world_deps_selection_layer/manual_testing_playbook.md",
+        "docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh",
+        "docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh",
+        "docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "WDL0 code and tests are merged and match S0 exactly",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "Feature-local smoke scripts run and results are recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read S0 and confirm WDL0-code and WDL0-test branches are ready to merge",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/wdl0-selection-integ; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run: bash docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1",
+        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
       "worktree": "wt/wdl0-selection-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL0-integ.md",
@@ -46,6 +121,28 @@
       "phase": "World Deps Selection Layer",
       "status": "pending",
       "description": "Extend manifest schema to declare install class metadata and enforce class routing in world-deps status/sync/install per S1.",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md",
+        "docs/project_management/next/world_deps_selection_layer/decision_register.md (DR-0006, DR-0007, DR-0012, DR-0014)",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Manifest schema changes (v2) and validation rules match S1",
+        "Install class routing is enforced in status/sync/install per S1",
+        "`system_packages` presence is determined by guest_detect probes per DR-0014"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read S1 and the referenced DR entries; confirm WDL0-integ is integrated",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/wdl1-classes-code; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and cargo clippy (workspace, -D warnings) in the worktree",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/wdl1-classes-code",
       "integration_task": "WDL1-integ",
       "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL1-code.md",
@@ -59,6 +156,28 @@
       "phase": "World Deps Selection Layer",
       "status": "pending",
       "description": "Add manifest validation and routing tests for install classes per S1.",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md",
+        "docs/project_management/next/world_deps_selection_layer/decision_register.md (DR-0012, DR-0014)",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover manifest v2 validation, including required guest_install.class and guest_detect probes",
+        "Tests cover routing behavior for user_space/system_packages/manual/copy_from_host",
+        "Tests assert exit code behavior for blocked/unsupported operations per S1"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read S1; identify target test modules and fixtures",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/wdl1-classes-test; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and targeted cargo test commands for the tests added/changed",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/wdl1-classes-test",
       "integration_task": "WDL1-integ",
       "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL1-test.md",
@@ -72,6 +191,32 @@
       "phase": "World Deps Selection Layer",
       "status": "pending",
       "description": "Merge WDL1 code+tests, reconcile to S1, and run fmt/clippy/tests/preflight.",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md",
+        "docs/project_management/next/world_deps_selection_layer/manual_testing_playbook.md",
+        "docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh",
+        "docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh",
+        "docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "WDL1 code and tests are merged and match S1 exactly",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "Feature-local smoke scripts run and results are recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read S1 and confirm WDL1-code and WDL1-test branches are ready to merge",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/wdl1-classes-integ; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run: bash docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1",
+        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
       "worktree": "wt/wdl1-classes-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL1-integ.md",
@@ -85,6 +230,31 @@
       "phase": "World Deps Selection Layer",
       "status": "pending",
       "description": "Implement `substrate world deps provision` (apt-only in guests) and platform gating per S2; update platform smoke scripts accordingly (production code + scripts only).",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md",
+        "docs/project_management/next/world_deps_selection_layer/decision_register.md (DR-0009, DR-0010, DR-0014)",
+        "docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh",
+        "docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh",
+        "docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "`substrate world deps provision` behavior matches S2 across platforms (guest supported; Linux host unsupported)",
+        "Provisioning does not run during sync/install paths",
+        "Feature-local smoke scripts cover the acceptance matrix rows and are kept up to date"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read S2 and the referenced DR entries; confirm WDL1-integ is integrated",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/wdl2-provision-code; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and cargo clippy (workspace, -D warnings) in the worktree",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/wdl2-provision-code",
       "integration_task": "WDL2-integ",
       "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL2-code.md",
@@ -98,6 +268,28 @@
       "phase": "World Deps Selection Layer",
       "status": "pending",
       "description": "Add tests for deterministic package list computation, platform gating, and exit codes per S2.",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md",
+        "docs/project_management/next/world_deps_selection_layer/decision_register.md (DR-0009, DR-0010, DR-0014)",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover deterministic package list computation and stable ordering",
+        "Tests cover platform gating and Linux-host unsupported behavior (exit code 4)",
+        "Tests cover backend unavailable and hardening/cage exit codes per S2"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read S2; identify target test modules and fixtures",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/wdl2-provision-test; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and targeted cargo test commands for the tests added/changed",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/wdl2-provision-test",
       "integration_task": "WDL2-integ",
       "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL2-test.md",
@@ -110,7 +302,33 @@
       "type": "integration",
       "phase": "World Deps Selection Layer",
       "status": "pending",
-      "description": "Merge WDL2 code+tests, reconcile to S2, run fmt/clippy/tests, then run platform smoke scripts as applicable.",
+      "description": "Merge WDL2 code+tests, reconcile to S2, run fmt/clippy/tests, then run the feature-local smoke script for your platform.",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md",
+        "docs/project_management/next/world_deps_selection_layer/manual_testing_playbook.md",
+        "docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh",
+        "docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh",
+        "docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "WDL2 code and tests are merged and match S2 exactly",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "Feature-local smoke scripts run and results are recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read S2 and confirm WDL2-code and WDL2-test branches are ready to merge",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/wdl2-provision-integ; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run: bash docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1",
+        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
       "worktree": "wt/wdl2-provision-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL2-integ.md",

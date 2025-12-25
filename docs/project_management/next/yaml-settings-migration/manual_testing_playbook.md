@@ -5,6 +5,13 @@ This playbook validates the Y0 TOML→YAML runtime settings migration (`substrat
 Authoritative spec:
 - `docs/project_management/next/yaml-settings-migration/Y0-spec.md`
 
+## Automated smoke scripts
+
+Run the platform smoke script first (it uses temp directories and exits non-zero on failure):
+- Linux: `bash docs/project_management/next/yaml-settings-migration/smoke/linux-smoke.sh`
+- macOS: `bash docs/project_management/next/yaml-settings-migration/smoke/macos-smoke.sh`
+- Windows: `pwsh -File docs/project_management/next/yaml-settings-migration/smoke/windows-smoke.ps1`
+
 ## 0) Preconditions
 
 1) Verify the CLI:

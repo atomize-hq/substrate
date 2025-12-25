@@ -7,6 +7,29 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Implement substrate init and world gating per C0-spec (production code only).",
+      "references": [
+        "docs/project_management/next/world-sync/plan.md",
+        "docs/project_management/next/world-sync/C0-spec.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+        "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "`substrate init` creates required workspace directories and `.gitignore` entries per C0-spec",
+        "World-sync commands that require init fail with exit 2 and actionable guidance per C0-spec",
+        "Behavior is idempotent when init is re-run"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C0-spec and plan.md; confirm prerequisites are integrated",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c0-init-code; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and cargo clippy (workspace, -D warnings) in the worktree",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/ws-c0-init-code",
       "integration_task": "C0-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C0-code.md",
@@ -20,6 +43,27 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Add tests for substrate init and gating per C0-spec.",
+      "references": [
+        "docs/project_management/next/world-sync/C0-spec.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover init idempotency and workspace directory creation per C0-spec",
+        "Tests cover gating exit code 2 behavior for uninitialized workspaces",
+        "Tests are targeted and do not introduce unrelated fixtures"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C0-spec and identify target test locations",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c0-init-test; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and targeted cargo test commands for the tests added/changed",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/ws-c0-init-test",
       "integration_task": "C0-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C0-test.md",
@@ -33,6 +77,32 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Merge C0 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "references": [
+        "docs/project_management/next/world-sync/C0-spec.md",
+        "docs/project_management/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
+        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
+        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "C0 code and tests are merged and match C0-spec exactly",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "Feature-local smoke scripts run and results are recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C0-spec and confirm C0-code and C0-test branches are ready to merge",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c0-init-integ; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
       "worktree": "wt/ws-c0-init-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C0-integ.md",
@@ -46,6 +116,29 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Implement settings/CLI parsing and stub sync command per C1-spec (no behavior change).",
+      "references": [
+        "docs/project_management/next/world-sync/plan.md",
+        "docs/project_management/next/world-sync/C1-spec.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+        "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "CLI flags and settings precedence match C1-spec",
+        "`substrate sync --dry-run` prints effective settings per C1-spec",
+        "Exit code behavior for usage/config errors is explicit and stable per C1-spec"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C1-spec; confirm C0-integ is integrated",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c1-config-code; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and cargo clippy (workspace, -D warnings) in the worktree",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/ws-c1-config-code",
       "integration_task": "C1-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C1-code.md",
@@ -59,6 +152,27 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Add tests/fixtures for settings/CLI precedence and defaults per C1-spec.",
+      "references": [
+        "docs/project_management/next/world-sync/C1-spec.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover settings precedence (global vs workspace) and defaults per C1-spec",
+        "Tests cover CLI parsing and `--dry-run` effective settings reporting per C1-spec",
+        "Tests are targeted and do not introduce unrelated fixtures"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C1-spec and identify target test locations",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c1-config-test; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and targeted cargo test commands for the tests added/changed",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/ws-c1-config-test",
       "integration_task": "C1-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C1-test.md",
@@ -72,6 +186,32 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Merge C1 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "references": [
+        "docs/project_management/next/world-sync/C1-spec.md",
+        "docs/project_management/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
+        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
+        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "C1 code and tests are merged and match C1-spec exactly",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "Feature-local smoke scripts run and results are recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C1-spec and confirm C1-code and C1-test branches are ready to merge",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c1-config-integ; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
       "worktree": "wt/ws-c1-config-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C1-integ.md",
@@ -86,6 +226,28 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Implement manual world→host sync apply for non-PTY per C2-spec.",
+      "references": [
+        "docs/project_management/next/world-sync/C2-spec.md",
+        "docs/project_management/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Manual non-PTY world→host apply behavior matches C2-spec",
+        "Protected paths are rejected per C2-spec",
+        "Failure modes map to explicit exit codes per C2-spec"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C2-spec; confirm prerequisites (WDL2-integ) are integrated",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c2-sync-code; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and cargo clippy (workspace, -D warnings) in the worktree",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/ws-c2-sync-code",
       "integration_task": "C2-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C2-code.md",
@@ -99,6 +261,27 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Add tests for non-PTY world→host sync engine per C2-spec.",
+      "references": [
+        "docs/project_management/next/world-sync/C2-spec.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover non-PTY world→host apply semantics per C2-spec",
+        "Tests cover protected paths and exit code behavior per C2-spec",
+        "Tests are targeted and deterministic"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C2-spec and identify target test locations",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c2-sync-test; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and targeted cargo test commands for the tests added/changed",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/ws-c2-sync-test",
       "integration_task": "C2-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C2-test.md",
@@ -112,6 +295,32 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Merge C2 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "references": [
+        "docs/project_management/next/world-sync/C2-spec.md",
+        "docs/project_management/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
+        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
+        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "C2 code and tests are merged and match C2-spec exactly",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "Feature-local smoke scripts run and results are recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C2-spec and confirm C2-code and C2-test branches are ready to merge",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c2-sync-integ; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
       "worktree": "wt/ws-c2-sync-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C2-integ.md",
@@ -126,6 +335,27 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Add auto-sync on session close for non-PTY per C3-spec.",
+      "references": [
+        "docs/project_management/next/world-sync/C3-spec.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Auto-sync behavior and safety rails match C3-spec",
+        "Auto-sync respects protected paths and diff safety rules per C3-spec",
+        "Failure modes map to explicit exit codes per C3-spec"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C3-spec; confirm C2-integ is integrated",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c3-autosync-code; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and cargo clippy (workspace, -D warnings) in the worktree",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/ws-c3-autosync-code",
       "integration_task": "C3-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C3-code.md",
@@ -139,6 +369,27 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Add tests covering auto-sync hooks and safety rails per C3-spec.",
+      "references": [
+        "docs/project_management/next/world-sync/C3-spec.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover auto-sync hooks and safety rails per C3-spec",
+        "Tests cover protected paths and exit code behavior per C3-spec",
+        "Tests are targeted and deterministic"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C3-spec and identify target test locations",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c3-autosync-test; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and targeted cargo test commands for the tests added/changed",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/ws-c3-autosync-test",
       "integration_task": "C3-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C3-test.md",
@@ -152,6 +403,32 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Merge C3 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "references": [
+        "docs/project_management/next/world-sync/C3-spec.md",
+        "docs/project_management/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
+        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
+        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "C3 code and tests are merged and match C3-spec exactly",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "Feature-local smoke scripts run and results are recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C3-spec and confirm C3-code and C3-test branches are ready to merge",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c3-autosync-integ; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
       "worktree": "wt/ws-c3-autosync-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C3-integ.md",
@@ -166,6 +443,27 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Expose PTY diffs and enable PTY world→host sync per C4-spec.",
+      "references": [
+        "docs/project_management/next/world-sync/C4-spec.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "PTY diff capture and PTY sync behavior match C4-spec",
+        "PTY sync respects protected paths and safety rules per C4-spec",
+        "Failure modes map to explicit exit codes per C4-spec"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C4-spec; confirm C3-integ is integrated",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c4-pty-code; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and cargo clippy (workspace, -D warnings) in the worktree",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/ws-c4-pty-code",
       "integration_task": "C4-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C4-code.md",
@@ -179,6 +477,27 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Add PTY-focused sync tests per C4-spec.",
+      "references": [
+        "docs/project_management/next/world-sync/C4-spec.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover PTY diff capture and PTY sync behavior per C4-spec",
+        "Tests cover protected paths and exit code behavior per C4-spec",
+        "Tests are targeted and deterministic"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C4-spec and identify target test locations",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c4-pty-test; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and targeted cargo test commands for the tests added/changed",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/ws-c4-pty-test",
       "integration_task": "C4-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C4-test.md",
@@ -192,6 +511,32 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Merge C4 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "references": [
+        "docs/project_management/next/world-sync/C4-spec.md",
+        "docs/project_management/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
+        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
+        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "C4 code and tests are merged and match C4-spec exactly",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "Feature-local smoke scripts run and results are recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C4-spec and confirm C4-code and C4-test branches are ready to merge",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c4-pty-integ; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
       "worktree": "wt/ws-c4-pty-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C4-integ.md",
@@ -206,6 +551,27 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Implement host→world pre-sync and directionality per C5-spec.",
+      "references": [
+        "docs/project_management/next/world-sync/C5-spec.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Host→world pre-sync behavior matches C5-spec",
+        "Host→world sync respects protected paths and safety rules per C5-spec",
+        "Failure modes map to explicit exit codes per C5-spec"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C5-spec; confirm C4-integ is integrated",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c5-hostsync-code; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and cargo clippy (workspace, -D warnings) in the worktree",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/ws-c5-hostsync-code",
       "integration_task": "C5-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C5-code.md",
@@ -219,6 +585,27 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Add tests for host→world pre-sync per C5-spec.",
+      "references": [
+        "docs/project_management/next/world-sync/C5-spec.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover host→world pre-sync behavior per C5-spec",
+        "Tests cover protected paths and exit code behavior per C5-spec",
+        "Tests are targeted and deterministic"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C5-spec and identify target test locations",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c5-hostsync-test; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and targeted cargo test commands for the tests added/changed",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/ws-c5-hostsync-test",
       "integration_task": "C5-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C5-test.md",
@@ -232,6 +619,32 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Merge C5 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "references": [
+        "docs/project_management/next/world-sync/C5-spec.md",
+        "docs/project_management/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
+        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
+        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "C5 code and tests are merged and match C5-spec exactly",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "Feature-local smoke scripts run and results are recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C5-spec and confirm C5-code and C5-test branches are ready to merge",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c5-hostsync-integ; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
       "worktree": "wt/ws-c5-hostsync-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C5-integ.md",
@@ -246,6 +659,27 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Add host-side internal git init/commit/checkpoint hooks per C6-spec.",
+      "references": [
+        "docs/project_management/next/world-sync/C6-spec.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Host-side internal git behavior matches C6-spec",
+        "Checkpoint and commit semantics are explicit and deterministic per C6-spec",
+        "Failure modes map to explicit exit codes per C6-spec"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C6-spec; confirm C5-integ is integrated",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c6-git-code; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and cargo clippy (workspace, -D warnings) in the worktree",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/ws-c6-git-code",
       "integration_task": "C6-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C6-code.md",
@@ -259,6 +693,27 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Add tests for host-side internal git init/commit/checkpoint per C6-spec.",
+      "references": [
+        "docs/project_management/next/world-sync/C6-spec.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover internal git init/commit/checkpoint behavior per C6-spec",
+        "Tests cover rollback/restore mechanics required by later slices",
+        "Tests are targeted and deterministic"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C6-spec and identify target test locations",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c6-git-test; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and targeted cargo test commands for the tests added/changed",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/ws-c6-git-test",
       "integration_task": "C6-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C6-test.md",
@@ -272,6 +727,32 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Merge C6 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "references": [
+        "docs/project_management/next/world-sync/C6-spec.md",
+        "docs/project_management/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
+        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
+        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "C6 code and tests are merged and match C6-spec exactly",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "Feature-local smoke scripts run and results are recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C6-spec and confirm C6-code and C6-test branches are ready to merge",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c6-git-integ; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
       "worktree": "wt/ws-c6-git-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C6-integ.md",
@@ -286,6 +767,27 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Implement rollback CLI using internal git per C7-spec.",
+      "references": [
+        "docs/project_management/next/world-sync/C7-spec.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Rollback CLI behavior matches C7-spec",
+        "Rollback uses internal git state and respects protected paths per C7-spec",
+        "Failure modes map to explicit exit codes per C7-spec"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C7-spec; confirm C6-integ is integrated",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c7-rollback-code; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and cargo clippy (workspace, -D warnings) in the worktree",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/ws-c7-rollback-code",
       "integration_task": "C7-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C7-code.md",
@@ -299,6 +801,27 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Add tests for rollback behavior per C7-spec.",
+      "references": [
+        "docs/project_management/next/world-sync/C7-spec.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover rollback behavior and internal git interactions per C7-spec",
+        "Tests cover error/exit code behavior per C7-spec",
+        "Tests are targeted and deterministic"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C7-spec and identify target test locations",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c7-rollback-test; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and targeted cargo test commands for the tests added/changed",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/ws-c7-rollback-test",
       "integration_task": "C7-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C7-test.md",
@@ -312,6 +835,32 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Merge C7 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "references": [
+        "docs/project_management/next/world-sync/C7-spec.md",
+        "docs/project_management/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
+        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
+        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "C7 code and tests are merged and match C7-spec exactly",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "Feature-local smoke scripts run and results are recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C7-spec and confirm C7-code and C7-test branches are ready to merge",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c7-rollback-integ; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
       "worktree": "wt/ws-c7-rollback-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C7-integ.md",
@@ -325,6 +874,27 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Ensure world-side .substrate-git bootstrap/bridge per C8-spec.",
+      "references": [
+        "docs/project_management/next/world-sync/C8-spec.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "World-side internal git bridge behavior matches C8-spec",
+        "World-side bridge does not touch user `.git` and respects protected paths per C8-spec",
+        "Failure modes map to explicit exit codes per C8-spec"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C8-spec; confirm C6-integ is integrated",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c8-worldgit-code; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and cargo clippy (workspace, -D warnings) in the worktree",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/ws-c8-worldgit-code",
       "integration_task": "C8-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C8-code.md",
@@ -338,6 +908,27 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Add tests for world-side .substrate-git bootstrap/bridge per C8-spec.",
+      "references": [
+        "docs/project_management/next/world-sync/C8-spec.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover world-side bootstrap/bridge behavior per C8-spec",
+        "Tests cover protected paths and error/exit code behavior per C8-spec",
+        "Tests are targeted and deterministic"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C8-spec and identify target test locations",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c8-worldgit-test; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and targeted cargo test commands for the tests added/changed",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/ws-c8-worldgit-test",
       "integration_task": "C8-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C8-test.md",
@@ -351,6 +942,32 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Merge C8 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "references": [
+        "docs/project_management/next/world-sync/C8-spec.md",
+        "docs/project_management/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
+        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
+        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "C8 code and tests are merged and match C8-spec exactly",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "Feature-local smoke scripts run and results are recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C8-spec and confirm C8-code and C8-test branches are ready to merge",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c8-worldgit-integ; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
       "worktree": "wt/ws-c8-worldgit-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C8-integ.md",
@@ -364,6 +981,27 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Enhance init UX/migration per C9-spec (production code).",
+      "references": [
+        "docs/project_management/next/world-sync/C9-spec.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Init UX/migration behavior matches C9-spec",
+        "Init remains idempotent and does not damage existing workspaces per C9-spec",
+        "Failure modes map to explicit exit codes per C9-spec"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C9-spec; confirm C0-integ is integrated",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c9-initux-code; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and cargo clippy (workspace, -D warnings) in the worktree",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/ws-c9-initux-code",
       "integration_task": "C9-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C9-code.md",
@@ -377,6 +1015,27 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Add tests for init UX/migration per C9-spec.",
+      "references": [
+        "docs/project_management/next/world-sync/C9-spec.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover init UX/migration behavior per C9-spec",
+        "Tests cover idempotency and error/exit code behavior per C9-spec",
+        "Tests are targeted and deterministic"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C9-spec and identify target test locations",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c9-initux-test; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt and targeted cargo test commands for the tests added/changed",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
+        "Remove worktree"
+      ],
       "worktree": "wt/ws-c9-initux-test",
       "integration_task": "C9-integ",
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C9-test.md",
@@ -390,6 +1049,32 @@
       "phase": "World Sync",
       "status": "pending",
       "description": "Merge C9 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "references": [
+        "docs/project_management/next/world-sync/C9-spec.md",
+        "docs/project_management/next/world-sync/manual_testing_playbook.md",
+        "docs/project_management/next/world-sync/smoke/linux-smoke.sh",
+        "docs/project_management/next/world-sync/smoke/macos-smoke.sh",
+        "docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "C9 code and tests are merged and match C9-spec exactly",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "Feature-local smoke scripts run and results are recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-sync && git pull --ff-only",
+        "Read C9-spec and confirm C9-code and C9-test branches are ready to merge",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create worktree wt/ws-c9-initux-integ; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
+        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
       "worktree": "wt/ws-c9-initux-integ",
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C9-integ.md",

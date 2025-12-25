@@ -10,6 +10,7 @@
    git worktree add wt/ahih-i1-fail-closed-code ahih-i1-fail-closed-code
    cd wt/ahih-i1-fail-closed-code
    ```
+5. Do not edit docs/tasks/session_log.md inside the worktree.
 
 ## Spec (shared with I1-test)
 - `docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md`

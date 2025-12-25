@@ -7,6 +7,13 @@ Authoritative specs:
 - `docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md`
 - `docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
 
+## Automated smoke scripts
+
+Run the platform smoke script first:
+- Linux: `bash docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh`
+- macOS: `bash docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh`
+- Windows: `pwsh -File docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1`
+
 Goal:
 - Validate end-to-end behavior across Linux, macOS (Lima), and Windows (WSL) where technically possible.
 - Where a journey is not supported, validate explicit, actionable failure messages and exit codes.

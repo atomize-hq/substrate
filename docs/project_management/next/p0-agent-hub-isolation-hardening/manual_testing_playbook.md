@@ -6,6 +6,13 @@ Authoritative docs:
 - ADR: `docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md`
 - Specs: `docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md` through `docs/project_management/next/p0-agent-hub-isolation-hardening/I5-spec.md`
 
+## Automated smoke scripts
+
+Run the platform smoke script first:
+- Linux: `bash docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh`
+- macOS: `bash docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh`
+- Windows: `pwsh -File docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1`
+
 ## 0) Preconditions
 
 1) Verify the CLI:

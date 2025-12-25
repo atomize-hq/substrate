@@ -10,6 +10,7 @@
    git worktree add wt/ahih-i4-landlock-code ahih-i4-landlock-code
    cd wt/ahih-i4-landlock-code
    ```
+5. Do not edit docs/tasks/session_log.md inside the worktree.
 
 ## Spec (shared with I4-test)
 - `docs/project_management/next/p0-agent-hub-isolation-hardening/I4-spec.md`

@@ -10,6 +10,7 @@
    git worktree add wt/ahih-i0-policy-schema-test ahih-i0-policy-schema-test
    cd wt/ahih-i0-policy-schema-test
    ```
+5. Do not edit docs/tasks/session_log.md inside the worktree.
 
 ## Spec (shared with I0-code)
 - `docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md`
@@ -30,4 +31,3 @@ cargo test -p substrate-broker -- --nocapture
 3. Merge back to `feat/p0-agent-hub-isolation-hardening` (ff-only).
 4. Update `tasks.json` + `session_log.md` (END entry) and commit docs (`docs: finish I0-test`).
 5. Remove worktree.
-

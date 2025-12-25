@@ -96,11 +96,12 @@ Explicitly not covered:
   - Landlock allowlists (if enabled) must not block writes into the world-deps prefix for `world deps` commands.
 
 ### Installer / provisioning scripts
-- **macOS:** `scripts/mac/lima-warm.sh`, `scripts/mac/smoke.sh`
-- **Windows:** `scripts/windows/wsl-warm.ps1`, `scripts/windows/wsl-smoke.ps1`, `scripts/wsl/provision.sh`
-- **Linux:** `scripts/linux/world-provision.sh`, `scripts/linux/world-socket-verify.sh`
+- **Feature-local smoke entrypoints:** `docs/project_management/next/world_deps_selection_layer/smoke/`
+- **macOS prerequisites:** `scripts/mac/lima-warm.sh`
+- **Windows prerequisites:** `scripts/windows/wsl-warm.ps1`
+- **Linux prerequisites:** `scripts/linux/world-provision.sh`
 - **Responsibilities added:**
-  - smoke coverage for new journeys (selection gating, system package provisioning, user-space install)
+  - smoke coverage for new journeys (selection gating, system package provisioning, user-space install) via the feature-local smoke scripts
   - no change to baseline WSL/Lima provisioning required to ship S0/S1 (but S2 needs smoke coverage updates)
 
 ---

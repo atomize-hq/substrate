@@ -10,6 +10,7 @@
    git worktree add wt/ahih-i5-docs-verify-code ahih-i5-docs-verify-code
    cd wt/ahih-i5-docs-verify-code
    ```
+5. Do not edit docs/tasks/session_log.md inside the worktree.
 
 ## Spec (shared with I5-test)
 - `docs/project_management/next/p0-agent-hub-isolation-hardening/I5-spec.md`
@@ -32,4 +33,3 @@ git ls-files '*.sh' | xargs -r shellcheck -x -S warning
 3. Merge back to `feat/p0-agent-hub-isolation-hardening` (ff-only).
 4. Update `tasks.json` + `session_log.md` (END entry) and commit docs (`docs: finish I5-code`).
 5. Remove worktree.
-

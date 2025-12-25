@@ -89,11 +89,18 @@
       "description": "Merge I0 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md"
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+        "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
       ],
       "acceptance_criteria": [
         "Behavior matches I0-spec on all supported platforms (platform guards as needed).",
-        "cargo fmt/clippy green; relevant tests green; make preflight green."
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
       ],
       "start_checklist": [
         "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
@@ -107,6 +114,7 @@
         "Run cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant cargo test suites",
         "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
         "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening",
         "Update tasks.json + session_log.md with END entry, commit docs"
       ],
@@ -209,11 +217,18 @@
       "description": "Merge I1 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md"
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+        "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
       ],
       "acceptance_criteria": [
         "Behavior matches I1-spec; integration owns resolving drift.",
-        "cargo fmt/clippy green; relevant tests green; make preflight green."
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
       ],
       "start_checklist": [
         "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
@@ -227,6 +242,7 @@
         "Run cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant cargo test suites",
         "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
         "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening",
         "Update tasks.json + session_log.md with END entry, commit docs"
       ],
@@ -330,11 +346,18 @@
       "description": "Merge I2 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md"
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+        "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
       ],
       "acceptance_criteria": [
         "Behavior matches I2-spec; integration owns resolving drift.",
-        "cargo fmt/clippy green; relevant tests green; make preflight green."
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
       ],
       "start_checklist": [
         "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
@@ -348,6 +371,7 @@
         "Run cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant cargo test suites",
         "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
         "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening",
         "Update tasks.json + session_log.md with END entry, commit docs"
       ],
@@ -450,11 +474,18 @@
       "description": "Merge I3 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/I3-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md"
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+        "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
       ],
       "acceptance_criteria": [
         "Behavior matches I3-spec; integration owns resolving drift.",
-        "cargo fmt/clippy green; relevant tests green; make preflight green."
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
       ],
       "start_checklist": [
         "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
@@ -468,6 +499,7 @@
         "Run cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant cargo test suites",
         "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
         "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening",
         "Update tasks.json + session_log.md with END entry, commit docs"
       ],
@@ -567,11 +599,18 @@
       "description": "Merge I4 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/I4-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md"
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+        "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
       ],
       "acceptance_criteria": [
         "Behavior matches I4-spec; integration owns resolving drift.",
-        "cargo fmt/clippy green; relevant tests green; make preflight green."
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
       ],
       "start_checklist": [
         "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
@@ -585,6 +624,7 @@
         "Run cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant cargo test suites",
         "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
         "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening",
         "Update tasks.json + session_log.md with END entry, commit docs"
       ],
@@ -690,11 +730,18 @@
       "description": "Merge I5 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/I5-spec.md",
-        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md"
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+        "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
       ],
       "acceptance_criteria": [
         "Docs and verification tooling match I5-spec.",
-        "cargo fmt/clippy green; relevant tests green; make preflight green."
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
       ],
       "start_checklist": [
         "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
@@ -708,6 +755,7 @@
         "Run cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant cargo test suites",
         "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
         "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening",
         "Update tasks.json + session_log.md with END entry, commit docs"
       ],
