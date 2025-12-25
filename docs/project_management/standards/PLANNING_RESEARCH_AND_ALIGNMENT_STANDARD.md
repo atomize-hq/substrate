@@ -43,6 +43,7 @@ When you run a docs-first planning pass for a feature/track, you must produce a 
 ### 3.0 Supporting workflow docs (required references)
 
 Planning work must use these standards:
+- `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
 - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
 - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`

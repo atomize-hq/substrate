@@ -194,6 +194,24 @@ fi
 
 ---
 
+## 5.1 Exit code taxonomy consistency (required when the feature defines CLI exit codes)
+
+If the feature defines CLI semantics with exit codes, the Planning Pack must:
+- reference `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`, or
+- include an explicit ADR-level override and repeat it consistently in specs/playbooks.
+
+Minimum command (heuristic):
+```bash
+rg -n 'Exit codes|exit code' "$FEATURE_DIR" | head
+```
+
+If this shows exit-code contracts, verify they are aligned with:
+- `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+
+Record the verification (and any overrides) in `quality_gate_report.md`.
+
+---
+
 ## 6) Sequencing alignment
 
 Verify:
@@ -206,4 +224,3 @@ jq -e --arg dir "$FEATURE_DIR" '.sprints[] | select(.directory==$dir) | .id' doc
 ```
 
 If a dependency exists in tasks.json that implies a sequencing change, update `sequencing.json` (or remove the dependency and fix the plan/specs) and record the final outcome in the feature’s `integration_map.md` or alignment report.
-

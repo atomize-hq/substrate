@@ -31,6 +31,12 @@ If the work has more than one meaningful decision, the Planning Pack must includ
 
 The ADR must link to that decision register and must not duplicate decision entries.
 
+## Accepted ADR requirements (non-negotiable)
+
+If an ADR status is `Accepted`, it must include:
+- the exact feature directory path(s) under `docs/project_management/next/<feature>/`, and
+- the intended branch name(s) (e.g., `feat/<feature>`).
+
 ## Required ADR format
 
 Every ADR must include all sections below. Every behavior statement must be singular and testable.
@@ -135,6 +141,7 @@ Every ADR must include all sections below. Every behavior statement must be sing
 - Commands:
   - `<command>`: <behavior, defaults, exit codes>
 - Exit codes:
+  - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md` (unless explicitly overridden here)
   - `0`: <meaning>
   - `2`: <meaning>
   - `3`: <meaning>
@@ -197,4 +204,3 @@ Every ADR must include all sections below. Every behavior statement must be sing
   - `docs/project_management/next/<feature>/decision_register.md`:
     - DR-0001, DR-0002, …
 ```
-

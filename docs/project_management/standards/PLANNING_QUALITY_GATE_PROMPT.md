@@ -21,6 +21,7 @@ Inputs (must read end-to-end):
 - `docs/project_management/next/sequencing.json`
 - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
 - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+- `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
 - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
 
@@ -31,6 +32,7 @@ Review checklist (pass/fail):
    - The selected option is justified and matches the constraints (security posture, platform parity, config format).
 2) Contract consistency:
    - CLI commands/flags/defaults and exit codes are consistent across ADR/specs/playbooks.
+   - Exit code meanings match `docs/project_management/standards/EXIT_CODE_TAXONOMY.md` unless an ADR explicitly overrides.
    - Config filenames/paths/precedence are consistent everywhere.
 3) Sequencing readiness:
    - No task can start before prerequisites are integrated (tasks.json deps match sequencing.json).

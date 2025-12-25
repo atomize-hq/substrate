@@ -20,6 +20,41 @@ The report is an auditable artifact. It is required before execution triads begi
 ## Evidence: Commands Run (verbatim)
 Paste the exact commands run and their results/exit codes.
 
+### Required preflight (minimum)
+
+These are the minimum commands that must appear in this report (or an explicit equivalent), with exit codes recorded:
+
+```bash
+# JSON validity
+jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
+jq -e . docs/project_management/next/sequencing.json >/dev/null
+
+# tasks.json required-field audit
+python - <<'PY'
+import json, os
+feature_dir=os.environ["FEATURE_DIR"]
+path=os.path.join(feature_dir,"tasks.json")
+data=json.load(open(path,"r",encoding="utf-8"))
+tasks=data["tasks"] if isinstance(data,dict) and "tasks" in data else data
+required=[
+  "id","name","type","phase","status","description",
+  "references","acceptance_criteria","start_checklist","end_checklist",
+  "worktree","integration_task","kickoff_prompt",
+  "depends_on","concurrent_with"
+]
+missing=[]
+for t in tasks:
+  m=[k for k in required if k not in t]
+  if m:
+    missing.append((t.get("id","<no id>"),m))
+if missing:
+  for tid,m in missing:
+    print(tid,":",", ".join(m))
+  raise SystemExit(1)
+print("OK: tasks.json required fields present")
+PY
+```
+
 ### Planning lint (mechanical)
 Reference: `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
 
@@ -111,4 +146,3 @@ Mark `YES` only if read end-to-end.
 - Summary: `<why it is not execution-ready>`
 - Required human decisions (explicit): `<list>`
 - Blockers to execution: `<list>`
-

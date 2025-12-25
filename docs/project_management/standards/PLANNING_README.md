@@ -18,6 +18,30 @@ Run a planning pass when the next body of work requires any of:
 Planning work must produce a Planning Pack under:
 - `docs/project_management/next/<feature>/`
 
+## Planning Pack artifact index (canonical filenames)
+
+This is the quick “did we create everything?” checklist.
+
+Always required:
+- `docs/project_management/next/<feature>/plan.md`
+- `docs/project_management/next/<feature>/tasks.json`
+- `docs/project_management/next/<feature>/session_log.md`
+- `docs/project_management/next/<feature>/kickoff_prompts/`
+- Specs: `docs/project_management/next/<feature>/*-spec*.md`
+
+Required for decision-heavy or cross-platform work:
+- `docs/project_management/next/<feature>/decision_register.md`
+- `docs/project_management/next/<feature>/integration_map.md`
+- `docs/project_management/next/<feature>/manual_testing_playbook.md`
+- `docs/project_management/next/<feature>/smoke/`
+  - `docs/project_management/next/<feature>/smoke/linux-smoke.sh`
+  - `docs/project_management/next/<feature>/smoke/macos-smoke.sh`
+  - `docs/project_management/next/<feature>/smoke/windows-smoke.ps1`
+
+Required before execution triads begin:
+- `docs/project_management/next/<feature>/quality_gate_report.md`
+  - must contain `RECOMMENDATION: ACCEPT`
+
 Minimum required:
 - `plan.md`
 - `tasks.json`
@@ -40,6 +64,7 @@ Before execution triads begin, the Planning Pack must include:
 ## Standards to follow (required reading)
 
 Planning agents must read end-to-end:
+- `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
 - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
 - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
@@ -78,6 +103,7 @@ Required reading (end-to-end):
 - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
 - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
 - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
+- `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
 - `docs/project_management/next/sequencing.json`
 - All existing planning docs relevant to <FEATURE> (if any).
@@ -108,4 +134,3 @@ Output requirements:
 - Produce a concise summary of files created/modified.
 - Do not claim work is “ready” without a quality gate; the gate is a separate step.
 ```
-
