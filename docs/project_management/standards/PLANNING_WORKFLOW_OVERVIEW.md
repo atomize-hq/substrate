@@ -16,7 +16,7 @@ flowchart TD
   D_YES[ADR accepted]
 
   P["Planning agent reads: docs/project_management/standards/PLANNING_README.md"]
-  PACK[Planning Pack created under docs/project_management/next/<feature>/]
+  PACK[Planning Pack created under docs/project_management/next/**FEATURE_NAME**/]
 
   Q["Quality gate reviewer reads: docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md"]
   LINT["Run mechanical checks: docs/project_management/standards/PLANNING_LINT_CHECKLIST.md"]
