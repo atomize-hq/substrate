@@ -57,3 +57,10 @@ Template (START/END only):
 - Scripts executed: n/a
 - Docs commit: (this commit)
 - Next steps / blockers: I0-integ can merge with I0-test when ready
+
+## [2025-12-25 20:34 UTC] Codex – I0-integ – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md
+- Created worktree: wt/ahih-i0-policy-schema-integ
+- Plan: merge I0 code+test branches; reconcile broker schema vs I0-spec; run fmt/clippy/broker tests/preflight
+- Blockers: none
