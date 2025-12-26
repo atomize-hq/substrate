@@ -438,3 +438,14 @@ Template (START/END only):
 - Worktree (next): wt/ahih-i7-playbook-align-test
 - Plan: add a lightweight test preventing playbook drift (`.substrate-profile` snippets must include required `id` and `name`)
 - Blockers: none
+
+## [2025-12-26 15:20 UTC] Codex – I7-test – END
+- Worktree commits: 1cc6a54
+- Commands:
+  - cargo fmt
+  - cargo test -p substrate-shell --tests -- --nocapture
+- Results: pass
+- Scripts executed: n/a
+- Kickoff prompts created/verified: n/a
+- Docs commit: (this commit)
+- Next steps / blockers: I7-integ can merge I7-code + I7-test and run full validation
