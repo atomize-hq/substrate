@@ -1035,7 +1035,7 @@
       "name": "I1 noise reduction (code)",
       "type": "code",
       "phase": "Agent Hub Isolation",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Reduce world routing output noise to match I1-spec: single warning on allowed fallback; single error when required.",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md",

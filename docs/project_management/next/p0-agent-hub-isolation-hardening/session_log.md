@@ -473,3 +473,10 @@ Template (START/END only):
 - Kickoff prompts created/verified: n/a
 - Docs commit: (this commit)
 - Next steps / blockers: none
+
+## [2025-12-26 15:37 UTC] Codex – I8-code – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md (commit: docs: start I8-code)
+- Worktree (next): wt/ahih-i8-i1-noise-code
+- Plan: reduce world-routing output noise to emit exactly one warning on allowed fallback and one error when world is required
+- Blockers: none
