@@ -496,3 +496,13 @@ Template (START/END only):
 - Results: pass
 - Docs commit: (this commit)
 - Next steps / blockers: I8-integ can merge I8-code + I8-test and run full validation
+
+## [2025-12-26 15:53 UTC] Codex – I8-code – END
+- Worktree commits: cac23b6
+- Notes: consolidate world-backend fallback messaging so fallback-allowed runs emit a single warning and required-world runs emit a single error
+- Commands:
+  - cargo fmt
+  - cargo clippy --workspace --all-targets -- -D warnings
+- Results: pass
+- Docs commit: (this commit)
+- Next steps / blockers: I8-integ can merge I8-code + I8-test and run full validation
