@@ -391,3 +391,10 @@ Template (START/END only):
 - Kickoff prompts created/verified: docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I6-code.md
 - Docs commit: (this commit)
 - Next steps / blockers: I6-integ can merge with I6-test and un-ignore `crates/shell/tests/world_verify.rs`
+
+## [2025-12-26 15:10 UTC] Codex – I6-integ – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md (commit: docs: start I6-integ)
+- Worktree (next): wt/ahih-i6-world-verify-integ
+- Plan: merge I6 code+test branches; reconcile `substrate world verify` behavior vs I6-spec; run fmt/clippy/tests/preflight + smoke scripts
+- Blockers: none
