@@ -518,7 +518,7 @@
       "name": "Landlock additive hardening (code)",
       "type": "code",
       "phase": "Agent Hub Isolation",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add Landlock-based allowlist enforcement when available; surface detection in doctor output.",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/I4-spec.md",

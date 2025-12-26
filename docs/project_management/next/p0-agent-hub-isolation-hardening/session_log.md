@@ -252,3 +252,10 @@ Template (START/END only):
 - Kickoff prompts created/verified: n/a
 - Docs commit: (this commit)
 - Next steps / blockers: none
+
+## [2025-12-26 00:51 UTC] Codex – I4-code – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md
+- Worktree (next): wt/ahih-i4-landlock-code
+- Plan: add Landlock runtime detection + allowlist enforcement (additive to full cage); surface Landlock availability in world doctor output
+- Blockers: none
