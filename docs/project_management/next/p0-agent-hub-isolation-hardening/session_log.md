@@ -380,3 +380,14 @@ Template (START/END only):
 - Kickoff prompts created/verified: n/a
 - Docs commit: (this commit)
 - Next steps / blockers: I6-integ should un-ignore `crates/shell/tests/world_verify.rs` once the command/JSON schema is implemented
+
+## [2025-12-26 14:41 UTC] Codex – I6-code – END
+- Worktree commits: 0c425b2
+- Commands:
+  - cargo fmt
+  - cargo clippy --workspace --all-targets -- -D warnings
+- Results: pass
+- Scripts executed: n/a
+- Kickoff prompts created/verified: docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I6-code.md
+- Docs commit: (this commit)
+- Next steps / blockers: I6-integ can merge with I6-test and un-ignore `crates/shell/tests/world_verify.rs`

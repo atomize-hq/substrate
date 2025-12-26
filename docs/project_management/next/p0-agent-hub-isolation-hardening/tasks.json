@@ -773,7 +773,7 @@
       "name": "`substrate world verify` command (code)",
       "type": "code",
       "phase": "Agent Hub Isolation",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add an install-available CLI subcommand that performs end-to-end isolation enforcement verification.",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/I6-spec.md",
