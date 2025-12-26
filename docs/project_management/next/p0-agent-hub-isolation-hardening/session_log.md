@@ -480,3 +480,10 @@ Template (START/END only):
 - Worktree (next): wt/ahih-i8-i1-noise-code
 - Plan: reduce world-routing output noise to emit exactly one warning on allowed fallback and one error when world is required
 - Blockers: none
+
+## [2025-12-26 15:38 UTC] Codex – I8-test – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md (commit: docs: start I8-test)
+- Worktree (next): wt/ahih-i8-i1-noise-test
+- Plan: add fixture-based tests asserting single warning/error emission when world is unavailable (fallback allowed vs require_world)
+- Blockers: none
