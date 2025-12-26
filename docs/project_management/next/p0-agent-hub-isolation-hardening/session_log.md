@@ -537,3 +537,10 @@ Template (START/END only):
 - Worktree (next): wt/ahih-i9-full-cage-verify-code
 - Plan: fix full-cage robustness for `/tmp`-rooted projects; align `substrate world verify` full-cage behavior to the isolation model; run fmt/clippy
 - Blockers: none
+
+## [2025-12-26 20:56 UTC] Codex – I9-test – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md (commit: docs: start I9-test)
+- Worktree (next): wt/ahih-i9-full-cage-verify-test
+- Plan: add regression coverage for `/tmp`-rooted full-cage execution; verify allowlist prefix patterns; assert outside-host access is blocked
+- Blockers: none
