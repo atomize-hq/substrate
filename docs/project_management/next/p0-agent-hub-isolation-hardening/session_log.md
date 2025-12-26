@@ -415,3 +415,10 @@ Template (START/END only):
 - Kickoff prompts created/verified: n/a
 - Docs commit: (this commit)
 - Next steps / blockers: none
+
+## [2025-12-26 15:07 UTC] Codex – I7-code – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md (commit: docs: start I7-code)
+- Worktree (next): wt/ahih-i7-playbook-align-code
+- Plan: align manual testing playbook with I0–I5 specs + current policy schema (ensure `.substrate-profile` examples include required `id`/`name`; remove non-spec claims like numeric exit codes)
+- Blockers: none
