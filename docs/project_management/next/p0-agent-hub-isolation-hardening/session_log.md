@@ -544,3 +544,13 @@ Template (START/END only):
 - Worktree (next): wt/ahih-i9-full-cage-verify-test
 - Plan: add regression coverage for `/tmp`-rooted full-cage execution; verify allowlist prefix patterns; assert outside-host access is blocked
 - Blockers: none
+
+## [2025-12-26 21:02 UTC] Codex – I9-code – END
+- Worktree commits: bcd4ef8
+- Notes: mount full-cage `/tmp` tmpfs before binding the project so `/tmp`-rooted projects/cwds remain nameable; align `substrate world verify` full-cage check to not require host-side project writes
+- Commands:
+  - cargo fmt
+  - cargo clippy --workspace --all-targets -- -D warnings
+- Results: pass
+- Docs commit: (this commit)
+- Next steps / blockers: I9-test can finish; then I9-integ can merge I9-code + I9-test and run full validation
