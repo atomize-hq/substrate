@@ -277,3 +277,20 @@ Template (START/END only):
 - Worktree (next): wt/ahih-i4-landlock-integ
 - Plan: merge I4 code+test; reconcile Landlock additive behavior vs I4-spec; run fmt/clippy/world tests/preflight + smoke scripts
 - Blockers: none
+
+## [2025-12-26 02:29 UTC] Codex – I4-integ – END
+- Worktree commits: e0c59e3, 6640641
+- Notes: added a minimal ahih-i4-landlock-test branch (was missing) with Landlock smoke tests; fixed world-agent main wrapper to satisfy preflight while preserving landlock exec behavior
+- Commands:
+  - cargo fmt
+  - cargo clippy --workspace --all-targets -- -D warnings
+  - cargo test -p world --tests -- --nocapture
+  - make preflight
+- Results: pass
+- Scripts executed:
+  - linux-smoke.sh (OK: agent hub hardening linux smoke (preflight); required PATH+=target/debug)
+  - macos-smoke.sh (SKIP: agent hub hardening macOS smoke (not macOS))
+  - windows-smoke.ps1 (SKIP: agent hub hardening windows smoke (pwsh not installed))
+- Kickoff prompts created/verified: n/a
+- Docs commit: (this commit)
+- Next steps / blockers: none
