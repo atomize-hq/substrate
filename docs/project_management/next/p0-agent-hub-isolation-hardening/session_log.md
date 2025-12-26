@@ -530,3 +530,10 @@ Template (START/END only):
 - Kickoff prompts created/verified: n/a
 - Docs commit: (this commit)
 - Next steps / blockers: none
+
+## [2025-12-26 20:55 UTC] Codex – I9-code – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md (commit: docs: start I9-code)
+- Worktree (next): wt/ahih-i9-full-cage-verify-code
+- Plan: fix full-cage robustness for `/tmp`-rooted projects; align `substrate world verify` full-cage behavior to the isolation model; run fmt/clippy
+- Blockers: none

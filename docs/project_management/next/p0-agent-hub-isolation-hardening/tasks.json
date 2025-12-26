@@ -1162,7 +1162,7 @@
       "name": "Full cage robustness (/tmp projects + world verify) (code)",
       "type": "code",
       "phase": "Agent Hub Isolation",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Fix full cage execution when the host project/cwd is under /tmp and align world verify full-cage behavior with the isolation model.",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md",
