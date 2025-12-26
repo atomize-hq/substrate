@@ -144,6 +144,18 @@ Template (START/END only):
 - Plan: align WORLD/VISION/CONFIGURATION docs with enforced guarantees; add minimal cross-platform verification script/checklist for read-only + full cage
 - Blockers: none
 
+## [2025-12-26 03:15 UTC] Codex – I5-code – END
+- Worktree commits: fde28f4
+- Commands:
+  - cargo fmt
+  - cargo clippy --workspace --all-targets -- -D warnings
+  - git ls-files '*.sh' | xargs -r shellcheck -x -S warning
+  - shellcheck -x -S warning scripts/linux/agent-hub-isolation-verify.sh
+- Results: pass
+- Scripts executed: n/a (verification script added; not executed in this task)
+- Docs commit: (this commit)
+- Next steps / blockers: I5-integ can merge I5 code+test and run full validation + preflight
+
 ## [2025-12-26 03:01 UTC] Codex – I5-test – START
 - Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
 - Updated tasks.json + session_log.md
