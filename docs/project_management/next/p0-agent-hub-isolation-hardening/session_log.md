@@ -563,3 +563,10 @@ Template (START/END only):
 - Results: pass (full-cage tests skipped when overlay support/privileges missing)
 - Docs commit: (this commit)
 - Next steps / blockers: I9-integ can merge I9-code + I9-test and run full validation
+
+## [2025-12-26 21:14 UTC] Codex – I9-integ – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md (commit: docs: start I9-integ)
+- Worktree (next): wt/ahih-i9-full-cage-verify-integ
+- Plan: merge I9 code+test; reconcile to I9-spec; run fmt/clippy/workspace tests/preflight; run smoke scripts
+- Blockers: none
