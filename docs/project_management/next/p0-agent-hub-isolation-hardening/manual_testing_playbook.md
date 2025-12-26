@@ -1,10 +1,10 @@
-# Agent Hub Isolation Hardening (I0–I5) — Manual Testing Playbook
+# Agent Hub Isolation Hardening (I0–I9) — Manual Testing Playbook
 
-This playbook validates the I0–I5 policy schema and Linux isolation semantics end-to-end.
+This playbook validates the I0–I9 policy schema and Linux isolation semantics end-to-end.
 
 Authoritative docs:
 - ADR: `docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md`
-- Specs: `docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md` through `docs/project_management/next/p0-agent-hub-isolation-hardening/I5-spec.md`
+- Specs: `docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md` through `docs/project_management/next/p0-agent-hub-isolation-hardening/I9-spec.md`
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Automated smoke scripts
@@ -27,6 +27,7 @@ which substrate
 export IH_TEST_WS="$(mktemp -d)"
 cd "$IH_TEST_WS"
 echo "IH_TEST_WS=$IH_TEST_WS"
+case "$IH_TEST_WS" in /tmp/*) ;; *) echo "NOTE: IH_TEST_WS is not under /tmp; set TMPDIR=/tmp for I9 /tmp-rooted coverage." ;; esac
 ```
 
 ## 1) I0: strict `.substrate-profile` schema validation
@@ -161,7 +162,105 @@ Expected:
 - Command succeeds (the report includes a structured `.landlock` object).
 - On Landlock-capable hosts, `.landlock.supported` should be `true` (inspect via `substrate world doctor --json | jq '.landlock'`).
 
-## 5) Cleanup
+## 5) I5: verification tooling (optional)
+
+I5 is documentation alignment plus a minimal verification script/checklist.
+
+On Linux (repo checkout), you can run the verification script:
+
+```bash
+bash scripts/linux/agent-hub-isolation-verify.sh
+```
+
+Expected:
+- Script exits `0` and prints `Verification complete. Logs saved under: ...`.
+- If full cage is unavailable, the script prints actionable hints (unprivileged user namespaces / CAP_SYS_ADMIN).
+
+## 6) I6: `substrate world verify` (enforcement verification)
+
+Run the end-to-end verifier (works from any directory; does not require a repo checkout):
+
+```bash
+SUBSTRATE_WORLD=enabled substrate world verify
+echo "exit=$?"
+```
+
+Expected:
+- Exit is `0`.
+- Output shows all checks and ends with `PASS`.
+
+Optional: validate the machine report shape:
+
+```bash
+SUBSTRATE_WORLD=enabled substrate world verify --json | jq -e '
+  .ok == true
+  and (.checks | type == "array")
+  and ([.checks[].id] | index("world_backend") != null)
+  and ([.checks[].id] | index("read_only_relative_write") != null)
+  and ([.checks[].id] | index("read_only_absolute_write") != null)
+  and ([.checks[].id] | index("full_cage_host_isolation") != null)
+' >/dev/null
+echo "exit=$?"
+```
+
+## 7) I7: Playbook/spec alignment sanity (docs)
+
+This triad is documentation-only. Spot-check:
+- Every `.substrate-profile` snippet includes top-level `id` and `name`.
+- Expected outputs do not claim strict numeric exit codes unless a spec defines them.
+- Any behavior differences are described as “typical” and include actionable next steps.
+
+## 8) I8: I1 noise reduction (single warning / single error)
+
+Re-run the I1 “missing world socket” scenarios and verify warning/error line counts.
+
+1) When fallback is allowed (`world_fs.require_world=false`): exactly one warning.
+
+```bash
+SUBSTRATE_WORLD=enabled SUBSTRATE_WORLD_ENABLED=1 SUBSTRATE_WORLD_SOCKET=/tmp/substrate-test-missing.sock \
+  substrate -c 'echo host-fallback-ok' 2>"$IH_TEST_WS/fallback.stderr"
+grep -c '^substrate: warn:' "$IH_TEST_WS/fallback.stderr"
+```
+
+Expected:
+- Command succeeds and prints `host-fallback-ok`.
+- The grep count is `1`.
+
+2) When world is required (`world_fs.require_world=true`): exactly one error (and no warning).
+
+```bash
+SUBSTRATE_WORLD=enabled SUBSTRATE_WORLD_ENABLED=1 SUBSTRATE_WORLD_SOCKET=/tmp/substrate-test-missing.sock \
+  substrate -c 'echo must-not-run' 2>"$IH_TEST_WS/required.stderr" || true
+grep -c '^Error:' "$IH_TEST_WS/required.stderr"
+grep -c '^substrate: warn:' "$IH_TEST_WS/required.stderr"
+```
+
+Expected:
+- The command fails.
+- `grep -c '^Error:'` prints `1`.
+- `grep -c '^substrate: warn:'` prints `0`.
+- Output does not include `must-not-run`.
+
+## 9) I9: Full cage robustness (`/tmp` projects + `world verify` full cage)
+
+If `IH_TEST_WS` is `/tmp`-rooted (the default on Linux), this playbook exercises the I9 regression path, and
+`substrate world verify` runs its temporary projects under the OS temp directory.
+
+Validate the full-cage verifier check explicitly:
+
+```bash
+SUBSTRATE_WORLD=enabled substrate world verify --json | jq -e '
+  .checks[] | select(.id == "full_cage_host_isolation") | .status == "pass"
+' >/dev/null
+echo "exit=$?"
+```
+
+Expected:
+- Exit is `0` and the full-cage check status is `pass`.
+- If it is `skip`, follow the hint in the report (typically: enable unprivileged user namespaces or run
+  with CAP_SYS_ADMIN).
+
+## 10) Cleanup
 
 ```bash
 cd /
