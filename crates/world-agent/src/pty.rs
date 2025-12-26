@@ -3,8 +3,9 @@
 use crate::service::WorldAgentService;
 #[cfg(target_os = "linux")]
 use crate::service::{
-    is_full_cage, resolve_project_dir, resolve_project_write_allowlist_prefixes, WORLD_FS_MODE_ENV,
-    WORLD_FS_WRITE_ALLOWLIST_ENV,
+    is_full_cage, resolve_landlock_allowlist_paths, resolve_project_dir,
+    resolve_project_write_allowlist_prefixes, WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV,
+    WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV, WORLD_FS_MODE_ENV, WORLD_FS_WRITE_ALLOWLIST_ENV,
 };
 use axum::extract::ws::{Message, WebSocket};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
@@ -266,6 +267,10 @@ pub async fn handle_ws_pty(
                 );
             }
             let world_fs = substrate_broker::world_fs_policy();
+            let landlock_read_paths =
+                resolve_landlock_allowlist_paths(&project_dir, &world_fs.read_allowlist);
+            let landlock_write_paths =
+                resolve_landlock_allowlist_paths(&project_dir, &world_fs.write_allowlist);
             let prefixes =
                 resolve_project_write_allowlist_prefixes(&project_dir, &world_fs.write_allowlist);
             if !prefixes.is_empty() {
@@ -273,6 +278,23 @@ pub async fn handle_ws_pty(
                     WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(),
                     prefixes.join("\n"),
                 );
+            }
+            if !landlock_read_paths.is_empty() {
+                env.insert(
+                    WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string(),
+                    landlock_read_paths.join("\n"),
+                );
+            }
+            if !landlock_write_paths.is_empty() {
+                env.insert(
+                    WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV.to_string(),
+                    landlock_write_paths.join("\n"),
+                );
+            }
+
+            if let Ok(exe) = std::env::current_exe() {
+                env.entry("SUBSTRATE_LANDLOCK_HELPER_SRC".to_string())
+                    .or_insert_with(|| exe.display().to_string());
             }
         }
 

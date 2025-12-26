@@ -2,6 +2,7 @@
 
 pub mod gc;
 pub mod handlers;
+pub mod internal_exec;
 pub mod pty;
 pub mod service;
 #[cfg(unix)]

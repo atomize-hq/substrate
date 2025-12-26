@@ -96,6 +96,7 @@ pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
 
     let activation_report = socket_activation::socket_activation_report();
     let fs_mode = world_fs_mode();
+    let landlock = world::landlock::detect_support();
 
     // overlay
     let mut overlay_ok = overlay_present();
@@ -184,6 +185,24 @@ pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
         println!("INFO  | overlay_root: {}", o_root.display());
         println!("INFO  | copydiff_root: {}", c_root.display());
         println!("INFO  | world_fs_mode: {}", fs_mode.as_str());
+        if landlock.supported {
+            pass(&format!(
+                "landlock: supported{}",
+                landlock
+                    .abi
+                    .map(|abi| format!(" (abi {abi})"))
+                    .unwrap_or_default()
+            ));
+        } else {
+            warn(&format!(
+                "landlock: unavailable{}",
+                landlock
+                    .reason
+                    .as_deref()
+                    .map(|reason| format!(" ({reason})"))
+                    .unwrap_or_default()
+            ));
+        }
         if activation_report.is_socket_activated() {
             pass(&format!(
                 "agent socket: systemd-managed ({} {})",
@@ -264,6 +283,11 @@ pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
             "fuse": {"dev": fuse_dev, "bin": fuse_bin},
             "cgroup_v2": cgv2,
             "nft_present": nft,
+            "landlock": {
+                "supported": landlock.supported,
+                "abi": landlock.abi,
+                "reason": landlock.reason,
+            },
             "dmesg_restrict": dmsg,
             "overlay_root": o_root,
             "copydiff_root": c_root,

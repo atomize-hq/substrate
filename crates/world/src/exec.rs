@@ -171,6 +171,15 @@ if [ "${SUBSTRATE_WORLD_FS_CAGE:-project}" = "full" ]; then
   mount -t tmpfs tmpfs "$new_root/tmp"
   chmod 1777 "$new_root/tmp" || true
 
+  # Optional: bind-mount the host world-agent binary into the cage so it can apply Landlock
+  # restrictions before executing the command.
+  if [ -n "${SUBSTRATE_LANDLOCK_HELPER_SRC:-}" ] && [ -e "${SUBSTRATE_LANDLOCK_HELPER_SRC:-}" ]; then
+    touch "$new_root/substrate-landlock-helper" 2>/dev/null || true
+    mount --bind "$SUBSTRATE_LANDLOCK_HELPER_SRC" "$new_root/substrate-landlock-helper" 2>/dev/null || true
+    mount -o remount,bind,ro "$new_root/substrate-landlock-helper" 2>/dev/null || true
+    export SUBSTRATE_LANDLOCK_HELPER_PATH="/substrate-landlock-helper"
+  fi
+
   pivot_root "$new_root" "$new_root/old_root"
   cd /
   umount -l /old_root 2>/dev/null || true
@@ -186,6 +195,9 @@ else
 fi
 
 cd "$SUBSTRATE_MOUNT_CWD"
+if [ -n "${SUBSTRATE_LANDLOCK_HELPER_PATH:-}" ] && [ -x "${SUBSTRATE_LANDLOCK_HELPER_PATH}" ]; then
+  exec "$SUBSTRATE_LANDLOCK_HELPER_PATH" "__substrate_world_landlock_exec"
+fi
 if [ "${SUBSTRATE_INNER_LOGIN_SHELL:-0}" = "1" ]; then
   exec sh -lc "$SUBSTRATE_INNER_CMD"
 else

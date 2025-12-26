@@ -1,7 +1,18 @@
-use anyhow::Result;
-use world_agent::run_world_agent;
+use anyhow::{Context, Result};
+use world_agent::{internal_exec, run_world_agent};
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    run_world_agent().await
+fn main() -> Result<()> {
+    if std::env::args()
+        .nth(1)
+        .is_some_and(|arg| arg == internal_exec::LANDLOCK_EXEC_ARG)
+    {
+        return internal_exec::run_landlock_exec();
+    }
+
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .context("failed to build tokio runtime")?;
+
+    runtime.block_on(run_world_agent())
 }
