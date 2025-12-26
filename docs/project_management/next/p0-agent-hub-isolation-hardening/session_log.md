@@ -570,3 +570,18 @@ Template (START/END only):
 - Worktree (next): wt/ahih-i9-full-cage-verify-integ
 - Plan: merge I9 code+test; reconcile to I9-spec; run fmt/clippy/workspace tests/preflight; run smoke scripts
 - Blockers: none
+
+## [2025-12-26 21:21 UTC] Codex – I9-integ – END
+- Worktree commits: b63f1d0
+- Commands:
+  - cargo fmt
+  - cargo clippy --workspace --all-targets -- -D warnings
+  - cargo test --workspace --all-targets -- --nocapture
+  - make preflight
+- Results: pass
+- Scripts executed:
+  - linux-smoke.sh (OK: agent hub hardening linux smoke (preflight))
+  - macos-smoke.sh (SKIP: agent hub hardening macOS smoke (not macOS))
+  - windows-smoke.ps1 (SKIP: pwsh not installed on this host)
+- Docs commit: (this commit)
+- Next steps / blockers: none
