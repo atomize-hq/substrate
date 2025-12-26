@@ -487,3 +487,12 @@ Template (START/END only):
 - Worktree (next): wt/ahih-i8-i1-noise-test
 - Plan: add fixture-based tests asserting single warning/error emission when world is unavailable (fallback allowed vs require_world)
 - Blockers: none
+
+## [2025-12-26 15:45 UTC] Codex – I8-test – END
+- Worktree commits: 50c4a74
+- Commands:
+  - cargo fmt
+  - cargo test -p substrate-shell --test fail_closed_semantics -- --nocapture
+- Results: pass
+- Docs commit: (this commit)
+- Next steps / blockers: I8-integ can merge I8-code + I8-test and run full validation
