@@ -904,7 +904,7 @@
       "name": "Manual testing playbook alignment (code)",
       "type": "code",
       "phase": "Agent Hub Isolation",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Update manual_testing_playbook.md to match I0–I5 specs and the strict world_fs policy schema (including required id/name).",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",

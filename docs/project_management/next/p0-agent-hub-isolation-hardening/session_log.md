@@ -423,6 +423,15 @@ Template (START/END only):
 - Plan: align manual testing playbook with I0–I5 specs + current policy schema (ensure `.substrate-profile` examples include required `id`/`name`; remove non-spec claims like numeric exit codes)
 - Blockers: none
 
+## [2025-12-26 15:12 UTC] Codex – I7-code – END
+- Worktree commits: 2005214
+- Commands: n/a (docs-only)
+- Results: updated playbook snippets/expectations to match current schema + I0–I5 specs
+- Scripts executed: n/a
+- Kickoff prompts created/verified: n/a
+- Docs commit: (this commit)
+- Next steps / blockers: none
+
 ## [2025-12-26 15:08 UTC] Codex – I7-test – START
 - Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
 - Updated tasks.json + session_log.md (commit: docs: start I7-test)
