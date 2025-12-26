@@ -77,6 +77,10 @@ fn assert_verify_json_schema(payload: &Value) {
         .get("skipped")
         .and_then(Value::as_u64)
         .expect("summary.skipped missing");
+    summary
+        .get("exit_code")
+        .and_then(Value::as_i64)
+        .expect("summary.exit_code missing");
 
     let checks = payload
         .get("checks")
@@ -99,6 +103,10 @@ fn assert_verify_json_schema(payload: &Value) {
             .get("id")
             .and_then(Value::as_str)
             .expect("check missing id string");
+        check
+            .get("description")
+            .and_then(Value::as_str)
+            .expect("check missing description string");
         let status = check
             .get("status")
             .and_then(Value::as_str)
@@ -110,7 +118,12 @@ fn assert_verify_json_schema(payload: &Value) {
         ids.push(id.to_string());
     }
 
-    for expected in ["read_only_project", "full_cage_host_paths"] {
+    for expected in [
+        "world_backend",
+        "read_only_relative_write",
+        "read_only_absolute_write",
+        "full_cage_host_isolation",
+    ] {
         assert!(
             ids.iter().any(|id| id == expected),
             "verify json missing expected check id {expected:?}: {payload}"
@@ -119,7 +132,6 @@ fn assert_verify_json_schema(payload: &Value) {
 }
 
 #[test]
-#[ignore = "requires I6-code: substrate world verify"]
 fn world_verify_help_mentions_json_flag() {
     let fixture = VerifyFixture::new();
     let assert = fixture.command().arg("--help").assert().success();
@@ -131,7 +143,6 @@ fn world_verify_help_mentions_json_flag() {
 }
 
 #[test]
-#[ignore = "requires I6-code: substrate world verify"]
 fn world_verify_json_is_stable_when_world_backend_unavailable() {
     let fixture = VerifyFixture::new();
     let output = fixture
@@ -161,7 +172,15 @@ fn world_verify_json_is_stable_when_world_backend_unavailable() {
         .as_array()
         .expect("verify checks should be an array");
     assert!(
-        checks.iter().all(|check| check["status"] == "skip"),
-        "expected every check to be skipped when world backend is missing: {payload}"
+        checks
+            .iter()
+            .any(|check| check["id"] == "world_backend" && check["status"] == "fail"),
+        "expected world_backend to be fail when world backend is missing: {payload}"
+    );
+    assert!(
+        checks.iter().all(|check| {
+            check["id"] == "world_backend" || check["status"] == "skip"
+        }),
+        "expected every non-world_backend check to be skipped when world backend is missing: {payload}"
     );
 }

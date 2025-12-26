@@ -8,7 +8,18 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const REPORT_VERSION: u32 = 1;
+const REPORT_SCHEMA_VERSION: u32 = 1;
+
+const CHECK_ID_WORLD_BACKEND: &str = "world_backend";
+const CHECK_ID_READONLY_REL: &str = "read_only_relative_write";
+const CHECK_ID_READONLY_ABS: &str = "read_only_absolute_write";
+const CHECK_ID_FULL_CAGE: &str = "full_cage_host_isolation";
+
+const CHECK_DESC_WORLD_BACKEND: &str = "World backend is available (doctor ok=true)";
+const CHECK_DESC_READONLY_REL: &str = "world_fs.mode=read_only blocks relative project writes";
+const CHECK_DESC_READONLY_ABS: &str = "world_fs.mode=read_only blocks absolute-path project writes";
+const CHECK_DESC_FULL_CAGE: &str =
+    "world_fs.cage=full enforces allowlists and blocks host paths outside the project";
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -33,17 +44,18 @@ struct CheckReport {
 
 #[derive(Debug, Serialize)]
 struct VerifySummary {
+    total: usize,
     passed: usize,
     failed: usize,
     skipped: usize,
     enforcement_checks_ran: usize,
-    ok: bool,
     exit_code: i32,
 }
 
 #[derive(Debug, Serialize)]
 struct VerifyReport {
-    version: u32,
+    schema_version: u32,
+    ok: bool,
     platform: String,
     started_at_utc: String,
     strict: bool,
@@ -75,18 +87,37 @@ pub fn run(args: &WorldVerifyArgs) -> Result<i32> {
             description: "Platform supports world verify",
             status: CheckStatus::Skip,
             error: Some("world verify is not yet supported on Windows".to_string()),
-            hint: Some("Run `substrate world doctor --json` on Linux/macOS to verify isolation enforcement.".to_string()),
+            hint: Some(
+                "Run `substrate world doctor --json` on Linux/macOS to verify isolation enforcement."
+                    .to_string(),
+            ),
             artifacts: BTreeMap::new(),
         });
+        checks.extend(skipped_enforcement_checks(
+            "world verify is not supported on Windows",
+            Some("Run `substrate world doctor --json` on Linux/macOS to verify isolation enforcement.".to_string()),
+        ));
 
-        let report = finalize_report(args, &root, started_at_utc, checks, 0, Some(4));
+        let report = finalize_report(
+            args,
+            &root,
+            started_at_utc,
+            checks,
+            0,
+            Some(if args.strict { 4 } else { 0 }),
+        );
         emit_report(args, &report)?;
+        cleanup_temp_projects(args, &root);
         return Ok(report.summary.exit_code);
     }
 
     let doctor = run_doctor(&root, &log_dir)?;
     checks.push(doctor.check);
     if !doctor.ok {
+        checks.extend(skipped_enforcement_checks(
+            "world backend unavailable; enforcement checks not run",
+            Some("Run `substrate world doctor --json` and provision the backend (`substrate world enable`, or platform provisioning scripts).".to_string()),
+        ));
         let report = finalize_report(
             args,
             &root,
@@ -96,6 +127,7 @@ pub fn run(args: &WorldVerifyArgs) -> Result<i32> {
             Some(doctor.exit_code),
         );
         emit_report(args, &report)?;
+        cleanup_temp_projects(args, &root);
         return Ok(report.summary.exit_code);
     }
 
@@ -126,8 +158,27 @@ pub fn run(args: &WorldVerifyArgs) -> Result<i32> {
 fn is_enforcement_check(id: &str) -> bool {
     matches!(
         id,
-        "read_only_relative_write" | "read_only_absolute_write" | "full_cage_host_isolation"
+        CHECK_ID_READONLY_REL | CHECK_ID_READONLY_ABS | CHECK_ID_FULL_CAGE
     )
+}
+
+fn skipped_enforcement_checks(error: &str, hint: Option<String>) -> Vec<CheckReport> {
+    let mut checks = Vec::new();
+    for (id, description) in [
+        (CHECK_ID_READONLY_REL, CHECK_DESC_READONLY_REL),
+        (CHECK_ID_READONLY_ABS, CHECK_DESC_READONLY_ABS),
+        (CHECK_ID_FULL_CAGE, CHECK_DESC_FULL_CAGE),
+    ] {
+        checks.push(CheckReport {
+            id,
+            description,
+            status: CheckStatus::Skip,
+            error: Some(error.to_string()),
+            hint: hint.clone(),
+            artifacts: BTreeMap::new(),
+        });
+    }
+    checks
 }
 
 fn prepare_root(root_arg: Option<&PathBuf>, started_at: chrono::DateTime<Utc>) -> Result<PathBuf> {
@@ -174,7 +225,7 @@ fn emit_report(args: &WorldVerifyArgs, report: &VerifyReport) -> Result<()> {
         }
     }
     println!("Artifacts: {}", report.root);
-    if report.summary.ok {
+    if report.ok {
         println!("PASS");
     } else {
         println!("FAIL");
@@ -213,18 +264,19 @@ fn finalize_report(
 
     let ok = exit_code == 0;
     VerifyReport {
-        version: REPORT_VERSION,
+        schema_version: REPORT_SCHEMA_VERSION,
+        ok,
         platform: std::env::consts::OS.to_string(),
         started_at_utc,
         strict: args.strict,
         root: root.display().to_string(),
         checks,
         summary: VerifySummary {
+            total: passed + failed + skipped,
             passed,
             failed,
             skipped,
             enforcement_checks_ran,
-            ok,
             exit_code,
         },
     }
@@ -250,12 +302,38 @@ fn run_doctor(root: &Path, log_dir: &Path) -> Result<DoctorResult> {
     fs::write(&doctor_err_path, &output.stderr).context("write world-doctor.stderr")?;
 
     let parsed = serde_json::from_slice::<Value>(&output.stdout);
-    let (ok, parse_error) = match parsed {
-        Ok(value) => (
-            value.get("ok").and_then(Value::as_bool).unwrap_or(false),
-            None,
-        ),
-        Err(err) => (false, Some(err.to_string())),
+    let (ok, parse_error, doctor_issue) = match parsed {
+        Ok(value) => {
+            let doctor_ok = value.get("ok").and_then(Value::as_bool).unwrap_or(false);
+            let socket_exists = value
+                .get("world_socket")
+                .and_then(|socket| socket.get("socket_exists"))
+                .and_then(Value::as_bool)
+                .or_else(|| {
+                    value
+                        .get("agent_socket")
+                        .and_then(|socket| socket.get("socket_exists"))
+                        .and_then(Value::as_bool)
+                })
+                .unwrap_or(false);
+
+            if !doctor_ok {
+                (
+                    false,
+                    None,
+                    Some("world doctor reported ok=false".to_string()),
+                )
+            } else if !socket_exists {
+                (
+                    false,
+                    None,
+                    Some("world socket missing or unreachable (socket_exists=false)".to_string()),
+                )
+            } else {
+                (true, None, None)
+            }
+        }
+        Err(err) => (false, Some(err.to_string()), None),
     };
 
     let mut artifacts = BTreeMap::new();
@@ -288,8 +366,8 @@ fn run_doctor(root: &Path, log_dir: &Path) -> Result<DoctorResult> {
         ok,
         exit_code,
         check: CheckReport {
-            id: "world_backend",
-            description: "World backend is available (doctor ok=true)",
+            id: CHECK_ID_WORLD_BACKEND,
+            description: CHECK_DESC_WORLD_BACKEND,
             status: if ok {
                 CheckStatus::Pass
             } else {
@@ -302,6 +380,8 @@ fn run_doctor(root: &Path, log_dir: &Path) -> Result<DoctorResult> {
                     "failed to parse world doctor JSON ({err}); see {}",
                     doctor_json_path.display()
                 ))
+            } else if let Some(issue) = doctor_issue {
+                Some(format!("{issue} (see {})", doctor_json_path.display()))
             } else {
                 Some(format!(
                     "world doctor reported ok=false (see {})",
@@ -351,8 +431,8 @@ world_fs:
 
     let mut checks = Vec::new();
     checks.push(expected_failure_no_file(
-        "read_only_relative_write",
-        "world_fs.mode=read_only blocks relative project writes",
+        CHECK_ID_READONLY_REL,
+        CHECK_DESC_READONLY_REL,
         &rel_run,
         &rel_path,
     ));
@@ -368,8 +448,8 @@ world_fs:
     )?;
 
     checks.push(expected_failure_no_file(
-        "read_only_absolute_write",
-        "world_fs.mode=read_only blocks absolute-path project writes",
+        CHECK_ID_READONLY_ABS,
+        CHECK_DESC_READONLY_ABS,
         &abs_run,
         &abs_path,
     ));
@@ -507,9 +587,8 @@ fi
     };
 
     Ok(CheckReport {
-        id: "full_cage_host_isolation",
-        description:
-            "world_fs.cage=full enforces allowlists and blocks host paths outside the project",
+        id: CHECK_ID_FULL_CAGE,
+        description: CHECK_DESC_FULL_CAGE,
         status,
         error,
         hint,
