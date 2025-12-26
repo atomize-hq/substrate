@@ -638,3 +638,58 @@ managers:
         "shim doctor should surface world_fs_mode from world doctor details"
     );
 }
+
+#[test]
+fn shim_doctor_json_surfaces_world_socket_and_landlock_details() {
+    let manifest = r#"version: 1
+managers:
+  - name: DetectedManager
+    priority: 1
+    detect:
+      script: "exit 0"
+    init:
+      shell: |
+        export DETECTED_MARKER=1
+"#;
+    let fixture = DoctorFixture::new(manifest);
+    fixture.write_world_doctor_fixture(json!({
+        "platform": "fixture-linux",
+        "ok": true,
+        "world_fs_mode": "read_only",
+        "world_socket": {
+            "mode": "socket_activation",
+            "path": "/run/substrate.sock",
+            "socket_exists": true,
+            "probe_ok": true
+        },
+        "landlock": {
+            "supported": true,
+            "abi": 1,
+            "reason": null
+        }
+    }));
+
+    let output = fixture
+        .command()
+        .arg("shim")
+        .arg("doctor")
+        .arg("--json")
+        .output()
+        .expect("failed to run shim doctor --json");
+    assert!(output.status.success(), "shim doctor --json should succeed");
+
+    let report: Value = serde_json::from_slice(&output.stdout).expect("doctor output JSON");
+    assert_eq!(
+        report["world"]["details"]["world_socket"]["path"],
+        json!("/run/substrate.sock")
+    );
+    assert_eq!(
+        report["world"]["details"]["world_socket"]["probe_ok"],
+        json!(true)
+    );
+    assert_eq!(
+        report["world"]["details"]["landlock"]["supported"],
+        json!(true)
+    );
+    assert_eq!(report["world"]["details"]["landlock"]["abi"], json!(1));
+}
