@@ -331,3 +331,10 @@ Template (START/END only):
 - Kickoff prompts created/verified: n/a
 - Docs commit: (this commit)
 - Next steps / blockers: none
+
+## [2025-12-26 03:34 UTC] Codex – I5-integ – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md
+- Worktree (next): wt/ahih-i5-docs-verify-integ
+- Plan: merge I5 code+test; reconcile docs+verification tooling vs I5-spec; run fmt/clippy/tests/preflight + smoke scripts
+- Blockers: none
