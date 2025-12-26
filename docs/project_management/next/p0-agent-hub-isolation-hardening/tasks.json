@@ -595,7 +595,7 @@
       "name": "Landlock additive hardening (integration)",
       "type": "integration",
       "phase": "Agent Hub Isolation",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge I4 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/I4-spec.md",

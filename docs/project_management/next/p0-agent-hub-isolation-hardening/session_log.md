@@ -270,3 +270,10 @@ Template (START/END only):
 - Kickoff prompts created/verified: n/a
 - Docs commit: (this commit)
 - Next steps / blockers: I4-test can add coverage for Landlock detection/enforcement (with skips when unsupported)
+
+## [2025-12-26 02:19 UTC] Codex – I4-integ – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md
+- Worktree (next): wt/ahih-i4-landlock-integ
+- Plan: merge I4 code+test; reconcile Landlock additive behavior vs I4-spec; run fmt/clippy/world tests/preflight + smoke scripts
+- Blockers: none
