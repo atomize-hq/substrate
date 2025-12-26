@@ -99,6 +99,10 @@ pub(crate) fn handle_world_command(cmd: &WorldCmd, cli: &Cli) -> Result<()> {
         WorldAction::Cleanup(opts) => {
             commands::world_cleanup::run(opts)?;
         }
+        WorldAction::Verify(opts) => {
+            let code = commands::world_verify::run(opts)?;
+            std::process::exit(code);
+        }
     }
     Ok(())
 }

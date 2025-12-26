@@ -238,6 +238,8 @@ pub enum WorldAction {
     Enable(WorldEnableArgs),
     Deps(WorldDepsCmd),
     Cleanup(WorldCleanupArgs),
+    /// Run end-to-end world_fs enforcement verification (read_only + full cage).
+    Verify(WorldVerifyArgs),
 }
 
 #[derive(Args, Debug, Clone)]
@@ -267,6 +269,25 @@ pub struct WorldCleanupArgs {
     /// Attempt to delete detected namespaces/nft tables/cgroups
     #[arg(long, help = "Apply cleanup actions instead of just reporting")]
     pub purge: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldVerifyArgs {
+    /// Emit a structured JSON report (stable fields for CI)
+    #[arg(long)]
+    pub json: bool,
+
+    /// Treat skipped checks (unsupported/prereq-missing) as failures
+    #[arg(long)]
+    pub strict: bool,
+
+    /// Directory to write logs/artifacts under (defaults to the OS temp directory)
+    #[arg(long = "root", value_name = "PATH")]
+    pub root: Option<PathBuf>,
+
+    /// Keep temporary projects instead of deleting them at exit
+    #[arg(long = "keep-temp")]
+    pub keep_temp: bool,
 }
 
 #[derive(Args, Debug)]
