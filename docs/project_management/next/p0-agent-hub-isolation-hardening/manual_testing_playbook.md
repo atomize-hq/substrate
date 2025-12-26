@@ -114,7 +114,7 @@ echo "exit=$?"
 
 Expected:
 - Exit is non-zero (exact numeric mapping is not specified by I0–I5; refer to `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`).
-- Error output mentions that world execution is required and that the world backend is unavailable; use `substrate world doctor --json` to troubleshoot.
+- Error output mentions that world execution is required and that the world backend is unavailable (typically includes a hint to run `substrate world doctor --json` and/or to check `systemctl status substrate-world-agent.socket`).
 - Output does not include `must-not-run`.
 
 ## 3) I2/I3: full cage semantics (Linux)
