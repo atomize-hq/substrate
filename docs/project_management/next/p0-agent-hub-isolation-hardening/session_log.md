@@ -362,3 +362,10 @@ Template (START/END only):
 - Kickoff prompts created/verified: n/a
 - Docs commit: (this commit)
 - Next steps / blockers: none
+
+## [2025-12-26 14:25 UTC] Codex – I6-test – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md
+- Created worktree: wt/ahih-i6-world-verify-test
+- Plan: add fixture-based tests for CLI wiring, skip behavior, and `--json` output stability
+- Blockers: none
