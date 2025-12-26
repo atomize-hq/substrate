@@ -1156,6 +1156,135 @@
         "I8-test"
       ],
       "concurrent_with": []
+    },
+    {
+      "id": "I9-code",
+      "name": "Full cage robustness (/tmp projects + world verify) (code)",
+      "type": "code",
+      "phase": "Agent Hub Isolation",
+      "status": "pending",
+      "description": "Fix full cage execution when the host project/cwd is under /tmp and align world verify full-cage behavior with the isolation model.",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I6-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I9-spec.md",
+        "crates/world/src/exec.rs",
+        "crates/shell/src/builtins/world_verify.rs"
+      ],
+      "acceptance_criteria": [
+        "Full-cage runs do not fail when project/cwd is under /tmp (no cd /tmp/... failures).",
+        "world verify full-cage check aligns with cage semantics (no host-side write assumptions)."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I9-code to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i9-full-cage-verify-code",
+        "Create worktree wt/ahih-i9-full-cage-verify-code from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i9-full-cage-verify-code",
+      "integration_task": "I9-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I9-code.md",
+      "depends_on": [
+        "I8-integ"
+      ],
+      "concurrent_with": [
+        "I9-test"
+      ]
+    },
+    {
+      "id": "I9-test",
+      "name": "Full cage robustness (/tmp projects + world verify) (test)",
+      "type": "test",
+      "phase": "Agent Hub Isolation",
+      "status": "pending",
+      "description": "Add regression and coverage tests for full cage execution robustness, including /tmp-rooted projects and allowlist behavior.",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I6-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I9-spec.md",
+        "crates/world-agent/tests",
+        "crates/shell/tests"
+      ],
+      "acceptance_criteria": [
+        "Tests cover full-cage execution from a /tmp-rooted project/cwd.",
+        "Tests cover allowlist prefix patterns like ./writable/* in full cage and outside-host blocking."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I9-test to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i9-full-cage-verify-test",
+        "Create worktree wt/ahih-i9-full-cage-verify-test from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run targeted cargo test suites touched",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i9-full-cage-verify-test",
+      "integration_task": "I9-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I9-test.md",
+      "depends_on": [
+        "I8-integ"
+      ],
+      "concurrent_with": [
+        "I9-code"
+      ]
+    },
+    {
+      "id": "I9-integ",
+      "name": "Full cage robustness (/tmp projects + world verify) (integration)",
+      "type": "integration",
+      "phase": "Agent Hub Isolation",
+      "status": "pending",
+      "description": "Merge I9 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I9-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Behavior matches I9-spec.",
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I9-integ to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i9-full-cage-verify-integ",
+        "Create worktree wt/ahih-i9-full-cage-verify-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge ahih-i9-full-cage-verify-code and ahih-i9-full-cage-verify-test into integration worktree",
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant cargo test suites",
+        "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
+        "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i9-full-cage-verify-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I9-integ.md",
+      "depends_on": [
+        "I9-code",
+        "I9-test"
+      ],
+      "concurrent_with": []
     }
   ]
 }
