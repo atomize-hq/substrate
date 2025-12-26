@@ -554,3 +554,12 @@ Template (START/END only):
 - Results: pass
 - Docs commit: (this commit)
 - Next steps / blockers: I9-test can finish; then I9-integ can merge I9-code + I9-test and run full validation
+
+## [2025-12-26 21:09 UTC] Codex – I9-test – END
+- Worktree commits: d1c18a2
+- Commands:
+  - cargo fmt
+  - cargo test -p world-agent --tests -- --nocapture
+- Results: pass (full-cage tests skipped when overlay support/privileges missing)
+- Docs commit: (this commit)
+- Next steps / blockers: I9-integ can merge I9-code + I9-test and run full validation
