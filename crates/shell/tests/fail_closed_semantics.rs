@@ -11,6 +11,25 @@ fn manager_manifest_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/manager_hooks.yaml")
 }
 
+fn count_warning_lines(stderr: &str) -> usize {
+    stderr
+        .lines()
+        .filter(|line| line.trim_start().starts_with("substrate: warn:"))
+        .count()
+}
+
+fn count_error_lines(stderr: &str) -> usize {
+    stderr
+        .lines()
+        .filter(|line| {
+            let trimmed = line.trim_start();
+            trimmed.starts_with("substrate: error:")
+                || trimmed.starts_with("substrate: fatal:")
+                || trimmed.starts_with("Error:")
+        })
+        .count()
+}
+
 fn write_profile(project_dir: &Path, require_world: bool) {
     let require_world = if require_world { "true" } else { "false" };
     let profile = format!(
@@ -65,11 +84,27 @@ fn require_world_true_refuses_host_fallback_when_world_socket_unavailable() {
 
     let assert = base_env_cmd(&project, &home, &socket_path, &trace_path)
         .arg("-c")
-        .arg("true")
+        .arg("printf should-not-run")
         .assert()
         .failure();
 
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    assert!(
+        !stdout.contains("should-not-run"),
+        "expected command to not run, got stdout: {stdout}"
+    );
+
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    assert_eq!(
+        count_error_lines(&stderr),
+        1,
+        "expected exactly one error line, got: {stderr}"
+    );
+    assert_eq!(
+        count_warning_lines(&stderr),
+        0,
+        "expected no warnings for require_world=true, got: {stderr}"
+    );
     assert!(
         stderr.contains("world execution required"),
         "expected fail-closed error, got: {stderr}"
@@ -110,9 +145,21 @@ fn require_world_false_warns_once_and_falls_back_to_host_when_world_socket_unava
     );
 
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    assert_eq!(
+        count_warning_lines(&stderr),
+        1,
+        "expected exactly one warning line, got: {stderr}"
+    );
+    assert_eq!(
+        count_error_lines(&stderr),
+        0,
+        "expected no error lines for require_world=false, got: {stderr}"
+    );
     assert!(
-        stderr.contains("substrate: warn:") && stderr.contains("running direct"),
-        "expected fallback warning in stderr, got: {stderr}"
+        stderr.contains("running direct")
+            || stderr.contains("running on host")
+            || stderr.contains("running on the host"),
+        "expected fallback warning to mention host fallback, got: {stderr}"
     );
     assert!(
         stderr.contains("SUBSTRATE_WORLD_SOCKET override")
