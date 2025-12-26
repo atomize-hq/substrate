@@ -686,7 +686,7 @@
       "name": "Docs alignment + verification tooling (test)",
       "type": "test",
       "phase": "Agent Hub Isolation",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add minimal automated coverage for the docs/tooling changes (schema fields present; scripts linted).",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/I5-spec.md",

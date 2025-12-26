@@ -144,6 +144,13 @@ Template (START/END only):
 - Plan: align WORLD/VISION/CONFIGURATION docs with enforced guarantees; add minimal cross-platform verification script/checklist for read-only + full cage
 - Blockers: none
 
+## [2025-12-26 03:01 UTC] Codex – I5-test – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md
+- Worktree (next): wt/ahih-i5-docs-verify-test
+- Plan: add minimal automated coverage for surfaced doctor/policy JSON fields and verification harness behavior
+- Blockers: none
+
 ## [2025-12-25 21:42 UTC] Codex – I2-code – START
 - Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
 - Updated tasks.json + session_log.md
