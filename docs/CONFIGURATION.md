@@ -138,10 +138,53 @@ Unknown keys and extra tables are preserved for future expansion.
 ### World filesystem mode
 
 Policies control whether the world filesystem is writable (overlay/copy-diff) or forced to
-`read_only`. Set `world_fs_mode` to `read_only` in your global policy (`~/.substrate/policy.yaml`)
-or per-project `.substrate-profile*` to disable upper/work overlays so writes fail cleanly. The
-shell exports `SUBSTRATE_WORLD_FS_MODE` with the resolved value for telemetry/replay and surfaces
-it in `substrate world doctor --json` to make policy enforcement visible without extra flags.
+`read_only` via `world_fs.mode` in the active policy file.
+
+- `world_fs.mode: writable` (default): project writes land in the world overlay.
+- `world_fs.mode: read_only`: the project is remounted read-only so both relative and absolute
+  project writes fail (requires `world_fs.require_world: true`).
+
+The shell exports `SUBSTRATE_WORLD_FS_MODE` with the resolved value for telemetry/replay and
+surfaces it in `substrate world doctor --json` so policy enforcement is visible without extra
+flags.
+
+### Policy files (`world_fs` schema)
+
+Substrate loads a YAML policy from one of these locations (first match wins):
+
+- Per-project: `.substrate-profile` (or `.substrate-profile.d/{default,policy}.{yaml,yml}`)
+- Repo-local: `.substrate/policy.yaml` or `.substrate-policy.yaml`
+- Global: `~/.substrate/policy.yaml`
+
+The policy schema is strict (unknown keys are rejected). The required top-level keys are `id`,
+`name`, and the `world_fs` block:
+
+```yaml
+id: default
+name: Default Policy
+world_fs:
+  mode: writable            # writable | read_only
+  cage: project             # project | full
+  require_world: false      # true = no host fallback when world is unavailable
+  read_allowlist:
+    - "*"                   # required, must be non-empty
+  write_allowlist: []       # required, can be empty
+```
+
+Notes:
+
+- `world_fs.require_world` is the single “fail closed” knob for world availability. If `true` and
+  the world backend is unavailable (or disabled via `--no-world`/`SUBSTRATE_WORLD=disabled`),
+  Substrate errors instead of falling back to host execution.
+- `world_fs.cage=full` is the strong host-path isolation mode (Linux mount namespace + `pivot_root`)
+  and requires `world_fs.require_world=true` (validated by the broker).
+- `world_fs.mode=read_only` requires `world_fs.require_world=true` (validated by the broker).
+- `world_fs.write_allowlist` entries are only honored when they target paths under the project root;
+  patterns for other host paths are ignored for safety.
+- `world.caged` / `SUBSTRATE_CAGED` is a *shell cwd guard* (prevents `cd` escapes). It is independent
+  of `world_fs.cage`, which controls filesystem isolation in the world backend.
+
+For a minimal end-to-end verification run, see `scripts/linux/agent-hub-isolation-verify.sh`.
 
 ### Bootstrapping the config file
 

@@ -2,6 +2,9 @@
 
 Substrate's evolution from command tracing to secure AI agent collaboration platform.
 
+This document is aspirational. For the current, enforced behavior of world isolation, see
+`docs/WORLD.md`. For the current policy schema (including `world_fs`), see `docs/CONFIGURATION.md`.
+
 ## Long-Term Vision
 
 Substrate is becoming the **foundational platform for secure AI-assisted development**, enabling:
@@ -18,21 +21,18 @@ Substrate is becoming the **foundational platform for secure AI-assisted develop
 Isolated execution environments with comprehensive controls:
 
 ```bash
-# Enable world-based isolation
-export SUBSTRATE_WORLD=enabled
-substrate  # Shell now runs in isolated world
-
-# Policy-controlled execution
-pip install requests  # Blocked: not in allowlist
-git commit -m "feat"  # Allowed: matches policy
+# World routing is enabled by default on Linux/macOS.
+# Use --no-world (or SUBSTRATE_WORLD=disabled) to opt out for a single run.
+substrate -c 'echo hello from world'
 ```
 
 **Features**:
 
-- Filesystem isolation with overlayfs
-- Network filtering via nftables/iptables
-- Resource limits via cgroups
-- Process isolation via namespaces
+- Filesystem isolation with overlayfs + mount namespaces (Linux)
+- Optional full cage mode (`world_fs.cage=full`) for strong host-path isolation (Linux)
+- Network filtering via nftables (best-effort)
+- Resource limits via cgroups (best-effort)
+- Process isolation via namespaces (Linux)
 
 ### AI Agent API
 
@@ -57,26 +57,26 @@ curl --unix-socket ~/.substrate/sock/agent.sock \
 YAML-based policies for comprehensive control:
 
 ```yaml
-# ~/.substrate/policies/default.yaml
+# ~/.substrate/policy.yaml (or per-project .substrate-profile)
 id: default
 name: Development Policy
 
-cmd_allowed:
-  - "git *"
-  - "npm *"
-  - "cargo *"
+world_fs:
+  mode: writable            # writable | read_only
+  cage: project             # project | full
+  require_world: false      # true = no host fallback when world is unavailable
+  read_allowlist:
+    - "*"                   # required, must be non-empty
+  write_allowlist:
+    - "./dist/*"            # allow project writes under dist
+
+cmd_allowed: []
 cmd_denied:
   - "sudo *"
   - "rm -rf /"
 cmd_isolated:
   - "pip install *"
   - "npm install *"
-
-fs_write:
-  - "$PROJECT/**"
-  - "/tmp/**"
-fs_read:
-  - "**"
 
 net_allowed:
   - "github.com"
