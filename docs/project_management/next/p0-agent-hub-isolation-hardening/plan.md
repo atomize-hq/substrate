@@ -34,7 +34,7 @@ recorded in the ADR:
 
 ## Triads Overview
 
-Triads are numbered `I0..I6` (Isolation track). Each triad has a `*-spec.md` and code/test/integ tasks.
+Triads are numbered `I0..I8` (Isolation track). Each triad has a `*-spec.md` and code/test/integ tasks.
 
 1) **I0 — Strict policy schema (world_fs v1)**
 2) **I1 — Fail-closed semantics (no host fallback when required)**
@@ -43,6 +43,8 @@ Triads are numbered `I0..I6` (Isolation track). Each triad has a `*-spec.md` and
 5) **I4 — Landlock (additive hardening)**
 6) **I5 — Docs alignment + verification tooling**
 7) **I6 — `substrate world verify` (install-available enforcement verification)**
+8) **I7 — Manual testing playbook alignment (I0–I5)**
+9) **I8 — I1 noise reduction (single warning/error)**
 
 ## Exit codes
 

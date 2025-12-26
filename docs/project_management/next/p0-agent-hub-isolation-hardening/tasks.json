@@ -898,6 +898,264 @@
         "I6-test"
       ],
       "concurrent_with": []
+    },
+    {
+      "id": "I7-code",
+      "name": "Manual testing playbook alignment (code)",
+      "type": "code",
+      "phase": "Agent Hub Isolation",
+      "status": "pending",
+      "description": "Update manual_testing_playbook.md to match I0–I5 specs and the strict world_fs policy schema (including required id/name).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I3-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I4-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I5-spec.md",
+        "docs/CONFIGURATION.md",
+        "docs/WORLD.md",
+        "docs/project_management/standards/EXIT_CODE_TAXONOMY.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts"
+      ],
+      "acceptance_criteria": [
+        "manual_testing_playbook.md `.substrate-profile` examples include required top-level `id` and `name`.",
+        "Playbook expectations match I0–I5 specs (no invented guarantees).",
+        "Exit code expectations are removed or clearly labeled as taxonomy guidance unless a spec defines them."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I7-code to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i7-playbook-align-code",
+        "Create worktree wt/ahih-i7-playbook-align-code from that branch"
+      ],
+      "end_checklist": [
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i7-playbook-align-code",
+      "integration_task": "I7-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I7-code.md",
+      "depends_on": [
+        "I5-integ"
+      ],
+      "concurrent_with": [
+        "I7-test"
+      ]
+    },
+    {
+      "id": "I7-test",
+      "name": "Manual testing playbook alignment (test)",
+      "type": "test",
+      "phase": "Agent Hub Isolation",
+      "status": "pending",
+      "description": "Add lightweight automated coverage that prevents obvious manual_testing_playbook.md drift (e.g., missing id/name in policy examples).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I7-spec.md",
+        "crates/shell/tests"
+      ],
+      "acceptance_criteria": [
+        "Tests fail if the playbook’s `.substrate-profile` examples omit required top-level keys (`id`, `name`).",
+        "Tests do not depend on a provisioned world backend."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I7-test to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i7-playbook-align-test",
+        "Create worktree wt/ahih-i7-playbook-align-test from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run targeted cargo test suites touched",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i7-playbook-align-test",
+      "integration_task": "I7-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I7-test.md",
+      "depends_on": [
+        "I5-integ"
+      ],
+      "concurrent_with": [
+        "I7-code"
+      ]
+    },
+    {
+      "id": "I7-integ",
+      "name": "Manual testing playbook alignment (integration)",
+      "type": "integration",
+      "phase": "Agent Hub Isolation",
+      "status": "pending",
+      "description": "Merge I7 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I7-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Playbook matches I7-spec.",
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I7-integ to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i7-playbook-align-integ",
+        "Create worktree wt/ahih-i7-playbook-align-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge ahih-i7-playbook-align-code and ahih-i7-playbook-align-test into integration worktree",
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant cargo test suites",
+        "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
+        "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i7-playbook-align-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I7-integ.md",
+      "depends_on": [
+        "I7-code",
+        "I7-test"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "I8-code",
+      "name": "I1 noise reduction (code)",
+      "type": "code",
+      "phase": "Agent Hub Isolation",
+      "status": "pending",
+      "description": "Reduce world routing output noise to match I1-spec: single warning on allowed fallback; single error when required.",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I8-spec.md",
+        "crates/shell/src/execution/routing/dispatch/exec.rs",
+        "crates/shell/src/execution/routing/dispatch/world_ops.rs",
+        "crates/shell/src/execution/invocation/runtime.rs"
+      ],
+      "acceptance_criteria": [
+        "When world is unavailable and require_world=false: exactly one warning is printed and the command runs on host.",
+        "When world is unavailable and require_world=true: exactly one error is printed and the command does not run.",
+        "Behavior applies to both -c and interactive command runs."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I8-code to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i8-i1-noise-code",
+        "Create worktree wt/ahih-i8-i1-noise-code from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i8-i1-noise-code",
+      "integration_task": "I8-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I8-code.md",
+      "depends_on": [
+        "I5-integ"
+      ],
+      "concurrent_with": [
+        "I8-test"
+      ]
+    },
+    {
+      "id": "I8-test",
+      "name": "I1 noise reduction (test)",
+      "type": "test",
+      "phase": "Agent Hub Isolation",
+      "status": "pending",
+      "description": "Add tests asserting single warning/error emission for I1 required-world vs fallback-allowed behavior.",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I8-spec.md",
+        "crates/shell/tests"
+      ],
+      "acceptance_criteria": [
+        "Tests assert warning/error line counts for fallback-allowed and required-world scenarios.",
+        "Tests do not depend on a provisioned world backend (use fixtures/mocks)."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I8-test to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i8-i1-noise-test",
+        "Create worktree wt/ahih-i8-i1-noise-test from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run targeted cargo test suites touched",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i8-i1-noise-test",
+      "integration_task": "I8-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I8-test.md",
+      "depends_on": [
+        "I5-integ"
+      ],
+      "concurrent_with": [
+        "I8-code"
+      ]
+    },
+    {
+      "id": "I8-integ",
+      "name": "I1 noise reduction (integration)",
+      "type": "integration",
+      "phase": "Agent Hub Isolation",
+      "status": "pending",
+      "description": "Merge I8 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I8-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Behavior matches I8-spec.",
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I8-integ to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i8-i1-noise-integ",
+        "Create worktree wt/ahih-i8-i1-noise-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge ahih-i8-i1-noise-code and ahih-i8-i1-noise-test into integration worktree",
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant cargo test suites",
+        "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
+        "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i8-i1-noise-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I8-integ.md",
+      "depends_on": [
+        "I8-code",
+        "I8-test"
+      ],
+      "concurrent_with": []
     }
   ]
 }
