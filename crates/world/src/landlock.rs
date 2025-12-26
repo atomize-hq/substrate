@@ -7,6 +7,13 @@ pub struct LandlockSupport {
     pub reason: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct LandlockFilesystemPolicy {
+    pub exec_paths: Vec<String>,
+    pub read_paths: Vec<String>,
+    pub write_paths: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct LandlockApplyReport {
     pub support: LandlockSupport,
@@ -32,13 +39,21 @@ pub fn detect_support() -> LandlockSupport {
 }
 
 pub fn apply_path_allowlists(read_paths: &[String], write_paths: &[String]) -> LandlockApplyReport {
+    apply_filesystem_policy(&LandlockFilesystemPolicy {
+        exec_paths: Vec::new(),
+        read_paths: read_paths.to_vec(),
+        write_paths: write_paths.to_vec(),
+    })
+}
+
+pub fn apply_filesystem_policy(policy: &LandlockFilesystemPolicy) -> LandlockApplyReport {
     #[cfg(target_os = "linux")]
     {
-        linux::apply_path_allowlists(read_paths, write_paths)
+        linux::apply_filesystem_policy(policy)
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (read_paths, write_paths);
+        let _ = policy;
         LandlockApplyReport {
             support: detect_support(),
             attempted: false,
@@ -51,95 +66,74 @@ pub fn apply_path_allowlists(read_paths: &[String], write_paths: &[String]) -> L
 
 #[cfg(target_os = "linux")]
 mod linux {
-    use super::{LandlockApplyReport, LandlockSupport};
+    use super::{LandlockApplyReport, LandlockFilesystemPolicy, LandlockSupport};
+    use linux_raw_sys::{general, landlock};
     use std::collections::BTreeMap;
     use std::ffi::CString;
     use std::mem;
-
-    const LANDLOCK_CREATE_RULESET_VERSION: u32 = 1;
-    const LANDLOCK_RULE_PATH_BENEATH: u32 = 1;
-
-    const LANDLOCK_ACCESS_FS_EXECUTE: u64 = 1 << 0;
-    const LANDLOCK_ACCESS_FS_WRITE_FILE: u64 = 1 << 1;
-    const LANDLOCK_ACCESS_FS_READ_FILE: u64 = 1 << 2;
-    const LANDLOCK_ACCESS_FS_READ_DIR: u64 = 1 << 3;
-    const LANDLOCK_ACCESS_FS_REMOVE_DIR: u64 = 1 << 4;
-    const LANDLOCK_ACCESS_FS_REMOVE_FILE: u64 = 1 << 5;
-    const LANDLOCK_ACCESS_FS_MAKE_CHAR: u64 = 1 << 6;
-    const LANDLOCK_ACCESS_FS_MAKE_DIR: u64 = 1 << 7;
-    const LANDLOCK_ACCESS_FS_MAKE_REG: u64 = 1 << 8;
-    const LANDLOCK_ACCESS_FS_MAKE_SOCK: u64 = 1 << 9;
-    const LANDLOCK_ACCESS_FS_MAKE_FIFO: u64 = 1 << 10;
-    const LANDLOCK_ACCESS_FS_MAKE_BLOCK: u64 = 1 << 11;
-    const LANDLOCK_ACCESS_FS_MAKE_SYM: u64 = 1 << 12;
-    const LANDLOCK_ACCESS_FS_REFER: u64 = 1 << 13;
-    const LANDLOCK_ACCESS_FS_TRUNCATE: u64 = 1 << 14;
-
-    #[repr(C)]
-    struct LandlockRulesetAttr {
-        handled_access_fs: u64,
-    }
-
-    #[repr(C)]
-    struct LandlockPathBeneathAttr {
-        allowed_access: u64,
-        parent_fd: i32,
-    }
+    use std::os::fd::RawFd;
 
     fn abi_supported_access_fs(abi: u32) -> u64 {
-        let mut mask = LANDLOCK_ACCESS_FS_EXECUTE
-            | LANDLOCK_ACCESS_FS_WRITE_FILE
-            | LANDLOCK_ACCESS_FS_READ_FILE
-            | LANDLOCK_ACCESS_FS_READ_DIR
-            | LANDLOCK_ACCESS_FS_REMOVE_DIR
-            | LANDLOCK_ACCESS_FS_REMOVE_FILE
-            | LANDLOCK_ACCESS_FS_MAKE_CHAR
-            | LANDLOCK_ACCESS_FS_MAKE_DIR
-            | LANDLOCK_ACCESS_FS_MAKE_REG
-            | LANDLOCK_ACCESS_FS_MAKE_SOCK
-            | LANDLOCK_ACCESS_FS_MAKE_FIFO
-            | LANDLOCK_ACCESS_FS_MAKE_BLOCK
-            | LANDLOCK_ACCESS_FS_MAKE_SYM;
+        let mut mask = landlock::LANDLOCK_ACCESS_FS_EXECUTE as u64
+            | landlock::LANDLOCK_ACCESS_FS_WRITE_FILE as u64
+            | landlock::LANDLOCK_ACCESS_FS_READ_FILE as u64
+            | landlock::LANDLOCK_ACCESS_FS_READ_DIR as u64
+            | landlock::LANDLOCK_ACCESS_FS_REMOVE_DIR as u64
+            | landlock::LANDLOCK_ACCESS_FS_REMOVE_FILE as u64
+            | landlock::LANDLOCK_ACCESS_FS_MAKE_CHAR as u64
+            | landlock::LANDLOCK_ACCESS_FS_MAKE_DIR as u64
+            | landlock::LANDLOCK_ACCESS_FS_MAKE_REG as u64
+            | landlock::LANDLOCK_ACCESS_FS_MAKE_SOCK as u64
+            | landlock::LANDLOCK_ACCESS_FS_MAKE_FIFO as u64
+            | landlock::LANDLOCK_ACCESS_FS_MAKE_BLOCK as u64
+            | landlock::LANDLOCK_ACCESS_FS_MAKE_SYM as u64;
 
         if abi >= 2 {
-            mask |= LANDLOCK_ACCESS_FS_REFER;
+            mask |= landlock::LANDLOCK_ACCESS_FS_REFER as u64;
         }
         if abi >= 3 {
-            mask |= LANDLOCK_ACCESS_FS_TRUNCATE;
+            mask |= landlock::LANDLOCK_ACCESS_FS_TRUNCATE as u64;
         }
+
         mask
+    }
+
+    fn exec_access_mask() -> u64 {
+        landlock::LANDLOCK_ACCESS_FS_EXECUTE as u64
     }
 
     fn read_access_mask(abi: u32) -> u64 {
         let supported = abi_supported_access_fs(abi);
         supported
-            & (LANDLOCK_ACCESS_FS_EXECUTE
-                | LANDLOCK_ACCESS_FS_READ_FILE
-                | LANDLOCK_ACCESS_FS_READ_DIR)
+            & (landlock::LANDLOCK_ACCESS_FS_EXECUTE as u64
+                | landlock::LANDLOCK_ACCESS_FS_READ_FILE as u64
+                | landlock::LANDLOCK_ACCESS_FS_READ_DIR as u64)
     }
 
     fn write_access_mask(abi: u32) -> u64 {
         let supported = abi_supported_access_fs(abi);
-        let mut mask = LANDLOCK_ACCESS_FS_EXECUTE
-            | LANDLOCK_ACCESS_FS_READ_FILE
-            | LANDLOCK_ACCESS_FS_READ_DIR
-            | LANDLOCK_ACCESS_FS_WRITE_FILE
-            | LANDLOCK_ACCESS_FS_REMOVE_DIR
-            | LANDLOCK_ACCESS_FS_REMOVE_FILE
-            | LANDLOCK_ACCESS_FS_MAKE_CHAR
-            | LANDLOCK_ACCESS_FS_MAKE_DIR
-            | LANDLOCK_ACCESS_FS_MAKE_REG
-            | LANDLOCK_ACCESS_FS_MAKE_SOCK
-            | LANDLOCK_ACCESS_FS_MAKE_FIFO
-            | LANDLOCK_ACCESS_FS_MAKE_BLOCK
-            | LANDLOCK_ACCESS_FS_MAKE_SYM;
+
+        let mut mask = landlock::LANDLOCK_ACCESS_FS_EXECUTE as u64
+            | landlock::LANDLOCK_ACCESS_FS_READ_FILE as u64
+            | landlock::LANDLOCK_ACCESS_FS_READ_DIR as u64
+            | landlock::LANDLOCK_ACCESS_FS_WRITE_FILE as u64
+            | landlock::LANDLOCK_ACCESS_FS_REMOVE_DIR as u64
+            | landlock::LANDLOCK_ACCESS_FS_REMOVE_FILE as u64
+            | landlock::LANDLOCK_ACCESS_FS_MAKE_CHAR as u64
+            | landlock::LANDLOCK_ACCESS_FS_MAKE_DIR as u64
+            | landlock::LANDLOCK_ACCESS_FS_MAKE_REG as u64
+            | landlock::LANDLOCK_ACCESS_FS_MAKE_SOCK as u64
+            | landlock::LANDLOCK_ACCESS_FS_MAKE_FIFO as u64
+            | landlock::LANDLOCK_ACCESS_FS_MAKE_BLOCK as u64
+            | landlock::LANDLOCK_ACCESS_FS_MAKE_SYM as u64;
 
         if abi >= 2 {
-            mask |= LANDLOCK_ACCESS_FS_REFER;
+            mask |= landlock::LANDLOCK_ACCESS_FS_REFER as u64;
         }
         if abi >= 3 {
-            mask |= LANDLOCK_ACCESS_FS_TRUNCATE;
+            mask |= landlock::LANDLOCK_ACCESS_FS_TRUNCATE as u64;
         }
+
         supported & mask
     }
 
@@ -158,9 +152,8 @@ mod linux {
         }
     }
 
-    pub(super) fn apply_path_allowlists(
-        read_paths: &[String],
-        write_paths: &[String],
+    pub(super) fn apply_filesystem_policy(
+        policy: &LandlockFilesystemPolicy,
     ) -> LandlockApplyReport {
         let support = detect_support();
         if !support.supported {
@@ -183,13 +176,16 @@ mod linux {
             };
         };
 
-        if read_paths.is_empty() {
+        if policy.exec_paths.is_empty()
+            && policy.read_paths.is_empty()
+            && policy.write_paths.is_empty()
+        {
             return LandlockApplyReport {
                 support,
                 attempted: false,
                 applied: false,
                 rules_added: 0,
-                reason: Some("landlock allowlists were empty; skipping".to_string()),
+                reason: Some("landlock policy was empty; skipping".to_string()),
             };
         }
 
@@ -203,33 +199,37 @@ mod linux {
             };
         }
 
-        let mut allowlist: BTreeMap<&str, u64> = BTreeMap::new();
+        let exec_mask = exec_access_mask();
         let read_mask = read_access_mask(abi);
         let write_mask = write_access_mask(abi);
 
-        for path in read_paths {
+        let mut allowlist: BTreeMap<&str, u64> = BTreeMap::new();
+        for path in &policy.exec_paths {
             let trimmed = path.trim();
             if trimmed.is_empty() {
                 continue;
             }
-            let entry = allowlist.entry(trimmed).or_default();
-            *entry |= read_mask;
+            *allowlist.entry(trimmed).or_default() |= exec_mask;
         }
-
-        for path in write_paths {
+        for path in &policy.read_paths {
             let trimmed = path.trim();
             if trimmed.is_empty() {
                 continue;
             }
-            let entry = allowlist.entry(trimmed).or_default();
-            *entry |= write_mask;
+            *allowlist.entry(trimmed).or_default() |= read_mask;
+        }
+        for path in &policy.write_paths {
+            let trimmed = path.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            *allowlist.entry(trimmed).or_default() |= write_mask;
         }
 
         let handled_access_fs =
             allowlist.values().fold(0u64, |acc, mask| acc | *mask) & abi_supported_access_fs(abi);
 
-        let ruleset_attr = LandlockRulesetAttr { handled_access_fs };
-
+        let ruleset_attr = landlock::landlock_ruleset_attr { handled_access_fs };
         let ruleset_fd = match unsafe { landlock_create_ruleset(&ruleset_attr) } {
             Ok(fd) => fd,
             Err(err) => {
@@ -266,7 +266,7 @@ mod linux {
                 }
             };
 
-            let attr = LandlockPathBeneathAttr {
+            let attr = landlock::landlock_path_beneath_attr {
                 allowed_access: access,
                 parent_fd: fd,
             };
@@ -322,10 +322,10 @@ mod linux {
 
     unsafe fn landlock_create_ruleset_version() -> Result<u32, String> {
         let ret = libc::syscall(
-            libc::SYS_landlock_create_ruleset,
+            general::__NR_landlock_create_ruleset as libc::c_long,
             std::ptr::null::<libc::c_void>(),
             0usize,
-            LANDLOCK_CREATE_RULESET_VERSION,
+            landlock::LANDLOCK_CREATE_RULESET_VERSION,
         );
         if ret < 0 {
             let err = std::io::Error::last_os_error();
@@ -334,29 +334,31 @@ mod linux {
         Ok(ret as u32)
     }
 
-    unsafe fn landlock_create_ruleset(attr: &LandlockRulesetAttr) -> Result<i32, String> {
+    unsafe fn landlock_create_ruleset(
+        attr: &landlock::landlock_ruleset_attr,
+    ) -> Result<RawFd, String> {
         let ret = libc::syscall(
-            libc::SYS_landlock_create_ruleset,
-            attr as *const LandlockRulesetAttr,
-            mem::size_of::<LandlockRulesetAttr>(),
+            general::__NR_landlock_create_ruleset as libc::c_long,
+            attr as *const landlock::landlock_ruleset_attr,
+            mem::size_of::<landlock::landlock_ruleset_attr>(),
             0u32,
         );
         if ret < 0 {
             let err = std::io::Error::last_os_error();
             return Err(format!("landlock create_ruleset failed: {err}"));
         }
-        Ok(ret as i32)
+        Ok(ret as RawFd)
     }
 
     unsafe fn landlock_add_rule(
-        ruleset_fd: i32,
-        attr: &LandlockPathBeneathAttr,
+        ruleset_fd: RawFd,
+        attr: &landlock::landlock_path_beneath_attr,
     ) -> Result<(), String> {
         let ret = libc::syscall(
-            libc::SYS_landlock_add_rule,
+            general::__NR_landlock_add_rule as libc::c_long,
             ruleset_fd,
-            LANDLOCK_RULE_PATH_BENEATH,
-            attr as *const LandlockPathBeneathAttr,
+            landlock::landlock_rule_type::LANDLOCK_RULE_PATH_BENEATH as u32,
+            attr as *const landlock::landlock_path_beneath_attr,
             0u32,
         );
         if ret < 0 {
@@ -366,8 +368,12 @@ mod linux {
         Ok(())
     }
 
-    unsafe fn landlock_restrict_self(ruleset_fd: i32) -> Result<(), String> {
-        let ret = libc::syscall(libc::SYS_landlock_restrict_self, ruleset_fd, 0u32);
+    unsafe fn landlock_restrict_self(ruleset_fd: RawFd) -> Result<(), String> {
+        let ret = libc::syscall(
+            general::__NR_landlock_restrict_self as libc::c_long,
+            ruleset_fd,
+            0u32,
+        );
         if ret < 0 {
             let err = std::io::Error::last_os_error();
             return Err(format!("landlock restrict_self failed: {err}"));
@@ -380,7 +386,7 @@ mod linux {
         Other(String),
     }
 
-    fn open_opath(path: &str) -> Result<i32, OpenError> {
+    fn open_opath(path: &str) -> Result<RawFd, OpenError> {
         let cstr = CString::new(path)
             .map_err(|e| OpenError::Other(format!("invalid path {path:?}: {e}")))?;
         let fd = unsafe { libc::open(cstr.as_ptr(), libc::O_PATH | libc::O_CLOEXEC) };

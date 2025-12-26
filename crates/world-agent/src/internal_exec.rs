@@ -5,18 +5,51 @@ pub const LANDLOCK_EXEC_ARG: &str = "__substrate_world_landlock_exec";
 const INNER_CMD_ENV: &str = "SUBSTRATE_INNER_CMD";
 const INNER_LOGIN_SHELL_ENV: &str = "SUBSTRATE_INNER_LOGIN_SHELL";
 const MOUNT_CWD_ENV: &str = "SUBSTRATE_MOUNT_CWD";
+const MOUNT_PROJECT_DIR_ENV: &str = "SUBSTRATE_MOUNT_PROJECT_DIR";
 
 const LANDLOCK_READ_ENV: &str = "SUBSTRATE_WORLD_FS_LANDLOCK_READ_ALLOWLIST";
 const LANDLOCK_WRITE_ENV: &str = "SUBSTRATE_WORLD_FS_LANDLOCK_WRITE_ALLOWLIST";
 
 pub fn run_landlock_exec() -> Result<()> {
-    let read_paths = parse_allowlist_env(LANDLOCK_READ_ENV);
-    let write_paths = parse_allowlist_env(LANDLOCK_WRITE_ENV);
+    let mut read_paths = parse_allowlist_env(LANDLOCK_READ_ENV);
+    let mut write_paths = parse_allowlist_env(LANDLOCK_WRITE_ENV);
 
     #[cfg(target_os = "linux")]
     {
-        let _report = world::landlock::apply_path_allowlists(&read_paths, &write_paths);
-        let _ = _report;
+        if !read_paths.is_empty() || !write_paths.is_empty() {
+            let mut policy = world::landlock::LandlockFilesystemPolicy {
+                exec_paths: vec!["/".to_string(), "/project".to_string()],
+                read_paths: vec![
+                    "/usr".to_string(),
+                    "/bin".to_string(),
+                    "/lib".to_string(),
+                    "/lib64".to_string(),
+                    "/etc".to_string(),
+                    "/proc".to_string(),
+                ],
+                write_paths: vec![
+                    "/tmp".to_string(),
+                    "/dev".to_string(),
+                    "/var/lib/substrate/world-deps".to_string(),
+                ],
+            };
+
+            if let Ok(project_dir) = std::env::var(MOUNT_PROJECT_DIR_ENV) {
+                if !project_dir.trim().is_empty() {
+                    policy.exec_paths.push(project_dir);
+                }
+            }
+
+            policy.read_paths.append(&mut read_paths);
+            policy.write_paths.append(&mut write_paths);
+            policy.read_paths.sort();
+            policy.read_paths.dedup();
+            policy.write_paths.sort();
+            policy.write_paths.dedup();
+
+            let _report = world::landlock::apply_filesystem_policy(&policy);
+            let _ = _report;
+        }
     }
     #[cfg(not(target_os = "linux"))]
     {
