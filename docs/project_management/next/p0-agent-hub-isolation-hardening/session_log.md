@@ -228,3 +228,10 @@ Template (START/END only):
 - Kickoff prompts created/verified: n/a
 - Docs commit: (this commit)
 - Next steps / blockers: I3-integ can merge with I3-test (ready)
+
+## [2025-12-26 00:15 UTC] Codex – I3-integ – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md
+- Worktree (next): wt/ahih-i3-full-cage-pty-integ
+- Plan: merge I3 code+test; reconcile PTY full-cage parity vs I3-spec; run fmt/clippy/world-agent tests/preflight + smoke scripts
+- Blockers: none
