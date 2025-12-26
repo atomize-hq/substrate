@@ -449,3 +449,10 @@ Template (START/END only):
 - Kickoff prompts created/verified: n/a
 - Docs commit: (this commit)
 - Next steps / blockers: I7-integ can merge I7-code + I7-test and run full validation
+
+## [2025-12-26 15:26 UTC] Codex – I7-integ – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md (commit: docs: start I7-integ)
+- Worktree (next): wt/ahih-i7-playbook-align-integ
+- Plan: merge I7 code+test branches; reconcile playbook behavior vs I7-spec; run fmt/clippy/tests/preflight + smoke scripts
+- Blockers: none
