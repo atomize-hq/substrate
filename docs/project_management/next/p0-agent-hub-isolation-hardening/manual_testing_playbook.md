@@ -153,12 +153,13 @@ Expected:
 ## 4) I4: Landlock detection is surfaced in `world doctor` (Linux)
 
 ```bash
-SUBSTRATE_WORLD=enabled substrate world doctor --json | jq -e '.. | objects | select(has("landlock")) | .landlock' >/dev/null
+SUBSTRATE_WORLD=enabled substrate world doctor --json | jq -e '.landlock | type == "object" and (.supported | type == "boolean") and (.abi | type == "number")' >/dev/null
 echo "exit=$?"
 ```
 
 Expected:
-- Command succeeds (jq finds a `landlock` object in the report).
+- Command succeeds (the report includes a structured `.landlock` object).
+- On Landlock-capable hosts, `.landlock.supported` should be `true` (inspect via `substrate world doctor --json | jq '.landlock'`).
 
 ## 5) Cleanup
 
