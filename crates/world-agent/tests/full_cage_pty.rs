@@ -183,6 +183,16 @@ async fn pty_full_cage_prevents_host_tmp_writes() {
         None => return,
     };
 
+    let (exit, error, output) = &outcome;
+    assert!(
+        error.is_none() && exit == &Some(0),
+        "full-cage PTY execution failed unexpectedly: {outcome:?}"
+    );
+    assert!(
+        !output.contains("cd:"),
+        "full-cage PTY execution failed to enter cwd: {output:?}"
+    );
+
     if host_path.exists() {
         let _ = std::fs::remove_file(&host_path);
         panic!(
@@ -244,6 +254,10 @@ async fn pty_full_cage_prevents_host_tmp_reads() {
         "full-cage PTY execution was able to read host /tmp secret (path: {})",
         host_path.display()
     );
+    assert!(
+        !output.contains("cd:"),
+        "full-cage PTY execution failed to enter cwd (masked by /tmp read assertion): {output:?}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -297,5 +311,39 @@ async fn pty_full_cage_read_only_blocks_project_writes() {
         exit.unwrap_or(0),
         0,
         "full-cage PTY read-only write unexpectedly succeeded"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn pty_full_cage_runs_from_tmp_rooted_project() {
+    if !overlay_available() {
+        eprintln!("skipping full-cage PTY test: overlay support or privileges missing");
+        return;
+    }
+
+    let service = match WorldAgentService::new() {
+        Ok(svc) => svc,
+        Err(err) => {
+            eprintln!("skipping full-cage PTY test: service init failed: {err}");
+            return;
+        }
+    };
+
+    let tmp = tempdir().expect("tempdir");
+    let cwd = tmp.path().to_path_buf();
+
+    let (exit, error, output) = match run_pty(service, &cwd, "sh -lc 'pwd'", base_cage_env()).await
+    {
+        Some(outcome) => outcome,
+        None => return,
+    };
+
+    assert!(
+        error.is_none() && exit == Some(0),
+        "full-cage PTY execution failed unexpectedly: exit={exit:?} error={error:?} output={output:?}"
+    );
+    assert!(
+        output.trim_start().starts_with("/project"),
+        "expected full-cage PTY cwd to use stable /project mount for /tmp-rooted projects, got: {output:?}"
     );
 }
