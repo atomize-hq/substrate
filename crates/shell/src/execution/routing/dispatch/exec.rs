@@ -42,20 +42,57 @@ const WORLD_BACKEND_UNAVAILABLE_HINT: &str = "hint: run 'substrate world doctor 
 
 static WORLD_BACKEND_UNAVAILABLE_WARN_ONCE: Once = Once::new();
 
+#[cfg(target_os = "linux")]
+fn world_socket_note() -> Option<String> {
+    const DEFAULT_SOCKET_PATH: &str = "/run/substrate.sock";
+
+    let socket_path = env::var_os("SUBSTRATE_WORLD_SOCKET").map(PathBuf::from);
+    let socket_path = socket_path.unwrap_or_else(|| PathBuf::from(DEFAULT_SOCKET_PATH));
+
+    let socket_override_active = env::var_os("SUBSTRATE_WORLD_SOCKET")
+        .map(|p| p != std::ffi::OsStr::new(DEFAULT_SOCKET_PATH))
+        .unwrap_or(false);
+
+    if socket_override_active {
+        Some(format!(
+            "SUBSTRATE_WORLD_SOCKET override: {}",
+            socket_path.display()
+        ))
+    } else {
+        Some(format!("socket: {}", socket_path.display()))
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn world_socket_note() -> Option<String> {
+    None
+}
+
 fn warn_world_backend_unavailable_once() {
     WORLD_BACKEND_UNAVAILABLE_WARN_ONCE.call_once(|| {
+        let socket_note = world_socket_note();
+        let socket_note = socket_note
+            .as_deref()
+            .map(|note| format!(" ({note})"))
+            .unwrap_or_default();
         eprintln!(
-            "substrate: warn: world backend unavailable; running on host ({})",
-            WORLD_BACKEND_UNAVAILABLE_HINT
+            "substrate: warn: world backend unavailable{}; running on host ({})",
+            socket_note, WORLD_BACKEND_UNAVAILABLE_HINT
         );
     });
 }
 
 fn required_world_backend_unavailable_error(fs_mode: &str, cage: &str) -> anyhow::Error {
+    let socket_note = world_socket_note();
+    let socket_note = socket_note
+        .as_deref()
+        .map(|note| format!(" ({note})"))
+        .unwrap_or_default();
     anyhow::anyhow!(
-        "world execution required (world_fs.require_world=true, mode={}, cage={}) but world backend is unavailable ({})",
+        "world execution required (world_fs.require_world=true, mode={}, cage={}) but world backend is unavailable{} ({})",
         fs_mode,
         cage,
+        socket_note,
         WORLD_BACKEND_UNAVAILABLE_HINT
     )
 }
