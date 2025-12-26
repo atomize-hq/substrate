@@ -41,7 +41,7 @@ fn manual_testing_playbook_substrate_profile_snippets_include_required_id_and_na
         };
 
         let mut snippet = Vec::new();
-        while let Some((_, body_line)) = lines.next() {
+        for (_, body_line) in lines.by_ref() {
             if body_line.trim_end() == delimiter {
                 break;
             }
