@@ -456,3 +456,20 @@ Template (START/END only):
 - Worktree (next): wt/ahih-i7-playbook-align-integ
 - Plan: merge I7 code+test branches; reconcile playbook behavior vs I7-spec; run fmt/clippy/tests/preflight + smoke scripts
 - Blockers: none
+
+## [2025-12-26 15:33 UTC] Codex – I7-integ – END
+- Worktree commits: 8680f94
+- Notes: fixed clippy failure in `playbook_alignment` test (replace `while let` iterator loop with `for`)
+- Commands:
+  - cargo fmt
+  - cargo clippy --workspace --all-targets -- -D warnings
+  - cargo test --workspace --all-targets -- --nocapture
+  - make preflight
+- Results: pass
+- Scripts executed:
+  - linux-smoke.sh (OK: agent hub hardening linux smoke (preflight); required PATH+=target/debug)
+  - macos-smoke.sh (SKIP: agent hub hardening macOS smoke (not macOS))
+  - windows-smoke.ps1 (SKIP: agent hub hardening Windows smoke (not Windows); ran via downloaded pwsh because pwsh not installed)
+- Kickoff prompts created/verified: n/a
+- Docs commit: (this commit)
+- Next steps / blockers: none
