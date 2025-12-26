@@ -392,9 +392,26 @@ Template (START/END only):
 - Docs commit: (this commit)
 - Next steps / blockers: I6-integ can merge with I6-test and un-ignore `crates/shell/tests/world_verify.rs`
 
-## [2025-12-26 15:10 UTC] Codex – I6-integ – START
+## [2025-12-26 14:46 UTC] Codex – I6-integ – START
 - Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
 - Updated tasks.json + session_log.md (commit: docs: start I6-integ)
 - Worktree (next): wt/ahih-i6-world-verify-integ
 - Plan: merge I6 code+test branches; reconcile `substrate world verify` behavior vs I6-spec; run fmt/clippy/tests/preflight + smoke scripts
 - Blockers: none
+
+## [2025-12-26 15:02 UTC] Codex – I6-integ – END
+- Worktree commits: 4ba1883
+- Notes: reconciled `substrate world verify --json` report schema with test expectations; ensure backend-unavailable cases fail closed and still emit stable JSON
+- Commands:
+  - cargo fmt
+  - cargo clippy --workspace --all-targets -- -D warnings
+  - cargo test --workspace --all-targets -- --nocapture
+  - make preflight
+- Results: pass
+- Scripts executed:
+  - linux-smoke.sh (OK: agent hub hardening linux smoke (preflight); required PATH+=target/debug)
+  - macos-smoke.sh (SKIP: agent hub hardening macOS smoke (not macOS))
+  - windows-smoke.ps1 (SKIP: agent hub hardening windows smoke (pwsh not installed))
+- Kickoff prompts created/verified: n/a
+- Docs commit: (this commit)
+- Next steps / blockers: none
