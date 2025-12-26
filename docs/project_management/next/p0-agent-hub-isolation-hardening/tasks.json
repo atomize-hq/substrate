@@ -1178,6 +1178,7 @@
       ],
       "start_checklist": [
         "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Read plan.md, tasks.json, session_log.md, I9-spec.md, and kickoff prompt",
         "Set I9-code to in_progress, append START entry to session_log.md, commit docs",
         "Create branch ahih-i9-full-cage-verify-code",
         "Create worktree wt/ahih-i9-full-cage-verify-code from that branch"
@@ -1186,7 +1187,7 @@
         "Run cargo fmt",
         "Run cargo clippy --workspace --all-targets -- -D warnings",
         "Commit worktree changes",
-        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening (ff-only)",
         "Update tasks.json + session_log.md with END entry, commit docs"
       ],
       "worktree": "wt/ahih-i9-full-cage-verify-code",
@@ -1219,6 +1220,7 @@
       ],
       "start_checklist": [
         "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Read plan.md, tasks.json, session_log.md, I9-spec.md, and kickoff prompt",
         "Set I9-test to in_progress, append START entry to session_log.md, commit docs",
         "Create branch ahih-i9-full-cage-verify-test",
         "Create worktree wt/ahih-i9-full-cage-verify-test from that branch"
@@ -1227,7 +1229,7 @@
         "Run cargo fmt",
         "Run targeted cargo test suites touched",
         "Commit worktree changes",
-        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening (ff-only)",
         "Update tasks.json + session_log.md with END entry, commit docs"
       ],
       "worktree": "wt/ahih-i9-full-cage-verify-test",
@@ -1263,6 +1265,7 @@
       ],
       "start_checklist": [
         "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Read plan.md, tasks.json, session_log.md, I9-spec.md, and kickoff prompt",
         "Set I9-integ to in_progress, append START entry to session_log.md, commit docs",
         "Create branch ahih-i9-full-cage-verify-integ",
         "Create worktree wt/ahih-i9-full-cage-verify-integ from that branch"
@@ -1274,7 +1277,7 @@
         "Run relevant cargo test suites",
         "Run make preflight",
         "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
-        "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening",
+        "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening (ff-only)",
         "Update tasks.json + session_log.md with END entry, commit docs"
       ],
       "worktree": "wt/ahih-i9-full-cage-verify-integ",
