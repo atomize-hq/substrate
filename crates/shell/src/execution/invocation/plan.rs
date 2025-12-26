@@ -524,12 +524,7 @@ impl ShellConfig {
         {
             use crate::execution::platform_world::windows;
 
-            if let Err(e) = windows::ensure_world_ready(&cli) {
-                eprintln!(
-                    "substrate: warn: windows world initialization failed: {:#}",
-                    e
-                );
-            }
+            let _ = windows::ensure_world_ready(&cli);
         }
         let shell_path = if let Some(shell) = cli.shell {
             shell

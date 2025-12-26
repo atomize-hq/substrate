@@ -6,7 +6,7 @@ use crate::Cli;
 use agent_api_client::{AgentClient, Transport};
 use anyhow::Result;
 use std::path::PathBuf;
-use std::sync::{Arc, Once, OnceLock};
+use std::sync::{Arc, OnceLock};
 use substrate_broker::world_fs_mode;
 use world_api::{ResourceLimits, WorldBackend, WorldSpec};
 use world_windows_wsl::WindowsWslBackend;
@@ -80,12 +80,7 @@ where
             std::env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
             Ok(Some(handle.id))
         }
-        Err(err) => {
-            warn_once(format!(
-                "substrate: warn: windows world ensure_session failed: {err}"
-            ));
-            Ok(None)
-        }
+        Err(_err) => Ok(None),
     }
 }
 
@@ -104,13 +99,6 @@ pub fn world_spec() -> WorldSpec {
         always_isolate: false,
         fs_mode: world_fs_mode(),
     }
-}
-
-fn warn_once(message: String) {
-    static WARN_ONCE: Once = Once::new();
-    WARN_ONCE.call_once(move || {
-        eprintln!("{}", message);
-    });
 }
 
 pub fn detect() -> Result<PlatformWorldContext> {

@@ -27,12 +27,38 @@ use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicI32, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 use substrate_broker::{detect_profile, evaluate, world_fs_policy, Decision};
 use substrate_common::{log_schema, redact_sensitive, WorldRootMode};
 #[cfg(target_os = "linux")]
 use substrate_trace::TransportMeta;
 use substrate_trace::{create_span_builder, ExecutionOrigin, PolicyDecision};
+
+#[cfg(target_os = "linux")]
+const WORLD_BACKEND_UNAVAILABLE_HINT: &str =
+    "hint: run 'substrate world doctor --json' and check 'systemctl status substrate-world-agent.socket'";
+#[cfg(not(target_os = "linux"))]
+const WORLD_BACKEND_UNAVAILABLE_HINT: &str = "hint: run 'substrate world doctor --json'";
+
+static WORLD_BACKEND_UNAVAILABLE_WARN_ONCE: Once = Once::new();
+
+fn warn_world_backend_unavailable_once() {
+    WORLD_BACKEND_UNAVAILABLE_WARN_ONCE.call_once(|| {
+        eprintln!(
+            "substrate: warn: world backend unavailable; running on host ({})",
+            WORLD_BACKEND_UNAVAILABLE_HINT
+        );
+    });
+}
+
+fn required_world_backend_unavailable_error(fs_mode: &str, cage: &str) -> anyhow::Error {
+    anyhow::anyhow!(
+        "world execution required (world_fs.require_world=true, mode={}, cage={}) but world backend is unavailable ({})",
+        fs_mode,
+        cage,
+        WORLD_BACKEND_UNAVAILABLE_HINT
+    )
+}
 
 pub(crate) fn execute_command(
     config: &ShellConfig,
@@ -262,10 +288,13 @@ pub(crate) fn execute_command(
             let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
             let world_available = !world_disabled && (world_enabled || uds_exists);
             if world_required && !world_available {
-                anyhow::bail!(
-                    "world execution required (fs_mode={}) but world-agent is unavailable (/run/substrate.sock missing)",
-                    fs_mode.as_str()
-                );
+                return Err(required_world_backend_unavailable_error(
+                    fs_mode.as_str(),
+                    world_fs.cage.as_str(),
+                ));
+            }
+            if !world_disabled && !world_required && !world_available {
+                warn_world_backend_unavailable_once();
             }
             if world_available {
                 let transport_meta = TransportMeta {
@@ -312,14 +341,8 @@ pub(crate) fn execute_command(
                                 e
                             );
                         }
-                        static WARN_ONCE: std::sync::Once = std::sync::Once::new();
-                        let err_msg = e.to_string();
-                        WARN_ONCE.call_once(move || {
-                            eprintln!(
-                                "substrate: warn: world PTY over WS failed, falling back to host PTY: {}",
-                                err_msg
-                            );
-                        });
+                        let _ = e;
+                        warn_world_backend_unavailable_once();
                         // fall through to host PTY
                     }
                 }
@@ -339,10 +362,13 @@ pub(crate) fn execute_command(
                 .unwrap_or(false);
             let world_available = !world_disabled && (world_enabled || uds_exists);
             if world_required && !world_available {
-                anyhow::bail!(
-                    "world execution required (fs_mode={}) but world-agent is unavailable",
-                    fs_mode.as_str()
-                );
+                return Err(required_world_backend_unavailable_error(
+                    fs_mode.as_str(),
+                    world_fs.cage.as_str(),
+                ));
+            }
+            if !world_disabled && !world_required && !world_available {
+                warn_world_backend_unavailable_once();
             }
             if world_available {
                 let transport_meta = context
@@ -383,10 +409,8 @@ pub(crate) fn execute_command(
                                 e
                             );
                         }
-                        static WARNED: std::sync::Once = std::sync::Once::new();
-                        WARNED.call_once(|| {
-                            eprintln!("substrate: warn: world PTY over WS failed on mac, falling back to host PTY: {}", e);
-                        });
+                        let _ = e;
+                        warn_world_backend_unavailable_once();
                         // fall through to host PTY
                     }
                 }
@@ -478,10 +502,13 @@ pub(crate) fn execute_command(
             .unwrap_or(false);
         let world_available = !world_disabled && (world_enabled || uds_exists);
         if world_required && !world_available {
-            anyhow::bail!(
-                "world execution required (fs_mode={}) but world-agent is unavailable",
-                fs_mode.as_str()
-            );
+            return Err(required_world_backend_unavailable_error(
+                fs_mode.as_str(),
+                world_fs.cage.as_str(),
+            ));
+        }
+        if !world_disabled && !world_required && !world_available {
+            warn_world_backend_unavailable_once();
         }
         if world_available {
             let transport_meta = context
@@ -516,19 +543,8 @@ pub(crate) fn execute_command(
                             e
                         );
                     }
-                    static WARN_ONCE: std::sync::Once = std::sync::Once::new();
-                    let path_hint = context
-                        .as_ref()
-                        .map(|ctx| ctx.transport.to_string())
-                        .unwrap_or_else(|| "mac context unavailable".to_string());
-                    let err_msg = e.to_string();
-                    WARN_ONCE.call_once(move || {
-                        eprintln!(
-                            "substrate: warn: shell world-agent path ({}) exec failed, running direct: {}",
-                            path_hint,
-                            err_msg
-                        );
-                    });
+                    let _ = e;
+                    warn_world_backend_unavailable_once();
                 }
             }
         }
@@ -539,10 +555,13 @@ pub(crate) fn execute_command(
         let context = pw::get_context();
         let world_available = !world_disabled && (world_enabled || context.is_some());
         if world_required && !world_available {
-            anyhow::bail!(
-                "world execution required (fs_mode={}) but world-agent is unavailable",
-                fs_mode.as_str()
-            );
+            return Err(required_world_backend_unavailable_error(
+                fs_mode.as_str(),
+                world_fs.cage.as_str(),
+            ));
+        }
+        if !world_disabled && !world_required && !world_available {
+            warn_world_backend_unavailable_once();
         }
         if world_available {
             let transport_meta = context
@@ -577,19 +596,8 @@ pub(crate) fn execute_command(
                             e
                         );
                     }
-                    static WARN_ONCE: std::sync::Once = std::sync::Once::new();
-                    let path_hint = context
-                        .as_ref()
-                        .map(|ctx| ctx.transport.to_string())
-                        .unwrap_or_else(|| "windows context unavailable".to_string());
-                    let err_msg = e.to_string();
-                    WARN_ONCE.call_once(move || {
-                        eprintln!(
-                            "substrate: warn: shell world-agent path ({}) exec failed, running direct: {}",
-                            path_hint,
-                            err_msg
-                        );
-                    });
+                    let _ = e;
+                    warn_world_backend_unavailable_once();
                 }
             }
         }
@@ -622,10 +630,13 @@ pub(crate) fn execute_command(
         let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
         let world_available = !world_disabled && (world_enabled || uds_exists);
         if world_required && !world_available {
-            anyhow::bail!(
-                "world execution required (fs_mode={}) but world-agent is unavailable (/run/substrate.sock missing)",
-                fs_mode.as_str()
-            );
+            return Err(required_world_backend_unavailable_error(
+                fs_mode.as_str(),
+                world_fs.cage.as_str(),
+            ));
+        }
+        if !world_disabled && !world_required && !world_available {
+            warn_world_backend_unavailable_once();
         }
         if world_available {
             let transport_meta = TransportMeta {
@@ -651,14 +662,8 @@ pub(crate) fn execute_command(
                             e
                         );
                     }
-                    static WARN_ONCE: std::sync::Once = std::sync::Once::new();
-                    let err_msg = e.to_string();
-                    WARN_ONCE.call_once(move || {
-                        eprintln!(
-                            "substrate: warn: shell world-agent path (/run/substrate.sock) exec failed, running direct: {}",
-                            err_msg
-                        );
-                    });
+                    let _ = e;
+                    warn_world_backend_unavailable_once();
                 }
             }
         }
