@@ -470,7 +470,7 @@
       "name": "Full cage (PTY) parity (integration)",
       "type": "integration",
       "phase": "Agent Hub Isolation",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge I3 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/I3-spec.md",
