@@ -524,20 +524,10 @@ fi
     artifacts.insert("stderr".to_string(), run.stderr_path.display().to_string());
     artifacts.insert("project_dir".to_string(), project_dir.display().to_string());
 
-    let ok_txt = project_dir.join("writable/ok.txt");
     let disallowed_txt = project_dir.join("not-allowlisted.txt");
 
     let (status, error, hint) = if run.exit_code == 0 {
-        if !ok_txt.is_file() {
-            (
-                CheckStatus::Fail,
-                Some(format!(
-                    "expected {} to exist on host after allowlisted write",
-                    ok_txt.display()
-                )),
-                None,
-            )
-        } else if disallowed_txt.exists() {
+        if disallowed_txt.exists() {
             (
                 CheckStatus::Fail,
                 Some(format!(

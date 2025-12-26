@@ -107,6 +107,18 @@ if [ "${SUBSTRATE_WORLD_FS_CAGE:-project}" = "full" ]; then
   mkdir -p "$new_root/var/lib/substrate/world-deps"
   mount --rbind /var/lib/substrate/world-deps "$new_root/var/lib/substrate/world-deps"
 
+  # Fresh /proc and writable /tmp.
+  #
+  # Note: /tmp is a tmpfs in full-cage mode. This must be mounted before binding the project
+  # into its host-absolute path. Otherwise, when the host project lives under /tmp, the tmpfs
+  # mount would cover that project bind mount and `cd $SUBSTRATE_MOUNT_CWD` would fail.
+  mkdir -p "$new_root/proc"
+  mount -t proc proc "$new_root/proc"
+
+  mkdir -p "$new_root/tmp"
+  mount -t tmpfs tmpfs "$new_root/tmp"
+  chmod 1777 "$new_root/tmp" || true
+
   # Project mount points: stable (/project) and host-absolute ($SUBSTRATE_MOUNT_PROJECT_DIR).
   mkdir -p "$new_root/project"
   mount --bind "$SUBSTRATE_MOUNT_MERGED_DIR" "$new_root/project"
@@ -162,14 +174,6 @@ if [ "${SUBSTRATE_WORLD_FS_CAGE:-project}" = "full" ]; then
     done
     IFS=$oldIFS
   fi
-
-  # Fresh /proc and writable /tmp.
-  mkdir -p "$new_root/proc"
-  mount -t proc proc "$new_root/proc"
-
-  mkdir -p "$new_root/tmp"
-  mount -t tmpfs tmpfs "$new_root/tmp"
-  chmod 1777 "$new_root/tmp" || true
 
   # Optional: bind-mount the host world-agent binary into the cage so it can apply Landlock
   # restrictions before executing the command.
