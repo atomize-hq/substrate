@@ -338,3 +338,20 @@ Template (START/END only):
 - Worktree (next): wt/ahih-i5-docs-verify-integ
 - Plan: merge I5 code+test; reconcile docs+verification tooling vs I5-spec; run fmt/clippy/tests/preflight + smoke scripts
 - Blockers: none
+
+## [2025-12-26 03:42 UTC] Codex – I5-integ – END
+- Worktree commits: beb0b5a
+- Notes: ahih-i5-docs-verify-code and ahih-i5-docs-verify-test were already merged into feat/p0-agent-hub-isolation-hardening; no drift fixes needed
+- Commands:
+  - cargo fmt
+  - cargo clippy --workspace --all-targets -- -D warnings
+  - cargo test --workspace --all-targets -- --nocapture
+  - make preflight
+- Results: pass
+- Scripts executed:
+  - linux-smoke.sh (OK: agent hub hardening linux smoke (preflight); required PATH+=target/debug)
+  - macos-smoke.sh (SKIP: agent hub hardening macOS smoke (not macOS))
+  - windows-smoke.ps1 (SKIP: agent hub hardening windows smoke (pwsh not installed))
+- Kickoff prompts created/verified: n/a
+- Docs commit: (this commit)
+- Next steps / blockers: none
