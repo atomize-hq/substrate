@@ -788,7 +788,7 @@
       "acceptance_criteria": [
         "`substrate world verify` is available via the CLI help and can be run from any directory.",
         "The verifier does not require a repo checkout (works for prefix installs).",
-        "The verifier runs the minimum checks from I6-spec and provides actionable failure output.",
+        "The verifier runs the minimum checks from I6-spec and provides actionable failure output (Linux + macOS parity).",
         "If `--json` is implemented, JSON output is stable and documented by tests in I6-test."
       ],
       "start_checklist": [

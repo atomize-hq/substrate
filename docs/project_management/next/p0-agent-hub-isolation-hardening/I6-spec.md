@@ -22,7 +22,9 @@
    - Writing a host path outside the project fails
 
 ### Platform expectations
-- Linux/macOS: supported when the world backend is available (`substrate world doctor --json` ok=true).
+- Linux/macOS: **required parity** when the world backend is available (`substrate world doctor --json` ok=true).
+  - The implementation must avoid Linux-host assumptions (e.g., `/run/substrate.sock`) and should rely on
+    normal world routing so it works on macOS (Lima) as well.
   - Full cage may require privileges/user namespaces; failures should be clearly explained.
 - Windows: allowed to be `SKIP` or “not yet supported” initially (explicit message + non-zero only if the
   user requested strict mode).
@@ -46,6 +48,8 @@
 - On a correctly provisioned Linux host, it can demonstrate:
   - `world_fs.mode=read_only` blocks relative + absolute project writes.
   - `world_fs.cage=full` blocks host paths outside the project and enforces project allowlists.
+- On a correctly provisioned macOS host (Lima backend), it demonstrates the same outcomes (parity), or
+  clearly reports any missing capability and how to fix it.
 - Failures are actionable (clear reasons + next steps).
 - Tests cover:
   - CLI wiring and `--json` shape/stability.
