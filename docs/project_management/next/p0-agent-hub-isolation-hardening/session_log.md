@@ -174,6 +174,13 @@ Template (START/END only):
 - Docs commit: (this commit)
 - Next steps / blockers: I5-integ can merge with I5-code when ready
 
+## [2025-12-26 14:24 UTC] Codex – I6-code – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md (commit: docs: start I6-code)
+- Worktree (next): wt/ahih-i6-world-verify-code
+- Plan: implement `substrate world verify` + `--json` report with platform guards (no tests)
+- Blockers: none
+
 ## [2025-12-25 21:42 UTC] Codex – I2-code – START
 - Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
 - Updated tasks.json + session_log.md
