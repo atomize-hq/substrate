@@ -151,6 +151,17 @@ Template (START/END only):
 - Plan: add minimal automated coverage for surfaced doctor/policy JSON fields and verification harness behavior
 - Blockers: none
 
+## [2025-12-26 03:08 UTC] Codex – I5-test – END
+- Worktree commits: 5a6039d
+- Commands:
+  - cargo fmt
+  - cargo test -p substrate-shell --tests -- --nocapture
+- Results: pass
+- Scripts executed: n/a
+- Kickoff prompts created/verified: n/a
+- Docs commit: (this commit)
+- Next steps / blockers: I5-integ can merge with I5-code when ready
+
 ## [2025-12-25 21:42 UTC] Codex – I2-code – START
 - Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
 - Updated tasks.json + session_log.md
