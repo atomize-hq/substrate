@@ -643,7 +643,7 @@
       "name": "Docs alignment + verification tooling (code)",
       "type": "code",
       "phase": "Agent Hub Isolation",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Update docs to match real isolation guarantees and add verification tooling/checklists.",
       "references": [
         "docs/project_management/next/p0-agent-hub-isolation-hardening/I5-spec.md",
