@@ -513,3 +513,20 @@ Template (START/END only):
 - Worktree (next): wt/ahih-i8-i1-noise-integ
 - Plan: merge I8 code+test branches; reconcile behavior vs I8-spec; run fmt/clippy/tests/preflight + smoke scripts
 - Blockers: none
+
+## [2025-12-26 16:07 UTC] Codex – I8-integ – END
+- Worktree commits: 03e7b34
+- Notes: include `SUBSTRATE_WORLD_SOCKET` context in the single world-backend-unavailable warning/error so tests can assert on the configured socket path without increasing noise
+- Commands:
+  - cargo fmt
+  - cargo clippy --workspace --all-targets -- -D warnings
+  - cargo test --workspace --all-targets -- --nocapture
+  - make preflight
+- Results: pass
+- Scripts executed:
+  - linux-smoke.sh (OK: agent hub hardening linux smoke (preflight); required PATH+=target/debug)
+  - macos-smoke.sh (SKIP: agent hub hardening macOS smoke (not macOS))
+  - windows-smoke.ps1 (SKIP: agent hub hardening Windows smoke (not Windows); ran via downloaded pwsh because pwsh not installed)
+- Kickoff prompts created/verified: n/a
+- Docs commit: (this commit)
+- Next steps / blockers: none
