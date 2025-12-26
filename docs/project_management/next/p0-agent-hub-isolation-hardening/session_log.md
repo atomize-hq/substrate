@@ -369,3 +369,14 @@ Template (START/END only):
 - Created worktree: wt/ahih-i6-world-verify-test
 - Plan: add fixture-based tests for CLI wiring, skip behavior, and `--json` output stability
 - Blockers: none
+
+## [2025-12-26 14:37 UTC] Codex – I6-test – END
+- Worktree commits: 0660ac4
+- Commands:
+  - cargo fmt
+  - cargo test -p substrate-shell --tests -- --nocapture
+- Results: pass (2 ignored: pending I6-code landing `substrate world verify`)
+- Scripts executed: n/a
+- Kickoff prompts created/verified: n/a
+- Docs commit: (this commit)
+- Next steps / blockers: I6-integ should un-ignore `crates/shell/tests/world_verify.rs` once the command/JSON schema is implemented
