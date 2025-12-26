@@ -422,3 +422,10 @@ Template (START/END only):
 - Worktree (next): wt/ahih-i7-playbook-align-code
 - Plan: align manual testing playbook with I0–I5 specs + current policy schema (ensure `.substrate-profile` examples include required `id`/`name`; remove non-spec claims like numeric exit codes)
 - Blockers: none
+
+## [2025-12-26 15:08 UTC] Codex – I7-test – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md (commit: docs: start I7-test)
+- Worktree (next): wt/ahih-i7-playbook-align-test
+- Plan: add a lightweight test preventing playbook drift (`.substrate-profile` snippets must include required `id` and `name`)
+- Blockers: none
