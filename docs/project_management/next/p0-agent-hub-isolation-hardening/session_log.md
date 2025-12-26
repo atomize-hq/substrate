@@ -506,3 +506,10 @@ Template (START/END only):
 - Results: pass
 - Docs commit: (this commit)
 - Next steps / blockers: I8-integ can merge I8-code + I8-test and run full validation
+
+## [2025-12-26 15:57 UTC] Codex – I8-integ – START
+- Checked out feat/p0-agent-hub-isolation-hardening, pulled latest
+- Updated tasks.json + session_log.md (commit: docs: start I8-integ)
+- Worktree (next): wt/ahih-i8-i1-noise-integ
+- Plan: merge I8 code+test branches; reconcile behavior vs I8-spec; run fmt/clippy/tests/preflight + smoke scripts
+- Blockers: none
