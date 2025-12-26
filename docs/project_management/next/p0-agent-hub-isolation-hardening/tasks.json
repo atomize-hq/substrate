@@ -767,6 +767,137 @@
         "I5-test"
       ],
       "concurrent_with": []
+    },
+    {
+      "id": "I6-code",
+      "name": "`substrate world verify` command (code)",
+      "type": "code",
+      "phase": "Agent Hub Isolation",
+      "status": "pending",
+      "description": "Add an install-available CLI subcommand that performs end-to-end isolation enforcement verification.",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I6-spec.md",
+        "docs/WORLD.md",
+        "docs/CONFIGURATION.md",
+        "scripts/linux/agent-hub-isolation-verify.sh",
+        "crates/shell/src/execution/cli.rs",
+        "crates/shell/src/execution/platform/mod.rs",
+        "crates/shell/src/execution/platform/linux.rs",
+        "crates/shell/src/execution/platform/macos.rs"
+      ],
+      "acceptance_criteria": [
+        "`substrate world verify` is available via the CLI help and can be run from any directory.",
+        "The verifier does not require a repo checkout (works for prefix installs).",
+        "The verifier runs the minimum checks from I6-spec and provides actionable failure output.",
+        "If `--json` is implemented, JSON output is stable and documented by tests in I6-test."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I6-code to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i6-world-verify-code",
+        "Create worktree wt/ahih-i6-world-verify-code from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i6-world-verify-code",
+      "integration_task": "I6-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I6-code.md",
+      "depends_on": [
+        "I5-integ"
+      ],
+      "concurrent_with": [
+        "I6-test"
+      ]
+    },
+    {
+      "id": "I6-test",
+      "name": "`substrate world verify` command (test)",
+      "type": "test",
+      "phase": "Agent Hub Isolation",
+      "status": "pending",
+      "description": "Add fixture-based tests covering CLI wiring, skip behavior, and JSON output for `substrate world verify`.",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I6-spec.md",
+        "crates/shell/tests",
+        "crates/shell/src/execution/cli.rs"
+      ],
+      "acceptance_criteria": [
+        "Tests validate the new subcommand wiring and output schema (especially `--json` if present).",
+        "Tests do not require a real provisioned world backend (fixture or mocked subprocesses)."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I6-test to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i6-world-verify-test",
+        "Create worktree wt/ahih-i6-world-verify-test from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run targeted cargo test suites touched",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i6-world-verify-test",
+      "integration_task": "I6-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I6-test.md",
+      "depends_on": [
+        "I5-integ"
+      ],
+      "concurrent_with": [
+        "I6-code"
+      ]
+    },
+    {
+      "id": "I6-integ",
+      "name": "`substrate world verify` command (integration)",
+      "type": "integration",
+      "phase": "Agent Hub Isolation",
+      "status": "pending",
+      "description": "Merge I6 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I6-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Behavior matches I6-spec on all supported platforms (platform guards as needed).",
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I6-integ to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i6-world-verify-integ",
+        "Create worktree wt/ahih-i6-world-verify-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge ahih-i6-world-verify-code and ahih-i6-world-verify-test into integration worktree",
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant cargo test suites",
+        "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
+        "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i6-world-verify-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I6-integ.md",
+      "depends_on": [
+        "I6-code",
+        "I6-test"
+      ],
+      "concurrent_with": []
     }
   ]
 }
