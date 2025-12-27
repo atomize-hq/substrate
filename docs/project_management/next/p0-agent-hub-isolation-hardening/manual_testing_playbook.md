@@ -217,6 +217,18 @@ Re-run the I1 “missing world socket” scenarios and verify warning/error line
 1) When fallback is allowed (`world_fs.require_world=false`): exactly one warning.
 
 ```bash
+cat > .substrate-profile <<'YAML'
+id: ih-test
+name: IH Test Policy
+world_fs:
+  require_world: false
+  mode: writable
+  cage: project
+  read_allowlist:
+    - "*"
+  write_allowlist: []
+YAML
+
 SUBSTRATE_WORLD=enabled SUBSTRATE_WORLD_ENABLED=1 SUBSTRATE_WORLD_SOCKET=/tmp/substrate-test-missing.sock \
   substrate -c 'echo host-fallback-ok' 2>"$IH_TEST_WS/fallback.stderr"
 grep -c '^substrate: warn:' "$IH_TEST_WS/fallback.stderr"
@@ -229,6 +241,18 @@ Expected:
 2) When world is required (`world_fs.require_world=true`): exactly one error (and no warning).
 
 ```bash
+cat > .substrate-profile <<'YAML'
+id: ih-test
+name: IH Test Policy
+world_fs:
+  require_world: true
+  mode: writable
+  cage: project
+  read_allowlist:
+    - "*"
+  write_allowlist: []
+YAML
+
 SUBSTRATE_WORLD=enabled SUBSTRATE_WORLD_ENABLED=1 SUBSTRATE_WORLD_SOCKET=/tmp/substrate-test-missing.sock \
   substrate -c 'echo must-not-run' 2>"$IH_TEST_WS/required.stderr" || true
 grep -c '^Error:' "$IH_TEST_WS/required.stderr"
