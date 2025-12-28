@@ -209,3 +209,18 @@
 - Task branch: `pcm-pcm2-routing-integ`
 - Worktree: `wt/pcm2-routing-integ`
 - Scope: merge PCM2 code+tests, reconcile to `PCM2-spec.md`, and run fmt/clippy/tests/preflight + smoke scripts.
+
+## END — 2025-12-28T17:04:54Z — PCM2-integ — policy mode + routing semantics (integration)
+- Summary of changes:
+  - Merged `pcm-pcm2-routing-code` and `pcm-pcm2-routing-test` and reconciled to `PCM2-spec.md`.
+  - Fixed broker approval tests to pass `cwd` into save-to-policy write target selection helpers.
+- Commands run (required):
+  - `cargo fmt --all` → exit `0`
+  - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
+  - `cargo test -p substrate-shell --test pcm2_routing_semantics -- --nocapture` → exit `0`
+  - `cargo test -p substrate-broker pcm2_save_to_policy -- --nocapture` → exit `0`
+  - `make preflight` → exit `0`
+- Smoke scripts:
+  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `1` (fails: `$SUBSTRATE_HOME/env.sh` not yet created by `substrate config global init --force`)
+  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
+  - `pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `127` (`pwsh` not found)
