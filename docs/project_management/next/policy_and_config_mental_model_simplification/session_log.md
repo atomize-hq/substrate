@@ -179,6 +179,16 @@
 - Worktree: `wt/pcm3-env-code`
 - Scope: implement env scripts behavior + world enable `--home` semantics + legacy removals per `PCM3-spec.md` (production code only; no tests).
 
+## END — 2025-12-28T17:50:12Z — PCM3-code — env scripts + world enable home + legacy removals (code)
+- Summary of changes:
+  - Implemented `$SUBSTRATE_HOME/env.sh` generation and ensured `substrate config global init|set` and `substrate world enable` write it (runtime does not rewrite it).
+  - Updated `$SUBSTRATE_HOME/manager_env.sh` wiring and runtime regeneration behavior; removed `SUBSTRATE_MANAGER_ENV` usage and updated bash preexec sourcing accordingly.
+  - Implemented `substrate world enable --home` semantics (removed `--prefix`), updated the helper script, and removed legacy names/flags/env vars per `PCM3-spec.md` (anchor/root + world_fs.cage + profile artifacts).
+- Commands run (required):
+  - `cargo fmt` → exit `0`
+  - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
+    - Output: `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in 2.02s`
+
 ## START — 2025-12-28T16:18:19Z — PCM2-code — policy mode + routing semantics (code)
 - Orchestration branch: `feat/policy_and_config`
 - Task branch: `pcm-pcm2-routing-code`
