@@ -54,3 +54,23 @@ flightcheck:
 
 .PHONY: preflight
 preflight: flightcheck
+
+.PHONY: pre-ci
+pre-ci:
+	@echo "##pre-ci -- runs CI checks not covered by preflight (plus CI-flag fmt/clippy)"
+	cargo fmt --all -- --check
+	cargo clippy --workspace --all-targets -- -D warnings
+	cargo build --workspace
+	cargo rustc -p substrate-telemetry --profile dist --crate-type=rlib,cdylib
+	cargo doc --workspace --no-deps
+	@sh_files="$$(git ls-files '*.sh')"; \
+	if command -v shellcheck >/dev/null 2>&1; then \
+	  if [ -n "$$sh_files" ]; then \
+	    printf '%s\n' "$$sh_files" | xargs shellcheck -x -S warning; \
+	  else \
+	    echo "No shell scripts found for shellcheck"; \
+	  fi; \
+	else \
+	  echo "shellcheck not installed; skipping Shell lint"; \
+	fi
+	cargo run --bin substrate -- --version
