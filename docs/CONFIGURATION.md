@@ -73,8 +73,8 @@ parsed for compatibility.
 Substrate resolves the world root from highest to lowest:
 
 1. CLI flags: `--anchor-mode` / `--anchor-path` (also accepts `--world-root-mode` / `--world-root-path`)
-2. Directory config: `.substrate/settings.toml` in the shell launch directory
-3. Global config: `~/.substrate/config.toml` `[world]` table
+2. Directory config: `.substrate/settings.yaml` in the shell launch directory
+3. Global config: `~/.substrate/config.yaml` `world:` mapping
 4. Environment variables: `SUBSTRATE_ANCHOR_MODE` / `SUBSTRATE_ANCHOR_PATH`
 5. Default: `project` mode anchored to the shell launch directory
 
@@ -90,14 +90,14 @@ Modes:
 
 Both the global config and per-directory settings file use the same schema:
 
-```toml
-[world]
-anchor_mode = "project"
-anchor_path = ""
-# Legacy keys are still parsed for compatibility:
-root_mode = "project"
-root_path = ""
-caged = true
+```yaml
+world:
+  anchor_mode: project
+  anchor_path: ""
+  # Legacy keys are still parsed for compatibility:
+  root_mode: project
+  root_path: ""
+  caged: true
 ```
 
 ### Host-only driver helpers
@@ -105,21 +105,20 @@ caged = true
 - Use `scripts/dev/substrate_shell_driver` when invoking `target/debug/substrate` from shell scripts or automation. It resolves the workspace binary, exports `SUBSTRATE_WORLD=disabled` and `SUBSTRATE_WORLD_ENABLED=0`, and passes through all CLI arguments.
 - Rust integration tests rely on `crates/shell/tests/common.rs::substrate_shell_driver()` to obtain an `assert_cmd::Command` with the same environment overrides. Reuse that helper instead of reimplementing binary lookup or TMPDIR wiring.
 
-## Install Metadata (`~/.substrate/config.toml`)
+## Install Metadata (`~/.substrate/config.yaml`)
 
 The installer and `substrate world enable` command keep a small metadata file at
-`~/.substrate/config.toml` with install-level fields under `[install]`. The
-same file (and optional `.substrate/settings.toml` in a repo) can carry a
-`[world]` table when you want a persistent root override:
+`~/.substrate/config.yaml` with install-level fields under `install:`. The same
+file (and optional `.substrate/settings.yaml` in a repo) can carry a `world:`
+mapping when you want a persistent root override:
 
-```toml
-[install]
-world_enabled = true
-
-[world]
-root_mode = "project"
-root_path = ""
-caged = true
+```yaml
+install:
+  world_enabled: true
+world:
+  root_mode: project
+  root_path: ""
+  caged: true
 ```
 
 Unknown keys and extra tables are preserved for future expansion.
@@ -128,52 +127,96 @@ Unknown keys and extra tables are preserved for future expansion.
 - Use `--world` to force isolation for a single run even when install metadata
   or `SUBSTRATE_WORLD*` env vars disable it; metadata stays unchanged and
   `--no-world` still wins when provided.
-- `substrate world enable` overwrites `[install]` after provisioning succeeds and repairs malformed metadata.
-- Legacy installs that still have `config.json` are read automatically, but new writes use `config.toml`.
+- `substrate world enable` overwrites `install:` after provisioning succeeds and repairs malformed metadata.
+- Legacy installs that still have `config.json` are read automatically, but new writes use `config.yaml`.
 - The generated `~/.substrate/manager_env.sh` exports `SUBSTRATE_WORLD`,
   `SUBSTRATE_WORLD_ENABLED`, and `SUBSTRATE_CAGED` so shims and subprocesses read
   a consistent view of this metadata even before the CLI runs.
-- Directory configs live at `.substrate/settings.toml` under the launch
-  directory and only carry the `[world]` table shown above.
+- Directory configs live at `.substrate/settings.yaml` under the launch
+  directory and only carry the `world:` mapping shown above.
 
 ### World filesystem mode
 
 Policies control whether the world filesystem is writable (overlay/copy-diff) or forced to
-`read_only`. Set `world_fs_mode` to `read_only` in your global policy (`~/.substrate/policy.yaml`)
-or per-project `.substrate-profile*` to disable upper/work overlays so writes fail cleanly. The
-shell exports `SUBSTRATE_WORLD_FS_MODE` with the resolved value for telemetry/replay and surfaces
-it in `substrate world doctor --json` to make policy enforcement visible without extra flags.
+`read_only` via `world_fs.mode` in the active policy file.
+
+- `world_fs.mode: writable` (default): project writes land in the world overlay.
+- `world_fs.mode: read_only`: the project is remounted read-only so both relative and absolute
+  project writes fail (requires `world_fs.require_world: true`).
+
+The shell exports `SUBSTRATE_WORLD_FS_MODE` with the resolved value for telemetry/replay and
+surfaces it in `substrate world doctor --json` so policy enforcement is visible without extra
+flags.
+
+### Policy files (`world_fs` schema)
+
+Substrate loads a YAML policy from one of these locations (first match wins):
+
+- Per-project: `.substrate-profile` (or `.substrate-profile.d/{default,policy}.{yaml,yml}`)
+- Repo-local: `.substrate/policy.yaml` or `.substrate-policy.yaml`
+- Global: `~/.substrate/policy.yaml`
+
+The policy schema is strict (unknown keys are rejected). The required top-level keys are `id`,
+`name`, and the `world_fs` block:
+
+```yaml
+id: default
+name: Default Policy
+world_fs:
+  mode: writable            # writable | read_only
+  cage: project             # project | full
+  require_world: false      # true = no host fallback when world is unavailable
+  read_allowlist:
+    - "*"                   # required, must be non-empty
+  write_allowlist: []       # required, can be empty
+```
+
+Notes:
+
+- `world_fs.require_world` is the single “fail closed” knob for world availability. If `true` and
+  the world backend is unavailable (or disabled via `--no-world`/`SUBSTRATE_WORLD=disabled`),
+  Substrate errors instead of falling back to host execution.
+- `world_fs.cage=full` is the strong host-path isolation mode (Linux mount namespace + `pivot_root`)
+  and requires `world_fs.require_world=true` (validated by the broker).
+- `world_fs.mode=read_only` requires `world_fs.require_world=true` (validated by the broker).
+- `world_fs.write_allowlist` entries are only honored when they target paths under the project root;
+  patterns for other host paths are ignored for safety.
+- `world.caged` / `SUBSTRATE_CAGED` is a *shell cwd guard* (prevents `cd` escapes). It is independent
+  of `world_fs.cage`, which controls filesystem isolation in the world backend.
+
+For a minimal end-to-end verification run, see `scripts/linux/agent-hub-isolation-verify.sh`.
 
 ### Bootstrapping the config file
 
-Use `substrate config init` whenever `~/.substrate/config.toml` is missing (or
+Use `substrate config init` whenever `~/.substrate/config.yaml` is missing (or
 after manually deleting/corrupting it). The command scaffolds the default
-`[install]` and `[world]` tables, respects `SUBSTRATE_HOME`, and is available
+`install:` and `world:` mappings, respects `SUBSTRATE_HOME`, and is available
 before the shell/REPL starts. Pass `--force` to regenerate the file even if it
 already exists. On Windows the same path lives under
-`%USERPROFILE%\.substrate\config.toml`. Shell startup and the install scripts
+`%USERPROFILE%\.substrate\config.yaml`. Shell startup and the install scripts
 emit a warning that points to this command whenever the file is absent, so
 running `substrate config init` is the supported fix.
 
 ### Inspecting the config file
 
 `substrate config show` prints the current global config in a stable, redacted
-format. TOML is emitted by default for humans, while `--json` produces a
+format. YAML is emitted by default for humans, while `--json` produces a
 machine-friendly payload for automation. Both commands honor
 `SUBSTRATE_HOME`/`%USERPROFILE%` overrides and exit non-zero with a reminder to
 run `substrate config init` if the file is missing.
 
+Note: `config show` renders only the global config file (`~/.substrate/config.yaml`); per-directory overrides from `.substrate/settings.yaml` are applied when running Substrate (settings stack), not merged into `config show` output.
+
 ```bash
 $ substrate config show
-[install]
-world_enabled = true
-
-[world]
-anchor_mode = "project"
-anchor_path = ""
-root_mode = "project"
-root_path = ""
-caged = true
+install:
+  world_enabled: true
+world:
+  anchor_mode: project
+  anchor_path: ""
+  root_mode: project
+  root_path: ""
+  caged: true
 ```
 
 ```bash
@@ -197,7 +240,7 @@ stored in the config.
 
 ### Updating the config file
 
-`substrate config set key=value [...]` edits `config.toml` without opening a
+`substrate config set key=value [...]` edits `config.yaml` without opening a
 text editor. Each dotted key is validated (anchor modes must be
 `project`/`follow-cwd`/`custom`, boolean toggles accept `true/false/1/0`), and
 all updates are applied atomically. Combine multiple assignments to keep related
@@ -205,17 +248,17 @@ fields in sync:
 
 ```bash
 $ substrate config set install.world_enabled=false world.caged=false
-substrate: updated config at /Users/alice/.substrate/config.toml
+substrate: updated config at /Users/alice/.substrate/config.yaml
   - install.world_enabled: true -> false
   - world.caged: true -> false
 ```
 
-Anchor overrides update the legacy aliases automatically so the `[world]` table
+Anchor overrides update the legacy aliases automatically so the `world:` mapping
 remains consistent:
 
 ```bash
 $ substrate config set world.anchor_mode=custom world.anchor_path=/workspaces/substrate
-substrate: updated config at /Users/alice/.substrate/config.toml
+substrate: updated config at /Users/alice/.substrate/config.yaml
   - world.anchor_mode: "project" -> "custom"
   - world.root_mode (alias): "project" -> "custom"
   - world.anchor_path: "" -> "/workspaces/substrate"
@@ -228,7 +271,7 @@ and new values:
 ```bash
 $ substrate config set --json world.anchor_mode=follow-cwd
 {
-  "config_path": "/Users/alice/.substrate/config.toml",
+  "config_path": "/Users/alice/.substrate/config.yaml",
   "changed": true,
   "changes": [
     {

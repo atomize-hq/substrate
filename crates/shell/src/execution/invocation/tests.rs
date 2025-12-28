@@ -33,8 +33,8 @@ fn wrap_mode_uses_cli_shell_and_shimmed_path() {
     let substrate_home = home.join(".substrate");
     fs::create_dir_all(substrate_home.join("shims")).unwrap();
     fs::write(
-        substrate_home.join("config.toml"),
-        "[install]\nworld_enabled = true\n",
+        substrate_home.join("config.yaml"),
+        "install:\n  world_enabled: true\n",
     )
     .unwrap();
 
@@ -98,8 +98,8 @@ fn skip_shims_and_no_world_disable_shimmed_path() {
     let substrate_home = home.join(".substrate");
     fs::create_dir_all(substrate_home.join("shims")).unwrap();
     fs::write(
-        substrate_home.join("config.toml"),
-        "[install]\nworld_enabled = true\n",
+        substrate_home.join("config.yaml"),
+        "install:\n  world_enabled: true\n",
     )
     .unwrap();
 

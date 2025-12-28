@@ -799,8 +799,19 @@ normalize_prefix() {
 initialize_metadata_paths() {
   MANAGER_ENV_PATH="${PREFIX}/manager_env.sh"
   MANAGER_INIT_PATH="${PREFIX}/manager_init.sh"
-  INSTALL_CONFIG_PATH="${PREFIX}/config.toml"
+  INSTALL_CONFIG_PATH="${PREFIX}/config.yaml"
   HOST_STATE_PATH="${PREFIX}/install_state.json"
+}
+
+ensure_no_legacy_toml_install_config() {
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    return
+  fi
+
+  local legacy="${PREFIX}/config.toml"
+  if [[ -f "${legacy}" ]]; then
+    fatal "Unsupported legacy TOML config detected at ${legacy}. YAML config is now required at ${INSTALL_CONFIG_PATH}. Delete the TOML file and re-run the installer."
+  fi
 }
 
 ensure_manager_init_placeholder() {
@@ -898,15 +909,14 @@ write_install_config() {
   config_dir="$(dirname "${INSTALL_CONFIG_PATH}")"
   mkdir -p "${config_dir}"
   cat > "${INSTALL_CONFIG_PATH}.tmp" <<EOF
-[install]
-world_enabled = ${flag}
-
-[world]
-anchor_mode = "project"
-anchor_path = ""
-root_mode = "project"
-root_path = ""
-caged = true
+install:
+  world_enabled: ${flag}
+world:
+  anchor_mode: project
+  anchor_path: ""
+  root_mode: project
+  root_path: ""
+  caged: true
 EOF
   mv "${INSTALL_CONFIG_PATH}.tmp" "${INSTALL_CONFIG_PATH}"
   chmod 0644 "${INSTALL_CONFIG_PATH}" || true
@@ -914,6 +924,7 @@ EOF
 
 finalize_install_metadata() {
   local enabled="$1"
+  ensure_no_legacy_toml_install_config
   ensure_manager_init_placeholder
   write_manager_env_script "${enabled}"
   write_install_config "${enabled}"

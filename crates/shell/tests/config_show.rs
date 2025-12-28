@@ -5,11 +5,11 @@ mod common;
 use assert_cmd::Command;
 use common::{substrate_shell_driver, temp_dir};
 use serde_json::Value as JsonValue;
+use serde_yaml::Value as YamlValue;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use tempfile::TempDir;
-use toml::Value as TomlValue;
 
 const REDACTED_PLACEHOLDER: &str = "*** redacted ***";
 
@@ -41,7 +41,7 @@ impl ConfigShowFixture {
     }
 
     fn config_path(&self) -> PathBuf {
-        self.substrate_home.join("config.toml")
+        self.substrate_home.join("config.yaml")
     }
 
     fn write_config(&self, contents: &str) {
@@ -51,9 +51,13 @@ impl ConfigShowFixture {
         fs::write(self.config_path(), contents).expect("failed to seed config file");
     }
 
-    fn read_config_value(&self) -> TomlValue {
+    fn legacy_config_path(&self) -> PathBuf {
+        self.substrate_home.join("config.toml")
+    }
+
+    fn read_config_value(&self) -> YamlValue {
         let body = fs::read_to_string(self.config_path()).expect("config to exist");
-        toml::from_str(&body).expect("config to parse as TOML")
+        serde_yaml::from_str(&body).expect("config to parse as YAML")
     }
 
     fn show_output(&self, extra_args: &[&str]) -> std::process::Output {
@@ -68,23 +72,14 @@ impl ConfigShowFixture {
 }
 
 #[test]
-fn config_show_prints_current_config_as_toml() {
+fn config_show_prints_current_config_as_yaml() {
     if !ensure_config_show_available() {
         return;
     }
 
     let fixture = ConfigShowFixture::new();
     fixture.write_config(
-        r#"[install]
-world_enabled = true
-
-[world]
-anchor_mode = "project"
-anchor_path = ""
-root_mode = "project"
-root_path = ""
-caged = true
-"#,
+        "install:\n  world_enabled: true\nworld:\n  anchor_mode: project\n  anchor_path: \"\"\n  root_mode: project\n  root_path: \"\"\n  caged: true\n",
     );
 
     let output = fixture.show_output(&[]);
@@ -95,12 +90,12 @@ caged = true
     );
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let cli_value: TomlValue =
-        toml::from_str(&stdout).expect("config show output to parse as TOML");
+    let cli_value: YamlValue =
+        serde_yaml::from_str(&stdout).expect("config show output to parse as YAML");
     assert_eq!(
         cli_value,
         fixture.read_config_value(),
-        "config show TOML should match file contents"
+        "config show YAML should match file contents"
     );
 }
 
@@ -112,16 +107,7 @@ fn config_show_supports_json_output() {
 
     let fixture = ConfigShowFixture::new();
     fixture.write_config(
-        r#"[install]
-world_enabled = false
-
-[world]
-anchor_mode = "follow-cwd"
-anchor_path = "/tmp/example"
-root_mode = "follow-cwd"
-root_path = "/tmp/example"
-caged = false
-"#,
+        "install:\n  world_enabled: false\nworld:\n  anchor_mode: follow-cwd\n  anchor_path: /tmp/example\n  root_mode: follow-cwd\n  root_path: /tmp/example\n  caged: false\n",
     );
 
     let expected = fixture.read_config_value();
@@ -135,12 +121,10 @@ caged = false
     let stdout = String::from_utf8_lossy(&output.stdout);
     let cli_json: JsonValue =
         serde_json::from_str(&stdout).expect("config show output to parse as JSON");
-    let expected_json: JsonValue = expected
-        .try_into()
-        .expect("written config to convert into JSON value");
+    let expected_json: JsonValue = serde_json::to_value(&expected).expect("yaml config to JSON");
     assert_eq!(
         cli_json, expected_json,
-        "json payload should mirror the TOML data"
+        "json payload should mirror the YAML data"
     );
 }
 
@@ -174,16 +158,7 @@ fn config_show_redacts_sensitive_paths_in_outputs() {
 
     let fixture = ConfigShowFixture::new();
     fixture.write_config(
-        r#"[install]
-world_enabled = true
-api_token = "install-secret"
-auth_token = "install-another"
-
-[world]
-anchor_mode = "project"
-root_mode = "project"
-api_token = "world-secret"
-"#,
+        "install:\n  world_enabled: true\n  api_token: install-secret\n  auth_token: install-another\nworld:\n  anchor_mode: project\n  root_mode: project\n  api_token: world-secret\n",
     );
 
     let output = fixture.show_output(&[]);
@@ -194,35 +169,36 @@ api_token = "world-secret"
     );
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let cli_value: TomlValue =
-        toml::from_str(&stdout).expect("config show TOML output should parse");
+    let cli_value: YamlValue =
+        serde_yaml::from_str(&stdout).expect("config show YAML output should parse");
 
-    let install_table = cli_value
-        .get("install")
-        .and_then(|value| value.as_table())
-        .expect("install table present");
+    let root = cli_value.as_mapping().expect("yaml root mapping");
+    let install_table = root
+        .get(YamlValue::String("install".to_string()))
+        .and_then(|value| value.as_mapping())
+        .expect("install mapping present");
     assert_eq!(
         install_table
-            .get("api_token")
+            .get(YamlValue::String("api_token".to_string()))
             .and_then(|value| value.as_str()),
         Some(REDACTED_PLACEHOLDER),
         "install.api_token should be redacted"
     );
     assert_eq!(
         install_table
-            .get("auth_token")
+            .get(YamlValue::String("auth_token".to_string()))
             .and_then(|value| value.as_str()),
         Some(REDACTED_PLACEHOLDER),
         "install.auth_token should be redacted"
     );
 
-    let world_table = cli_value
-        .get("world")
-        .and_then(|value| value.as_table())
-        .expect("world table present");
+    let world_table = root
+        .get(YamlValue::String("world".to_string()))
+        .and_then(|value| value.as_mapping())
+        .expect("world mapping present");
     assert_eq!(
         world_table
-            .get("api_token")
+            .get(YamlValue::String("api_token".to_string()))
             .and_then(|value| value.as_str()),
         Some(REDACTED_PLACEHOLDER),
         "world.api_token should be redacted"
@@ -261,34 +237,71 @@ api_token = "world-secret"
     );
 
     let stored = fixture.read_config_value();
-    let stored_install = stored
-        .get("install")
-        .and_then(|value| value.as_table())
-        .expect("stored install table");
+    let stored_root = stored.as_mapping().expect("stored yaml root mapping");
+    let stored_install = stored_root
+        .get(YamlValue::String("install".to_string()))
+        .and_then(|value| value.as_mapping())
+        .expect("stored install mapping");
     assert_eq!(
         stored_install
-            .get("api_token")
+            .get(YamlValue::String("api_token".to_string()))
             .and_then(|value| value.as_str()),
         Some("install-secret"),
         "redaction should not mutate the stored config"
     );
     assert_eq!(
         stored_install
-            .get("auth_token")
+            .get(YamlValue::String("auth_token".to_string()))
             .and_then(|value| value.as_str()),
         Some("install-another"),
         "redaction should not mutate install.auth_token on disk"
     );
-    let stored_world = stored
-        .get("world")
-        .and_then(|value| value.as_table())
-        .expect("stored world table");
+    let stored_world = stored_root
+        .get(YamlValue::String("world".to_string()))
+        .and_then(|value| value.as_mapping())
+        .expect("stored world mapping");
     assert_eq!(
         stored_world
-            .get("api_token")
+            .get(YamlValue::String("api_token".to_string()))
             .and_then(|value| value.as_str()),
         Some("world-secret"),
         "redaction should not mutate world.api_token on disk"
+    );
+}
+
+#[test]
+fn config_show_refuses_legacy_toml() {
+    if !ensure_config_show_available() {
+        return;
+    }
+
+    let fixture = ConfigShowFixture::new();
+    fixture.write_config("install:\n  world_enabled: true\n");
+    fs::write(
+        fixture.legacy_config_path(),
+        "[install]\nworld_enabled = true\n",
+    )
+    .expect("write legacy config.toml");
+
+    let output = fixture.show_output(&[]);
+    assert!(
+        !output.status.success(),
+        "config show should fail when legacy toml exists: {:?}",
+        output
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unsupported legacy TOML config detected"),
+        "stderr missing legacy TOML message: {stderr}"
+    );
+    assert!(
+        stderr.contains(&fixture.legacy_config_path().display().to_string()),
+        "stderr missing legacy path: {stderr}"
+    );
+    assert!(
+        stderr.contains(&fixture.config_path().display().to_string()),
+        "stderr missing yaml path: {stderr}"
     );
 }
 

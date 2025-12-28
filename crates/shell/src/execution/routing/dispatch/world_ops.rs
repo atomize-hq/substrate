@@ -472,7 +472,7 @@ where
             env::remove_var("SUBSTRATE_WORLD_ID");
             LinuxWorldInit::Agent
         }
-        Err(agent_err) => {
+        Err(_agent_err) => {
             #[cfg(test)]
             if let Ok(mock_id) = env::var("SUBSTRATE_TEST_LOCAL_WORLD_ID") {
                 env::set_var("SUBSTRATE_WORLD", "enabled");
@@ -497,12 +497,7 @@ where
                     env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
                     LinuxWorldInit::LocalBackend
                 }
-                Err(local_err) => {
-                    eprintln!(
-                        "substrate: linux world fallback failed (agent error: {agent_err:#}; local error: {local_err:#})"
-                    );
-                    LinuxWorldInit::LocalBackendFailed
-                }
+                Err(_local_err) => LinuxWorldInit::LocalBackendFailed,
             }
         }
     }

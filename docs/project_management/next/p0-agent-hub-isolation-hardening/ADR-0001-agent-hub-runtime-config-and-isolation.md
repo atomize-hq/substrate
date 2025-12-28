@@ -14,7 +14,7 @@ Related work:
 
 ## 0) Executive Summary
 
-Substrate is evolving into a multi-agent hub where multiple frontier-model CLIs (Codex/Claude/Gemini/etc.)
+Substrate is evolving into a multi-agent hub where multiple frontier-model CLIs (Codex, Claude, Gemini, and similar tools)
 execute through a single, policy-controlled “secure execution layer”. That only works if:
 
 1) **Policies parse reliably and predictably** (clear schema + strong validation).
@@ -24,10 +24,10 @@ execute through a single, policy-controlled “secure execution layer”. That o
 
 This ADR records the decisions, gaps, and an implementation plan to:
 - Add a **world-deps selection/allowlist layer** and gate behavior on its existence.
-- Decide **one runtime config format** (YAML-everywhere vs TOML-everywhere) with no dual-format support.
+- Standardize Substrate-owned runtime settings on **YAML-only** with no dual-format support (Y0).
 - Fix a critical Linux gap: **absolute-path writes into the project bypassing the overlay**.
 - Move toward **fail-closed** security semantics for policies that require guarantees.
-- Plan the larger “full caging” hardening (pivot_root/minimal rootfs and/or Landlock).
+- Plan “full caging” hardening (pivot_root/minimal rootfs) with Landlock as additive hardening only.
 
 ---
 
@@ -54,25 +54,20 @@ explicit selection/allowlist so `world deps` only targets what they opted into, 
 selection exists.
 
 Desired behavior going forward:
-- World-deps should **only show and act on tools that are configured/selected**.
-- If no world-deps selection config exists, world-deps should **report “not configured” and do nothing**.
-- World-deps configuration and UX should live behind `substrate world …` (world is optional, but UX should be
-  separate from the global `substrate config …` stack).
+- World-deps must **only show and act on tools that are configured/selected**.
+- If no world-deps selection config exists, world-deps must **report “not configured” and do nothing**.
+- World-deps configuration and UX must live behind `substrate world …` and must not use the global `substrate config …` stack.
 
-### 1.3 Runtime config format split (TOML vs YAML)
+### 1.3 Runtime settings format: YAML-only
 
-Current reality:
-- TOML for the layered runtime config stack:
-  - `~/.substrate/config.toml`
-  - `.substrate/settings.toml`
-  - CLI `substrate config init/show/set`
-- YAML for runtime manifests and policies:
-  - `config/manager_hooks.yaml`, `~/.substrate/manager_hooks.local.yaml`
-  - `scripts/substrate/world-deps.yaml`, `~/.substrate/world-deps.local.yaml`
-  - `.substrate/policy.yaml`, `~/.substrate/policy.yaml`, profile defaults
+Runtime settings are YAML-only (Y0):
+- Global config: `~/.substrate/config.yaml`
+- Workspace settings: `.substrate/settings.yaml`
+- CLI: `substrate config init/show/set`
 
-We want to standardize to **one** format for Substrate-owned runtime config/manifests/policies.
-No dual-format support is desired for this migration (to avoid long-term complexity).
+TOML settings files are unsupported after Y0:
+- `~/.substrate/config.toml`
+- `.substrate/settings.toml`
 
 Note: Lima templates remain YAML due to external tooling expectations.
 
@@ -82,7 +77,7 @@ On Linux, “world” provides isolation using overlay/copy-diff and other primi
 fully remap the process’s filesystem root (no pivot_root/chroot), and “caging” for the interactive shell
 was primarily a `cd` guard.
 
-Consequence: even if the project is mounted read-only through overlay/copy-diff, a process could still write
+Consequence: even if the project is mounted read-only through overlay/copy-diff, a process can still write
 into the host project directory by using an absolute path (e.g., `touch /home/user/project/file`), bypassing
 the overlay root anchored at the current working directory.
 
@@ -96,16 +91,20 @@ This ADR contains multiple related decisions. Each decision lists its status.
 
 ### D1 — World-deps must be selection-driven (and no-op when unconfigured)
 
-Status: Proposed (design agreed; implementation pending)
+Status: Accepted
 
 Decision:
 - Keep a **canonical inventory** sourced from `config/manager_hooks.yaml`.
-- Introduce a **separate selection config** (an allowlist) that determines what `world deps` commands show and
-  act on.
-- If no selection config exists, `substrate world deps status/install/sync` should:
-  - print a short “not configured” message
-  - exit successfully (no side effects)
-  - optionally mention how to configure (`substrate world deps init` / `... select ...`)
+- Introduce a **separate selection config** (an allowlist) that determines what `world deps` commands show and act on.
+- Selection filename is fixed: `world-deps.selection.yaml`.
+- Selection paths are fixed:
+  - `.substrate/world-deps.selection.yaml` (workspace)
+  - `~/.substrate/world-deps.selection.yaml` (global)
+- Precedence is fixed: workspace overrides global.
+- If no selection config exists, `substrate world deps status|install|sync|provision` must:
+  - print one prominent “not configured (selection file missing)” line plus next steps
+  - exit `0`
+  - perform no side effects, including no world backend calls
 
 Rationale:
 - Inventory is “what Substrate *can* manage”; selection is “what the operator *wants* Substrate to manage”.
@@ -114,39 +113,29 @@ Rationale:
 
 ### D2 — World-deps selection config must not be confusing to users
 
-Status: Proposed (naming/path pending)
+Status: Accepted
 
 Decision:
 - Do not rely on “same base name, one-character extension differences” to distinguish files (too easy to
   confuse during manual edits and support).
 - Prefer distinct names for distinct concepts (inventory vs selection vs overlay).
 
-Concrete naming proposal (recommended):
+Concrete naming (fixed):
 - Canonical inventory: `config/manager_hooks.yaml` (existing)
 - Manifest overlay(s): `scripts/substrate/world-deps.yaml` (installed) and `~/.substrate/world-deps.local.yaml`
   (user overlay) (existing)
-- Selection config (new): `~/.substrate/world-deps.yaml` **or** `~/.substrate/world-deps.selection.yaml`
+- Selection config (new): `world-deps.selection.yaml`
+  - Workspace: `.substrate/world-deps.selection.yaml`
+  - Global: `~/.substrate/world-deps.selection.yaml`
 
-Notes:
-- The originally proposed `~/.substrate/world-deps.yaml` does not path-collide with the installed overlay,
-  but it may still be confusing because the name is extremely close to `world-deps.local.yaml`.
-- If we want the clearest UX, prefer `world-deps.selection.yaml` for selection and reserve `world-deps*.yaml`
-  for overlays only.
+### D3 — Runtime settings format is YAML-only
 
-### D3 — Pick a single runtime config format (YAML-only vs TOML-only)
-
-Status: Open (research item; no decision yet)
+Status: Accepted (implemented in Y0)
 
 Decision:
-- Choose **one** format for Substrate runtime config/manifests/policies: either YAML-only or TOML-only.
-- Do **not** implement dual-format support.
-- After choosing, create a migration plan and execute it (code + tests + docs).
-
-Evaluation criteria:
-- Amount of refactor: number of crates/files touched, tests updated, downstream script/tool impacts.
-- Risk surface: parsing/schema validation complexity, error messages, and migration cost.
-- Operator ergonomics: editing, comments, anchors/includes (YAML), typing and tooling (TOML), clarity for policies.
-- External constraints: Lima YAML templates remain YAML regardless.
+- Substrate-owned runtime settings must be YAML-only with no dual-format support.
+- TOML runtime settings files are unsupported.
+- The authoritative spec for this migration is `docs/project_management/next/yaml-settings-migration/Y0-spec.md`.
 
 ### D4 — `.substrate-profile` schema is greenfield (strict + versioned)
 
@@ -155,9 +144,8 @@ Status: Accepted (greenfield; backward-compat not a goal)
 Decision:
 - Substrate policy/profile schema is treated as **greenfield**: backward compatibility with legacy keys or
   older profiles is **not** a priority.
-- We should still be resilient in the face of partial configs (good error messages; no silent fallback to a
-  permissive mode), but we can introduce **breaking schema changes** as we converge on the final model.
-- Filesystem control must remain first-class (including path-level allow/deny), but it should be expressed in
+- The system must fail with actionable diagnostics for missing/invalid fields; it must not silently fall back to a permissive mode.
+- Filesystem control must remain first-class (including path-level allow/deny), and it must be expressed in
   the unified model (see §4.3) rather than as legacy compatibility keys.
 
 ### D5 — Fail-closed for requested security guarantees
@@ -166,10 +154,8 @@ Status: Implemented for “project read-only overlay enforcement”; broader pol
 
 Decision:
 - When a policy requests a guarantee (e.g., read-only project filesystem), and the system cannot enforce it,
-  Substrate should **fail closed** (refuse to run the world path) rather than silently running with weaker
-  protection.
-- For less strict modes (e.g., `writable` where the guarantee is not security-critical), Substrate may still
-  degrade gracefully with warnings.
+  Substrate must **fail closed** (refuse to run the world path) rather than silently running with weaker protection.
+- When a policy does not request a guarantee, Substrate must follow the policy’s explicit `world_fs.require_world` setting (I1).
 
 Rationale:
 - “Secure execution layer” must be reliable. Silent degrade becomes a security bug in an agent-hub context.
@@ -183,11 +169,11 @@ Decision:
   overlay root onto the *real host project directory path* before executing the command.
 - This ensures that absolute paths under the project root resolve into the overlay, matching relative-path
   behavior.
-- If `world_fs_mode: read_only` is requested and this enforcement cannot run, fail closed (D5).
+- If `world_fs.mode=read_only` is requested and this enforcement cannot run, fail closed (D5).
 
 Limitations (explicitly acknowledged):
 - This only fixes escapes **into the project directory**.
-- It does **not** prevent a process from touching other host paths (e.g., `/tmp`, `$HOME/other_project`, etc.).
+- It does **not** prevent a process from touching other host paths (e.g., `/tmp`, `$HOME/other_project`, and other host paths).
   Full caging requires a bigger upgrade (see D7).
 
 ### D7 — Plan “full caging” as a separate hardening milestone
@@ -196,8 +182,9 @@ Status: Proposed (next sprint(s))
 
 Decision:
 - Treat “fail-closed semantics” and “full caging isolation” as separate deliverables:
-  1) **Sprint A: Fail closed** (policy semantics and enforcement checks), without changing isolation mechanics.
-  2) **Sprint B: Full caging** via mount-namespace + pivot_root/minimal rootfs (container-style) and/or Landlock.
+  1) **I1: Fail closed** (policy semantics and enforcement checks).
+  2) **I2/I3: Full caging** via mount-namespace + pivot_root/minimal rootfs (container-style).
+  3) **I4: Landlock** as additive hardening inside a full cage, never as the primary guarantee.
 
 Rationale:
 - Fail-closed stops the most dangerous failure mode (silent downgrade) immediately.
@@ -208,13 +195,11 @@ Rationale:
 Status: Proposed
 
 Decision:
-- Landlock can be added as an additional restriction layer when available (unprivileged path-based sandboxing),
-  but it should not be our only enforcement mechanism:
-  - It is not enabled on all kernels/distros.
-  - It has feature/version variability.
-- A pragmatic plan is:
-  - Implement full caging with mount namespace + pivot_root where available.
-  - Add Landlock as “extra hardening” and/or as a fallback on hosts where pivot_root cannot be used.
+- Landlock is additive hardening only and is never the primary isolation guarantee.
+- When `world_fs.cage=full`, Substrate must:
+  - enforce isolation using mount namespace + `pivot_root` (I2/I3), and
+  - apply Landlock restrictions inside the cage when the kernel supports it (I4).
+- When `world_fs.cage=full` is requested and `pivot_root` cannot be used, Substrate must fail closed (I1); it must not fall back to Landlock-only enforcement.
 
 ### D9 — Documentation must align with actual enforced guarantees
 
@@ -231,11 +216,10 @@ Decision:
 
 ## 3) Implementation Status (as of 2025-12-22)
 
-### 3.1 `.substrate-profile` parsing resilience (Implemented; may be removed)
+### 3.1 `.substrate-profile` parsing resilience (Implemented; removed by I0)
 
-Current code includes serde defaults so minimal profiles parse without requiring all fields, plus a regression
-test. If we decide to enforce a strict schema (recommended for greenfield), we can remove these defaults and
-instead fail loudly with targeted diagnostics.
+Current code includes serde defaults so minimal profiles parse without requiring all fields, plus a regression test.
+I0 removes these defaults and enforces a strict schema with actionable diagnostics.
 
 ### 3.2 Linux: absolute-path project escape mitigation (Implemented)
 
@@ -248,81 +232,29 @@ Implemented the “project bind mount” enforcement:
 
 ### 3.3 World-deps selection layer (Not implemented yet)
 
-The selection-driven design exists as a planning outcome, but it still needs:
-- Config schema and path decision
-- CLI UX (`status`, `sync`, `install`, plus `init/select`)
-- Updated docs and tests
+The selection-driven world-deps model is specified and sequenced:
+- ADR: `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
+- Specs: `docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`, `docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md`, `docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
+- Sequencing: `docs/project_management/next/sequencing.json`
 
 ### 3.4 Runtime format unification (Not started)
 
-Format choice still pending (YAML-only vs TOML-only).
+Runtime settings format is YAML-only and is implemented by Y0:
+- `docs/project_management/next/yaml-settings-migration/Y0-spec.md`
 
 ---
 
-## 4) Proposed UX and Config Design
+## 4) Final UX and schema summary
 
-### 4.1 World-deps: selection config schema (proposal)
+World-deps selection + install-class semantics are finalized in ADR-0002 and its triad specs:
+- `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
+- `docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`
+- `docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md`
+- `docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
 
-Minimal selection file:
-```yaml
-version: 1
-selected:
-  - nvm
-  - pyenv
-  - bun
-```
-
-Optional: include per-tool options that *only* affect world-deps behavior (not global manager manifest):
-```yaml
-version: 1
-selected:
-  - name: nvm
-    enabled: true
-  - name: pyenv
-    enabled: true
-  - name: bun
-    enabled: false
-```
-
-### 4.2 World-deps: command behavior (proposal)
-
-- `substrate world deps status`
-  - If selection config missing: print “world deps not configured” and exit 0.
-  - Otherwise: show only the selected tools (or selected+present subset, depending on `--all`).
-- `substrate world deps sync`
-  - If selection config missing: no-op with message; exit 0.
-  - Otherwise: sync only selected tools by default; `--all` overrides selection (debug/ops flag).
-- `substrate world deps status --all`
-  - Debug/ops mode: include canonical inventory entries even if unselected.
-
-Note: The `--all` semantics must be explicit in help and docs to avoid conflating:
-- “show the canonical inventory” vs
-- “show host-missing managers” vs
-- “ignore selection config”
-
-We should pick one meaning for `--all` and introduce a second flag if needed (e.g. `--inventory`).
-
-### 4.3 Policy: unify filesystem policy and caging knobs (proposal)
-
-Today we have:
-- `world_fs_mode` (new high-level switch)
-- legacy `fs_read`/`fs_write` patterns (path allowlists)
-
-Proposal: unify under a single `world_fs` block (breaking change acceptable):
-```yaml
-world_fs:
-  mode: read_only         # read_only | writable
-  cage: project           # project | full
-  write_allowlist:        # optional; only meaningful when cage=full or for future enforcement
-    - "$PROJECT/**"
-    - "/tmp/**"
-  read_allowlist:
-    - "**"
-```
-
-Migration story:
-- Prefer a single versioned schema and clear error messages (no silent fallback).
-- If we change keys, provide a short migration note in release notes/docs.
+Policy schema is finalized by I0/I1:
+- `docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md`
+- `docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md`
 
 ---
 
@@ -349,7 +281,7 @@ Goal: make the process’s `/` no longer the host’s `/`, so host paths are not
 Conceptual steps:
 - `unshare(CLONE_NEWNS)`; make mounts private.
 - Build a minimal filesystem tree (new root).
-- Bind-mount only the allowed directories (project overlay, `/usr`, `/lib*`, etc.) as needed.
+- Bind-mount only the allowed directories (project overlay, `/usr`, `/lib*`, and other required read-only system mounts) as needed.
 - Mount a fresh `/proc`, a minimal `/dev`, writable `/tmp` (tmpfs).
 - `pivot_root(new_root, new_root/old_root)`; unmount `old_root`.
 
@@ -400,18 +332,15 @@ This keeps us honest about guarantees while improving security steadily.
 
 ---
 
-## 7) Open Questions
+## 7) Resolved alignment points
 
-1) Runtime format choice: YAML-only vs TOML-only (and the migration mechanics).
-2) World-deps selection config naming: `world-deps.yaml` vs `world-deps.selection.yaml`.
-3) Exact semantics for `world_fs_mode: read_only`:
-   - Does it imply only “project read-only”, or should it imply “full cage + read-only”?
-4) Cross-distro constraints:
-   - How do we detect and communicate “unshare/mount namespace/pivot_root not allowed”?
-   - What is the correct fallback ladder (pivot_root vs Landlock vs best-effort)?
-5) Docs alignment:
-   - `docs/VISION.md` includes examples of `fs_read/fs_write` that imply enforcement; we need to ensure the
-     docs are accurate at each phase.
+1) Runtime settings format is YAML-only (Y0) with no dual-format support.
+2) World-deps selection config naming is fixed to `world-deps.selection.yaml` (ADR-0002).
+3) `world_fs.mode=read_only` means “project is read-only”; `world_fs.cage` controls whether only the project path is protected (`project`) or whether the process is fully caged (`full`) (I0/I1/I2/I3).
+4) Full-cage fallback ladder is explicit:
+   - If `world_fs.cage=full` is requested and cannot be enforced, Substrate fails closed (I1).
+   - Landlock is additive hardening only and never a fallback for full cage (I4).
+5) Docs alignment is owned by I5, and documentation must match actual enforced guarantees.
 
 ---
 

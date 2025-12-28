@@ -41,9 +41,7 @@ fn init_windows_world(config: &ShellConfig) {
 
     match pw::detect() {
         Ok(ctx) => {
-            if let Err(e) = (ctx.ensure_ready)() {
-                eprintln!("substrate: windows world ensure_ready failed: {:#}", e);
-            } else {
+            if (ctx.ensure_ready)().is_ok() {
                 env::set_var("SUBSTRATE_WORLD", "enabled");
                 if let Ok(handle) = ctx.backend.ensure_session(&pw::windows::world_spec()) {
                     env::set_var("SUBSTRATE_WORLD_ID", handle.id);
@@ -51,9 +49,7 @@ fn init_windows_world(config: &ShellConfig) {
             }
             pw::store_context_globally(ctx);
         }
-        Err(e) => {
-            eprintln!("substrate: windows world detection failed: {}", e);
-        }
+        Err(_e) => {}
     }
 }
 
@@ -71,10 +67,7 @@ fn init_macos_world(config: &ShellConfig) {
 
     match pw::detect() {
         Ok(ctx) => {
-            if let Err(e) = (ctx.ensure_ready)() {
-                // Degrade silently if ensure_ready fails
-                eprintln!("substrate: mac world ensure_ready failed: {}", e);
-            } else {
+            if (ctx.ensure_ready)().is_ok() {
                 // Set parity with Linux: world enabled + ID only
                 env::set_var("SUBSTRATE_WORLD", "enabled");
 
@@ -95,10 +88,7 @@ fn init_macos_world(config: &ShellConfig) {
             }
             pw::store_context_globally(ctx);
         }
-        Err(e) => {
-            // Degrade silently on mac as well
-            eprintln!("substrate: mac world detection failed: {}", e);
-        }
+        Err(_e) => {}
     }
 }
 

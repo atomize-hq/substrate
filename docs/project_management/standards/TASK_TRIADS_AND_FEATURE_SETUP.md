@@ -7,6 +7,7 @@ This document explains, step by step, how to create a new feature directory, def
 - Code agent: production code only. No tests. Runs `cargo fmt` and `cargo clippy --workspace --all-targets -- -D warnings`. Optional targeted/manual sanity checks are allowed but not required. No unit/integration suite requirement.
 - Test agent: tests only (plus minimal test-only helpers if absolutely needed). No production code. Runs `cargo fmt` and the targeted tests they add/touch; not responsible for full suite.
 - Integration agent: merges code+tests, resolves drift to the spec, ensures behavior matches the spec, runs `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, all relevant tests, and finishes with `make preflight` (required). They own the final green state.
+- Execution triads must not begin until the Planning Pack has a quality gate report with `RECOMMENDATION: ACCEPT` at `docs/project_management/next/<feature>/quality_gate_report.md` (see `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`).
 - Docs/tasks/session log edits happen **only** on the orchestration branch (never in worktrees).
 - Specs are the single source of truth; integration reconciles code/tests to the spec.
 
@@ -115,6 +116,7 @@ End (integration):
 - Code: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; optional targeted/manual sanity checks allowed but not required; no unit/integration suite requirement.
 - Test: `cargo fmt`; targeted `cargo test ...` for tests added/modified; no production code; no responsibility for full suite.
 - Integration: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; run relevant tests (at least new/affected suites) and finish with `make preflight` (required full-suite gate). Integration must reconcile code/tests to the spec.
+  - If the feature includes a manual validation playbook and smoke scripts (see `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`), integration must run the relevant platform smoke scripts under `docs/project_management/next/<feature>/smoke/` and record results in the feature `session_log.md`.
 
 ## Context Budget & Triad Sizing
 - Agents typically have a 272k token context window. Size each task so a single agent needs no more than ~40–50% of that window (roughly 110–150k tokens) to hold the spec, plan, code/tests, and recent history.

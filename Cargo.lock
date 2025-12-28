@@ -4684,6 +4684,7 @@ dependencies = [
  "dns-lookup",
  "libc",
  "libseccomp",
+ "linux-raw-sys 0.4.15",
  "nix 0.27.1",
  "prctl",
  "serde",

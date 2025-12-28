@@ -2,7 +2,11 @@
 
 use crate::service::WorldAgentService;
 #[cfg(target_os = "linux")]
-use crate::service::{resolve_project_dir, WORLD_FS_MODE_ENV};
+use crate::service::{
+    is_full_cage, resolve_landlock_allowlist_paths, resolve_project_dir,
+    resolve_project_write_allowlist_prefixes, WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV,
+    WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV, WORLD_FS_MODE_ENV, WORLD_FS_WRITE_ALLOWLIST_ENV,
+};
 use axum::extract::ws::{Message, WebSocket};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use futures_util::stream::SplitSink;
@@ -14,8 +18,12 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+#[cfg(target_os = "linux")]
+use tracing::warn;
 use tracing::{error, info};
 // no atomic imports needed here
+#[cfg(target_os = "linux")]
+use world::exec::PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT;
 #[cfg(target_os = "linux")]
 use world::guard::{should_guard_anchor, wrap_with_anchor_guard};
 #[cfg(target_os = "linux")]
@@ -196,7 +204,9 @@ pub async fn handle_ws_pty(
     #[cfg(not(target_os = "linux"))]
     let env = env_map;
     #[cfg(target_os = "linux")]
-    let mut command_to_run = cmd.clone();
+    let mut inner_cmd = cmd.clone();
+    #[cfg(target_os = "linux")]
+    let command_to_run: String;
     #[cfg(not(target_os = "linux"))]
     let command_to_run = cmd.clone();
     #[cfg(target_os = "linux")]
@@ -242,10 +252,52 @@ pub async fn handle_ws_pty(
                 return;
             }
         };
+        let cage_full = is_full_cage(Some(&env));
         let fs_mode = env
             .get(WORLD_FS_MODE_ENV)
             .and_then(|value| WorldFsMode::parse(value))
             .unwrap_or(WorldFsMode::Writable);
+
+        if cage_full {
+            if let Err(e) = substrate_broker::detect_profile(&cwd) {
+                warn!(
+                    error = %e,
+                    cwd = %cwd.display(),
+                    "world-agent: failed to detect policy profile for PTY request"
+                );
+            }
+            let world_fs = substrate_broker::world_fs_policy();
+            let landlock_read_paths =
+                resolve_landlock_allowlist_paths(&project_dir, &world_fs.read_allowlist);
+            let landlock_write_paths =
+                resolve_landlock_allowlist_paths(&project_dir, &world_fs.write_allowlist);
+            let prefixes =
+                resolve_project_write_allowlist_prefixes(&project_dir, &world_fs.write_allowlist);
+            if !prefixes.is_empty() {
+                env.insert(
+                    WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(),
+                    prefixes.join("\n"),
+                );
+            }
+            if !landlock_read_paths.is_empty() {
+                env.insert(
+                    WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string(),
+                    landlock_read_paths.join("\n"),
+                );
+            }
+            if !landlock_write_paths.is_empty() {
+                env.insert(
+                    WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV.to_string(),
+                    landlock_write_paths.join("\n"),
+                );
+            }
+
+            if let Ok(exe) = std::env::current_exe() {
+                env.entry("SUBSTRATE_LANDLOCK_HELPER_SRC".to_string())
+                    .or_insert_with(|| exe.display().to_string());
+            }
+        }
+
         let spec = WorldSpec {
             reuse_session: true,
             isolate_network: true,
@@ -287,7 +339,6 @@ pub async fn handle_ws_pty(
         cwd_for_child = PathBuf::from("/");
         anchor_root = project_dir.clone();
 
-        // Bind-mount overlay root onto the real project path so absolute paths see the overlay.
         let desired_cwd = if cwd.starts_with(&project_dir) {
             cwd.clone()
         } else {
@@ -311,20 +362,28 @@ pub async fn handle_ws_pty(
         );
 
         if should_guard_anchor(&env) {
-            command_to_run = wrap_with_anchor_guard(&command_to_run, &anchor_root);
+            inner_cmd = wrap_with_anchor_guard(&inner_cmd, &anchor_root);
         }
-        env.insert("SUBSTRATE_INNER_CMD".to_string(), command_to_run.clone());
+        env.insert("SUBSTRATE_INNER_CMD".to_string(), inner_cmd);
+        env.insert("SUBSTRATE_INNER_LOGIN_SHELL".to_string(), "1".to_string());
 
-        command_to_run = r#"set -eu
-mount --make-rprivate /
-mount --bind "$SUBSTRATE_MOUNT_MERGED_DIR" "$SUBSTRATE_MOUNT_PROJECT_DIR"
-if [ "${SUBSTRATE_MOUNT_FS_MODE:-writable}" = "read_only" ]; then
-  mount -o remount,bind,ro "$SUBSTRATE_MOUNT_PROJECT_DIR"
-fi
-cd "$SUBSTRATE_MOUNT_CWD"
-exec sh -lc "$SUBSTRATE_INNER_CMD"
-"#
-        .to_string();
+        if cage_full {
+            env.insert("HOME".to_string(), "/tmp/substrate-home".to_string());
+            env.insert(
+                "XDG_CACHE_HOME".to_string(),
+                "/tmp/substrate-xdg/cache".to_string(),
+            );
+            env.insert(
+                "XDG_CONFIG_HOME".to_string(),
+                "/tmp/substrate-xdg/config".to_string(),
+            );
+            env.insert(
+                "XDG_DATA_HOME".to_string(),
+                "/tmp/substrate-xdg/data".to_string(),
+            );
+        }
+
+        command_to_run = PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT.to_string();
     }
 
     // Create PTY
@@ -349,25 +408,40 @@ exec sh -lc "$SUBSTRATE_INNER_CMD"
     };
 
     #[cfg(target_os = "linux")]
-    let mut cmd_builder = if let Some(ref ns_name) = ns_name_opt {
-        let mut builder = CommandBuilder::new("ip");
-        builder.args([
-            "netns",
-            "exec",
-            ns_name,
-            "unshare",
-            "--mount",
-            "--fork",
-            "--",
-            "sh",
-            "-c",
-            &command_to_run,
-        ]);
-        builder
-    } else {
-        let mut builder = CommandBuilder::new("unshare");
-        builder.args(["--mount", "--fork", "--", "sh", "-c", &command_to_run]);
-        builder
+    let mut cmd_builder = {
+        let needs_userns = unsafe { libc::geteuid() != 0 };
+
+        if let Some(ref ns_name) = ns_name_opt {
+            let mut builder = CommandBuilder::new("ip");
+            builder.arg("netns");
+            builder.arg("exec");
+            builder.arg(ns_name);
+            builder.arg("unshare");
+            builder.arg("--mount");
+            builder.arg("--fork");
+            if needs_userns {
+                builder.arg("--user");
+                builder.arg("--map-root-user");
+            }
+            builder.arg("--");
+            builder.arg("sh");
+            builder.arg("-c");
+            builder.arg(&command_to_run);
+            builder
+        } else {
+            let mut builder = CommandBuilder::new("unshare");
+            builder.arg("--mount");
+            builder.arg("--fork");
+            if needs_userns {
+                builder.arg("--user");
+                builder.arg("--map-root-user");
+            }
+            builder.arg("--");
+            builder.arg("sh");
+            builder.arg("-c");
+            builder.arg(&command_to_run);
+            builder
+        }
     };
     #[cfg(not(target_os = "linux"))]
     let mut cmd_builder = {

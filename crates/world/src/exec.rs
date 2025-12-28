@@ -68,6 +68,147 @@ pub struct ProjectBindMount<'a> {
     pub fs_mode: WorldFsMode,
 }
 
+pub const PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT: &str = r#"set -eu
+set -f
+
+mount --make-rprivate / 2>/dev/null || mount --make-private / 2>/dev/null || true
+
+if [ "${SUBSTRATE_WORLD_FS_CAGE:-project}" = "full" ]; then
+  new_root="$(mktemp -d /tmp/substrate-full-cage.XXXXXX)"
+
+  # Ensure new_root is a mountpoint (required by pivot_root).
+  mount --bind "$new_root" "$new_root"
+  mkdir -p "$new_root/old_root"
+
+  bind_ro() {
+    src="$1"
+    dst="$2"
+    if [ -e "$src" ]; then
+      mkdir -p "$dst"
+      mount --rbind "$src" "$dst"
+      mount -o remount,bind,ro "$dst"
+    fi
+  }
+
+  # Minimal system mounts.
+  bind_ro /usr "$new_root/usr"
+  bind_ro /bin "$new_root/bin"
+  bind_ro /lib "$new_root/lib"
+  bind_ro /lib64 "$new_root/lib64"
+  bind_ro /etc "$new_root/etc"
+
+  # /dev: bind-mounted read-only.
+  mkdir -p "$new_root/dev"
+  mount --rbind /dev "$new_root/dev"
+  mount -o remount,bind,ro "$new_root/dev"
+
+  # /var/lib/substrate/world-deps: bind-mounted read-write.
+  mkdir -p /var/lib/substrate/world-deps
+  mkdir -p "$new_root/var/lib/substrate/world-deps"
+  mount --rbind /var/lib/substrate/world-deps "$new_root/var/lib/substrate/world-deps"
+
+  # Fresh /proc and writable /tmp.
+  #
+  # Note: /tmp is a tmpfs in full-cage mode. This must be mounted before binding the project
+  # into its host-absolute path. Otherwise, when the host project lives under /tmp, the tmpfs
+  # mount would cover that project bind mount and `cd $SUBSTRATE_MOUNT_CWD` would fail.
+  mkdir -p "$new_root/proc"
+  mount -t proc proc "$new_root/proc"
+
+  mkdir -p "$new_root/tmp"
+  mount -t tmpfs tmpfs "$new_root/tmp"
+  chmod 1777 "$new_root/tmp" || true
+
+  # Project mount points: stable (/project) and host-absolute ($SUBSTRATE_MOUNT_PROJECT_DIR).
+  mkdir -p "$new_root/project"
+  mount --bind "$SUBSTRATE_MOUNT_MERGED_DIR" "$new_root/project"
+
+  mkdir -p "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR"
+  mount --bind "$SUBSTRATE_MOUNT_MERGED_DIR" "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR"
+
+  # Ensure allowlisted writable prefixes exist before we remount the project read-only.
+  if [ "${SUBSTRATE_MOUNT_FS_MODE:-writable}" != "read_only" ] && [ -n "${SUBSTRATE_WORLD_FS_WRITE_ALLOWLIST:-}" ]; then
+    oldIFS=$IFS
+    IFS='
+'
+    for rel in $SUBSTRATE_WORLD_FS_WRITE_ALLOWLIST; do
+      [ -z "$rel" ] && continue
+      case "$rel" in
+        /*) continue ;;
+      esac
+      case "/$rel/" in
+        */../*) continue ;;
+      esac
+      [ "$rel" = "." ] && continue
+      mkdir -p "$new_root/project/$rel"
+      mkdir -p "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR/$rel"
+    done
+    IFS=$oldIFS
+  fi
+
+  # Project is read-only by default; remount allowlisted prefixes writable.
+  mount -o remount,bind,ro "$new_root/project"
+  mount -o remount,bind,ro "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR"
+
+  if [ "${SUBSTRATE_MOUNT_FS_MODE:-writable}" != "read_only" ] && [ -n "${SUBSTRATE_WORLD_FS_WRITE_ALLOWLIST:-}" ]; then
+    oldIFS=$IFS
+    IFS='
+'
+    for rel in $SUBSTRATE_WORLD_FS_WRITE_ALLOWLIST; do
+      [ -z "$rel" ] && continue
+      case "$rel" in
+        /*) continue ;;
+      esac
+      case "/$rel/" in
+        */../*) continue ;;
+      esac
+      if [ "$rel" = "." ]; then
+        mount -o remount,bind,rw "$new_root/project"
+        mount -o remount,bind,rw "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR"
+        continue
+      fi
+      mount --bind "$new_root/project/$rel" "$new_root/project/$rel"
+      mount -o remount,bind,rw "$new_root/project/$rel"
+      mount --bind "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR/$rel" "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR/$rel"
+      mount -o remount,bind,rw "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR/$rel"
+    done
+    IFS=$oldIFS
+  fi
+
+  # Optional: bind-mount the host world-agent binary into the cage so it can apply Landlock
+  # restrictions before executing the command.
+  if [ -n "${SUBSTRATE_LANDLOCK_HELPER_SRC:-}" ] && [ -e "${SUBSTRATE_LANDLOCK_HELPER_SRC:-}" ]; then
+    touch "$new_root/substrate-landlock-helper" 2>/dev/null || true
+    mount --bind "$SUBSTRATE_LANDLOCK_HELPER_SRC" "$new_root/substrate-landlock-helper" 2>/dev/null || true
+    mount -o remount,bind,ro "$new_root/substrate-landlock-helper" 2>/dev/null || true
+    export SUBSTRATE_LANDLOCK_HELPER_PATH="/substrate-landlock-helper"
+  fi
+
+  pivot_root "$new_root" "$new_root/old_root"
+  cd /
+  umount -l /old_root 2>/dev/null || true
+  rmdir /old_root 2>/dev/null || true
+
+  mkdir -p "${HOME:-/tmp/substrate-home}" 2>/dev/null || true
+
+else
+  mount --bind "$SUBSTRATE_MOUNT_MERGED_DIR" "$SUBSTRATE_MOUNT_PROJECT_DIR"
+  if [ "${SUBSTRATE_MOUNT_FS_MODE:-writable}" = "read_only" ]; then
+    mount -o remount,bind,ro "$SUBSTRATE_MOUNT_PROJECT_DIR"
+  fi
+fi
+
+cd "$SUBSTRATE_MOUNT_CWD"
+if [ -n "${SUBSTRATE_LANDLOCK_HELPER_PATH:-}" ] && [ -x "${SUBSTRATE_LANDLOCK_HELPER_PATH}" ]; then
+  exec "$SUBSTRATE_LANDLOCK_HELPER_PATH" "__substrate_world_landlock_exec"
+fi
+if [ "${SUBSTRATE_INNER_LOGIN_SHELL:-0}" = "1" ]; then
+  exec sh -lc "$SUBSTRATE_INNER_CMD"
+else
+  exec sh -c "$SUBSTRATE_INNER_CMD"
+fi
+"#;
+
 pub fn execute_shell_command_with_project_bind_mount(
     cmd: &str,
     mount: ProjectBindMount<'_>,
@@ -88,26 +229,18 @@ pub fn execute_shell_command_with_project_bind_mount(
     #[cfg(target_os = "linux")]
     {
         use nix::unistd::Uid;
+        #[cfg(unix)]
+        use std::os::unix::process::ExitStatusExt;
 
-        // Outer script: establish a private mount namespace, bind the overlay root onto the
-        // project path, optionally remount read-only, then cd into the desired cwd and exec the
-        // requested command via sh.
+        // Outer script: establish a private mount namespace, then either:
+        // - cage=project: bind the overlay merged root onto the host project path to prevent
+        //   absolute-path escapes back into the host project, or
+        // - cage=full: build a minimal rootfs, bind-mount only the allowed paths, then pivot_root
+        //   so host paths are no longer nameable.
         //
         // We avoid setting the child's cwd via Command::current_dir() because holding an inode
         // reference into the host project dir would bypass the bind mount (absolute-path escape).
-        let script = r#"set -eu
-mount --make-rprivate /
-mount --bind "$SUBSTRATE_MOUNT_MERGED_DIR" "$SUBSTRATE_MOUNT_PROJECT_DIR"
-if [ "${SUBSTRATE_MOUNT_FS_MODE:-writable}" = "read_only" ]; then
-  mount -o remount,bind,ro "$SUBSTRATE_MOUNT_PROJECT_DIR"
-fi
-cd "$SUBSTRATE_MOUNT_CWD"
-if [ "${SUBSTRATE_INNER_LOGIN_SHELL:-0}" = "1" ]; then
-  exec sh -lc "$SUBSTRATE_INNER_CMD"
-else
-  exec sh -c "$SUBSTRATE_INNER_CMD"
-fi
-"#;
+        let script = PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT;
 
         let mut env_map = env.clone();
         env_map.insert(
@@ -136,6 +269,25 @@ fi
             },
         );
 
+        let cage_full = env_map
+            .get("SUBSTRATE_WORLD_FS_CAGE")
+            .is_some_and(|raw| raw.trim().eq_ignore_ascii_case("full"));
+        if cage_full {
+            env_map.insert("HOME".to_string(), "/tmp/substrate-home".to_string());
+            env_map.insert(
+                "XDG_CACHE_HOME".to_string(),
+                "/tmp/substrate-xdg/cache".to_string(),
+            );
+            env_map.insert(
+                "XDG_CONFIG_HOME".to_string(),
+                "/tmp/substrate-xdg/config".to_string(),
+            );
+            env_map.insert(
+                "XDG_DATA_HOME".to_string(),
+                "/tmp/substrate-xdg/data".to_string(),
+            );
+        }
+
         let mut command = Command::new("unshare");
         command.arg("--mount");
         command.arg("--fork");
@@ -155,9 +307,22 @@ fi
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
 
-        let mut child = command
-            .spawn()
-            .with_context(|| format!("Failed to spawn command: {cmd}"))?;
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(err) => {
+                if cage_full {
+                    let message = format!(
+                        "substrate: error: world_fs.cage=full requested but failed to spawn unshare wrapper: {err}\n"
+                    );
+                    return Ok(Output {
+                        status: std::process::ExitStatus::from_raw(126 << 8),
+                        stdout: Vec::new(),
+                        stderr: message.into_bytes(),
+                    });
+                }
+                return Err(err).with_context(|| format!("Failed to spawn command: {cmd}"));
+            }
+        };
 
         let stdout = child
             .stdout
@@ -176,7 +341,19 @@ fi
             .context("Failed to wait for child process completion")?;
 
         let stdout_buf = join_reader(stdout_handle, "stdout");
-        let stderr_buf = join_reader(stderr_handle, "stderr");
+        let mut stderr_buf = join_reader(stderr_handle, "stderr");
+
+        if cage_full && !status.success() {
+            if let Ok(stderr_str) = std::str::from_utf8(&stderr_buf) {
+                if stderr_str.starts_with("unshare:") {
+                    let mut wrapped = Vec::new();
+                    wrapped.extend_from_slice(b"substrate: error: world_fs.cage=full requested but failed to enter a mount namespace (unshare).\n");
+                    wrapped.extend_from_slice(b"substrate: hint: run with CAP_SYS_ADMIN (root) or enable unprivileged user namespaces (kernel.unprivileged_userns_clone=1).\n");
+                    wrapped.extend_from_slice(stderr_buf.as_slice());
+                    stderr_buf = wrapped;
+                }
+            }
+        }
 
         Ok(Output {
             status,

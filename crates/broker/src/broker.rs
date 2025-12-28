@@ -1,7 +1,7 @@
 //! Core broker state and policy evaluation logic.
 
 use crate::approval::{self, ApprovalCache, ApprovalContext, ApprovalStatus};
-use crate::policy::{Decision, Policy, Restriction, RestrictionType};
+use crate::policy::{Decision, Policy, Restriction, RestrictionType, WorldFsPolicy};
 use crate::policy_loader::load_policy_from_path;
 use crate::profile::ProfileDetector;
 use anyhow::Result;
@@ -169,6 +169,13 @@ impl Broker {
             return WorldFsMode::Writable;
         };
         policy.world_fs_mode
+    }
+
+    pub fn world_fs_policy(&self) -> WorldFsPolicy {
+        let Ok(policy) = self.policy.read() else {
+            return Policy::default().world_fs_policy();
+        };
+        policy.world_fs_policy()
     }
 
     fn check_approval(&self, cmd: &str) -> Result<ApprovalStatus> {

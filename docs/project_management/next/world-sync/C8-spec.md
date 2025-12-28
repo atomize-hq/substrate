@@ -1,22 +1,20 @@
-# C8-spec: World-side Internal Git Bootstrap/Bridge
+# C8-spec: World-side Handling of `.substrate-git`
 
 ## Scope
-- Ensure the world environment has access to `.substrate-git`:
-  - Create/clone a world-side `.substrate-git/.git` (lazy on first world session) using the host repo as source (or initialize if missing).
-  - Keep world commits aligned with host by mirroring Substrate commits (push/pull or shared bare repo) so rollback/checkpoint references remain valid in both environments.
-- Agent/world enforcement:
-  - World commands that rely on internal git should fail with a clear error if the world repo cannot be prepared.
-  - Protect user `.git` inside the world (no accidental use).
-- Sync interactions:
-  - World-side commits should be recorded for world→host applies; host should see aligned commit ids (or mapping) after sync.
-  - Document/emit logs when world-side git falls back to a degraded mode.
+- Define the world-side contract for `.substrate-git` in a world-sync workspace.
+- Ensure user commands running inside a world do not mutate internal git state.
+
+## Contract (must be enforced)
+- `.substrate-git/` is a protected path for sync and must never be applied as part of host↔world sync in any direction.
+- Internal git operations are host-only:
+  - `substrate checkpoint` and `substrate rollback` run on the host and use the host internal git directory created by C0/C6.
+  - World execution paths must not create, mutate, or depend on `.substrate-git/` contents.
+- If a world execution path cannot avoid touching `.substrate-git/`, it must fail closed with an explicit error and must perform no mutations.
 
 ## Acceptance
-- On first world session after init, a world `.substrate-git` exists and is tied to the host’s internal repo (clone/mirror/shared bare).
-- World operations that need internal git succeed when available; otherwise surface clear errors without mutating host.
-- Commit alignment: Substrate-created commits are visible/usable from both host and world (either same hash via mirror/shared repo or a stable mapping).
-- User `.git` is never touched inside the world; `.substrate-git` remains isolated.
+- World-side executions do not create or modify `.substrate-git/` files.
+- `substrate sync` never applies diffs that touch `.substrate-git/` in any direction; the command exits non-zero with an explicit message if only protected paths are present in the diff.
+- `substrate checkpoint` and `substrate rollback` operate on the host internal git only and never require world backend availability.
 
 ## Out of Scope
-- Rollback CLI changes (handled in C7).
-- Init UX (handled in C9).
+- Any world-side internal git mirroring or commit alignment.

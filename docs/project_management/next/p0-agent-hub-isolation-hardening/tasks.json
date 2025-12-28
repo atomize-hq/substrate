@@ -1,0 +1,1293 @@
+{
+  "tasks": [
+    {
+      "id": "I0-code",
+      "name": "Strict policy schema (world_fs v1) (code)",
+      "type": "code",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Implement a strict, versioned world_fs policy schema with strong validation and broker outputs required for enforcement.",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md",
+        "crates/broker/src/policy.rs",
+        "crates/broker/src/profile.rs",
+        "crates/broker/src/policy_loader.rs",
+        "crates/shell/src/execution/routing/dispatch/exec.rs"
+      ],
+      "acceptance_criteria": [
+        "world_fs schema (mode/cage/read_allowlist/write_allowlist) is parsed and validated with clear errors on missing/invalid fields.",
+        "Legacy keys are rejected or explicitly handled per spec (default: reject with diagnostic).",
+        "Broker output includes the fields needed to drive shell/world enforcement decisions."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I0-code to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i0-policy-schema-code",
+        "Create worktree wt/ahih-i0-policy-schema-code from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i0-policy-schema-code",
+      "integration_task": "I0-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I0-code.md",
+      "depends_on": [],
+      "concurrent_with": [
+        "I0-test"
+      ]
+    },
+    {
+      "id": "I0-test",
+      "name": "Strict policy schema (world_fs v1) (test)",
+      "type": "test",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Add unit/integration tests covering world_fs parsing, validation, and error messaging.",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md",
+        "crates/broker/src/policy.rs",
+        "crates/broker/src/tests.rs",
+        "crates/broker/src/profile.rs"
+      ],
+      "acceptance_criteria": [
+        "Tests cover missing world_fs, invalid mode/cage, and valid minimal examples.",
+        "Tests assert errors are actionable (mention required fields / allowed values)."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I0-test to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i0-policy-schema-test",
+        "Create worktree wt/ahih-i0-policy-schema-test from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run targeted cargo test (broker/policy/profile)",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i0-policy-schema-test",
+      "integration_task": "I0-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I0-test.md",
+      "depends_on": [],
+      "concurrent_with": [
+        "I0-code"
+      ]
+    },
+    {
+      "id": "I0-integ",
+      "name": "Strict policy schema (world_fs v1) (integration)",
+      "type": "integration",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Merge I0 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+        "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "Behavior matches I0-spec on all supported platforms (platform guards as needed).",
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I0-integ to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i0-policy-schema-integ",
+        "Create worktree wt/ahih-i0-policy-schema-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge ahih-i0-policy-schema-code and ahih-i0-policy-schema-test into integration worktree",
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant cargo test suites",
+        "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
+        "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i0-policy-schema-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I0-integ.md",
+      "depends_on": [
+        "I0-code",
+        "I0-test"
+      ],
+      "concurrent_with": []
+    },
+
+    {
+      "id": "I1-code",
+      "name": "Fail-closed semantics (code)",
+      "type": "code",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Implement fail-closed routing when policy requires world enforcement (no host fallback).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md",
+        "crates/shell/src/execution/routing/dispatch/exec.rs",
+        "crates/shell/src/execution/routing/dispatch/pty.rs",
+        "crates/broker/src/policy.rs",
+        "crates/world-backend-factory"
+      ],
+      "acceptance_criteria": [
+        "When world is required and backend unavailable, shell refuses to execute on host with a clear error.",
+        "When `world_fs.require_world=false` and backend unavailable, existing warn-once host fallback remains."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I1-code to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i1-fail-closed-code",
+        "Create worktree wt/ahih-i1-fail-closed-code from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i1-fail-closed-code",
+      "integration_task": "I1-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I1-code.md",
+      "depends_on": [
+        "I0-integ"
+      ],
+      "concurrent_with": [
+        "I1-test"
+      ]
+    },
+    {
+      "id": "I1-test",
+      "name": "Fail-closed semantics (test)",
+      "type": "test",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Add integration tests proving no host fallback occurs when world is required.",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md",
+        "crates/shell/tests",
+        "crates/world-agent",
+        "docs/WORLD.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover: `world_fs.require_world=true` + backend unavailable -> error; `world_fs.require_world=false` + backend unavailable -> warning + fallback."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I1-test to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i1-fail-closed-test",
+        "Create worktree wt/ahih-i1-fail-closed-test from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run targeted cargo test suites touched",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i1-fail-closed-test",
+      "integration_task": "I1-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I1-test.md",
+      "depends_on": [
+        "I0-integ"
+      ],
+      "concurrent_with": [
+        "I1-code"
+      ]
+    },
+    {
+      "id": "I1-integ",
+      "name": "Fail-closed semantics (integration)",
+      "type": "integration",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Merge I1 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+        "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "Behavior matches I1-spec; integration owns resolving drift.",
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I1-integ to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i1-fail-closed-integ",
+        "Create worktree wt/ahih-i1-fail-closed-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge ahih-i1-fail-closed-code and ahih-i1-fail-closed-test into integration worktree",
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant cargo test suites",
+        "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
+        "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i1-fail-closed-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I1-integ.md",
+      "depends_on": [
+        "I1-code",
+        "I1-test"
+      ],
+      "concurrent_with": []
+    },
+
+    {
+      "id": "I2-code",
+      "name": "Full cage (non-PTY) pivot_root (code)",
+      "type": "code",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Implement full caging for non-PTY execution using mount namespace + pivot_root (Linux).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md",
+        "crates/world/src/isolation.rs",
+        "crates/world/src/session.rs",
+        "crates/world-agent/src/service.rs",
+        "docs/WORLD.md"
+      ],
+      "acceptance_criteria": [
+        "Full cage mode prevents naming/accessing host paths outside allowed mounts.",
+        "read_only mode prevents project writes (relative and absolute).",
+        "Capability detection fails closed when full cage is required but unavailable."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I2-code to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i2-full-cage-nonpty-code",
+        "Create worktree wt/ahih-i2-full-cage-nonpty-code from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i2-full-cage-nonpty-code",
+      "integration_task": "I2-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I2-code.md",
+      "depends_on": [
+        "I1-integ"
+      ],
+      "concurrent_with": [
+        "I2-test"
+      ]
+    },
+    {
+      "id": "I2-test",
+      "name": "Full cage (non-PTY) pivot_root (test)",
+      "type": "test",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Add tests validating non-PTY full cage behavior and fail-closed handling.",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md",
+        "crates/world/tests",
+        "crates/world-agent/tests"
+      ],
+      "acceptance_criteria": [
+        "Tests validate: cannot touch outside-cage paths when cage=full (skip when privileges unavailable).",
+        "Tests validate: read_only blocks project writes and absolute paths."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I2-test to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i2-full-cage-nonpty-test",
+        "Create worktree wt/ahih-i2-full-cage-nonpty-test from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run targeted cargo test suites touched",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i2-full-cage-nonpty-test",
+      "integration_task": "I2-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I2-test.md",
+      "depends_on": [
+        "I1-integ"
+      ],
+      "concurrent_with": [
+        "I2-code"
+      ]
+    },
+    {
+      "id": "I2-integ",
+      "name": "Full cage (non-PTY) pivot_root (integration)",
+      "type": "integration",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Merge I2 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+        "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "Behavior matches I2-spec; integration owns resolving drift.",
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I2-integ to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i2-full-cage-nonpty-integ",
+        "Create worktree wt/ahih-i2-full-cage-nonpty-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge ahih-i2-full-cage-nonpty-code and ahih-i2-full-cage-nonpty-test into integration worktree",
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant cargo test suites",
+        "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
+        "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i2-full-cage-nonpty-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I2-integ.md",
+      "depends_on": [
+        "I2-code",
+        "I2-test"
+      ],
+      "concurrent_with": []
+    },
+
+    {
+      "id": "I3-code",
+      "name": "Full cage (PTY) parity (code)",
+      "type": "code",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Extend full cage mechanics to PTY execution paths (world-agent stream/REPL).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I3-spec.md",
+        "crates/world-agent/src/pty.rs",
+        "crates/world/src/isolation.rs",
+        "docs/WORLD.md"
+      ],
+      "acceptance_criteria": [
+        "PTY child enters full cage before executing user command.",
+        "No inode/cwd escape (child does not start inside project dir before cage).",
+        "Signals/resizing continue to work."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I3-code to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i3-full-cage-pty-code",
+        "Create worktree wt/ahih-i3-full-cage-pty-code from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i3-full-cage-pty-code",
+      "integration_task": "I3-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I3-code.md",
+      "depends_on": [
+        "I2-integ"
+      ],
+      "concurrent_with": [
+        "I3-test"
+      ]
+    },
+    {
+      "id": "I3-test",
+      "name": "Full cage (PTY) parity (test)",
+      "type": "test",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Add PTY-path tests validating full cage parity and read-only behavior.",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I3-spec.md",
+        "crates/world-agent/tests",
+        "crates/world-agent/src/pty.rs"
+      ],
+      "acceptance_criteria": [
+        "Tests validate PTY read_only blocks writes and full cage blocks outside access (skip when privileges unavailable).",
+        "No regressions to PTY streaming test harnesses."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I3-test to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i3-full-cage-pty-test",
+        "Create worktree wt/ahih-i3-full-cage-pty-test from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run targeted cargo test suites touched",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i3-full-cage-pty-test",
+      "integration_task": "I3-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I3-test.md",
+      "depends_on": [
+        "I2-integ"
+      ],
+      "concurrent_with": [
+        "I3-code"
+      ]
+    },
+    {
+      "id": "I3-integ",
+      "name": "Full cage (PTY) parity (integration)",
+      "type": "integration",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Merge I3 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I3-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+        "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "Behavior matches I3-spec; integration owns resolving drift.",
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I3-integ to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i3-full-cage-pty-integ",
+        "Create worktree wt/ahih-i3-full-cage-pty-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge ahih-i3-full-cage-pty-code and ahih-i3-full-cage-pty-test into integration worktree",
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant cargo test suites",
+        "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
+        "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i3-full-cage-pty-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I3-integ.md",
+      "depends_on": [
+        "I3-code",
+        "I3-test"
+      ],
+      "concurrent_with": []
+    },
+
+    {
+      "id": "I4-code",
+      "name": "Landlock additive hardening (code)",
+      "type": "code",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Add Landlock-based allowlist enforcement when available; surface detection in doctor output.",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I4-spec.md",
+        "crates/world/src",
+        "docs/WORLD.md"
+      ],
+      "acceptance_criteria": [
+        "Landlock is detected and (when available) used to enforce allowlists.",
+        "Behavior matches spec when unavailable (fail closed if required; otherwise warn/degrade)."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I4-code to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i4-landlock-code",
+        "Create worktree wt/ahih-i4-landlock-code from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i4-landlock-code",
+      "integration_task": "I4-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I4-code.md",
+      "depends_on": [
+        "I3-integ"
+      ],
+      "concurrent_with": [
+        "I4-test"
+      ]
+    },
+    {
+      "id": "I4-test",
+      "name": "Landlock additive hardening (test)",
+      "type": "test",
+      "phase": "Agent Hub Isolation",
+      "status": "pending",
+      "description": "Add tests for Landlock detection and enforcement behavior (with skips where unsupported).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I4-spec.md",
+        "crates/world/tests"
+      ],
+      "acceptance_criteria": [
+        "Tests validate detection plumbing; enforcement tests skip cleanly when Landlock unsupported.",
+        "No regressions to existing world isolation tests."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I4-test to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i4-landlock-test",
+        "Create worktree wt/ahih-i4-landlock-test from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run targeted cargo test suites touched",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i4-landlock-test",
+      "integration_task": "I4-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I4-test.md",
+      "depends_on": [
+        "I3-integ"
+      ],
+      "concurrent_with": [
+        "I4-code"
+      ]
+    },
+    {
+      "id": "I4-integ",
+      "name": "Landlock additive hardening (integration)",
+      "type": "integration",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Merge I4 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I4-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+        "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "Behavior matches I4-spec; integration owns resolving drift.",
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I4-integ to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i4-landlock-integ",
+        "Create worktree wt/ahih-i4-landlock-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge ahih-i4-landlock-code and ahih-i4-landlock-test into integration worktree",
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant cargo test suites",
+        "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
+        "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i4-landlock-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I4-integ.md",
+      "depends_on": [
+        "I4-code",
+        "I4-test"
+      ],
+      "concurrent_with": []
+    },
+
+    {
+      "id": "I5-code",
+      "name": "Docs alignment + verification tooling (code)",
+      "type": "code",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Update docs to match real isolation guarantees and add verification tooling/checklists.",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I5-spec.md",
+        "docs/WORLD.md",
+        "docs/VISION.md",
+        "docs/CONFIGURATION.md",
+        "scripts/linux",
+        "scripts/mac"
+      ],
+      "acceptance_criteria": [
+        "Docs clearly describe what is enforced today vs what requires full cage, and fail-closed vs best-effort behavior.",
+        "Verification steps/tooling exist and are reproducible (with platform notes)."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I5-code to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i5-docs-verify-code",
+        "Create worktree wt/ahih-i5-docs-verify-code from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt (if code touched)",
+        "Run cargo clippy --workspace --all-targets -- -D warnings (if Rust touched)",
+        "Run shellcheck if scripts touched",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i5-docs-verify-code",
+      "integration_task": "I5-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I5-code.md",
+      "depends_on": [
+        "I4-integ"
+      ],
+      "concurrent_with": [
+        "I5-test"
+      ]
+    },
+    {
+      "id": "I5-test",
+      "name": "Docs alignment + verification tooling (test)",
+      "type": "test",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Add minimal automated coverage for the docs/tooling changes (schema fields present; scripts linted).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I5-spec.md",
+        "docs/WORLD.md",
+        "crates/shell/tests",
+        "scripts/linux"
+      ],
+      "acceptance_criteria": [
+        "Targeted tests validate new doctor/policy fields are present in JSON output (where applicable).",
+        "Any new scripts or changes remain shellcheck-clean."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I5-test to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i5-docs-verify-test",
+        "Create worktree wt/ahih-i5-docs-verify-test from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run targeted cargo test suites touched",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i5-docs-verify-test",
+      "integration_task": "I5-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I5-test.md",
+      "depends_on": [
+        "I4-integ"
+      ],
+      "concurrent_with": [
+        "I5-code"
+      ]
+    },
+    {
+      "id": "I5-integ",
+      "name": "Docs alignment + verification tooling (integration)",
+      "type": "integration",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Merge I5 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I5-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+        "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "Docs and verification tooling match I5-spec.",
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I5-integ to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i5-docs-verify-integ",
+        "Create worktree wt/ahih-i5-docs-verify-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge ahih-i5-docs-verify-code and ahih-i5-docs-verify-test into integration worktree",
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant cargo test suites",
+        "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
+        "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i5-docs-verify-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I5-integ.md",
+      "depends_on": [
+        "I5-code",
+        "I5-test"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "I6-code",
+      "name": "`substrate world verify` command (code)",
+      "type": "code",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Add an install-available CLI subcommand that performs end-to-end isolation enforcement verification.",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I6-spec.md",
+        "docs/WORLD.md",
+        "docs/CONFIGURATION.md",
+        "scripts/linux/agent-hub-isolation-verify.sh",
+        "crates/shell/src/execution/cli.rs",
+        "crates/shell/src/execution/platform/mod.rs",
+        "crates/shell/src/execution/platform/linux.rs",
+        "crates/shell/src/execution/platform/macos.rs"
+      ],
+      "acceptance_criteria": [
+        "`substrate world verify` is available via the CLI help and can be run from any directory.",
+        "The verifier does not require a repo checkout (works for prefix installs).",
+        "The verifier runs the minimum checks from I6-spec and provides actionable failure output (Linux + macOS parity).",
+        "If `--json` is implemented, JSON output is stable and documented by tests in I6-test."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I6-code to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i6-world-verify-code",
+        "Create worktree wt/ahih-i6-world-verify-code from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i6-world-verify-code",
+      "integration_task": "I6-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I6-code.md",
+      "depends_on": [
+        "I5-integ"
+      ],
+      "concurrent_with": [
+        "I6-test"
+      ]
+    },
+    {
+      "id": "I6-test",
+      "name": "`substrate world verify` command (test)",
+      "type": "test",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Add fixture-based tests covering CLI wiring, skip behavior, and JSON output for `substrate world verify`.",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I6-spec.md",
+        "crates/shell/tests",
+        "crates/shell/src/execution/cli.rs"
+      ],
+      "acceptance_criteria": [
+        "Tests validate the new subcommand wiring and output schema (especially `--json` if present).",
+        "Tests do not require a real provisioned world backend (fixture or mocked subprocesses)."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I6-test to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i6-world-verify-test",
+        "Create worktree wt/ahih-i6-world-verify-test from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run targeted cargo test suites touched",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i6-world-verify-test",
+      "integration_task": "I6-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I6-test.md",
+      "depends_on": [
+        "I5-integ"
+      ],
+      "concurrent_with": [
+        "I6-code"
+      ]
+    },
+    {
+      "id": "I6-integ",
+      "name": "`substrate world verify` command (integration)",
+      "type": "integration",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Merge I6 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I6-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Behavior matches I6-spec on all supported platforms (platform guards as needed).",
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I6-integ to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i6-world-verify-integ",
+        "Create worktree wt/ahih-i6-world-verify-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge ahih-i6-world-verify-code and ahih-i6-world-verify-test into integration worktree",
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant cargo test suites",
+        "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
+        "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i6-world-verify-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I6-integ.md",
+      "depends_on": [
+        "I6-code",
+        "I6-test"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "I7-code",
+      "name": "Manual testing playbook alignment (code)",
+      "type": "code",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Update manual_testing_playbook.md to match I0–I5 specs and the strict world_fs policy schema (including required id/name).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I3-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I4-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I5-spec.md",
+        "docs/CONFIGURATION.md",
+        "docs/WORLD.md",
+        "docs/project_management/standards/EXIT_CODE_TAXONOMY.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts"
+      ],
+      "acceptance_criteria": [
+        "manual_testing_playbook.md `.substrate-profile` examples include required top-level `id` and `name`.",
+        "Playbook expectations match I0–I5 specs (no invented guarantees).",
+        "Exit code expectations are removed or clearly labeled as taxonomy guidance unless a spec defines them."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I7-code to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i7-playbook-align-code",
+        "Create worktree wt/ahih-i7-playbook-align-code from that branch"
+      ],
+      "end_checklist": [
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i7-playbook-align-code",
+      "integration_task": "I7-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I7-code.md",
+      "depends_on": [
+        "I5-integ"
+      ],
+      "concurrent_with": [
+        "I7-test"
+      ]
+    },
+    {
+      "id": "I7-test",
+      "name": "Manual testing playbook alignment (test)",
+      "type": "test",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Add lightweight automated coverage that prevents obvious manual_testing_playbook.md drift (e.g., missing id/name in policy examples).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I7-spec.md",
+        "crates/shell/tests"
+      ],
+      "acceptance_criteria": [
+        "Tests fail if the playbook’s `.substrate-profile` examples omit required top-level keys (`id`, `name`).",
+        "Tests do not depend on a provisioned world backend."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I7-test to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i7-playbook-align-test",
+        "Create worktree wt/ahih-i7-playbook-align-test from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run targeted cargo test suites touched",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i7-playbook-align-test",
+      "integration_task": "I7-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I7-test.md",
+      "depends_on": [
+        "I5-integ"
+      ],
+      "concurrent_with": [
+        "I7-code"
+      ]
+    },
+    {
+      "id": "I7-integ",
+      "name": "Manual testing playbook alignment (integration)",
+      "type": "integration",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Merge I7 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I7-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Playbook matches I7-spec.",
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I7-integ to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i7-playbook-align-integ",
+        "Create worktree wt/ahih-i7-playbook-align-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge ahih-i7-playbook-align-code and ahih-i7-playbook-align-test into integration worktree",
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant cargo test suites",
+        "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
+        "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i7-playbook-align-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I7-integ.md",
+      "depends_on": [
+        "I7-code",
+        "I7-test"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "I8-code",
+      "name": "I1 noise reduction (code)",
+      "type": "code",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Reduce world routing output noise to match I1-spec: single warning on allowed fallback; single error when required.",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I8-spec.md",
+        "crates/shell/src/execution/routing/dispatch/exec.rs",
+        "crates/shell/src/execution/routing/dispatch/world_ops.rs",
+        "crates/shell/src/execution/invocation/runtime.rs"
+      ],
+      "acceptance_criteria": [
+        "When world is unavailable and require_world=false: exactly one warning is printed and the command runs on host.",
+        "When world is unavailable and require_world=true: exactly one error is printed and the command does not run.",
+        "Behavior applies to both -c and interactive command runs."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I8-code to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i8-i1-noise-code",
+        "Create worktree wt/ahih-i8-i1-noise-code from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i8-i1-noise-code",
+      "integration_task": "I8-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I8-code.md",
+      "depends_on": [
+        "I5-integ"
+      ],
+      "concurrent_with": [
+        "I8-test"
+      ]
+    },
+    {
+      "id": "I8-test",
+      "name": "I1 noise reduction (test)",
+      "type": "test",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Add tests asserting single warning/error emission for I1 required-world vs fallback-allowed behavior.",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I8-spec.md",
+        "crates/shell/tests"
+      ],
+      "acceptance_criteria": [
+        "Tests assert warning/error line counts for fallback-allowed and required-world scenarios.",
+        "Tests do not depend on a provisioned world backend (use fixtures/mocks)."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I8-test to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i8-i1-noise-test",
+        "Create worktree wt/ahih-i8-i1-noise-test from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run targeted cargo test suites touched",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i8-i1-noise-test",
+      "integration_task": "I8-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I8-test.md",
+      "depends_on": [
+        "I5-integ"
+      ],
+      "concurrent_with": [
+        "I8-code"
+      ]
+    },
+    {
+      "id": "I8-integ",
+      "name": "I1 noise reduction (integration)",
+      "type": "integration",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Merge I8 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I8-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Behavior matches I8-spec.",
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Set I8-integ to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i8-i1-noise-integ",
+        "Create worktree wt/ahih-i8-i1-noise-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge ahih-i8-i1-noise-code and ahih-i8-i1-noise-test into integration worktree",
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant cargo test suites",
+        "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
+        "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i8-i1-noise-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I8-integ.md",
+      "depends_on": [
+        "I8-code",
+        "I8-test"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "I9-code",
+      "name": "Full cage robustness (/tmp projects + world verify) (code)",
+      "type": "code",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Fix full cage execution when the host project/cwd is under /tmp and align world verify full-cage behavior with the isolation model.",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I6-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I9-spec.md",
+        "crates/world/src/exec.rs",
+        "crates/shell/src/builtins/world_verify.rs"
+      ],
+      "acceptance_criteria": [
+        "Full-cage runs do not fail when project/cwd is under /tmp (no cd /tmp/... failures).",
+        "world verify full-cage check aligns with cage semantics (no host-side write assumptions)."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Read plan.md, tasks.json, session_log.md, I9-spec.md, and kickoff prompt",
+        "Set I9-code to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i9-full-cage-verify-code",
+        "Create worktree wt/ahih-i9-full-cage-verify-code from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening (ff-only)",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i9-full-cage-verify-code",
+      "integration_task": "I9-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I9-code.md",
+      "depends_on": [
+        "I8-integ"
+      ],
+      "concurrent_with": [
+        "I9-test"
+      ]
+    },
+    {
+      "id": "I9-test",
+      "name": "Full cage robustness (/tmp projects + world verify) (test)",
+      "type": "test",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Add regression and coverage tests for full cage execution robustness, including /tmp-rooted projects and allowlist behavior.",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I6-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I9-spec.md",
+        "crates/world-agent/tests",
+        "crates/shell/tests"
+      ],
+      "acceptance_criteria": [
+        "Tests cover full-cage execution from a /tmp-rooted project/cwd.",
+        "Tests cover allowlist prefix patterns like ./writable/* in full cage and outside-host blocking."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Read plan.md, tasks.json, session_log.md, I9-spec.md, and kickoff prompt",
+        "Set I9-test to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i9-full-cage-verify-test",
+        "Create worktree wt/ahih-i9-full-cage-verify-test from that branch"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run targeted cargo test suites touched",
+        "Commit worktree changes",
+        "Merge branch back to feat/p0-agent-hub-isolation-hardening (ff-only)",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i9-full-cage-verify-test",
+      "integration_task": "I9-integ",
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I9-test.md",
+      "depends_on": [
+        "I8-integ"
+      ],
+      "concurrent_with": [
+        "I9-code"
+      ]
+    },
+    {
+      "id": "I9-integ",
+      "name": "Full cage robustness (/tmp projects + world verify) (integration)",
+      "type": "integration",
+      "phase": "Agent Hub Isolation",
+      "status": "completed",
+      "description": "Merge I9 code+test, reconcile to spec, and run full validation (fmt/clippy/tests/preflight).",
+      "references": [
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/I9-spec.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/plan.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/manual_testing_playbook.md",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/linux-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/macos-smoke.sh",
+        "docs/project_management/next/p0-agent-hub-isolation-hardening/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Behavior matches I9-spec.",
+        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "Feature-local smoke script runs and results are recorded in session_log.md."
+      ],
+      "start_checklist": [
+        "Checkout feat/p0-agent-hub-isolation-hardening, pull latest",
+        "Read plan.md, tasks.json, session_log.md, I9-spec.md, and kickoff prompt",
+        "Set I9-integ to in_progress, append START entry to session_log.md, commit docs",
+        "Create branch ahih-i9-full-cage-verify-integ",
+        "Create worktree wt/ahih-i9-full-cage-verify-integ from that branch"
+      ],
+      "end_checklist": [
+        "Merge ahih-i9-full-cage-verify-code and ahih-i9-full-cage-verify-test into integration worktree",
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant cargo test suites",
+        "Run make preflight",
+        "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
+        "Commit integration changes and merge back to feat/p0-agent-hub-isolation-hardening (ff-only)",
+        "Update tasks.json + session_log.md with END entry, commit docs"
+      ],
+      "worktree": "wt/ahih-i9-full-cage-verify-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/p0-agent-hub-isolation-hardening/kickoff_prompts/I9-integ.md",
+      "depends_on": [
+        "I9-code",
+        "I9-test"
+      ],
+      "concurrent_with": []
+    }
+  ]
+}

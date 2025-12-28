@@ -5,14 +5,13 @@ mod common;
 use assert_cmd::Command;
 use common::{substrate_shell_driver, temp_dir};
 use serde_json::Value as JsonValue;
+use serde_yaml::{Mapping as YamlMapping, Value as YamlValue};
 use std::fs;
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use tempfile::TempDir;
-use toml::value::Table as TomlTable;
-use toml::Value as TomlValue;
 
 struct ConfigSetFixture {
     _temp: TempDir,
@@ -47,7 +46,7 @@ impl ConfigSetFixture {
     }
 
     fn config_path(&self) -> PathBuf {
-        self.substrate_home.join("config.toml")
+        self.substrate_home.join("config.yaml")
     }
 
     fn init_config(&self) {
@@ -55,9 +54,13 @@ impl ConfigSetFixture {
         cmd.arg("config").arg("init").assert().success();
     }
 
-    fn read_config(&self) -> TomlValue {
+    fn legacy_config_path(&self) -> PathBuf {
+        self.substrate_home.join("config.toml")
+    }
+
+    fn read_config(&self) -> YamlValue {
         let data = fs::read_to_string(self.config_path()).expect("config contents");
-        toml::from_str(&data).expect("config to parse as TOML")
+        serde_yaml::from_str(&data).expect("config to parse as YAML")
     }
 
     fn raw_contents(&self) -> String {
@@ -97,7 +100,9 @@ fn config_set_updates_anchor_mode() {
     let config = fixture.read_config();
     let world = world_table(&config);
     assert_eq!(
-        world.get("anchor_mode").and_then(|value| value.as_str()),
+        world
+            .get(YamlValue::String("anchor_mode".to_string()))
+            .and_then(|value| value.as_str()),
         Some("follow-cwd"),
         "world.anchor_mode should reflect config set change"
     );
@@ -122,7 +127,9 @@ fn config_set_updates_anchor_path() {
     let config = fixture.read_config();
     let world = world_table(&config);
     assert_eq!(
-        world.get("anchor_path").and_then(|value| value.as_str()),
+        world
+            .get(YamlValue::String("anchor_path".to_string()))
+            .and_then(|value| value.as_str()),
         Some(expected_path),
         "world.anchor_path should update to requested path"
     );
@@ -146,7 +153,9 @@ fn config_set_updates_world_caged_flag() {
     let config = fixture.read_config();
     let world = world_table(&config);
     assert_eq!(
-        world.get("caged").and_then(|value| value.as_bool()),
+        world
+            .get(YamlValue::String("caged".to_string()))
+            .and_then(|value| value.as_bool()),
         Some(false),
         "world.caged should follow config set boolean"
     );
@@ -171,7 +180,7 @@ fn config_set_updates_install_world_enabled_flag() {
     let install = install_table(&config);
     assert_eq!(
         install
-            .get("world_enabled")
+            .get(YamlValue::String("world_enabled".to_string()))
             .and_then(|value| value.as_bool()),
         Some(false),
         "install.world_enabled should update to requested boolean"
@@ -198,19 +207,23 @@ fn config_set_updates_multiple_keys_atomically() {
     let config = fixture.read_config();
     let world = world_table(&config);
     assert_eq!(
-        world.get("anchor_mode").and_then(|value| value.as_str()),
+        world
+            .get(YamlValue::String("anchor_mode".to_string()))
+            .and_then(|value| value.as_str()),
         Some("custom"),
         "world.anchor_mode should match multi-key update"
     );
     assert_eq!(
-        world.get("anchor_path").and_then(|value| value.as_str()),
+        world
+            .get(YamlValue::String("anchor_path".to_string()))
+            .and_then(|value| value.as_str()),
         Some("/tmp/multi-anchor"),
         "world.anchor_path should match multi-key update"
     );
     let install = install_table(&config);
     assert_eq!(
         install
-            .get("world_enabled")
+            .get(YamlValue::String("world_enabled".to_string()))
             .and_then(|value| value.as_bool()),
         Some(false),
         "install.world_enabled should reflect the combined run"
@@ -425,18 +438,58 @@ fn cli_flags_still_override_config_after_config_set() {
     );
 }
 
-fn world_table(config: &TomlValue) -> &TomlTable {
-    config
-        .get("world")
-        .and_then(|value| value.as_table())
-        .expect("world table present")
+fn world_table(config: &YamlValue) -> &YamlMapping {
+    let root = config.as_mapping().expect("config must be a mapping");
+    root.get(YamlValue::String("world".to_string()))
+        .and_then(|value| value.as_mapping())
+        .expect("world mapping present")
 }
 
-fn install_table(config: &TomlValue) -> &TomlTable {
-    config
-        .get("install")
-        .and_then(|value| value.as_table())
-        .expect("install table present")
+fn install_table(config: &YamlValue) -> &YamlMapping {
+    let root = config.as_mapping().expect("config must be a mapping");
+    root.get(YamlValue::String("install".to_string()))
+        .and_then(|value| value.as_mapping())
+        .expect("install mapping present")
+}
+
+#[test]
+fn config_set_refuses_legacy_toml() {
+    if !ensure_config_set_available() {
+        return;
+    }
+
+    let fixture = ConfigSetFixture::new();
+    fixture.init_config();
+    fs::write(
+        fixture.legacy_config_path(),
+        "[install]\nworld_enabled = true\n",
+    )
+    .expect("write legacy config.toml");
+
+    let output = fixture
+        .set_command()
+        .arg("world.anchor_mode=custom")
+        .output()
+        .expect("failed to execute substrate config set");
+    assert!(
+        !output.status.success(),
+        "config set should fail when legacy toml exists: {:?}",
+        output
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unsupported legacy TOML config detected"),
+        "stderr missing legacy TOML message: {stderr}"
+    );
+    assert!(
+        stderr.contains(&fixture.legacy_config_path().display().to_string()),
+        "stderr missing legacy path: {stderr}"
+    );
+    assert!(
+        stderr.contains(&fixture.config_path().display().to_string()),
+        "stderr missing yaml path: {stderr}"
+    );
 }
 
 fn ensure_config_set_available() -> bool {

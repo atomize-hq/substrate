@@ -13,6 +13,7 @@ pub mod dns;
 pub mod exec;
 pub mod guard;
 pub mod isolation;
+pub mod landlock;
 pub mod netfilter;
 pub mod netns;
 pub mod network;

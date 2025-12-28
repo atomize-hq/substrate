@@ -87,6 +87,65 @@ fn non_pty_read_only_mode_blocks_writes() {
 }
 
 #[test]
+fn non_pty_read_only_mode_blocks_absolute_project_writes() {
+    if !overlay_available() {
+        eprintln!("skipping read-only absolute-path test: overlay support or privileges missing");
+        return;
+    }
+
+    let service = match WorldAgentService::new() {
+        Ok(svc) => svc,
+        Err(err) => {
+            eprintln!("skipping read-only absolute-path test: service init failed: {err}");
+            return;
+        }
+    };
+    let tmp = tempdir().expect("tempdir");
+    let cwd = tmp.path().to_path_buf();
+    let target = cwd.join("ro-abs-deny.txt");
+
+    let mut env = HashMap::new();
+    env.insert(
+        "SUBSTRATE_TEST_ABS_TARGET".to_string(),
+        target.display().to_string(),
+    );
+
+    let req = ExecuteRequest {
+        profile: None,
+        cmd: r#"sh -lc 'echo denied > "$SUBSTRATE_TEST_ABS_TARGET"'"#.to_string(),
+        cwd: Some(cwd.display().to_string()),
+        env: Some(env),
+        pty: false,
+        agent_id: "fs-mode-test".to_string(),
+        budget: None,
+        world_fs_mode: Some(WorldFsMode::ReadOnly),
+    };
+
+    let rt = Runtime::new().expect("runtime");
+    let resp = match rt.block_on(service.execute(req)) {
+        Ok(resp) => resp,
+        Err(err) => {
+            eprintln!("skipping read-only absolute-path assertions: execute failed: {err}");
+            return;
+        }
+    };
+
+    if resp.exit == 0 {
+        let stderr = decode(&resp.stderr_b64);
+        panic!(
+            "read-only absolute-path write unexpectedly succeeded (target: {}, stderr: {stderr})",
+            target.display()
+        );
+    }
+
+    assert!(
+        !target.exists(),
+        "read-only absolute-path write should not create files (found {})",
+        target.display()
+    );
+}
+
+#[test]
 fn non_pty_writable_mode_records_diffs_for_writes() {
     if !overlay_available() {
         eprintln!("skipping writable fs_mode test: overlay support or privileges missing");

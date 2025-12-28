@@ -42,9 +42,10 @@ Always-on by default (unless disabled via `SUBSTRATE_WORLD=disabled`):
   - The Substrate REPL can force PTY per‑line using the `:pty ` prefix. The shell strips this prefix before sending the command to the agent.
 
 - Fallback
-  - If the agent/socket is unavailable or a transport handshake fails, the shell prints exactly one warning and runs on the host path for that command. Subsequent commands continue to attempt world routing.
+  - If `world_fs.require_world=false` and the agent/socket is unavailable (or a transport handshake fails), the shell prints exactly one warning and runs on the host path for that command. Subsequent commands continue to attempt world routing.
+  - If `world_fs.require_world=true`, Substrate fails closed when the world backend is unavailable (or disabled via `--no-world`/`SUBSTRATE_WORLD=disabled`) instead of falling back to host execution.
 
-Windows currently degrades to host execution with a friendly notice.
+Windows (WSL backend) is functional but experimental. When the world backend is unavailable, the same `world_fs.require_world` rules apply (fallback only when `false`).
 
 ---
 
@@ -122,6 +123,7 @@ Substrate on macOS uses a Lima VM (“substrate”) to host the world-agent. The
 
 - Validation
   - `scripts/mac/smoke.sh` exercises non‑PTY, PTY, and replay flows on macOS and asserts that the replay `fs_diff` contains project paths.
+  - `scripts/linux/agent-hub-isolation-verify.sh` verifies `world_fs.mode=read_only` and `world_fs.cage=full` enforcement (on macOS it drives the Lima-backed world; on Windows, use WSL-specific tooling instead).
 
 ## 4) Isolation Details (Linux)
 
@@ -135,8 +137,12 @@ Per session world (identified by `WORLD_ID`, e.g., `wld_01994…`):
 - Cgroup v2 path: `/sys/fs/cgroup/substrate/<WORLD_ID>`
   - Resource limits applied best‑effort; PTY children are attached to this cgroup
 - Filesystem isolation
-  - Non‑PTY: overlay/copy‑diff is used by the world backend (fs_diff returned in ExecResult)
-  - PTY: overlay not used in this phase; fs_diff collection for PTY is intentionally skipped
+  - Overlay: non‑PTY and PTY runs execute against a per-session overlay so changes are contained to the world (and can be diffed for non‑PTY runs).
+  - `world_fs.mode=read_only`: the project mount is remounted read-only so both relative and absolute project writes fail (and if mount namespaces are unavailable, Substrate fails closed rather than risking an absolute-path escape).
+  - `world_fs.cage=project`: bind-mounts the overlay root onto the project path inside a private mount namespace to prevent absolute-path escapes back into the host project; this does **not** hide other host paths.
+  - `world_fs.cage=full`: builds a minimal rootfs and `pivot_root`s so host paths are no longer nameable; only a small set of mounts exist (system dirs read-only, `/project` + the project absolute path, fresh `/tmp` tmpfs, `/proc`, `/dev` read-only, plus `/var/lib/substrate/world-deps` read-write).
+  - `world_fs.write_allowlist` is used in full-cage writable mode to remount specific project prefixes read-write; everything else under the project remains read-only.
+  - `fs_diff` is returned for non‑PTY `/v1/execute`; the PTY streaming API does not include `fs_diff` today.
 
 ---
 
@@ -176,7 +182,7 @@ Notes
   - Windows hosts call `platform_world::windows::ensure_world_ready`, which provisions/warms the `substrate-wsl` distro (via the PowerShell helpers) and keeps the world agent reachable through the forwarder named pipe.
 - Routing
   - Non‑PTY: POST to `/v1/execute` over UDS (Linux) or the forwarded socket/port (macOS/Windows).
-  - PTY: use WS to `/v1/stream` over the active transport; fallback to host PTY only if world startup fails.
+  - PTY: use WS to `/v1/stream` over the active transport; host fallback only occurs when `world_fs.require_world=false`.
 - Prompt safety
   - The REPL wraps PTY runs in `reedline::suspend_guard()` to avoid prompt corruption during external output.
 - Readiness & auto‑spawn
@@ -185,7 +191,8 @@ Notes
   - macOS invokes the Lima backend ensure path to boot the VM and wire up its tunnel.
   - Windows triggers the forwarder warm routine; see `docs/cross-platform/wsl_world_setup.md` for the underlying PowerShell flow.
 - Fallback
-  - Exactly one warning is printed if the world cannot be reached; execution continues on the host in that situation.
+  - With `world_fs.require_world=false`, exactly one warning is printed if the world cannot be reached; execution continues on the host in that situation.
+  - With `world_fs.require_world=true`, world routing failures are treated as hard errors (no host fallback).
 
 ### World Dependencies (`world deps`)
 

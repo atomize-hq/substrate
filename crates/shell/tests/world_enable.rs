@@ -5,11 +5,11 @@ mod common;
 
 use assert_cmd::Command;
 use common::{shared_tmpdir, substrate_shell_driver, temp_dir};
+use serde_yaml::Value as YamlValue;
 use std::fs;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::PathBuf;
 use tempfile::{Builder, TempDir};
-use toml::Value as TomlValue;
 
 const HELPER_SCRIPT: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
@@ -154,7 +154,7 @@ impl WorldEnableFixture {
     }
 
     fn config_path(&self) -> PathBuf {
-        self.substrate_home.join("config.toml")
+        self.substrate_home.join("config.yaml")
     }
 
     fn config_exists(&self) -> bool {
@@ -163,28 +163,32 @@ impl WorldEnableFixture {
 
     fn write_config(&self, enabled: bool) {
         let flag = if enabled { "true" } else { "false" };
-        let body = format!("[install]\nworld_enabled = {flag}\n");
-        fs::write(self.config_path(), body).expect("write config toml");
+        let body = format!("install:\n  world_enabled: {flag}\n");
+        fs::write(self.config_path(), body).expect("write config yaml");
     }
 
     fn write_invalid_config(&self) {
         fs::write(
             self.config_path(),
-            "[install]\nworld_enabled = \"invalid\"\n",
+            "install:\n  world_enabled: \"invalid\"\n",
         )
         .expect("write invalid config");
     }
 
-    fn read_config(&self) -> TomlValue {
+    fn read_config(&self) -> YamlValue {
         let data = fs::read_to_string(self.config_path()).expect("read config");
-        toml::from_str(&data).expect("parse config toml")
+        serde_yaml::from_str(&data).expect("parse config yaml")
     }
 
     fn install_world_enabled(&self) -> bool {
-        self.read_config()
-            .get("install")
-            .and_then(|value| value.as_table())
-            .and_then(|table| table.get("world_enabled"))
+        let config = self.read_config();
+        let root = config.as_mapping().expect("config root mapping");
+        let install = root
+            .get(YamlValue::String("install".to_string()))
+            .and_then(|value| value.as_mapping())
+            .expect("install mapping missing");
+        install
+            .get(YamlValue::String("world_enabled".to_string()))
             .and_then(|value| value.as_bool())
             .expect("install.world_enabled missing")
     }

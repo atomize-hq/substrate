@@ -35,6 +35,13 @@ pub(crate) const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
 pub(crate) const LEGACY_ROOT_MODE_ENV: &str = "SUBSTRATE_WORLD_ROOT_MODE";
 pub(crate) const LEGACY_ROOT_PATH_ENV: &str = "SUBSTRATE_WORLD_ROOT_PATH";
 pub(crate) const WORLD_FS_MODE_ENV: &str = "SUBSTRATE_WORLD_FS_MODE";
+pub(crate) const WORLD_FS_CAGE_ENV: &str = "SUBSTRATE_WORLD_FS_CAGE";
+pub(crate) const WORLD_FS_WRITE_ALLOWLIST_ENV: &str = "SUBSTRATE_WORLD_FS_WRITE_ALLOWLIST";
+pub(crate) const WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV: &str =
+    "SUBSTRATE_WORLD_FS_LANDLOCK_READ_ALLOWLIST";
+pub(crate) const WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV: &str =
+    "SUBSTRATE_WORLD_FS_LANDLOCK_WRITE_ALLOWLIST";
+pub(crate) const LANDLOCK_HELPER_SRC_ENV: &str = "SUBSTRATE_LANDLOCK_HELPER_SRC";
 
 /// Main service running inside the world.
 #[derive(Clone)]
@@ -157,7 +164,28 @@ impl WorldAgentService {
             .clone()
             .map(PathBuf::from)
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
-        let project_dir = resolve_project_dir(req.env.as_ref(), Some(&cwd))?;
+        let env_ref = req.env.as_ref();
+        let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
+        let fs_mode = resolve_fs_mode(req.world_fs_mode, env_ref);
+        let cage_full = is_full_cage(env_ref);
+
+        let (write_allowlist_prefixes, landlock_read_paths, landlock_write_paths) = if cage_full {
+            if let Err(e) = substrate_broker::detect_profile(&cwd) {
+                tracing::warn!(
+                    error = %e,
+                    cwd = %cwd.display(),
+                    "world-agent: failed to detect policy profile for request"
+                );
+            }
+            let world_fs = substrate_broker::world_fs_policy();
+            (
+                resolve_project_write_allowlist_prefixes(&project_dir, &world_fs.write_allowlist),
+                resolve_landlock_allowlist_paths(&project_dir, &world_fs.read_allowlist),
+                resolve_landlock_allowlist_paths(&project_dir, &world_fs.write_allowlist),
+            )
+        } else {
+            (Vec::new(), Vec::new(), Vec::new())
+        };
 
         // Create world spec from request
         let spec = WorldSpec {
@@ -170,7 +198,7 @@ impl WorldAgentService {
             // For agent non-PTY path, prefer consistent fs_diff collection
             // to enable immediate span enrichment in the shell.
             always_isolate: true,
-            fs_mode: resolve_fs_mode(req.world_fs_mode, req.env.as_ref()),
+            fs_mode,
         };
 
         // Ensure world exists
@@ -183,10 +211,36 @@ impl WorldAgentService {
         };
 
         // Prepare execution request
+        let mut env_map = req.env.unwrap_or_default();
+        if cage_full && !write_allowlist_prefixes.is_empty() {
+            env_map.insert(
+                WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(),
+                write_allowlist_prefixes.join("\n"),
+            );
+        }
+        if cage_full && !landlock_read_paths.is_empty() {
+            env_map.insert(
+                WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string(),
+                landlock_read_paths.join("\n"),
+            );
+        }
+        if cage_full && !landlock_write_paths.is_empty() {
+            env_map.insert(
+                WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV.to_string(),
+                landlock_write_paths.join("\n"),
+            );
+        }
+        if cage_full {
+            if let Ok(exe) = std::env::current_exe() {
+                env_map
+                    .entry(LANDLOCK_HELPER_SRC_ENV.to_string())
+                    .or_insert_with(|| exe.display().to_string());
+            }
+        }
         let exec_req = world_api::ExecRequest {
             cmd: req.cmd,
             cwd,
-            env: req.env.unwrap_or_default(),
+            env: env_map,
             pty: req.pty,
             span_id: None,
         };
@@ -240,7 +294,28 @@ impl WorldAgentService {
             .clone()
             .map(PathBuf::from)
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
-        let project_dir = resolve_project_dir(req.env.as_ref(), Some(&cwd))?;
+        let env_ref = req.env.as_ref();
+        let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
+        let fs_mode = resolve_fs_mode(req.world_fs_mode, env_ref);
+        let cage_full = is_full_cage(env_ref);
+
+        let (write_allowlist_prefixes, landlock_read_paths, landlock_write_paths) = if cage_full {
+            if let Err(e) = substrate_broker::detect_profile(&cwd) {
+                tracing::warn!(
+                    error = %e,
+                    cwd = %cwd.display(),
+                    "world-agent: failed to detect policy profile for request"
+                );
+            }
+            let world_fs = substrate_broker::world_fs_policy();
+            (
+                resolve_project_write_allowlist_prefixes(&project_dir, &world_fs.write_allowlist),
+                resolve_landlock_allowlist_paths(&project_dir, &world_fs.read_allowlist),
+                resolve_landlock_allowlist_paths(&project_dir, &world_fs.write_allowlist),
+            )
+        } else {
+            (Vec::new(), Vec::new(), Vec::new())
+        };
 
         let spec = WorldSpec {
             reuse_session: true,
@@ -250,7 +325,7 @@ impl WorldAgentService {
             allowed_domains: substrate_broker::allowed_domains(),
             project_dir,
             always_isolate: true,
-            fs_mode: resolve_fs_mode(req.world_fs_mode, req.env.as_ref()),
+            fs_mode,
         };
 
         let world = match self.backend.ensure_session(&spec) {
@@ -264,7 +339,28 @@ impl WorldAgentService {
         let mut exec_req = world_api::ExecRequest {
             cmd: req.cmd.clone(),
             cwd: cwd.clone(),
-            env: req.env.clone().unwrap_or_default(),
+            env: {
+                let mut env_map = req.env.clone().unwrap_or_default();
+                if cage_full && !write_allowlist_prefixes.is_empty() {
+                    env_map.insert(
+                        WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(),
+                        write_allowlist_prefixes.join("\n"),
+                    );
+                }
+                if cage_full && !landlock_read_paths.is_empty() {
+                    env_map.insert(
+                        WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string(),
+                        landlock_read_paths.join("\n"),
+                    );
+                }
+                if cage_full && !landlock_write_paths.is_empty() {
+                    env_map.insert(
+                        WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV.to_string(),
+                        landlock_write_paths.join("\n"),
+                    );
+                }
+                env_map
+            },
             pty: false,
             span_id: None,
         };
@@ -434,6 +530,136 @@ fn first_env_value<'a>(
 ) -> Option<(&'static str, &'a str)> {
     keys.iter()
         .find_map(|key| env.get(*key).map(|value| (*key, value.as_str())))
+}
+
+pub(crate) fn is_full_cage(env: Option<&HashMap<String, String>>) -> bool {
+    if let Some(env) = env {
+        if let Some(raw) = env.get(WORLD_FS_CAGE_ENV) {
+            return raw.trim().eq_ignore_ascii_case("full");
+        }
+    }
+    std::env::var(WORLD_FS_CAGE_ENV)
+        .ok()
+        .is_some_and(|raw| raw.trim().eq_ignore_ascii_case("full"))
+}
+
+pub(crate) fn resolve_project_write_allowlist_prefixes(
+    project_dir: &Path,
+    write_allowlist: &[String],
+) -> Vec<String> {
+    let project_str = project_dir.to_string_lossy();
+    let mut prefixes: Vec<String> = Vec::new();
+
+    for raw_pattern in write_allowlist {
+        let pattern = raw_pattern.trim();
+        if pattern.is_empty() {
+            continue;
+        }
+
+        // Apply only allowlist entries that target paths under the project root. Reduce globs to
+        // the directory prefix up to the first wildcard/meta character.
+        let rel = if pattern.starts_with('/') {
+            if pattern == project_str {
+                "*"
+            } else if let Some(stripped) = pattern.strip_prefix(&format!("{}/", project_str)) {
+                stripped
+            } else {
+                continue;
+            }
+        } else {
+            pattern
+        };
+
+        let rel = rel.trim_start_matches("./");
+
+        if matches!(rel, "*" | "**" | "/*" | "/**") {
+            prefixes.push(".".to_string());
+            continue;
+        }
+
+        let mut prefix = rel;
+        if let Some(idx) = rel.find(['*', '?', '[']) {
+            prefix = &rel[..idx];
+        }
+
+        let prefix = prefix.trim_matches('/');
+        if prefix.is_empty() {
+            prefixes.push(".".to_string());
+            continue;
+        }
+
+        if prefix.split('/').any(|c| c == "..") {
+            continue;
+        }
+
+        prefixes.push(prefix.to_string());
+    }
+
+    prefixes.sort();
+    prefixes.dedup();
+    prefixes
+}
+
+pub(crate) fn resolve_landlock_allowlist_paths(
+    project_dir: &Path,
+    patterns: &[String],
+) -> Vec<String> {
+    let project_dir_str = project_dir.to_string_lossy();
+    let mut out: Vec<String> = Vec::new();
+
+    for raw_pattern in patterns {
+        let pattern = raw_pattern.trim();
+        if pattern.is_empty() {
+            continue;
+        }
+
+        let pattern = pattern.trim_start_matches("./");
+
+        // Landlock allowlists are enforced relative to the project root (mirrors the full-cage
+        // mount semantics). Absolute patterns are only honored when they refer to the project dir.
+        let rel = if pattern.starts_with('/') {
+            if pattern == project_dir_str {
+                "*"
+            } else if let Some(stripped) = pattern.strip_prefix(&format!("{}/", project_dir_str)) {
+                stripped
+            } else {
+                continue;
+            }
+        } else {
+            pattern
+        };
+
+        let rel = rel.trim_start_matches("./");
+
+        if matches!(rel, "*" | "**" | "/*" | "/**") {
+            out.push("/project".to_string());
+            out.push(project_dir_str.to_string());
+            continue;
+        }
+
+        let mut prefix = rel;
+        if let Some(idx) = rel.find(['*', '?', '[']) {
+            prefix = &rel[..idx];
+        }
+
+        let prefix = prefix.trim_matches('/');
+        if prefix.is_empty() || prefix == "." {
+            out.push("/project".to_string());
+            out.push(project_dir_str.to_string());
+            continue;
+        }
+
+        if prefix.split('/').any(|c| c == "..") {
+            continue;
+        }
+
+        out.push(format!("/project/{prefix}"));
+        out.push(format!("{}/{}", project_dir_str, prefix));
+    }
+
+    out.sort();
+    out.dedup();
+    out
 }
 
 #[cfg(test)]

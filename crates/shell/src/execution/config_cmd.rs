@@ -5,12 +5,12 @@ use crate::execution::settings::parse_bool_flag;
 use anyhow::{anyhow, bail, Context, Result};
 use serde::Serialize;
 use serde_json::Value as JsonValue;
+use serde_yaml::{Mapping as YamlMapping, Value as YamlValue};
 use std::fs;
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use substrate_common::{paths as substrate_paths, WorldRootMode};
 use tempfile::NamedTempFile;
-use toml::value::{Table as TomlTable, Value as TomlValue};
 
 pub(crate) fn handle_config_command(cmd: &ConfigCmd) -> Result<()> {
     match &cmd.action {
@@ -22,6 +22,8 @@ pub(crate) fn handle_config_command(cmd: &ConfigCmd) -> Result<()> {
 
 fn run_config_init(args: &ConfigInitArgs) -> Result<()> {
     let config_path = substrate_paths::config_file()?;
+    ensure_no_legacy_toml_config(&config_path)?;
+
     let parent = config_path
         .parent()
         .ok_or_else(|| anyhow!("config path {} has no parent", config_path.display()))?;
@@ -55,18 +57,18 @@ fn run_config_init(args: &ConfigInitArgs) -> Result<()> {
 fn run_config_show(args: &ConfigShowArgs) -> Result<()> {
     let config_path = substrate_paths::config_file()?;
     let contents = read_config_contents(&config_path)?;
-    let mut value: TomlValue = toml::from_str(&contents)
-        .with_context(|| format!("invalid TOML in {}", config_path.display()))?;
+    let mut value: YamlValue = serde_yaml::from_str(&contents)
+        .with_context(|| format!("invalid YAML in {}", config_path.display()))?;
 
     redact_config_value("", &mut value);
 
     if args.json {
-        let json =
-            serde_json::to_string_pretty(&value).context("failed to serialize config as JSON")?;
-        println!("{json}");
+        let payload = serde_json::to_string_pretty(&yaml_to_json_value(&value))
+            .context("failed to serialize config as JSON")?;
+        println!("{payload}");
     } else {
         let formatted =
-            toml::to_string_pretty(&value).context("failed to serialize config as TOML")?;
+            serde_yaml::to_string(&value).context("failed to serialize config as YAML")?;
         println!("{formatted}");
     }
 
@@ -76,13 +78,16 @@ fn run_config_show(args: &ConfigShowArgs) -> Result<()> {
 fn run_config_set(args: &ConfigSetArgs) -> Result<()> {
     let config_path = substrate_paths::config_file()?;
     let contents = read_config_contents(&config_path)?;
-    let mut document: TomlTable = toml::from_str(&contents)
-        .with_context(|| format!("invalid TOML in {}", config_path.display()))?;
+    let mut root: YamlValue = serde_yaml::from_str(&contents)
+        .with_context(|| format!("invalid YAML in {}", config_path.display()))?;
+    let document = root
+        .as_mapping_mut()
+        .ok_or_else(|| anyhow!("config in {} must be a mapping", config_path.display()))?;
 
     let updates = parse_config_updates(&args.updates)?;
     let mut all_changes = Vec::new();
     for update in updates {
-        all_changes.extend(apply_config_update(&mut document, &update)?);
+        all_changes.extend(apply_config_update(document, &update)?);
     }
 
     let applied_changes: Vec<ConfigChange> = all_changes
@@ -105,7 +110,7 @@ fn run_config_set(args: &ConfigSetArgs) -> Result<()> {
         return Ok(());
     }
 
-    write_config_table(&config_path, &document)?;
+    write_config_value(&config_path, &root)?;
 
     if args.json {
         let summary = ConfigSetSummary::from_changes(&config_path, &applied_changes);
@@ -130,11 +135,12 @@ fn run_config_set(args: &ConfigSetArgs) -> Result<()> {
 }
 
 fn write_default_config(path: &Path) -> Result<()> {
-    let defaults = default_config_tables();
-    write_config_table(path, &defaults).context("failed to write default config")
+    let defaults = default_config_value();
+    write_config_value(path, &defaults).context("failed to write default config")
 }
 
-fn write_config_table(path: &Path, table: &TomlTable) -> Result<()> {
+fn write_config_value(path: &Path, value: &YamlValue) -> Result<()> {
+    ensure_no_legacy_toml_config(path)?;
     let parent = path
         .parent()
         .ok_or_else(|| anyhow!("config path {} has no parent", path.display()))?;
@@ -142,7 +148,7 @@ fn write_config_table(path: &Path, table: &TomlTable) -> Result<()> {
 
     let mut tmp = NamedTempFile::new_in(parent)
         .with_context(|| format!("failed to create temp file near {}", path.display()))?;
-    let body = toml::to_string_pretty(table)
+    let body = serde_yaml::to_string(value)
         .with_context(|| format!("failed to serialize config at {}", path.display()))?;
     tmp.write_all(body.as_bytes())
         .with_context(|| format!("failed to write {}", path.display()))?;
@@ -157,27 +163,45 @@ fn write_config_table(path: &Path, table: &TomlTable) -> Result<()> {
     Ok(())
 }
 
-fn default_config_tables() -> TomlTable {
-    let mut root = TomlTable::new();
-    root.insert(
-        "anchor_mode".to_string(),
-        TomlValue::String("project".to_string()),
+fn default_config_value() -> YamlValue {
+    let mut world = YamlMapping::new();
+    world.insert(
+        YamlValue::String("anchor_mode".to_string()),
+        YamlValue::String("project".to_string()),
     );
-    root.insert("anchor_path".to_string(), TomlValue::String(String::new()));
-    root.insert(
-        "root_mode".to_string(),
-        TomlValue::String("project".to_string()),
+    world.insert(
+        YamlValue::String("anchor_path".to_string()),
+        YamlValue::String(String::new()),
     );
-    root.insert("root_path".to_string(), TomlValue::String(String::new()));
-    root.insert("caged".to_string(), TomlValue::Boolean(true));
+    world.insert(
+        YamlValue::String("root_mode".to_string()),
+        YamlValue::String("project".to_string()),
+    );
+    world.insert(
+        YamlValue::String("root_path".to_string()),
+        YamlValue::String(String::new()),
+    );
+    world.insert(
+        YamlValue::String("caged".to_string()),
+        YamlValue::Bool(true),
+    );
 
-    let mut install = TomlTable::new();
-    install.insert("world_enabled".to_string(), TomlValue::Boolean(true));
+    let mut install = YamlMapping::new();
+    install.insert(
+        YamlValue::String("world_enabled".to_string()),
+        YamlValue::Bool(true),
+    );
 
-    let mut doc = TomlTable::new();
-    doc.insert("install".to_string(), TomlValue::Table(install));
-    doc.insert("world".to_string(), TomlValue::Table(root));
-    doc
+    let mut doc = YamlMapping::new();
+    doc.insert(
+        YamlValue::String("install".to_string()),
+        YamlValue::Mapping(install),
+    );
+    doc.insert(
+        YamlValue::String("world".to_string()),
+        YamlValue::Mapping(world),
+    );
+    YamlValue::Mapping(doc)
 }
 
 fn parse_config_updates(inputs: &[String]) -> Result<Vec<ConfigUpdate>> {
@@ -237,7 +261,7 @@ fn parse_config_value(kind: ConfigValueKind, raw: &str, key: &str) -> Result<Con
 }
 
 fn apply_config_update(
-    document: &mut TomlTable,
+    document: &mut YamlMapping,
     update: &ConfigUpdate,
 ) -> Result<Vec<ConfigChange>> {
     let mut paths: Vec<&'static str> = update.spec.paths.to_vec();
@@ -250,8 +274,8 @@ fn apply_config_update(
 
     let mut changes = Vec::with_capacity(paths.len());
     for path in paths {
-        let new_value = update.value.to_toml();
-        let previous = set_toml_path(document, path, new_value.clone())?;
+        let new_value = update.value.to_yaml();
+        let previous = set_yaml_path(document, path, new_value.clone())?;
         changes.push(ConfigChange {
             key: path.to_string(),
             is_alias: path != update.requested_key,
@@ -263,11 +287,11 @@ fn apply_config_update(
     Ok(changes)
 }
 
-fn set_toml_path(
-    document: &mut TomlTable,
+fn set_yaml_path(
+    document: &mut YamlMapping,
     dotted: &str,
-    value: TomlValue,
-) -> Result<Option<TomlValue>> {
+    value: YamlValue,
+) -> Result<Option<YamlValue>> {
     let segments: Vec<&str> = dotted.split('.').collect();
     if segments.is_empty() {
         bail!("invalid config key '{}'", dotted);
@@ -275,28 +299,46 @@ fn set_toml_path(
     if segments.iter().any(|segment| segment.is_empty()) {
         bail!("invalid config key '{}': empty path segment", dotted);
     }
+    set_yaml_path_segments(document, &segments, dotted, "", value)
+}
 
-    let mut cursor = document;
-    for (index, segment) in segments.iter().enumerate() {
-        if index == segments.len() - 1 {
-            return Ok(cursor.insert((*segment).to_string(), value));
-        }
+fn set_yaml_path_segments(
+    document: &mut YamlMapping,
+    segments: &[&str],
+    dotted: &str,
+    prefix: &str,
+    value: YamlValue,
+) -> Result<Option<YamlValue>> {
+    let Some((segment, rest)) = segments.split_first() else {
+        bail!("invalid config key '{}'", dotted);
+    };
 
-        let entry = cursor
-            .entry((*segment).to_string())
-            .or_insert_with(|| TomlValue::Table(TomlTable::new()));
-        match entry {
-            TomlValue::Table(table) => {
-                cursor = table;
-            }
-            _ => {
-                let prefix = segments[..=index].join(".");
-                bail!("{} must be a table to set {}", prefix, dotted);
-            }
-        }
+    let key = YamlValue::String((*segment).to_string());
+    if rest.is_empty() {
+        return Ok(document.insert(key, value));
     }
 
-    unreachable!("config key split yielded at least one segment");
+    let next_prefix = if prefix.is_empty() {
+        (*segment).to_string()
+    } else {
+        format!("{prefix}.{segment}")
+    };
+
+    if !document.contains_key(&key) {
+        document.insert(key.clone(), YamlValue::Mapping(YamlMapping::new()));
+    }
+    let entry = document
+        .get_mut(&key)
+        .ok_or_else(|| anyhow!("failed to access {} in {}", next_prefix, dotted))?;
+    match entry {
+        YamlValue::Mapping(map) => set_yaml_path_segments(map, rest, dotted, &next_prefix, value),
+        other => bail!(
+            "{} must be a mapping to set {} (found {})",
+            next_prefix,
+            dotted,
+            yaml_type_name(other)
+        ),
+    }
 }
 
 fn lookup_field_spec(key: &str) -> Option<&'static ConfigFieldSpec> {
@@ -309,25 +351,25 @@ fn lookup_field_spec(key: &str) -> Option<&'static ConfigFieldSpec> {
     }
 }
 
-fn format_optional_value(value: Option<&TomlValue>) -> String {
+fn format_optional_value(value: Option<&YamlValue>) -> String {
     value
         .map(format_value)
         .unwrap_or_else(|| "(unset)".to_string())
 }
 
-fn format_value(value: &TomlValue) -> String {
+fn format_value(value: &YamlValue) -> String {
     match value {
-        TomlValue::String(s) => format!("{:?}", s),
-        TomlValue::Boolean(flag) => flag.to_string(),
-        TomlValue::Integer(num) => num.to_string(),
-        TomlValue::Float(num) => num.to_string(),
-        TomlValue::Datetime(dt) => dt.to_string(),
-        TomlValue::Array(_) | TomlValue::Table(_) => value.to_string(),
+        YamlValue::Null => "null".to_string(),
+        YamlValue::Bool(flag) => flag.to_string(),
+        YamlValue::Number(num) => num.to_string(),
+        YamlValue::String(s) => format!("{:?}", s),
+        YamlValue::Sequence(_) | YamlValue::Mapping(_) => format_yaml_compact(value),
+        YamlValue::Tagged(tagged) => format_value(&tagged.value),
     }
 }
 
-fn toml_to_json_value(value: &TomlValue) -> JsonValue {
-    serde_json::to_value(value).unwrap_or_else(|_| JsonValue::String(value.to_string()))
+fn yaml_to_json_value(value: &YamlValue) -> JsonValue {
+    serde_json::to_value(value).unwrap_or_else(|_| JsonValue::String(format_value(value)))
 }
 
 struct ConfigUpdate {
@@ -356,11 +398,11 @@ enum ConfigValue {
 }
 
 impl ConfigValue {
-    fn to_toml(&self) -> TomlValue {
+    fn to_yaml(&self) -> YamlValue {
         match self {
-            ConfigValue::Boolean(flag) => TomlValue::Boolean(*flag),
-            ConfigValue::Mode(mode) => TomlValue::String(mode.to_string()),
-            ConfigValue::String(value) => TomlValue::String(value.clone()),
+            ConfigValue::Boolean(flag) => YamlValue::Bool(*flag),
+            ConfigValue::Mode(mode) => YamlValue::String(mode.to_string()),
+            ConfigValue::String(value) => YamlValue::String(value.clone()),
         }
     }
 }
@@ -368,8 +410,8 @@ impl ConfigValue {
 struct ConfigChange {
     key: String,
     is_alias: bool,
-    old_value: Option<TomlValue>,
-    new_value: TomlValue,
+    old_value: Option<YamlValue>,
+    new_value: YamlValue,
 }
 
 impl ConfigChange {
@@ -395,8 +437,8 @@ impl ConfigSetSummary {
             .map(|change| ConfigChangeSummary {
                 key: change.key.clone(),
                 alias: change.is_alias,
-                old_value: change.old_value.as_ref().map(toml_to_json_value),
-                new_value: toml_to_json_value(&change.new_value),
+                old_value: change.old_value.as_ref().map(yaml_to_json_value),
+                new_value: yaml_to_json_value(&change.new_value),
             })
             .collect();
         Self {
@@ -446,6 +488,7 @@ const SUPPORTED_CONFIG_KEYS: &[&str] = &[
 ];
 
 fn read_config_contents(path: &Path) -> Result<String> {
+    ensure_no_legacy_toml_config(path)?;
     match fs::read_to_string(path) {
         Ok(contents) => Ok(contents),
         Err(err) if err.kind() == io::ErrorKind::NotFound => bail!(
@@ -456,24 +499,28 @@ fn read_config_contents(path: &Path) -> Result<String> {
     }
 }
 
-fn redact_config_value(current_path: &str, value: &mut TomlValue) {
+fn redact_config_value(current_path: &str, value: &mut YamlValue) {
     match value {
-        TomlValue::Table(table) => {
-            for (key, entry) in table.iter_mut() {
+        YamlValue::Mapping(map) => {
+            for (key, entry) in map.iter_mut() {
+                let Some(key_str) = key.as_str() else {
+                    redact_config_value(current_path, entry);
+                    continue;
+                };
                 let next_path = if current_path.is_empty() {
-                    key.clone()
+                    key_str.to_string()
                 } else {
-                    format!("{current_path}.{key}")
+                    format!("{current_path}.{key_str}")
                 };
 
                 if is_sensitive_path(&next_path) {
-                    *entry = TomlValue::String(REDACTED_PLACEHOLDER.to_string());
+                    *entry = YamlValue::String(REDACTED_PLACEHOLDER.to_string());
                 } else {
                     redact_config_value(&next_path, entry);
                 }
             }
         }
-        TomlValue::Array(items) => {
+        YamlValue::Sequence(items) => {
             for (index, item) in items.iter_mut().enumerate() {
                 let next_path = if current_path.is_empty() {
                     format!("[{index}]")
@@ -483,6 +530,7 @@ fn redact_config_value(current_path: &str, value: &mut TomlValue) {
                 redact_config_value(&next_path, item);
             }
         }
+        YamlValue::Tagged(tagged) => redact_config_value(current_path, &mut tagged.value),
         _ => {}
     }
 }
@@ -500,3 +548,45 @@ fn is_sensitive_path(path: &str) -> bool {
 }
 
 const REDACTED_PLACEHOLDER: &str = "*** redacted ***";
+
+fn ensure_no_legacy_toml_config(config_yaml_path: &Path) -> Result<()> {
+    let legacy = config_yaml_path
+        .parent()
+        .map(|parent| parent.join("config.toml"))
+        .unwrap_or_else(|| PathBuf::from("config.toml"));
+
+    if !legacy.exists() {
+        return Ok(());
+    }
+
+    let message = format!(
+        "substrate: unsupported legacy TOML config detected:\n  - {}\nYAML config is now required:\n  - {}\nNext steps:\n  - Delete the TOML file and run `substrate config init --force`\n  - Re-apply changes via `substrate config set ...`\n",
+        legacy.display(),
+        config_yaml_path.display()
+    );
+    bail!("{message}");
+}
+
+fn yaml_type_name(value: &YamlValue) -> &'static str {
+    match value {
+        YamlValue::Null => "null",
+        YamlValue::Bool(_) => "boolean",
+        YamlValue::Number(_) => "number",
+        YamlValue::String(_) => "string",
+        YamlValue::Sequence(_) => "sequence",
+        YamlValue::Mapping(_) => "mapping",
+        YamlValue::Tagged(_) => "tagged",
+    }
+}
+
+fn format_yaml_compact(value: &YamlValue) -> String {
+    let rendered = serde_yaml::to_string(value)
+        .unwrap_or_else(|_| "<unprintable yaml>".to_string())
+        .trim()
+        .to_string();
+    rendered
+        .strip_prefix("---\n")
+        .unwrap_or(&rendered)
+        .trim()
+        .to_string()
+}

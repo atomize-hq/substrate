@@ -53,16 +53,34 @@ write_install_metadata() {
     flag="true"
   fi
 
-  cat > "${INSTALL_CONFIG_PATH}.tmp" <<EOF
-[install]
-world_enabled = ${flag}
+  local legacy_config="${PREFIX%/}/config.toml"
+  if [[ -f "${legacy_config}" ]]; then
+    fatal "Unsupported legacy TOML config detected at ${legacy_config}. YAML config is now required at ${INSTALL_CONFIG_PATH}. Delete the TOML file and re-run dev-install."
+  fi
 
-[world]
-anchor_mode = "${ANCHOR_MODE}"
-anchor_path = "${ANCHOR_PATH}"
-root_mode = "${ANCHOR_MODE}"
-root_path = "${ANCHOR_PATH}"
-caged = $([[ "${WORLD_CAGED}" -eq 1 ]] && echo "true" || echo "false")
+  local caged_yaml="false"
+  if [[ "${WORLD_CAGED}" -eq 1 ]]; then
+    caged_yaml="true"
+  fi
+
+  local anchor_path_yaml='""'
+  local root_path_yaml='""'
+  if [[ -n "${ANCHOR_PATH}" ]]; then
+    local escaped_anchor_path
+    escaped_anchor_path="$(printf '%s' "${ANCHOR_PATH}" | sed "s/'/''/g")"
+    anchor_path_yaml="'${escaped_anchor_path}'"
+    root_path_yaml="${anchor_path_yaml}"
+  fi
+
+  cat > "${INSTALL_CONFIG_PATH}.tmp" <<EOF
+install:
+  world_enabled: ${flag}
+world:
+  anchor_mode: ${ANCHOR_MODE}
+  anchor_path: ${anchor_path_yaml}
+  root_mode: ${ANCHOR_MODE}
+  root_path: ${root_path_yaml}
+  caged: ${caged_yaml}
 EOF
   mv "${INSTALL_CONFIG_PATH}.tmp" "${INSTALL_CONFIG_PATH}"
   chmod 0644 "${INSTALL_CONFIG_PATH}" || true
@@ -624,7 +642,7 @@ VERSION_DIR="${PREFIX%/}/versions/${VERSION_LABEL}"
 VERSION_CONFIG_DIR="${VERSION_DIR}/config"
 MANAGER_INIT_PATH="${PREFIX%/}/manager_init.sh"
 MANAGER_ENV_PATH="${PREFIX%/}/manager_env.sh"
-INSTALL_CONFIG_PATH="${PREFIX%/}/config.toml"
+INSTALL_CONFIG_PATH="${PREFIX%/}/config.yaml"
 
 mkdir -p "${PREFIX}" "${BIN_DIR}" "${VERSION_CONFIG_DIR}"
 
@@ -652,7 +670,7 @@ EOF
 mv "${MANAGER_INIT_PATH}.tmp" "${MANAGER_INIT_PATH}"
 chmod 0644 "${MANAGER_INIT_PATH}" || true
 
-# Write install metadata (install + world tables) like the production installer.
+# Write install metadata (install + world mappings) like the production installer.
 write_install_metadata "${WORLD_ENABLED}"
 write_manager_env_script "${WORLD_ENABLED}"
 

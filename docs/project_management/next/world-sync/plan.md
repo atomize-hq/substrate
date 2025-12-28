@@ -6,13 +6,24 @@
 - Per-triad spec files (`C*-spec.md`) are the single source of truth for scope/acceptance. Code/Test/Integration must align to the spec; integration is responsible for reconciling any drift.
 
 ## Global Guardrails
-- Branch: `feat/world-sync` (orchestrator). Docs/tasks/session log live only here; never edit them in worktrees.
+- Orchestration branch: `feat/world-sync`. Docs/tasks/session log live only here; never edit them in worktrees.
 - Work happens in dedicated task branches + worktrees per task (names in tasks.json).
 - Code agent: writes production code only. No tests. Not required to run unit/integration suites—must run fmt/clippy and validate functionality per spec.
 - Test agent: writes tests/fixtures/mocks/harnesses only (and tiny test-only helpers). No production code changes. Runs relevant tests they add/touch.
 - Integration agent: merges code+test branches, resolves mismatches, ensures functionality matches the spec, and runs full verification ending with `make preflight` (after fmt/clippy/tests). They own the final green state even if code/test drifted.
 - Protected paths: `.git`, `.substrate-git`, `.substrate`, sockets, device files must never be mutated by sync.
 - Each task must fit comfortably < 40–50% of 272k context (~110–140k tokens). Keep changes scoped and testable.
+
+## Exit codes (stable taxonomy)
+
+Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+
+World-sync commands use these exit codes:
+- `0`: success, including intentional no-op (no diffs, auto-sync disabled)
+- `2`: configuration or usage error (including “workspace not initialized; run substrate init”)
+- `3`: world backend unavailable when the command requires it (sync operations only)
+- `4`: operation not supported on this platform or not implemented yet
+- `5`: safety-rail refusal (protected paths, size guard, clean-tree guard)
 
 ## Common Start Checklist (all tasks)
 1. `git checkout feat/world-sync && git pull --ff-only`
@@ -36,6 +47,7 @@
 ## Triads Overview
 - C0: Init + gating (require `substrate init`, create `.substrate/` and `.substrate-git/`, host/world readiness guards).
 - C1: Config/CLI surface (no behavior change).
+- WDL0–WDL2: World-deps selection layer (executes between C1 and C2; see `docs/project_management/next/world_deps_selection_layer/plan.md`).
 - C2: Manual world→host sync (non-PTY) with conflict/filter controls.
 - C3: Auto-sync (non-PTY) on session close + safety rails.
 - C4: PTY overlay diff + manual/auto world→host sync.

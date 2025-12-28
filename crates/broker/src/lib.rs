@@ -12,12 +12,12 @@ mod watcher;
 
 pub use api::{
     allowed_domains, detect_profile, evaluate, init, quick_check, reload_policy, set_global_broker,
-    set_observe_only, world_fs_mode,
+    set_observe_only, world_fs_mode, world_fs_policy,
 };
 pub use approval::{ApprovalCache, ApprovalContext, ApprovalStatus};
 pub use broker::Broker;
 pub use handle::BrokerHandle;
-pub use policy::{Decision, Policy, Restriction, RestrictionType};
+pub use policy::{Decision, Policy, Restriction, RestrictionType, WorldFsCage, WorldFsPolicy};
 pub use profile::ProfileDetector;
 #[cfg(any(test, feature = "policy-watcher"))]
 pub use watcher::{spawn_policy_watcher, MultiPolicyWatcher, PolicyWatcher};

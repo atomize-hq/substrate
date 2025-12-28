@@ -47,10 +47,14 @@ fn test_load_policy() {
     let policy_content = r#"
 id: test-policy
 name: Test Policy
-fs_read:
-  - /tmp/*
-fs_write:
-  - /tmp/*
+world_fs:
+  mode: writable
+  cage: project
+  require_world: false
+  read_allowlist:
+    - /tmp/*
+  write_allowlist:
+    - /tmp/*
 net_allowed:
   - github.com
 cmd_allowed:
@@ -83,11 +87,16 @@ allow_shell_operators: true
 }
 
 #[test]
-fn minimal_profile_parses_with_defaults() {
+fn minimal_policy_parses_with_required_world_fs() {
     let raw = r#"
 id: minimal
 name: Minimal Profile
-world_fs_mode: read_only
+world_fs:
+  mode: read_only
+  cage: project
+  require_world: true
+  read_allowlist: ["*"]
+  write_allowlist: []
 cmd_denied: ["ls"]
 "#;
 
@@ -96,6 +105,8 @@ cmd_denied: ["ls"]
     assert_eq!(policy.world_fs_mode, WorldFsMode::ReadOnly);
     assert_eq!(policy.fs_read, vec!["*".to_string()]);
     assert!(policy.fs_write.is_empty());
+    assert!(policy.net_allowed.is_empty());
+    assert!(policy.cmd_allowed.is_empty());
 }
 
 #[test]
@@ -156,8 +167,12 @@ fn broker_handles_remain_isolated_in_parallel() {
         r#"
 id: alpha
 name: Alpha Policy
-fs_read: []
-fs_write: []
+world_fs:
+  mode: writable
+  cage: project
+  require_world: false
+  read_allowlist: ["*"]
+  write_allowlist: []
 net_allowed: []
 cmd_allowed:
   - alpha-allowed
@@ -174,8 +189,12 @@ allow_shell_operators: true
         r#"
 id: beta
 name: Beta Policy
-fs_read: []
-fs_write: []
+world_fs:
+  mode: writable
+  cage: project
+  require_world: false
+  read_allowlist: ["*"]
+  write_allowlist: []
 net_allowed: []
 cmd_allowed:
   - beta-allowed
@@ -248,7 +267,12 @@ fn invalid_world_fs_mode_in_policy_surfaces_error() {
         r#"
 id: bad-fs-mode
 name: Invalid fs mode
-world_fs_mode: invalid
+world_fs:
+  mode: invalid
+  cage: project
+  require_world: false
+  read_allowlist: ["*"]
+  write_allowlist: []
 "#,
     )
     .unwrap();
@@ -257,6 +281,206 @@ world_fs_mode: invalid
     let result = broker.load_policy(&policy_path);
     assert!(
         result.is_err(),
-        "expected invalid world_fs_mode to fail parsing"
+        "expected invalid world_fs.mode to fail parsing"
     );
+}
+
+mod i0_strict_policy_schema_world_fs {
+    use super::*;
+
+    fn parse_err(raw: &str) -> String {
+        serde_yaml::from_str::<Policy>(raw)
+            .expect_err("expected policy parse error")
+            .to_string()
+    }
+
+    #[test]
+    fn missing_world_fs_fails_with_actionable_error() {
+        let err = parse_err(
+            r#"
+id: p
+name: Policy
+"#,
+        );
+
+        assert!(
+            err.contains("missing required policy block: world_fs"),
+            "unexpected error: {err}"
+        );
+        assert!(err.contains("example:"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn invalid_world_fs_mode_fails_with_allowed_values() {
+        let err = parse_err(
+            r#"
+id: p
+name: Policy
+world_fs:
+  mode: invalid
+  cage: project
+  require_world: false
+  read_allowlist: ["*"]
+  write_allowlist: []
+"#,
+        );
+        assert!(
+            err.contains("invalid world fs mode"),
+            "unexpected error: {err}"
+        );
+        assert!(err.contains("writable"), "unexpected error: {err}");
+        assert!(err.contains("read_only"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn invalid_world_fs_cage_fails_with_allowed_values() {
+        let err = parse_err(
+            r#"
+id: p
+name: Policy
+world_fs:
+  mode: writable
+  cage: invalid
+  require_world: false
+  read_allowlist: ["*"]
+  write_allowlist: []
+"#,
+        );
+        assert!(
+            err.contains("invalid world_fs.cage"),
+            "unexpected error: {err}"
+        );
+        assert!(err.contains("project"), "unexpected error: {err}");
+        assert!(err.contains("full"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn read_only_requires_require_world_true() {
+        let err = parse_err(
+            r#"
+id: p
+name: Policy
+world_fs:
+  mode: read_only
+  cage: project
+  require_world: false
+  read_allowlist: ["*"]
+  write_allowlist: []
+"#,
+        );
+        assert!(
+            err.contains("mode=read_only") && err.contains("require_world=true"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn full_cage_requires_require_world_true() {
+        let err = parse_err(
+            r#"
+id: p
+name: Policy
+world_fs:
+  mode: writable
+  cage: full
+  require_world: false
+  read_allowlist: ["*"]
+  write_allowlist: []
+"#,
+        );
+        assert!(
+            err.contains("cage=full") && err.contains("require_world=true"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn read_allowlist_must_be_non_empty() {
+        let err = parse_err(
+            r#"
+id: p
+name: Policy
+world_fs:
+  mode: writable
+  cage: project
+  require_world: false
+  read_allowlist: []
+  write_allowlist: []
+"#,
+        );
+        assert!(err.contains("read_allowlist"), "unexpected error: {err}");
+        assert!(err.contains("non-empty"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn write_allowlist_can_be_empty_but_required() {
+        serde_yaml::from_str::<Policy>(
+            r#"
+id: p
+name: Policy
+world_fs:
+  mode: writable
+  cage: project
+  require_world: false
+  read_allowlist: ["*"]
+  write_allowlist: []
+"#,
+        )
+        .expect("empty write_allowlist should be allowed");
+
+        let err = parse_err(
+            r#"
+id: p
+name: Policy
+world_fs:
+  mode: writable
+  cage: project
+  require_world: false
+  read_allowlist: ["*"]
+"#,
+        );
+        assert!(err.contains("write_allowlist"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn legacy_keys_are_rejected() {
+        let err = parse_err(
+            r#"
+id: p
+name: Policy
+world_fs_mode: writable
+world_fs:
+  mode: writable
+  cage: project
+  require_world: false
+  read_allowlist: ["*"]
+  write_allowlist: []
+"#,
+        );
+        assert!(
+            err.contains("legacy policy key") && err.contains("world_fs_mode"),
+            "unexpected error: {err}"
+        );
+        assert!(err.contains("world_fs.mode"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn minimal_world_fs_policy_passes() {
+        let policy: Policy = serde_yaml::from_str(
+            r#"
+id: minimal
+name: Minimal
+world_fs:
+  mode: writable
+  cage: project
+  require_world: false
+  read_allowlist: ["./*"]
+  write_allowlist: []
+"#,
+        )
+        .expect("minimal world_fs policy should parse");
+        assert_eq!(policy.world_fs_mode, WorldFsMode::Writable);
+        assert_eq!(policy.world_fs_cage, WorldFsCage::Project);
+        assert!(!policy.world_fs_require_world);
+    }
 }

@@ -196,9 +196,9 @@ pub struct ConfigCmd {
 
 #[derive(Subcommand, Debug)]
 pub enum ConfigAction {
-    /// Initialize or regenerate ~/.substrate/config.toml
+    /// Initialize or regenerate ~/.substrate/config.yaml
     Init(ConfigInitArgs),
-    /// Print the global config (TOML by default, JSON with --json)
+    /// Print the global config (YAML by default, JSON with --json)
     Show(ConfigShowArgs),
     /// Update config keys via dotted key=value assignments
     Set(ConfigSetArgs),
@@ -213,7 +213,7 @@ pub struct ConfigInitArgs {
 
 #[derive(Args, Debug)]
 pub struct ConfigShowArgs {
-    /// Emit JSON instead of TOML
+    /// Emit JSON instead of YAML
     #[arg(long)]
     pub json: bool,
 }
@@ -238,6 +238,8 @@ pub enum WorldAction {
     Enable(WorldEnableArgs),
     Deps(WorldDepsCmd),
     Cleanup(WorldCleanupArgs),
+    /// Run end-to-end world_fs enforcement verification (read_only + full cage).
+    Verify(WorldVerifyArgs),
 }
 
 #[derive(Args, Debug, Clone)]
@@ -267,6 +269,25 @@ pub struct WorldCleanupArgs {
     /// Attempt to delete detected namespaces/nft tables/cgroups
     #[arg(long, help = "Apply cleanup actions instead of just reporting")]
     pub purge: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldVerifyArgs {
+    /// Emit a structured JSON report (stable fields for CI)
+    #[arg(long)]
+    pub json: bool,
+
+    /// Treat skipped checks (unsupported/prereq-missing) as failures
+    #[arg(long)]
+    pub strict: bool,
+
+    /// Directory to write logs/artifacts under (defaults to the OS temp directory)
+    #[arg(long = "root", value_name = "PATH")]
+    pub root: Option<PathBuf>,
+
+    /// Keep temporary projects instead of deleting them at exit
+    #[arg(long = "keep-temp")]
+    pub keep_temp: bool,
 }
 
 #[derive(Args, Debug)]

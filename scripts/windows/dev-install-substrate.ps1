@@ -97,7 +97,11 @@ finally {
 }
 
 Write-Log 'Substrate dev install complete.'
-$configPath = Join-Path $Prefix 'config.toml'
+$configPath = Join-Path $Prefix 'config.yaml'
+$legacyConfigPath = Join-Path $Prefix 'config.toml'
+if (Test-Path $legacyConfigPath) {
+    Write-Warn "Legacy TOML config detected at $legacyConfigPath. YAML config is now required ($configPath). Delete the TOML file and run 'substrate config init --force' to regenerate defaults."
+}
 if (-not (Test-Path $configPath)) {
     Write-Warn "Config metadata missing at $configPath. Run 'substrate config init' to create defaults."
 }
