@@ -156,3 +156,19 @@
 - Task branch: `pcm-pcm1-policy-integ`
 - Worktree: `wt/pcm1-policy-integ`
 - Scope: merge PCM1 code+tests, reconcile to `PCM1-spec.md`, and run fmt/clippy/tests/preflight + smoke scripts.
+
+## END — 2025-12-28T16:07:50Z — PCM1-integ — policy inventory and CLI (integration)
+- Summary of changes:
+  - Updated remaining policy fixtures (broker/shell/shim/world-agent) to use strict PCM1 schema (`world_fs.isolation`, required keys) and to satisfy invariants (`read_only` requires `require_world=true`).
+  - Adjusted built-in default policy (struct + YAML template) to include baseline `cmd_denied` patterns so enforced mode can deny obviously dangerous commands.
+  - Fixed a shell policy discovery test to reflect workspace-init creating `.substrate/policy.yaml`.
+- Commands run (required):
+  - `cargo fmt --all` → exit `0`
+  - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
+  - `cargo test -p substrate-broker policy::tests::pcm1_ -- --nocapture` → exit `0`
+  - `cargo test -p substrate-shell --test policy_discovery -- --nocapture` → exit `0`
+  - `make preflight` → exit `0`
+- Smoke scripts:
+  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `1` (fails: `$SUBSTRATE_HOME/env.sh` not yet created by `substrate config global init --force`)
+  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
+  - `pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `127` (`pwsh` not found)
