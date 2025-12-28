@@ -4,23 +4,25 @@ mod common;
 
 use assert_cmd::Command;
 use common::{substrate_shell_driver, temp_dir};
+use serde_json::Value as JsonValue;
 use serde_yaml::Value as YamlValue;
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
 
-struct ConfigInitFixture {
+struct GlobalConfigFixture {
     _temp: TempDir,
     home: PathBuf,
     substrate_home: PathBuf,
 }
 
-impl ConfigInitFixture {
+impl GlobalConfigFixture {
     fn new() -> Self {
-        let temp = temp_dir("substrate-config-init-");
+        let temp = temp_dir("substrate-config-global-");
         let home = temp.path().join("home");
         fs::create_dir_all(&home).expect("failed to create HOME fixture");
-        let substrate_home = temp.path().join("alt-substrate-home");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&substrate_home).expect("failed to create SUBSTRATE_HOME fixture");
         Self {
             _temp: temp,
             home,
@@ -40,191 +42,230 @@ impl ConfigInitFixture {
         self.substrate_home.join("config.yaml")
     }
 
-    fn legacy_config_path(&self) -> PathBuf {
-        self.substrate_home.join("config.toml")
+    fn write_raw_config(&self, contents: &str) {
+        fs::write(self.config_path(), contents).expect("failed to seed config.yaml");
     }
 
-    fn read_config(&self) -> YamlValue {
-        let data = fs::read_to_string(self.config_path()).expect("config contents");
-        serde_yaml::from_str(&data).expect("config to parse as YAML")
+    fn read_raw_config(&self) -> String {
+        fs::read_to_string(self.config_path()).expect("read config.yaml")
     }
 
-    fn write_custom_config(&self, contents: &str) {
-        if let Some(parent) = self.config_path().parent() {
-            fs::create_dir_all(parent).expect("config parent");
+    fn read_yaml_config(&self) -> YamlValue {
+        serde_yaml::from_str(&self.read_raw_config()).expect("config.yaml should parse as YAML")
+    }
+
+    fn global_init(&self, force: bool) -> std::process::Output {
+        let mut cmd = self.command();
+        cmd.arg("config").arg("global").arg("init");
+        if force {
+            cmd.arg("--force");
         }
-        fs::write(self.config_path(), contents).expect("write custom config");
+        cmd.output().expect("failed to run config global init")
     }
 
-    fn raw_contents(&self) -> String {
-        fs::read_to_string(self.config_path()).expect("config contents")
+    fn global_show_json(&self) -> JsonValue {
+        let mut cmd = self.command();
+        let output = cmd
+            .arg("config")
+            .arg("global")
+            .arg("show")
+            .arg("--json")
+            .output()
+            .expect("failed to run config global show --json");
+        assert!(
+            output.status.success(),
+            "config global show should succeed: {output:?}"
+        );
+        serde_json::from_slice(&output.stdout).expect("global show JSON should parse")
     }
 }
 
-fn assert_default_config(config: &YamlValue) {
-    let root = config.as_mapping().expect("config must be a mapping");
-    let install = root
-        .get(YamlValue::String("install".to_string()))
-        .and_then(|value| value.as_mapping())
-        .expect("install mapping present");
-    assert_eq!(
-        install
-            .get(YamlValue::String("world_enabled".to_string()))
-            .and_then(|value| value.as_bool()),
-        Some(true),
-        "install.world_enabled should default to true"
+#[test]
+fn config_global_show_prints_defaults_when_missing() {
+    let fixture = GlobalConfigFixture::new();
+    assert!(
+        !fixture.config_path().exists(),
+        "precondition: config missing"
     );
 
-    let world = root
-        .get(YamlValue::String("world".to_string()))
-        .and_then(|value| value.as_mapping())
-        .expect("world mapping present");
+    let json = fixture.global_show_json();
     assert_eq!(
-        world
-            .get(YamlValue::String("anchor_mode".to_string()))
-            .and_then(|value| value.as_str())
-            .map(str::to_string),
-        Some("project".to_string()),
-        "world.anchor_mode default mismatch"
+        json.pointer("/world/enabled").and_then(|v| v.as_bool()),
+        Some(true)
     );
     assert_eq!(
-        world
-            .get(YamlValue::String("anchor_path".to_string()))
-            .and_then(|value| value.as_str())
-            .map(str::to_string),
-        Some(String::new()),
-        "world.anchor_path default mismatch"
+        json.pointer("/world/anchor_mode").and_then(|v| v.as_str()),
+        Some("workspace")
     );
     assert_eq!(
-        world
-            .get(YamlValue::String("root_mode".to_string()))
-            .and_then(|value| value.as_str())
-            .map(str::to_string),
-        Some("project".to_string()),
-        "world.root_mode should mirror anchor"
+        json.pointer("/world/anchor_path").and_then(|v| v.as_str()),
+        Some("")
     );
     assert_eq!(
-        world
-            .get(YamlValue::String("root_path".to_string()))
-            .and_then(|value| value.as_str())
-            .map(str::to_string),
-        Some(String::new()),
-        "world.root_path default mismatch"
+        json.pointer("/world/caged").and_then(|v| v.as_bool()),
+        Some(true)
     );
     assert_eq!(
-        world
-            .get(YamlValue::String("caged".to_string()))
-            .and_then(|value| value.as_bool()),
-        Some(true),
-        "world.caged default mismatch"
+        json.pointer("/policy/mode").and_then(|v| v.as_str()),
+        Some("observe")
+    );
+    assert_eq!(
+        json.pointer("/sync/auto_sync").and_then(|v| v.as_bool()),
+        Some(false)
+    );
+    assert_eq!(
+        json.pointer("/sync/direction").and_then(|v| v.as_str()),
+        Some("from_world")
+    );
+    assert_eq!(
+        json.pointer("/sync/conflict_policy")
+            .and_then(|v| v.as_str()),
+        Some("prefer_host")
+    );
+    assert_eq!(
+        json.pointer("/sync/exclude")
+            .and_then(|v| v.as_array())
+            .map(|v| v.len()),
+        Some(0)
     );
 }
 
 #[test]
-fn config_init_creates_default_tables_under_substrate_home() {
-    let fixture = ConfigInitFixture::new();
-
-    let mut cmd = fixture.command();
-    cmd.arg("config").arg("init").assert().success();
-
+fn config_global_init_writes_default_config_yaml() {
+    let fixture = GlobalConfigFixture::new();
+    let output = fixture.global_init(false);
+    assert!(
+        output.status.success(),
+        "config global init should succeed: {output:?}"
+    );
     assert!(
         fixture.config_path().exists(),
-        "config init should write {}",
+        "config global init should create {}",
         fixture.config_path().display()
     );
 
-    let config = fixture.read_config();
-    assert_default_config(&config);
+    let yaml = fixture.read_yaml_config();
+    let root = yaml.as_mapping().expect("yaml root mapping");
+    assert!(root.contains_key(&YamlValue::String("world".to_string())));
+    assert!(root.contains_key(&YamlValue::String("policy".to_string())));
+    assert!(root.contains_key(&YamlValue::String("sync".to_string())));
 }
 
 #[test]
-fn config_init_force_rewrites_existing_config() {
-    let fixture = ConfigInitFixture::new();
-
-    let mut initial = fixture.command();
-    initial.arg("config").arg("init").assert().success();
-
-    fixture.write_custom_config(
-        "# user customizations that should be removed\ninstall:\n  world_enabled: false\nworld:\n  anchor_mode: custom\n  anchor_path: /tmp/custom\n  root_mode: custom\n  root_path: /tmp/custom\n  caged: false\n",
+fn config_global_init_does_not_overwrite_without_force() {
+    let fixture = GlobalConfigFixture::new();
+    fixture.write_raw_config(
+        "world:\n  enabled: false\n  anchor_mode: follow-cwd\n  anchor_path: /tmp/example\n  caged: false\npolicy:\n  mode: disabled\nsync:\n  auto_sync: true\n  direction: both\n  conflict_policy: abort\n  exclude: [\"user\"]\n",
     );
+    let before = fixture.read_raw_config();
+
+    let output = fixture.global_init(false);
     assert!(
-        fixture.raw_contents().contains("user customizations"),
-        "precondition: custom config should persist prior to --force"
+        output.status.success(),
+        "config global init should succeed (no overwrite): {output:?}"
+    );
+    let after = fixture.read_raw_config();
+    assert_eq!(before, after, "init without --force must not overwrite");
+}
+
+#[test]
+fn config_global_set_creates_file_and_applies_updates() {
+    let fixture = GlobalConfigFixture::new();
+    assert!(
+        !fixture.config_path().exists(),
+        "precondition: config missing"
     );
 
     let mut cmd = fixture.command();
-    cmd.arg("config")
-        .arg("init")
-        .arg("--force")
-        .assert()
-        .success();
+    let output = cmd
+        .arg("config")
+        .arg("global")
+        .arg("set")
+        .arg("--json")
+        .arg("world.enabled=false")
+        .arg("policy.mode=enforce")
+        .arg("sync.exclude=[\"a\",\"b\"]")
+        .output()
+        .expect("failed to run config global set");
 
-    let config = fixture.read_config();
-    assert_default_config(&config);
     assert!(
-        !fixture.raw_contents().contains("user customizations"),
-        "force init should rewrite custom config contents"
+        output.status.success(),
+        "config global set should succeed: {output:?}"
+    );
+    assert!(
+        fixture.config_path().exists(),
+        "global set should create config"
+    );
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout).expect("set output JSON parse");
+    assert_eq!(
+        json.pointer("/world/enabled").and_then(|v| v.as_bool()),
+        Some(false)
+    );
+    assert_eq!(
+        json.pointer("/policy/mode").and_then(|v| v.as_str()),
+        Some("enforce")
+    );
+    assert_eq!(
+        json.pointer("/sync/exclude")
+            .and_then(|v| v.as_array())
+            .and_then(|v| v.iter().map(|x| x.as_str()).collect::<Option<Vec<_>>>()),
+        Some(vec!["a", "b"])
     );
 }
 
 #[test]
-fn shell_launch_without_config_prints_init_hint() {
-    let fixture = ConfigInitFixture::new();
+fn config_global_set_rejects_unknown_keys_without_writing() {
+    let fixture = GlobalConfigFixture::new();
+    assert!(
+        !fixture.config_path().exists(),
+        "precondition: config missing"
+    );
 
     let output = fixture
         .command()
-        .arg("--no-world")
-        .arg("-c")
-        .arg("echo config-check")
+        .arg("config")
+        .arg("global")
+        .arg("set")
+        .arg("nope.key=true")
         .output()
-        .expect("failed to launch substrate shell");
+        .expect("failed to run config global set");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    let hint_found =
-        stdout.contains("substrate config init") || stderr.contains("substrate config init");
-
-    assert!(
-        hint_found,
-        "missing config hint not printed.\nstatus: {:#?}\nstdout: {}\nstderr: {}",
-        output.status, stdout, stderr
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "unknown key must return exit 2: {output:?}"
     );
     assert!(
         !fixture.config_path().exists(),
-        "config init hint should not silently create config.yaml"
+        "global set must not create config.yaml on error"
     );
 }
 
 #[test]
-fn config_init_refuses_legacy_toml() {
-    let fixture = ConfigInitFixture::new();
-    fixture.write_custom_config("install:\n  world_enabled: true\n");
-    fs::write(
-        fixture.legacy_config_path(),
-        "[install]\nworld_enabled = true\n",
-    )
-    .expect("write legacy config.toml");
-
-    let assert = fixture
-        .command()
-        .arg("config")
-        .arg("init")
-        .arg("--force")
-        .assert()
-        .failure();
-
-    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
-    assert!(
-        stderr.contains("unsupported legacy TOML config detected"),
-        "stderr missing legacy TOML message: {stderr}"
+fn config_global_init_force_overwrites_existing_config() {
+    let fixture = GlobalConfigFixture::new();
+    fixture.write_raw_config(
+        "world:\n  enabled: false\n  anchor_mode: custom\n  anchor_path: /tmp/custom\n  caged: false\npolicy:\n  mode: disabled\nsync:\n  auto_sync: true\n  direction: both\n  conflict_policy: abort\n  exclude: [\"user\"]\n",
     );
+
+    let output = fixture.global_init(true);
     assert!(
-        stderr.contains(&fixture.legacy_config_path().display().to_string()),
-        "stderr missing legacy path: {stderr}"
+        output.status.success(),
+        "config global init --force should succeed: {output:?}"
     );
-    assert!(
-        stderr.contains(&fixture.config_path().display().to_string()),
-        "stderr missing yaml path: {stderr}"
+
+    let json = fixture.global_show_json();
+    assert_eq!(
+        json.pointer("/world/enabled").and_then(|v| v.as_bool()),
+        Some(true)
+    );
+    assert_eq!(
+        json.pointer("/world/anchor_mode").and_then(|v| v.as_str()),
+        Some("workspace")
+    );
+    assert_eq!(
+        json.pointer("/policy/mode").and_then(|v| v.as_str()),
+        Some("observe")
     );
 }

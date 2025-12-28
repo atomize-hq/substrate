@@ -5,19 +5,16 @@ mod common;
 use assert_cmd::Command;
 use common::{substrate_shell_driver, temp_dir};
 use serde_json::Value as JsonValue;
-use serde_yaml::{Mapping as YamlMapping, Value as YamlValue};
+use serde_yaml::Value as YamlValue;
 use std::fs;
-use std::fs::Permissions;
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 use tempfile::TempDir;
 
 struct ConfigSetFixture {
     _temp: TempDir,
     home: PathBuf,
     substrate_home: PathBuf,
-    workspace: PathBuf,
+    workspace_root: PathBuf,
 }
 
 impl ConfigSetFixture {
@@ -25,15 +22,15 @@ impl ConfigSetFixture {
         let temp = temp_dir("substrate-config-set-");
         let home = temp.path().join("home");
         fs::create_dir_all(&home).expect("failed to create HOME fixture");
-        let workspace = temp.path().join("workspace");
-        fs::create_dir_all(&workspace).expect("failed to create workspace fixture");
-        let substrate_home = temp.path().join("alt-substrate-home");
+        let substrate_home = temp.path().join("substrate-home");
         fs::create_dir_all(&substrate_home).expect("failed to create SUBSTRATE_HOME fixture");
+        let workspace_root = temp.path().join("workspace");
+        fs::create_dir_all(&workspace_root).expect("failed to create workspace root");
         Self {
             _temp: temp,
             home,
             substrate_home,
-            workspace,
+            workspace_root,
         }
     }
 
@@ -45,472 +42,247 @@ impl ConfigSetFixture {
         cmd
     }
 
-    fn config_path(&self) -> PathBuf {
-        self.substrate_home.join("config.yaml")
+    fn workspace_config_path(&self) -> PathBuf {
+        self.workspace_root
+            .join(".substrate")
+            .join("workspace.yaml")
     }
 
-    fn init_config(&self) {
+    fn init_workspace(&self) {
+        let output = self
+            .command()
+            .arg("workspace")
+            .arg("init")
+            .arg(&self.workspace_root)
+            .output()
+            .expect("failed to run workspace init");
+        assert!(
+            output.status.success(),
+            "workspace init should succeed: {output:?}"
+        );
+        assert!(
+            self.workspace_config_path().exists(),
+            "workspace init should create workspace.yaml"
+        );
+    }
+
+    fn read_workspace_yaml(&self) -> YamlValue {
+        let raw = fs::read_to_string(self.workspace_config_path()).expect("read workspace.yaml");
+        serde_yaml::from_str(&raw).expect("workspace.yaml YAML parse")
+    }
+
+    fn set_json(&self, cwd: &Path, updates: &[&str]) -> std::process::Output {
         let mut cmd = self.command();
-        cmd.arg("config").arg("init").assert().success();
-    }
-
-    fn legacy_config_path(&self) -> PathBuf {
-        self.substrate_home.join("config.toml")
-    }
-
-    fn read_config(&self) -> YamlValue {
-        let data = fs::read_to_string(self.config_path()).expect("config contents");
-        serde_yaml::from_str(&data).expect("config to parse as YAML")
-    }
-
-    fn raw_contents(&self) -> String {
-        fs::read_to_string(self.config_path()).expect("config contents")
-    }
-
-    fn set_command(&self) -> Command {
-        let mut cmd = self.command();
-        cmd.arg("config").arg("set");
-        cmd
-    }
-
-    fn workspace(&self) -> &Path {
-        &self.workspace
-    }
-
-    fn substrate_home(&self) -> &Path {
-        &self.substrate_home
-    }
-}
-
-#[test]
-fn config_set_updates_anchor_mode() {
-    if !ensure_config_set_available() {
-        return;
-    }
-
-    let fixture = ConfigSetFixture::new();
-    fixture.init_config();
-
-    fixture
-        .set_command()
-        .arg("world.anchor_mode=follow-cwd")
-        .assert()
-        .success();
-
-    let config = fixture.read_config();
-    let world = world_table(&config);
-    assert_eq!(
-        world
-            .get(YamlValue::String("anchor_mode".to_string()))
-            .and_then(|value| value.as_str()),
-        Some("follow-cwd"),
-        "world.anchor_mode should reflect config set change"
-    );
-}
-
-#[test]
-fn config_set_updates_anchor_path() {
-    if !ensure_config_set_available() {
-        return;
-    }
-
-    let fixture = ConfigSetFixture::new();
-    fixture.init_config();
-
-    let expected_path = "/tmp/config-set-anchor";
-    fixture
-        .set_command()
-        .arg(format!("world.anchor_path={expected_path}"))
-        .assert()
-        .success();
-
-    let config = fixture.read_config();
-    let world = world_table(&config);
-    assert_eq!(
-        world
-            .get(YamlValue::String("anchor_path".to_string()))
-            .and_then(|value| value.as_str()),
-        Some(expected_path),
-        "world.anchor_path should update to requested path"
-    );
-}
-
-#[test]
-fn config_set_updates_world_caged_flag() {
-    if !ensure_config_set_available() {
-        return;
-    }
-
-    let fixture = ConfigSetFixture::new();
-    fixture.init_config();
-
-    fixture
-        .set_command()
-        .arg("world.caged=false")
-        .assert()
-        .success();
-
-    let config = fixture.read_config();
-    let world = world_table(&config);
-    assert_eq!(
-        world
-            .get(YamlValue::String("caged".to_string()))
-            .and_then(|value| value.as_bool()),
-        Some(false),
-        "world.caged should follow config set boolean"
-    );
-}
-
-#[test]
-fn config_set_updates_install_world_enabled_flag() {
-    if !ensure_config_set_available() {
-        return;
-    }
-
-    let fixture = ConfigSetFixture::new();
-    fixture.init_config();
-
-    fixture
-        .set_command()
-        .arg("install.world_enabled=false")
-        .assert()
-        .success();
-
-    let config = fixture.read_config();
-    let install = install_table(&config);
-    assert_eq!(
-        install
-            .get(YamlValue::String("world_enabled".to_string()))
-            .and_then(|value| value.as_bool()),
-        Some(false),
-        "install.world_enabled should update to requested boolean"
-    );
-}
-
-#[test]
-fn config_set_updates_multiple_keys_atomically() {
-    if !ensure_config_set_available() {
-        return;
-    }
-
-    let fixture = ConfigSetFixture::new();
-    fixture.init_config();
-
-    fixture
-        .set_command()
-        .arg("world.anchor_mode=custom")
-        .arg("world.anchor_path=/tmp/multi-anchor")
-        .arg("install.world_enabled=false")
-        .assert()
-        .success();
-
-    let config = fixture.read_config();
-    let world = world_table(&config);
-    assert_eq!(
-        world
-            .get(YamlValue::String("anchor_mode".to_string()))
-            .and_then(|value| value.as_str()),
-        Some("custom"),
-        "world.anchor_mode should match multi-key update"
-    );
-    assert_eq!(
-        world
-            .get(YamlValue::String("anchor_path".to_string()))
-            .and_then(|value| value.as_str()),
-        Some("/tmp/multi-anchor"),
-        "world.anchor_path should match multi-key update"
-    );
-    let install = install_table(&config);
-    assert_eq!(
-        install
-            .get(YamlValue::String("world_enabled".to_string()))
-            .and_then(|value| value.as_bool()),
-        Some(false),
-        "install.world_enabled should reflect the combined run"
-    );
-}
-
-#[test]
-fn config_set_rejects_invalid_anchor_mode_without_mutation() {
-    if !ensure_config_set_available() {
-        return;
-    }
-
-    let fixture = ConfigSetFixture::new();
-    fixture.init_config();
-    let before = fixture.raw_contents();
-
-    fixture
-        .set_command()
-        .arg("world.anchor_mode=invalid-mode")
-        .assert()
-        .failure();
-
-    let after = fixture.raw_contents();
-    assert_eq!(
-        before, after,
-        "config should not change when anchor_mode value is invalid"
-    );
-}
-
-#[test]
-fn config_set_rejects_non_boolean_values() {
-    if !ensure_config_set_available() {
-        return;
-    }
-
-    let fixture = ConfigSetFixture::new();
-    fixture.init_config();
-    let before = fixture.raw_contents();
-
-    fixture
-        .set_command()
-        .arg("install.world_enabled=perhaps")
-        .assert()
-        .failure();
-
-    let after = fixture.raw_contents();
-    assert_eq!(
-        before, after,
-        "config should remain unchanged when boolean parsing fails"
-    );
-}
-
-#[test]
-fn config_set_reports_applied_changes_as_json() {
-    if !ensure_config_set_available() {
-        return;
-    }
-
-    let fixture = ConfigSetFixture::new();
-    fixture.init_config();
-
-    let mut cmd = fixture.set_command();
-    let output = cmd
-        .arg("--json")
-        .arg("world.anchor_mode=custom")
-        .arg("world.anchor_path=/tmp/json-anchor")
-        .arg("install.world_enabled=false")
-        .output()
-        .expect("failed to execute substrate config set --json");
-    assert!(
-        output.status.success(),
-        "config set --json should succeed: {:?}",
-        output
-    );
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let payload: JsonValue =
-        serde_json::from_str(&stdout).expect("config set --json output to parse");
-
-    assert_eq!(
-        payload.get("changed").and_then(|value| value.as_bool()),
-        Some(true),
-        "json payload should report that changes were applied",
-    );
-
-    let changes = payload
-        .get("changes")
-        .and_then(|value| value.as_array())
-        .expect("changes array present in JSON payload");
-
-    let find_change = |key: &str| {
-        changes
-            .iter()
-            .find(|change| change.get("key").and_then(|value| value.as_str()) == Some(key))
-    };
-
-    let anchor_mode =
-        find_change("world.anchor_mode").expect("world.anchor_mode change present in JSON payload");
-    assert_eq!(
-        anchor_mode
-            .get("new_value")
-            .and_then(|value| value.as_str()),
-        Some("custom"),
-        "json payload should describe updated anchor_mode",
-    );
-
-    let anchor_path =
-        find_change("world.anchor_path").expect("world.anchor_path change present in JSON payload");
-    assert_eq!(
-        anchor_path
-            .get("new_value")
-            .and_then(|value| value.as_str()),
-        Some("/tmp/json-anchor"),
-        "json payload should describe updated anchor_path",
-    );
-
-    let world_enabled = find_change("install.world_enabled")
-        .expect("install.world_enabled change present in JSON payload");
-    assert_eq!(
-        world_enabled
-            .get("new_value")
-            .and_then(|value| value.as_bool()),
-        Some(false),
-        "json payload should report boolean keys faithfully",
-    );
-}
-
-#[test]
-fn config_set_preserves_config_when_write_fails() {
-    if !ensure_config_set_available() {
-        return;
-    }
-
-    let fixture = ConfigSetFixture::new();
-    fixture.init_config();
-    let before = fixture.raw_contents();
-
-    let mut perms = fs::metadata(fixture.substrate_home())
-        .expect("substrate home metadata")
-        .permissions();
-    let original_mode = perms.mode();
-    perms.set_mode(0o555);
-    fs::set_permissions(fixture.substrate_home(), perms).expect("set read-only permissions");
-
-    fixture
-        .set_command()
-        .arg("world.anchor_mode=custom")
-        .arg("world.anchor_path=/tmp/failure")
-        .assert()
-        .failure();
-
-    let restore = Permissions::from_mode(original_mode);
-    fs::set_permissions(fixture.substrate_home(), restore).expect("restore permissions");
-
-    let after = fixture.raw_contents();
-    assert_eq!(
-        before, after,
-        "config should remain intact when atomic persist fails"
-    );
-}
-
-#[test]
-fn cli_flags_still_override_config_after_config_set() {
-    if !ensure_config_set_available() {
-        return;
-    }
-
-    let fixture = ConfigSetFixture::new();
-    fixture.init_config();
-    fixture
-        .set_command()
-        .arg("world.anchor_mode=custom")
-        .arg("world.anchor_path=/tmp/from-config")
-        .assert()
-        .success();
-
-    let project_dir = fixture.workspace().join("project");
-    fs::create_dir_all(&project_dir).expect("failed to create project dir");
-
-    let script = "printf '%s|%s' \"$SUBSTRATE_ANCHOR_MODE\" \"$SUBSTRATE_ANCHOR_PATH\"";
-    let output = fixture
-        .command()
-        .current_dir(&project_dir)
-        .arg("--anchor-mode")
-        .arg("follow-cwd")
-        .arg("--no-world")
-        .arg("-c")
-        .arg(script)
-        .output()
-        .expect("failed to launch substrate with CLI overrides");
-    assert!(
-        output.status.success(),
-        "substrate run with CLI overrides should succeed: {:?}",
-        output
-    );
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut parts = stdout.trim().split('|');
-    assert_eq!(
-        parts.next(),
-        Some("follow-cwd"),
-        "CLI --anchor-mode should override config file values",
-    );
-
-    let expected_anchor = project_dir
-        .canonicalize()
-        .unwrap_or_else(|_| project_dir.clone());
-    assert_eq!(
-        parts.next(),
-        Some(expected_anchor.to_string_lossy().as_ref()),
-        "follow-cwd should anchor to the current working directory",
-    );
-}
-
-fn world_table(config: &YamlValue) -> &YamlMapping {
-    let root = config.as_mapping().expect("config must be a mapping");
-    root.get(YamlValue::String("world".to_string()))
-        .and_then(|value| value.as_mapping())
-        .expect("world mapping present")
-}
-
-fn install_table(config: &YamlValue) -> &YamlMapping {
-    let root = config.as_mapping().expect("config must be a mapping");
-    root.get(YamlValue::String("install".to_string()))
-        .and_then(|value| value.as_mapping())
-        .expect("install mapping present")
-}
-
-#[test]
-fn config_set_refuses_legacy_toml() {
-    if !ensure_config_set_available() {
-        return;
-    }
-
-    let fixture = ConfigSetFixture::new();
-    fixture.init_config();
-    fs::write(
-        fixture.legacy_config_path(),
-        "[install]\nworld_enabled = true\n",
-    )
-    .expect("write legacy config.toml");
-
-    let output = fixture
-        .set_command()
-        .arg("world.anchor_mode=custom")
-        .output()
-        .expect("failed to execute substrate config set");
-    assert!(
-        !output.status.success(),
-        "config set should fail when legacy toml exists: {:?}",
-        output
-    );
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("unsupported legacy TOML config detected"),
-        "stderr missing legacy TOML message: {stderr}"
-    );
-    assert!(
-        stderr.contains(&fixture.legacy_config_path().display().to_string()),
-        "stderr missing legacy path: {stderr}"
-    );
-    assert!(
-        stderr.contains(&fixture.config_path().display().to_string()),
-        "stderr missing yaml path: {stderr}"
-    );
-}
-
-fn ensure_config_set_available() -> bool {
-    if config_set_supported() {
-        true
-    } else {
-        static WARNED: OnceLock<()> = OnceLock::new();
-        WARNED.get_or_init(|| {
-            eprintln!("skipping config set tests until the subcommand is implemented");
-        });
-        false
-    }
-}
-
-fn config_set_supported() -> bool {
-    static SUPPORTED: OnceLock<bool> = OnceLock::new();
-    *SUPPORTED.get_or_init(|| {
-        let mut cmd = substrate_shell_driver();
-        match cmd.arg("config").arg("set").arg("--help").output() {
-            Ok(output) => output.status.success(),
-            Err(_) => false,
+        cmd.current_dir(cwd);
+        cmd.arg("config").arg("set").arg("--json");
+        for update in updates {
+            cmd.arg(update);
         }
-    })
+        cmd.output().expect("failed to run config set --json")
+    }
+}
+
+#[test]
+fn config_set_requires_workspace() {
+    let fixture = ConfigSetFixture::new();
+    let cwd = fixture._temp.path().join("not-a-workspace");
+    fs::create_dir_all(&cwd).expect("create cwd");
+
+    let output = fixture.set_json(&cwd, &["world.enabled=false"]);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "missing workspace should exit 2: {output:?}"
+    );
+}
+
+#[test]
+fn config_set_updates_workspace_and_prints_effective_config() {
+    let fixture = ConfigSetFixture::new();
+    fixture.init_workspace();
+
+    let output = fixture.set_json(
+        &fixture.workspace_root,
+        &[
+            "world.enabled=false",
+            "world.anchor_mode=custom",
+            "world.anchor_path=/tmp/custom-anchor",
+            "policy.mode=enforce",
+            "sync.exclude=[\"user\"]",
+        ],
+    );
+    assert!(
+        output.status.success(),
+        "config set should succeed: {output:?}"
+    );
+    let json: JsonValue = serde_json::from_slice(&output.stdout).expect("effective JSON parse");
+
+    assert_eq!(
+        json.pointer("/world/enabled").and_then(|v| v.as_bool()),
+        Some(false)
+    );
+    assert_eq!(
+        json.pointer("/world/anchor_mode").and_then(|v| v.as_str()),
+        Some("custom")
+    );
+    assert_eq!(
+        json.pointer("/world/anchor_path").and_then(|v| v.as_str()),
+        Some("/tmp/custom-anchor")
+    );
+    assert_eq!(
+        json.pointer("/policy/mode").and_then(|v| v.as_str()),
+        Some("enforce")
+    );
+
+    let exclude = json
+        .pointer("/sync/exclude")
+        .and_then(|v| v.as_array())
+        .expect("sync.exclude array");
+    let items = exclude
+        .iter()
+        .map(|v| v.as_str())
+        .collect::<Option<Vec<_>>>()
+        .expect("sync.exclude string array");
+    assert_eq!(
+        &items[..3],
+        [".git/**", ".substrate/**", ".substrate-git/**"]
+    );
+    assert!(items.contains(&"user"));
+
+    // The on-disk workspace.yaml stores only the user-provided excludes.
+    let yaml = fixture.read_workspace_yaml();
+    let root = yaml.as_mapping().expect("workspace.yaml root mapping");
+    let sync = root
+        .get(YamlValue::String("sync".to_string()))
+        .and_then(|v| v.as_mapping())
+        .expect("sync mapping");
+    let stored = sync
+        .get(YamlValue::String("exclude".to_string()))
+        .and_then(|v| v.as_sequence())
+        .expect("stored sync.exclude sequence");
+    let stored_items = stored
+        .iter()
+        .map(|v| v.as_str())
+        .collect::<Option<Vec<_>>>()
+        .expect("stored exclude strings");
+    assert_eq!(stored_items, vec!["user"]);
+}
+
+#[test]
+fn config_set_supports_list_append_and_remove() {
+    let fixture = ConfigSetFixture::new();
+    fixture.init_workspace();
+    let init = fixture.set_json(&fixture.workspace_root, &["sync.exclude=[\"a\",\"b\"]"]);
+    assert!(init.status.success(), "precondition set should succeed");
+
+    let output = fixture.set_json(
+        &fixture.workspace_root,
+        &["sync.exclude+=c", "sync.exclude-=a"],
+    );
+    assert!(output.status.success(), "append/remove should succeed");
+
+    let yaml = fixture.read_workspace_yaml();
+    let root = yaml.as_mapping().expect("workspace.yaml root mapping");
+    let sync = root
+        .get(YamlValue::String("sync".to_string()))
+        .and_then(|v| v.as_mapping())
+        .expect("sync mapping");
+    let stored = sync
+        .get(YamlValue::String("exclude".to_string()))
+        .and_then(|v| v.as_sequence())
+        .expect("stored sync.exclude sequence");
+    let stored_items = stored
+        .iter()
+        .map(|v| v.as_str())
+        .collect::<Option<Vec<_>>>()
+        .expect("stored exclude strings");
+    assert_eq!(stored_items, vec!["b", "c"]);
+}
+
+#[test]
+fn config_set_rejects_unknown_key_without_mutation() {
+    let fixture = ConfigSetFixture::new();
+    fixture.init_workspace();
+    let before = fs::read_to_string(fixture.workspace_config_path()).expect("read workspace.yaml");
+
+    let output = fixture.set_json(&fixture.workspace_root, &["nope.key=true"]);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "unknown key should exit 2: {output:?}"
+    );
+
+    let after = fs::read_to_string(fixture.workspace_config_path()).expect("read workspace.yaml");
+    assert_eq!(before, after, "workspace.yaml must not change on error");
+}
+
+#[test]
+fn config_set_accepts_boolean_synonyms() {
+    let fixture = ConfigSetFixture::new();
+    fixture.init_workspace();
+
+    let output = fixture.set_json(&fixture.workspace_root, &["world.enabled=off"]);
+    assert!(output.status.success(), "boolean synonym should succeed");
+
+    let yaml = fixture.read_workspace_yaml();
+    let root = yaml.as_mapping().expect("workspace.yaml root mapping");
+    let world = root
+        .get(YamlValue::String("world".to_string()))
+        .and_then(|v| v.as_mapping())
+        .expect("world mapping");
+    assert_eq!(
+        world
+            .get(YamlValue::String("enabled".to_string()))
+            .and_then(|v| v.as_bool()),
+        Some(false)
+    );
+}
+
+#[test]
+fn config_set_rejects_invalid_list_literal_without_mutation() {
+    let fixture = ConfigSetFixture::new();
+    fixture.init_workspace();
+    let before = fs::read_to_string(fixture.workspace_config_path()).expect("read workspace.yaml");
+
+    let output = fixture.set_json(&fixture.workspace_root, &["sync.exclude=not-a-list"]);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "invalid list literal should exit 2: {output:?}"
+    );
+
+    let after = fs::read_to_string(fixture.workspace_config_path()).expect("read workspace.yaml");
+    assert_eq!(before, after, "workspace.yaml must not change on error");
+}
+
+#[test]
+fn protected_excludes_are_always_present_in_effective_config() {
+    let fixture = ConfigSetFixture::new();
+    fixture.init_workspace();
+
+    let output = fixture.set_json(
+        &fixture.workspace_root,
+        &[
+            "sync.exclude=[\".git/**\",\"user\"]",
+            "sync.exclude-=.git/**",
+        ],
+    );
+    assert!(output.status.success(), "config set should succeed");
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout).expect("effective JSON parse");
+    let exclude = json
+        .pointer("/sync/exclude")
+        .and_then(|v| v.as_array())
+        .expect("sync.exclude array");
+    let items = exclude
+        .iter()
+        .map(|v| v.as_str())
+        .collect::<Option<Vec<_>>>()
+        .expect("sync.exclude string array");
+    assert_eq!(
+        &items[..3],
+        [".git/**", ".substrate/**", ".substrate-git/**"],
+        "protected excludes must always be present"
+    );
+    assert!(items.contains(&"user"));
 }
