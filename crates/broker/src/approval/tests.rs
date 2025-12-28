@@ -118,7 +118,10 @@ fn pcm2_save_to_policy_prefers_workspace_policy_when_workspace_root_exists() -> 
         "precondition: workspace policy should not exist"
     );
 
-    add_command_to_policy("echo pcm2 save-to-policy workspace")?;
+    add_command_to_policy(
+        "echo pcm2 save-to-policy workspace",
+        child.to_str().expect("child path is utf-8"),
+    )?;
 
     assert!(
         workspace_policy.exists(),
@@ -152,7 +155,10 @@ fn pcm2_save_to_policy_writes_global_policy_when_no_workspace_root() -> anyhow::
         "precondition: global policy should not exist"
     );
 
-    add_command_to_policy("echo pcm2 save-to-policy global")?;
+    add_command_to_policy(
+        "echo pcm2 save-to-policy global",
+        project.to_str().expect("project path is utf-8"),
+    )?;
 
     assert!(
         global_policy.exists(),
