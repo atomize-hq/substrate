@@ -96,3 +96,11 @@
 - Task branch: `pcm-pcm0-config-test`
 - Worktree: `wt/pcm0-config-test`
 - Scope: tests for PCM0 workspace discovery/init, config precedence + strict parsing, and protected excludes per `PCM0-spec.md`.
+
+## END — 2025-12-28T14:12:56Z — PCM0-test — workspace + config inventory and CLI (test)
+- Summary of changes:
+  - Added integration tests covering workspace init/discovery semantics, config CLI (global + workspace scope), strict parsing, and config precedence per `PCM0-spec.md`.
+  - Verified protected sync excludes are always present in effective config and cannot be removed via config updates.
+- Commands run (required):
+  - `cargo fmt` → exit `0`
+  - `cargo test -p substrate-shell --test config_init --test config_show --test config_set --test workspace_init -- --nocapture` → exit `0`
