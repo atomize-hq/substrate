@@ -290,7 +290,7 @@
       "name": "Policy mode + routing semantics (test)",
       "type": "test",
       "phase": "Policy + Config Mental Model Simplification",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add and update tests that lock in policy.mode semantics, requires-world behavior, and approval write targeting per PCM2.",
       "references": [
         "docs/project_management/next/policy_and_config_mental_model_simplification/PCM2-spec.md",

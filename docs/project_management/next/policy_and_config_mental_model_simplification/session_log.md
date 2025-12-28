@@ -184,3 +184,12 @@
 - Task branch: `pcm-pcm2-routing-test`
 - Worktree: `wt/pcm2-routing-test`
 - Scope: tests for policy.mode semantics, requires-world behavior, and approval “save to policy” write target selection per `PCM2-spec.md`.
+
+## END — 2025-12-28T16:34:45Z — PCM2-test — policy mode + routing semantics (test)
+- Summary of changes:
+  - Added shell integration tests covering `policy.mode=disabled|observe|enforce`, including enforce-mode fail-closed behavior when world is required and unavailable.
+  - Added broker unit tests covering approval “save to policy” write target selection (workspace policy vs global policy).
+- Commands run (required):
+  - `cargo fmt` → exit `0`
+  - `cargo test -p substrate-shell --test pcm2_routing_semantics -- --nocapture` → exit `101` (fails: observe-mode would-deny recording and enforce deny semantics not yet implemented)
+  - `cargo test -p substrate-broker pcm2_save_to_policy -- --nocapture` → exit `101` (fails: save-to-policy target selection not yet implemented)
