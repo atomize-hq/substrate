@@ -150,3 +150,9 @@
   - `cargo fmt` → exit `0`
   - `cargo test -p substrate-broker policy::tests::pcm1_ -- --nocapture` → exit `101` (fails: broker policy schema still expects `world_fs.cage` and accepts it; rejects `world_fs.isolation`)
   - `cargo test -p substrate-shell --test policy_discovery -- --nocapture` → exit `101` (fails: `substrate policy *` subcommands not yet implemented)
+
+## START — 2025-12-28T15:32:03Z — PCM1-integ — policy inventory and CLI (integration)
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm1-policy-integ`
+- Worktree: `wt/pcm1-policy-integ`
+- Scope: merge PCM1 code+tests, reconcile to `PCM1-spec.md`, and run fmt/clippy/tests/preflight + smoke scripts.
