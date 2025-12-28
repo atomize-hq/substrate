@@ -151,6 +151,7 @@ pub enum SubCommands {
     Graph(GraphCmd),
     World(WorldCmd),
     Config(ConfigCmd),
+    Policy(PolicyCmd),
     Workspace(WorkspaceCmd),
     Shim(ShimCmd),
     Health(HealthCmd),
@@ -185,6 +186,12 @@ pub struct WorldCmd {
 pub struct ConfigCmd {
     #[command(subcommand)]
     pub action: ConfigAction,
+}
+
+#[derive(Args, Debug)]
+pub struct PolicyCmd {
+    #[command(subcommand)]
+    pub action: PolicyAction,
 }
 
 #[derive(Subcommand, Debug)]
@@ -230,6 +237,58 @@ pub struct ConfigShowArgs {
 #[derive(Args, Debug)]
 pub struct ConfigSetArgs {
     /// Emit JSON summary instead of human output
+    #[arg(long)]
+    pub json: bool,
+    /// One or more dotted updates (key=value, key+=value, key-=value)
+    #[arg(value_name = "UPDATE", required = true)]
+    pub updates: Vec<String>,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum PolicyAction {
+    /// Initialize <workspace_root>/.substrate/policy.yaml (creates if missing; overwrites with --force)
+    Init(PolicyInitArgs),
+    /// Print the effective policy for the current workspace (YAML by default, JSON with --json)
+    Show(PolicyShowArgs),
+    /// Update <workspace_root>/.substrate/policy.yaml via dotted updates (key=value, key+=value, key-=value)
+    Set(PolicySetArgs),
+    /// Global policy commands ($SUBSTRATE_HOME/policy.yaml)
+    Global(PolicyGlobalCmd),
+}
+
+#[derive(Args, Debug)]
+pub struct PolicyGlobalCmd {
+    #[command(subcommand)]
+    pub action: PolicyGlobalAction,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum PolicyGlobalAction {
+    /// Initialize $SUBSTRATE_HOME/policy.yaml (creates if missing; overwrites with --force)
+    Init(PolicyInitArgs),
+    /// Print $SUBSTRATE_HOME/policy.yaml if present; otherwise print built-in defaults
+    Show(PolicyShowArgs),
+    /// Update $SUBSTRATE_HOME/policy.yaml via dotted updates (key=value, key+=value, key-=value)
+    Set(PolicySetArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct PolicyInitArgs {
+    /// Overwrite the policy even if it already exists
+    #[arg(long)]
+    pub force: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct PolicyShowArgs {
+    /// Emit JSON instead of YAML
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct PolicySetArgs {
+    /// Emit JSON instead of human output
     #[arg(long)]
     pub json: bool,
     /// One or more dotted updates (key=value, key+=value, key-=value)

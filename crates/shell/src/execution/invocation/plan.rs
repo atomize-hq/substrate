@@ -6,9 +6,9 @@ use crate::execution::shim_deploy::{DeploymentStatus, ShimDeployer};
 #[cfg(target_os = "linux")]
 use crate::execution::socket_activation;
 use crate::execution::{
-    handle_config_command, handle_graph_command, handle_health_command, handle_replay_command,
-    handle_shim_command, handle_trace_command, handle_workspace_command, handle_world_command,
-    update_world_env,
+    handle_config_command, handle_graph_command, handle_health_command, handle_policy_command,
+    handle_replay_command, handle_shim_command, handle_trace_command, handle_workspace_command,
+    handle_world_command, update_world_env,
 };
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -438,6 +438,10 @@ impl ShellConfig {
                 }
                 SubCommands::Config(config_cmd) => {
                     let code = handle_config_command(config_cmd, &cli);
+                    std::process::exit(code);
+                }
+                SubCommands::Policy(policy_cmd) => {
+                    let code = handle_policy_command(policy_cmd, &cli);
                     std::process::exit(code);
                 }
                 SubCommands::Workspace(workspace_cmd) => {

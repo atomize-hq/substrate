@@ -2,8 +2,7 @@
 
 use crate::approval::{self, ApprovalCache, ApprovalContext, ApprovalStatus};
 use crate::policy::{Decision, Policy, Restriction, RestrictionType, WorldFsPolicy};
-use crate::policy_loader::load_policy_from_path;
-use crate::profile::ProfileDetector;
+use crate::policy_loader::{load_effective_policy_for_cwd, load_policy_from_path};
 use anyhow::Result;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -15,7 +14,6 @@ pub struct Broker {
     pub(crate) policy: Arc<RwLock<Policy>>,
     pub(crate) approvals: Arc<RwLock<ApprovalCache>>,
     observe_only: AtomicBool,
-    profile_detector: ProfileDetector,
 }
 
 impl Broker {
@@ -25,7 +23,6 @@ impl Broker {
             policy: Arc::new(RwLock::new(default_policy)),
             approvals: Arc::new(RwLock::new(ApprovalCache::new())),
             observe_only: AtomicBool::new(true), // Start in observe mode
-            profile_detector: ProfileDetector::new(),
         }
     }
 
@@ -41,9 +38,18 @@ impl Broker {
         Ok(())
     }
 
-    pub fn detect_and_load_profile(&mut self, cwd: &Path) -> Result<()> {
-        if let Some(profile_path) = self.profile_detector.find_profile(cwd)? {
-            self.load_policy(&profile_path)?;
+    pub fn detect_and_load_policy(&self, cwd: &Path) -> Result<()> {
+        let (policy, source) = load_effective_policy_for_cwd(cwd)?;
+        let mut guard = self
+            .policy
+            .write()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire policy write lock: {}", e))?;
+        *guard = policy;
+
+        if let Some(path) = source {
+            info!("Loaded policy from {:?}", path);
+        } else {
+            info!("Loaded built-in default policy");
         }
         Ok(())
     }

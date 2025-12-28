@@ -9,6 +9,8 @@ pub mod manager_init;
 mod platform;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) mod platform_world;
+mod policy_cmd;
+pub(crate) mod policy_model;
 mod pty;
 mod routing;
 mod settings;
@@ -22,6 +24,7 @@ mod workspace_cmd;
 pub use cli::*;
 pub(crate) use config_cmd::handle_config_command;
 pub use invocation::{needs_shell, ShellConfig, ShellMode};
+pub(crate) use policy_cmd::handle_policy_command;
 pub use routing::*;
 pub(crate) use workspace_cmd::handle_workspace_command;
 

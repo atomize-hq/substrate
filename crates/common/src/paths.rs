@@ -48,6 +48,10 @@ pub fn config_file() -> Result<PathBuf> {
     Ok(substrate_home()?.join("config.yaml"))
 }
 
+pub fn policy_file() -> Result<PathBuf> {
+    Ok(substrate_home()?.join("policy.yaml"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

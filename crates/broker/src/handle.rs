@@ -37,11 +37,11 @@ impl BrokerHandle {
     }
 
     pub fn detect_profile(&self, cwd: &Path) -> Result<()> {
-        let mut broker = self
+        let broker = self
             .broker
             .write()
             .map_err(|e| anyhow::anyhow!("Failed to acquire broker write lock: {}", e))?;
-        broker.detect_and_load_profile(cwd)
+        broker.detect_and_load_policy(cwd)
     }
 
     pub fn evaluate(&self, cmd: &str, cwd: &str, world_id: Option<&str>) -> Result<Decision> {
