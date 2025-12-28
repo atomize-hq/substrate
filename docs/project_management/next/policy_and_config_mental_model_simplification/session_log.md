@@ -125,3 +125,9 @@
 - Task branch: `pcm-pcm1-policy-code`
 - Worktree: `wt/pcm1-policy-code`
 - Scope: policy schema/discovery/strict parsing/invariants; `substrate policy *` per `PCM1-spec.md`
+
+## START — 2025-12-28T15:10:24Z — PCM1-test — policy inventory and CLI (test)
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm1-policy-test`
+- Worktree: `wt/pcm1-policy-test`
+- Scope: tests for policy strict parsing, invariants, discovery selection order, and policy CLI behavior per `PCM1-spec.md`.
