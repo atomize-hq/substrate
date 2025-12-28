@@ -119,3 +119,9 @@
   - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `1` (fails on `$SUBSTRATE_HOME/env.sh` check; `substrate policy *` not yet implemented in PCM0)
   - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
   - `pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `127` (`pwsh` not found)
+
+## START — 2025-12-28T15:02:47Z — PCM1-code — policy inventory and CLI
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm1-policy-code`
+- Worktree: `wt/pcm1-policy-code`
+- Scope: policy schema/discovery/strict parsing/invariants; `substrate policy *` per `PCM1-spec.md`
