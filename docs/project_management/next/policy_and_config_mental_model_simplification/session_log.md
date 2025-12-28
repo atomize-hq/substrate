@@ -246,3 +246,17 @@
 - Task branch: `pcm-pcm3-env-test`
 - Worktree: `wt/pcm3-env-test`
 - Scope: tests for env script ownership/regeneration, world enable `--home` semantics, and legacy removal no-ops per `PCM3-spec.md`.
+
+## END — 2025-12-28T18:15:23Z — PCM3-test — env scripts + world enable home + legacy removals (test)
+- Summary of changes:
+  - Updated shell integration tests to lock `env.sh` ownership (runtime does not rewrite) and `manager_env.sh` regeneration + `env.sh` sourcing when shims are enabled.
+  - Updated `substrate world enable` integration tests to enforce `--home` state writes and reject `--prefix`; confirmed legacy `SUBSTRATE_PREFIX` has no effect.
+  - Updated replay integration tests to confirm legacy `SUBSTRATE_WORLD_ROOT_*` env vars have no effect (anchor env vars take precedence).
+  - Removed legacy `SUBSTRATE_WORLD_FS_CAGE` from world-agent full-cage tests.
+- Commands run (required):
+  - `cargo fmt` → exit `0`
+  - `cargo test -p substrate-shell --test world_enable -- --nocapture` → exit `0`
+  - `cargo test -p substrate-shell --test shell_env -- --nocapture` → exit `0`
+  - `cargo test -p substrate-shell --test replay_world -- --nocapture` → exit `0`
+  - `cargo test -p world-agent --test full_cage_nonpty -- --nocapture` → exit `0` (some cases skipped: overlay support or privileges missing)
+  - `cargo test -p world-agent --test full_cage_pty -- --nocapture` → exit `0` (some cases skipped: overlay support or privileges missing)
