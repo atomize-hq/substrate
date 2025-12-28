@@ -104,3 +104,18 @@
 - Commands run (required):
   - `cargo fmt` → exit `0`
   - `cargo test -p substrate-shell --test config_init --test config_show --test config_set --test workspace_init -- --nocapture` → exit `0`
+
+## END — 2025-12-28T14:54:20Z — PCM0-integ — workspace + config inventory and CLI (integration)
+- Summary of changes:
+  - Fixed integration/unit tests and world enable plumbing to match the strict PCM0 config schema (no legacy `install.*` / `root_mode` / `root_path`).
+  - Made `substrate world enable` overwrite invalid legacy config files with fresh PCM0 defaults before enabling `world.enabled`.
+  - Hardened `substrate-shell` integration tests to run with an isolated `$HOME`/`$SUBSTRATE_HOME` so host config does not break CI.
+- Commands run (required):
+  - `cargo fmt` → exit `0`
+  - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
+  - `cargo test -p substrate-shell --test config_init --test config_show --test config_set --test workspace_init -- --nocapture` → exit `0`
+  - `make preflight` → exit `0`
+- Smoke scripts:
+  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `1` (fails on `$SUBSTRATE_HOME/env.sh` check; `substrate policy *` not yet implemented in PCM0)
+  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
+  - `pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `127` (`pwsh` not found)
