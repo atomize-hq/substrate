@@ -27,10 +27,22 @@ id: shell-tests
 name: Shell Tests
 world_fs:
   mode: writable
-  cage: project
+  isolation: project
   require_world: false
   read_allowlist: ["*"]
   write_allowlist: []
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+require_approval: false
+allow_shell_operators: true
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+metadata: {}
 "#,
         )
         .expect("write shell test policy");

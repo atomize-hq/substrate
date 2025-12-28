@@ -146,7 +146,7 @@ name: My Project Security Policy
 # Filesystem permissions + caging
 world_fs:
   mode: writable            # writable | read_only
-  cage: project             # project | full
+  isolation: project        # project | full
   require_world: false      # true = world required (no host fallback)
   read_allowlist:
     - "*"                   # Allow reading all files

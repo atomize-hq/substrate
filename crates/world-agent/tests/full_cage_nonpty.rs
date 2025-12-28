@@ -93,12 +93,21 @@ fn write_profile_policy(project_dir: &Path, write_allowlist: &[&str]) {
 name: Full Cage Test Policy
 world_fs:
   mode: writable
-  cage: full
+  isolation: full
   require_world: true
   read_allowlist: ["*"]
-{allowlist_yaml}cmd_denied: []
+{allowlist_yaml}net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
 require_approval: false
 allow_shell_operators: true
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+metadata: {{}}
 "#
     );
 

@@ -567,7 +567,10 @@ world_fs:
 net_allowed: []
 
 cmd_allowed: []
-cmd_denied: []
+cmd_denied:
+  - "rm -rf *"
+  - "curl * | bash"
+  - "wget * | bash"
 cmd_isolated: []
 
 require_approval: false

@@ -33,7 +33,9 @@ metadata: {}
 fn test_default_policy() {
     let policy = Policy::default();
     assert_eq!(policy.id, "default");
-    assert!(!policy.cmd_allowed.is_empty() || !policy.cmd_denied.is_empty());
+    assert_eq!(policy.fs_read, vec!["*".to_string()]);
+    assert_eq!(policy.world_fs_mode, WorldFsMode::Writable);
+    assert!(!policy.cmd_denied.is_empty());
 }
 
 #[test]

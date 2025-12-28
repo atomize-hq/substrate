@@ -142,6 +142,7 @@ fn policy_discovery_prefers_workspace_policy_over_global() {
 fn policy_discovery_falls_back_to_global_then_default() {
     let fixture = PolicyFixture::new();
     fixture.init_workspace();
+    fs::remove_file(fixture.workspace_policy_path()).expect("remove workspace policy");
 
     fs::write(
         fixture.global_policy_path(),

@@ -58,7 +58,7 @@ impl FromStr for WorldFsCage {
             "project" => Ok(Self::Project),
             "full" => Ok(Self::Full),
             other => Err(format!(
-                "invalid world_fs.cage: {} (expected project or full)",
+                "invalid world_fs.isolation: {} (expected project or full)",
                 other
             )),
         }
@@ -102,7 +102,7 @@ pub struct Policy {
     pub fs_read: Vec<String>,         // world_fs.read_allowlist
     pub fs_write: Vec<String>,        // world_fs.write_allowlist
     pub world_fs_mode: WorldFsMode,   // world_fs.mode
-    pub world_fs_cage: WorldFsCage,   // world_fs.cage
+    pub world_fs_cage: WorldFsCage,   // world_fs.isolation
     pub world_fs_require_world: bool, // world_fs.require_world
 
     // Network
@@ -136,7 +136,11 @@ impl Default for Policy {
             world_fs_require_world: false,
             net_allowed: vec![],
             cmd_allowed: vec![],
-            cmd_denied: vec![],
+            cmd_denied: vec![
+                "rm -rf *".to_string(),
+                "curl * | bash".to_string(),
+                "wget * | bash".to_string(),
+            ],
             cmd_isolated: vec![],
             require_approval: false,
             allow_shell_operators: default_allow_shell_operators(),

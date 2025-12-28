@@ -125,6 +125,7 @@ mod tests {
         let policy_path = temp.path().join("policy.yaml");
         let policy = substrate_broker::Policy {
             world_fs_mode: substrate_common::WorldFsMode::ReadOnly,
+            world_fs_require_world: true,
             ..Default::default()
         };
         fs::write(&policy_path, serde_yaml::to_string(&policy).unwrap()).expect("write policy");

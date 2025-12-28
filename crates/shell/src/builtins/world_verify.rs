@@ -19,7 +19,7 @@ const CHECK_DESC_WORLD_BACKEND: &str = "World backend is available (doctor ok=tr
 const CHECK_DESC_READONLY_REL: &str = "world_fs.mode=read_only blocks relative project writes";
 const CHECK_DESC_READONLY_ABS: &str = "world_fs.mode=read_only blocks absolute-path project writes";
 const CHECK_DESC_FULL_CAGE: &str =
-    "world_fs.cage=full enforces allowlists and blocks host paths outside the project";
+    "world_fs.isolation=full enforces allowlists and blocks host paths outside the project";
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -407,11 +407,23 @@ fn check_read_only(root: &Path, log_dir: &Path) -> Result<ReadOnlyResult> {
 name: I6 verify (read_only)
 world_fs:
   mode: read_only
-  cage: project
+  isolation: project
   require_world: true
   read_allowlist:
     - "*"
   write_allowlist: []
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+require_approval: false
+allow_shell_operators: true
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+metadata: {}
 "#,
     )?;
 
@@ -466,12 +478,24 @@ fn check_full_cage(root: &Path, log_dir: &Path) -> Result<CheckReport> {
 name: I6 verify (full cage)
 world_fs:
   mode: writable
-  cage: full
+  isolation: full
   require_world: true
   read_allowlist:
     - "*"
   write_allowlist:
     - "./writable/*"
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+require_approval: false
+allow_shell_operators: true
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+metadata: {}
 "#,
     )?;
 
