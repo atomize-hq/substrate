@@ -25,23 +25,29 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn update_manager_env_exports_preserves_shebang_and_existing_lines() {
+    fn update_manager_env_exports_writes_env_sh_format() {
         let temp = tempdir().unwrap();
-        let manager_env = temp.path().join("env/manager_env.sh");
-        fs::create_dir_all(manager_env.parent().unwrap()).unwrap();
-        fs::write(&manager_env, "#!/usr/bin/env bash\nexport OTHER_VAR=1\n").unwrap();
+        let home = temp.path().join("substrate-home");
+        let env_sh = home.join("env.sh");
+        fs::create_dir_all(env_sh.parent().unwrap()).unwrap();
 
-        update_manager_env_exports(&manager_env, true).unwrap();
-        let contents = fs::read_to_string(&manager_env).unwrap();
-        assert!(contents.starts_with(
-            "#!/usr/bin/env bash\n# Managed by `substrate world enable`\nexport SUBSTRATE_WORLD=enabled\nexport SUBSTRATE_WORLD_ENABLED=1\n"
-        ));
-        assert!(contents.contains("export OTHER_VAR=1"));
+        let prev_home = std::env::var_os("SUBSTRATE_HOME");
+        std::env::set_var("SUBSTRATE_HOME", &home);
+        let result = update_manager_env_exports(&env_sh, true);
+        if let Some(val) = prev_home {
+            std::env::set_var("SUBSTRATE_HOME", val);
+        } else {
+            std::env::remove_var("SUBSTRATE_HOME");
+        }
+        result.unwrap();
 
-        update_manager_env_exports(&manager_env, false).unwrap();
-        let updated = fs::read_to_string(&manager_env).unwrap();
-        assert!(updated.contains("export SUBSTRATE_WORLD=disabled"));
-        assert!(updated.contains("export SUBSTRATE_WORLD_ENABLED=0"));
-        assert!(updated.contains("export OTHER_VAR=1"));
+        let contents = fs::read_to_string(&env_sh).unwrap();
+        assert!(contents.starts_with("#!/usr/bin/env bash\n"));
+        assert!(contents.contains("export SUBSTRATE_HOME="));
+        assert!(contents.contains("export SUBSTRATE_WORLD='enabled'\n"));
+        assert!(contents.contains("export SUBSTRATE_CAGED="));
+        assert!(contents.contains("export SUBSTRATE_ANCHOR_MODE="));
+        assert!(contents.contains("export SUBSTRATE_ANCHOR_PATH="));
+        assert!(contents.contains("export SUBSTRATE_POLICY_MODE="));
     }
 }

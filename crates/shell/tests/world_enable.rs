@@ -196,12 +196,6 @@ impl WorldEnableFixture {
         fs::read_to_string(&self.log_path).ok()
     }
 
-    fn log_line_count(&self) -> usize {
-        self.log_contents()
-            .map(|contents| contents.lines().count())
-            .unwrap_or(0)
-    }
-
     fn assert_socket_exists(&self) {
         let metadata = fs::metadata(&self.socket_path).expect("socket metadata");
         assert!(

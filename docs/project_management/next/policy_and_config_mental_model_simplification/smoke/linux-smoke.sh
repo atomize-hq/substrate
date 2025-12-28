@@ -36,10 +36,10 @@ test -f "$TMP_WS/.substrate/workspace.yaml"
 test -f "$TMP_WS/.substrate/policy.yaml"
 test -d "$TMP_WS/.substrate-git/repo.git"
 
-grep -qE '^\\.substrate-git/' "$TMP_WS/.gitignore"
-grep -qE '^\\.substrate/\\*$' "$TMP_WS/.gitignore"
-grep -qE '^!\\.substrate/workspace\\.yaml$' "$TMP_WS/.gitignore"
-grep -qE '^!\\.substrate/policy\\.yaml$' "$TMP_WS/.gitignore"
+grep -qxF '.substrate-git/' "$TMP_WS/.gitignore"
+grep -qxF '.substrate/*' "$TMP_WS/.gitignore"
+grep -qxF '!.substrate/workspace.yaml' "$TMP_WS/.gitignore"
+grep -qxF '!.substrate/policy.yaml' "$TMP_WS/.gitignore"
 
 cd "$TMP_WS"
 substrate config show --json | jq -e '.world.anchor_mode=="workspace"' >/dev/null
@@ -60,4 +60,3 @@ if substrate world enable --help | grep -q -- '--prefix'; then
 fi
 
 echo "OK: policy/config mental model linux smoke (gating)"
-

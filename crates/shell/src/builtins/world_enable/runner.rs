@@ -26,7 +26,7 @@ pub fn run_enable(args: &WorldEnableArgs) -> Result<()> {
         bail!("substrate world enable is not yet supported on Windows");
     }
 
-    if let Some(home) = &args.prefix {
+    if let Some(home) = &args.home {
         env::set_var("SUBSTRATE_HOME", home);
     }
 

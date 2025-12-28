@@ -336,7 +336,7 @@ pub enum WorldAction {
 pub struct WorldEnableArgs {
     /// Substrate home directory for this operation (defaults to ~/.substrate or $SUBSTRATE_HOME)
     #[arg(long = "home", value_name = "PATH")]
-    pub prefix: Option<PathBuf>,
+    pub home: Option<PathBuf>,
     /// Provisioning profile label passed to the helper script
     #[arg(long = "profile", value_name = "NAME", default_value = "release")]
     pub profile: String,

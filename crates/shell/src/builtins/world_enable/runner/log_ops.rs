@@ -99,7 +99,7 @@ mod tests {
 
     fn sample_args() -> WorldEnableArgs {
         WorldEnableArgs {
-            prefix: None,
+            home: None,
             profile: "release".to_string(),
             dry_run: true,
             verbose: true,

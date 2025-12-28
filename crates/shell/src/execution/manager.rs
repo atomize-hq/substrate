@@ -420,7 +420,8 @@ managers:
         let config = test_shell_config(&temp);
         write_manager_env_script(&config).expect("write manager env");
         let script = fs::read_to_string(&config.manager_env_path).unwrap();
-        assert!(script.contains("SUBSTRATE_MANAGER_INIT"));
+        assert!(script.contains("env.sh"));
+        assert!(script.contains("manager_init.sh"));
         assert!(script.contains("SUBSTRATE_ORIGINAL_BASH_ENV"));
         assert!(script.contains(".substrate_bashenv"));
     }

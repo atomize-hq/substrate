@@ -6,11 +6,6 @@ use std::path::{Path, PathBuf};
 use substrate_common::paths as substrate_paths;
 use tracing::{debug, info};
 
-#[cfg(test)]
-const PROFILE_FILENAME: &str = ".substrate-profile";
-#[cfg(test)]
-const PROFILE_DIR_FILENAME: &str = ".substrate-profile.d";
-
 const MAX_SEARCH_DEPTH: usize = 10; // Prevent infinite traversal
 
 pub struct ProfileDetector {
