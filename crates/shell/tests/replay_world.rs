@@ -1049,10 +1049,13 @@ fn replay_flip_host_to_world_prefers_agent_and_reports_origin() {
             ..TraceOptions::default()
         },
     );
+    let legacy_root = fixture.home().join("legacy-root-flip");
+    fs::create_dir_all(&legacy_root).expect("create legacy root dir");
     cmd.env("SUBSTRATE_ANCHOR_MODE", "custom");
-    cmd.env("SUBSTRATE_WORLD_ROOT_MODE", "custom");
     cmd.env("SUBSTRATE_ANCHOR_PATH", &cwd);
-    cmd.env("SUBSTRATE_WORLD_ROOT_PATH", &cwd);
+    // Legacy root env vars removed by ADR-0003 must have no effect.
+    cmd.env("SUBSTRATE_WORLD_ROOT_MODE", "custom");
+    cmd.env("SUBSTRATE_WORLD_ROOT_PATH", &legacy_root);
     cmd.env("SUBSTRATE_CAGED", "0");
     cmd.arg("--flip");
 
@@ -1177,10 +1180,13 @@ fn replay_prefers_agent_when_socket_healthy() {
         &path_override,
         options,
     );
+    let legacy_root = fixture.home().join("legacy-root-agent");
+    fs::create_dir_all(&legacy_root).expect("create legacy root dir");
     cmd.env("SUBSTRATE_ANCHOR_MODE", "custom");
-    cmd.env("SUBSTRATE_WORLD_ROOT_MODE", "custom");
     cmd.env("SUBSTRATE_ANCHOR_PATH", &anchor_root);
-    cmd.env("SUBSTRATE_WORLD_ROOT_PATH", &anchor_root);
+    // Legacy root env vars removed by ADR-0003 must have no effect.
+    cmd.env("SUBSTRATE_WORLD_ROOT_MODE", "custom");
+    cmd.env("SUBSTRATE_WORLD_ROOT_PATH", &legacy_root);
     cmd.env("SUBSTRATE_CAGED", "1");
 
     let assert = cmd.assert().success();
@@ -1438,10 +1444,13 @@ fn replay_agent_fallback_uses_caged_project_dir() {
         &path_override,
         options,
     );
+    let legacy_root = fixture.home().join("legacy-root-agent-missing");
+    fs::create_dir_all(&legacy_root).expect("create legacy root dir");
     cmd.env("SUBSTRATE_ANCHOR_MODE", "custom");
-    cmd.env("SUBSTRATE_WORLD_ROOT_MODE", "custom");
     cmd.env("SUBSTRATE_ANCHOR_PATH", &anchor_root);
-    cmd.env("SUBSTRATE_WORLD_ROOT_PATH", &anchor_root);
+    // Legacy root env vars removed by ADR-0003 must have no effect.
+    cmd.env("SUBSTRATE_WORLD_ROOT_MODE", "custom");
+    cmd.env("SUBSTRATE_WORLD_ROOT_PATH", &legacy_root);
     cmd.env("SUBSTRATE_CAGED", "1");
 
     let output = cmd.output().expect("failed to run replay command");

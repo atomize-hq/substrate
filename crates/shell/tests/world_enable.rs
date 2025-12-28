@@ -65,9 +65,9 @@ struct WorldEnableFixture {
     _temp: TempDir,
     _socket_temp: TempDir,
     home: PathBuf,
-    prefix: PathBuf,
+    legacy_prefix: PathBuf,
     substrate_home: PathBuf,
-    manager_env_path: PathBuf,
+    env_sh_path: PathBuf,
     script_path: PathBuf,
     log_path: PathBuf,
     socket_path: PathBuf,
@@ -77,9 +77,9 @@ impl WorldEnableFixture {
     fn new() -> Self {
         let temp = temp_dir("substrate-world-enable-");
         let home = temp.path().join("home");
-        let prefix = temp.path().join("prefix");
-        let substrate_home = home.join(".substrate");
-        let manager_env_path = substrate_home.join("manager_env.sh");
+        let legacy_prefix = temp.path().join("legacy-prefix");
+        let substrate_home = temp.path().join("substrate-home");
+        let env_sh_path = substrate_home.join("env.sh");
         let script_path = temp.path().join("scripts/world-enable.sh");
         let log_path = temp.path().join("logs/world-enable.log");
         let socket_temp = Builder::new()
@@ -89,25 +89,19 @@ impl WorldEnableFixture {
         let socket_path = socket_temp.path().join("sock");
 
         fs::create_dir_all(&home).expect("failed to create fixture home");
-        fs::create_dir_all(&prefix).expect("failed to create fixture prefix");
+        fs::create_dir_all(&legacy_prefix).expect("failed to create legacy prefix dir");
         fs::create_dir_all(&substrate_home).expect("failed to create substrate dir");
         fs::create_dir_all(script_path.parent().unwrap()).expect("failed to create script dir");
         fs::create_dir_all(log_path.parent().unwrap()).expect("failed to create log dir");
         fs::create_dir_all(socket_path.parent().unwrap()).expect("failed to create socket dir");
 
-        fs::write(
-            &manager_env_path,
-            "# world enable test fixture\nexport SUBSTRATE_WORLD=disabled\nexport SUBSTRATE_WORLD_ENABLED=0\n",
-        )
-        .expect("failed to seed manager env");
-
         let fixture = Self {
             _temp: temp,
             _socket_temp: socket_temp,
             home,
-            prefix,
+            legacy_prefix,
             substrate_home,
-            manager_env_path,
+            env_sh_path,
             script_path,
             log_path,
             socket_path,
@@ -129,16 +123,15 @@ impl WorldEnableFixture {
         let mut cmd = substrate_shell_driver();
         cmd.arg("world")
             .arg("enable")
+            .arg("--home")
+            .arg(&self.substrate_home)
             .env("TMPDIR", shared_tmpdir())
             .env("HOME", &self.home)
             .env("USERPROFILE", &self.home)
-            .env("SUBSTRATE_HOME", &self.substrate_home)
-            .env("SUBSTRATE_MANAGER_ENV", &self.manager_env_path)
             .env("SUBSTRATE_WORLD_ENABLE_SCRIPT", &self.script_path)
             .env("SUBSTRATE_WORLD_SOCKET", &self.socket_path)
-            .env("SUBSTRATE_PREFIX", &self.prefix)
-            .env("SUBSTRATE_WORLD", "disabled")
-            .env("SUBSTRATE_WORLD_ENABLED", "0")
+            // Legacy env vars removed by ADR-0003 must not affect world enable.
+            .env("SUBSTRATE_PREFIX", &self.legacy_prefix)
             .env("SUBSTRATE_TEST_WORLD_LOG", &self.log_path);
         cmd
     }
@@ -149,16 +142,20 @@ impl WorldEnableFixture {
         cmd
     }
 
-    fn manager_env_contents(&self) -> String {
-        fs::read_to_string(&self.manager_env_path).expect("manager env contents")
-    }
-
     fn config_path(&self) -> PathBuf {
         self.substrate_home.join("config.yaml")
     }
 
     fn config_exists(&self) -> bool {
         self.config_path().exists()
+    }
+
+    fn env_sh_exists(&self) -> bool {
+        self.env_sh_path.exists()
+    }
+
+    fn env_sh_contents(&self) -> String {
+        fs::read_to_string(&self.env_sh_path).expect("env.sh contents")
     }
 
     fn write_config(&self, enabled: bool) {
@@ -220,9 +217,7 @@ fn world_enable_provisions_and_sets_config_and_env_state() {
     let fixture = WorldEnableFixture::new();
 
     let mut cmd = fixture.command_skip_doctor();
-    cmd.arg("--prefix")
-        .arg(&fixture.prefix)
-        .arg("--profile")
+    cmd.arg("--profile")
         .arg("release")
         .arg("--verbose")
         .env("SUBSTRATE_TEST_WORLD_STDOUT", "helper stdout")
@@ -253,21 +248,74 @@ fn world_enable_provisions_and_sets_config_and_env_state() {
         "global config should mark world enabled"
     );
 
-    let env_contents = fixture.manager_env_contents();
     assert!(
-        env_contents.contains("SUBSTRATE_WORLD=enabled"),
-        "manager env missing SUBSTRATE_WORLD export: {}",
-        env_contents
+        fixture.env_sh_exists(),
+        "env.sh should be written under --home"
+    );
+    let env_contents = fixture.env_sh_contents();
+    assert!(
+        env_contents.starts_with("#!/usr/bin/env bash\n"),
+        "env.sh missing shebang: {env_contents}"
     );
     assert!(
-        env_contents.contains("SUBSTRATE_WORLD_ENABLED=1"),
-        "manager env missing SUBSTRATE_WORLD_ENABLED export: {}",
-        env_contents
+        env_contents.contains("export SUBSTRATE_HOME="),
+        "env.sh missing SUBSTRATE_HOME export: {env_contents}"
+    );
+    assert!(
+        env_contents.contains(&fixture.substrate_home.display().to_string()),
+        "env.sh should include substrate_home path: {env_contents}"
+    );
+    assert!(
+        env_contents.contains("export SUBSTRATE_WORLD='enabled'"),
+        "env.sh missing SUBSTRATE_WORLD enabled export: {env_contents}"
     );
 
     let log = fixture.log_contents().expect("helper log missing");
     assert!(log.contains("world-enable invoked"));
-    assert!(log.contains("prefix="));
+
+    assert!(
+        !fixture.home.join(".substrate/config.yaml").exists(),
+        "world enable should honor --home for state writes"
+    );
+    assert!(
+        !fixture.legacy_prefix.join("config.yaml").exists(),
+        "legacy SUBSTRATE_PREFIX must not affect state writes"
+    );
+}
+
+#[test]
+fn world_enable_rejects_prefix_flag() {
+    let fixture = WorldEnableFixture::new();
+
+    let mut cmd = substrate_shell_driver();
+    cmd.arg("world")
+        .arg("enable")
+        .arg("--prefix")
+        .arg(&fixture.legacy_prefix)
+        .env("TMPDIR", shared_tmpdir())
+        .env("HOME", &fixture.home)
+        .env("USERPROFILE", &fixture.home);
+
+    let output = cmd
+        .output()
+        .expect("failed to run substrate world enable --prefix");
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "--prefix should be rejected by CLI: {output:?}"
+    );
+    assert!(
+        !fixture.config_exists(),
+        "world enable should not write config when args are invalid"
+    );
+    assert!(
+        !fixture.env_sh_exists(),
+        "world enable should not write env.sh when args are invalid"
+    );
+    assert!(
+        fixture.log_contents().is_none(),
+        "helper should not run when args are invalid"
+    );
 }
 
 #[test]
@@ -276,14 +324,16 @@ fn world_enable_fails_when_helper_exits_non_zero() {
     fixture.write_config(false);
 
     let mut cmd = fixture.command_skip_doctor();
-    cmd.arg("--prefix")
-        .arg(&fixture.prefix)
-        .env("SUBSTRATE_TEST_WORLD_EXIT", "42");
+    cmd.env("SUBSTRATE_TEST_WORLD_EXIT", "42");
 
     cmd.assert().failure();
     assert!(
         !fixture.install_world_enabled(),
         "global config should remain disabled when helper fails"
+    );
+    assert!(
+        !fixture.env_sh_exists(),
+        "env.sh should not be written when helper fails"
     );
 }
 
@@ -292,82 +342,33 @@ fn world_enable_fails_when_socket_missing() {
     let fixture = WorldEnableFixture::new();
 
     let mut cmd = fixture.command();
-    cmd.arg("--prefix")
-        .arg(&fixture.prefix)
-        .arg("--profile")
+    cmd.arg("--profile")
         .arg("debug")
         .env("SUBSTRATE_TEST_SKIP_SOCKET", "1");
 
     cmd.assert().failure();
     assert!(!fixture.config_exists(), "config should not be created");
-}
-
-#[test]
-fn world_enable_short_circuits_when_already_enabled() {
-    let fixture = WorldEnableFixture::new();
-
-    // First run succeeds and toggles config.
-    fixture
-        .command_skip_doctor()
-        .arg("--prefix")
-        .arg(&fixture.prefix)
-        .assert()
-        .success();
-    let first_log = fixture.log_contents().unwrap();
-
-    // Second run should short-circuit and avoid running helper.
-    let assert = fixture
-        .command_skip_doctor()
-        .arg("--prefix")
-        .arg(&fixture.prefix)
-        .assert()
-        .success();
-    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
-    assert!(stdout.contains("already enabled"), "stdout: {}", stdout);
-    assert_eq!(fixture.log_contents().unwrap(), first_log);
-}
-
-#[test]
-fn world_enable_force_reinvokes_even_when_enabled() {
-    let fixture = WorldEnableFixture::new();
-
-    fixture
-        .command_skip_doctor()
-        .arg("--prefix")
-        .arg(&fixture.prefix)
-        .assert()
-        .success();
-    let first_count = fixture.log_line_count();
-
-    fixture
-        .command_skip_doctor()
-        .arg("--prefix")
-        .arg(&fixture.prefix)
-        .arg("--force")
-        .assert()
-        .success();
-    assert!(
-        fixture.log_line_count() > first_count,
-        "expected helper log to grow when forced"
-    );
+    assert!(!fixture.env_sh_exists(), "env.sh should not be created");
 }
 
 #[test]
 fn world_enable_dry_run_skips_all_mutations() {
     let fixture = WorldEnableFixture::new();
-    let initial_env = fixture.manager_env_contents();
+    let initial_env_exists = fixture.env_sh_exists();
 
     fixture
         .command_skip_doctor()
-        .arg("--prefix")
-        .arg(&fixture.prefix)
         .arg("--dry-run")
         .assert()
         .success();
 
     assert!(!fixture.config_exists(), "dry run should not create config");
+    assert_eq!(
+        fixture.env_sh_exists(),
+        initial_env_exists,
+        "dry run should not create env.sh"
+    );
     assert!(fixture.log_contents().is_none(), "helper should not run");
-    assert_eq!(fixture.manager_env_contents(), initial_env);
 }
 
 #[test]
@@ -375,12 +376,11 @@ fn world_enable_recovers_from_invalid_config_file() {
     let fixture = WorldEnableFixture::new();
     fixture.write_invalid_config();
 
-    fixture
-        .command_skip_doctor()
-        .arg("--prefix")
-        .arg(&fixture.prefix)
-        .assert()
-        .success();
+    fixture.command_skip_doctor().assert().success();
 
     assert!(fixture.install_world_enabled());
+    assert!(
+        fixture.env_sh_exists(),
+        "env.sh should be written after recovery"
+    );
 }

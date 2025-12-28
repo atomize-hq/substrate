@@ -69,7 +69,6 @@ fn execute_non_pty(
 
 fn base_cage_env() -> HashMap<String, String> {
     let mut env = HashMap::new();
-    env.insert("SUBSTRATE_WORLD_FS_CAGE".to_string(), "full".to_string());
     env.insert("SUBSTRATE_WORLD_REQUIRE_WORLD".to_string(), "1".to_string());
     env
 }
