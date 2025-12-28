@@ -37,11 +37,11 @@ Required behavior:
 1. Source `$SUBSTRATE_HOME/env.sh` if present.
 2. Source `$SUBSTRATE_HOME/manager_init.sh` if present.
 3. Source user original `BASH_ENV` if captured as `SUBSTRATE_ORIGINAL_BASH_ENV` and the file exists.
-4. Source the legacy bashenv file at `~/.substrate/bashenv` if it exists.
+4. Source the legacy bashenv file at `~/.substrate_bashenv` if it exists.
 
 ### `substrate world enable` home semantics
 Command:
-- `substrate world enable --home <PATH> [other existing flags not removed by this ADR]`
+- `substrate world enable [--home <PATH>] [--profile <NAME>] [--dry-run] [--verbose] [--force] [--timeout <SECONDS>]`
 
 Rules:
 - `--home` sets `$SUBSTRATE_HOME` for the operation and all state writes live under that home.
@@ -81,4 +81,3 @@ Canonical naming:
 - `$SUBSTRATE_HOME/env.sh` and `$SUBSTRATE_HOME/manager_env.sh` behavior and ownership match ADR-0003 exactly.
 - `substrate world enable --home` semantics match ADR-0003 exactly and `--prefix` is rejected.
 - All removed names and legacy artifacts are absent from loader/CLI logic and produce explicit, actionable errors where required by ADR-0003.
-

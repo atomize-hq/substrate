@@ -24,9 +24,11 @@ When `policy.mode` is `observe` or `enforce`, command evaluation implements:
   - If the command matches any `cmd_denied` pattern, it is denied.
   - In `enforce`, Substrate blocks execution.
   - In `observe`, Substrate allows execution and records “would deny”.
-- Allow check:
-  - If the command matches any `cmd_allowed` pattern, it is allowed.
-  - If neither denied nor allowed matches, it is treated as “unclassified” and is allowed in observe and enforce.
+- Allowlist check (`cmd_allowed`):
+  - If `cmd_allowed` is empty: it imposes no allowlist restriction.
+  - If `cmd_allowed` is non-empty and the command matches none of its patterns:
+    - In `enforce`: Substrate blocks execution.
+    - In `observe`: Substrate allows execution but records “would deny”.
 - Isolation check:
   - If the command matches any `cmd_isolated` pattern, it produces a “requires world” constraint.
 
@@ -74,4 +76,3 @@ No other write targets are permitted.
 - “requires world” constraints and fail-closed behavior in enforce mode match ADR-0003 exactly.
 - Host/world selection precedence matches ADR-0003 exactly.
 - “save to policy” writes select the correct on-disk target exactly.
-
