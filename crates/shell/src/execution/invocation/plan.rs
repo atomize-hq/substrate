@@ -1,6 +1,7 @@
 //! Shell invocation planning and environment preparation.
 
 use crate::execution::cli::*;
+use crate::execution::config_model::PolicyMode;
 use crate::execution::settings::{self, apply_world_root_env, resolve_world_root};
 use crate::execution::shim_deploy::{DeploymentStatus, ShimDeployer};
 #[cfg(target_os = "linux")]
@@ -42,6 +43,9 @@ pub struct ShellConfig {
     pub no_exit_on_error: bool,
     pub skip_shims: bool,
     pub no_world: bool,
+    pub cli_world: bool,
+    pub cli_no_world: bool,
+    pub(crate) policy_mode: PolicyMode,
     pub world_root: settings::WorldRootSettings,
     pub async_repl: bool,
     pub env_vars: HashMap<String, String>,
@@ -511,6 +515,7 @@ impl ShellConfig {
                 ..Default::default()
             },
         )?;
+        env::set_var("SUBSTRATE_POLICY_MODE", effective.policy.mode.as_str());
         let final_no_world = !effective.world.enabled;
         update_world_env(final_no_world);
         let manager_init_path = substrate_home.join("manager_init.sh");
@@ -578,6 +583,9 @@ impl ShellConfig {
             no_exit_on_error: cli.no_exit_on_error,
             skip_shims: skip_shims_flag,
             no_world: final_no_world,
+            cli_world: cli.world,
+            cli_no_world: cli.no_world,
+            policy_mode: effective.policy.mode,
             world_root: world_root_settings,
             async_repl: async_repl_enabled,
             env_vars: HashMap::new(),

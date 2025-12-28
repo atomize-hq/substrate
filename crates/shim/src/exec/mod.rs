@@ -14,8 +14,8 @@ use anyhow::Result;
 use std::env;
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime};
-use substrate_broker::{set_global_broker, BrokerHandle};
-use substrate_trace::{create_span_builder, init_trace, set_global_trace_context, TraceContext};
+use substrate_broker::{detect_profile, policy_mode, set_global_broker, BrokerHandle, PolicyMode};
+use substrate_trace::{set_global_trace_context, TraceContext};
 
 /// Main shim execution function
 pub fn run_shim() -> Result<i32> {
@@ -51,37 +51,14 @@ pub fn run_shim() -> Result<i32> {
         .collect();
     let command_str = argv.join(" ");
 
-    let mut active_span = None;
-
-    if world_features_enabled() {
-        match evaluate_policy(&command_str, &cwd, &argv)? {
-            PolicyResult::Proceed(context) => {
-                active_span = context.span;
-            }
-            PolicyResult::Deny(exit_code) => {
-                return Ok(exit_code);
-            }
-        }
-    } else {
-        let _ = init_trace(None);
-        if let Ok(mut builder) = create_span_builder() {
-            builder = builder
-                .with_command(&command_str)
-                .with_cwd(cwd.to_str().unwrap_or("."));
-
-            match builder.start() {
-                Ok(span) => {
-                    env::set_var("SHIM_PARENT_SPAN", span.get_span_id());
-                    active_span = Some(span);
-                }
-                Err(e) => {
-                    eprintln!("substrate: failed to create span: {}", e);
-                }
-            }
-        } else {
-            eprintln!("substrate: failed to create span builder");
-        }
+    let mode = policy_mode();
+    if mode != PolicyMode::Disabled {
+        let _ = detect_profile(&cwd);
     }
+    let active_span = match evaluate_policy(&command_str, &cwd, &argv)? {
+        PolicyResult::Proceed(context) => context.span,
+        PolicyResult::Deny(exit_code) => return Ok(exit_code),
+    };
 
     let start_time = Instant::now();
     let timestamp = SystemTime::now();

@@ -261,6 +261,7 @@ pub(crate) fn configure_child_shell_env<E: CommandEnvAdapter>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::execution::config_model::PolicyMode;
     use crate::execution::settings::WorldRootSettings;
     use crate::execution::ShellMode;
     use serial_test::serial;
@@ -292,6 +293,9 @@ mod tests {
             no_exit_on_error: false,
             skip_shims: false,
             no_world: false,
+            cli_world: false,
+            cli_no_world: false,
+            policy_mode: PolicyMode::Observe,
             world_root: WorldRootSettings {
                 mode: WorldRootMode::Project,
                 path: temp.path().to_path_buf(),

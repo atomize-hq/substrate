@@ -1,11 +1,12 @@
 //! Core broker state and policy evaluation logic.
 
 use crate::approval::{self, ApprovalCache, ApprovalContext, ApprovalStatus};
+use crate::mode::PolicyMode;
 use crate::policy::{Decision, Policy, Restriction, RestrictionType, WorldFsPolicy};
 use crate::policy_loader::{load_effective_policy_for_cwd, load_policy_from_path};
 use anyhow::Result;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, RwLock};
 use substrate_common::WorldFsMode;
 use tracing::{debug, info, warn};
@@ -13,7 +14,27 @@ use tracing::{debug, info, warn};
 pub struct Broker {
     pub(crate) policy: Arc<RwLock<Policy>>,
     pub(crate) approvals: Arc<RwLock<ApprovalCache>>,
-    observe_only: AtomicBool,
+    policy_mode: AtomicU8,
+}
+
+const MODE_DISABLED: u8 = 0;
+const MODE_OBSERVE: u8 = 1;
+const MODE_ENFORCE: u8 = 2;
+
+fn mode_to_u8(mode: PolicyMode) -> u8 {
+    match mode {
+        PolicyMode::Disabled => MODE_DISABLED,
+        PolicyMode::Observe => MODE_OBSERVE,
+        PolicyMode::Enforce => MODE_ENFORCE,
+    }
+}
+
+fn mode_from_u8(raw: u8) -> PolicyMode {
+    match raw {
+        MODE_DISABLED => PolicyMode::Disabled,
+        MODE_ENFORCE => PolicyMode::Enforce,
+        _ => PolicyMode::Observe,
+    }
 }
 
 impl Broker {
@@ -22,7 +43,7 @@ impl Broker {
         Self {
             policy: Arc::new(RwLock::new(default_policy)),
             approvals: Arc::new(RwLock::new(ApprovalCache::new())),
-            observe_only: AtomicBool::new(true), // Start in observe mode
+            policy_mode: AtomicU8::new(mode_to_u8(PolicyMode::from_env())),
         }
     }
 
@@ -55,6 +76,10 @@ impl Broker {
     }
 
     pub fn evaluate(&self, cmd: &str, cwd: &str, _world_id: Option<&str>) -> Result<Decision> {
+        if self.policy_mode() == PolicyMode::Disabled {
+            return Ok(Decision::Allow);
+        }
+
         let policy = self
             .policy
             .read()
@@ -63,15 +88,8 @@ impl Broker {
         // Check denied commands first
         for pattern in &policy.cmd_denied {
             if matches_pattern(cmd, pattern) {
-                if !self.observe_only.load(Ordering::Relaxed) {
-                    log_violation(cmd, "Command explicitly denied");
-                    return Ok(Decision::Deny("Command explicitly denied".into()));
-                } else {
-                    warn!(
-                        "[OBSERVE] Would deny command: {} (pattern: {})",
-                        cmd, pattern
-                    );
-                }
+                log_violation(cmd, "Command explicitly denied");
+                return Ok(Decision::Deny("Command explicitly denied".into()));
             }
         }
 
@@ -85,12 +103,8 @@ impl Broker {
         }
 
         if !allowed && !policy.cmd_allowed.is_empty() {
-            if !self.observe_only.load(Ordering::Relaxed) {
-                log_violation(cmd, "Command not in allowlist");
-                return Ok(Decision::Deny("Command not explicitly allowed".into()));
-            } else {
-                warn!("[OBSERVE] Would deny command: {} (not in allowlist)", cmd);
-            }
+            log_violation(cmd, "Command not in allowlist");
+            return Ok(Decision::Deny("Command not explicitly allowed".into()));
         }
 
         // Check if needs isolation
@@ -105,7 +119,7 @@ impl Broker {
         }
 
         // Check if approval required
-        if policy.require_approval && !self.observe_only.load(Ordering::Relaxed) {
+        if policy.require_approval && self.policy_mode() == PolicyMode::Enforce {
             let approval_status = self.check_approval(cmd)?;
             match approval_status {
                 ApprovalStatus::Approved => {
@@ -128,6 +142,10 @@ impl Broker {
     }
 
     pub fn quick_check(&self, argv: &[String], _cwd: &str) -> Result<Decision> {
+        if self.policy_mode() == PolicyMode::Disabled {
+            return Ok(Decision::Allow);
+        }
+
         // Fast path for shims - just check deny list
         let cmd = argv.join(" ");
         let policy = self
@@ -137,14 +155,25 @@ impl Broker {
 
         for pattern in &policy.cmd_denied {
             if matches_pattern(&cmd, pattern) {
-                if !self.observe_only.load(Ordering::Relaxed) {
-                    return Ok(Decision::Deny("Command denied by policy".into()));
-                } else {
-                    warn!(
-                        "[OBSERVE] Would deny in quick_check: {} (pattern: {})",
-                        cmd, pattern
-                    );
-                }
+                return Ok(Decision::Deny("Command denied by policy".into()));
+            }
+        }
+
+        if !policy.cmd_allowed.is_empty()
+            && !policy
+                .cmd_allowed
+                .iter()
+                .any(|pattern| matches_pattern(&cmd, pattern))
+        {
+            return Ok(Decision::Deny("Command not explicitly allowed".into()));
+        }
+
+        for pattern in &policy.cmd_isolated {
+            if matches_pattern(&cmd, pattern) {
+                return Ok(Decision::AllowWithRestrictions(vec![Restriction {
+                    type_: RestrictionType::IsolatedWorld,
+                    value: "ephemeral".into(),
+                }]));
             }
         }
 
@@ -152,15 +181,24 @@ impl Broker {
     }
 
     pub fn set_observe_only(&self, observe: bool) {
-        self.observe_only.store(observe, Ordering::Relaxed);
-        info!(
-            "Policy enforcement mode: {}",
-            if observe { "OBSERVE" } else { "ENFORCE" }
-        );
+        self.set_policy_mode(if observe {
+            PolicyMode::Observe
+        } else {
+            PolicyMode::Enforce
+        });
     }
 
     pub fn is_observe_only(&self) -> bool {
-        self.observe_only.load(Ordering::Relaxed)
+        self.policy_mode() != PolicyMode::Enforce
+    }
+
+    pub fn set_policy_mode(&self, mode: PolicyMode) {
+        self.policy_mode.store(mode_to_u8(mode), Ordering::Relaxed);
+        info!("Policy mode: {}", mode.as_str());
+    }
+
+    pub fn policy_mode(&self) -> PolicyMode {
+        mode_from_u8(self.policy_mode.load(Ordering::Relaxed))
     }
 
     pub fn allowed_domains(&self) -> Vec<String> {

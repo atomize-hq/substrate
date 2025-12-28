@@ -1,3 +1,4 @@
+use crate::execution::config_model::PolicyMode;
 use crate::execution::settings::WorldRootSettings;
 use crate::execution::world_env_guard;
 use crate::execution::{ShellConfig, ShellMode};
@@ -30,6 +31,9 @@ pub(crate) fn test_shell_config(temp: &TempDir) -> ShellConfig {
         no_exit_on_error: false,
         skip_shims: false,
         no_world: false,
+        cli_world: false,
+        cli_no_world: false,
+        policy_mode: PolicyMode::Observe,
         world_root: WorldRootSettings {
             mode: WorldRootMode::Project,
             path: temp.path().to_path_buf(),

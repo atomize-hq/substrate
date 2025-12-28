@@ -1,6 +1,7 @@
 //! Safe handle for interacting with shared broker state.
 
 use crate::broker::Broker;
+use crate::mode::PolicyMode;
 use crate::policy::Decision;
 use crate::policy::WorldFsPolicy;
 use anyhow::Result;
@@ -66,6 +67,19 @@ impl BrokerHandle {
         }
     }
 
+    pub fn set_policy_mode(&self, mode: PolicyMode) {
+        if let Ok(broker) = self.broker.read() {
+            broker.set_policy_mode(mode);
+        }
+    }
+
+    pub fn policy_mode(&self) -> PolicyMode {
+        self.broker
+            .read()
+            .map(|b| b.policy_mode())
+            .unwrap_or_else(|_| PolicyMode::from_env())
+    }
+
     pub fn is_observe_only(&self) -> bool {
         self.broker
             .read()
@@ -95,8 +109,6 @@ impl BrokerHandle {
     }
 
     fn apply_enforcement_env(&self) {
-        if std::env::var("SUBSTRATE_WORLD").unwrap_or_default() == "enabled" {
-            self.set_observe_only(false);
-        }
+        self.set_policy_mode(PolicyMode::from_env());
     }
 }

@@ -93,6 +93,14 @@ impl PolicyMode {
             _ => None,
         }
     }
+
+    pub(crate) fn as_str(&self) -> &'static str {
+        match self {
+            Self::Disabled => "disabled",
+            Self::Observe => "observe",
+            Self::Enforce => "enforce",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]

@@ -9,6 +9,7 @@ use super::world_ops::execute_world_pty_over_ws_macos;
 use super::world_ops::{
     collect_world_telemetry, emit_stream_chunk, stream_non_pty_via_agent, AgentStreamOutcome,
 };
+use crate::execution::config_model::PolicyMode;
 use crate::execution::pty;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use crate::execution::pw;
@@ -43,14 +44,21 @@ const WORLD_BACKEND_UNAVAILABLE_HINT: &str = "hint: run 'substrate world doctor 
 static WORLD_BACKEND_UNAVAILABLE_WARN_ONCE: Once = Once::new();
 
 #[cfg(target_os = "linux")]
-fn world_socket_note() -> Option<String> {
-    const DEFAULT_SOCKET_PATH: &str = "/run/substrate.sock";
+const DEFAULT_WORLD_SOCKET_PATH: &str = "/run/substrate.sock";
 
-    let socket_path = env::var_os("SUBSTRATE_WORLD_SOCKET").map(PathBuf::from);
-    let socket_path = socket_path.unwrap_or_else(|| PathBuf::from(DEFAULT_SOCKET_PATH));
+#[cfg(target_os = "linux")]
+fn world_socket_path() -> PathBuf {
+    env::var_os("SUBSTRATE_WORLD_SOCKET")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_WORLD_SOCKET_PATH))
+}
+
+#[cfg(target_os = "linux")]
+fn world_socket_note() -> Option<String> {
+    let socket_path = world_socket_path();
 
     let socket_override_active = env::var_os("SUBSTRATE_WORLD_SOCKET")
-        .map(|p| p != std::ffi::OsStr::new(DEFAULT_SOCKET_PATH))
+        .map(|p| p != std::ffi::OsStr::new(DEFAULT_WORLD_SOCKET_PATH))
         .unwrap_or(false);
 
     if socket_override_active {
@@ -82,16 +90,15 @@ fn warn_world_backend_unavailable_once() {
     });
 }
 
-fn required_world_backend_unavailable_error(fs_mode: &str, cage: &str) -> anyhow::Error {
+fn required_world_backend_unavailable_error(reason: &str) -> anyhow::Error {
     let socket_note = world_socket_note();
     let socket_note = socket_note
         .as_deref()
         .map(|note| format!(" ({note})"))
         .unwrap_or_default();
     anyhow::anyhow!(
-        "world execution required (world_fs.require_world=true, mode={}, cage={}) but world backend is unavailable{} ({})",
-        fs_mode,
-        cage,
+        "world execution required ({}) but world backend is unavailable{} ({})",
+        reason,
         socket_note,
         WORLD_BACKEND_UNAVAILABLE_HINT
     )
@@ -193,111 +200,120 @@ pub(crate) fn execute_command(
         out.join(" ")
     };
 
-    let world_env = std::env::var("SUBSTRATE_WORLD").unwrap_or_default();
-    let world_enabled = world_env == "enabled";
-    let world_disabled = world_env == "disabled" || config.no_world;
-    let world_required = world_fs.require_world && !world_disabled;
-    if world_fs.require_world && world_disabled {
+    let policy_mode = config.policy_mode;
+
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let decision = match policy_mode {
+        PolicyMode::Disabled => None,
+        PolicyMode::Observe | PolicyMode::Enforce => Some(
+            evaluate(trimmed, cwd.to_str().unwrap_or("."), None)
+                .with_context(|| format!("policy check failed for command: {trimmed}"))?,
+        ),
+    };
+
+    let cmd_isolated_match = matches!(decision, Some(Decision::AllowWithRestrictions(_)));
+
+    let requires_world_constraint =
+        matches!(policy_mode, PolicyMode::Observe | PolicyMode::Enforce)
+            && (world_fs.require_world
+                || world_fs.mode == substrate_common::WorldFsMode::ReadOnly
+                || world_fs.cage == substrate_broker::WorldFsCage::Full
+                || cmd_isolated_match);
+
+    let world_disabled = config.no_world;
+    let world_enabled = !world_disabled;
+
+    let world_required_by_cli = config.cli_world;
+    let world_required_by_policy = policy_mode == PolicyMode::Enforce && requires_world_constraint;
+    let world_required = world_required_by_cli || world_required_by_policy;
+
+    let world_required_reason = {
+        let mut reasons = Vec::new();
+        if world_required_by_cli {
+            reasons.push("--world".to_string());
+        }
+        if world_required_by_policy {
+            let mut details = Vec::new();
+            if world_fs.require_world {
+                details.push("world_fs.require_world=true");
+            }
+            if world_fs.mode == substrate_common::WorldFsMode::ReadOnly {
+                details.push("world_fs.mode=read_only");
+            }
+            if world_fs.cage == substrate_broker::WorldFsCage::Full {
+                details.push("world_fs.isolation=full");
+            }
+            if cmd_isolated_match {
+                details.push("cmd_isolated match");
+            }
+            let detail = if details.is_empty() {
+                "".to_string()
+            } else {
+                format!(" ({})", details.join(", "))
+            };
+            reasons.push(format!("policy requires world{detail}"));
+        }
+        if reasons.is_empty() {
+            "unknown".to_string()
+        } else {
+            reasons.join(" + ")
+        }
+    };
+
+    if world_required && world_disabled {
         anyhow::bail!(
-            "world execution required (world_fs.require_world=true, mode={}, cage={}) but world is disabled (SUBSTRATE_WORLD=disabled or --no-world)",
-            world_fs.mode.as_str(),
-            world_fs.cage.as_str()
+            "world execution required ({}) but world is disabled (SUBSTRATE_WORLD=disabled, --no-world, or world.enabled=false)",
+            world_required_reason
         );
     }
 
-    // Start span for command execution
-    let policy_decision;
-    let mut span = if world_enabled {
-        // Policy evaluation (Phase 4)
-        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let mut policy_decision = None;
+    if let Some(ref decision) = decision {
+        let mut restriction_strings: Vec<String> = match decision {
+            Decision::AllowWithRestrictions(restrictions) => restrictions
+                .iter()
+                .map(|r| format!("{:?}:{}", r.type_, r.value))
+                .collect(),
+            _ => Vec::new(),
+        };
 
-        // Detect and load .substrate-profile if present
-        detect_profile(&cwd).with_context(|| {
-            format!("failed to load Substrate profile for cwd {}", cwd.display())
-        })?;
+        if requires_world_constraint {
+            restriction_strings.push("requires_world".to_string());
+        }
 
-        let decision = evaluate(trimmed, cwd.to_str().unwrap_or("."), None)
-            .with_context(|| format!("policy check failed for command: {trimmed}"))?;
-
-        // Convert broker Decision to trace PolicyDecision
-        policy_decision = match &decision {
-            Decision::Allow => Some(PolicyDecision {
-                action: "allow".to_string(),
-                reason: None,
-                restrictions: None,
-            }),
-            Decision::AllowWithRestrictions(restrictions) => {
-                eprintln!(
-                    "substrate: command requires restrictions: {:?}",
-                    restrictions
-                );
-                // Convert Restriction objects to strings for trace
-                let restriction_strings: Vec<String> = restrictions
-                    .iter()
-                    .map(|r| format!("{:?}:{}", r.type_, r.value))
-                    .collect();
-                Some(PolicyDecision {
-                    action: "allow_with_restrictions".to_string(),
-                    reason: None,
-                    restrictions: Some(restriction_strings),
-                })
+        let (action, reason) = match decision {
+            Decision::Allow => {
+                if restriction_strings.is_empty() {
+                    ("allow".to_string(), None)
+                } else {
+                    ("allow_with_restrictions".to_string(), None)
+                }
             }
+            Decision::AllowWithRestrictions(_) => ("allow_with_restrictions".to_string(), None),
             Decision::Deny(reason) => {
-                eprintln!("substrate: command denied by policy: {}", reason);
-                Some(PolicyDecision {
-                    action: "deny".to_string(),
-                    reason: Some(reason.clone()),
-                    restrictions: None,
-                })
+                let effective_reason = if policy_mode == PolicyMode::Observe {
+                    format!("would deny (policy.mode=observe): {reason}")
+                } else {
+                    reason.clone()
+                };
+                ("deny".to_string(), Some(effective_reason))
             }
         };
 
-        // Handle denial
-        if let Decision::Deny(_) = decision {
-            // Return failure status
-            #[cfg(unix)]
-            {
-                use std::os::unix::process::ExitStatusExt;
-                return Ok(ExitStatus::from_raw(126 << 8)); // Cannot execute
-            }
-            #[cfg(windows)]
-            {
-                use std::os::windows::process::ExitStatusExt;
-                return Ok(ExitStatus::from_raw(126));
-            }
-        }
+        policy_decision = Some(PolicyDecision {
+            action,
+            reason,
+            restrictions: (!restriction_strings.is_empty()).then_some(restriction_strings),
+        });
+    }
 
-        // Create span with policy decision
-        if let Ok(mut builder) = create_span_builder() {
-            builder = builder
-                .with_command(&redacted_for_logging)
-                .with_cwd(cwd.to_str().unwrap_or("."));
-
-            if let Some(pd) = policy_decision.clone() {
-                builder = builder.with_policy_decision(pd);
-            }
-
-            // Set parent span ID in environment for child processes
-            match builder.start() {
-                Ok(span) => {
-                    std::env::set_var("SHIM_PARENT_SPAN", span.get_span_id());
-                    Some(span)
-                }
-                Err(e) => {
-                    eprintln!("substrate: failed to create span: {}", e);
-                    None
-                }
-            }
-        } else {
-            eprintln!("substrate: failed to create span builder");
-            None
-        }
-    } else if let Ok(mut builder) = create_span_builder() {
-        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let mut span = if let Ok(mut builder) = create_span_builder() {
         builder = builder
             .with_command(&redacted_for_logging)
             .with_cwd(cwd.to_str().unwrap_or("."));
-
+        if let Some(pd) = policy_decision.clone() {
+            builder = builder.with_policy_decision(pd);
+        }
         match builder.start() {
             Ok(span) => {
                 std::env::set_var("SHIM_PARENT_SPAN", span.get_span_id());
@@ -313,6 +329,25 @@ pub(crate) fn execute_command(
         None
     };
 
+    if policy_mode == PolicyMode::Enforce {
+        if let Some(Decision::Deny(reason)) = decision {
+            eprintln!("substrate: command denied by policy: {}", reason);
+            if let Some(active_span) = span.take() {
+                let _ = active_span.finish(126, vec![], None);
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::process::ExitStatusExt;
+                return Ok(ExitStatus::from_raw(126 << 8));
+            }
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::ExitStatusExt;
+                return Ok(ExitStatus::from_raw(126));
+            }
+        }
+    }
+
     // Check if PTY should be used (force overrides disable)
     let disabled = is_pty_disabled();
     let forced = is_force_pty_command(trimmed);
@@ -322,21 +357,21 @@ pub(crate) fn execute_command(
         // Attempt world-agent PTY WS route on Linux when world is enabled or agent socket exists
         #[cfg(target_os = "linux")]
         {
-            let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
-            let world_available = !world_disabled && (world_enabled || uds_exists);
-            if world_required && !world_available {
+            let socket_path = world_socket_path();
+            let uds_exists = socket_path.exists();
+            let world_available = world_enabled && uds_exists;
+            if world_required && world_enabled && !uds_exists {
                 return Err(required_world_backend_unavailable_error(
-                    fs_mode.as_str(),
-                    world_fs.cage.as_str(),
+                    &world_required_reason,
                 ));
             }
-            if !world_disabled && !world_required && !world_available {
+            if world_enabled && !world_required && !uds_exists {
                 warn_world_backend_unavailable_once();
             }
             if world_available {
                 let transport_meta = TransportMeta {
                     mode: "unix".to_string(),
-                    endpoint: Some("/run/substrate.sock".to_string()),
+                    endpoint: Some(socket_path.display().to_string()),
                     socket_activation: Some(
                         socket_activation::socket_activation_report().is_socket_activated(),
                     ),
@@ -373,8 +408,8 @@ pub(crate) fn execute_command(
                     Err(e) => {
                         if world_required {
                             anyhow::bail!(
-                                "world execution required (fs_mode={}); PTY world path failed: {}",
-                                fs_mode.as_str(),
+                                "world execution required ({}); PTY world path failed: {}",
+                                world_required_reason,
                                 e
                             );
                         }
@@ -397,14 +432,13 @@ pub(crate) fn execute_command(
                     _ => false,
                 })
                 .unwrap_or(false);
-            let world_available = !world_disabled && (world_enabled || uds_exists);
-            if world_required && !world_available {
+            let world_available = world_enabled && uds_exists;
+            if world_required && world_enabled && !uds_exists {
                 return Err(required_world_backend_unavailable_error(
-                    fs_mode.as_str(),
-                    world_fs.cage.as_str(),
+                    &world_required_reason,
                 ));
             }
-            if !world_disabled && !world_required && !world_available {
+            if world_enabled && !world_required && !uds_exists {
                 warn_world_backend_unavailable_once();
             }
             if world_available {
@@ -441,8 +475,8 @@ pub(crate) fn execute_command(
                     Err(e) => {
                         if world_required {
                             anyhow::bail!(
-                                "world execution required (fs_mode={}); PTY world path failed: {}",
-                                fs_mode.as_str(),
+                                "world execution required ({}); PTY world path failed: {}",
+                                world_required_reason,
                                 e
                             );
                         }
@@ -456,8 +490,8 @@ pub(crate) fn execute_command(
 
         if world_required {
             anyhow::bail!(
-	                "world execution required (fs_mode={}) but no world PTY execution path is available on this platform",
-	                fs_mode.as_str()
+	                "world execution required ({}) but no world PTY execution path is available on this platform",
+	                world_required_reason
 	            );
         }
 
@@ -537,14 +571,13 @@ pub(crate) fn execute_command(
             .as_ref()
             .map(|c| matches!(&c.transport, pw::WorldTransport::Unix(path) if path.exists()))
             .unwrap_or(false);
-        let world_available = !world_disabled && (world_enabled || uds_exists);
-        if world_required && !world_available {
+        let world_available = world_enabled && uds_exists;
+        if world_required && world_enabled && !uds_exists {
             return Err(required_world_backend_unavailable_error(
-                fs_mode.as_str(),
-                world_fs.cage.as_str(),
+                &world_required_reason,
             ));
         }
-        if !world_disabled && !world_required && !world_available {
+        if world_enabled && !world_required && !uds_exists {
             warn_world_backend_unavailable_once();
         }
         if world_available {
@@ -575,8 +608,8 @@ pub(crate) fn execute_command(
                 Err(e) => {
                     if world_required {
                         anyhow::bail!(
-                            "world execution required (fs_mode={}); world-agent exec failed: {}",
-                            fs_mode.as_str(),
+                            "world execution required ({}); world-agent exec failed: {}",
+                            world_required_reason,
                             e
                         );
                     }
@@ -590,14 +623,13 @@ pub(crate) fn execute_command(
     #[cfg(target_os = "windows")]
     {
         let context = pw::get_context();
-        let world_available = !world_disabled && (world_enabled || context.is_some());
-        if world_required && !world_available {
+        let world_available = world_enabled && context.is_some();
+        if world_required && world_enabled && context.is_none() {
             return Err(required_world_backend_unavailable_error(
-                fs_mode.as_str(),
-                world_fs.cage.as_str(),
+                &world_required_reason,
             ));
         }
-        if !world_disabled && !world_required && !world_available {
+        if world_enabled && !world_required && context.is_none() {
             warn_world_backend_unavailable_once();
         }
         if world_available {
@@ -628,8 +660,8 @@ pub(crate) fn execute_command(
                 Err(e) => {
                     if world_required {
                         anyhow::bail!(
-                            "world execution required (fs_mode={}); world-agent exec failed: {}",
-                            fs_mode.as_str(),
+                            "world execution required ({}); world-agent exec failed: {}",
+                            world_required_reason,
                             e
                         );
                     }
@@ -664,21 +696,21 @@ pub(crate) fn execute_command(
 
     #[cfg(target_os = "linux")]
     {
-        let uds_exists = std::path::Path::new("/run/substrate.sock").exists();
-        let world_available = !world_disabled && (world_enabled || uds_exists);
-        if world_required && !world_available {
+        let socket_path = world_socket_path();
+        let uds_exists = socket_path.exists();
+        let world_available = world_enabled && uds_exists;
+        if world_required && world_enabled && !uds_exists {
             return Err(required_world_backend_unavailable_error(
-                fs_mode.as_str(),
-                world_fs.cage.as_str(),
+                &world_required_reason,
             ));
         }
-        if !world_disabled && !world_required && !world_available {
+        if world_enabled && !world_required && !uds_exists {
             warn_world_backend_unavailable_once();
         }
         if world_available {
             let transport_meta = TransportMeta {
                 mode: "unix".to_string(),
-                endpoint: Some("/run/substrate.sock".to_string()),
+                endpoint: Some(socket_path.display().to_string()),
                 socket_activation: Some(
                     socket_activation::socket_activation_report().is_socket_activated(),
                 ),
@@ -694,8 +726,8 @@ pub(crate) fn execute_command(
                 Err(e) => {
                     if world_required {
                         anyhow::bail!(
-                            "world execution required (fs_mode={}); world-agent exec failed: {}",
-                            fs_mode.as_str(),
+                            "world execution required ({}); world-agent exec failed: {}",
+                            world_required_reason,
                             e
                         );
                     }
