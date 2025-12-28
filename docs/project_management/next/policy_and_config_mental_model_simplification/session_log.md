@@ -193,3 +193,13 @@
   - `cargo fmt` → exit `0`
   - `cargo test -p substrate-shell --test pcm2_routing_semantics -- --nocapture` → exit `101` (fails: observe-mode would-deny recording and enforce deny semantics not yet implemented)
   - `cargo test -p substrate-broker pcm2_save_to_policy -- --nocapture` → exit `101` (fails: save-to-policy target selection not yet implemented)
+
+## END — 2025-12-28T16:52:14Z — PCM2-code — policy mode + routing semantics (code)
+- Summary of changes:
+  - Implemented `policy.mode=disabled|observe|enforce` runtime semantics and command evaluation behavior per `PCM2-spec.md`.
+  - Implemented requires-world constraints and host/world routing semantics, including fail-closed enforcement and host fallback warning behavior when world is optional and unavailable.
+  - Implemented approval “save to policy” write target selection (workspace `.substrate/policy.yaml` vs `$SUBSTRATE_HOME/policy.yaml`) per `PCM2-spec.md`.
+- Commands run (required):
+  - `cargo fmt` → exit `0`
+  - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
+    - Output: `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in 2.24s`
