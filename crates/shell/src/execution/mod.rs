@@ -1,6 +1,7 @@
 pub mod agent_events;
 mod cli;
 mod config_cmd;
+mod config_model;
 mod invocation;
 pub mod lock;
 mod manager;
@@ -14,11 +15,15 @@ mod settings;
 pub mod shim_deploy;
 #[cfg(target_os = "linux")]
 pub(crate) mod socket_activation; // Made public for integration tests
+mod value_parse;
+mod workspace;
+mod workspace_cmd;
 
 pub use cli::*;
 pub(crate) use config_cmd::handle_config_command;
 pub use invocation::{needs_shell, ShellConfig, ShellMode};
 pub use routing::*;
+pub(crate) use workspace_cmd::handle_workspace_command;
 
 pub(crate) use manager::{
     configure_child_shell_env, configure_manager_init, current_platform, log_manager_init_event,

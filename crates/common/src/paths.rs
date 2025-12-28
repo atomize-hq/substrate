@@ -7,7 +7,10 @@ pub const OLD_SHIM_DIR: &str = ".cmdshim_rust";
 
 pub fn substrate_home() -> Result<PathBuf> {
     if let Ok(override_home) = std::env::var("SUBSTRATE_HOME") {
-        return Ok(PathBuf::from(override_home));
+        let trimmed = override_home.trim();
+        if !trimmed.is_empty() {
+            return Ok(PathBuf::from(trimmed));
+        }
     }
     Ok(dirs::home_dir()
         .ok_or_else(|| anyhow::anyhow!("No home directory found"))?

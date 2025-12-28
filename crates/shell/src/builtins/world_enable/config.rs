@@ -228,7 +228,7 @@ fn ensure_no_legacy_toml_config(config_yaml_path: &Path) -> Result<()> {
     }
 
     let message = format!(
-        "substrate: unsupported legacy TOML config detected:\n  - {}\nYAML config is now required:\n  - {}\nNext steps:\n  - Delete the TOML file and run `substrate config init --force`\n  - Re-apply changes via `substrate config set ...`\n",
+        "substrate: unsupported legacy TOML config detected:\n  - {}\nYAML config is now required:\n  - {}\nNext steps:\n  - Delete the TOML file and run `substrate config global init --force`\n  - Re-apply changes via `substrate config global set ...`\n",
         legacy.display(),
         config_yaml_path.display()
     );

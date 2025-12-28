@@ -4,18 +4,18 @@ use substrate_common::WorldRootMode;
 
 #[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
 #[value(rename_all = "kebab-case")]
-pub enum WorldRootModeArg {
-    Project,
+pub enum AnchorModeArg {
+    Workspace,
     FollowCwd,
     Custom,
 }
 
-impl From<WorldRootModeArg> for WorldRootMode {
-    fn from(value: WorldRootModeArg) -> Self {
+impl From<AnchorModeArg> for WorldRootMode {
+    fn from(value: AnchorModeArg) -> Self {
         match value {
-            WorldRootModeArg::Project => WorldRootMode::Project,
-            WorldRootModeArg::FollowCwd => WorldRootMode::FollowCwd,
-            WorldRootModeArg::Custom => WorldRootMode::Custom,
+            AnchorModeArg::Workspace => WorldRootMode::Project,
+            AnchorModeArg::FollowCwd => WorldRootMode::FollowCwd,
+            AnchorModeArg::Custom => WorldRootMode::Custom,
         }
     }
 }
@@ -115,21 +115,13 @@ pub struct Cli {
     #[arg(long = "uncaged", action = ArgAction::SetTrue, conflicts_with = "caged")]
     pub uncaged: bool,
 
-    /// Control how the anchor root is selected (project, follow-cwd, or custom)
-    #[arg(
-        long = "anchor-mode",
-        visible_alias = "world-root-mode",
-        value_name = "MODE"
-    )]
-    pub world_root_mode: Option<WorldRootModeArg>,
+    /// Control how the anchor root is selected (workspace, follow-cwd, or custom)
+    #[arg(long = "anchor-mode", value_name = "MODE")]
+    pub anchor_mode: Option<AnchorModeArg>,
 
     /// Explicit anchor path (used when --anchor-mode=custom)
-    #[arg(
-        long = "anchor-path",
-        visible_alias = "world-root-path",
-        value_name = "PATH"
-    )]
-    pub world_root_path: Option<PathBuf>,
+    #[arg(long = "anchor-path", value_name = "PATH")]
+    pub anchor_path: Option<PathBuf>,
 
     /// Force world isolation for this run (overrides disabled install/config/env)
     #[arg(
@@ -159,6 +151,7 @@ pub enum SubCommands {
     Graph(GraphCmd),
     World(WorldCmd),
     Config(ConfigCmd),
+    Workspace(WorkspaceCmd),
     Shim(ShimCmd),
     Health(HealthCmd),
 }
@@ -196,11 +189,27 @@ pub struct ConfigCmd {
 
 #[derive(Subcommand, Debug)]
 pub enum ConfigAction {
-    /// Initialize or regenerate ~/.substrate/config.yaml
-    Init(ConfigInitArgs),
-    /// Print the global config (YAML by default, JSON with --json)
+    /// Print the effective config for the current workspace (YAML by default, JSON with --json)
     Show(ConfigShowArgs),
-    /// Update config keys via dotted key=value assignments
+    /// Update the workspace config via dotted updates (key=value, key+=value, key-=value)
+    Set(ConfigSetArgs),
+    /// Global config commands ($SUBSTRATE_HOME/config.yaml)
+    Global(ConfigGlobalCmd),
+}
+
+#[derive(Args, Debug)]
+pub struct ConfigGlobalCmd {
+    #[command(subcommand)]
+    pub action: ConfigGlobalAction,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ConfigGlobalAction {
+    /// Initialize $SUBSTRATE_HOME/config.yaml (creates if missing; overwrites with --force)
+    Init(ConfigInitArgs),
+    /// Print $SUBSTRATE_HOME/config.yaml if present; otherwise print built-in defaults
+    Show(ConfigShowArgs),
+    /// Update $SUBSTRATE_HOME/config.yaml via dotted updates (key=value, key+=value, key-=value)
     Set(ConfigSetArgs),
 }
 
@@ -220,12 +229,34 @@ pub struct ConfigShowArgs {
 
 #[derive(Args, Debug)]
 pub struct ConfigSetArgs {
-    /// Emit JSON summary instead of the human-readable diff
+    /// Emit JSON summary instead of human output
     #[arg(long)]
     pub json: bool,
-    /// One or more dotted key assignments (key=value)
-    #[arg(value_name = "key=value", required = true)]
+    /// One or more dotted updates (key=value, key+=value, key-=value)
+    #[arg(value_name = "UPDATE", required = true)]
     pub updates: Vec<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct WorkspaceCmd {
+    #[command(subcommand)]
+    pub action: WorkspaceAction,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum WorkspaceAction {
+    /// Initialize a workspace at PATH (defaults to .)
+    Init(WorkspaceInitArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct WorkspaceInitArgs {
+    /// Workspace root path (defaults to .)
+    #[arg(value_name = "PATH")]
+    pub path: Option<PathBuf>,
+    /// Repair missing directories/files without overwriting existing files
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Subcommand, Debug)]
