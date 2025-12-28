@@ -84,3 +84,9 @@
   - `cargo fmt` → exit `0`
   - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
     - Output: `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in 3.17s`
+
+## START — 2025-12-28T13:48:44Z — PCM0-integ — workspace + config inventory and CLI (integration)
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm0-config-integ`
+- Worktree: `wt/pcm0-config-integ`
+- Scope: merge PCM0 code+tests, reconcile to `PCM0-spec.md`, and run fmt/clippy/tests/preflight + smoke scripts.
