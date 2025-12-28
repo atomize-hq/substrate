@@ -74,3 +74,13 @@
 - Task branch: `pcm-pcm0-config-code`
 - Worktree: `wt/pcm0-config-code`
 - Scope: workspace discovery/init; strict config schema/discovery/precedence; `substrate workspace init` and `substrate config *` per `PCM0-spec.md`
+
+## END — 2025-12-28T13:23:14Z — PCM0-code — workspace + config inventory and CLI
+- Summary of changes:
+  - Implemented workspace marker discovery (`.substrate/workspace.yaml`) and `substrate workspace init` scaffolding (`.substrate/`, `.substrate-git/repo.git/`, `.gitignore` rules) with nested-workspace refusal.
+  - Implemented strict config schema parsing and effective-config precedence (CLI > env > workspace > global > defaults), including protected sync excludes and hard rejection of legacy `.substrate/settings.yaml`.
+  - Implemented `substrate config show|set` (workspace scope) and `substrate config global init|show|set` (global scope) per `PCM0-spec.md`.
+- Commands run (required):
+  - `cargo fmt` → exit `0`
+  - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
+    - Output: `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in 3.17s`
