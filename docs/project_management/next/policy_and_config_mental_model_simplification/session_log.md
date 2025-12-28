@@ -240,3 +240,9 @@
   - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `1` (fails: `$SUBSTRATE_HOME/env.sh` not yet created by `substrate config global init --force`)
   - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
   - `pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `127` (`pwsh` not found)
+
+## START — 2025-12-28T17:51:46Z — PCM3-test — env scripts + world enable home + legacy removals (test)
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm3-env-test`
+- Worktree: `wt/pcm3-env-test`
+- Scope: tests for env script ownership/regeneration, world enable `--home` semantics, and legacy removal no-ops per `PCM3-spec.md`.
