@@ -250,7 +250,7 @@
       "name": "Policy mode + routing semantics (code)",
       "type": "code",
       "phase": "Policy + Config Mental Model Simplification",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Implement policy.mode and routing semantics per PCM2 (production code only).",
       "references": [
         "docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md",

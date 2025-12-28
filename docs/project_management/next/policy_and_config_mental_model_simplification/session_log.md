@@ -172,3 +172,9 @@
   - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `1` (fails: `$SUBSTRATE_HOME/env.sh` not yet created by `substrate config global init --force`)
   - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
   - `pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `127` (`pwsh` not found)
+
+## START — 2025-12-28T16:18:19Z — PCM2-code — policy mode + routing semantics (code)
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm2-routing-code`
+- Worktree: `wt/pcm2-routing-code`
+- Scope: implement `policy.mode=disabled|observe|enforce`, requires-world constraints, host/world selection precedence, and enforce-mode save-to-policy write target selection per `PCM2-spec.md`.
