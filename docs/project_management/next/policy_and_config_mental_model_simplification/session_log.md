@@ -173,6 +173,12 @@
   - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
   - `pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `127` (`pwsh` not found)
 
+## START — 2025-12-28T17:07:56Z — PCM3-code — env scripts + world enable home + legacy removals (code)
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm3-env-code`
+- Worktree: `wt/pcm3-env-code`
+- Scope: implement env scripts behavior + world enable `--home` semantics + legacy removals per `PCM3-spec.md` (production code only; no tests).
+
 ## START — 2025-12-28T16:18:19Z — PCM2-code — policy mode + routing semantics (code)
 - Orchestration branch: `feat/policy_and_config`
 - Task branch: `pcm-pcm2-routing-code`
