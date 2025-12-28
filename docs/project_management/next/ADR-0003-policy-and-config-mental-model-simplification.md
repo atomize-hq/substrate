@@ -18,7 +18,17 @@
 ## Related Docs
 
 - Sequencing: `docs/project_management/next/sequencing.json`
+- Plan: `docs/project_management/next/policy_and_config_mental_model_simplification/plan.md`
+- Tasks: `docs/project_management/next/policy_and_config_mental_model_simplification/tasks.json`
+- Session log: `docs/project_management/next/policy_and_config_mental_model_simplification/session_log.md`
+- Specs:
+  - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md`
+  - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM1-spec.md`
+  - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM2-spec.md`
+  - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md`
 - Decision Register: `docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md`
+- Integration map: `docs/project_management/next/policy_and_config_mental_model_simplification/integration_map.md`
+- Manual playbook: `docs/project_management/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md`
 - Prior (untemplated) ADR content preserved verbatim:
   - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification_OG.md`
 - World-sync specs that MUST be updated to align with this ADR before `world_sync` implementation:
@@ -893,11 +903,13 @@ At minimum, tests MUST verify:
 
 ### Manual validation (explicit)
 
-Manual playbook: none required by this ADR.
+Manual playbook: `docs/project_management/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md`
 
 ### Smoke scripts (explicit)
 
-Smoke scripts: none required by this ADR.
+- Linux: `docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 

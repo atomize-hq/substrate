@@ -1,0 +1,492 @@
+{
+  "tasks": [
+    {
+      "id": "PCM0-code",
+      "name": "Workspace + config inventory and CLI (code)",
+      "type": "code",
+      "phase": "Policy + Config Mental Model Simplification",
+      "status": "pending",
+      "description": "Implement workspace discovery/init and config schema/discovery/precedence and config CLI per PCM0 (production code only).",
+      "references": [
+        "docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/plan.md",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md (DR-0001, DR-0002, DR-0003, DR-0004, DR-0009, DR-0010)",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/integration_map.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+        "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md",
+        "docs/project_management/standards/EXIT_CODE_TAXONOMY.md"
+      ],
+      "acceptance_criteria": [
+        "`substrate workspace init` semantics match PCM0 and ADR-0003 exactly, including nested workspace refusal and .gitignore rules",
+        "Effective config discovery and merge precedence match PCM0 and ADR-0003 exactly",
+        "Config parsing is strict and rejects unknown keys and type mismatches as hard errors",
+        "Legacy `.substrate/settings.yaml` presence produces a hard error with an actionable message"
+      ],
+      "start_checklist": [
+        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "Read plan/spec/decision_register/integration_map for PCM0 and this prompt",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create branch pcm-pcm0-config-code and worktree wt/pcm0-config-code; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
+      "worktree": "wt/pcm0-config-code",
+      "integration_task": "PCM0-integ",
+      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM0-code.md",
+      "depends_on": [],
+      "concurrent_with": [
+        "PCM0-test"
+      ]
+    },
+    {
+      "id": "PCM0-test",
+      "name": "Workspace + config inventory and CLI (test)",
+      "type": "test",
+      "phase": "Policy + Config Mental Model Simplification",
+      "status": "pending",
+      "description": "Add and update tests that lock in workspace discovery/init and config precedence and strict parsing per PCM0.",
+      "references": [
+        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md (DR-0001, DR-0010)",
+        "docs/project_management/standards/EXIT_CODE_TAXONOMY.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Tests verify walk-up workspace discovery and no-workspace behavior per ADR-0003",
+        "Tests verify nested workspace init refusal is exit 2 and performs no writes",
+        "Tests verify config precedence order CLI > env > workspace > global > defaults for every config key",
+        "Tests verify protected excludes are always present and cannot be removed"
+      ],
+      "start_checklist": [
+        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "Read plan/spec for PCM0 and this prompt",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create branch pcm-pcm0-config-test and worktree wt/pcm0-config-test; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run targeted cargo test commands for the tests added/modified",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
+      "worktree": "wt/pcm0-config-test",
+      "integration_task": "PCM0-integ",
+      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM0-test.md",
+      "depends_on": [],
+      "concurrent_with": [
+        "PCM0-code"
+      ]
+    },
+    {
+      "id": "PCM0-integ",
+      "name": "Workspace + config inventory and CLI (integration)",
+      "type": "integration",
+      "phase": "Policy + Config Mental Model Simplification",
+      "status": "pending",
+      "description": "Merge PCM0 code+tests, reconcile to PCM0-spec, and run fmt/clippy/tests/preflight plus smoke scripts.",
+      "references": [
+        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "PCM0 code and tests are merged and match PCM0-spec exactly",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "Feature-local smoke scripts run and results are recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "Read PCM0-spec and confirm PCM0-code and PCM0-test branches are ready to merge",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create branch pcm-pcm0-config-integ and worktree wt/pcm0-config-integ; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
+        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
+      "worktree": "wt/pcm0-config-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM0-integ.md",
+      "depends_on": [
+        "PCM0-code",
+        "PCM0-test"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "PCM1-code",
+      "name": "Policy inventory and CLI (code)",
+      "type": "code",
+      "phase": "Policy + Config Mental Model Simplification",
+      "status": "pending",
+      "description": "Implement policy schema/discovery/strict parsing/invariants and policy CLI per PCM1 (production code only).",
+      "references": [
+        "docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM1-spec.md",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md (DR-0002, DR-0003, DR-0008)",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/integration_map.md",
+        "docs/project_management/standards/EXIT_CODE_TAXONOMY.md"
+      ],
+      "acceptance_criteria": [
+        "Policy strict parsing and invariants match PCM1 and ADR-0003 exactly",
+        "Policy discovery order matches PCM1 and ADR-0003 exactly",
+        "Policy CLI init/show/set/global init/show/set behavior matches PCM1 and ADR-0003 exactly"
+      ],
+      "start_checklist": [
+        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "Read plan/spec/decision_register for PCM1 and this prompt",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create branch pcm-pcm1-policy-code and worktree wt/pcm1-policy-code; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
+      "worktree": "wt/pcm1-policy-code",
+      "integration_task": "PCM1-integ",
+      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM1-code.md",
+      "depends_on": [
+        "PCM0-integ"
+      ],
+      "concurrent_with": [
+        "PCM1-test"
+      ]
+    },
+    {
+      "id": "PCM1-test",
+      "name": "Policy inventory and CLI (test)",
+      "type": "test",
+      "phase": "Policy + Config Mental Model Simplification",
+      "status": "pending",
+      "description": "Add and update tests that lock in policy strict parsing, invariants, discovery, and CLI behavior per PCM1.",
+      "references": [
+        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM1-spec.md",
+        "docs/project_management/standards/EXIT_CODE_TAXONOMY.md"
+      ],
+      "acceptance_criteria": [
+        "Tests verify policy discovery selection order per ADR-0003",
+        "Tests verify policy invariants are hard errors",
+        "Tests verify strict parsing rejects unknown keys and type mismatches"
+      ],
+      "start_checklist": [
+        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "Read plan/spec for PCM1 and this prompt",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create branch pcm-pcm1-policy-test and worktree wt/pcm1-policy-test; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run targeted cargo test commands for the tests added/modified",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
+      "worktree": "wt/pcm1-policy-test",
+      "integration_task": "PCM1-integ",
+      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM1-test.md",
+      "depends_on": [
+        "PCM0-integ"
+      ],
+      "concurrent_with": [
+        "PCM1-code"
+      ]
+    },
+    {
+      "id": "PCM1-integ",
+      "name": "Policy inventory and CLI (integration)",
+      "type": "integration",
+      "phase": "Policy + Config Mental Model Simplification",
+      "status": "pending",
+      "description": "Merge PCM1 code+tests, reconcile to PCM1-spec, and run fmt/clippy/tests/preflight plus smoke scripts.",
+      "references": [
+        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM1-spec.md",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "PCM1 code and tests are merged and match PCM1-spec exactly",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "Feature-local smoke scripts run and results are recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "Read PCM1-spec and confirm PCM1-code and PCM1-test branches are ready to merge",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create branch pcm-pcm1-policy-integ and worktree wt/pcm1-policy-integ; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
+        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
+      "worktree": "wt/pcm1-policy-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM1-integ.md",
+      "depends_on": [
+        "PCM1-code",
+        "PCM1-test"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "PCM2-code",
+      "name": "Policy mode + routing semantics (code)",
+      "type": "code",
+      "phase": "Policy + Config Mental Model Simplification",
+      "status": "pending",
+      "description": "Implement policy.mode and routing semantics per PCM2 (production code only).",
+      "references": [
+        "docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM2-spec.md",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md (DR-0007, DR-0008)",
+        "docs/project_management/standards/EXIT_CODE_TAXONOMY.md"
+      ],
+      "acceptance_criteria": [
+        "disabled|observe|enforce semantics match PCM2 and ADR-0003 exactly",
+        "requires-world constraints and fail-closed behavior match PCM2 and ADR-0003 exactly",
+        "world selection precedence and fallback rules match PCM2 and ADR-0003 exactly"
+      ],
+      "start_checklist": [
+        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "Read plan/spec for PCM2 and this prompt",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create branch pcm-pcm2-routing-code and worktree wt/pcm2-routing-code; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
+      "worktree": "wt/pcm2-routing-code",
+      "integration_task": "PCM2-integ",
+      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM2-code.md",
+      "depends_on": [
+        "PCM1-integ"
+      ],
+      "concurrent_with": [
+        "PCM2-test"
+      ]
+    },
+    {
+      "id": "PCM2-test",
+      "name": "Policy mode + routing semantics (test)",
+      "type": "test",
+      "phase": "Policy + Config Mental Model Simplification",
+      "status": "pending",
+      "description": "Add and update tests that lock in policy.mode semantics, requires-world behavior, and approval write targeting per PCM2.",
+      "references": [
+        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM2-spec.md",
+        "docs/project_management/standards/EXIT_CODE_TAXONOMY.md"
+      ],
+      "acceptance_criteria": [
+        "Tests verify disabled does not evaluate policy decisions",
+        "Tests verify observe allows execution and records would-deny for denied commands",
+        "Tests verify enforce denies denied commands and fails closed when world is required and unavailable",
+        "Tests verify save-to-policy writes choose workspace policy when in a workspace and global policy when not"
+      ],
+      "start_checklist": [
+        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "Read plan/spec for PCM2 and this prompt",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create branch pcm-pcm2-routing-test and worktree wt/pcm2-routing-test; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run targeted cargo test commands for the tests added/modified",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
+      "worktree": "wt/pcm2-routing-test",
+      "integration_task": "PCM2-integ",
+      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM2-test.md",
+      "depends_on": [
+        "PCM1-integ"
+      ],
+      "concurrent_with": [
+        "PCM2-code"
+      ]
+    },
+    {
+      "id": "PCM2-integ",
+      "name": "Policy mode + routing semantics (integration)",
+      "type": "integration",
+      "phase": "Policy + Config Mental Model Simplification",
+      "status": "pending",
+      "description": "Merge PCM2 code+tests, reconcile to PCM2-spec, and run fmt/clippy/tests/preflight plus smoke scripts.",
+      "references": [
+        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM2-spec.md",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "PCM2 code and tests are merged and match PCM2-spec exactly",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "Feature-local smoke scripts run and results are recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "Read PCM2-spec and confirm PCM2-code and PCM2-test branches are ready to merge",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create branch pcm-pcm2-routing-integ and worktree wt/pcm2-routing-integ; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
+        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
+      "worktree": "wt/pcm2-routing-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM2-integ.md",
+      "depends_on": [
+        "PCM2-code",
+        "PCM2-test"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "PCM3-code",
+      "name": "Env scripts + world enable home + legacy removals (code)",
+      "type": "code",
+      "phase": "Policy + Config Mental Model Simplification",
+      "status": "pending",
+      "description": "Implement env.sh/manager_env.sh behavior, world enable --home semantics, and legacy removals per PCM3 (production code only).",
+      "references": [
+        "docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md (DR-0005, DR-0006)",
+        "docs/project_management/standards/EXIT_CODE_TAXONOMY.md"
+      ],
+      "acceptance_criteria": [
+        "env.sh and manager_env.sh ownership and content rules match PCM3 and ADR-0003 exactly",
+        "substrate world enable uses --home semantics and rejects --prefix",
+        "Legacy env vars and flags removed by ADR-0003 are absent and have no effect"
+      ],
+      "start_checklist": [
+        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "Read plan/spec for PCM3 and this prompt",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create branch pcm-pcm3-env-code and worktree wt/pcm3-env-code; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
+      "worktree": "wt/pcm3-env-code",
+      "integration_task": "PCM3-integ",
+      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM3-code.md",
+      "depends_on": [
+        "PCM2-integ"
+      ],
+      "concurrent_with": [
+        "PCM3-test"
+      ]
+    },
+    {
+      "id": "PCM3-test",
+      "name": "Env scripts + world enable home + legacy removals (test)",
+      "type": "test",
+      "phase": "Policy + Config Mental Model Simplification",
+      "status": "pending",
+      "description": "Add and update tests that lock in env script ownership rules, world enable home semantics, and legacy removals per PCM3.",
+      "references": [
+        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md",
+        "docs/project_management/standards/EXIT_CODE_TAXONOMY.md"
+      ],
+      "acceptance_criteria": [
+        "Tests verify runtime substrate does not rewrite env.sh",
+        "Tests verify runtime regenerates manager_env.sh and that it sources env.sh when present",
+        "Tests verify world enable rejects --prefix and honors --home for state writes",
+        "Tests verify legacy env vars removed by ADR-0003 have no effect"
+      ],
+      "start_checklist": [
+        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "Read plan/spec for PCM3 and this prompt",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create branch pcm-pcm3-env-test and worktree wt/pcm3-env-test; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run targeted cargo test commands for the tests added/modified",
+        "Commit worktree changes to the task branch",
+        "Merge/fast-forward into orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
+      "worktree": "wt/pcm3-env-test",
+      "integration_task": "PCM3-integ",
+      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM3-test.md",
+      "depends_on": [
+        "PCM2-integ"
+      ],
+      "concurrent_with": [
+        "PCM3-code"
+      ]
+    },
+    {
+      "id": "PCM3-integ",
+      "name": "Env scripts + world enable home + legacy removals (integration)",
+      "type": "integration",
+      "phase": "Policy + Config Mental Model Simplification",
+      "status": "pending",
+      "description": "Merge PCM3 code+tests, reconcile to PCM3-spec, and run fmt/clippy/tests/preflight plus smoke scripts.",
+      "references": [
+        "docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
+        "docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "PCM3 code and tests are merged and match PCM3-spec exactly",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "Feature-local smoke scripts run and results are recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "Read PCM3-spec and confirm PCM3-code and PCM3-test branches are ready to merge",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Create branch pcm-pcm3-env-integ and worktree wt/pcm3-env-integ; do not edit docs/tasks/session_log.md inside the worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
+        "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
+        "Run: pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
+        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+      ],
+      "worktree": "wt/pcm3-env-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/policy_and_config_mental_model_simplification/kickoff_prompts/PCM3-integ.md",
+      "depends_on": [
+        "PCM3-code",
+        "PCM3-test"
+      ],
+      "concurrent_with": []
+    }
+  ]
+}
+

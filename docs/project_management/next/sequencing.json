@@ -50,13 +50,25 @@
       "id": "policy_and_config_mental_model_simplification",
       "title": "Policy + config mental model simplification",
       "branch": "feat/policy-and-config-mental-model-simplification",
-      "directory": "docs/project_management/next",
-      "plan": "docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md",
+      "directory": "docs/project_management/next/policy_and_config_mental_model_simplification",
+      "plan": "docs/project_management/next/policy_and_config_mental_model_simplification/plan.md",
       "status": "not_started",
       "sequence": [
         {
-          "id": "ADR-0003",
-          "spec": "docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md"
+          "id": "PCM0",
+          "spec": "docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md"
+        },
+        {
+          "id": "PCM1",
+          "spec": "docs/project_management/next/policy_and_config_mental_model_simplification/PCM1-spec.md"
+        },
+        {
+          "id": "PCM2",
+          "spec": "docs/project_management/next/policy_and_config_mental_model_simplification/PCM2-spec.md"
+        },
+        {
+          "id": "PCM3",
+          "spec": "docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md"
         }
       ],
       "notes": [
