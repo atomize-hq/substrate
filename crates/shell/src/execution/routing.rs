@@ -276,12 +276,15 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
         env::remove_var("SUBSTRATE_MANAGER_INIT");
         env::remove_var("SUBSTRATE_MANAGER_ENV");
     } else {
-        if let Err(err) = write_manager_env_script(&config) {
-            warn!(
-                target = "substrate::shell",
-                error = %err,
-                "failed to write manager_env.sh"
-            );
+        env::remove_var("SUBSTRATE_MANAGER_ENV");
+        if !config.skip_shims {
+            if let Err(err) = write_manager_env_script(&config) {
+                warn!(
+                    target = "substrate::shell",
+                    error = %err,
+                    "failed to write manager_env.sh"
+                );
+            }
         }
         if let Some(parent) = config.bash_preexec_path.parent() {
             let _ = fs::create_dir_all(parent);
@@ -297,7 +300,6 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
                 );
             }
         }
-        env::set_var("SUBSTRATE_MANAGER_ENV", &config.manager_env_path);
     }
 
     initialize_world(&config);

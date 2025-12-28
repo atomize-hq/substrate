@@ -13,7 +13,7 @@ use std::thread;
 pub(super) fn run_helper_script(
     script: &Path,
     args: &WorldEnableArgs,
-    prefix: &Path,
+    substrate_home: &Path,
     log_path: &Path,
     socket_override: Option<&Path>,
 ) -> Result<()> {
@@ -29,7 +29,7 @@ pub(super) fn run_helper_script(
     )?;
 
     let mut cmd = Command::new(script);
-    cmd.arg("--prefix").arg(prefix);
+    cmd.arg("--home").arg(substrate_home);
     cmd.arg("--profile").arg(&args.profile);
     if args.dry_run {
         cmd.arg("--dry-run");

@@ -77,7 +77,7 @@ pub(crate) fn update_world_env(no_world: bool) {
     }
     let world_fs = world_fs_policy();
     env::set_var("SUBSTRATE_WORLD_FS_MODE", world_fs.mode.as_str());
-    env::set_var("SUBSTRATE_WORLD_FS_CAGE", world_fs.cage.as_str());
+    env::set_var("SUBSTRATE_WORLD_FS_ISOLATION", world_fs.cage.as_str());
     env::set_var(
         "SUBSTRATE_WORLD_REQUIRE_WORLD",
         if world_fs.require_world { "1" } else { "0" },

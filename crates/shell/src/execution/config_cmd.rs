@@ -3,6 +3,7 @@ use crate::execution::cli::{
     ConfigInitArgs, ConfigSetArgs, ConfigShowArgs,
 };
 use crate::execution::config_model::{self, CliConfigOverrides, SubstrateConfig};
+use crate::execution::write_env_sh;
 use anyhow::{anyhow, Context, Result};
 use std::fs;
 use std::io::Write;
@@ -68,8 +69,10 @@ fn run_global_init(args: &ConfigInitArgs) -> Result<()> {
         return Ok(());
     }
 
-    write_atomic_yaml(&path, &SubstrateConfig::default())
+    let cfg = SubstrateConfig::default();
+    write_atomic_yaml(&path, &cfg)
         .with_context(|| format!("failed to write {}", path.display()))?;
+    write_env_sh(&cfg).context("failed to write env.sh")?;
     if existed {
         println!(
             "substrate: overwrote config at {} (--force)",
@@ -102,6 +105,7 @@ fn run_global_set(args: &ConfigSetArgs) -> Result<()> {
             .with_context(|| format!("failed to write {}", path.display()))?;
     }
 
+    write_env_sh(&cfg).context("failed to write env.sh")?;
     print_config(&cfg, args.json)?;
     Ok(())
 }

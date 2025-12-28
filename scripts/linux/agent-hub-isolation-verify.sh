@@ -7,7 +7,7 @@ usage: scripts/linux/agent-hub-isolation-verify.sh [--log-dir DIR] [--substrate-
 
 Verifies the policy-driven filesystem guarantees introduced by the Agent Hub Isolation Hardening track:
   1) world_fs.mode=read_only blocks both relative and absolute project writes
-  2) world_fs.cage=full prevents reading/writing arbitrary host paths outside the project
+  2) world_fs.isolation=full prevents reading/writing arbitrary host paths outside the project
 
 This script is intended for manual verification on a host with a working world backend.
 On Linux, full-cage requires mount namespaces (root/CAP_SYS_ADMIN or unprivileged user namespaces).
@@ -112,31 +112,87 @@ readonly_project="${LOG_DIR}/readonly-project"
 fullcage_project="${LOG_DIR}/fullcage-project"
 mkdir -p "${readonly_project}" "${fullcage_project}"
 
-readonly_profile="${readonly_project}/.substrate-profile"
-cat >"${readonly_profile}" <<'YAML'
+readonly_substrate="${readonly_project}/.substrate"
+fullcage_substrate="${fullcage_project}/.substrate"
+mkdir -p "${readonly_substrate}" "${fullcage_substrate}"
+
+cat >"${readonly_substrate}/workspace.yaml" <<'YAML'
+world:
+  enabled: true
+  anchor_mode: workspace
+  anchor_path: ""
+  caged: true
+policy:
+  mode: observe
+sync:
+  auto_sync: false
+  direction: from_world
+  conflict_policy: prefer_host
+  exclude: []
+YAML
+
+cat >"${readonly_substrate}/policy.yaml" <<'YAML'
 id: i5-verify-readonly
 name: I5 verify (read_only)
 world_fs:
   mode: read_only
-  cage: project
+  isolation: project
   require_world: true
   read_allowlist:
     - "*"
   write_allowlist: []
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+require_approval: false
+allow_shell_operators: true
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+metadata: {}
 YAML
 
-fullcage_profile="${fullcage_project}/.substrate-profile"
-cat >"${fullcage_profile}" <<'YAML'
+cat >"${fullcage_substrate}/workspace.yaml" <<'YAML'
+world:
+  enabled: true
+  anchor_mode: workspace
+  anchor_path: ""
+  caged: true
+policy:
+  mode: observe
+sync:
+  auto_sync: false
+  direction: from_world
+  conflict_policy: prefer_host
+  exclude: []
+YAML
+
+cat >"${fullcage_substrate}/policy.yaml" <<'YAML'
 id: i5-verify-full-cage
 name: I5 verify (full cage)
 world_fs:
   mode: writable
-  cage: full
+  isolation: full
   require_world: true
   read_allowlist:
     - "*"
   write_allowlist:
     - "./writable/*"
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+require_approval: false
+allow_shell_operators: true
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+metadata: {}
 YAML
 
 cleanup() {
@@ -200,7 +256,7 @@ fi
 popd >/dev/null
 log "PASS: read_only blocked relative + absolute project writes"
 
-log "Test 2: world_fs.cage=full blocks arbitrary host paths outside the project"
+log "Test 2: world_fs.isolation=full blocks arbitrary host paths outside the project"
 outside_read="${HOST_HOME}/substrate-i5-outside-read.$$.txt"
 outside_write="${HOST_HOME}/substrate-i5-outside-write.$$.txt"
 printf 'host-visible\n' >"${outside_read}"

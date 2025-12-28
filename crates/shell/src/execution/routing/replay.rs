@@ -234,12 +234,8 @@ fn inject_world_root_env(env: &mut HashMap<String, String>) {
     let mode = world_root.mode.as_str().to_string();
     let path = world_root.path.to_string_lossy().to_string();
     env.entry("SUBSTRATE_ANCHOR_MODE".to_string())
-        .or_insert_with(|| mode.clone());
-    env.entry("SUBSTRATE_WORLD_ROOT_MODE".to_string())
         .or_insert(mode);
     env.entry("SUBSTRATE_ANCHOR_PATH".to_string())
-        .or_insert_with(|| path.clone());
-    env.entry("SUBSTRATE_WORLD_ROOT_PATH".to_string())
         .or_insert(path);
     env.entry("SUBSTRATE_CAGED".to_string())
         .or_insert_with(|| if world_root.caged { "1" } else { "0" }.to_string());

@@ -334,8 +334,8 @@ pub enum WorldAction {
 
 #[derive(Args, Debug, Clone)]
 pub struct WorldEnableArgs {
-    /// Installation prefix to upgrade (defaults to ~/.substrate or SUBSTRATE_HOME)
-    #[arg(long = "prefix", value_name = "PATH")]
+    /// Substrate home directory for this operation (defaults to ~/.substrate or $SUBSTRATE_HOME)
+    #[arg(long = "home", value_name = "PATH")]
     pub prefix: Option<PathBuf>,
     /// Provisioning profile label passed to the helper script
     #[arg(long = "profile", value_name = "NAME", default_value = "release")]

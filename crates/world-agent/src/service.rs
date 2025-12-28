@@ -32,10 +32,8 @@ use world_api::{WorldBackend, WorldHandle, WorldSpec};
 
 pub(crate) const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
 pub(crate) const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
-pub(crate) const LEGACY_ROOT_MODE_ENV: &str = "SUBSTRATE_WORLD_ROOT_MODE";
-pub(crate) const LEGACY_ROOT_PATH_ENV: &str = "SUBSTRATE_WORLD_ROOT_PATH";
 pub(crate) const WORLD_FS_MODE_ENV: &str = "SUBSTRATE_WORLD_FS_MODE";
-pub(crate) const WORLD_FS_CAGE_ENV: &str = "SUBSTRATE_WORLD_FS_CAGE";
+pub(crate) const WORLD_FS_ISOLATION_ENV: &str = "SUBSTRATE_WORLD_FS_ISOLATION";
 pub(crate) const WORLD_FS_WRITE_ALLOWLIST_ENV: &str = "SUBSTRATE_WORLD_FS_WRITE_ALLOWLIST";
 pub(crate) const WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV: &str =
     "SUBSTRATE_WORLD_FS_LANDLOCK_READ_ALLOWLIST";
@@ -499,46 +497,34 @@ pub(crate) fn resolve_project_dir(
         .map(|path| path.to_path_buf())
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
 
-    let mode = if let Some((key, value)) =
-        env.and_then(|map| first_env_value(map, &[ANCHOR_MODE_ENV, LEGACY_ROOT_MODE_ENV]))
-    {
-        WorldRootMode::parse(value).ok_or_else(|| anyhow!("invalid {} value: {}", key, value))?
-    } else {
-        WorldRootMode::Project
-    };
+    let mode = env
+        .and_then(|map| map.get(ANCHOR_MODE_ENV))
+        .and_then(|value| WorldRootMode::parse(value))
+        .unwrap_or(WorldRootMode::Project);
 
     let root_path = env
-        .and_then(|map| first_env_value(map, &[ANCHOR_PATH_ENV, LEGACY_ROOT_PATH_ENV]))
-        .map(|(_, value)| value.trim())
+        .and_then(|map| map.get(ANCHOR_PATH_ENV))
+        .map(|value| value.trim())
         .filter(|value| !value.is_empty())
         .map(PathBuf::from);
 
     let base_dir = match mode {
         WorldRootMode::Project => root_path.unwrap_or_else(|| cwd_path.clone()),
         WorldRootMode::FollowCwd => cwd_path.clone(),
-        WorldRootMode::Custom => root_path.ok_or_else(|| {
-            anyhow!("world root mode 'custom' requires SUBSTRATE_WORLD_ROOT_PATH")
-        })?,
+        WorldRootMode::Custom => root_path
+            .ok_or_else(|| anyhow!("anchor mode 'custom' requires SUBSTRATE_ANCHOR_PATH"))?,
     };
 
     Ok(base_dir)
 }
 
-fn first_env_value<'a>(
-    env: &'a HashMap<String, String>,
-    keys: &[&'static str],
-) -> Option<(&'static str, &'a str)> {
-    keys.iter()
-        .find_map(|key| env.get(*key).map(|value| (*key, value.as_str())))
-}
-
 pub(crate) fn is_full_cage(env: Option<&HashMap<String, String>>) -> bool {
     if let Some(env) = env {
-        if let Some(raw) = env.get(WORLD_FS_CAGE_ENV) {
+        if let Some(raw) = env.get(WORLD_FS_ISOLATION_ENV) {
             return raw.trim().eq_ignore_ascii_case("full");
         }
     }
-    std::env::var(WORLD_FS_CAGE_ENV)
+    std::env::var(WORLD_FS_ISOLATION_ENV)
         .ok()
         .is_some_and(|raw| raw.trim().eq_ignore_ascii_case("full"))
 }

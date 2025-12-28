@@ -176,13 +176,6 @@ fn resolve_host_detection_context() -> HostDetectionContext {
 }
 
 fn resolve_manager_env_path() -> std::result::Result<PathBuf, String> {
-    if let Ok(path) = env::var("SUBSTRATE_MANAGER_ENV") {
-        if path.trim().is_empty() {
-            return Err("SUBSTRATE_MANAGER_ENV is set but empty".to_string());
-        }
-        return Ok(PathBuf::from(path));
-    }
-
     substrate_paths::substrate_home()
         .map(|home| home.join("manager_env.sh"))
         .map_err(|err| {
@@ -273,7 +266,6 @@ fn run_host_detection_command(command: &str, bash_ctx: &HostBashContext) -> bool
     cmd.arg("-c").arg(command);
     // Use BASH_ENV to source the manager env without touching user rc files.
     cmd.env("BASH_ENV", &bash_ctx.manager_env_path);
-    cmd.env("SUBSTRATE_MANAGER_ENV", &bash_ctx.manager_env_path);
     if let Some(original) = &bash_ctx.original_bash_env {
         cmd.env("SUBSTRATE_ORIGINAL_BASH_ENV", original);
     } else {
@@ -377,7 +369,6 @@ fn run_bash_bulk_command_v(
     let mut cmd = Command::new(&bash_ctx.bash_path);
     cmd.arg("-c").arg(script);
     cmd.env("BASH_ENV", &bash_ctx.manager_env_path);
-    cmd.env("SUBSTRATE_MANAGER_ENV", &bash_ctx.manager_env_path);
     if let Some(original) = &bash_ctx.original_bash_env {
         cmd.env("SUBSTRATE_ORIGINAL_BASH_ENV", original);
     } else {

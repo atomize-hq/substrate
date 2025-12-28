@@ -168,8 +168,6 @@ fn prepare_manager_env() {
             error = %err,
             "failed to write manager env script for world deps"
         );
-    } else {
-        env::set_var("SUBSTRATE_MANAGER_ENV", &manager_env_path);
     }
 }
 

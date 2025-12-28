@@ -4,23 +4,20 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::Utc;
 use std::env;
 use std::path::{Component, Path, PathBuf};
+#[cfg(test)]
 use substrate_common::paths as substrate_paths;
 
+#[cfg(test)]
 pub(super) fn resolve_prefix(explicit: Option<&Path>) -> Result<PathBuf> {
     if let Some(prefix) = explicit {
         return Ok(prefix.to_path_buf());
     }
-    if let Ok(prefix) = env::var("SUBSTRATE_PREFIX") {
-        return Ok(PathBuf::from(prefix));
-    }
     substrate_paths::substrate_home()
-        .context("failed to locate Substrate home (override via --prefix or SUBSTRATE_HOME)")
+        .context("failed to locate Substrate home (override via --home or SUBSTRATE_HOME)")
 }
 
+#[cfg(test)]
 pub(super) fn resolve_manager_env_path() -> Result<PathBuf> {
-    if let Ok(path) = env::var("SUBSTRATE_MANAGER_ENV") {
-        return Ok(PathBuf::from(path));
-    }
     Ok(substrate_paths::substrate_home()?.join("manager_env.sh"))
 }
 
@@ -33,7 +30,7 @@ pub(super) fn resolve_version_dir(prefix: &Path) -> Result<PathBuf> {
     let bin_path = prefix.join("bin").join(bin_name);
     if !bin_path.exists() {
         bail!(
-            "Substrate binary not found at {}. Reinstall or pass --prefix to an existing install.",
+            "Substrate binary not found at {}. Reinstall Substrate or use --home to point at a valid Substrate home.",
             bin_path.display()
         );
     }

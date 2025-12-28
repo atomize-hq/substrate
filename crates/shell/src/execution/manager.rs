@@ -161,8 +161,19 @@ if [[ -n "${SUBSTRATE_MANAGER_ENV_ACTIVE:-}" ]]; then
 fi
 export SUBSTRATE_MANAGER_ENV_ACTIVE=1
 
-substrate_manager_init="${SUBSTRATE_MANAGER_INIT:-}"
-if [[ -n "$substrate_manager_init" && -f "$substrate_manager_init" ]]; then
+substrate_home="${SUBSTRATE_HOME:-}"
+if [[ -z "${substrate_home}" ]]; then
+    substrate_home="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+
+substrate_env="${substrate_home}/env.sh"
+if [[ -f "$substrate_env" ]]; then
+    # shellcheck disable=SC1090
+    source "$substrate_env"
+fi
+
+substrate_manager_init="${substrate_home}/manager_init.sh"
+if [[ -f "$substrate_manager_init" ]]; then
     # shellcheck disable=SC1090
     source "$substrate_manager_init"
 fi

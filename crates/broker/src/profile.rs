@@ -3,10 +3,14 @@ use anyhow::Context;
 use anyhow::Result;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use substrate_common::paths as substrate_paths;
 use tracing::{debug, info};
 
+#[cfg(test)]
 const PROFILE_FILENAME: &str = ".substrate-profile";
+#[cfg(test)]
 const PROFILE_DIR_FILENAME: &str = ".substrate-profile.d";
+
 const MAX_SEARCH_DEPTH: usize = 10; // Prevent infinite traversal
 
 pub struct ProfileDetector {
@@ -36,28 +40,21 @@ impl ProfileDetector {
         let mut depth = 0;
 
         loop {
-            // Check for .substrate-profile file
-            let profile_file = current.join(PROFILE_FILENAME);
-            if profile_file.exists() && profile_file.is_file() {
-                info!("Found profile at {:?}", profile_file);
-                self.cache
-                    .insert(canonical_start.clone(), Some(profile_file.clone()));
-                return Ok(Some(profile_file));
-            }
-
-            // Check for .substrate-profile.d directory
-            let profile_dir = current.join(PROFILE_DIR_FILENAME);
-            if profile_dir.exists() && profile_dir.is_dir() {
-                // Look for default.yaml or similar
-                for entry in ["default.yaml", "default.yml", "policy.yaml", "policy.yml"] {
-                    let policy_file = profile_dir.join(entry);
-                    if policy_file.exists() && policy_file.is_file() {
-                        info!("Found profile at {:?}", policy_file);
-                        self.cache
-                            .insert(canonical_start.clone(), Some(policy_file.clone()));
-                        return Ok(Some(policy_file));
-                    }
+            let marker = current
+                .join(substrate_paths::SUBSTRATE_DIR_NAME)
+                .join("workspace.yaml");
+            if marker.is_file() {
+                let workspace_policy = current
+                    .join(substrate_paths::SUBSTRATE_DIR_NAME)
+                    .join("policy.yaml");
+                if workspace_policy.is_file() {
+                    info!("Found workspace policy at {:?}", workspace_policy);
+                    self.cache
+                        .insert(canonical_start.clone(), Some(workspace_policy.clone()));
+                    return Ok(Some(workspace_policy));
                 }
+                self.cache.insert(canonical_start.clone(), None);
+                return Ok(None);
             }
 
             // Move up one directory
@@ -83,6 +80,14 @@ impl ProfileDetector {
         }
 
         // Cache the negative result
+        if let Ok(global_policy) = substrate_paths::policy_file() {
+            if global_policy.is_file() {
+                self.cache
+                    .insert(canonical_start.clone(), Some(global_policy.clone()));
+                return Ok(Some(global_policy));
+            }
+        }
+
         self.cache.insert(canonical_start, None);
         Ok(None)
     }
@@ -137,8 +142,8 @@ pub fn load_profile_directory(dir: &Path) -> Result<Vec<crate::Policy>> {
 #[cfg(any(test, feature = "policy-watcher"))]
 #[allow(dead_code)]
 pub fn create_sample_profile(path: &Path) -> Result<()> {
-    let sample = r#"# Substrate Security Profile
-# Place this file in your project root as .substrate-profile
+    let sample = r#"# Substrate Policy
+# Place this file in your workspace as .substrate/policy.yaml
 
 id: project-policy
 name: My Project Security Policy

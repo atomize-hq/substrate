@@ -136,19 +136,9 @@ pub fn reconstruct_state(
         }
         if let Some(anchor_mode) = &ctx.anchor_mode {
             env.insert("SUBSTRATE_ANCHOR_MODE".to_string(), anchor_mode.clone());
-            env.insert("SUBSTRATE_WORLD_ROOT_MODE".to_string(), anchor_mode.clone());
         }
         if let Some(anchor_path) = &ctx.anchor_path {
             env.insert("SUBSTRATE_ANCHOR_PATH".to_string(), anchor_path.clone());
-            env.insert("SUBSTRATE_WORLD_ROOT_PATH".to_string(), anchor_path.clone());
-        }
-        if let Some(world_root_mode) = &ctx.world_root_mode {
-            env.entry("SUBSTRATE_WORLD_ROOT_MODE".to_string())
-                .or_insert(world_root_mode.clone());
-        }
-        if let Some(world_root_path) = &ctx.world_root_path {
-            env.entry("SUBSTRATE_WORLD_ROOT_PATH".to_string())
-                .or_insert(world_root_path.clone());
         }
         if let Some(caged) = ctx.caged {
             env.insert(
@@ -175,9 +165,7 @@ pub fn reconstruct_state(
     // Preserve world root/caging hints from the current environment when not captured in the trace
     for key in [
         "SUBSTRATE_ANCHOR_MODE",
-        "SUBSTRATE_WORLD_ROOT_MODE",
         "SUBSTRATE_ANCHOR_PATH",
-        "SUBSTRATE_WORLD_ROOT_PATH",
         "SUBSTRATE_CAGED",
     ] {
         if let Ok(value) = std::env::var(key) {

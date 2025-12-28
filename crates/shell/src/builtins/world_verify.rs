@@ -401,8 +401,8 @@ struct ReadOnlyResult {
 fn check_read_only(root: &Path, log_dir: &Path) -> Result<ReadOnlyResult> {
     let project_dir = root.join("readonly-project");
     fs::create_dir_all(&project_dir).context("create readonly project dir")?;
-    write_profile(
-        &project_dir.join(".substrate-profile"),
+    write_workspace_policy(
+        &project_dir,
         r#"id: i6-verify-readonly
 name: I6 verify (read_only)
 world_fs:
@@ -472,8 +472,8 @@ metadata: {}
 fn check_full_cage(root: &Path, log_dir: &Path) -> Result<CheckReport> {
     let project_dir = root.join("fullcage-project");
     fs::create_dir_all(&project_dir).context("create full cage project dir")?;
-    write_profile(
-        &project_dir.join(".substrate-profile"),
+    write_workspace_policy(
+        &project_dir,
         r#"id: i6-verify-full-cage
 name: I6 verify (full cage)
 world_fs:
@@ -574,7 +574,8 @@ fi
         }
     } else {
         let stderr = fs::read_to_string(&run.stderr_path).unwrap_or_default();
-        if stderr.contains("world_fs.cage=full requested but failed to enter a mount namespace")
+        if stderr
+            .contains("world_fs.isolation=full requested but failed to enter a mount namespace")
             || stderr.contains("failed to spawn unshare wrapper")
         {
             (
@@ -659,7 +660,28 @@ fn expected_failure_no_file(
 }
 
 fn write_profile(path: &Path, contents: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+    }
     fs::write(path, contents).with_context(|| format!("write profile {}", path.display()))
+}
+
+fn write_workspace_policy(project_dir: &Path, policy: &str) -> Result<()> {
+    use crate::execution::config_model::SubstrateConfig;
+
+    let substrate_dir = project_dir.join(".substrate");
+    fs::create_dir_all(&substrate_dir)
+        .with_context(|| format!("failed to create {}", substrate_dir.display()))?;
+
+    let workspace_yaml = substrate_dir.join("workspace.yaml");
+    let workspace_contents =
+        serde_yaml::to_string(&SubstrateConfig::default()).context("serialize workspace.yaml")?;
+    fs::write(&workspace_yaml, workspace_contents)
+        .with_context(|| format!("failed to write {}", workspace_yaml.display()))?;
+
+    let policy_yaml = substrate_dir.join("policy.yaml");
+    write_profile(&policy_yaml, policy)
 }
 
 fn run_substrate_ci(

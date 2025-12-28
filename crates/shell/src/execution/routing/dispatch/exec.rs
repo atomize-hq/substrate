@@ -124,7 +124,7 @@ pub(crate) fn execute_command(
     let world_fs = world_fs_policy();
     let fs_mode = world_fs.mode;
     std::env::set_var("SUBSTRATE_WORLD_FS_MODE", fs_mode.as_str());
-    std::env::set_var("SUBSTRATE_WORLD_FS_CAGE", world_fs.cage.as_str());
+    std::env::set_var("SUBSTRATE_WORLD_FS_ISOLATION", world_fs.cage.as_str());
     std::env::set_var(
         "SUBSTRATE_WORLD_REQUIRE_WORLD",
         if world_fs.require_world { "1" } else { "0" },
