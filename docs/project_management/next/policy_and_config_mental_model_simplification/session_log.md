@@ -90,3 +90,9 @@
 - Task branch: `pcm-pcm0-config-integ`
 - Worktree: `wt/pcm0-config-integ`
 - Scope: merge PCM0 code+tests, reconcile to `PCM0-spec.md`, and run fmt/clippy/tests/preflight + smoke scripts.
+
+## START — 2025-12-28T13:50:26Z — PCM0-test — workspace + config inventory and CLI (test)
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm0-config-test`
+- Worktree: `wt/pcm0-config-test`
+- Scope: tests for PCM0 workspace discovery/init, config precedence + strict parsing, and protected excludes per `PCM0-spec.md`.
