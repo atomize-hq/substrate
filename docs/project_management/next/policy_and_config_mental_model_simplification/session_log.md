@@ -178,3 +178,9 @@
 - Task branch: `pcm-pcm2-routing-code`
 - Worktree: `wt/pcm2-routing-code`
 - Scope: implement `policy.mode=disabled|observe|enforce`, requires-world constraints, host/world selection precedence, and enforce-mode save-to-policy write target selection per `PCM2-spec.md`.
+
+## START — 2025-12-28T16:19:14Z — PCM2-test — policy mode + routing semantics (test)
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm2-routing-test`
+- Worktree: `wt/pcm2-routing-test`
+- Scope: tests for policy.mode semantics, requires-world behavior, and approval “save to policy” write target selection per `PCM2-spec.md`.
