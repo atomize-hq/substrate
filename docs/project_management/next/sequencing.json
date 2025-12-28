@@ -49,7 +49,7 @@
       "order": 25,
       "id": "policy_and_config_mental_model_simplification",
       "title": "Policy + config mental model simplification",
-      "branch": "feat/policy-and-config-mental-model-simplification",
+      "branch": "feat/policy_and_config",
       "directory": "docs/project_management/next/policy_and_config_mental_model_simplification",
       "plan": "docs/project_management/next/policy_and_config_mental_model_simplification/plan.md",
       "status": "not_started",

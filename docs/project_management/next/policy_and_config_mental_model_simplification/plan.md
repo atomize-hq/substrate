@@ -8,7 +8,7 @@ Authoritative contract:
 - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`
 
 ## Guardrails (non-negotiable)
-- Orchestration branch: `feat/policy-and-config-mental-model-simplification`
+- Orchestration branch: `feat/policy_and_config`
 - Planning Pack directory: `docs/project_management/next/policy_and_config_mental_model_simplification/`
 - Docs/tasks/session log edits happen only on the orchestration branch (never in worktrees).
 - Greenfield: remove all legacy compatibility paths; no aliases; no fallbacks.
@@ -68,7 +68,7 @@ These are the primary locations expected to change when implementing ADR-0003:
   - `crates/world/src/exec.rs`
 
 ## Start checklist (all tasks)
-1. `git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only`
+1. `git checkout feat/policy_and_config && git pull --ff-only`
 2. Read: `plan.md`, `tasks.json`, `session_log.md`, the relevant `PCM*-spec.md`, and your kickoff prompt.
 3. Set task status to `in_progress` in `tasks.json`.
 4. Add a START entry to `session_log.md`; commit docs (`docs: start <task-id>`).
@@ -91,4 +91,3 @@ These are the primary locations expected to change when implementing ADR-0003:
    - `pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1`
 4. Commit integration changes; merge/fast-forward into the orchestration branch.
 5. Update `tasks.json` + add END entry to `session_log.md`; commit docs (`docs: finish <task-id>`); remove the worktree.
-

@@ -70,7 +70,7 @@
   - Execution triads: start `PCM0-code` and `PCM0-test` after the quality gate is `ACCEPT`.
 
 ## START — 2025-12-28T12:49:11Z — PCM0-code — workspace + config inventory and CLI
-- Orchestration branch: `feat/policy_and_config` (prompt branch name `feat/policy-and-config-mental-model-simplification` not present locally or on `origin`)
+- Orchestration branch: `feat/policy_and_config`
 - Task branch: `pcm-pcm0-config-code`
 - Worktree: `wt/pcm0-config-code`
 - Scope: workspace discovery/init; strict config schema/discovery/precedence; `substrate workspace init` and `substrate config *` per `PCM0-spec.md`

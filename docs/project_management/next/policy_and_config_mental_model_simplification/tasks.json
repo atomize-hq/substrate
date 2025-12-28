@@ -24,7 +24,7 @@
         "Legacy `.substrate/settings.yaml` presence produces a hard error with an actionable message"
       ],
       "start_checklist": [
-        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "git checkout feat/policy_and_config && git pull --ff-only",
         "Read plan/spec/decision_register/integration_map for PCM0 and this prompt",
         "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
         "Create branch pcm-pcm0-config-code and worktree wt/pcm0-config-code; do not edit docs/tasks/session_log.md inside the worktree"
@@ -63,7 +63,7 @@
         "Tests verify protected excludes are always present and cannot be removed"
       ],
       "start_checklist": [
-        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "git checkout feat/policy_and_config && git pull --ff-only",
         "Read plan/spec for PCM0 and this prompt",
         "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
         "Create branch pcm-pcm0-config-test and worktree wt/pcm0-config-test; do not edit docs/tasks/session_log.md inside the worktree"
@@ -103,7 +103,7 @@
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
-        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "git checkout feat/policy_and_config && git pull --ff-only",
         "Read PCM0-spec and confirm PCM0-code and PCM0-test branches are ready to merge",
         "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
         "Create branch pcm-pcm0-config-integ and worktree wt/pcm0-config-integ; do not edit docs/tasks/session_log.md inside the worktree"
@@ -144,7 +144,7 @@
         "Policy CLI init/show/set/global init/show/set behavior matches PCM1 and ADR-0003 exactly"
       ],
       "start_checklist": [
-        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "git checkout feat/policy_and_config && git pull --ff-only",
         "Read plan/spec/decision_register for PCM1 and this prompt",
         "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
         "Create branch pcm-pcm1-policy-code and worktree wt/pcm1-policy-code; do not edit docs/tasks/session_log.md inside the worktree"
@@ -182,7 +182,7 @@
         "Tests verify strict parsing rejects unknown keys and type mismatches"
       ],
       "start_checklist": [
-        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "git checkout feat/policy_and_config && git pull --ff-only",
         "Read plan/spec for PCM1 and this prompt",
         "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
         "Create branch pcm-pcm1-policy-test and worktree wt/pcm1-policy-test; do not edit docs/tasks/session_log.md inside the worktree"
@@ -224,7 +224,7 @@
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
-        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "git checkout feat/policy_and_config && git pull --ff-only",
         "Read PCM1-spec and confirm PCM1-code and PCM1-test branches are ready to merge",
         "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
         "Create branch pcm-pcm1-policy-integ and worktree wt/pcm1-policy-integ; do not edit docs/tasks/session_log.md inside the worktree"
@@ -264,7 +264,7 @@
         "world selection precedence and fallback rules match PCM2 and ADR-0003 exactly"
       ],
       "start_checklist": [
-        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "git checkout feat/policy_and_config && git pull --ff-only",
         "Read plan/spec for PCM2 and this prompt",
         "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
         "Create branch pcm-pcm2-routing-code and worktree wt/pcm2-routing-code; do not edit docs/tasks/session_log.md inside the worktree"
@@ -303,7 +303,7 @@
         "Tests verify save-to-policy writes choose workspace policy when in a workspace and global policy when not"
       ],
       "start_checklist": [
-        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "git checkout feat/policy_and_config && git pull --ff-only",
         "Read plan/spec for PCM2 and this prompt",
         "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
         "Create branch pcm-pcm2-routing-test and worktree wt/pcm2-routing-test; do not edit docs/tasks/session_log.md inside the worktree"
@@ -345,7 +345,7 @@
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
-        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "git checkout feat/policy_and_config && git pull --ff-only",
         "Read PCM2-spec and confirm PCM2-code and PCM2-test branches are ready to merge",
         "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
         "Create branch pcm-pcm2-routing-integ and worktree wt/pcm2-routing-integ; do not edit docs/tasks/session_log.md inside the worktree"
@@ -385,7 +385,7 @@
         "Legacy env vars and flags removed by ADR-0003 are absent and have no effect"
       ],
       "start_checklist": [
-        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "git checkout feat/policy_and_config && git pull --ff-only",
         "Read plan/spec for PCM3 and this prompt",
         "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
         "Create branch pcm-pcm3-env-code and worktree wt/pcm3-env-code; do not edit docs/tasks/session_log.md inside the worktree"
@@ -424,7 +424,7 @@
         "Tests verify legacy env vars removed by ADR-0003 have no effect"
       ],
       "start_checklist": [
-        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "git checkout feat/policy_and_config && git pull --ff-only",
         "Read plan/spec for PCM3 and this prompt",
         "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
         "Create branch pcm-pcm3-env-test and worktree wt/pcm3-env-test; do not edit docs/tasks/session_log.md inside the worktree"
@@ -466,7 +466,7 @@
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
-        "git checkout feat/policy-and-config-mental-model-simplification && git pull --ff-only",
+        "git checkout feat/policy_and_config && git pull --ff-only",
         "Read PCM3-spec and confirm PCM3-code and PCM3-test branches are ready to merge",
         "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
         "Create branch pcm-pcm3-env-integ and worktree wt/pcm3-env-integ; do not edit docs/tasks/session_log.md inside the worktree"
