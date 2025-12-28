@@ -1,69 +1,33 @@
-# ADR-0003 — Policy + Config Mental Model Simplification
+# ADR-0003: Policy + Config Mental Model Simplification
 
-## Status
+- Status: Proposed
+- Date: 2025-12-27
+- Owner: spenser
 
-- Status: Accepted
-- Date (UTC): 2025-12-27
-- Owner(s): spenser
+## Summary (Normative)
 
-## Scope
+Substrate MUST adopt a single, explicit mental model:
 
-- Feature directory: `docs/project_management/next/policy_and_config_mental_model_simplification/`
-- Sequencing spine: `docs/project_management/next/sequencing.json`
-- Standards:
-  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
-  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
-  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+- Global defaults live in `$SUBSTRATE_HOME/`:
+  - `$SUBSTRATE_HOME/config.yaml`
+  - `$SUBSTRATE_HOME/policy.yaml`
+- Workspace overrides live in the workspace root:
+  - `<workspace_root>/.substrate/workspace.yaml`
+  - `<workspace_root>/.substrate/policy.yaml`
 
-## Related Docs
+There is **no backward compatibility**: all legacy files/keys/flags/env vars that existed solely for previous behavior MUST be removed.
 
-- Sequencing: `docs/project_management/next/sequencing.json`
-- Decision Register: `docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md`
-- Prior (untemplated) ADR content preserved verbatim:
-  - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification_OG.md`
-- World-sync specs that MUST be updated to align with this ADR before `world_sync` implementation:
-  - `docs/project_management/next/world-sync/C0-spec.md`
-  - `docs/project_management/next/world-sync/C1-spec.md`
+## Motivation / Context
 
-## Problem / Context
+Today there are overlapping concepts (“config vs settings vs profile vs policy”), multiple on-disk names for “policy”, and colliding terms (“caged” vs “cage”, “root” vs “anchor”). This ADR removes ambiguity by defining:
 
-Substrate currently has overlapping configuration/policy artifacts and naming collisions that make the runtime mental model hard to reason about. Examples include:
+- Canonical files and how they are discovered
+- Exact precedence rules
+- Exact schemas (strict parsing; unknown keys are errors)
+- Exact CLI surface for workspace/config/policy management
+- Explicit policy mode semantics (`disabled|observe|enforce`) and how “observe” differs from “disabled”
 
-- Multiple competing “policy” and “settings” concepts (config vs settings vs profile vs policy).
-- Multiple on-disk file names for “policy” with different schemas and behaviors.
-- Naming collisions:
-  - `world.caged` / `--caged` is a shell roaming guard.
-  - `world_fs.cage` historically referred to filesystem isolation.
-  - “root” vs “anchor” existed simultaneously.
-- Drift-prone runtime state:
-  - Installers/world-enable can write world state exports into `manager_env.sh`, but runtime overwrites that file with a different script, causing “cached state” to be unreliable.
-- Ambiguous world enable semantics:
-  - `--prefix` influences scripts/logs, while metadata historically wrote under `$SUBSTRATE_HOME`, enabling split-brain behavior.
-
-This ADR defines a cleaner, stricter model with a single mental model and strict contracts.
-
-## Goals
-
-- Define a single, explicit mental model for global defaults vs workspace overrides.
-- Make all on-disk configuration and policy locations unambiguous and testable.
-- Remove naming collisions by:
-  - removing all “root” naming (anchor-only),
-  - removing filesystem-isolation “cage” naming (isolation-only),
-  - keeping `--caged/--uncaged` as roaming-guard-only terminology.
-- Make policy mode explicit and unambiguous: `disabled|observe|enforce`.
-- Make cached state stable via `env.sh` and prevent runtime drift.
-- Make `world enable` semantics unambiguous via `--home`.
-- Lock the model in with guardrail tests (precedence + discovery + removal constraints).
-
-## Non-Goals
-
-- Implementing world-sync functionality itself (this ADR only defines prerequisites and updated contracts that world-sync must adopt).
-- Preserving any backward compatibility, migration tooling, aliases, or legacy discovery fallbacks.
-- Adding additional configuration/policy surfaces beyond what is explicitly specified here.
-
-## User Contract (Authoritative)
-
-### Hard rules (non-negotiable)
+## Hard Rules
 
 1. **No backward compatibility**:
    - No CLI aliases, env var aliases, schema aliases, or file name fallbacks.
@@ -74,16 +38,16 @@ This ADR defines a cleaner, stricter model with a single mental model and strict
 3. **Single source of truth**:
    - Only the files listed in this ADR are valid configuration/policy inputs.
 
-### Terminology
+## Terminology
 
-#### Substrate Home (`$SUBSTRATE_HOME`)
+### Substrate Home (`$SUBSTRATE_HOME`)
 
 `$SUBSTRATE_HOME` MUST be resolved as:
 
 - If `SUBSTRATE_HOME` is set and non-empty: use it.
 - Else: use `~/.substrate`.
 
-#### Workspace Root (`<workspace_root>`)
+### Workspace Root (`<workspace_root>`)
 
 The workspace root is the nearest ancestor directory (including the current directory) that contains:
 
@@ -97,21 +61,21 @@ Workspace discovery MUST:
 
 If no match exists, the current directory is “not in a workspace”.
 
-### Canonical on-disk inventory
+## Canonical On-Disk Inventory
 
-#### Global (system-wide defaults)
+### Global (system-wide defaults)
 
 - `$SUBSTRATE_HOME/config.yaml`
 - `$SUBSTRATE_HOME/policy.yaml`
 - `$SUBSTRATE_HOME/env.sh`
 - `$SUBSTRATE_HOME/manager_env.sh`
 
-#### Workspace (repo/directory-scoped overrides)
+### Workspace (repo/directory-scoped overrides)
 
 - `<workspace_root>/.substrate/workspace.yaml`
 - `<workspace_root>/.substrate/policy.yaml`
 
-#### Explicit removals (must not exist in code)
+### Explicit removals (must not exist in code)
 
 The following legacy artifacts MUST be removed from loader/CLI logic:
 
@@ -120,43 +84,34 @@ The following legacy artifacts MUST be removed from loader/CLI logic:
 - `.substrate-profile.d/*`
 - `.substrate-policy.yaml`
 - Any TOML-era config/settings files (`config.toml`, `.substrate/settings.toml`, etc.)
-- Any legacy “root” fields/flags/env vars (see “Removed names”)
-- Any legacy filesystem-isolation “cage” naming (see “Filesystem isolation rename”)
-- Any `--prefix` / `SUBSTRATE_PREFIX` semantics for home selection (see “World enable home semantics”)
+- Any legacy “root” fields/flags/env vars (see “Removed Names”)
+- Any legacy filesystem-isolation “cage” naming (see “Isolation Rename”)
+- Any `--prefix` / `SUBSTRATE_PREFIX` semantics for home selection (see “World Enable Home Semantics”)
 
-### Exit codes
+## Workspace Initialization
 
-Exit code taxonomy reference (unless overridden here): `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`.
-
-This ADR explicitly defines exit codes for the commands it specifies:
-
-- `0`: success (including no-op “already up to date” behavior where applicable)
-- `2`: user/actionable error (missing workspace, invalid key/value/type, invalid path, nested-workspace refusal, unsupported flag/operator)
-- `1`: unexpected failure
-
-### Workspace initialization
-
-#### Command
+### Command
 
 `substrate workspace init [PATH] [--force]`
 
-Arguments:
+#### Arguments
 
 - `PATH`: workspace root directory to initialize; if omitted, it defaults to `.`.
 
-Flags:
+#### Flags
 
 - `--force`: repair missing pieces idempotently, without deleting or overwriting user data.
 
 No other flags are permitted by this ADR.
 
-Nested workspace refusal:
+#### Nested workspace refusal
 
-- If any parent directory of `PATH` contains `.substrate/workspace.yaml`, `substrate workspace init` MUST:
-  - exit with status `2`, and
-  - perform no filesystem writes.
+If any parent directory of `PATH` contains `.substrate/workspace.yaml`, `substrate workspace init` MUST:
 
-Filesystem effects (success path):
+- Exit with status `2`.
+- Perform no filesystem writes.
+
+#### Filesystem effects (success path)
 
 On success, `substrate workspace init` MUST ensure these paths exist:
 
@@ -168,13 +123,13 @@ On success, `substrate workspace init` MUST ensure these paths exist:
 
 File creation rules:
 
-- If `PATH/.substrate/workspace.yaml` is missing: write defaults (see “Config schema”).
-- If `PATH/.substrate/policy.yaml` is missing: write default policy (see “Policy schema”).
+- If `PATH/.substrate/workspace.yaml` is missing: write defaults (see “Config Schema”).
+- If `PATH/.substrate/policy.yaml` is missing: write default policy (see “Policy Schema”).
 - If either file exists:
   - Without `--force`: do not modify it.
   - With `--force`: still do not overwrite it; only repair missing files/directories elsewhere.
 
-`.gitignore` rules (required):
+#### `.gitignore` rules (required)
 
 `substrate workspace init` MUST create or update `PATH/.gitignore` such that it includes these exact ignore rules (order does not matter; duplicates are allowed but discouraged):
 
@@ -185,15 +140,15 @@ File creation rules:
 
 No other `.gitignore` behavior is permitted by this ADR.
 
-Exit codes:
+#### Exit codes
 
 - `0`: initialized successfully (including “already initialized”).
 - `2`: nested workspace refusal or invalid `PATH`.
 - `1`: unexpected failure.
 
-### Config
+## Config
 
-#### Config schema (YAML; strict)
+### Config Schema (YAML; strict)
 
 Both global config and workspace config MUST be YAML mappings with exactly these keys:
 
@@ -216,7 +171,7 @@ sync:
 
 Unknown keys MUST be a hard error.
 
-Protected sync excludes (always-on):
+### Protected sync excludes (always-on)
 
 `sync.exclude` MUST always behave as if the following protected patterns are prepended (and cannot be removed by config/env/CLI):
 
@@ -224,7 +179,7 @@ Protected sync excludes (always-on):
 - `.substrate/**`
 - `.substrate-git/**`
 
-#### Config discovery and precedence (effective config)
+### Config discovery and precedence (effective config)
 
 For a given `cwd`, the effective config MUST be computed as:
 
@@ -239,14 +194,9 @@ For a given `cwd`, the effective config MUST be computed as:
    - Global config
    - Built-in defaults
 
-Config parsing MUST be strict:
+### Config CLI
 
-- Unknown keys MUST be a hard error.
-- Type mismatches MUST be a hard error.
-
-#### Config CLI
-
-Workspace scope:
+#### Workspace scope
 
 Workspace-scope commands MUST require `<workspace_root>` to exist; otherwise they MUST exit `2` with an error directing the user to `substrate workspace init`.
 
@@ -255,7 +205,7 @@ Workspace-scope commands MUST require `<workspace_root>` to exist; otherwise the
 - `substrate config set [--json] UPDATE...`
   - Applies updates to `<workspace_root>/.substrate/workspace.yaml` only.
 
-Global scope:
+#### Global scope
 
 - `substrate config global init [--force]`
   - Creates `$SUBSTRATE_HOME/config.yaml` if missing; overwrites if `--force`.
@@ -264,7 +214,7 @@ Global scope:
 - `substrate config global set [--json] UPDATE...`
   - Applies updates to `$SUBSTRATE_HOME/config.yaml` (creating the file if missing).
 
-`UPDATE` syntax (config set):
+#### `UPDATE` syntax (config set)
 
 Each `UPDATE` MUST be one of:
 
@@ -297,9 +247,9 @@ Exit codes (`config show/set`):
 - `2`: unsupported key/operator, invalid value/type, or missing workspace (workspace scope).
 - `1`: unexpected failure.
 
-### Policy
+## Policy
 
-#### Policy schema (YAML; strict)
+### Policy Schema (YAML; strict)
 
 Both global policy and workspace policy MUST be YAML mappings with exactly this schema:
 
@@ -334,14 +284,14 @@ metadata: {}                # map[string]string (required; may be empty)
 
 Unknown keys MUST be a hard error.
 
-Policy invariants (must be validated):
+#### Policy invariants (must be validated)
 
 Policy load MUST fail (hard error) if any of the following are true:
 
 - `world_fs.isolation=full` AND `world_fs.require_world=false`
 - `world_fs.mode=read_only` AND `world_fs.require_world=false`
 
-Command pattern semantics (`cmd_*`):
+### Command pattern semantics (`cmd_*`)
 
 For `cmd_allowed`, `cmd_denied`, and `cmd_isolated`:
 
@@ -350,7 +300,7 @@ For `cmd_allowed`, `cmd_denied`, and `cmd_isolated`:
 
 No other pattern semantics are permitted by this ADR.
 
-#### Policy discovery (effective policy)
+### Policy discovery (effective policy)
 
 For a given `cwd`, effective policy MUST be selected as:
 
@@ -360,12 +310,7 @@ For a given `cwd`, effective policy MUST be selected as:
 4. Else if `$SUBSTRATE_HOME/policy.yaml` exists: load it.
 5. Else: use the built-in default policy.
 
-Policy parsing MUST be strict:
-
-- Unknown keys MUST be a hard error.
-- Type mismatches MUST be a hard error.
-
-#### Policy mode (`disabled|observe|enforce`)
+### Policy mode (`disabled|observe|enforce`)
 
 `policy.mode` (from effective config) MUST control runtime behavior:
 
@@ -381,7 +326,7 @@ Policy parsing MUST be strict:
 
 Observe differs from disabled because observe records *policy decisions* (not just commands), enabling deterministic audit/replay and future agent planning.
 
-How policy decisions apply (command-level):
+#### How policy decisions apply (command-level)
 
 When `policy.mode` is `observe` or `enforce`, policy evaluation MUST implement these semantics:
 
@@ -400,7 +345,7 @@ When `policy.mode` is `observe` or `enforce`, policy evaluation MUST implement t
 
 When `policy.mode` is `disabled`, Substrate MUST NOT evaluate `cmd_*` lists at all.
 
-World execution requirements (policy + config + CLI):
+#### World execution requirements (policy + config + CLI)
 
 The decision “run in world vs host” MUST be made for each execution using:
 
@@ -429,7 +374,7 @@ World backend availability rule:
 - If Substrate determines that world execution is required (by `--world` or by policy-derived requirement in `enforce`), but the world backend is unavailable: Substrate MUST fail closed (hard error).
 - If Substrate selects world execution (via config/env) but world execution is not required by `enforce`, and the world backend is unavailable: Substrate MUST fall back to host execution and MUST record the fallback reason in trace/telemetry.
 
-Approvals “save to policy” writes (enforce mode):
+### Approvals “save to policy” writes (enforce mode)
 
 If (and only if) enforce mode requests interactive approval and the user selects “save this approval to policy file”, Substrate MUST write to:
 
@@ -438,9 +383,9 @@ If (and only if) enforce mode requests interactive approval and the user selects
 
 No other write locations are permitted by this ADR.
 
-#### Policy CLI
+### Policy CLI
 
-Workspace scope:
+#### Workspace scope
 
 Workspace-scope commands MUST require `<workspace_root>` to exist; otherwise they MUST exit `2` with an error directing the user to `substrate workspace init`.
 
@@ -452,7 +397,7 @@ Workspace-scope commands MUST require `<workspace_root>` to exist; otherwise the
 - `substrate policy set [--json] UPDATE...`
   - Applies updates to `<workspace_root>/.substrate/policy.yaml` only.
 
-Global scope:
+#### Global scope
 
 - `substrate policy global init [--force]`
 - `substrate policy global show [--json]`
@@ -460,7 +405,7 @@ Global scope:
 
 Global commands operate on `$SUBSTRATE_HOME/policy.yaml` (creating it when needed).
 
-`UPDATE` syntax (policy set):
+#### `UPDATE` syntax (policy set)
 
 Each `UPDATE` MUST be one of:
 
@@ -493,9 +438,9 @@ Exit codes (`policy init/show/set`):
 - `2`: unsupported key/operator, invalid value/type, or missing workspace (workspace scope).
 - `1`: unexpected failure.
 
-### World / anchor / roaming guard (naming and semantics)
+## World / Anchor / Roaming Guard (Naming and Semantics)
 
-Removed names (must not exist in code):
+### Removed names (must not exist in code)
 
 All “root” naming MUST be removed:
 
@@ -510,7 +455,7 @@ Canonical names are:
 - CLI: `--anchor-mode`, `--anchor-path`
 - Env: `SUBSTRATE_ANCHOR_MODE`, `SUBSTRATE_ANCHOR_PATH`
 
-Anchor resolution (runtime semantics):
+### Anchor resolution (runtime semantics)
 
 Substrate MUST resolve the **anchor root** for a given execution as follows:
 
@@ -537,14 +482,14 @@ The anchor root MUST be used consistently as the “project boundary” for:
 - The roaming guard (`--caged/--uncaged`)
 - World filesystem isolation in `project` mode
 
-Roaming guard (`--caged/--uncaged`):
+### Roaming guard (`--caged/--uncaged`)
 
 `world.caged` and `--caged/--uncaged` are a roaming guard only:
 
 - They MUST control whether the shell allows `cd` outside the resolved anchor root.
 - They MUST NOT be described as filesystem isolation or policy enforcement.
 
-Filesystem isolation rename (policy-only):
+### Filesystem isolation rename (policy-only)
 
 The filesystem isolation concept MUST use only the “isolation” naming:
 
@@ -556,7 +501,7 @@ All filesystem-isolation “cage” naming MUST be removed:
 - Policy key: `world_fs.cage`
 - Env export: `SUBSTRATE_WORLD_FS_CAGE`
 
-### Environment variables (exhaustive for this ADR)
+## Environment Variables (Exhaustive for this ADR)
 
 The following env vars MUST exist and MUST have the semantics described:
 
@@ -574,14 +519,14 @@ The following env vars MUST exist and MUST have the semantics described:
 
 No other env vars are permitted by this ADR for these concerns.
 
-### Environment scripts (global; required)
+## Environment Scripts (Global; Required)
 
 This ADR defines two generated, global shell scripts under `$SUBSTRATE_HOME/`:
 
 - `$SUBSTRATE_HOME/env.sh`
 - `$SUBSTRATE_HOME/manager_env.sh`
 
-`$SUBSTRATE_HOME/env.sh` (stable exports; generated):
+### `$SUBSTRATE_HOME/env.sh` (stable exports; generated)
 
 Purpose:
 
@@ -613,7 +558,7 @@ Exports (exhaustive for this ADR):
 
 No other exports are permitted by this ADR in `$SUBSTRATE_HOME/env.sh`.
 
-`$SUBSTRATE_HOME/manager_env.sh` (runtime manager wiring; generated):
+### `$SUBSTRATE_HOME/manager_env.sh` (runtime manager wiring; generated)
 
 Purpose:
 
@@ -640,15 +585,15 @@ Required behavior (exhaustive for this ADR):
 3. Source the user’s original `BASH_ENV` if Substrate captured it (`SUBSTRATE_ORIGINAL_BASH_ENV`) and it exists.
 4. Source the legacy bashenv file at `~/.substrate_bashenv` if it exists.
 
-`SUBSTRATE_MANAGER_ENV` override (removed):
+### `SUBSTRATE_MANAGER_ENV` override (removed)
 
 `SUBSTRATE_MANAGER_ENV` MUST NOT exist and MUST NOT be consulted for resolving the manager env script path. The manager env path is always `$SUBSTRATE_HOME/manager_env.sh`.
 
-Bash preexec script integration (required):
+### Bash preexec script integration (required)
 
 The bash preexec script (currently written to `~/.substrate_preexec`) MUST source `$SUBSTRATE_HOME/manager_env.sh` and MUST NOT consult `SUBSTRATE_MANAGER_ENV`.
 
-### Top-level CLI flags (exhaustive subset for this ADR)
+## Top-Level CLI Flags (Exhaustive subset for this ADR)
 
 The following top-level flags MUST exist:
 
@@ -660,15 +605,15 @@ The following top-level flags MUST exist:
 
 No other flags are permitted by this ADR for these concerns.
 
-### World enable home semantics (required)
+## World Enable Home Semantics (Required)
 
 `substrate world enable` MUST have unambiguous “home” semantics:
 
-Command:
+### Command
 
 `substrate world enable [--home <PATH>] [--profile <NAME>] [--dry-run] [--verbose] [--force] [--timeout <SECONDS>]`
 
-Flags:
+### Flags
 
 - `--home <PATH>`: sets `$SUBSTRATE_HOME` for the operation.
   - If omitted, `$SUBSTRATE_HOME` is resolved normally (see “Substrate Home”).
@@ -680,7 +625,7 @@ Flags:
 
 `--prefix` MUST NOT exist. `SUBSTRATE_PREFIX` MUST NOT exist.
 
-Filesystem effects (when not `--dry-run`):
+### Filesystem effects (when not `--dry-run`)
 
 `substrate world enable` MUST treat `--home` as the only state root:
 
@@ -692,21 +637,21 @@ Filesystem effects (when not `--dry-run`):
 
 `substrate world enable` MUST NOT read or write `<home>/policy.yaml`.
 
-Metadata update guarantee:
+### Metadata update guarantee
 
 On successful provisioning, `substrate world enable` MUST:
 
 - Set `world.enabled=true` in `<home>/config.yaml` (creating the file if missing).
 - Regenerate `<home>/env.sh` to reflect the new effective global defaults.
 
-Helper invocation guarantee:
+### Helper invocation guarantee
 
 The world enable helper script MUST be invoked with consistent home semantics:
 
 - The helper script MUST be passed `--home <PATH>` (not `--prefix`).
 - The helper process environment MUST include `SUBSTRATE_HOME=<PATH>` set to the same value.
 
-### World-sync implications (required)
+## World-Sync Implications (Required)
 
 World-sync commands MUST gate on workspace initialization:
 
@@ -718,93 +663,18 @@ Gating rule:
 
 - If no `<workspace_root>` exists for `cwd`, these commands MUST exit `2` and MUST direct the user to `substrate workspace init`.
 
-## Architecture Shape
-
-### Components affected (non-exhaustive but required map)
-
-Primary hot spots (current code reality that must be rewritten to satisfy this ADR):
-
-- Global-only config commands:
-  - `crates/shell/src/execution/config_cmd.rs`
-- Launch-dir-only directory settings:
-  - `crates/shell/src/execution/settings/builder.rs`
-  - `crates/shell/src/execution/settings/runtime.rs`
-- Legacy enforcement profile discovery:
-  - `crates/broker/src/profile.rs`
-  - `crates/broker/src/broker.rs` (holds `ProfileDetector`)
-- Approvals policy writer (must be workspace/global only):
-  - `crates/broker/src/approval.rs`
-- Policy schema:
-  - `crates/broker/src/policy.rs` (`world_fs.cage` -> `world_fs.isolation`)
-- World env plumbing and parsing:
-  - `crates/world-agent/src/service.rs`
-  - `crates/world/src/exec.rs`
-  - `crates/shell/src/execution/routing/dispatch/exec.rs`
-- CLI flags:
-  - `crates/shell/src/execution/cli.rs` (remove `world-root-*` alias; add `policy-mode`; add `workspace` + `policy` subcommands)
-
-### End-to-end flow (inputs → derived state → actions → outputs)
-
-Inputs:
-
-- CLI flags (world selection, anchor selection, policy mode, config/policy subcommands)
-- Environment variables (subset defined by this ADR)
-- Global files under `$SUBSTRATE_HOME/`
-- Workspace files under `<workspace_root>/.substrate/` when in a workspace
-
-Derived state:
-
-- Resolved `$SUBSTRATE_HOME`
-- Resolved `<workspace_root>` (or “no workspace”)
-- Effective config (layered)
-- Effective policy (selected)
-- Policy-derived “requires world” constraints (observe/enforce only)
-- Anchor root (resolved)
-
-Actions:
-
-- Evaluate policy and enforce/observe/skip per `policy.mode`
-- Select host vs world execution per the rules in this ADR
-- Enforce roaming guard per `world.caged`
-- Generate/maintain `$SUBSTRATE_HOME/env.sh` and `$SUBSTRATE_HOME/manager_env.sh` per ownership rules
-
-Outputs:
-
-- Trace/telemetry records (including policy decisions in observe/enforce)
-- Updated config/policy files when requested by CLI or approval “save” action
-- World enable logs under `<home>/logs/`
-
-## Sequencing / Dependencies
-
-- Sequencing entry: `docs/project_management/next/sequencing.json` → sprint id `policy_and_config_mental_model_simplification` (order `25`).
-- This sprint MUST land before `world_sync` to avoid implementing world-sync against legacy config/policy/env semantics.
-- Before implementing `world_sync` code, world-sync planning docs MUST be updated to match this ADR (at minimum `docs/project_management/next/world-sync/C0-spec.md` and `docs/project_management/next/world-sync/C1-spec.md`).
-
-## Security / Safety Posture
-
-- Strict parsing is fail-closed:
-  - Unknown keys and type mismatches are hard errors for config/policy.
-- Policy-derived “requires world” behavior is fail-closed in `enforce` mode:
-  - If world is required and unavailable, Substrate fails closed and does not silently fall back.
-- Protected paths:
-  - `sync.exclude` always includes `.git/**`, `.substrate/**`, `.substrate-git/**` and they cannot be removed.
-- Policy invariants are fail-closed:
-  - `world_fs.isolation=full` and `world_fs.mode=read_only` require `world_fs.require_world=true`.
-- Drift prevention:
-  - Stable exports MUST be in `$SUBSTRATE_HOME/env.sh` only; runtime must not clobber that file.
-
-## Validation Plan (Authoritative)
-
-### Tests (required)
+## Required Test Coverage (Acceptance)
 
 Implementation MUST include automated tests that lock in all precedence rules and all “removed” behaviors from this ADR.
 
-Test suite locations (required):
+### Test suite locations (required)
+
+The tests MUST be added under:
 
 - `crates/shell/tests/` (workspace discovery, config precedence, world-enable home semantics, env scripts behavior)
 - `crates/broker/src/tests.rs` or `crates/broker/tests/` (policy discovery/updates, enforce/observe/disabled semantics)
 
-Workspace discovery guardrails (required):
+### Workspace discovery guardrails (required)
 
 Tests MUST verify:
 
@@ -813,9 +683,9 @@ Tests MUST verify:
 2. **No-workspace behavior**:
    - If no `.substrate/workspace.yaml` exists in any ancestor, Substrate treats `cwd` as “not in a workspace”.
 3. **Nested workspace init refusal**:
-   - `substrate workspace init` exits `2` and makes no writes when a parent workspace already exists.
+   - `substrate workspace init` exits `2` and makes no writes when a parent workspace already exists (see “Nested workspace refusal”).
 
-Config precedence guardrails (required):
+### Config precedence guardrails (required)
 
 Tests MUST verify the precedence order exactly as specified:
 
@@ -838,7 +708,7 @@ Protected excludes tests MUST verify:
 - The protected patterns `.git/**`, `.substrate/**`, `.substrate-git/**` are always effectively present.
 - Attempts to remove protected patterns via env or CLI do not remove them.
 
-Policy discovery + write target guardrails (required):
+### Policy discovery + write target guardrails (required)
 
 Tests MUST verify effective policy selection order exactly:
 
@@ -853,7 +723,7 @@ Approvals “save to policy” tests MUST verify write target selection exactly:
 
 All tests MUST verify `$SUBSTRATE_HOME` is honored (i.e., no implicit `dirs::home_dir()` fallback).
 
-Policy mode semantics guardrails (required):
+### Policy mode semantics guardrails (required)
 
 Tests MUST verify:
 
@@ -866,7 +736,7 @@ Tests MUST include at least one denied-command case and assert:
 - In `observe`, the command is allowed and a “would deny” result is produced/recorded.
 - In `enforce`, the command is denied.
 
-Environment scripts guardrails (required):
+### Environment scripts guardrails (required)
 
 Tests MUST verify:
 
@@ -878,7 +748,7 @@ Tests MUST verify:
    - does not modify `<home>/manager_env.sh`,
    - and uses consistent `--home` semantics (see “Helper invocation guarantee”).
 
-Legacy removal guardrails (required; no compatibility):
+### Legacy removal guardrails (required; no compatibility)
 
 Because this ADR forbids all compatibility layers, tests MUST verify that legacy artifacts are rejected and/or ignored in a way that prevents silent partial behavior.
 
@@ -890,27 +760,6 @@ At minimum, tests MUST verify:
 - Config keys `install.world_enabled`, `world.root_mode`, `world.root_path` are rejected by `substrate config * set` and by config parsing.
 - Policy key `world_fs.cage` is rejected by policy parsing.
 - Presence of `.substrate/settings.yaml` MUST cause a hard error with an actionable message directing the user to use `.substrate/workspace.yaml`.
-
-### Manual validation (explicit)
-
-Manual playbook: none required by this ADR.
-
-### Smoke scripts (explicit)
-
-Smoke scripts: none required by this ADR.
-
-## Rollout / Backwards Compatibility
-
-- Policy: greenfield breaking is allowed
-- Compat work: none (explicitly forbidden by this ADR)
-
-## Decision Summary
-
-Decision Register: `docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md`
-
-Entries used by this ADR:
-
-- DR-0001, DR-0002, DR-0003, DR-0004, DR-0005, DR-0006, DR-0007, DR-0008, DR-0009, DR-0010
 
 ## Expected Breaking Changes (Explicit)
 
@@ -946,3 +795,37 @@ These are required outcomes of implementing this ADR:
 - World enable home semantics:
   - `substrate world enable --prefix` MUST NOT exist
   - `substrate world enable --home` MUST exist and MUST update state under the chosen `$SUBSTRATE_HOME`
+
+## Implementation Notes / Code Map (Non-normative)
+
+Primary hot spots (current code reality that must be rewritten to satisfy this ADR):
+
+- Global-only config commands:
+  - `crates/shell/src/execution/config_cmd.rs`
+- Launch-dir-only directory settings:
+  - `crates/shell/src/execution/settings/builder.rs`
+  - `crates/shell/src/execution/settings/runtime.rs`
+- Legacy enforcement profile discovery:
+  - `crates/broker/src/profile.rs`
+  - `crates/broker/src/broker.rs` (holds `ProfileDetector`)
+- Approvals policy writer (must be workspace/global only):
+  - `crates/broker/src/approval.rs`
+- Policy schema:
+  - `crates/broker/src/policy.rs` (`world_fs.cage` -> `world_fs.isolation`)
+- World env plumbing and parsing:
+  - `crates/world-agent/src/service.rs`
+  - `crates/world/src/exec.rs`
+  - `crates/shell/src/execution/routing/dispatch/exec.rs`
+- CLI flags:
+  - `crates/shell/src/execution/cli.rs` (remove `world-root-*` alias; add `policy-mode`; add `workspace` + `policy` subcommands)
+
+Related planning docs that must be updated to match this ADR:
+
+- `docs/project_management/next/world-sync/C0-spec.md` (uses `substrate init`; must become `substrate workspace init`)
+- `docs/project_management/next/world-sync/C1-spec.md` (references `.substrate/settings.yaml`; must become `.substrate/workspace.yaml`)
+
+## Deferred (Explicitly out of scope for this ADR)
+
+These topics are intentionally not specified here and MUST be handled in separate ADRs:
+
+None.
