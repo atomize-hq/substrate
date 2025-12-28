@@ -266,3 +266,23 @@
 - Task branch: `pcm-pcm3-env-integ`
 - Worktree: `wt/pcm3-env-integ`
 - Scope: merge PCM3 code+tests, reconcile to `PCM3-spec.md`, and run fmt/clippy/tests/preflight + smoke scripts.
+
+## END — 2025-12-28T18:45:00Z — PCM3-integ — env scripts + world enable home + legacy removals (integration)
+- Summary of changes:
+  - Reconciled lingering PCM3 unit tests/helpers to ADR-0003 (removed legacy `SUBSTRATE_PREFIX`/`SUBSTRATE_MANAGER_ENV` test hooks, renamed `WorldEnableArgs.home`, updated manager env script assertions).
+  - Updated broker profile detector tests to match ADR-0003 policy discovery (workspace policy > global policy) and avoid host-global policy bleed-through.
+  - Fixed linux smoke script `.gitignore` assertions to use exact-line matching (previous regex over-escaped and always failed).
+- Commands run (required):
+  - `cargo fmt` → exit `0`
+  - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
+  - `cargo test -p substrate-shell --lib -- --nocapture` → exit `0`
+  - `cargo test -p substrate-shell --test world_enable -- --nocapture` → exit `0`
+  - `cargo test -p substrate-shell --test shell_env -- --nocapture` → exit `0`
+  - `cargo test -p substrate-shell --test replay_world -- --nocapture` → exit `0`
+  - `cargo test -p world-agent --test full_cage_nonpty -- --nocapture` → exit `0` (some cases skipped: overlay support or privileges missing)
+  - `cargo test -p world-agent --test full_cage_pty -- --nocapture` → exit `0` (some cases skipped: overlay support or privileges missing)
+  - `make preflight` → exit `0`
+- Smoke scripts:
+  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `0`
+  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
+  - `pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `127` (`pwsh` not found)

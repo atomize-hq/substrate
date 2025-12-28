@@ -450,7 +450,7 @@
       "name": "Env scripts + world enable home + legacy removals (integration)",
       "type": "integration",
       "phase": "Policy + Config Mental Model Simplification",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge PCM3 code+tests, reconcile to PCM3-spec, and run fmt/clippy/tests/preflight plus smoke scripts.",
       "references": [
         "docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md",
