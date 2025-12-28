@@ -203,3 +203,9 @@
   - `cargo fmt` → exit `0`
   - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
     - Output: `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in 2.24s`
+
+## START — 2025-12-28T16:57:39Z — PCM2-integ — policy mode + routing semantics (integration)
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm2-routing-integ`
+- Worktree: `wt/pcm2-routing-integ`
+- Scope: merge PCM2 code+tests, reconcile to `PCM2-spec.md`, and run fmt/clippy/tests/preflight + smoke scripts.
