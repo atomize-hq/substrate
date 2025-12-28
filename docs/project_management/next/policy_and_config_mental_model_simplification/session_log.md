@@ -126,6 +126,16 @@
 - Worktree: `wt/pcm1-policy-code`
 - Scope: policy schema/discovery/strict parsing/invariants; `substrate policy *` per `PCM1-spec.md`
 
+## END — 2025-12-28T15:24:23Z — PCM1-code — policy inventory and CLI
+- Summary of changes:
+  - Implemented strict policy schema parsing (deny unknown keys/type mismatches) with load-time invariants per `PCM1-spec.md`.
+  - Implemented policy discovery precedence (workspace `.substrate/policy.yaml` > global `$SUBSTRATE_HOME/policy.yaml` > defaults) for broker refresh and CLI show.
+  - Implemented `substrate policy init|show|set` and `substrate policy global init|show|set`, including dotted update syntax and `--json` output.
+- Commands run (required):
+  - `cargo fmt` → exit `0`
+  - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
+    - Output: `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in 3.00s`
+
 ## START — 2025-12-28T15:10:24Z — PCM1-test — policy inventory and CLI (test)
 - Orchestration branch: `feat/policy_and_config`
 - Task branch: `pcm-pcm1-policy-test`

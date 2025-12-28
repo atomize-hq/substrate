@@ -129,7 +129,7 @@
       "name": "Policy inventory and CLI (code)",
       "type": "code",
       "phase": "Policy + Config Mental Model Simplification",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Implement policy schema/discovery/strict parsing/invariants and policy CLI per PCM1 (production code only).",
       "references": [
         "docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md",
