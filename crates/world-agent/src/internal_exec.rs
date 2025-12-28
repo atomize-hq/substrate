@@ -5,17 +5,20 @@ pub const LANDLOCK_EXEC_ARG: &str = "__substrate_world_landlock_exec";
 const INNER_CMD_ENV: &str = "SUBSTRATE_INNER_CMD";
 const INNER_LOGIN_SHELL_ENV: &str = "SUBSTRATE_INNER_LOGIN_SHELL";
 const MOUNT_CWD_ENV: &str = "SUBSTRATE_MOUNT_CWD";
+#[cfg(target_os = "linux")]
 const MOUNT_PROJECT_DIR_ENV: &str = "SUBSTRATE_MOUNT_PROJECT_DIR";
 
 const LANDLOCK_READ_ENV: &str = "SUBSTRATE_WORLD_FS_LANDLOCK_READ_ALLOWLIST";
 const LANDLOCK_WRITE_ENV: &str = "SUBSTRATE_WORLD_FS_LANDLOCK_WRITE_ALLOWLIST";
 
 pub fn run_landlock_exec() -> Result<()> {
-    let mut read_paths = parse_allowlist_env(LANDLOCK_READ_ENV);
-    let mut write_paths = parse_allowlist_env(LANDLOCK_WRITE_ENV);
+    let read_paths = parse_allowlist_env(LANDLOCK_READ_ENV);
+    let write_paths = parse_allowlist_env(LANDLOCK_WRITE_ENV);
 
     #[cfg(target_os = "linux")]
     {
+        let mut read_paths = read_paths;
+        let mut write_paths = write_paths;
         if !read_paths.is_empty() || !write_paths.is_empty() {
             let mut policy = world::landlock::LandlockFilesystemPolicy {
                 exec_paths: vec!["/".to_string(), "/project".to_string()],
