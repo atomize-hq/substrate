@@ -131,3 +131,12 @@
 - Task branch: `pcm-pcm1-policy-test`
 - Worktree: `wt/pcm1-policy-test`
 - Scope: tests for policy strict parsing, invariants, discovery selection order, and policy CLI behavior per `PCM1-spec.md`.
+
+## END — 2025-12-28T15:20:27Z — PCM1-test — policy inventory and CLI (test)
+- Summary of changes:
+  - Added broker unit tests that lock strict policy parsing expectations (including rejecting legacy `world_fs.cage`) and invariant failures per `PCM1-spec.md`.
+  - Added shell integration tests that lock policy discovery precedence (workspace > global > default) and workspace-scope guardrails per `PCM1-spec.md`.
+- Commands run (required):
+  - `cargo fmt` → exit `0`
+  - `cargo test -p substrate-broker policy::tests::pcm1_ -- --nocapture` → exit `101` (fails: broker policy schema still expects `world_fs.cage` and accepts it; rejects `world_fs.isolation`)
+  - `cargo test -p substrate-shell --test policy_discovery -- --nocapture` → exit `101` (fails: `substrate policy *` subcommands not yet implemented)
