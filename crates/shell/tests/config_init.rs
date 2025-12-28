@@ -146,9 +146,9 @@ fn config_global_init_writes_default_config_yaml() {
 
     let yaml = fixture.read_yaml_config();
     let root = yaml.as_mapping().expect("yaml root mapping");
-    assert!(root.contains_key(&YamlValue::String("world".to_string())));
-    assert!(root.contains_key(&YamlValue::String("policy".to_string())));
-    assert!(root.contains_key(&YamlValue::String("sync".to_string())));
+    assert!(root.contains_key(YamlValue::String("world".to_string())));
+    assert!(root.contains_key(YamlValue::String("policy".to_string())));
+    assert!(root.contains_key(YamlValue::String("sync".to_string())));
 }
 
 #[test]

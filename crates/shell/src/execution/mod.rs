@@ -1,7 +1,7 @@
 pub mod agent_events;
 mod cli;
 mod config_cmd;
-mod config_model;
+pub(crate) mod config_model;
 mod invocation;
 pub mod lock;
 mod manager;

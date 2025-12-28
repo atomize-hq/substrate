@@ -5,18 +5,35 @@ mod support;
 use predicates::prelude::*;
 use serde_json::Value;
 use std::fs;
+use std::path::PathBuf;
 use support::{get_substrate_binary, temp_dir};
 #[cfg(target_os = "linux")]
 use support::{AgentSocket, SocketResponse};
 #[cfg(target_os = "linux")]
 use tempfile::Builder;
 
+fn setup_isolated_home(temp: &tempfile::TempDir) -> PathBuf {
+    let home = temp.path().join("home");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(substrate_home.join("shims")).expect("create shims directory");
+    fs::write(
+        substrate_home.join("config.yaml"),
+        "world:\n  enabled: true\n  anchor_mode: workspace\n  anchor_path: \"\"\n  caged: true\n\npolicy:\n  mode: observe\n\nsync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: []\n",
+    )
+    .expect("write default config");
+    home
+}
+
 #[test]
 fn test_command_start_finish_json_roundtrip() {
     let temp = temp_dir("substrate-test-");
+    let home = setup_isolated_home(&temp);
     let log_file = temp.path().join("trace.jsonl");
 
     get_substrate_binary()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", home.join(".substrate"))
         .env("SHIM_TRACE_LOG", &log_file)
         .arg("-c")
         .arg("echo test")
@@ -98,11 +115,15 @@ fn test_command_start_finish_json_roundtrip() {
 #[test]
 fn test_log_directory_creation() {
     let temp = temp_dir("substrate-test-");
+    let home = setup_isolated_home(&temp);
     let nested_log = temp.path().join("subdir").join("logs").join("trace.jsonl");
 
     assert!(!nested_log.parent().unwrap().exists());
 
     get_substrate_binary()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", home.join(".substrate"))
         .env("SHIM_TRACE_LOG", &nested_log)
         .arg("-c")
         .arg("true")
@@ -118,9 +139,13 @@ fn test_log_directory_creation() {
 #[test]
 fn test_pipe_mode_detection() {
     let temp = temp_dir("substrate-test-");
+    let home = setup_isolated_home(&temp);
     let log_file = temp.path().join("trace.jsonl");
 
     get_substrate_binary()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", home.join(".substrate"))
         .env("SHIM_TRACE_LOG", &log_file)
         .write_stdin("echo piped\n")
         .assert()
@@ -134,12 +159,16 @@ fn test_pipe_mode_detection() {
 #[test]
 fn test_log_rotation() {
     let temp = temp_dir("substrate-test-");
+    let home = setup_isolated_home(&temp);
     let log_file = temp.path().join("trace.jsonl");
 
     let large_content = "x".repeat(2 * 1024 * 1024);
     fs::write(&log_file, &large_content).unwrap();
 
     get_substrate_binary()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", home.join(".substrate"))
         .env("SHIM_TRACE_LOG", &log_file)
         .env("TRACE_LOG_MAX_MB", "1")
         .arg("-c")
@@ -166,9 +195,13 @@ fn test_log_rotation() {
 #[test]
 fn test_pty_field_in_logs() {
     let temp = temp_dir("substrate-test-");
+    let home = setup_isolated_home(&temp);
     let log_file = temp.path().join("trace.jsonl");
 
     get_substrate_binary()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", home.join(".substrate"))
         .env("SHIM_TRACE_LOG", &log_file)
         .arg("-c")
         .arg("echo test")
@@ -182,9 +215,13 @@ fn test_pty_field_in_logs() {
 #[test]
 fn test_process_group_signal_handling() {
     let temp = temp_dir("substrate-test-");
+    let home = setup_isolated_home(&temp);
     let log_file = temp.path().join("trace.jsonl");
 
     get_substrate_binary()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", home.join(".substrate"))
         .env("SHIM_TRACE_LOG", &log_file)
         .arg("-c")
         .arg("sleep 0.1 | cat")
@@ -199,6 +236,7 @@ fn test_process_group_signal_handling() {
 #[cfg(target_os = "linux")]
 fn command_logs_include_socket_activation_flag() {
     let temp = temp_dir("substrate-test-");
+    let home = setup_isolated_home(&temp);
     let log_file = temp.path().join("trace.jsonl");
     let socket_temp = Builder::new()
         .prefix("substrate-activation-")
@@ -208,6 +246,9 @@ fn command_logs_include_socket_activation_flag() {
     let _socket = AgentSocket::start(&socket_path, SocketResponse::Capabilities);
 
     get_substrate_binary()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", home.join(".substrate"))
         .env("SHIM_TRACE_LOG", &log_file)
         .env("SUBSTRATE_WORLD", "enabled")
         .env("SUBSTRATE_WORLD_ENABLED", "1")
@@ -238,9 +279,13 @@ fn command_logs_include_socket_activation_flag() {
 #[cfg(target_os = "linux")]
 fn command_logs_mark_manual_mode_without_socket_activation() {
     let temp = temp_dir("substrate-test-");
+    let home = setup_isolated_home(&temp);
     let log_file = temp.path().join("trace.jsonl");
 
     get_substrate_binary()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", home.join(".substrate"))
         .env("SHIM_TRACE_LOG", &log_file)
         .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
         .arg("-c")

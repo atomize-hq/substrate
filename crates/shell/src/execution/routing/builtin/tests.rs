@@ -8,9 +8,45 @@ use clap::Parser;
 use serial_test::serial;
 #[cfg(unix)]
 use std::process::Command;
-use std::{env, fs, path::PathBuf};
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+};
 use substrate_common::WorldRootMode;
 use tempfile::tempdir;
+
+fn write_config_yaml(
+    path: &Path,
+    world_enabled: bool,
+    anchor_mode: &str,
+    anchor_path: &str,
+    caged: bool,
+) {
+    let enabled = if world_enabled { "true" } else { "false" };
+    let caged = if caged { "true" } else { "false" };
+    let anchor_path = anchor_path.replace('\\', "\\\\");
+    let body = format!(
+        "world:\n  enabled: {enabled}\n  anchor_mode: {anchor_mode}\n  anchor_path: \"{anchor_path}\"\n  caged: {caged}\n\npolicy:\n  mode: observe\n\nsync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: []\n"
+    );
+    fs::write(path, body).unwrap();
+}
+
+fn write_workspace_config(
+    workspace_root: &Path,
+    world_enabled: bool,
+    anchor_mode: &str,
+    anchor_path: &Path,
+    caged: bool,
+) {
+    fs::create_dir_all(workspace_root.join(".substrate")).unwrap();
+    write_config_yaml(
+        &workspace_root.join(".substrate/workspace.yaml"),
+        world_enabled,
+        anchor_mode,
+        &anchor_path.display().to_string(),
+        caged,
+    );
+}
 
 #[test]
 #[serial]
@@ -69,19 +105,19 @@ fn world_flag_overrides_disabled_config_and_env() {
     let home = temp.path().join("home");
     let substrate_home = home.join(".substrate");
     fs::create_dir_all(substrate_home.join("shims")).unwrap();
-    fs::write(
-        substrate_home.join("config.yaml"),
-        "install:\n  world_enabled: false\n",
-    )
-    .unwrap();
+    write_config_yaml(
+        &substrate_home.join("config.yaml"),
+        false,
+        "workspace",
+        "",
+        true,
+    );
 
     let prev_home = set_env("HOME", &home.display().to_string());
     let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
     let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home.display().to_string());
     let prev_world = set_env("SUBSTRATE_WORLD", "disabled");
     let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "0");
-    let prev_root_mode = set_env("SUBSTRATE_WORLD_ROOT_MODE", "project");
-    let prev_root_path = set_env("SUBSTRATE_WORLD_ROOT_PATH", "/env/root");
     let prev_caged = set_env("SUBSTRATE_CAGED", "1");
     let prev_anchor_mode = env::var("SUBSTRATE_ANCHOR_MODE").ok();
     let prev_anchor_path = env::var("SUBSTRATE_ANCHOR_PATH").ok();
@@ -97,8 +133,6 @@ fn world_flag_overrides_disabled_config_and_env() {
     assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
     assert_eq!(env::var("SUBSTRATE_WORLD_ENABLED").unwrap(), "1");
 
-    restore_env("SUBSTRATE_WORLD_ROOT_MODE", prev_root_mode);
-    restore_env("SUBSTRATE_WORLD_ROOT_PATH", prev_root_path);
     restore_env("SUBSTRATE_CAGED", prev_caged);
     restore_env("SUBSTRATE_ANCHOR_MODE", prev_anchor_mode);
     restore_env("SUBSTRATE_ANCHOR_PATH", prev_anchor_path);
@@ -120,29 +154,27 @@ fn world_flag_honors_directory_world_root_settings() {
     let workdir = temp.path().join("workspace");
     let custom_root = workdir.join("nested-root");
     fs::create_dir_all(substrate_home.join("shims")).unwrap();
-    fs::create_dir_all(workdir.join(".substrate")).unwrap();
     fs::create_dir_all(&custom_root).unwrap();
-    fs::write(
-        substrate_home.join("config.yaml"),
-        "install:\n  world_enabled: false\nworld:\n  root_mode: project\n  root_path: \"\"\n  caged: true\n",
-    )
-    .unwrap();
-    let settings_body = format!(
-        "world:\n  root_mode: custom\n  root_path: \"{}\"\n  caged: false\n",
-        custom_root.display().to_string().replace('\\', "\\\\")
+    write_config_yaml(
+        &substrate_home.join("config.yaml"),
+        false,
+        "workspace",
+        "",
+        true,
     );
-    fs::write(workdir.join(".substrate/settings.yaml"), settings_body).unwrap();
+    write_workspace_config(&workdir, false, "custom", &custom_root, false);
 
     let prev_home = set_env("HOME", &home.display().to_string());
     let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
     let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home.display().to_string());
     let prev_world = set_env("SUBSTRATE_WORLD", "disabled");
     let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "0");
-    let prev_root_mode = set_env("SUBSTRATE_WORLD_ROOT_MODE", "project");
-    let prev_root_path = set_env("SUBSTRATE_WORLD_ROOT_PATH", "/env/root");
-    let prev_caged = set_env("SUBSTRATE_CAGED", "1");
+    let prev_caged = env::var("SUBSTRATE_CAGED").ok();
+    env::remove_var("SUBSTRATE_CAGED");
     let prev_anchor_mode = env::var("SUBSTRATE_ANCHOR_MODE").ok();
     let prev_anchor_path = env::var("SUBSTRATE_ANCHOR_PATH").ok();
+    env::remove_var("SUBSTRATE_ANCHOR_MODE");
+    env::remove_var("SUBSTRATE_ANCHOR_PATH");
     let _dir_guard = DirGuard::new();
     env::set_current_dir(&workdir).unwrap();
 
@@ -154,15 +186,17 @@ fn world_flag_honors_directory_world_root_settings() {
     assert!(!config.world_root.caged);
     assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
     assert_eq!(env::var("SUBSTRATE_WORLD_ENABLED").unwrap(), "1");
-    assert_eq!(env::var("SUBSTRATE_WORLD_ROOT_MODE").unwrap(), "custom");
+    assert_eq!(env::var("SUBSTRATE_ANCHOR_MODE").unwrap(), "custom");
+    let env_anchor = PathBuf::from(env::var("SUBSTRATE_ANCHOR_PATH").unwrap());
+    let env_anchor = env_anchor.canonicalize().unwrap_or(env_anchor);
     assert_eq!(
-        env::var("SUBSTRATE_WORLD_ROOT_PATH").unwrap(),
-        custom_root.display().to_string()
+        env_anchor,
+        custom_root
+            .canonicalize()
+            .unwrap_or_else(|_| custom_root.clone())
     );
     assert_eq!(env::var("SUBSTRATE_CAGED").unwrap(), "0");
 
-    restore_env("SUBSTRATE_WORLD_ROOT_MODE", prev_root_mode);
-    restore_env("SUBSTRATE_WORLD_ROOT_PATH", prev_root_path);
     restore_env("SUBSTRATE_CAGED", prev_caged);
     restore_env("SUBSTRATE_ANCHOR_MODE", prev_anchor_mode);
     restore_env("SUBSTRATE_ANCHOR_PATH", prev_anchor_path);
@@ -175,7 +209,7 @@ fn world_flag_honors_directory_world_root_settings() {
 
 #[test]
 #[serial]
-fn anchor_flags_override_configs_and_export_legacy_env() {
+fn anchor_flags_override_configs_and_export_anchor_env() {
     let temp = tempdir().unwrap();
     let home = temp.path().join("home");
     let substrate_home = home.join(".substrate");
@@ -183,27 +217,22 @@ fn anchor_flags_override_configs_and_export_legacy_env() {
     let cli_anchor = workdir.join("cli-anchor");
     let dir_anchor = workdir.join("dir-anchor");
     fs::create_dir_all(substrate_home.join("shims")).unwrap();
-    fs::create_dir_all(workdir.join(".substrate")).unwrap();
     fs::create_dir_all(&cli_anchor).unwrap();
     fs::create_dir_all(&dir_anchor).unwrap();
-    fs::write(
-        substrate_home.join("config.yaml"),
-        "world:\n  anchor_mode: project\n  anchor_path: /config/root\n  caged: false\n",
-    )
-    .unwrap();
-    let settings_body = format!(
-        "world:\n  anchor_mode: custom\n  anchor_path: \"{}\"\n  caged: false\n",
-        dir_anchor.display().to_string().replace('\\', "\\\\")
+    write_config_yaml(
+        &substrate_home.join("config.yaml"),
+        true,
+        "workspace",
+        "",
+        false,
     );
-    fs::write(workdir.join(".substrate/settings.yaml"), settings_body).unwrap();
+    write_workspace_config(&workdir, true, "custom", &dir_anchor, false);
 
     let prev_home = set_env("HOME", &home.display().to_string());
     let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
     let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home.display().to_string());
     let prev_anchor_mode = set_env("SUBSTRATE_ANCHOR_MODE", "follow-cwd");
     let prev_anchor_path = set_env("SUBSTRATE_ANCHOR_PATH", "/env/anchor");
-    let prev_root_mode = set_env("SUBSTRATE_WORLD_ROOT_MODE", "follow-cwd");
-    let prev_root_path = set_env("SUBSTRATE_WORLD_ROOT_PATH", "/env/root");
     let prev_caged = set_env("SUBSTRATE_CAGED", "0");
     let _dir_guard = DirGuard::new();
     env::set_current_dir(&workdir).unwrap();
@@ -223,20 +252,13 @@ fn anchor_flags_override_configs_and_export_legacy_env() {
     assert_eq!(config.world_root.path, cli_anchor);
     assert!(config.world_root.caged);
     assert_eq!(env::var("SUBSTRATE_ANCHOR_MODE").unwrap(), "custom");
-    assert_eq!(env::var("SUBSTRATE_WORLD_ROOT_MODE").unwrap(), "custom");
     assert_eq!(
         env::var("SUBSTRATE_ANCHOR_PATH").unwrap(),
-        cli_anchor.display().to_string()
-    );
-    assert_eq!(
-        env::var("SUBSTRATE_WORLD_ROOT_PATH").unwrap(),
         cli_anchor.display().to_string()
     );
     assert_eq!(env::var("SUBSTRATE_CAGED").unwrap(), "1");
 
     restore_env("SUBSTRATE_CAGED", prev_caged);
-    restore_env("SUBSTRATE_WORLD_ROOT_PATH", prev_root_path);
-    restore_env("SUBSTRATE_WORLD_ROOT_MODE", prev_root_mode);
     restore_env("SUBSTRATE_ANCHOR_PATH", prev_anchor_path);
     restore_env("SUBSTRATE_ANCHOR_MODE", prev_anchor_mode);
     restore_env("SUBSTRATE_HOME", prev_substrate_home);
@@ -253,19 +275,19 @@ fn no_world_flag_disables_world_and_sets_root_exports() {
     let workdir = temp.path().join("workspace");
     fs::create_dir_all(substrate_home.join("shims")).unwrap();
     fs::create_dir_all(&workdir).unwrap();
-    fs::write(
-        substrate_home.join("config.yaml"),
-        "install:\n  world_enabled: true\nworld:\n  root_mode: project\n  root_path: \"\"\n  caged: true\n",
-    )
-    .unwrap();
+    write_config_yaml(
+        &substrate_home.join("config.yaml"),
+        true,
+        "workspace",
+        "",
+        true,
+    );
 
     let prev_home = set_env("HOME", &home.display().to_string());
     let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
     let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home.display().to_string());
     let prev_world = set_env("SUBSTRATE_WORLD", "enabled");
     let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "1");
-    let prev_root_mode = set_env("SUBSTRATE_WORLD_ROOT_MODE", "project");
-    let prev_root_path = set_env("SUBSTRATE_WORLD_ROOT_PATH", "/env/root");
     let prev_caged = set_env("SUBSTRATE_CAGED", "1");
     let prev_anchor_mode = env::var("SUBSTRATE_ANCHOR_MODE").ok();
     let prev_anchor_path = env::var("SUBSTRATE_ANCHOR_PATH").ok();
@@ -275,7 +297,7 @@ fn no_world_flag_disables_world_and_sets_root_exports() {
     let cli = Cli::parse_from([
         "substrate",
         "--no-world",
-        "--world-root-mode",
+        "--anchor-mode",
         "follow-cwd",
         "--uncaged",
     ]);
@@ -295,14 +317,12 @@ fn no_world_flag_disables_world_and_sets_root_exports() {
     assert!(!config.world_root.caged);
     assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "disabled");
     assert_eq!(env::var("SUBSTRATE_WORLD_ENABLED").unwrap(), "0");
-    assert_eq!(env::var("SUBSTRATE_WORLD_ROOT_MODE").unwrap(), "follow-cwd");
-    let env_root_path = PathBuf::from(env::var("SUBSTRATE_WORLD_ROOT_PATH").unwrap());
-    let env_root_canon = fs::canonicalize(&env_root_path).unwrap_or(env_root_path);
-    assert_eq!(env_root_canon, expected_workdir);
+    assert_eq!(env::var("SUBSTRATE_ANCHOR_MODE").unwrap(), "follow-cwd");
+    let env_anchor_path = PathBuf::from(env::var("SUBSTRATE_ANCHOR_PATH").unwrap());
+    let env_anchor_canon = fs::canonicalize(&env_anchor_path).unwrap_or(env_anchor_path);
+    assert_eq!(env_anchor_canon, expected_workdir);
     assert_eq!(env::var("SUBSTRATE_CAGED").unwrap(), "0");
 
-    restore_env("SUBSTRATE_WORLD_ROOT_MODE", prev_root_mode);
-    restore_env("SUBSTRATE_WORLD_ROOT_PATH", prev_root_path);
     restore_env("SUBSTRATE_CAGED", prev_caged);
     restore_env("SUBSTRATE_ANCHOR_MODE", prev_anchor_mode);
     restore_env("SUBSTRATE_ANCHOR_PATH", prev_anchor_path);

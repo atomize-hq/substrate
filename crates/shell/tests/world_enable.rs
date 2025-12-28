@@ -163,7 +163,9 @@ impl WorldEnableFixture {
 
     fn write_config(&self, enabled: bool) {
         let flag = if enabled { "true" } else { "false" };
-        let body = format!("install:\n  world_enabled: {flag}\n");
+        let body = format!(
+            "world:\n  enabled: {flag}\n  anchor_mode: workspace\n  anchor_path: \"\"\n  caged: true\n\npolicy:\n  mode: observe\n\nsync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: []\n"
+        );
         fs::write(self.config_path(), body).expect("write config yaml");
     }
 
@@ -183,14 +185,14 @@ impl WorldEnableFixture {
     fn install_world_enabled(&self) -> bool {
         let config = self.read_config();
         let root = config.as_mapping().expect("config root mapping");
-        let install = root
-            .get(YamlValue::String("install".to_string()))
+        let world = root
+            .get(YamlValue::String("world".to_string()))
             .and_then(|value| value.as_mapping())
-            .expect("install mapping missing");
-        install
-            .get(YamlValue::String("world_enabled".to_string()))
+            .expect("world mapping missing");
+        world
+            .get(YamlValue::String("enabled".to_string()))
             .and_then(|value| value.as_bool())
-            .expect("install.world_enabled missing")
+            .expect("world.enabled missing")
     }
 
     fn log_contents(&self) -> Option<String> {
@@ -248,7 +250,7 @@ fn world_enable_provisions_and_sets_config_and_env_state() {
     fixture.assert_socket_exists();
     assert!(
         fixture.install_world_enabled(),
-        "install config should mark world enabled"
+        "global config should mark world enabled"
     );
 
     let env_contents = fixture.manager_env_contents();
@@ -281,7 +283,7 @@ fn world_enable_fails_when_helper_exits_non_zero() {
     cmd.assert().failure();
     assert!(
         !fixture.install_world_enabled(),
-        "install config should remain disabled when helper fails"
+        "global config should remain disabled when helper fails"
     );
 }
 

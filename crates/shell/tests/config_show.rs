@@ -153,9 +153,9 @@ fn config_show_emits_yaml_by_default() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let yaml: YamlValue = serde_yaml::from_str(&stdout).expect("config show YAML parse");
     let root = yaml.as_mapping().expect("yaml root mapping");
-    assert!(root.contains_key(&YamlValue::String("world".to_string())));
-    assert!(root.contains_key(&YamlValue::String("policy".to_string())));
-    assert!(root.contains_key(&YamlValue::String("sync".to_string())));
+    assert!(root.contains_key(YamlValue::String("world".to_string())));
+    assert!(root.contains_key(YamlValue::String("policy".to_string())));
+    assert!(root.contains_key(YamlValue::String("sync".to_string())));
 }
 
 #[test]

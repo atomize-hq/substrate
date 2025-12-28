@@ -84,9 +84,9 @@ fn workspace_init_creates_expected_inventory_and_gitignore() {
     let raw = fs::read_to_string(&workspace_yaml).expect("read workspace.yaml");
     let yaml: YamlValue = serde_yaml::from_str(&raw).expect("workspace.yaml should parse");
     let root = yaml.as_mapping().expect("workspace.yaml root mapping");
-    assert!(root.contains_key(&YamlValue::String("world".to_string())));
-    assert!(root.contains_key(&YamlValue::String("policy".to_string())));
-    assert!(root.contains_key(&YamlValue::String("sync".to_string())));
+    assert!(root.contains_key(YamlValue::String("world".to_string())));
+    assert!(root.contains_key(YamlValue::String("policy".to_string())));
+    assert!(root.contains_key(YamlValue::String("sync".to_string())));
 }
 
 #[test]

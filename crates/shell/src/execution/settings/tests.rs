@@ -50,51 +50,28 @@ impl Drop for CwdGuard {
     }
 }
 
-fn write_world_settings(path: &Path, mode: &str, root_path: Option<&Path>, caged: Option<bool>) {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).expect("create settings parent");
-    }
-    let mut body = format!("world:\n  root_mode: {mode}\n");
-    if let Some(root) = root_path {
-        body.push_str(&format!("  root_path: \"{}\"\n", root.display()));
-    }
-    if let Some(flag) = caged {
-        body.push_str(&format!(
-            "  caged: {}\n",
-            if flag { "true" } else { "false" }
-        ));
-    }
-    std::fs::write(path, body).expect("write settings file");
+fn yaml_escape_path(path: &Path) -> String {
+    path.display().to_string().replace('\\', "\\\\")
 }
 
-fn write_anchor_world_settings(
+fn write_config_yaml(
     path: &Path,
+    world_enabled: bool,
     anchor_mode: &str,
     anchor_path: Option<&Path>,
-    legacy_mode: Option<&str>,
-    legacy_path: Option<&Path>,
-    caged: Option<bool>,
+    caged: bool,
 ) {
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).expect("create anchor settings parent");
+        std::fs::create_dir_all(parent).expect("create config parent");
     }
-    let mut body = format!("world:\n  anchor_mode: {anchor_mode}\n");
-    if let Some(anchor) = anchor_path {
-        body.push_str(&format!("  anchor_path: \"{}\"\n", anchor.display()));
-    }
-    if let Some(mode) = legacy_mode {
-        body.push_str(&format!("  root_mode: {mode}\n"));
-    }
-    if let Some(root) = legacy_path {
-        body.push_str(&format!("  root_path: \"{}\"\n", root.display()));
-    }
-    if let Some(flag) = caged {
-        body.push_str(&format!(
-            "  caged: {}\n",
-            if flag { "true" } else { "false" }
-        ));
-    }
-    std::fs::write(path, body).expect("write anchor settings file");
+
+    let anchor_path = anchor_path.map(yaml_escape_path).unwrap_or_default();
+    let enabled = if world_enabled { "true" } else { "false" };
+    let caged = if caged { "true" } else { "false" };
+    let body = format!(
+        "world:\n  enabled: {enabled}\n  anchor_mode: {anchor_mode}\n  anchor_path: \"{anchor_path}\"\n  caged: {caged}\n\npolicy:\n  mode: observe\n\nsync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: []\n"
+    );
+    std::fs::write(path, body).expect("write config yaml");
 }
 
 fn setup_substrate_home(temp: &TempDir) -> PathBuf {
@@ -103,45 +80,51 @@ fn setup_substrate_home(temp: &TempDir) -> PathBuf {
     home
 }
 
+fn write_global_config(
+    substrate_home: &Path,
+    world_enabled: bool,
+    anchor_mode: &str,
+    anchor_path: Option<&Path>,
+    caged: bool,
+) -> PathBuf {
+    let config_path = substrate_home.join("config.yaml");
+    write_config_yaml(&config_path, world_enabled, anchor_mode, anchor_path, caged);
+    config_path
+}
+
+fn write_workspace_config(
+    workspace_root: &Path,
+    world_enabled: bool,
+    anchor_mode: &str,
+    anchor_path: Option<&Path>,
+    caged: bool,
+) -> PathBuf {
+    let workspace_dir = workspace_root.join(".substrate");
+    std::fs::create_dir_all(&workspace_dir).expect("create workspace .substrate");
+    let marker_path = workspace_dir.join("workspace.yaml");
+    write_config_yaml(&marker_path, world_enabled, anchor_mode, anchor_path, caged);
+    marker_path
+}
+
 #[test]
 #[serial]
 fn resolve_world_root_defaults_to_launch_dir_project() {
     let temp = TempDir::new().unwrap();
-    let home = setup_substrate_home(&temp);
+    let substrate_home = setup_substrate_home(&temp);
     let _env = EnvGuard::new(vec![
-        ("SUBSTRATE_HOME", Some(home.display().to_string())),
+        ("SUBSTRATE_HOME", Some(substrate_home.display().to_string())),
         ("SUBSTRATE_ANCHOR_MODE", None),
         ("SUBSTRATE_ANCHOR_PATH", None),
-        ("SUBSTRATE_WORLD_ROOT_MODE", None),
-        ("SUBSTRATE_WORLD_ROOT_PATH", None),
         ("SUBSTRATE_CAGED", None),
     ]);
-    assert!(std::env::var("SUBSTRATE_ANCHOR_MODE").is_err());
-    assert!(std::env::var("SUBSTRATE_ANCHOR_PATH").is_err());
-    assert!(std::env::var("SUBSTRATE_WORLD_ROOT_MODE").is_err());
-    assert!(std::env::var("SUBSTRATE_WORLD_ROOT_PATH").is_err());
+
     let launch_dir = temp.path().join("workspace");
     std::fs::create_dir_all(&launch_dir).unwrap();
-    let dir_settings = launch_dir.join(".substrate/settings.yaml");
-    let global_settings = home.join("config.yaml");
-    assert!(
-        !dir_settings.exists(),
-        "unexpected directory settings file at {}",
-        dir_settings.display()
-    );
-    assert!(
-        !global_settings.exists(),
-        "unexpected global config at {}",
-        global_settings.display()
-    );
 
-    let cwd = std::env::current_dir().unwrap();
     let env_settings = world_root_from_env();
     assert_eq!(env_settings.mode, WorldRootMode::Project);
-    assert_eq!(env_settings.path, cwd);
 
     let settings = resolve_world_root(None, None, None, &launch_dir).expect("default settings");
-
     assert_eq!(settings.mode, WorldRootMode::Project);
     assert_eq!(settings.path, launch_dir);
     assert!(settings.caged);
@@ -149,22 +132,26 @@ fn resolve_world_root_defaults_to_launch_dir_project() {
 
 #[test]
 #[serial]
-fn resolve_world_root_refuses_legacy_settings_toml() {
+fn resolve_world_root_refuses_legacy_workspace_settings_yaml() {
     let temp = TempDir::new().unwrap();
-    let home = setup_substrate_home(&temp);
-    let _env = EnvGuard::new(vec![("SUBSTRATE_HOME", Some(home.display().to_string()))]);
+    let substrate_home = setup_substrate_home(&temp);
+    let _env = EnvGuard::new(vec![(
+        "SUBSTRATE_HOME",
+        Some(substrate_home.display().to_string()),
+    )]);
 
-    let launch_dir = temp.path().join("workspace");
-    std::fs::create_dir_all(launch_dir.join(".substrate")).unwrap();
-    let legacy_settings = launch_dir.join(".substrate/settings.toml");
-    std::fs::write(&legacy_settings, "[world]\nroot_mode = \"project\"\n").unwrap();
+    let workspace_root = temp.path().join("workspace");
+    std::fs::create_dir_all(&workspace_root).unwrap();
 
-    let err = resolve_world_root(None, None, None, &launch_dir)
-        .expect_err("legacy settings.toml should be rejected");
+    write_workspace_config(&workspace_root, true, "workspace", None, true);
+    let legacy_settings = workspace_root.join(".substrate").join("settings.yaml");
+    std::fs::write(&legacy_settings, "world:\n  enabled: true\n").unwrap();
+
+    let err = resolve_world_root(None, None, None, &workspace_root)
+        .expect_err("legacy settings.yaml should be rejected");
     let message = err.to_string();
-
     assert!(
-        message.contains("unsupported legacy TOML settings detected"),
+        message.contains("unsupported legacy workspace config detected"),
         "unexpected error message: {message}"
     );
     assert!(
@@ -173,12 +160,12 @@ fn resolve_world_root_refuses_legacy_settings_toml() {
     );
     assert!(
         message.contains(
-            &launch_dir
-                .join(".substrate/settings.yaml")
+            &workspace_root
+                .join(".substrate/workspace.yaml")
                 .display()
                 .to_string()
         ),
-        "error message missing yaml path: {message}"
+        "error message missing workspace.yaml path: {message}"
     );
 }
 
@@ -186,134 +173,99 @@ fn resolve_world_root_refuses_legacy_settings_toml() {
 #[serial]
 fn resolve_world_root_respects_env_when_no_configs() {
     let temp = TempDir::new().unwrap();
-    let home = setup_substrate_home(&temp);
-    let _env = EnvGuard::new(vec![
-        ("SUBSTRATE_HOME", Some(home.display().to_string())),
-        ("SUBSTRATE_ANCHOR_MODE", None),
-        ("SUBSTRATE_ANCHOR_PATH", None),
-        ("SUBSTRATE_WORLD_ROOT_MODE", Some("custom".into())),
-        ("SUBSTRATE_WORLD_ROOT_PATH", Some("/env/root".into())),
-        ("SUBSTRATE_CAGED", Some("false".into())),
-    ]);
-    assert!(std::env::var("SUBSTRATE_ANCHOR_MODE").is_err());
-    assert!(std::env::var("SUBSTRATE_ANCHOR_PATH").is_err());
-    assert_eq!(
-        std::env::var("SUBSTRATE_WORLD_ROOT_MODE").as_deref(),
-        Ok("custom")
-    );
-    assert_eq!(
-        std::env::var("SUBSTRATE_WORLD_ROOT_PATH").as_deref(),
-        Ok("/env/root")
-    );
+    let substrate_home = setup_substrate_home(&temp);
     let launch_dir = temp.path().join("project");
     std::fs::create_dir_all(&launch_dir).unwrap();
-    let dir_settings = launch_dir.join(".substrate/settings.yaml");
-    let global_settings = home.join("config.yaml");
-    assert!(
-        !dir_settings.exists(),
-        "unexpected directory settings file at {}",
-        dir_settings.display()
-    );
-    assert!(
-        !global_settings.exists(),
-        "unexpected global config at {}",
-        global_settings.display()
-    );
+    let anchor_dir = temp.path().join("env-anchor");
+    std::fs::create_dir_all(&anchor_dir).unwrap();
 
-    let env_settings = world_root_from_env();
-    assert_eq!(env_settings.mode, WorldRootMode::Custom);
-    assert_eq!(env_settings.path, PathBuf::from("/env/root"));
-    assert!(!env_settings.caged);
+    let _env = EnvGuard::new(vec![
+        ("SUBSTRATE_HOME", Some(substrate_home.display().to_string())),
+        ("SUBSTRATE_ANCHOR_MODE", Some("custom".into())),
+        (
+            "SUBSTRATE_ANCHOR_PATH",
+            Some(anchor_dir.display().to_string()),
+        ),
+        ("SUBSTRATE_CAGED", Some("false".into())),
+    ]);
 
     let settings = resolve_world_root(None, None, None, &launch_dir).expect("env settings");
-
     assert_eq!(settings.mode, WorldRootMode::Custom);
-    assert_eq!(settings.path, PathBuf::from("/env/root"));
+    assert_eq!(
+        settings.path,
+        anchor_dir.canonicalize().unwrap_or(anchor_dir)
+    );
     assert!(!settings.caged);
 }
 
 #[test]
 #[serial]
-fn world_root_from_env_prefers_anchor_over_legacy_keys() {
+fn resolve_world_root_env_overrides_global_config() {
     let temp = TempDir::new().unwrap();
-    let home = setup_substrate_home(&temp);
+    let substrate_home = setup_substrate_home(&temp);
+    let launch_dir = temp.path().join("project");
+    std::fs::create_dir_all(&launch_dir).unwrap();
+    let anchor_dir = temp.path().join("env-anchor");
+    std::fs::create_dir_all(&anchor_dir).unwrap();
+
+    write_global_config(&substrate_home, true, "follow-cwd", None, true);
+
     let _env = EnvGuard::new(vec![
-        ("SUBSTRATE_HOME", Some(home.display().to_string())),
+        ("SUBSTRATE_HOME", Some(substrate_home.display().to_string())),
         ("SUBSTRATE_ANCHOR_MODE", Some("custom".into())),
-        ("SUBSTRATE_WORLD_ROOT_MODE", Some("follow-cwd".into())),
-        ("SUBSTRATE_ANCHOR_PATH", Some("/env/anchor".into())),
-        ("SUBSTRATE_WORLD_ROOT_PATH", Some("/env/legacy".into())),
+        (
+            "SUBSTRATE_ANCHOR_PATH",
+            Some(anchor_dir.display().to_string()),
+        ),
         ("SUBSTRATE_CAGED", Some("0".into())),
     ]);
-    let launch_dir = temp.path().join("project");
-    std::fs::create_dir_all(&launch_dir).unwrap();
 
-    let settings = resolve_world_root(None, None, None, &launch_dir).expect("anchor env settings");
-
+    let settings = resolve_world_root(None, None, None, &launch_dir).expect("resolved settings");
     assert_eq!(settings.mode, WorldRootMode::Custom);
-    assert_eq!(settings.path, PathBuf::from("/env/anchor"));
+    assert_eq!(
+        settings.path,
+        anchor_dir.canonicalize().unwrap_or(anchor_dir)
+    );
     assert!(!settings.caged);
 }
 
 #[test]
 #[serial]
-fn resolve_world_root_prefers_global_config_over_env() {
+fn resolve_world_root_prefers_workspace_config_over_global_when_env_unset() {
     let temp = TempDir::new().unwrap();
-    let home = setup_substrate_home(&temp);
-    let config_path = home.join("config.yaml");
-    write_world_settings(&config_path, "follow-cwd", None, Some(true));
-    let _env = EnvGuard::new(vec![
-        ("SUBSTRATE_HOME", Some(home.display().to_string())),
-        ("SUBSTRATE_ANCHOR_MODE", None),
-        ("SUBSTRATE_ANCHOR_PATH", None),
-        ("SUBSTRATE_WORLD_ROOT_MODE", Some("custom".into())),
-        ("SUBSTRATE_WORLD_ROOT_PATH", Some("/env/root".into())),
-        ("SUBSTRATE_CAGED", Some("false".into())),
-    ]);
-    let launch_dir = temp.path().join("project");
-    std::fs::create_dir_all(&launch_dir).unwrap();
+    let substrate_home = setup_substrate_home(&temp);
 
-    let settings = resolve_world_root(None, None, None, &launch_dir).expect("global settings");
+    let workspace_root = temp.path().join("workspace");
+    let cwd = workspace_root.join("nested");
+    std::fs::create_dir_all(&cwd).unwrap();
 
-    assert_eq!(settings.mode, WorldRootMode::FollowCwd);
-    assert_eq!(settings.path, launch_dir);
-    assert!(settings.caged);
-}
+    let global_anchor = temp.path().join("global-anchor");
+    let workspace_anchor = temp.path().join("workspace-anchor");
+    std::fs::create_dir_all(&global_anchor).unwrap();
+    std::fs::create_dir_all(&workspace_anchor).unwrap();
 
-#[test]
-#[serial]
-fn resolve_world_root_prefers_directory_config_over_global_and_env() {
-    let temp = TempDir::new().unwrap();
-    let home = setup_substrate_home(&temp);
-    let config_path = home.join("config.yaml");
-    write_world_settings(
-        &config_path,
-        "project",
-        Some(Path::new("/global/root")),
-        Some(true),
-    );
-    let _env = EnvGuard::new(vec![
-        ("SUBSTRATE_HOME", Some(home.display().to_string())),
-        ("SUBSTRATE_ANCHOR_MODE", None),
-        ("SUBSTRATE_ANCHOR_PATH", None),
-        ("SUBSTRATE_WORLD_ROOT_MODE", Some("custom".into())),
-        ("SUBSTRATE_WORLD_ROOT_PATH", Some("/env/root".into())),
-        ("SUBSTRATE_CAGED", Some("false".into())),
-    ]);
-    let launch_dir = temp.path().join("project");
-    std::fs::create_dir_all(launch_dir.join(".substrate")).unwrap();
-    let dir_settings = launch_dir.join(".substrate/settings.yaml");
-    write_world_settings(
-        &dir_settings,
+    write_global_config(&substrate_home, true, "custom", Some(&global_anchor), true);
+    write_workspace_config(
+        &workspace_root,
+        true,
         "custom",
-        Some(Path::new("/dir/root")),
-        Some(false),
+        Some(&workspace_anchor),
+        false,
     );
 
-    let settings = resolve_world_root(None, None, None, &launch_dir).expect("dir config settings");
+    let _env = EnvGuard::new(vec![
+        ("SUBSTRATE_HOME", Some(substrate_home.display().to_string())),
+        ("SUBSTRATE_ANCHOR_MODE", None),
+        ("SUBSTRATE_ANCHOR_PATH", None),
+        ("SUBSTRATE_CAGED", None),
+    ]);
 
+    let settings = resolve_world_root(None, None, None, &cwd).expect("workspace settings");
     assert_eq!(settings.mode, WorldRootMode::Custom);
-    assert_eq!(settings.path, PathBuf::from("/dir/root"));
+    assert_eq!(
+        settings.path,
+        workspace_anchor.canonicalize().unwrap_or(workspace_anchor)
+    );
     assert!(!settings.caged);
 }
 
@@ -321,145 +273,84 @@ fn resolve_world_root_prefers_directory_config_over_global_and_env() {
 #[serial]
 fn resolve_world_root_prefers_cli_over_all_other_sources() {
     let temp = TempDir::new().unwrap();
-    let home = setup_substrate_home(&temp);
-    let config_path = home.join("config.yaml");
-    write_world_settings(
-        &config_path,
-        "project",
-        Some(Path::new("/global/root")),
-        Some(true),
-    );
-    let _env = EnvGuard::new(vec![
-        ("SUBSTRATE_HOME", Some(home.display().to_string())),
-        ("SUBSTRATE_ANCHOR_MODE", None),
-        ("SUBSTRATE_ANCHOR_PATH", None),
-        ("SUBSTRATE_WORLD_ROOT_MODE", Some("project".into())),
-        ("SUBSTRATE_WORLD_ROOT_PATH", Some("/env/root".into())),
-        ("SUBSTRATE_CAGED", Some("false".into())),
-    ]);
-    let launch_dir = temp.path().join("project");
-    std::fs::create_dir_all(launch_dir.join(".substrate")).unwrap();
-    let dir_settings = launch_dir.join(".substrate/settings.yaml");
-    write_world_settings(
-        &dir_settings,
+    let substrate_home = setup_substrate_home(&temp);
+
+    let workspace_root = temp.path().join("workspace");
+    let cwd = workspace_root.join("nested");
+    std::fs::create_dir_all(&cwd).unwrap();
+
+    let global_anchor = temp.path().join("global-anchor");
+    let workspace_anchor = temp.path().join("workspace-anchor");
+    let cli_anchor = temp.path().join("cli-anchor");
+    std::fs::create_dir_all(&global_anchor).unwrap();
+    std::fs::create_dir_all(&workspace_anchor).unwrap();
+    std::fs::create_dir_all(&cli_anchor).unwrap();
+
+    write_global_config(&substrate_home, true, "custom", Some(&global_anchor), false);
+    write_workspace_config(
+        &workspace_root,
+        true,
         "custom",
-        Some(Path::new("/dir/root")),
-        Some(false),
+        Some(&workspace_anchor),
+        false,
     );
-    let cli_path = PathBuf::from("/cli/root");
+
+    let _env = EnvGuard::new(vec![
+        ("SUBSTRATE_HOME", Some(substrate_home.display().to_string())),
+        ("SUBSTRATE_ANCHOR_MODE", Some("custom".into())),
+        (
+            "SUBSTRATE_ANCHOR_PATH",
+            Some(workspace_anchor.display().to_string()),
+        ),
+        ("SUBSTRATE_CAGED", Some("0".into())),
+    ]);
 
     let settings = resolve_world_root(
         Some(WorldRootMode::Custom),
-        Some(cli_path.clone()),
+        Some(cli_anchor.clone()),
         Some(true),
-        &launch_dir,
+        &cwd,
     )
     .expect("cli settings");
 
     assert_eq!(settings.mode, WorldRootMode::Custom);
-    assert_eq!(settings.path, cli_path);
+    assert_eq!(
+        settings.path,
+        cli_anchor.canonicalize().unwrap_or(cli_anchor)
+    );
     assert!(settings.caged);
 }
 
 #[test]
 #[serial]
-fn resolve_world_root_honors_anchor_keys_and_legacy_precedence() {
+fn resolve_world_root_requires_anchor_path_for_custom_mode() {
     let temp = TempDir::new().unwrap();
-    let home = setup_substrate_home(&temp);
-    let global_path = home.join("config.yaml");
-    let launch_dir = temp.path().join("project");
-    std::fs::create_dir_all(&launch_dir).unwrap();
-    write_anchor_world_settings(
-        &global_path,
-        "custom",
-        Some(Path::new("/global/anchor")),
-        Some("project"),
-        Some(Path::new("/global/legacy")),
-        Some(true),
-    );
+    let substrate_home = setup_substrate_home(&temp);
     let _env = EnvGuard::new(vec![
-        ("SUBSTRATE_HOME", Some(home.display().to_string())),
-        ("SUBSTRATE_ANCHOR_MODE", Some("project".into())),
-        ("SUBSTRATE_WORLD_ROOT_MODE", Some("custom".into())),
-        ("SUBSTRATE_ANCHOR_PATH", Some("/env/anchor".into())),
-        ("SUBSTRATE_WORLD_ROOT_PATH", Some("/env/legacy".into())),
-        ("SUBSTRATE_CAGED", Some("false".into())),
-    ]);
-
-    let settings =
-        resolve_world_root(None, None, None, &launch_dir).expect("global anchor settings");
-    assert_eq!(settings.mode, WorldRootMode::Custom);
-    assert_eq!(settings.path, PathBuf::from("/global/anchor"));
-    assert!(settings.caged);
-
-    let dir_settings = launch_dir.join(".substrate/settings.yaml");
-    write_world_settings(
-        &dir_settings,
-        "custom",
-        Some(Path::new("/dir/root")),
-        Some(false),
-    );
-
-    let settings_with_dir =
-        resolve_world_root(None, None, None, &launch_dir).expect("dir settings override");
-    assert_eq!(settings_with_dir.mode, WorldRootMode::Custom);
-    assert_eq!(settings_with_dir.path, PathBuf::from("/dir/root"));
-    assert!(!settings_with_dir.caged);
-}
-
-#[test]
-#[serial]
-fn resolve_world_root_requires_path_for_custom_mode() {
-    let temp = TempDir::new().unwrap();
-    let home = setup_substrate_home(&temp);
-    let _env = EnvGuard::new(vec![
-        ("SUBSTRATE_HOME", Some(home.display().to_string())),
+        ("SUBSTRATE_HOME", Some(substrate_home.display().to_string())),
         ("SUBSTRATE_ANCHOR_MODE", None),
         ("SUBSTRATE_ANCHOR_PATH", None),
-        ("SUBSTRATE_WORLD_ROOT_MODE", None),
-        ("SUBSTRATE_WORLD_ROOT_PATH", None),
         ("SUBSTRATE_CAGED", None),
     ]);
-    assert!(std::env::var("SUBSTRATE_ANCHOR_MODE").is_err());
-    assert!(std::env::var("SUBSTRATE_ANCHOR_PATH").is_err());
-    assert!(std::env::var("SUBSTRATE_WORLD_ROOT_MODE").is_err());
-    assert!(std::env::var("SUBSTRATE_WORLD_ROOT_PATH").is_err());
     let launch_dir = temp.path().join("project");
     std::fs::create_dir_all(&launch_dir).unwrap();
-    let dir_settings = launch_dir.join(".substrate/settings.yaml");
-    let global_settings = home.join("config.yaml");
-    assert!(
-        !dir_settings.exists(),
-        "unexpected directory settings file at {}",
-        dir_settings.display()
-    );
-    assert!(
-        !global_settings.exists(),
-        "unexpected global config at {}",
-        global_settings.display()
-    );
-
-    let cwd = std::env::current_dir().unwrap();
-    let env_settings = world_root_from_env();
-    assert_eq!(env_settings.mode, WorldRootMode::Project);
-    assert_eq!(env_settings.path, cwd);
-    assert!(env_settings.caged);
 
     let err = resolve_world_root(Some(WorldRootMode::Custom), None, None, &launch_dir)
         .expect_err("custom without path should error");
     let message = err.to_string();
     assert!(
-        message.contains("requires a path"),
+        message.contains("anchor_mode=custom requires world.anchor_path to be non-empty"),
         "unexpected error message: {message}"
     );
 }
+
 #[test]
 #[serial]
 fn effective_root_uses_current_directory_for_follow_mode() {
     let temp = TempDir::new().unwrap();
-    let home = setup_substrate_home(&temp);
+    let substrate_home = setup_substrate_home(&temp);
     let _env = EnvGuard::new(vec![
-        ("SUBSTRATE_HOME", Some(home.display().to_string())),
+        ("SUBSTRATE_HOME", Some(substrate_home.display().to_string())),
         ("SUBSTRATE_ANCHOR_MODE", None),
         ("SUBSTRATE_ANCHOR_PATH", None),
     ]);
