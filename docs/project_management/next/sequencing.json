@@ -32,7 +32,7 @@
       "branch": "feat/p0-agent-hub-isolation-hardening",
       "directory": "docs/project_management/next/p0-agent-hub-isolation-hardening",
       "plan": "docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md",
-      "status": "in_progress",
+      "status": "completed",
       "sequence": [
         { "id": "I0", "spec": "docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md" },
         { "id": "I1", "spec": "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md" },
