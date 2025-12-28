@@ -260,3 +260,9 @@
   - `cargo test -p substrate-shell --test replay_world -- --nocapture` → exit `0`
   - `cargo test -p world-agent --test full_cage_nonpty -- --nocapture` → exit `0` (some cases skipped: overlay support or privileges missing)
   - `cargo test -p world-agent --test full_cage_pty -- --nocapture` → exit `0` (some cases skipped: overlay support or privileges missing)
+
+## START — 2025-12-28T18:20:30Z — PCM3-integ — env scripts + world enable home + legacy removals (integration)
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm3-env-integ`
+- Worktree: `wt/pcm3-env-integ`
+- Scope: merge PCM3 code+tests, reconcile to `PCM3-spec.md`, and run fmt/clippy/tests/preflight + smoke scripts.
