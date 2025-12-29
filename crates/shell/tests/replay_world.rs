@@ -1523,6 +1523,20 @@ fn replay_retries_copydiff_roots_and_dedupes_warnings() {
     fs::write(&tmp_root, b"block tmp copydiff root")
         .expect("failed to block default tmp copydiff root");
 
+    // Ensure `/run/user/$UID/substrate/copydiff` cannot be used so we reliably exercise
+    // multiple fallback roots (systems that already have /run/user/$UID/substrate may
+    // otherwise succeed after the first ENOSPC retry).
+    let run_user_root = PathBuf::from(format!("/run/user/{}/substrate/copydiff", uid));
+    let run_user_prefix = PathBuf::from(format!("/run/user/{}", uid));
+    if run_user_prefix.is_dir() {
+        let run_user_parent = run_user_prefix.join("substrate");
+        if fs::create_dir_all(&run_user_parent).is_ok() {
+            let _ = fs::remove_dir_all(&run_user_root);
+            let _ = fs::remove_file(&run_user_root);
+            let _ = fs::write(&run_user_root, b"block run-user copydiff root");
+        }
+    }
+
     let shim = EnospcShim::build();
     let xdg_runtime = fixture.home().join("xdg-runtime");
     let enospc_prefix = xdg_runtime.join("substrate/copydiff");
@@ -1564,8 +1578,9 @@ fn replay_retries_copydiff_roots_and_dedupes_warnings() {
         "expected multiple copy-diff retry warnings after /run and /tmp failures: {stderr}"
     );
     let tmp_root_str = tmp_root.display().to_string();
+    let tmp_failure_marker = format!("copy-diff failed in {} (", tmp_root_str);
     assert_eq!(
-        stderr.matches(tmp_root_str.as_str()).count(),
+        stderr.matches(tmp_failure_marker.as_str()).count(),
         1,
         "tmp root failure should be logged once: {stderr}"
     );
@@ -1623,6 +1638,7 @@ fn replay_retries_copydiff_roots_and_dedupes_warnings() {
         "verbose output should include the final copy-diff root and source: {stderr}"
     );
     let _ = fs::remove_file(&tmp_root);
+    let _ = fs::remove_file(&run_user_root);
 }
 
 #[test]
@@ -1633,7 +1649,13 @@ fn replay_logs_copydiff_override_root_and_telemetry() {
     fs::create_dir_all(&cwd).expect("failed to create replay cwd");
     let span_id = "span-copydiff-override";
     let path_override = configure_nft_stub(&fixture, "#!/bin/sh\necho \"nft (test) v1\"\nexit 0\n");
-    let override_root = fixture.home().join("custom copydiff root");
+    // Use a short root path (under /tmp) so the copy-diff workspace doesn't hit path-length
+    // limits on systems with long temp directory prefixes.
+    let override_parent = Builder::new()
+        .prefix("substrate-copydiff-override-")
+        .tempdir_in("/tmp")
+        .expect("failed to create override root tempdir");
+    let override_root = override_parent.path().join("custom copydiff root");
     let override_root_str = override_root.display().to_string();
 
     let mut cmd = replay_command(

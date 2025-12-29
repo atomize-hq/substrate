@@ -20,7 +20,9 @@ use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 #[cfg(test)]
 use std::sync::{Mutex, OnceLock};
+use substrate_broker::{set_global_broker, BrokerHandle};
 use substrate_common::{dedupe_path, paths as substrate_paths, WorldRootMode};
+use substrate_trace::{init_trace, set_global_trace_context, TraceContext};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -422,6 +424,11 @@ impl ShellConfig {
 
         // Handle --replay flag
         if let Some(span_id) = cli.replay.clone() {
+            let _ = set_global_broker(BrokerHandle::new());
+            let _ = set_global_trace_context(TraceContext::default());
+            if let Err(e) = init_trace(None) {
+                eprintln!("substrate: warning: failed to initialize trace: {}", e);
+            }
             if cli.replay_verbose {
                 env::set_var("SUBSTRATE_REPLAY_VERBOSE", "1");
             }

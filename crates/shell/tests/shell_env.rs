@@ -66,6 +66,12 @@ managers:
     let output = substrate_command_for_home(&fixture)
         .env("PATH", &host_path_str)
         .env("BASH_ENV", &host_bash_env)
+        // Ensure we don't accidentally route the command through a host-installed world-agent
+        // (e.g., /run/substrate.sock) which would bypass host-side env injection.
+        .env(
+            "SUBSTRATE_WORLD_SOCKET",
+            fixture.home().join("missing-world.sock"),
+        )
         .env_remove("SUBSTRATE_SKIP_MANAGER_INIT")
         .env_remove("SUBSTRATE_SKIP_MANAGER_INIT_LIST")
         .env("SUBSTRATE_SHIM_PATH", path_str(&fixture.shim_dir()))
@@ -207,6 +213,10 @@ fn shell_env_applies_overlay_manifest() {
     let output = substrate_command_for_home(&fixture)
         .env_remove("SUBSTRATE_WORLD")
         .env_remove("SUBSTRATE_WORLD_ENABLED")
+        .env(
+            "SUBSTRATE_WORLD_SOCKET",
+            fixture.home().join("missing-world.sock"),
+        )
         .env("SUBSTRATE_SHIM_PATH", path_str(&fixture.shim_dir()))
         .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
         .env("OVERLAY_VALUE", "overlay-active")
