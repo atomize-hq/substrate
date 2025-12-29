@@ -6,6 +6,7 @@ usage() {
 Usage:
   scripts/ci/dispatch_feature_smoke.sh \
     --feature-dir docs/project_management/next/<feature> \
+    [--runner-kind github-hosted|self-hosted] \
     --platform linux|macos|windows|all \
     [--run-wsl] \
     [--workflow .github/workflows/feature-smoke.yml] \
@@ -25,6 +26,7 @@ USAGE
 
 FEATURE_DIR=""
 PLATFORM=""
+RUNNER_KIND="github-hosted"
 RUN_WSL=0
 WORKFLOW=".github/workflows/feature-smoke.yml"
 REMOTE="origin"
@@ -34,6 +36,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --feature-dir)
             FEATURE_DIR="${2:-}"
+            shift 2
+            ;;
+        --runner-kind)
+            RUNNER_KIND="${2:-}"
             shift 2
             ;;
         --platform)
@@ -74,6 +80,15 @@ if [[ -z "${FEATURE_DIR}" || -z "${PLATFORM}" ]]; then
     exit 2
 fi
 
+case "${RUNNER_KIND}" in
+    github-hosted|self-hosted) ;;
+    *)
+        echo "Invalid --runner-kind: ${RUNNER_KIND}" >&2
+        usage >&2
+        exit 2
+        ;;
+esac
+
 if ! command -v gh >/dev/null 2>&1; then
     echo "Missing dependency: gh (GitHub CLI)" >&2
     exit 3
@@ -94,9 +109,9 @@ git push -u "${REMOTE}" "${temp_branch}:${temp_branch}"
 
 echo "Dispatching workflow: ${WORKFLOW}"
 if [[ "${RUN_WSL}" -eq 1 ]]; then
-    gh workflow run "${WORKFLOW}" --ref "${temp_branch}" -f feature_dir="${FEATURE_DIR}" -f platform="${PLATFORM}" -f run_wsl=true
+    gh workflow run "${WORKFLOW}" --ref "${temp_branch}" -f feature_dir="${FEATURE_DIR}" -f runner_kind="${RUNNER_KIND}" -f platform="${PLATFORM}" -f run_wsl=true
 else
-    gh workflow run "${WORKFLOW}" --ref "${temp_branch}" -f feature_dir="${FEATURE_DIR}" -f platform="${PLATFORM}" -f run_wsl=false
+    gh workflow run "${WORKFLOW}" --ref "${temp_branch}" -f feature_dir="${FEATURE_DIR}" -f runner_kind="${RUNNER_KIND}" -f platform="${PLATFORM}" -f run_wsl=false
 fi
 
 echo "Waiting for run to start..."
@@ -124,4 +139,3 @@ if [[ "${conclusion}" != "success" ]]; then
 fi
 
 echo "OK: feature smoke passed"
-

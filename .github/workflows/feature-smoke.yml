@@ -7,6 +7,14 @@ on:
         description: "Feature Planning Pack directory (e.g., docs/project_management/next/world-sync)"
         required: true
         type: string
+      runner_kind:
+        description: "Where to run the smoke job(s)"
+        required: true
+        type: choice
+        options:
+          - github-hosted
+          - self-hosted
+        default: github-hosted
       platform:
         description: "Which platform smoke to run"
         required: true
@@ -26,9 +34,12 @@ env:
   CARGO_TERM_COLOR: always
   RUST_TOOLCHAIN: 1.89.0
 
+permissions:
+  contents: read
+
 jobs:
-  linux:
-    if: inputs.platform == 'linux' || inputs.platform == 'all'
+  linux_hosted:
+    if: (inputs.platform == 'linux' || inputs.platform == 'all') && inputs.runner_kind == 'github-hosted'
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
@@ -36,18 +47,29 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq ripgrep
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt, clippy
 
+      - name: Build substrate (debug)
+        run: cargo build --bin substrate
+
+      - name: Add substrate to PATH
+        run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+
       - name: Run linux smoke
         run: bash "${{ inputs.feature_dir }}/smoke/linux-smoke.sh"
 
-  macos:
-    if: inputs.platform == 'macos' || inputs.platform == 'all'
-    runs-on: macos-14
+  linux_self_hosted:
+    if: (inputs.platform == 'linux' || inputs.platform == 'all') && inputs.runner_kind == 'self-hosted'
+    runs-on: [self-hosted, linux]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -60,11 +82,70 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt, clippy
 
+      - name: Build substrate (debug)
+        run: cargo build --bin substrate
+
+      - name: Add substrate to PATH
+        run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+
+      - name: Run linux smoke
+        run: bash "${{ inputs.feature_dir }}/smoke/linux-smoke.sh"
+
+  macos_hosted:
+    if: (inputs.platform == 'macos' || inputs.platform == 'all') && inputs.runner_kind == 'github-hosted'
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          if ! command -v jq >/dev/null 2>&1; then brew install jq; fi
+          if ! command -v rg >/dev/null 2>&1; then brew install ripgrep; fi
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      - name: Build substrate (debug)
+        run: cargo build --bin substrate
+
+      - name: Add substrate to PATH
+        run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+
       - name: Run macOS smoke
         run: bash "${{ inputs.feature_dir }}/smoke/macos-smoke.sh"
 
-  windows:
-    if: inputs.platform == 'windows' || inputs.platform == 'all'
+  macos_self_hosted:
+    if: (inputs.platform == 'macos' || inputs.platform == 'all') && inputs.runner_kind == 'self-hosted'
+    runs-on: [self-hosted, macos]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      - name: Build substrate (debug)
+        run: cargo build --bin substrate
+
+      - name: Add substrate to PATH
+        run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+
+      - name: Run macOS smoke
+        run: bash "${{ inputs.feature_dir }}/smoke/macos-smoke.sh"
+
+  windows_hosted:
+    if: (inputs.platform == 'windows' || inputs.platform == 'all') && inputs.runner_kind == 'github-hosted'
     runs-on: windows-2022
     steps:
       - name: Checkout repository
@@ -77,6 +158,39 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt, clippy
+
+      - name: Build substrate (debug)
+        run: cargo build --bin substrate
+
+      - name: Add substrate to PATH
+        shell: pwsh
+        run: Add-Content -LiteralPath $env:GITHUB_PATH -Value "$pwd\\target\\debug"
+
+      - name: Run Windows smoke
+        shell: pwsh
+        run: pwsh -File "${{ inputs.feature_dir }}/smoke/windows-smoke.ps1"
+
+  windows_self_hosted:
+    if: (inputs.platform == 'windows' || inputs.platform == 'all') && inputs.runner_kind == 'self-hosted'
+    runs-on: [self-hosted, windows]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      - name: Build substrate (debug)
+        run: cargo build --bin substrate
+
+      - name: Add substrate to PATH
+        shell: pwsh
+        run: Add-Content -LiteralPath $env:GITHUB_PATH -Value "$pwd\\target\\debug"
 
       - name: Run Windows smoke
         shell: pwsh
@@ -91,6 +205,19 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      - name: Build substrate (debug)
+        run: cargo build --bin substrate
+
+      - name: Add substrate to PATH
+        shell: pwsh
+        run: Add-Content -LiteralPath $env:GITHUB_PATH -Value "$pwd\\target\\debug"
+
       - name: Verify WSL availability
         shell: pwsh
         run: |
@@ -102,4 +229,3 @@ jobs:
       - name: Run WSL smoke
         shell: pwsh
         run: pwsh -File scripts/windows/wsl-smoke.ps1
-
