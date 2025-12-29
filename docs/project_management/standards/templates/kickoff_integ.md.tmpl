@@ -1,0 +1,24 @@
+# Kickoff: {{TASK_ID}} (integration)
+
+## Scope
+- Merge code + tests, resolve drift to spec, and make the slice green.
+- Spec: `{{FEATURE_DIR}}/{{SPEC_FILE}}`
+
+## Start Checklist
+Do not edit planning docs inside the worktree.
+
+1. `git checkout feat/{{FEATURE}} && git pull --ff-only`
+2. Read: plan.md, tasks.json, session_log.md, spec, this prompt.
+3. Set `{{TASK_ID}}` status to `in_progress` in tasks.json; add START entry to session_log.md; commit docs (`docs: start {{TASK_ID}}`).
+4. Create branch `{{BRANCH}}`; create worktree `{{WORKTREE}}`.
+
+## Requirements
+- Reconcile code/tests to spec (spec wins).
+- Run: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make integ-checks`.
+
+## End Checklist
+1. Run required commands; capture outputs.
+2. Commit worktree changes.
+3. Merge back to orchestration branch (ff-only).
+4. Update tasks.json + session_log.md END entry; commit docs (`docs: finish {{TASK_ID}}`); remove worktree.
+

@@ -1,0 +1,133 @@
+{
+  "meta": {
+    "feature": "world-overlayfs-enumeration",
+    "cross_platform": false,
+    "notes": "Linux-only work per ADR-0004; fixes overlayfs directory enumeration reliability and adds fuse-overlayfs fallback + observability."
+  },
+  "tasks": [
+    {
+      "id": "WO0-code",
+      "name": "Stable mount topology + strategy probe + fallback metadata",
+      "type": "code",
+      "phase": "WO0",
+      "status": "pending",
+      "description": "Implement the Linux project-isolation mount topology fix (mount --move), add an overlayfs enumeration health probe that drives retry-with-fuse behavior, and emit required trace/doctor metadata per ADR-0004 + WO0-spec.",
+      "references": [
+        "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",
+        "docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md",
+        "docs/project_management/next/world-overlayfs-enumeration/decision_register.md",
+        "docs/project_management/next/world-overlayfs-enumeration/integration_map.md"
+      ],
+      "acceptance_criteria": [
+        "Project isolation mount choreography uses mount --move (not mount --bind) to place the overlay mount at the project path inside the private mount namespace",
+        "Kernel overlayfs is tried first; if it is unavailable or fails the enumeration health check, fuse-overlayfs is tried exactly once as fallback",
+        "Enumeration health check uses a dedicated probe overlay and the exact POSIX sh probe command specified in ADR-0004",
+        "When world is required and no viable strategy exists, Substrate fails closed with exit code 3 and does not execute the user command on the host",
+        "When world is optional and no viable strategy exists, Substrate executes on host and emits exactly one warning line containing substrings 'world unavailable' and 'falling back to host'",
+        "Trace spans include the required world_fs_strategy_* fields and fallback reason enums defined in ADR-0004",
+        "substrate world doctor --json includes the required world_fs_strategy_* keys defined in ADR-0004"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-overlayfs-enumeration && git pull --ff-only",
+        "Read ADR/spec/decision register/integration map",
+        "Update this task status to in_progress in tasks.json and commit docs on the orchestration branch",
+        "Create branch woe-wo0-code and worktree wt/woe-wo0-code"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Commit worktree changes to woe-wo0-code",
+        "Fast-forward merge woe-wo0-code back into feat/world-overlayfs-enumeration",
+        "Update this task status to completed in tasks.json and commit docs on the orchestration branch",
+        "Remove worktree wt/woe-wo0-code"
+      ],
+      "worktree": "wt/woe-wo0-code",
+      "integration_task": "WO0-integ",
+      "kickoff_prompt": "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-code.md",
+      "depends_on": [],
+      "concurrent_with": ["WO0-test"]
+    },
+    {
+      "id": "WO0-test",
+      "name": "Tests: enumeration probe + fallback + metadata",
+      "type": "test",
+      "phase": "WO0",
+      "status": "pending",
+      "description": "Add unit/integration tests that validate enumeration probe behavior, fallback selection, and trace/doctor metadata for the Linux world filesystem strategies defined by ADR-0004 + WO0-spec.",
+      "references": [
+        "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",
+        "docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md"
+      ],
+      "acceptance_criteria": [
+        "A Linux integration test creates a file in world mode and asserts it appears via directory enumeration in the world project view",
+        "A Linux test simulates or forces primary-strategy enumeration failure and asserts fuse-overlayfs fallback is selected",
+        "A test asserts trace metadata includes world_fs_strategy_primary, world_fs_strategy_final, and world_fs_strategy_fallback_reason with allowed enum values",
+        "A test asserts doctor JSON includes world_fs_strategy_primary, world_fs_strategy_fallback, and world_fs_strategy_probe keys"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-overlayfs-enumeration && git pull --ff-only",
+        "Read ADR/spec",
+        "Update this task status to in_progress in tasks.json and commit docs on the orchestration branch",
+        "Create branch woe-wo0-test and worktree wt/woe-wo0-test"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run targeted cargo test commands for the tests added/modified",
+        "Commit worktree changes to woe-wo0-test",
+        "Fast-forward merge woe-wo0-test back into feat/world-overlayfs-enumeration",
+        "Update this task status to completed in tasks.json and commit docs on the orchestration branch",
+        "Remove worktree wt/woe-wo0-test"
+      ],
+      "worktree": "wt/woe-wo0-test",
+      "integration_task": "WO0-integ",
+      "kickoff_prompt": "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-test.md",
+      "depends_on": [],
+      "concurrent_with": ["WO0-code"]
+    },
+    {
+      "id": "WO0-integ",
+      "name": "Integration: land WO0 with smoke + playbook validation",
+      "type": "integration",
+      "phase": "WO0",
+      "status": "pending",
+      "description": "Integrate WO0-code + WO0-test, reconcile to WO0-spec, run required formatting/lint/tests, run Linux smoke script and manual playbook steps, and ensure final behavior matches ADR-0004.",
+      "references": [
+        "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",
+        "docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md",
+        "docs/project_management/next/world-overlayfs-enumeration/manual_testing_playbook.md",
+        "docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "WO0-spec contract is met with no drift",
+        "cargo fmt passes",
+        "cargo clippy --workspace --all-targets -- -D warnings passes",
+        "All relevant cargo test suites pass (at minimum: tests added/modified by WO0-test and any touched world/shell crates)",
+        "Linux smoke script docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh passes",
+        "Manual playbook docs/project_management/next/world-overlayfs-enumeration/manual_testing_playbook.md steps pass",
+        "make preflight passes"
+      ],
+      "start_checklist": [
+        "git checkout feat/world-overlayfs-enumeration && git pull --ff-only",
+        "Update this task status to in_progress in tasks.json and commit docs on the orchestration branch",
+        "Create branch woe-wo0-integ and worktree wt/woe-wo0-integ",
+        "Merge/fetch woe-wo0-code and woe-wo0-test into the integration worktree"
+      ],
+      "end_checklist": [
+        "Run cargo fmt",
+        "Run cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant cargo test suites",
+        "Run docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh",
+        "Run make preflight",
+        "Commit integration changes to woe-wo0-integ",
+        "Fast-forward merge woe-wo0-integ back into feat/world-overlayfs-enumeration",
+        "Update this task status to completed in tasks.json and commit docs on the orchestration branch",
+        "Remove worktree wt/woe-wo0-integ"
+      ],
+      "worktree": "wt/woe-wo0-integ",
+      "integration_task": "WO0-integ",
+      "kickoff_prompt": "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ.md",
+      "depends_on": ["WO0-code", "WO0-test"],
+      "concurrent_with": []
+    }
+  ]
+}
