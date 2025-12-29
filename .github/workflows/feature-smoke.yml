@@ -103,6 +103,19 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt, clippy
 
+      - name: Preflight native deps (Linux)
+        run: |
+          if ! command -v pkg-config >/dev/null 2>&1; then
+            echo "Missing pkg-config. Install it (e.g., pkgconf/pkg-config) on this runner." >&2
+            exit 1
+          fi
+          if ! pkg-config --exists libseccomp; then
+            echo "Missing libseccomp development package on this runner." >&2
+            echo "  - Ubuntu/Debian: sudo apt-get install -y libseccomp-dev pkg-config" >&2
+            echo "  - Manjaro/Arch:  sudo pacman -Syu --needed libseccomp pkgconf" >&2
+            exit 1
+          fi
+
       - name: Build substrate (debug)
         run: cargo build --bin substrate
 
@@ -232,11 +245,17 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          components: rustfmt, clippy
+      - name: Ensure Rust toolchain (self-hosted)
+        shell: pwsh
+        run: |
+          if (-not (Get-Command rustup -ErrorAction SilentlyContinue)) {
+            throw "rustup not found on PATH. Install Rust via rustup-init.exe, then restart the runner service."
+          }
+          rustup toolchain install $env:RUST_TOOLCHAIN --profile minimal
+          rustup component add rustfmt clippy --toolchain $env:RUST_TOOLCHAIN
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "RUSTUP_TOOLCHAIN=$env:RUST_TOOLCHAIN"
+          rustc --version
+          cargo --version
 
       - name: Build substrate (debug)
         run: cargo build --bin substrate
@@ -266,11 +285,17 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          components: rustfmt, clippy
+      - name: Ensure Rust toolchain (self-hosted)
+        shell: pwsh
+        run: |
+          if (-not (Get-Command rustup -ErrorAction SilentlyContinue)) {
+            throw "rustup not found on PATH. Install Rust via rustup-init.exe, then restart the runner service."
+          }
+          rustup toolchain install $env:RUST_TOOLCHAIN --profile minimal
+          rustup component add rustfmt clippy --toolchain $env:RUST_TOOLCHAIN
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "RUSTUP_TOOLCHAIN=$env:RUST_TOOLCHAIN"
+          rustc --version
+          cargo --version
 
       - name: Build substrate (debug)
         run: cargo build --bin substrate
