@@ -10,12 +10,13 @@ Usage:
     --platform linux|macos|windows|all \
     [--run-wsl] \
     [--workflow .github/workflows/feature-smoke.yml] \
+    [--workflow-ref <ref>] \
     [--remote origin] \
     [--cleanup]
 
 What it does:
   - Creates a throwaway remote branch at HEAD
-  - Dispatches the workflow against that branch
+  - Dispatches the workflow against the workflow ref (default: repo default branch), checking out the throwaway branch
   - Optionally waits and deletes the throwaway branch
 
 Requirements:
@@ -29,6 +30,7 @@ PLATFORM=""
 RUNNER_KIND="github-hosted"
 RUN_WSL=0
 WORKFLOW=".github/workflows/feature-smoke.yml"
+WORKFLOW_REF=""
 REMOTE="origin"
 CLEANUP=0
 
@@ -52,6 +54,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --workflow)
             WORKFLOW="${2:-}"
+            shift 2
+            ;;
+        --workflow-ref)
+            WORKFLOW_REF="${2:-}"
             shift 2
             ;;
         --remote)
@@ -96,6 +102,11 @@ fi
 
 gh auth status >/dev/null
 
+repo_default_branch="$(gh repo view --json defaultBranchRef -q '.defaultBranchRef.name')"
+if [[ -z "${WORKFLOW_REF}" ]]; then
+    WORKFLOW_REF="${repo_default_branch}"
+fi
+
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 safe_feature="$(basename "${FEATURE_DIR}")"
 temp_branch="tmp/feature-smoke/${safe_feature}/${PLATFORM}/${ts}"
@@ -108,16 +119,18 @@ git branch -f "${temp_branch}" "${head_sha}"
 git push -u "${REMOTE}" "${temp_branch}:${temp_branch}"
 
 echo "Dispatching workflow: ${WORKFLOW}"
+echo "Workflow ref: ${WORKFLOW_REF}"
+dispatch_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 if [[ "${RUN_WSL}" -eq 1 ]]; then
-    gh workflow run "${WORKFLOW}" --ref "${temp_branch}" -f feature_dir="${FEATURE_DIR}" -f runner_kind="${RUNNER_KIND}" -f platform="${PLATFORM}" -f run_wsl=true
+    gh workflow run "${WORKFLOW}" --ref "${WORKFLOW_REF}" -f feature_dir="${FEATURE_DIR}" -f checkout_ref="${temp_branch}" -f runner_kind="${RUNNER_KIND}" -f platform="${PLATFORM}" -f run_wsl=true
 else
-    gh workflow run "${WORKFLOW}" --ref "${temp_branch}" -f feature_dir="${FEATURE_DIR}" -f runner_kind="${RUNNER_KIND}" -f platform="${PLATFORM}" -f run_wsl=false
+    gh workflow run "${WORKFLOW}" --ref "${WORKFLOW_REF}" -f feature_dir="${FEATURE_DIR}" -f checkout_ref="${temp_branch}" -f runner_kind="${RUNNER_KIND}" -f platform="${PLATFORM}" -f run_wsl=false
 fi
 
 echo "Waiting for run to start..."
-sleep 3
+sleep 5
 
-run_id="$(gh run list --workflow "${WORKFLOW}" --branch "${temp_branch}" --limit 1 --json databaseId -q '.[0].databaseId')"
+run_id="$(gh run list --workflow "${WORKFLOW}" --event workflow_dispatch --branch "${WORKFLOW_REF}" --limit 20 --json databaseId,createdAt -q "map(select(.createdAt >= \"${dispatch_started}\")) | .[0].databaseId")"
 if [[ -z "${run_id}" ]]; then
     echo "Could not find a matching workflow run for ${temp_branch}" >&2
     exit 4

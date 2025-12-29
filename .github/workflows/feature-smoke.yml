@@ -7,6 +7,11 @@ on:
         description: "Feature Planning Pack directory (e.g., docs/project_management/next/world-sync)"
         required: true
         type: string
+      checkout_ref:
+        description: "Git ref to checkout for running the smoke scripts (defaults to the workflow ref)."
+        required: false
+        type: string
+        default: ""
       runner_kind:
         description: "Where to run the smoke job(s)"
         required: true
@@ -42,7 +47,15 @@ jobs:
     if: (inputs.platform == 'linux' || inputs.platform == 'all') && inputs.runner_kind == 'github-hosted'
     runs-on: ubuntu-24.04
     steps:
+      - name: Checkout repository (override ref)
+        if: inputs.checkout_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          submodules: recursive
+
       - name: Checkout repository
+        if: inputs.checkout_ref == ''
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -50,7 +63,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y jq ripgrep
+          sudo apt-get install -y jq ripgrep pkg-config libseccomp-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -71,7 +84,15 @@ jobs:
     if: (inputs.platform == 'linux' || inputs.platform == 'all') && inputs.runner_kind == 'self-hosted'
     runs-on: [self-hosted, linux]
     steps:
+      - name: Checkout repository (override ref)
+        if: inputs.checkout_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          submodules: recursive
+
       - name: Checkout repository
+        if: inputs.checkout_ref == ''
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -95,7 +116,15 @@ jobs:
     if: (inputs.platform == 'macos' || inputs.platform == 'all') && inputs.runner_kind == 'github-hosted'
     runs-on: macos-14
     steps:
+      - name: Checkout repository (override ref)
+        if: inputs.checkout_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          submodules: recursive
+
       - name: Checkout repository
+        if: inputs.checkout_ref == ''
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -124,7 +153,15 @@ jobs:
     if: (inputs.platform == 'macos' || inputs.platform == 'all') && inputs.runner_kind == 'self-hosted'
     runs-on: [self-hosted, macos]
     steps:
+      - name: Checkout repository (override ref)
+        if: inputs.checkout_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          submodules: recursive
+
       - name: Checkout repository
+        if: inputs.checkout_ref == ''
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -148,7 +185,15 @@ jobs:
     if: (inputs.platform == 'windows' || inputs.platform == 'all') && inputs.runner_kind == 'github-hosted'
     runs-on: windows-2022
     steps:
+      - name: Checkout repository (override ref)
+        if: inputs.checkout_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          submodules: recursive
+
       - name: Checkout repository
+        if: inputs.checkout_ref == ''
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -174,7 +219,15 @@ jobs:
     if: (inputs.platform == 'windows' || inputs.platform == 'all') && inputs.runner_kind == 'self-hosted'
     runs-on: [self-hosted, windows]
     steps:
+      - name: Checkout repository (override ref)
+        if: inputs.checkout_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          submodules: recursive
+
       - name: Checkout repository
+        if: inputs.checkout_ref == ''
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -200,7 +253,15 @@ jobs:
     if: inputs.run_wsl
     runs-on: [self-hosted, windows, wsl]
     steps:
+      - name: Checkout repository (override ref)
+        if: inputs.checkout_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          submodules: recursive
+
       - name: Checkout repository
+        if: inputs.checkout_ref == ''
         uses: actions/checkout@v4
         with:
           submodules: recursive
