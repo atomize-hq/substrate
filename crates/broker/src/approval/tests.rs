@@ -2,10 +2,7 @@ use super::*;
 use std::ffi::OsString;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Mutex;
 use tempfile::TempDir;
-
-static PCM2_ENV_LOCK: Mutex<()> = Mutex::new(());
 
 struct ScopedEnv {
     key: &'static str,
@@ -95,7 +92,9 @@ fn test_pattern_matching() {
 
 #[test]
 fn pcm2_save_to_policy_prefers_workspace_policy_when_workspace_root_exists() -> anyhow::Result<()> {
-    let _lock = PCM2_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+    let _lock = crate::test_utils::env_lock()
+        .lock()
+        .unwrap_or_else(|err| err.into_inner());
     let temp = TempDir::new().expect("tempdir");
 
     let home = temp.path().join("home");
@@ -134,7 +133,9 @@ fn pcm2_save_to_policy_prefers_workspace_policy_when_workspace_root_exists() -> 
 
 #[test]
 fn pcm2_save_to_policy_writes_global_policy_when_no_workspace_root() -> anyhow::Result<()> {
-    let _lock = PCM2_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+    let _lock = crate::test_utils::env_lock()
+        .lock()
+        .unwrap_or_else(|err| err.into_inner());
     let temp = TempDir::new().expect("tempdir");
 
     let home = temp.path().join("home");

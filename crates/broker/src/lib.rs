@@ -11,6 +11,9 @@ mod policy;
 mod profile;
 mod watcher;
 
+#[cfg(test)]
+mod test_utils;
+
 pub use api::{
     allowed_domains, detect_profile, evaluate, init, policy_mode, quick_check, reload_policy,
     set_global_broker, set_observe_only, set_policy_mode, world_fs_mode, world_fs_policy,

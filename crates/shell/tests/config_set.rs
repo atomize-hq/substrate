@@ -38,7 +38,11 @@ impl ConfigSetFixture {
         let mut cmd = substrate_shell_driver();
         cmd.env("HOME", &self.home)
             .env("USERPROFILE", &self.home)
-            .env("SUBSTRATE_HOME", &self.substrate_home);
+            .env("SUBSTRATE_HOME", &self.substrate_home)
+            .env_remove("SUBSTRATE_ANCHOR_MODE")
+            .env_remove("SUBSTRATE_ANCHOR_PATH")
+            .env_remove("SUBSTRATE_CAGED")
+            .env_remove("SUBSTRATE_POLICY_MODE");
         cmd
     }
 

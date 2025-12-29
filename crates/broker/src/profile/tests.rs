@@ -1,12 +1,6 @@
 use super::*;
 use std::path::Path;
-use std::sync::{Mutex, OnceLock};
 use tempfile::tempdir;
-
-fn env_lock() -> &'static Mutex<()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
-}
 
 fn write_workspace_marker(root: &Path) {
     let substrate_dir = root.join(substrate_paths::SUBSTRATE_DIR_NAME);
@@ -23,7 +17,7 @@ fn write_workspace_policy(root: &Path, contents: &str) -> PathBuf {
 }
 
 fn with_substrate_home<T>(home: &Path, f: impl FnOnce() -> T) -> T {
-    let _lock = env_lock().lock().unwrap();
+    let _lock = crate::test_utils::env_lock().lock().unwrap();
     let previous = std::env::var_os("SUBSTRATE_HOME");
     std::env::set_var("SUBSTRATE_HOME", home);
     let result = f();
