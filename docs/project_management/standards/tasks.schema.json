@@ -1,0 +1,66 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Substrate Planning Pack tasks.json",
+    "type": "object",
+    "additionalProperties": true,
+    "properties": {
+        "meta": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "feature": { "type": "string" },
+                "cross_platform": { "type": "boolean" },
+                "notes": { "type": "string" },
+                "external_task_ids": { "type": "array", "items": { "type": "string" } }
+            }
+        },
+        "tasks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": true,
+                "required": [
+                    "id",
+                    "name",
+                    "type",
+                    "phase",
+                    "status",
+                    "description",
+                    "references",
+                    "acceptance_criteria",
+                    "start_checklist",
+                    "end_checklist",
+                    "worktree",
+                    "integration_task",
+                    "kickoff_prompt",
+                    "depends_on",
+                    "concurrent_with"
+                ],
+                "properties": {
+                    "id": { "type": "string", "minLength": 1 },
+                    "name": { "type": "string", "minLength": 1 },
+                    "type": { "type": "string", "enum": ["code", "test", "integration", "ops", "investigation"] },
+                    "phase": { "type": "string", "minLength": 1 },
+                    "status": {
+                        "type": "string",
+                        "enum": ["pending", "in_progress", "completed", "queued", "blocked", "canceled"]
+                    },
+                    "description": { "type": "string", "minLength": 1 },
+                    "references": { "type": "array", "items": { "type": "string" } },
+                    "acceptance_criteria": { "type": "array", "items": { "type": "string" } },
+                    "start_checklist": { "type": "array", "items": { "type": "string" } },
+                    "end_checklist": { "type": "array", "items": { "type": "string" } },
+                    "worktree": { "type": ["string", "null"], "minLength": 1 },
+                    "integration_task": { "type": ["string", "null"], "minLength": 1 },
+                    "kickoff_prompt": { "type": ["string", "null"], "minLength": 1 },
+                    "depends_on": { "type": "array", "items": { "type": "string" } },
+                    "concurrent_with": { "type": "array", "items": { "type": "string" } },
+                    "platform": { "type": "string", "enum": ["linux", "macos", "windows", "wsl"] },
+                    "runner": { "type": "string", "enum": ["local", "github-actions", "manual"] },
+                    "workflow": { "type": "string" }
+                }
+            }
+        }
+    },
+    "required": ["tasks"]
+}

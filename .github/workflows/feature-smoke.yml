@@ -1,0 +1,105 @@
+name: Feature Smoke (Planning Pack)
+
+on:
+  workflow_dispatch:
+    inputs:
+      feature_dir:
+        description: "Feature Planning Pack directory (e.g., docs/project_management/next/world-sync)"
+        required: true
+        type: string
+      platform:
+        description: "Which platform smoke to run"
+        required: true
+        type: choice
+        options:
+          - linux
+          - macos
+          - windows
+          - all
+      run_wsl:
+        description: "Also run WSL smoke (requires suitable runner)"
+        required: false
+        type: boolean
+        default: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_TOOLCHAIN: 1.89.0
+
+jobs:
+  linux:
+    if: inputs.platform == 'linux' || inputs.platform == 'all'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      - name: Run linux smoke
+        run: bash "${{ inputs.feature_dir }}/smoke/linux-smoke.sh"
+
+  macos:
+    if: inputs.platform == 'macos' || inputs.platform == 'all'
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      - name: Run macOS smoke
+        run: bash "${{ inputs.feature_dir }}/smoke/macos-smoke.sh"
+
+  windows:
+    if: inputs.platform == 'windows' || inputs.platform == 'all'
+    runs-on: windows-2022
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      - name: Run Windows smoke
+        shell: pwsh
+        run: pwsh -File "${{ inputs.feature_dir }}/smoke/windows-smoke.ps1"
+
+  wsl:
+    if: inputs.run_wsl
+    runs-on: [self-hosted, windows, wsl]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Verify WSL availability
+        shell: pwsh
+        run: |
+          if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
+            throw "wsl.exe not found on this runner"
+          }
+          wsl.exe -l -v
+
+      - name: Run WSL smoke
+        shell: pwsh
+        run: pwsh -File scripts/windows/wsl-smoke.ps1
+
