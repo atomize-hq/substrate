@@ -15,6 +15,10 @@ use std::{
 use substrate_common::WorldRootMode;
 use tempfile::tempdir;
 
+fn canonicalize_or(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
 fn write_config_yaml(
     path: &Path,
     world_enabled: bool,
@@ -121,6 +125,8 @@ fn world_flag_overrides_disabled_config_and_env() {
     let prev_caged = set_env("SUBSTRATE_CAGED", "1");
     let prev_anchor_mode = env::var("SUBSTRATE_ANCHOR_MODE").ok();
     let prev_anchor_path = env::var("SUBSTRATE_ANCHOR_PATH").ok();
+    env::remove_var("SUBSTRATE_ANCHOR_MODE");
+    env::remove_var("SUBSTRATE_ANCHOR_PATH");
     let prev_manager_env = env::var("SUBSTRATE_MANAGER_ENV").ok();
     let prev_manager_init = env::var("SUBSTRATE_MANAGER_INIT").ok();
     let _dir_guard = DirGuard::new();
@@ -182,7 +188,10 @@ fn world_flag_honors_directory_world_root_settings() {
     let config = ShellConfig::from_cli(cli).expect("parse config with directory world root");
     assert!(!config.no_world);
     assert_eq!(config.world_root.mode, WorldRootMode::Custom);
-    assert_eq!(config.world_root.path, custom_root);
+    assert_eq!(
+        canonicalize_or(&config.world_root.path),
+        canonicalize_or(&custom_root)
+    );
     assert!(!config.world_root.caged);
     assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
     assert_eq!(env::var("SUBSTRATE_WORLD_ENABLED").unwrap(), "1");
@@ -249,12 +258,15 @@ fn anchor_flags_override_configs_and_export_anchor_env() {
     let config = ShellConfig::from_cli(cli).expect("parse config with anchor flags");
 
     assert_eq!(config.world_root.mode, WorldRootMode::Custom);
-    assert_eq!(config.world_root.path, cli_anchor);
+    assert_eq!(
+        canonicalize_or(&config.world_root.path),
+        canonicalize_or(&cli_anchor)
+    );
     assert!(config.world_root.caged);
     assert_eq!(env::var("SUBSTRATE_ANCHOR_MODE").unwrap(), "custom");
     assert_eq!(
-        env::var("SUBSTRATE_ANCHOR_PATH").unwrap(),
-        cli_anchor.display().to_string()
+        canonicalize_or(Path::new(&env::var("SUBSTRATE_ANCHOR_PATH").unwrap())),
+        canonicalize_or(&cli_anchor)
     );
     assert_eq!(env::var("SUBSTRATE_CAGED").unwrap(), "1");
 
