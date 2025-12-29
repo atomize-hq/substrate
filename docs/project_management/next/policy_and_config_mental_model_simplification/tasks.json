@@ -99,7 +99,7 @@
       ],
       "acceptance_criteria": [
         "PCM0 code and tests are merged and match PCM0-spec exactly",
-        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
@@ -109,7 +109,7 @@
         "Create branch pcm-pcm0-config-integ and worktree wt/pcm0-config-integ; do not edit docs/tasks/session_log.md inside the worktree"
       ],
       "end_checklist": [
-        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
         "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
         "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
         "Run: pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
@@ -220,7 +220,7 @@
       ],
       "acceptance_criteria": [
         "PCM1 code and tests are merged and match PCM1-spec exactly",
-        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
@@ -230,7 +230,7 @@
         "Create branch pcm-pcm1-policy-integ and worktree wt/pcm1-policy-integ; do not edit docs/tasks/session_log.md inside the worktree"
       ],
       "end_checklist": [
-        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
         "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
         "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
         "Run: pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
@@ -341,7 +341,7 @@
       ],
       "acceptance_criteria": [
         "PCM2 code and tests are merged and match PCM2-spec exactly",
-        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
@@ -351,7 +351,7 @@
         "Create branch pcm-pcm2-routing-integ and worktree wt/pcm2-routing-integ; do not edit docs/tasks/session_log.md inside the worktree"
       ],
       "end_checklist": [
-        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
         "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
         "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
         "Run: pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",
@@ -462,7 +462,7 @@
       ],
       "acceptance_criteria": [
         "PCM3 code and tests are merged and match PCM3-spec exactly",
-        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
@@ -472,7 +472,7 @@
         "Create branch pcm-pcm3-env-integ and worktree wt/pcm3-env-integ; do not edit docs/tasks/session_log.md inside the worktree"
       ],
       "end_checklist": [
-        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
         "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh",
         "Run: bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh",
         "Run: pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1",

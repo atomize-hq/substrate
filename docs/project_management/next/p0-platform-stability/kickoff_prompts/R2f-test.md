@@ -13,7 +13,7 @@
 
 ## Spec
 - Add fixtures that run host-only commands (`--no-world`, `SUBSTRATE_REPLAY_USE_WORLD=disabled`, policy host path) and assert spans include `span_id` + replay_context with `execution_origin=host`.
-- Replay those host spans and verify they execute on the host without agent/world socket probes; warnings should be single-shot when overrides force world usage.
+- Replay those host spans and verify they execute on the host without agent/world socket probes; warnings must be single-shot when overrides force world usage.
 - Cover async REPL and non-PTY replay entrypoints; gate expectations when CI lacks world sockets or env differs.
 
 ## Scope & Guardrails
@@ -35,3 +35,6 @@ cargo test -p substrate-replay -- --nocapture
 4. Update `tasks.json` + `session_log.md` END entry with command results.
 5. Confirm R2f-integ prompt remains accurate.
 6. Commit doc/task/log updates (`git commit -am "docs: finish R2f-test"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

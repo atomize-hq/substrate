@@ -104,7 +104,7 @@
         "All relevant cargo test suites pass (at minimum: tests added/modified by WO0-test and any touched world/shell crates)",
         "Linux smoke script docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh passes",
         "Manual playbook docs/project_management/next/world-overlayfs-enumeration/manual_testing_playbook.md steps pass",
-        "make preflight passes"
+        "make integ-checks passes"
       ],
       "start_checklist": [
         "git checkout feat/world-overlayfs-enumeration && git pull --ff-only",
@@ -117,7 +117,7 @@
         "Run cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant cargo test suites",
         "Run docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh",
-        "Run make preflight",
+        "Run make integ-checks",
         "Commit integration changes to woe-wo0-integ",
         "Fast-forward merge woe-wo0-integ back into feat/world-overlayfs-enumeration",
         "Update this task status to completed in tasks.json and commit docs on the orchestration branch",

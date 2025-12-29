@@ -14,7 +14,7 @@
 ## Spec
 - Add tests ensuring agent→local fallback warnings emit once per replay (with actionable text).
 - Cover copy-diff scratch root retries and overrides (env/flag) to ensure logs show the chosen path.
-- Exercise ENOSPC retry behavior and verify logging/telemetry matches spec; fixtures should simulate constrained scratch dirs (origin/flip handled in R2d).
+- Exercise ENOSPC retry behavior and verify logging/telemetry matches spec; fixtures must simulate constrained scratch dirs (origin/flip handled in R2d).
 
 ## Required Commands
 ```
@@ -31,3 +31,6 @@ Capture any manual `substrate --replay ...` verification when debugging warnings
 4. Update `tasks.json` + `session_log.md` END entry (include command results).
 5. Confirm R2b-integ prompt contents.
 6. Commit doc/task/log updates (`git commit -am "docs: finish R2b-test"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

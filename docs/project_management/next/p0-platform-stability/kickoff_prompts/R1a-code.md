@@ -36,3 +36,6 @@ Record any manual replay invocations or cleanup scripts run.
 4. Update `tasks.json` + `session_log.md` END entry, summarizing command results and manual checks.
 5. Confirm R1a-integ prompt still matches scope; edit if new steps required.
 6. Commit doc/task/log updates (`git commit -am "docs: finish R1a-code"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

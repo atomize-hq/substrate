@@ -26,6 +26,43 @@
       ]
     },
     {
+      "order": 15,
+      "id": "p0_platform_stability",
+      "title": "P0 platform stability",
+      "branch": "feat/p0-platform-stability",
+      "directory": "docs/project_management/next/p0-platform-stability",
+      "plan": "docs/project_management/next/p0-platform-stability/plan.md",
+      "status": "not_started",
+      "sequence": [{ "id": "LP1", "spec": "docs/project_management/next/p0-platform-stability/LP1-spec.md" }],
+      "notes": [
+        "Bundles socket activation, replay polish, and health mismatch fixes under one coordination umbrella.",
+        "Land before macOS parity work so the parity sprint can mirror the final Linux/WSL behavior."
+      ]
+    },
+    {
+      "order": 16,
+      "id": "p0_platform_stability_macos_parity",
+      "title": "P0 platform stability: macOS parity",
+      "branch": "feat/p0-platform-stability-macOS-parity",
+      "directory": "docs/project_management/next/p0-platform-stability-macOS-parity",
+      "plan": "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "status": "not_started",
+      "sequence": [
+        { "id": "M1", "spec": "docs/project_management/next/p0-platform-stability-macOS-parity/M1-spec.md" },
+        { "id": "M2", "spec": "docs/project_management/next/p0-platform-stability-macOS-parity/M2-spec.md" },
+        { "id": "M3", "spec": "docs/project_management/next/p0-platform-stability-macOS-parity/M3-spec.md" },
+        { "id": "M4", "spec": "docs/project_management/next/p0-platform-stability-macOS-parity/M4-spec.md" },
+        { "id": "M5a", "spec": "docs/project_management/next/p0-platform-stability-macOS-parity/M5a-spec.md" },
+        { "id": "M5b", "spec": "docs/project_management/next/p0-platform-stability-macOS-parity/M5b-spec.md" },
+        { "id": "M5c", "spec": "docs/project_management/next/p0-platform-stability-macOS-parity/M5c-spec.md" },
+        { "id": "M6", "spec": "docs/project_management/next/p0-platform-stability-macOS-parity/M6-spec.md" }
+      ],
+      "notes": [
+        "Bridges the P0 platform stability behavior set to macOS (Lima guest + host UX parity).",
+        "Treat WSL coverage separately: either extend Windows smoke scripts to include WSL assertions, or use a self-hosted Windows+WSL runner."
+      ]
+    },
+    {
       "order": 20,
       "id": "agent_hub_isolation_hardening",
       "title": "Agent hub isolation hardening",
@@ -93,6 +130,24 @@
       ]
     },
     {
+      "order": 28,
+      "id": "world_deps_selection_layer",
+      "title": "World deps selection layer",
+      "branch": "feat/world-sync",
+      "directory": "docs/project_management/next/world_deps_selection_layer",
+      "plan": "docs/project_management/next/world_deps_selection_layer/plan.md",
+      "status": "not_started",
+      "sequence": [
+        { "id": "WDL0", "spec": "docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md" },
+        { "id": "WDL1", "spec": "docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md" },
+        { "id": "WDL2", "spec": "docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md" }
+      ],
+      "notes": [
+        "Implements ADR-0002 world-deps selection + install classes + provisioning.",
+        "Sequenced before world_sync so C1 can assume the selection/UX model is stable."
+      ]
+    },
+    {
       "order": 30,
       "id": "world_sync",
       "title": "World sync + .substrate-git",
@@ -103,18 +158,6 @@
       "sequence": [
         { "id": "C0", "spec": "docs/project_management/next/world-sync/C0-spec.md" },
         { "id": "C1", "spec": "docs/project_management/next/world-sync/C1-spec.md" },
-        {
-          "id": "WDL0",
-          "spec": "docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md"
-        },
-        {
-          "id": "WDL1",
-          "spec": "docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md"
-        },
-        {
-          "id": "WDL2",
-          "spec": "docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md"
-        },
         { "id": "C2", "spec": "docs/project_management/next/world-sync/C2-spec.md" },
         { "id": "C3", "spec": "docs/project_management/next/world-sync/C3-spec.md" },
         { "id": "C4", "spec": "docs/project_management/next/world-sync/C4-spec.md" },
@@ -125,7 +168,7 @@
         { "id": "C9", "spec": "docs/project_management/next/world-sync/C9-spec.md" }
       ],
       "notes": [
-        "WDL0–WDL2 implement ADR-0002 world-deps selection + install classes + provisioning, sequenced here to avoid CLI conflicts with C1 and to reuse the `.substrate/` workspace model established by C0."
+        "C0/C1 land the core workspace model and CLI/config prerequisites for sync; world_deps_selection_layer is sequenced separately before deeper sync triads."
       ]
     },
     {

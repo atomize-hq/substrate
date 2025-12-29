@@ -21,6 +21,18 @@
 - Integration Map: `docs/project_management/next/world-overlayfs-enumeration/integration_map.md`
 - Manual Playbook: `docs/project_management/next/world-overlayfs-enumeration/manual_testing_playbook.md`
 
+## Executive Summary (Operator)
+
+ADR_BODY_SHA256: ce2d1407e0a28e63907b72ec3bc460d34bebd804682ed35454397b249248a336
+
+ADR_BODY_SHA256: <run `python3 scripts/planning/check_adr_exec_summary.py --adr <this-file> --fix` after editing>
+
+- Existing: On some Linux hosts, a “world” overlay mount can succeed but directory enumeration in the merged view is broken (e.g., `ls` shows empty even though `stat` works), making worlds unsafe/confusing.
+- New: Substrate refuses to run a “world” command on any filesystem strategy that fails an enumeration health check; it selects a strategy + fallback chain deterministically and records the choice/fallback reason in trace/doctor output.
+- Why: Restores the core world contract (observable filesystem state) and improves reproducibility/debuggability when host/filesystem combinations are problematic.
+- Links:
+  - `docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md`
+
 ## Problem / Context
 - Substrate’s Linux world execution uses overlayfs to present an isolated, writable view of the project and to compute filesystem diffs.
 - On some hosts, the overlay mount can succeed and writes can occur, but directory enumeration in the merged overlay view returns an empty listing (e.g., `ls` shows nothing) even when files exist and can be `stat`’d.
@@ -126,4 +138,3 @@
 - Decision Register entries:
   - `docs/project_management/next/world-overlayfs-enumeration/decision_register.md`:
     - DR-0001, DR-0002
-

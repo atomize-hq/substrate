@@ -38,3 +38,6 @@ cargo test -p world-agent   # document skips if privileges lacking
 4. Update `tasks.json` + `session_log.md` END entry with command results.
 5. Confirm R2e-integ prompt remains accurate.
 6. Commit doc/task/log updates (`git commit -am "docs: finish R2e-code"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

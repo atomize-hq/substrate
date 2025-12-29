@@ -16,7 +16,7 @@ Template (START/END only):
   - cargo fmt
   - cargo clippy --workspace --all-targets -- -D warnings
   - cargo test ... (only for test/integration tasks)
-  - make preflight (integration only)
+  - make integ-checks (integration only)
 - Results: <pass/fail/skips>
 - Scripts executed: <doctor/smoke/manual verification if any>
 - Kickoff prompts created/verified: <paths or n/a>
@@ -71,7 +71,7 @@ Template (START/END only):
   - cargo fmt
   - cargo clippy --workspace --all-targets -- -D warnings
   - cargo test -p substrate-broker -- --nocapture
-  - make preflight
+  - make integ-checks
 - Results: pass
 - Scripts executed:
   - linux-smoke.sh (OK: agent hub hardening linux smoke (preflight); required PATH+=target/debug)
@@ -127,7 +127,7 @@ Template (START/END only):
   - cargo fmt
   - cargo clippy --workspace --all-targets -- -D warnings
   - cargo test -p substrate-shell --tests -- --nocapture
-  - make preflight
+  - make integ-checks
 - Results: pass
 - Scripts executed:
   - linux-smoke.sh (OK: agent hub hardening linux smoke (preflight); required PATH+=target/debug)
@@ -230,7 +230,7 @@ Template (START/END only):
   - cargo fmt
   - cargo clippy --workspace --all-targets -- -D warnings
   - cargo test -p world -p world-agent -- --nocapture
-  - make preflight
+  - make integ-checks
 - Results: pass (full-cage tests self-skip when overlay support/privileges missing)
 - Scripts executed:
   - linux-smoke.sh (OK: agent hub hardening linux smoke (preflight); required PATH+=target/debug)
@@ -287,7 +287,7 @@ Template (START/END only):
   - cargo fmt
   - cargo clippy --workspace --all-targets -- -D warnings
   - cargo test -p world-agent --tests -- --nocapture
-  - make preflight
+  - make integ-checks
 - Results: pass
 - Scripts executed:
   - linux-smoke.sh (OK: agent hub hardening linux smoke (preflight); required PATH+=target/debug)
@@ -329,7 +329,7 @@ Template (START/END only):
   - cargo fmt
   - cargo clippy --workspace --all-targets -- -D warnings
   - cargo test -p world --tests -- --nocapture
-  - make preflight
+  - make integ-checks
 - Results: pass
 - Scripts executed:
   - linux-smoke.sh (OK: agent hub hardening linux smoke (preflight); required PATH+=target/debug)
@@ -353,7 +353,7 @@ Template (START/END only):
   - cargo fmt
   - cargo clippy --workspace --all-targets -- -D warnings
   - cargo test --workspace --all-targets -- --nocapture
-  - make preflight
+  - make integ-checks
 - Results: pass
 - Scripts executed:
   - linux-smoke.sh (OK: agent hub hardening linux smoke (preflight); required PATH+=target/debug)
@@ -406,7 +406,7 @@ Template (START/END only):
   - cargo fmt
   - cargo clippy --workspace --all-targets -- -D warnings
   - cargo test --workspace --all-targets -- --nocapture
-  - make preflight
+  - make integ-checks
 - Results: pass
 - Scripts executed:
   - linux-smoke.sh (OK: agent hub hardening linux smoke (preflight); required PATH+=target/debug)
@@ -464,7 +464,7 @@ Template (START/END only):
   - cargo fmt
   - cargo clippy --workspace --all-targets -- -D warnings
   - cargo test --workspace --all-targets -- --nocapture
-  - make preflight
+  - make integ-checks
 - Results: pass
 - Scripts executed:
   - linux-smoke.sh (OK: agent hub hardening linux smoke (preflight); required PATH+=target/debug)
@@ -521,7 +521,7 @@ Template (START/END only):
   - cargo fmt
   - cargo clippy --workspace --all-targets -- -D warnings
   - cargo test --workspace --all-targets -- --nocapture
-  - make preflight
+  - make integ-checks
 - Results: pass
 - Scripts executed:
   - linux-smoke.sh (OK: agent hub hardening linux smoke (preflight); required PATH+=target/debug)
@@ -577,7 +577,7 @@ Template (START/END only):
   - cargo fmt
   - cargo clippy --workspace --all-targets -- -D warnings
   - cargo test --workspace --all-targets -- --nocapture
-  - make preflight
+  - make integ-checks
 - Results: pass
 - Scripts executed:
   - linux-smoke.sh (OK: agent hub hardening linux smoke (preflight))

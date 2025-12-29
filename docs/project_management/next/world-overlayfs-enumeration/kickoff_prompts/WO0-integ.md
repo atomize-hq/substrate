@@ -20,7 +20,7 @@ Role: Integration agent (owns final alignment to spec and green state).
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - Relevant `cargo test ...` suites (at minimum the ones added/modified by WO0-test)
 - `docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh`
-- `make preflight`
+- `make integ-checks`
 
 ## End checklist
 1. Run required commands and fix failures until green.

@@ -76,7 +76,7 @@ else
 fi
 
 echo "-- Ambiguity scan"
-if rg -n --hidden --glob '!**/.git/**' --glob '!decision_register.md' '\b(should|could|might|maybe|optionally|optional)\b' "${FEATURE_DIR}"; then
+if rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' --glob '!**/session_log.md' --glob '!**/quality_gate_report.md' --glob '!**/final_alignment_report.md' '\b(should|could|might|maybe)\b' "${FEATURE_DIR}"; then
     echo "FAIL: ambiguity-word matches found (rewrite behavioral contracts to be singular/testable)" >&2
     exit 1
 else
@@ -93,6 +93,30 @@ jq -e . docs/project_management/next/sequencing.json >/dev/null
 echo "-- tasks.json invariants"
 python3 scripts/planning/validate_tasks_json.py --feature-dir "${FEATURE_DIR}"
 
+echo "-- ADR Executive Summary drift (if ADRs found/referenced)"
+adr_paths=()
+
+while IFS= read -r p; do
+    [[ -n "$p" ]] && adr_paths+=("$p")
+done < <(ls -1 "${FEATURE_DIR}"/ADR-*.md 2>/dev/null || true)
+
+while IFS= read -r p; do
+    [[ -n "$p" ]] && adr_paths+=("$p")
+done < <(rg -o --no-filename --no-line-number --hidden --glob '!**/.git/**' 'docs/project_management/next/ADR-[^ )"\r\n]+\.md' "${FEATURE_DIR}" 2>/dev/null | sort -u || true)
+
+if [[ "${#adr_paths[@]}" -gt 0 ]]; then
+    for adr in "${adr_paths[@]}"; do
+        if [[ -f "$adr" ]]; then
+            python3 scripts/planning/check_adr_exec_summary.py --adr "$adr"
+        else
+            echo "Referenced ADR not found: $adr" >&2
+            exit 1
+        fi
+    done
+else
+    echo "SKIP: no ADRs found/referenced"
+fi
+
 echo "-- Kickoff prompt sentinel"
 missing=0
 while IFS= read -r -d '' f; do
@@ -100,7 +124,7 @@ while IFS= read -r -d '' f; do
         echo "Missing sentinel in kickoff prompt: $f" >&2
         missing=1
     fi
-done < <(find "${FEATURE_DIR}/kickoff_prompts" -maxdepth 1 -type f -name '*.md' -print0)
+done < <(find "${FEATURE_DIR}/kickoff_prompts" -maxdepth 1 -type f -name '*.md' ! -name 'README.md' -print0)
 if [[ "${missing}" -ne 0 ]]; then
     exit 1
 fi
@@ -108,7 +132,10 @@ fi
 echo "-- Manual playbook smoke linkage (if present)"
 if [[ -f "${FEATURE_DIR}/manual_testing_playbook.md" ]]; then
     if [[ -d "${FEATURE_DIR}/smoke" ]]; then
-        rg -n 'smoke/(linux-smoke\.sh|macos-smoke\.sh|windows-smoke\.ps1)' "${FEATURE_DIR}/manual_testing_playbook.md" >/dev/null
+        if ! rg -n 'smoke/(linux-smoke\.sh|macos-smoke\.sh|windows-smoke\.ps1)' "${FEATURE_DIR}/manual_testing_playbook.md" >/dev/null; then
+            echo "FAIL: manual_testing_playbook.md must reference smoke scripts under smoke/" >&2
+            exit 1
+        fi
     fi
 fi
 

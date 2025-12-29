@@ -39,3 +39,6 @@ If the smoke script can’t run on the current machine, record the skip and rati
 4. Update `tasks.json` + `session_log.md` END entry with command results.
 5. Confirm `S1d-integ` prompt reflects any new suites.
 6. Commit doc/task/log updates (`git commit -am "docs: finish S1d-test"`), remove worktree, hand off on `feat/p0-platform-stability-follow-up`.
+
+
+Do not edit planning docs inside the worktree.

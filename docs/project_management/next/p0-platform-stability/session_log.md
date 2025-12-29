@@ -2,7 +2,7 @@
 
 Use the same START/END template as the json-mode & config-subcommand programs. Capture:
 - UTC timestamp, agent role, task ID, and START/END markers.
-- Commands/tests/scripts executed with pass/fail notes (fmt, clippy, cargo test, provisioning scripts, installers, etc.).
+- Commands/tests/scripts executed with pass/fail notes (fmt, clippy, cargo test, provisioning scripts, installers, and similar).
 - Worktree + commit hashes.
 - Kickoff prompts authored or updated.
 
@@ -19,7 +19,7 @@ Template:
 - Worktree commits: <hash(es)>
 - Commands: <cargo fmt / cargo clippy / cargo test ...>
 - Results: <pass/fail/skips>
-- Scripts executed: <world doctor / provisioners / etc.>
+- Scripts executed: <world doctor / provisioners / other>
 - Kickoff prompts created: <paths or n/a>
 - Docs commit: <hash>
 - Next steps / blockers: <handoff notes>
@@ -913,12 +913,12 @@ Template:
 - Reviewed p0 plan, tasks.json, session_log.md, LP1-spec.md, and LP1-integ prompt
 - Updated tasks.json (LP1-integ → in_progress); docs commit pending
 - Worktree: pending (`ps-lp1-provision-integ` → `wt/ps-lp1-provision-integ` after start commit)
-- Plan: merge LP1 code/test, validate script/docs per spec, run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, LP1-test harnesses, and `make preflight`
+- Plan: merge LP1 code/test, validate script/docs per spec, run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, LP1-test harnesses, and `make integ-checks`
 - Blockers: none (expect installer harness skips for privileged steps; will note if encountered)
 
 ## [2025-12-11 16:41 UTC] Integration Agent – LP1-integ – END
 - Worktree commits: f264659 (merge ps-lp1-provision-code), c8e4bdc (merge ps-lp1-provision-test), 61b946a (fix: support LP1 preflight harness)
-- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `cargo test -p substrate-shell socket_activation` (pass); `shellcheck tests/installers/world_provision_smoke.sh` (pass); `tests/installers/world_provision_smoke.sh` (pass – harness now stubs `systemctl`/`ls` to create/check /run/substrate.sock under fakeroot); `make preflight` (pass – added `preflight` target aliasing flightcheck so integ agents can run the required gate)
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `cargo test -p substrate-shell socket_activation` (pass); `shellcheck tests/installers/world_provision_smoke.sh` (pass); `tests/installers/world_provision_smoke.sh` (pass – harness now stubs `systemctl`/`ls` to create/check /run/substrate.sock under fakeroot); `make integ-checks` (pass – added `preflight` target aliasing flightcheck so integ agents can run the required gate)
 - Results: Linux provisioner now sets SocketGroup=substrate, ensures substrate group/membership, emits linger guidance, and matches LP1 harness expectations; documentation updates from LP1-code remain intact
 - Scripts executed: none outside the listed harness/tests
 - Kickoff prompts created: n/a

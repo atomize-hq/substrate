@@ -123,7 +123,7 @@ Required deliverables (must create or update):
 
 Required interoperability rules:
 - `tasks.json` must match the required fields and workflow described in `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`.
-- Every task must have a kickoff prompt file and must include the “Do not edit docs/tasks/session_log.md inside the worktree.” rule.
+- Every task must have a kickoff prompt file and must include the exact rule: `Do not edit planning docs inside the worktree.`
 - Integration tasks must include running the feature-local smoke script (if present) and recording results in `session_log.md`.
 
 Sequencing rules:

@@ -36,3 +36,6 @@ Note any manual verbose replay runs in the session log.
 4. Update `tasks.json` + `session_log.md` END entry summarizing results.
 5. Confirm R1b-integ prompt matches the suites upgraded.
 6. Commit doc/task/log updates (`git commit -am "docs: finish R1b-test"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

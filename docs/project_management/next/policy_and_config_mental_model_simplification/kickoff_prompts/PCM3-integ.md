@@ -5,6 +5,9 @@
 - Integration owns the final green state for PCM3.
 
 ## Start Checklist
+
+Do not edit planning docs inside the worktree.
+
 1. `git checkout feat/policy_and_config && git pull --ff-only`
 2. Read: `docs/project_management/next/policy_and_config_mental_model_simplification/plan.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/tasks.json`, `docs/project_management/next/policy_and_config_mental_model_simplification/session_log.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md`, and this prompt.
 3. Set `PCM3-integ` status to `in_progress` in `docs/project_management/next/policy_and_config_mental_model_simplification/tasks.json`; add a START entry to `docs/project_management/next/policy_and_config_mental_model_simplification/session_log.md`; commit docs (`docs: start PCM3-integ`).
@@ -21,7 +24,7 @@
 - `cargo fmt`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - Relevant `cargo test ...`
-- `make preflight`
+- `make integ-checks`
 
 ## End Checklist
 1. Run required commands; capture outputs for the END entry.

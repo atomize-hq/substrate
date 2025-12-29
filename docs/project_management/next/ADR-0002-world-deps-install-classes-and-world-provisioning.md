@@ -30,6 +30,25 @@ Related tracks:
 - Agent hub isolation hardening (I0–I5): `docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md`
 - World sync (C0–C9): `docs/project_management/next/world-sync/plan.md`
 
+## Executive Summary (Operator)
+
+ADR_BODY_SHA256: 05ff5a8dca5d85f9f583a0bba032853dbd0bd6f00a854635e6d6991d3e0dfdba
+
+ADR_BODY_SHA256: <run `python3 scripts/planning/check_adr_exec_summary.py --adr <this-file> --fix` after editing>
+
+- Existing: `substrate world deps *` behavior is not fully selection-driven; some operations risk feeling “implicit” or “surprising” across platforms.
+- New: `substrate world deps status|sync|install|provision` is selection-driven and no-ops (exit `0`, no world calls) when no selection file exists.
+- Why: Prevents accidental tooling mutation/noise and makes behavior consistent, auditable, and safe for an agent-hub threat model.
+- Links:
+  - `docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`
+
+- Existing: “Install” can be interpreted as “mutate the OS”, which is unsafe/irreproducible during runtime `sync/install`.
+- New: Install classes are explicit; OS packages route only through `substrate world deps provision` on supported guest platforms; runtime `sync/install` never mutate OS packages.
+- Why: Keeps runtime behavior reproducible and avoids hidden privileged mutations.
+- Links:
+  - `docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md`
+  - `docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
+
 ## 0) Executive summary
 
 `substrate world deps` must be selection-driven, cross-platform consistent, and safe under an agent-hub threat model.

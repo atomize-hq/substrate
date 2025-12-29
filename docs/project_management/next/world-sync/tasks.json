@@ -1,4 +1,7 @@
 {
+  "meta": {
+    "external_task_ids": ["WDL2-integ"]
+  },
   "tasks": [
     {
       "id": "C0-code",
@@ -76,7 +79,7 @@
       "type": "integration",
       "phase": "World Sync",
       "status": "pending",
-      "description": "Merge C0 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "description": "Merge C0 code+tests, ensure fmt/clippy/tests and make integ-checks pass.",
       "references": [
         "docs/project_management/next/world-sync/C0-spec.md",
         "docs/project_management/next/world-sync/manual_testing_playbook.md",
@@ -87,7 +90,7 @@
       ],
       "acceptance_criteria": [
         "C0 code and tests are merged and match C0-spec exactly",
-        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
@@ -97,7 +100,7 @@
         "Create worktree wt/ws-c0-init-integ; do not edit docs/tasks/session_log.md inside the worktree"
       ],
       "end_checklist": [
-        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
         "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
         "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
         "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
@@ -185,7 +188,7 @@
       "type": "integration",
       "phase": "World Sync",
       "status": "pending",
-      "description": "Merge C1 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "description": "Merge C1 code+tests, ensure fmt/clippy/tests and make integ-checks pass.",
       "references": [
         "docs/project_management/next/world-sync/C1-spec.md",
         "docs/project_management/next/world-sync/manual_testing_playbook.md",
@@ -196,7 +199,7 @@
       ],
       "acceptance_criteria": [
         "C1 code and tests are merged and match C1-spec exactly",
-        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
@@ -206,7 +209,7 @@
         "Create worktree wt/ws-c1-config-integ; do not edit docs/tasks/session_log.md inside the worktree"
       ],
       "end_checklist": [
-        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
         "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
         "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
         "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
@@ -294,7 +297,7 @@
       "type": "integration",
       "phase": "World Sync",
       "status": "pending",
-      "description": "Merge C2 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "description": "Merge C2 code+tests, ensure fmt/clippy/tests and make integ-checks pass.",
       "references": [
         "docs/project_management/next/world-sync/C2-spec.md",
         "docs/project_management/next/world-sync/manual_testing_playbook.md",
@@ -305,7 +308,7 @@
       ],
       "acceptance_criteria": [
         "C2 code and tests are merged and match C2-spec exactly",
-        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
@@ -315,7 +318,7 @@
         "Create worktree wt/ws-c2-sync-integ; do not edit docs/tasks/session_log.md inside the worktree"
       ],
       "end_checklist": [
-        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
         "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
         "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
         "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
@@ -402,7 +405,7 @@
       "type": "integration",
       "phase": "World Sync",
       "status": "pending",
-      "description": "Merge C3 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "description": "Merge C3 code+tests, ensure fmt/clippy/tests and make integ-checks pass.",
       "references": [
         "docs/project_management/next/world-sync/C3-spec.md",
         "docs/project_management/next/world-sync/manual_testing_playbook.md",
@@ -413,7 +416,7 @@
       ],
       "acceptance_criteria": [
         "C3 code and tests are merged and match C3-spec exactly",
-        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
@@ -423,7 +426,7 @@
         "Create worktree wt/ws-c3-autosync-integ; do not edit docs/tasks/session_log.md inside the worktree"
       ],
       "end_checklist": [
-        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
         "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
         "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
         "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
@@ -510,7 +513,7 @@
       "type": "integration",
       "phase": "World Sync",
       "status": "pending",
-      "description": "Merge C4 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "description": "Merge C4 code+tests, ensure fmt/clippy/tests and make integ-checks pass.",
       "references": [
         "docs/project_management/next/world-sync/C4-spec.md",
         "docs/project_management/next/world-sync/manual_testing_playbook.md",
@@ -521,7 +524,7 @@
       ],
       "acceptance_criteria": [
         "C4 code and tests are merged and match C4-spec exactly",
-        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
@@ -531,7 +534,7 @@
         "Create worktree wt/ws-c4-pty-integ; do not edit docs/tasks/session_log.md inside the worktree"
       ],
       "end_checklist": [
-        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
         "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
         "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
         "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
@@ -618,7 +621,7 @@
       "type": "integration",
       "phase": "World Sync",
       "status": "pending",
-      "description": "Merge C5 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "description": "Merge C5 code+tests, ensure fmt/clippy/tests and make integ-checks pass.",
       "references": [
         "docs/project_management/next/world-sync/C5-spec.md",
         "docs/project_management/next/world-sync/manual_testing_playbook.md",
@@ -629,7 +632,7 @@
       ],
       "acceptance_criteria": [
         "C5 code and tests are merged and match C5-spec exactly",
-        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
@@ -639,7 +642,7 @@
         "Create worktree wt/ws-c5-hostsync-integ; do not edit docs/tasks/session_log.md inside the worktree"
       ],
       "end_checklist": [
-        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
         "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
         "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
         "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
@@ -726,7 +729,7 @@
       "type": "integration",
       "phase": "World Sync",
       "status": "pending",
-      "description": "Merge C6 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "description": "Merge C6 code+tests, ensure fmt/clippy/tests and make integ-checks pass.",
       "references": [
         "docs/project_management/next/world-sync/C6-spec.md",
         "docs/project_management/next/world-sync/manual_testing_playbook.md",
@@ -737,7 +740,7 @@
       ],
       "acceptance_criteria": [
         "C6 code and tests are merged and match C6-spec exactly",
-        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
@@ -747,7 +750,7 @@
         "Create worktree wt/ws-c6-git-integ; do not edit docs/tasks/session_log.md inside the worktree"
       ],
       "end_checklist": [
-        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
         "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
         "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
         "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
@@ -834,7 +837,7 @@
       "type": "integration",
       "phase": "World Sync",
       "status": "pending",
-      "description": "Merge C7 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "description": "Merge C7 code+tests, ensure fmt/clippy/tests and make integ-checks pass.",
       "references": [
         "docs/project_management/next/world-sync/C7-spec.md",
         "docs/project_management/next/world-sync/manual_testing_playbook.md",
@@ -845,7 +848,7 @@
       ],
       "acceptance_criteria": [
         "C7 code and tests are merged and match C7-spec exactly",
-        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
@@ -855,7 +858,7 @@
         "Create worktree wt/ws-c7-rollback-integ; do not edit docs/tasks/session_log.md inside the worktree"
       ],
       "end_checklist": [
-        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
         "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
         "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
         "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
@@ -941,7 +944,7 @@
       "type": "integration",
       "phase": "World Sync",
       "status": "pending",
-      "description": "Merge C8 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "description": "Merge C8 code+tests, ensure fmt/clippy/tests and make integ-checks pass.",
       "references": [
         "docs/project_management/next/world-sync/C8-spec.md",
         "docs/project_management/next/world-sync/manual_testing_playbook.md",
@@ -952,7 +955,7 @@
       ],
       "acceptance_criteria": [
         "C8 code and tests are merged and match C8-spec exactly",
-        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
@@ -962,7 +965,7 @@
         "Create worktree wt/ws-c8-worldgit-integ; do not edit docs/tasks/session_log.md inside the worktree"
       ],
       "end_checklist": [
-        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
         "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
         "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
         "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",
@@ -1048,7 +1051,7 @@
       "type": "integration",
       "phase": "World Sync",
       "status": "pending",
-      "description": "Merge C9 code+tests, ensure fmt/clippy/tests and make preflight pass.",
+      "description": "Merge C9 code+tests, ensure fmt/clippy/tests and make integ-checks pass.",
       "references": [
         "docs/project_management/next/world-sync/C9-spec.md",
         "docs/project_management/next/world-sync/manual_testing_playbook.md",
@@ -1059,7 +1062,7 @@
       ],
       "acceptance_criteria": [
         "C9 code and tests are merged and match C9-spec exactly",
-        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
@@ -1069,7 +1072,7 @@
         "Create worktree wt/ws-c9-initux-integ; do not edit docs/tasks/session_log.md inside the worktree"
       ],
       "end_checklist": [
-        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
         "Run: bash docs/project_management/next/world-sync/smoke/linux-smoke.sh",
         "Run: bash docs/project_management/next/world-sync/smoke/macos-smoke.sh",
         "Run: pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1",

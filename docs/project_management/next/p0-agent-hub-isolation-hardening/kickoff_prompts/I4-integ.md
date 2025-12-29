@@ -21,7 +21,7 @@
 cargo fmt
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test -p world --tests -- --nocapture
-make preflight
+make integ-checks
 ```
 
 ## Smoke Scripts (required)
@@ -35,3 +35,6 @@ make preflight
 3. Run the feature-local smoke script for your platform; capture output for the END entry.
 4. Update `tasks.json` + `session_log.md` (END entry) and commit docs (`docs: finish I4-integ`).
 5. Remove worktree.
+
+
+Do not edit planning docs inside the worktree.

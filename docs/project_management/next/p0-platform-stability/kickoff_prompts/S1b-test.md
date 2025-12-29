@@ -20,7 +20,7 @@
 ## Scope & Guardrails
 - Tests/fixtures/scripts only; do not modify production logic beyond helper hooks needed for dependency injection.
 - Keep simulations hermetic by creating Unix sockets in temp dirs; avoid relying on systemd or sudo.
-- Document any commands requiring privileges (world doctor, etc.) and justify skips.
+- Document any commands requiring privileges (e.g., world doctor) and justify skips.
 
 ## Required Commands
 ```
@@ -37,3 +37,6 @@ Add manual doctor/shim-status invocations (real or simulated) to the session log
 4. Update `tasks.json` + `session_log.md` END entry detailing command outcomes.
 5. Confirm S1b-integ prompt reflects any new suites.
 6. Commit doc/task/log updates (`git commit -am "docs: finish S1b-test"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

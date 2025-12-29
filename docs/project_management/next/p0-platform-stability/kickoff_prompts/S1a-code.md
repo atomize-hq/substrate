@@ -37,3 +37,6 @@ Record outputs or skips in the session log.
 4. Update `tasks.json` + `session_log.md` with END entry and mention command results.
 5. Confirm S1a-integ prompt linkage (no edit expected unless requirements changed).
 6. Commit doc/task/log updates (`git commit -am "docs: finish S1a-code"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

@@ -28,7 +28,7 @@ cargo fmt
 cargo clippy -p substrate-shell -- -D warnings
 cargo test -p substrate-shell world_enable
 ```
-Capture any manual doctor/shim-status runs in the log (ok to note TODO if privileges missing).
+Capture any manual doctor/shim-status runs in the log (if privileges are missing, record `SKIP` with the reason).
 
 ## End Checklist
 1. Ensure fmt/clippy/tests/manual checks completed; document skips.
@@ -37,3 +37,6 @@ Capture any manual doctor/shim-status runs in the log (ok to note TODO if privil
 4. Update `tasks.json` + `session_log.md` END entry summarizing command results and manual checks.
 5. Confirm S1b-integ prompt is current (edit if new requirements emerged).
 6. Commit doc/task/log updates (`git commit -am "docs: finish S1b-code"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

@@ -40,3 +40,6 @@ Include additional doctor/health invocations if run.
 4. Update `tasks.json` + `session_log.md` END entry summarizing commands/skips.
 5. Ensure S1c-integ prompt aligns with the suites you touched.
 6. Commit doc/task/log updates (`git commit -am "docs: finish S1c-test"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

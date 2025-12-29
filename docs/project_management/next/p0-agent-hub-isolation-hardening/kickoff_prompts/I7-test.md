@@ -33,3 +33,6 @@ cargo test -p substrate-shell --tests -- --nocapture
 3. Merge back to `feat/p0-agent-hub-isolation-hardening` (ff-only).
 4. Update `tasks.json` + `session_log.md` (END entry) and commit docs (`docs: finish I7-test`).
 5. Remove worktree.
+
+
+Do not edit planning docs inside the worktree.

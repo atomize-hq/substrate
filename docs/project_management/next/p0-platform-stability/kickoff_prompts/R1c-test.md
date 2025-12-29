@@ -36,3 +36,6 @@ Include any manual `substrate --replay` runs (world-on/off) in the log.
 4. Update `tasks.json` + `session_log.md` END entry summarizing commands/results.
 5. Confirm R1c-integ prompt remains accurate.
 6. Commit doc/task/log updates (`git commit -am "docs: finish R1c-test"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

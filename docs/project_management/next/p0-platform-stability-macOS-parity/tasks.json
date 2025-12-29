@@ -1,4 +1,5 @@
-[
+{
+  "tasks": [
   {
     "id": "M1-code",
     "name": "Lima socket parity (code)",
@@ -97,7 +98,7 @@
     ],
     "acceptance_criteria": [
       "Code + tests merged and aligned to M1-spec.",
-      "cargo fmt + clippy + relevant tests + make preflight executed and logged.",
+      "cargo fmt + clippy + relevant tests + make integ-checks executed and logged.",
       "Integration branch merged fast-forward into orchestration; tasks/logs updated."
     ],
     "start_checklist": [
@@ -110,7 +111,7 @@
     ],
     "end_checklist": [
       "Merge upstream code/test branches for M1 into mp-m1-sockets-integ inside wt/mp-m1-sockets-integ and reconcile behavior to the spec.",
-      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make integ-checks.",
       "Commit integration changes on branch mp-m1-sockets-integ.",
       "Fast-forward merge mp-m1-sockets-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M1-integ'.",
       "Remove worktree wt/mp-m1-sockets-integ."
@@ -218,14 +219,14 @@
     "type": "integration",
     "phase": "M2",
     "status": "completed",
-    "description": "Merge M2 code/test, align mac installer/uninstaller parity with spec, and gate with fmt/clippy/tests/make preflight.",
+    "description": "Merge M2 code/test, align mac installer/uninstaller parity with spec, and gate with fmt/clippy/tests/make integ-checks.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
       "docs/project_management/next/p0-platform-stability-macOS-parity/M2-spec.md"
     ],
     "acceptance_criteria": [
       "Installer parity changes merged and match M2-spec (dev/prod mac).",
-      "cargo fmt + clippy + relevant tests + make preflight executed and logged.",
+      "cargo fmt + clippy + relevant tests + make integ-checks executed and logged.",
       "Integration merged fast-forward; tasks/logs updated."
     ],
     "start_checklist": [
@@ -238,7 +239,7 @@
     ],
     "end_checklist": [
       "Merge upstream code/test branches for M2 into mp-m2-installer-integ inside wt/mp-m2-installer-integ and reconcile behavior to the spec.",
-      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make integ-checks.",
       "Commit integration changes on branch mp-m2-installer-integ.",
       "Fast-forward merge mp-m2-installer-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M2-integ'.",
       "Remove worktree wt/mp-m2-installer-integ."
@@ -346,14 +347,14 @@
     "type": "integration",
     "phase": "M3",
     "status": "completed",
-    "description": "Merge M3 code/test, reconcile mac backend/doctor parity with the spec, and gate with fmt/clippy/tests/make preflight.",
+    "description": "Merge M3 code/test, reconcile mac backend/doctor parity with the spec, and gate with fmt/clippy/tests/make integ-checks.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
       "docs/project_management/next/p0-platform-stability-macOS-parity/M3-spec.md"
     ],
     "acceptance_criteria": [
       "Backend/doctor parity changes merged and match M3-spec.",
-      "cargo fmt + clippy + relevant tests (including shim-status/health parity coverage) + make preflight executed and logged.",
+      "cargo fmt + clippy + relevant tests (including shim-status/health parity coverage) + make integ-checks executed and logged.",
       "Integration merged fast-forward; tasks/logs updated."
     ],
     "start_checklist": [
@@ -366,7 +367,7 @@
     ],
     "end_checklist": [
       "Merge upstream code/test branches for M3 into mp-m3-backend-integ inside wt/mp-m3-backend-integ and reconcile behavior to the spec.",
-      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make integ-checks.",
       "Commit integration changes on branch mp-m3-backend-integ.",
       "Fast-forward merge mp-m3-backend-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M3-integ'.",
       "Remove worktree wt/mp-m3-backend-integ."
@@ -472,14 +473,14 @@
     "type": "integration",
     "phase": "M4",
     "status": "completed",
-    "description": "Merge M4 code/test, reconcile manifest resolution behavior to M4-spec, and gate with fmt/clippy/tests/make preflight.",
+    "description": "Merge M4 code/test, reconcile manifest resolution behavior to M4-spec, and gate with fmt/clippy/tests/make integ-checks.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
       "docs/project_management/next/p0-platform-stability-macOS-parity/M4-spec.md"
     ],
     "acceptance_criteria": [
       "Manifest resolution behavior matches M4-spec across installed and workspace layouts.",
-      "cargo fmt + clippy + relevant tests + make preflight executed and logged.",
+      "cargo fmt + clippy + relevant tests + make integ-checks executed and logged.",
       "Integration merged fast-forward; tasks/logs updated."
     ],
     "start_checklist": [
@@ -492,7 +493,7 @@
     ],
     "end_checklist": [
       "Merge upstream code/test branches for M4 into mp-m4-world-deps-manifest-integ inside wt/mp-m4-world-deps-manifest-integ and reconcile behavior to the spec.",
-      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make integ-checks.",
       "Commit integration changes on branch mp-m4-world-deps-manifest-integ.",
       "Fast-forward merge mp-m4-world-deps-manifest-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M4-integ'.",
       "Remove worktree wt/mp-m4-world-deps-manifest-integ."
@@ -596,14 +597,14 @@
     "type": "integration",
     "phase": "M5a",
     "status": "completed",
-    "description": "Merge M5a code/test, reconcile inventory + layering behavior to M5a-spec, and gate with fmt/clippy/tests/make preflight.",
+    "description": "Merge M5a code/test, reconcile inventory + layering behavior to M5a-spec, and gate with fmt/clippy/tests/make integ-checks.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
       "docs/project_management/next/p0-platform-stability-macOS-parity/M5a-spec.md"
     ],
     "acceptance_criteria": [
       "Inventory and layering behavior matches M5a-spec.",
-      "cargo fmt + clippy + relevant tests + make preflight executed and logged.",
+      "cargo fmt + clippy + relevant tests + make integ-checks executed and logged.",
       "Integration merged fast-forward; tasks/logs updated."
     ],
     "start_checklist": [
@@ -616,7 +617,7 @@
     ],
     "end_checklist": [
       "Merge upstream code/test branches for M5a into mp-m5a-world-deps-inventory-integ inside wt/mp-m5a-world-deps-inventory-integ and reconcile behavior to the spec.",
-      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make integ-checks.",
       "Commit integration changes on branch mp-m5a-world-deps-inventory-integ.",
       "Fast-forward merge mp-m5a-world-deps-inventory-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M5a-integ'.",
       "Remove worktree wt/mp-m5a-world-deps-inventory-integ."
@@ -718,14 +719,14 @@
     "type": "integration",
     "phase": "M5b",
     "status": "completed",
-    "description": "Merge M5b code/test, reconcile host detection semantics to M5b-spec, and gate with fmt/clippy/tests/make preflight.",
+    "description": "Merge M5b code/test, reconcile host detection semantics to M5b-spec, and gate with fmt/clippy/tests/make integ-checks.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
       "docs/project_management/next/p0-platform-stability-macOS-parity/M5b-spec.md"
     ],
     "acceptance_criteria": [
       "Host detection behavior matches M5b-spec.",
-      "cargo fmt + clippy + relevant tests + make preflight executed and logged.",
+      "cargo fmt + clippy + relevant tests + make integ-checks executed and logged.",
       "Integration merged fast-forward; tasks/logs updated."
     ],
     "start_checklist": [
@@ -738,7 +739,7 @@
     ],
     "end_checklist": [
       "Merge upstream code/test branches for M5b into mp-m5b-world-deps-host-detect-integ inside wt/mp-m5b-world-deps-host-detect-integ and reconcile behavior to the spec.",
-      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make integ-checks.",
       "Commit integration changes on branch mp-m5b-world-deps-host-detect-integ.",
       "Fast-forward merge mp-m5b-world-deps-host-detect-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M5b-integ'.",
       "Remove worktree wt/mp-m5b-world-deps-host-detect-integ."
@@ -843,14 +844,14 @@
     "type": "integration",
     "phase": "M5c",
     "status": "completed",
-    "description": "Merge M5c code/test, reconcile first-run wiring and recommendations to M5c-spec, and gate with fmt/clippy/tests/make preflight.",
+    "description": "Merge M5c code/test, reconcile first-run wiring and recommendations to M5c-spec, and gate with fmt/clippy/tests/make integ-checks.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
       "docs/project_management/next/p0-platform-stability-macOS-parity/M5c-spec.md"
     ],
     "acceptance_criteria": [
       "First-run wiring and recommendations match M5c-spec.",
-      "cargo fmt + clippy + relevant tests + make preflight executed and logged.",
+      "cargo fmt + clippy + relevant tests + make integ-checks executed and logged.",
       "Integration merged fast-forward; tasks/logs updated."
     ],
     "start_checklist": [
@@ -863,7 +864,7 @@
     ],
     "end_checklist": [
       "Merge upstream code/test branches for M5c into mp-m5c-world-deps-first-run-integ inside wt/mp-m5c-world-deps-first-run-integ and reconcile behavior to the spec.",
-      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make integ-checks.",
       "Commit integration changes on branch mp-m5c-world-deps-first-run-integ.",
       "Fast-forward merge mp-m5c-world-deps-first-run-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M5c-integ'.",
       "Remove worktree wt/mp-m5c-world-deps-first-run-integ."
@@ -967,14 +968,14 @@
     "type": "integration",
     "phase": "M6",
     "status": "completed",
-    "description": "Merge M6 code/test, reconcile macOS world deps failure safety to M6-spec, and gate with fmt/clippy/tests/make preflight.",
+    "description": "Merge M6 code/test, reconcile macOS world deps failure safety to M6-spec, and gate with fmt/clippy/tests/make integ-checks.",
     "references": [
       "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
       "docs/project_management/next/p0-platform-stability-macOS-parity/M6-spec.md"
     ],
     "acceptance_criteria": [
       "macOS world deps failure safety matches M6-spec.",
-      "cargo fmt + clippy + relevant tests + make preflight executed and logged.",
+      "cargo fmt + clippy + relevant tests + make integ-checks executed and logged.",
       "Integration merged fast-forward; tasks/logs updated."
     ],
     "start_checklist": [
@@ -987,7 +988,7 @@
     ],
     "end_checklist": [
       "Merge upstream code/test branches for M6 into mp-m6-world-deps-safety-integ inside wt/mp-m6-world-deps-safety-integ and reconcile behavior to the spec.",
-      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make integ-checks.",
       "Commit integration changes on branch mp-m6-world-deps-safety-integ.",
       "Fast-forward merge mp-m6-world-deps-safety-integ into feat/p0-platform-stability-macOS-parity; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish M6-integ'.",
       "Remove worktree wt/mp-m6-world-deps-safety-integ."
@@ -1001,4 +1002,5 @@
     ],
     "concurrent_with": []
   }
-]
+  ]
+}

@@ -30,3 +30,6 @@ shellcheck scripts/substrate/dev-install-substrate.sh scripts/substrate/dev-unin
 3. Update `tasks.json` (`S1d-*` statuses) and append an END session log entry summarizing smoke results plus lingering/group notes.
 4. Document hand-off/next steps (e.g., Windows WhatIf task) in the session log.
 5. Commit doc/task/log updates (`git commit -am "docs: finish S1d-integ"`), remove the worktree, and notify stakeholders that dev installer parity is in place on `feat/p0-platform-stability-follow-up`.
+
+
+Do not edit planning docs inside the worktree.

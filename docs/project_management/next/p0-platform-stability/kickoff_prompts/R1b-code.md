@@ -36,3 +36,6 @@ Capture at least one manual `substrate --replay --replay-verbose ...` run or not
 4. Update `tasks.json` + `session_log.md` END entry summarizing command results and manual smoke.
 5. Confirm R1b-integ prompt remains accurate.
 6. Commit doc/task/log updates (`git commit -am "docs: finish R1b-code"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

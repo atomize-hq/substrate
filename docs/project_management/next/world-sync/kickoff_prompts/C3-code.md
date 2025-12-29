@@ -4,6 +4,9 @@
 - Add auto-sync hook for non-PTY sessions per `C3-spec`. Production code only; no tests.
 
 ## Start Checklist
+
+Do not edit planning docs inside the worktree.
+
 1. `git checkout feat/world-sync && git pull --ff-only`
 2. Read: plan.md, tasks.json, session_log.md, C3-spec.md, this prompt.
 3. Set C3-code status to `in_progress` in tasks.json; add START entry to session_log.md; commit docs (`docs: start C3-code`).

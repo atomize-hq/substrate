@@ -2,6 +2,7 @@
 
 This diagram shows the intended handoff flow:
 - ADR creation (after brainstorming converges)
+- Operator review via `## Executive Summary (Operator)` + drift guard
 - Planning Pack creation (execution-ready specs/tasks/prompts)
 - Third-party Planning Quality Gate (accept/flag)
 - Execution triads (code/test/integ)

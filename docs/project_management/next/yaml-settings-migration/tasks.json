@@ -106,7 +106,7 @@
       ],
       "acceptance_criteria": [
         "Behavior matches Y0-spec.",
-        "cargo fmt/clippy green; relevant tests green; make preflight green.",
+        "cargo fmt/clippy green; relevant tests green; make integ-checks green.",
         "Feature-local smoke script runs and results are recorded in session_log.md."
       ],
       "start_checklist": [
@@ -120,7 +120,7 @@
         "Run cargo fmt",
         "Run cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant cargo test suites",
-        "Run make preflight",
+        "Run make integ-checks",
         "Run the feature-local smoke script for your platform (linux-smoke.sh, macos-smoke.sh, or windows-smoke.ps1) and capture output",
         "Commit integration changes and merge back to feat/yaml-settings-migration",
         "Update tasks.json + session_log.md with END entry, commit docs"

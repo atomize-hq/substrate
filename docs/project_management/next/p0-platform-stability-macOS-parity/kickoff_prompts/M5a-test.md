@@ -33,3 +33,6 @@ Add tests/fixtures validating inventory alignment and manifest layering per M5a-
 3. Switch back to orchestration branch; mark task completed; add END entry; commit docs (`docs: finish M5a-test`).
 4. Remove worktree `wt/mp-m5a-world-deps-inventory-test`.
 
+
+
+Do not edit planning docs inside the worktree.

@@ -1,6 +1,6 @@
 {
     "purpose": "Ad-hoc tracker for planning-system improvements.",
-    "last_updated_utc": "2025-12-29T00:00:00Z",
+    "last_updated_utc": "2025-12-29T03:34:53Z",
     "items": [
         {
             "id": "HF-001",
@@ -29,6 +29,13 @@
             "title": "Add fast integration check target",
             "status": "completed",
             "result": "Added `make integ-checks` (no `cargo clean`, clippy uses `-D warnings`) and updated triad standards to use it."
+        },
+        {
+            "id": "HF-005",
+            "area": "Standards / tooling mismatch",
+            "title": "Make lint checklist reflect lint runners",
+            "status": "completed",
+            "result": "`docs/project_management/standards/PLANNING_LINT_CHECKLIST.md` now instructs running `scripts/planning/lint.sh` / `scripts/planning/lint.ps1` (single source of truth)."
         },
         {
             "id": "P0-001",
@@ -79,7 +86,35 @@
                 "scripts/ci/dispatch_feature_smoke.sh"
             ],
             "notes": "WSL smoke is supported via a self-hosted runner stub; hosted-runner WSL is not assumed."
+        },
+        {
+            "id": "P2-003",
+            "area": "Drift prevention",
+            "title": "Embed ADR executive summary + drift guard",
+            "status": "completed",
+            "files": [
+                "docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md",
+                "docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md",
+                "scripts/planning/check_adr_exec_summary.py",
+                "docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md",
+                "docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md",
+                "docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification_OG.md",
+                "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",
+                "docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md"
+            ],
+            "notes": "Exec summaries include Existing→New→Why + Links, and `ADR_BODY_SHA256` enforces summary/body sync."
+        },
+        {
+            "id": "P2-004",
+            "area": "Sequencing / dependencies",
+            "title": "Fix missing sprints and cross-feature deps",
+            "status": "completed",
+            "files": [
+                "docs/project_management/next/sequencing.json",
+                "docs/project_management/next/world_deps_selection_layer/tasks.json",
+                "docs/project_management/next/world-sync/tasks.json"
+            ],
+            "notes": "Added missing sprint entries (incl. `p0_platform_stability`, `p0_platform_stability_macos_parity`, `world_deps_selection_layer`) and declared cross-feature task deps via `meta.external_task_ids`."
         }
     ]
 }
-

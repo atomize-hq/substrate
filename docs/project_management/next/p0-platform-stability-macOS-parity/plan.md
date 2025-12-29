@@ -7,7 +7,7 @@ Bridge every behavior shipped in `p0-platform-stability` to macOS. This includes
 - Triads only: code / test / integration. No mixed roles.
 - Code: production code/scripts only; no tests. Required commands: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`. Optional targeted sanity checks allowed.
 - Test: tests/fixtures/harnesses only; no production logic. Required commands: `cargo fmt`; targeted `cargo test ...` for suites added/touched.
-- Integration: merges code+tests, reconciles to spec, and must run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, **and `make preflight`** (required).
+- Integration: merges code+tests, reconciles to spec, and must run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, **and `make integ-checks`** (required).
 - Docs/tasks/session_log edits happen only on the orchestration branch (`feat/p0-platform-stability-macOS-parity`), never from worktrees.
 - Respect protected paths (no touching `.git`, sockets, device nodes, host-sensitive roots) when adding provisioning or cleanup logic.
 - Treat the existing Lima environment as replaceable: we re-provision/upgrade mac hosts to the new socket layout and do not maintain backwards compatibility or perform in-place user carry-over.
@@ -44,7 +44,7 @@ Bridge every behavior shipped in `p0-platform-stability` to macOS. This includes
 
 ## End Checklist (integration)
 1. Merge code/test branches into the integration worktree; reconcile behavior to the spec.
-2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make preflight` (required). Capture outputs.
+2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make integ-checks` (required). Capture outputs.
 3. Commit integration changes to the integration branch.
 4. Fast-forward merge the integration branch into `feat/p0-platform-stability-macOS-parity`; update tasks.json and session_log.md with the END entry (commands/results/blockers); commit docs (`docs: finish <task-id>`).
 5. Remove the worktree.

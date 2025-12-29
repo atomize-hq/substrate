@@ -1,9 +1,12 @@
 # Kickoff Prompt – M3-integ (Backend & doctor parity)
 
 ## Scope
-- Merge `M3-code` + `M3-test`, reconcile to M3-spec, and gate with fmt/clippy/tests + `make preflight`. Integration owns final mac backend/doctor parity.
+- Merge `M3-code` + `M3-test`, reconcile to M3-spec, and gate with fmt/clippy/tests + `make integ-checks`. Integration owns final mac backend/doctor parity.
 
 ## Start Checklist
+
+Do not edit planning docs inside the worktree.
+
 1. `git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only`
 2. Read: plan.md, tasks.json, session_log.md, M3-spec.md, this prompt.
 3. Set `M3-integ` status to `in_progress` in tasks.json (orchestration branch only).
@@ -17,12 +20,12 @@
   - `cargo fmt`  
   - `cargo clippy --workspace --all-targets -- -D warnings`  
   - Relevant tests (at minimum those added in M3-test; note mac-only skips)  
-  - `make preflight`
+  - `make integ-checks`
 - Confirm non-mac platforms remain green.
 
 ## End Checklist
 1. Merge the upstream code/test branches for M3 into `mp-m3-backend-integ` inside `wt/mp-m3-backend-integ` and reconcile behavior to the spec.
-2. Run the required commands (cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight) and capture outputs.
+2. Run the required commands (cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make integ-checks) and capture outputs.
 3. Commit integration changes on branch `mp-m3-backend-integ`.
 4. Fast-forward merge `mp-m3-backend-integ` into `feat/p0-platform-stability-macOS-parity`; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs (`docs: finish M3-integ`).
 5. Remove worktree `wt/mp-m3-backend-integ`.

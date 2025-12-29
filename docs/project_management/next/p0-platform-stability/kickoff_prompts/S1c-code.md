@@ -21,7 +21,7 @@
 - Production scripts + documentation only; test harness updates belong to S1c-test.
 - Keep platform-specific instructions accurate—note when commands require sudo/PowerShell elevation.
 - Provide sample systemd unit content or link to the existing templates; avoid hard-coding host paths where not portable.
-- Cross-check references against the S1b shell changes (`ensure_world_agent_ready`, doctor/shim outputs) instead of re-implementing readiness logic; docs should call out `SUBSTRATE_WORLD_SOCKET`/`socket_activation` terminology verbatim so later tests can assert them.
+- Cross-check references against the S1b shell changes (`ensure_world_agent_ready`, doctor/shim outputs) instead of re-implementing readiness logic; docs must call out `SUBSTRATE_WORLD_SOCKET`/`socket_activation` terminology verbatim so later tests can assert them.
 
 ## Required Commands
 ```
@@ -39,3 +39,6 @@ Capture outputs/skips in the session log.
 4. Update `tasks.json` + `session_log.md` END entry summarizing command results.
 5. Confirm S1c-integ prompt is accurate; edit if new requirements introduced.
 6. Commit doc/task/log updates (`git commit -am "docs: finish S1c-code"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

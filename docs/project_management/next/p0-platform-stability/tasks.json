@@ -314,7 +314,7 @@
         "Provisioning harness exercises `.socket` deployment paths (dry-run allowed) and asserts expected files/units.",
         "Integration tests ensure `substrate world doctor --json` reflects installer output after provisioning/uninstall flows.",
         "Docs/tests capture platform-specific skip notes if automation unavailable.",
-        "`cargo fmt`; targeted installer tests (`./tests/installers/install_smoke.sh` etc.) executed/logged."
+        "`cargo fmt`; targeted installer tests (e.g., `./tests/installers/install_smoke.sh`) executed/logged."
       ],
       "start_checklist": [
         "Checkout feat/p0-platform-stability, pull latest",
@@ -2003,135 +2003,6 @@
       "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2e-integ.md"
     },
     {
-      "id": "R2e-code",
-      "name": "Policy-driven world fs mode (code)",
-      "type": "code",
-      "phase": "R2e \u2013 Policy-driven World FS Mode",
-      "status": "completed",
-      "description": "Add a broker policy toggle for read-only vs writable worlds, thread it through shell requests, and teach world-agent/backends to honor it so per-project/global policy controls world mutability.",
-      "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
-        "docs/CONFIGURATION.md",
-        "crates/broker",
-        "crates/shell",
-        "crates/world-agent",
-        "crates/world"
-      ],
-      "acceptance_criteria": [
-        "Policy schema exposes world fs mode (read_only/writable) with default writable; validation errors surface clearly.",
-        "Shell uses the resolved policy for PTY + non-PTY world requests and records the active mode in traces/doctor output.",
-        "World-agent/backends honor the mode (read-only disables copy-diff/upper writes; writable keeps current behavior).",
-        "Docs describe the new knob (CONFIGURATION/WORLD) and doctor output highlights the active mode with remediation tips.",
-        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; targeted suites (`cargo test -p substrate-shell world_enable`, `cargo test -p world-agent` or justified skips) executed/logged."
-      ],
-      "start_checklist": [
-        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
-        "Read plan, tasks.json, session_log.md, and this prompt",
-        "Set R2e-code to in_progress, append START entry, commit doc update",
-        "Create branch/worktree: `git checkout -b ps-r2e-world-fs-code`, `git worktree add wt/ps-r2e-world-fs-code ps-r2e-world-fs-code`, `cd wt/ps-r2e-world-fs-code`"
-      ],
-      "end_checklist": [
-        "Ensure fmt/clippy/tests completed (note skips)",
-        "Commit code/doc changes",
-        "Merge ps-r2e-world-fs-code into feat/p0-platform-stability-follow-up",
-        "Update tasks.json + session_log.md with END entry (include commands run)",
-        "Confirm R2e-integ prompt contents",
-        "Commit doc/task/log updates (`git commit -am \"docs: finish R2e-code\"`), remove worktree, hand off"
-      ],
-      "depends_on": [
-        "R2d-integ"
-      ],
-      "concurrent_with": [
-        "R2e-test"
-      ],
-      "worktree": "wt/ps-r2e-world-fs-code",
-      "integration_task": "R2e-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2e-code.md"
-    },
-    {
-      "id": "R2e-test",
-      "name": "Policy-driven world fs mode (test)",
-      "type": "test",
-      "phase": "R2e \u2013 Policy-driven World FS Mode",
-      "status": "queued",
-      "description": "Add tests/fixtures that assert policy-controlled read-only vs writable world behavior (PTY + non-PTY) with trace/doctor coverage.",
-      "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
-        "docs/CONFIGURATION.md",
-        "crates/shell/tests",
-        "crates/world/tests"
-      ],
-      "acceptance_criteria": [
-        "Fixtures cover read-only policy (writes fail cleanly, telemetry/doctor show ro) and writable policy (writes succeed via overlay/copy-diff).",
-        "Coverage includes PTY/REPL path where feasible and documents skips on hosts lacking overlay/cgroup permissions.",
-        "`cargo fmt`; targeted suites (`cargo test -p substrate-shell world_enable`, `cargo test -p world-agent` or justified skips) executed/logged."
-      ],
-      "start_checklist": [
-        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
-        "Review plan, tasks.json, session_log.md, and R2e-code scope",
-        "Set R2e-test to in_progress, append START entry, commit doc update",
-        "Create branch/worktree: `git checkout -b ps-r2e-world-fs-test`, `git worktree add wt/ps-r2e-world-fs-test ps-r2e-world-fs-test`, `cd wt/ps-r2e-world-fs-test`"
-      ],
-      "end_checklist": [
-        "Ensure fmt/tests completed; document skips with justification",
-        "Commit test/fixture updates",
-        "Merge ps-r2e-world-fs-test into feat/p0-platform-stability-follow-up",
-        "Update tasks.json + session_log.md with END entry (include commands run)",
-        "Confirm R2e-integ prompt contents",
-        "Commit doc/task/log updates (`git commit -am \"docs: finish R2e-test\"`), remove worktree, hand off"
-      ],
-      "depends_on": [
-        "R2d-integ"
-      ],
-      "concurrent_with": [
-        "R2e-code"
-      ],
-      "worktree": "wt/ps-r2e-world-fs-test",
-      "integration_task": "R2e-integ",
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2e-test.md"
-    },
-    {
-      "id": "R2e-integ",
-      "name": "Policy-driven world fs mode (integration)",
-      "type": "integration",
-      "phase": "R2e \u2013 Policy-driven World FS Mode",
-      "status": "queued",
-      "description": "Merge the policy-driven world fs mode code/test branches, run fmt/lint/tests, and document RO vs writable policy behavior before moving on.",
-      "references": [
-        "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
-        "docs/CONFIGURATION.md",
-        "crates/broker",
-        "crates/shell",
-        "crates/world-agent"
-      ],
-      "acceptance_criteria": [
-        "wt/ps-r2e-world-fs-integ merges ps-r2e-world-fs-code/test cleanly and fast-forwards feat/p0-platform-stability-follow-up.",
-        "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; targeted suites (`cargo test -p substrate-shell world_enable`, `cargo test -p world-agent` or justified skips) executed/logged.",
-        "tasks.json + session_log.md updated with END entry; docs note the policy knob/systemd expectations."
-      ],
-      "start_checklist": [
-        "Checkout feat/p0-platform-stability-follow-up && git pull --ff-only",
-        "Confirm R2e-code/test completed",
-        "Set R2e-integ to in_progress, append START entry, commit doc update",
-        "Create branch/worktree: `git checkout -b ps-r2e-world-fs-integ`, `git worktree add wt/ps-r2e-world-fs-integ ps-r2e-world-fs-integ`, `cd wt/ps-r2e-world-fs-integ`"
-      ],
-      "end_checklist": [
-        "Merge code/test branches, resolve conflicts",
-        "Run required fmt/lint/tests; capture output",
-        "Fast-forward merge into feat/p0-platform-stability-follow-up",
-        "Update tasks.json + session_log.md with END entry (include commands run)",
-        "Commit doc/task/log updates (`git commit -am \"docs: finish R2e-integ\"`), remove worktree, hand off"
-      ],
-      "depends_on": [
-        "R2e-code",
-        "R2e-test"
-      ],
-      "concurrent_with": [],
-      "worktree": "wt/ps-r2e-world-fs-integ",
-      "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/p0-platform-stability/kickoff_prompts/R2e-integ.md"
-    },
-    {
       "id": "R2f-code",
       "name": "Host replay span parity (code)",
       "type": "code",
@@ -2354,7 +2225,7 @@
     "type": "integration",
     "phase": "LP1 \u2013 Linux Provision Parity",
     "status": "completed",
-    "description": "Merge LP1 code/test branches, reconcile to spec, and gate with fmt/clippy/tests + make preflight so standalone provisioning matches installer behavior.",
+    "description": "Merge LP1 code/test branches, reconcile to spec, and gate with fmt/clippy/tests + make integ-checks so standalone provisioning matches installer behavior.",
     "references": [
       "docs/project_management/next/p0-platform-stability/p0_platform_stability_plan.md",
       "docs/project_management/next/p0-platform-stability/LP1-spec.md",
@@ -2363,7 +2234,7 @@
     ],
     "acceptance_criteria": [
       "wt/ps-lp1-provision-integ merges ps-lp1-provision-code/test and fast-forwards feat/p0-platform-stability.",
-      "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; relevant tests/harnesses (including provisioner coverage) executed/logged; `make preflight` run.",
+      "`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; relevant tests/harnesses (including provisioner coverage) executed/logged; `make integ-checks` run.",
       "tasks.json + session_log.md updated with END entry; docs reflect corrected provisioner behavior."
     ],
     "start_checklist": [
@@ -2376,7 +2247,7 @@
     ],
     "end_checklist": [
       "Merge the upstream LP1 code/test branches into ps-lp1-provision-integ inside wt/ps-lp1-provision-integ and reconcile behavior to the spec.",
-      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make preflight.",
+      "Run required commands (capture outputs): cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; make integ-checks.",
       "Commit integration changes on branch ps-lp1-provision-integ.",
       "Fast-forward merge ps-lp1-provision-integ into feat/p0-platform-stability; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs with 'docs: finish LP1-integ'.",
       "Remove worktree wt/ps-lp1-provision-integ."

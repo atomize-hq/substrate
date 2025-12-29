@@ -37,6 +37,23 @@ If an ADR status is `Accepted`, it must include:
 - the exact feature directory path(s) under `docs/project_management/next/<feature>/`, and
 - the intended branch name(s) (e.g., `feat/<feature>`).
 
+## Executive Summary (Operator) (required)
+
+Every ADR must include an operator-facing summary section:
+- Header must be exactly: `## Executive Summary (Operator)`
+- Must contain an `ADR_BODY_SHA256: <64-hex>` line (drift guard)
+- Must describe behavior changes using:
+  - `Existing:` (what the operator experiences today)
+  - `New:` (what the operator will experience after this ADR)
+  - `Why:` (why this change exists / what it prevents/enables)
+  - `Links:` (deep links into the ADR/specs/code/docs; prefer `path#L<line>` when possible)
+
+Drift is enforced mechanically via:
+- `scripts/planning/check_adr_exec_summary.py`
+
+See also:
+- `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md`
+
 ## Required ADR format
 
 Every ADR must include all sections below. Every behavior statement must be singular and testable.
@@ -50,6 +67,10 @@ Every ADR must include all sections below. Every behavior statement must be sing
 - Related documents (links to plan/specs/decision register/sequencing)
 
 ### Required sections
+
+0) Executive Summary (Operator)
+- Existing → New → Why bullets (operator-facing).
+- Must include `ADR_BODY_SHA256` and deep links.
 
 1) Problem / Context
 - Why this body of work exists now.
@@ -123,6 +144,18 @@ Every ADR must include all sections below. Every behavior statement must be sing
 - Decision Register: `docs/project_management/next/<feature>/decision_register.md` (if required)
 - Integration Map: `docs/project_management/next/<feature>/integration_map.md` (if required)
 - Manual Playbook: `docs/project_management/next/<feature>/manual_testing_playbook.md` (if required)
+
+## Executive Summary (Operator)
+
+ADR_BODY_SHA256: <run `python3 scripts/planning/check_adr_exec_summary.py --adr <this-file> --fix` after drafting>
+
+### Changes (operator-facing)
+- <short change title>
+  - Existing: <existing behavior>
+  - New: <new behavior>
+  - Why: <why this change>
+  - Links:
+    - `<path>#L<line>` (best-effort; update line links when ADR changes)
 
 ## Problem / Context
 - <why this work exists now>

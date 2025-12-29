@@ -27,3 +27,6 @@
 2. Merge back to `feat/p0-agent-hub-isolation-hardening` (ff-only).
 3. Update `tasks.json` + `session_log.md` (END entry) and commit docs (`docs: finish I7-code`).
 4. Remove worktree.
+
+
+Do not edit planning docs inside the worktree.

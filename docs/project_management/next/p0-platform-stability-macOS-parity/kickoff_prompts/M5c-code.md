@@ -35,3 +35,6 @@ Implement M5c-spec: wire first-run/provision flows so macOS installs “feel lik
 3. Switch back to orchestration branch; mark task completed; add END entry; commit docs (`docs: finish M5c-code`).
 4. Remove worktree `wt/mp-m5c-world-deps-first-run-code`.
 
+
+
+Do not edit planning docs inside the worktree.

@@ -5,7 +5,7 @@
   - When a Linux `world-agent` binary is absent or non-ELF, build it inside Lima (with resilient toolchain bootstrap) and install it in the guest; prefer copying if a valid ELF is bundled.
   - (Optional) Install a CLI shim inside Lima when required for diagnostics, keeping the behavior consistent across dev/prod.
   - Ensure installer metadata/cleanup-state flows mirror Linux (group membership, linger guidance, cleanup-state flag handling).
-  - Prod path should copy the bundled Linux agent into Lima by default; only fall back to in-guest builds when the bundle is missing or invalid. Dev path may build in-guest for iteration.
+  - Prod path must copy the bundled Linux agent into Lima by default; only fall back to in-guest builds when the bundle is missing or invalid. Dev path may build in-guest for iteration.
 - Update mac uninstall flows to mirror Linux cleanup:
   - Remove agent binary, CLI shim (if installed), units, runtime/state dirs, and host-forwarded sockets; respect cleanup-state behavior.
 - Keep installer logging and failure modes consistent with P0 (actionable guidance, no silent skips).

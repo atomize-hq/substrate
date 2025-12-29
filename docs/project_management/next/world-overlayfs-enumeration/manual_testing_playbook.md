@@ -32,3 +32,7 @@ Expected:
 ## macOS / Windows
 - Out of scope for this ADR.
 
+## Smoke scripts
+- Linux: `docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/next/world-overlayfs-enumeration/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/next/world-overlayfs-enumeration/smoke/windows-smoke.ps1`

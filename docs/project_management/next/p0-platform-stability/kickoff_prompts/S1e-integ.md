@@ -36,3 +36,6 @@ shellcheck scripts/substrate/dev-install-substrate.sh scripts/substrate/install-
 3. Update `tasks.json` + `session_log.md` END entry (commands, results, next prompts).
 4. Confirm downstream kickoff prompts (interactive installer work) or note TODOs.
 5. Commit doc/task/log updates (`git commit -am "docs: finish S1e-integ"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

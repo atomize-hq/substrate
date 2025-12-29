@@ -6,7 +6,7 @@ The next statement of work bundles all three P0 backlog items (docs/BACKLOG.md):
 
 1. **Socket-activated world-agent service** – refactor the Linux/Lima/WSL world-agent so systemd can launch it on-demand via `.socket` units while retaining backwards-compatible manual binds.
 2. **Replay polish – isolation + verbose scopes** – finish the isolation follow-ups, improve replay verbosity, and expand default-to-world test coverage plus warning distinctions when replays skip world execution.
-3. **Health command manager mismatch bug** – fix false “attention required” results when optional host package managers (direnv/asdf/conda/etc.) are missing both on the host and in the world.
+3. **Health command manager mismatch bug** – fix false “attention required” results when optional host package managers (direnv/asdf/conda and similar) are missing both on the host and in the world.
 
 These threads are tightly coupled to platform stability and observability. We will deliver them under a single coordination umbrella so shell/world/replay changes land coherently and the doctor/health UX reflects the new behaviors.
 
@@ -49,4 +49,3 @@ These threads are tightly coupled to platform stability and observability. We wi
 3. Merge back to the orchestration branch (ff-only).
 4. Update `tasks.json` + `session_log.md` with an END entry; commit docs.
 5. Remove the worktree: `git worktree remove <worktree>`.
-

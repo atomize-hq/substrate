@@ -25,13 +25,13 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 ## [2025-12-11 19:27 UTC] Integration Agent – M1-integ – START
 - Checked out `feat/p0-platform-stability-macOS-parity`, `git pull --ff-only` (already up to date)
 - Read plan/tasks/session log/M1-spec/kickoff prompt, updated tasks.json (M1-integ → in_progress)
-- Scope: merge `M1-code` + `M1-test`, ensure Lima socket parity replacement aligns with spec, gate with `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, targeted tests, `make preflight`
+- Scope: merge `M1-code` + `M1-test`, ensure Lima socket parity replacement aligns with spec, gate with `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, targeted tests, `make integ-checks`
 - Next: create integration branch/worktree (`mp-m1-sockets-integ`), merge upstream branches, reconcile behavior/tests before running required commands
 - Blockers: none
 
 ## [2025-12-11 19:32 UTC] Integration Agent – M1-integ – END
 - Worktree `wt/mp-m1-sockets-integ` merged `mp-m1-sockets-code` + `mp-m1-sockets-test` (branch `mp-m1-sockets-integ` now carries socket-parity Lima warm/doctor scripts, YAML SocketGroup fixes, and the mac doctor fixture/test additions) and fast-forwarded `feat/p0-platform-stability-macOS-parity`
-- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `cargo test -p substrate-shell socket_activation` (pass); `tests/mac/lima_doctor_fixture.sh` (pass – fixture logs at `/tmp/substrate-mac-doctor.S4aeLX`); `make preflight` (pass – reran fmt/clippy/clean/check/test for the workspace)
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `cargo test -p substrate-shell socket_activation` (pass); `tests/mac/lima_doctor_fixture.sh` (pass – fixture logs at `/tmp/substrate-mac-doctor.S4aeLX`); `make integ-checks` (pass – reran fmt/clippy/clean/check/test for the workspace)
 - Result: Lima warm flow now enforces socket-activated layout + group perms, doctor surfaces sentinel/group/socket state, tests/scripts cover socket activation text + Lima doctor scenarios; no regressions observed on Linux builds
 - Blockers: none
 
@@ -56,12 +56,12 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 ## [2025-12-11 20:49 UTC] Integration Agent – M2-integ – START
 - Checked out `feat/p0-platform-stability-macOS-parity`, pulled latest, read plan/tasks/session log/M2-spec/kickoff prompt per checklist
 - Updated `tasks.json` (`M2-integ` → `in_progress`) and confirmed integration scope: merge M2 code + tests, enforce prod copy-first/build fallback + dev build paths, CLI shim + cleanup-state parity, ensure Linux installers unaffected
-- Next steps: commit start docs, create branch `mp-m2-installer-integ` with worktree `wt/mp-m2-installer-integ`, merge upstream branches, reconcile to M2-spec, then run required commands (`cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, `make preflight`)
+- Next steps: commit start docs, create branch `mp-m2-installer-integ` with worktree `wt/mp-m2-installer-integ`, merge upstream branches, reconcile to M2-spec, then run required commands (`cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, `make integ-checks`)
 - Blockers: none
 
 ## [2025-12-11 20:56 UTC] Integration Agent – M2-integ – END
 - Worktree `wt/mp-m2-installer-integ` merged `mp-m2-installer-code` + `mp-m2-installer-test`, reconciled installer parity (copy-first w/ build fallback, dev build logging, cleanup-state/uninstall metadata) and patched the mac installer fixture to export `SHIM_ORIGINAL_PATH` so stubs work under shimmed shells; branch `mp-m2-installer-integ` now contains merge commits + fixture fix
-- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `tests/mac/installer_parity_fixture.sh --all` (pass – logs at `/tmp/substrate-mac-installer-prod-copy.O1JCbq/prod-copy.log`, `.prod-build.XfW0Cf/...`, `.dev-build.bxDxYd/...`, `.cleanup-guidance.7DkDvF/...`); `make preflight` (pass – reran fmt/clippy/clean/check/test for the workspace)
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `tests/mac/installer_parity_fixture.sh --all` (pass – logs at `/tmp/substrate-mac-installer-prod-copy.O1JCbq/prod-copy.log`, `.prod-build.XfW0Cf/...`, `.dev-build.bxDxYd/...`, `.cleanup-guidance.7DkDvF/...`); `make integ-checks` (pass – reran fmt/clippy/clean/check/test for the workspace)
 - Result: prod installer now verifies Lima agent installs regardless of bundle state, dev installer logs guest build sources, uninstall removes host socket, Lima warm only builds CLI/agent when missing, and the mac installer fixture exercises copy/build/cleanup guidance on Linux hosts; Linux/WSL installers unchanged (mac-only code paths touched)
 - Blockers: none
 
@@ -96,12 +96,12 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 ## [2025-12-12 03:30 UTC] Integration Agent – M3-integ – START
 - Checked out `feat/p0-platform-stability-macOS-parity`, ran `git pull --ff-only` (already up to date), read plan/tasks/session log/M3-spec/kickoff prompt per checklist
 - Updated `tasks.json` (`M3-integ` → `in_progress`); integration scope confirmed: merge `M3-code` + `M3-test`, reconcile mac fs_mode propagation, forwarding/readiness ordering, doctor/shim-status/health parity with M3-spec
-- Next steps: commit this START docs update (`docs: start M3-integ`), create branch/worktree `mp-m3-backend-integ`/`wt/mp-m3-backend-integ`, merge upstream branches, fix outstanding test failures (shim-status `world_fs_mode` surfacing and replay-context fs_mode env export), then run required commands (`cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, `make preflight`)
+- Next steps: commit this START docs update (`docs: start M3-integ`), create branch/worktree `mp-m3-backend-integ`/`wt/mp-m3-backend-integ`, merge upstream branches, fix outstanding test failures (shim-status `world_fs_mode` surfacing and replay-context fs_mode env export), then run required commands (`cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, `make integ-checks`)
 - Blockers: none
 
 ## [2025-12-12 03:51 UTC] Integration Agent – M3-integ – END
 - Worktree `wt/mp-m3-backend-integ` merged `mp-m3-backend-code` + `mp-m3-backend-test`, resolved minor test conflicts/duplication, and reconciled to M3-spec. Added shim-status `world_fs_mode` parity (JSON/text) and exported replay-context fs_mode via `SUBSTRATE_WORLD_FS_MODE`; forwarding ordering and mac backend fs_mode propagation retained from M3-code.
-- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass after removing duplicate tests and fixing a clippy lint in `shim_status_fs_mode`); `cargo test -p substrate-shell --test shim_doctor` (pass); `cargo test -p substrate-shell --test shim_health` (pass); `cargo test -p substrate-shell --test shim_status_fs_mode` (pass); `cargo test -p substrate-replay reconstruct_state_exports_world_fs_mode_from_replay_context` (pass); `make preflight` (pass – reran fmt/clippy/clean/check/test for workspace).
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass after removing duplicate tests and fixing a clippy lint in `shim_status_fs_mode`); `cargo test -p substrate-shell --test shim_doctor` (pass); `cargo test -p substrate-shell --test shim_health` (pass); `cargo test -p substrate-shell --test shim_status_fs_mode` (pass); `cargo test -p substrate-replay reconstruct_state_exports_world_fs_mode_from_replay_context` (pass); `make integ-checks` (pass – reran fmt/clippy/clean/check/test for workspace).
 - Result: mac shim-status/health/doctor outputs now surface fs_mode and socket activation in parity with Linux P0, mac backend honors policy fs_mode across exec/replay, and readiness no longer probes pre-forwarding. Workspace remains green on non-mac targets.
 - Blockers: none
 
@@ -121,13 +121,13 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 ## [2025-12-19 23:32 UTC] Integration Agent – M5c-integ – START
 - Checked out `feat/p0-platform-stability-macOS-parity`, `git pull --ff-only` (already up to date)
 - Read plan/tasks/session log/M5c-spec/kickoff prompt; updated tasks.json (M5c-integ → in_progress)
-- Scope: merge M5c code + tests for first-run UX wiring, reconcile spec parity, gate with `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant `cargo test ...`, and `make preflight`
+- Scope: merge M5c code + tests for first-run UX wiring, reconcile spec parity, gate with `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant `cargo test ...`, and `make integ-checks`
 - Next steps: commit docs (`docs: start M5c-integ`), create branch/worktree `mp-m5c-world-deps-first-run-integ`/`wt/mp-m5c-world-deps-first-run-integ`, merge upstream branches, reconcile behavior/tests before running required commands
 - Blockers: none
 
 ## [2025-12-19 23:41 UTC] Integration Agent – M5c-integ – END
 - Worktree `wt/mp-m5c-world-deps-first-run-integ` merged `mp-m5c-world-deps-first-run-code` + `mp-m5c-world-deps-first-run-test`, then aligned sync-deps/recommendation expectations with spec (installer uses `world deps sync` default; health recommendations point to `world deps sync` without `--all` by default).
-- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `cargo test -p substrate-shell --test shim_health` (pass); `cargo test -p substrate-shell --test world_deps` (pass); `tests/mac/installer_parity_fixture.sh --scenario sync-deps` (pass – logs at `/tmp/substrate-mac-installer-sync-deps.Nxu7Tq/sync-deps.log`, `/tmp/substrate-mac-installer-sync-deps.Nxu7Tq/sync-deps-substrate.log`); `make preflight` (pass – fmt/clippy/clean/check/test workspace run).
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `cargo test -p substrate-shell --test shim_health` (pass); `cargo test -p substrate-shell --test world_deps` (pass); `tests/mac/installer_parity_fixture.sh --scenario sync-deps` (pass – logs at `/tmp/substrate-mac-installer-sync-deps.Nxu7Tq/sync-deps.log`, `/tmp/substrate-mac-installer-sync-deps.Nxu7Tq/sync-deps-substrate.log`); `make integ-checks` (pass – fmt/clippy/clean/check/test workspace run).
 - Result: first-run sync wiring uses safe defaults; health/installer guidance aligned to world deps sync semantics while keeping host-missing installs gated behind `--all`.
 - Blockers: none
 
@@ -158,14 +158,14 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 
 ## [2025-12-19 14:55 UTC] Integration Agent – M4-integ – START
 - Checked out `feat/p0-platform-stability-macOS-parity`, ran `git pull --ff-only` (already up to date), read plan/tasks/session log/M4-spec/kickoff prompt per checklist
-- Updated `tasks.json` (`M4-integ` → `in_progress`); integration scope confirmed: merge `M4-code` + `M4-test`, reconcile manifest resolution behavior to M4-spec, gate with `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, `make preflight`
+- Updated `tasks.json` (`M4-integ` → `in_progress`); integration scope confirmed: merge `M4-code` + `M4-test`, reconcile manifest resolution behavior to M4-spec, gate with `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, `make integ-checks`
 - Next steps: commit this START docs update (`docs: start M4-integ`), create branch/worktree `mp-m4-world-deps-manifest-integ`/`wt/mp-m4-world-deps-manifest-integ`, merge upstream branches, resolve conflicts/failures, then run required commands and record outputs in END entry
 - Blockers: none
 
 ## [2025-12-19 15:04 UTC] Integration Agent – M4-integ – END
 - Worktree `wt/mp-m4-world-deps-manifest-integ` merged `mp-m4-world-deps-manifest-code` + `mp-m4-world-deps-manifest-test`, reconciled to M4-spec, and fast-forwarded `feat/p0-platform-stability-macOS-parity` (integration head commit 1116afc)
 - Reconciliation: stabilized installed-layout manifest path assertions by canonicalizing manifest paths in the `world deps status --json` test harness so `target/tests-tmp` roots compare equal even when constructed via `CARGO_MANIFEST_DIR/../../…` segments
-- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `cargo test -p substrate-shell --test world_deps -- --nocapture` (pass – 10 tests); `make preflight` (pass – ran fmt/clippy/clean/check/test; `cargo clean` removed 8730 files, 2.9GiB)
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `cargo test -p substrate-shell --test world_deps -- --nocapture` (pass – 10 tests); `make integ-checks` (pass – ran fmt/clippy/clean/check/test; `cargo clean` removed 8730 files, 2.9GiB)
 - Blockers: none
 
 ## [2025-12-19 15:09 UTC] Code Agent – M5a-code – START
@@ -196,7 +196,7 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 
 ## [2025-12-19 15:28 UTC] Integration Agent – M5a-integ – START
 - Checked out `feat/p0-platform-stability-macOS-parity`, `git pull --ff-only` (already up to date), read plan/tasks/session log/M5a-spec/kickoff prompt per checklist
-- Updated `tasks.json` (`M5a-integ` → `in_progress`); integration scope confirmed: merge `M5a-code` + `M5a-test`, reconcile inventory + layering behavior to M5a-spec, gate with `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, `make preflight`
+- Updated `tasks.json` (`M5a-integ` → `in_progress`); integration scope confirmed: merge `M5a-code` + `M5a-test`, reconcile inventory + layering behavior to M5a-spec, gate with `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, `make integ-checks`
 - Next steps: commit this START docs update (`docs: start M5a-integ`), create branch/worktree `mp-m5a-world-deps-inventory-integ`/`wt/mp-m5a-world-deps-inventory-integ`, merge upstream branches, resolve conflicts/failures, then run required commands and record outputs in END entry
 - Blockers: none
 
@@ -216,7 +216,7 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 ## [2025-12-19 16:11 UTC] Integration Agent – M5a-integ – END
 - Worktree `wt/mp-m5a-world-deps-inventory-integ` merged `mp-m5a-world-deps-inventory-code` + `mp-m5a-world-deps-inventory-test`, reconciled to M5a-spec, and fast-forwarded `feat/p0-platform-stability-macOS-parity` (integration head commit a660722)
 - Reconciliation: fixed `world deps sync --all` test hang by constraining the test fixture inventory via `SUBSTRATE_MANAGER_MANIFEST` (so sync only covers the intended tools), and updated shim doctor/health world deps fixtures to the new `WorldDepsStatusReport` schema (`manifest.inventory`/`manifest.overlays` + `manifest.layers`)
-- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `cargo test -p substrate-shell --test world_deps_layering -- --nocapture` (pass – 3 tests); `cargo test -p substrate-shell --test world_deps -- --nocapture` (pass – 10 tests); `make preflight` (pass – ran fmt/clippy/clean/check/test; `cargo clean` removed 18270 files, 7.7GiB)
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass); `cargo test -p substrate-shell --test world_deps_layering -- --nocapture` (pass – 3 tests); `cargo test -p substrate-shell --test world_deps -- --nocapture` (pass – 10 tests); `make integ-checks` (pass – ran fmt/clippy/clean/check/test; `cargo clean` removed 18270 files, 7.7GiB)
 - Blockers: none
 
 ## [2025-12-19 16:46 UTC] Code Agent – M5b-code – START
@@ -253,7 +253,7 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 ## [2025-12-19 17:51 UTC] Integration Agent – M5b-integ – END
 - Worktree `wt/mp-m5b-world-deps-host-detect-integ` merged `mp-m5b-world-deps-host-detect-code` + `mp-m5b-world-deps-host-detect-test`, reconciled to M5b-spec, and fast-forwarded `feat/p0-platform-stability-macOS-parity` (integration head commit 8ee3b93)
 - Reconciliation: world deps subcommand now prepares manager init/env scripts so host detection can reuse manager init semantics, host detection falls back to legacy shell probing with explicit reasons when manager env is unavailable, and sync output notes skipped/degraded host detection
-- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass – `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in 3.75s`); `cargo test -p substrate-shell --test world_deps -- --nocapture` (pass – 11 tests); `make preflight` (pass – ran fmt/clippy/clean/check/test; `cargo clean` removed 8748 files, 2.9GiB)
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass – `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in 3.75s`); `cargo test -p substrate-shell --test world_deps -- --nocapture` (pass – 11 tests); `make integ-checks` (pass – ran fmt/clippy/clean/check/test; `cargo clean` removed 8748 files, 2.9GiB)
 - Blockers: none
 
 ## [2025-12-19 20:32 UTC] Code Agent – M5c-code – START
@@ -288,5 +288,5 @@ Use START/END entries only. Include UTC timestamp, agent role, task ID, commands
 ## [2025-12-20 03:06 UTC] Integration Agent – M6-integ – END
 - Worktree `wt/mp-m6-world-deps-safety-integ` merged `mp-m6-world-deps-safety-code` + `mp-m6-world-deps-safety-test`, reconciled to M6-spec, and fast-forwarded `feat/p0-platform-stability-macOS-parity` (integration head commit bab1725)
 - Reconciliation: macOS install/sync now error when backend unreachable with doctor guidance; status marks guest unavailable with backend reason; host fallback warnings remain for other platforms
-- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass – `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in 10.46s`); `cargo test -p substrate-shell --test world_deps -- --nocapture` (pass – 12 tests); `make preflight` (pass – ran fmt/clippy/clean/check/test; `cargo clean` removed 8748 files, 2.9GiB)
+- Commands: `cargo fmt` (pass); `cargo clippy --workspace --all-targets -- -D warnings` (pass – `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in 10.46s`); `cargo test -p substrate-shell --test world_deps -- --nocapture` (pass – 12 tests); `make integ-checks` (pass – ran fmt/clippy/clean/check/test; `cargo clean` removed 8748 files, 2.9GiB)
 - Blockers: none

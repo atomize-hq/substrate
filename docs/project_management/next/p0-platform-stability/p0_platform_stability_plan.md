@@ -6,7 +6,7 @@ The next statement of work bundles all three P0 backlog items (docs/BACKLOG.md):
 
 1. **Socket-activated world-agent service** – refactor the Linux/Lima/WSL world-agent so systemd can launch it on-demand via `.socket` units while retaining backwards-compatible manual binds.
 2. **Replay polish – isolation + verbose scopes** – finish the isolation follow-ups, improve replay verbosity, and expand default-to-world test coverage plus warning distinctions when replays skip world execution.
-3. **Health command manager mismatch bug** – fix false “attention required” results when optional host package managers (direnv/asdf/conda/etc.) are missing both on the host and in the world.
+3. **Health command manager mismatch bug** – fix false “attention required” results when optional host package managers (direnv/asdf/conda and similar) are missing both on the host and in the world.
 
 These threads are tightly coupled to platform stability and observability. We will deliver them under a single coordination umbrella so shell/world/replay changes land coherently and the doctor/health UX reflects the new behaviors.
 
@@ -53,7 +53,7 @@ These threads are tightly coupled to platform stability and observability. We wi
 ### End Checklist (integration)
 
 1. Merge code/test branches into the integration worktree; reconcile to the spec.
-2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make preflight`. Capture outputs.
+2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make integ-checks`. Capture outputs.
 3. Commit integration changes to the integration branch.
 4. Fast-forward merge the integration branch into `feat/p0-platform-stability`; update `tasks.json` and `session_log.md` with END entry (commands/results/blockers) and commit docs (`docs: finish <task-id>`).
 5. Remove the worktree.

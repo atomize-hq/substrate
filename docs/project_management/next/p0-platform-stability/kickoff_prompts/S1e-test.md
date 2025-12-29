@@ -37,3 +37,6 @@ Document exact commands or justified skips.
 4. Update `tasks.json` + `session_log.md` END entry with command results.
 5. Confirm `S1e-integ` prompt remains accurate; edit if new harness steps were added.
 6. Commit doc/task/log updates (`git commit -am "docs: finish S1e-test"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

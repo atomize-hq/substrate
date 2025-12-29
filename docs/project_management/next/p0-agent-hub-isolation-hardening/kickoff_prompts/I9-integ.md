@@ -21,7 +21,7 @@
 cargo fmt
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --all-targets -- --nocapture
-make preflight
+make integ-checks
 ```
 
 ## Smoke Scripts (required)
@@ -36,3 +36,6 @@ make preflight
 4. Update `tasks.json` + `session_log.md` (END entry) and commit docs (`docs: finish I9-integ`).
 5. Remove worktree.
 
+
+
+Do not edit planning docs inside the worktree.

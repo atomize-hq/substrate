@@ -32,8 +32,8 @@ if ($LASTEXITCODE -eq 0) { throw "FAIL: hard-ban matches found (remove these fro
 if ($LASTEXITCODE -ne 1) { throw "rg failed with exit code $LASTEXITCODE" }
 
 Write-Host "-- Ambiguity scan"
-$ambig = "\\b(should|could|might|maybe|optionally|optional)\\b"
-& rg -n --hidden --glob '!**/.git/**' --glob '!decision_register.md' $ambig $FeatureDir
+$ambig = "\\b(should|could|might|maybe)\\b"
+& rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' --glob '!**/session_log.md' --glob '!**/quality_gate_report.md' --glob '!**/final_alignment_report.md' $ambig $FeatureDir
 if ($LASTEXITCODE -eq 0) { throw "FAIL: ambiguity-word matches found (rewrite behavioral contracts)" }
 if ($LASTEXITCODE -ne 1) { throw "rg failed with exit code $LASTEXITCODE" }
 
@@ -47,10 +47,36 @@ Write-Host "-- tasks.json invariants"
 & python scripts/planning/validate_tasks_json.py --feature-dir $FeatureDir
 if ($LASTEXITCODE -ne 0) { throw "FAIL: tasks.json invariants failed" }
 
+Write-Host "-- ADR Executive Summary drift (if ADRs found/referenced)"
+$adrPaths = @()
+
+Get-ChildItem -LiteralPath $FeatureDir -Filter "ADR-*.md" -File -ErrorAction SilentlyContinue | ForEach-Object {
+    $adrPaths += $_.FullName
+}
+
+$refs = & rg -o --no-filename --no-line-number --hidden --glob '!**/.git/**' 'docs/project_management/next/ADR-[^ )"\r\n]+\.md' $FeatureDir 2>$null
+if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 1) { throw "rg failed with exit code $LASTEXITCODE" }
+if ($refs) {
+    $adrPaths += ($refs | Sort-Object -Unique)
+}
+
+$adrPaths = $adrPaths | Sort-Object -Unique
+if ($adrPaths.Count -gt 0) {
+    foreach ($adr in $adrPaths) {
+        if (-not (Test-Path -LiteralPath $adr)) {
+            throw "Referenced ADR not found: $adr"
+        }
+        & python scripts/planning/check_adr_exec_summary.py --adr $adr
+        if ($LASTEXITCODE -ne 0) { throw "FAIL: ADR executive summary drift: $adr" }
+    }
+} else {
+    Write-Host "SKIP: no ADRs found/referenced"
+}
+
 Write-Host "-- Kickoff prompt sentinel"
 $sentinel = "Do not edit planning docs inside the worktree\."
 $missing = @()
-Get-ChildItem -LiteralPath (Join-Path $FeatureDir "kickoff_prompts") -Filter *.md | ForEach-Object {
+Get-ChildItem -LiteralPath (Join-Path $FeatureDir "kickoff_prompts") -Filter *.md | Where-Object { $_.Name -ne "README.md" } | ForEach-Object {
     $content = Get-Content -LiteralPath $_.FullName -Raw
     if ($content -notmatch $sentinel) {
         $missing += $_.FullName

@@ -21,7 +21,7 @@
 
 ## Scope & Guardrails
 - Production shell scripts + docs only; test harness updates handled by S1d-test.
-- Keep the installer idempotent (re-running should not break existing installs).
+- Keep the installer idempotent (re-running must not break existing installs).
 - When touching documentation, mention both the group setup and lingering step so manual testers know what to expect.
 
 ## Required Commands
@@ -38,3 +38,6 @@ Log shellcheck output (or justify skips) in the session log.
 4. Update `tasks.json` + `session_log.md` END entry (include commands run).
 5. Confirm `S1d-integ` prompt remains accurate; edit if scope changed.
 6. Commit doc/task/log updates (`git commit -am "docs: finish S1d-code"`), remove worktree, hand off on `feat/p0-platform-stability-follow-up`.
+
+
+Do not edit planning docs inside the worktree.

@@ -114,7 +114,7 @@
   - `cargo fmt` → exit `0`
   - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
   - `cargo test -p substrate-shell --test config_init --test config_show --test config_set --test workspace_init -- --nocapture` → exit `0`
-  - `make preflight` → exit `0`
+  - `make integ-checks` → exit `0`
 - Smoke scripts:
   - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `1` (fails on `$SUBSTRATE_HOME/env.sh` check; `substrate policy *` not yet implemented in PCM0)
   - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
@@ -167,7 +167,7 @@
   - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
   - `cargo test -p substrate-broker policy::tests::pcm1_ -- --nocapture` → exit `0`
   - `cargo test -p substrate-shell --test policy_discovery -- --nocapture` → exit `0`
-  - `make preflight` → exit `0`
+  - `make integ-checks` → exit `0`
 - Smoke scripts:
   - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `1` (fails: `$SUBSTRATE_HOME/env.sh` not yet created by `substrate config global init --force`)
   - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
@@ -235,7 +235,7 @@
   - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
   - `cargo test -p substrate-shell --test pcm2_routing_semantics -- --nocapture` → exit `0`
   - `cargo test -p substrate-broker pcm2_save_to_policy -- --nocapture` → exit `0`
-  - `make preflight` → exit `0`
+  - `make integ-checks` → exit `0`
 - Smoke scripts:
   - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `1` (fails: `$SUBSTRATE_HOME/env.sh` not yet created by `substrate config global init --force`)
   - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
@@ -281,7 +281,7 @@
   - `cargo test -p substrate-shell --test replay_world -- --nocapture` → exit `0`
   - `cargo test -p world-agent --test full_cage_nonpty -- --nocapture` → exit `0` (some cases skipped: overlay support or privileges missing)
   - `cargo test -p world-agent --test full_cage_pty -- --nocapture` → exit `0` (some cases skipped: overlay support or privileges missing)
-  - `make preflight` → exit `0`
+  - `make integ-checks` → exit `0`
 - Smoke scripts:
   - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `0`
   - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)

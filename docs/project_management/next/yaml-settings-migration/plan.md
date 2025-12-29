@@ -38,7 +38,7 @@ The runtime precedence model and semantics must remain unchanged (see `Y0-spec.m
   - `cargo fmt`
   - `cargo clippy --workspace --all-targets -- -D warnings`
   - relevant `cargo test ...`
-  - `make preflight` (required)
+  - `make integ-checks` (required)
 
 ## Triads Overview
 
@@ -80,6 +80,6 @@ Single triad (kept intentionally small):
 ## End Checklist (integration)
 
 1. Merge code+test branches into the integration worktree; reconcile to spec.
-2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make preflight`.
+2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make integ-checks`.
 3. Commit integration changes; fast-forward into orchestration branch.
 4. Update `tasks.json` + `session_log.md`; commit docs; remove worktree.

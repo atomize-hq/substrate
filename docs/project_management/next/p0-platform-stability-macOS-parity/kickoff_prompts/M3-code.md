@@ -4,6 +4,9 @@
 - Production code/docs only; no tests. Implement M3-spec: propagate policy fs_mode to mac backend, fix readiness/forwarding ordering, align socket/group expectations, and update doctor/manual flows accordingly. Keep other platforms stable.
 
 ## Start Checklist
+
+Do not edit planning docs inside the worktree.
+
 1. `git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only`
 2. Read: plan.md, tasks.json, session_log.md, M3-spec.md, this prompt.
 3. Set `M3-code` status to `in_progress` in tasks.json (orchestration branch only).

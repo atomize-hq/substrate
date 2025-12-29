@@ -33,3 +33,6 @@ Implement M6-spec so macOS world deps cannot silently fall back to host executio
 3. Switch back to orchestration branch; mark task completed; add END entry; commit docs (`docs: finish M6-code`).
 4. Remove worktree `wt/mp-m6-world-deps-safety-code`.
 
+
+
+Do not edit planning docs inside the worktree.

@@ -32,3 +32,6 @@ Record manual `substrate --replay ...` samples (agent vs no-world).
 4. Update `tasks.json` + `session_log.md` END entry (include commands run).
 5. Confirm R2c-integ prompt contents.
 6. Commit doc/task/log updates (`git commit -am "docs: finish R2c-code"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

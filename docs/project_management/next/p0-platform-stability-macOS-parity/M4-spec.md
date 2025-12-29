@@ -10,7 +10,7 @@ Today, `substrate world deps` may resolve `world-deps.yaml` from a repository-re
 - Fresh installs behaving differently depending on where users run `substrate`.
 - Confusion when the installer has staged `world-deps.yaml` under the versioned install config, but the CLI reads the repo copy instead.
 
-The desired default behavior is consistent with `docs/CONFIGURATION.md`: release/dev installs should prefer the versioned manifest under `<prefix>/versions/<version>/config/world-deps.yaml`, with explicit overrides still supported.
+The desired default behavior is consistent with `docs/CONFIGURATION.md`: release/dev installs must prefer the versioned manifest under `<prefix>/versions/<version>/config/world-deps.yaml`, with explicit overrides still supported.
 
 ## Scope
 ### Required behavior
@@ -37,4 +37,3 @@ The desired default behavior is consistent with `docs/CONFIGURATION.md`: release
 - Workspace builds still work without needing installed manifests.
 - JSON payload (`--json`) reports the same resolved `manifest.base` path used for execution.
 - Documentation references remain accurate (no drift between `docs/CONFIGURATION.md` and behavior).
-

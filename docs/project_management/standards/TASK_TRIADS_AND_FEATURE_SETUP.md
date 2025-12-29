@@ -6,7 +6,7 @@ This document explains, step by step, how to create a new feature directory, def
 - Every slice of work ships as a triad: code, test, integration.
 - Code agent: production code only. No tests. Runs `cargo fmt` and `cargo clippy --workspace --all-targets -- -D warnings`. Optional targeted/manual sanity checks are allowed but not required. No unit/integration suite requirement.
 - Test agent: tests only (plus minimal test-only helpers if absolutely needed). No production code. Runs `cargo fmt` and the targeted tests they add/touch; not responsible for full suite.
-- Integration agent: merges code+tests, resolves drift to the spec, ensures behavior matches the spec, runs `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, all relevant tests, and finishes with `make preflight` (required). They own the final green state.
+- Integration agent: merges code+tests, resolves drift to the spec, ensures behavior matches the spec, runs `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, all relevant tests, and finishes with `make integ-checks` (required). They own the final green state.
 - Execution triads must not begin until the Planning Pack has a quality gate report with `RECOMMENDATION: ACCEPT` at `docs/project_management/next/<feature>/quality_gate_report.md` (see `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`).
 - Docs/tasks/session log edits happen **only** on the orchestration branch (never in worktrees).
 - Specs are the single source of truth; integration reconciles code/tests to the spec.
@@ -81,7 +81,7 @@ Must include:
 Each prompt must include:
 - Scope and explicit role boundaries (“prod code only, no tests” for code; “tests only” for test; integration owns aligning to spec).
 - Start checklist (always): checkout orchestration branch, pull ff-only, read plan/tasks/session_log/spec/prompt, set task status to `in_progress` in tasks.json, add START entry to session_log.md, commit docs (`docs: start <task-id>`), create task branch and worktree, no docs/tasks/log edits in worktree.
-- Requirements: what to build/test, protected paths/safety, required commands (code: fmt/clippy only; test: fmt + targeted tests; integration: fmt/clippy/tests + `make preflight`), sanity-check expectations.
+- Requirements: what to build/test, protected paths/safety, required commands (code: fmt/clippy only; test: fmt + targeted tests; integration: fmt/clippy/tests + `make integ-checks`), sanity-check expectations.
 - End checklist: run required commands; commit worktree; merge back to orchestration branch (ff-only); update tasks.json status; add END entry (commands/results/blockers); create downstream prompts if missing (mandatory when absent); commit docs (`docs: finish <task-id>`); remove worktree.
 
 ## Branch/Worktree Naming
@@ -107,7 +107,7 @@ End (code/test):
 
 End (integration):
 1. Merge code+test task branches into the integration worktree; resolve drift to spec.
-2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make preflight`. Capture outputs.
+2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make integ-checks`. Capture outputs.
 3. Commit integration changes to the integration branch.
 4. Fast-forward merge the integration branch into the orchestration branch; update tasks.json/session_log.md with END entry; commit docs (`docs: finish <task-id>`).
 5. Remove worktree.
@@ -115,7 +115,7 @@ End (integration):
 ## Role Command Requirements
 - Code: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; optional targeted/manual sanity checks allowed but not required; no unit/integration suite requirement.
 - Test: `cargo fmt`; targeted `cargo test ...` for tests added/modified; no production code; no responsibility for full suite.
-- Integration: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; run relevant tests (at least new/affected suites) and finish with `make preflight` (required full-suite gate). Integration must reconcile code/tests to the spec.
+- Integration: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; run relevant tests (at least new/affected suites) and finish with `make integ-checks` (required full-suite gate). Integration must reconcile code/tests to the spec.
   - If the feature includes a manual validation playbook and smoke scripts (see `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`), integration must run the relevant platform smoke scripts under `docs/project_management/next/<feature>/smoke/` and record results in the feature `session_log.md`.
 
 ## Context Budget & Triad Sizing

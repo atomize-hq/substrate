@@ -18,7 +18,7 @@ Authoritative contract:
 ### Role boundaries (triad workflow)
 - Code agent: production code only; no tests; run `cargo fmt` and `cargo clippy --workspace --all-targets -- -D warnings`.
 - Test agent: tests only; no production code; run `cargo fmt` and targeted `cargo test ...`.
-- Integration agent: reconcile code+tests to spec; run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, and finish with `make preflight`; run feature-local smoke scripts and record results in `session_log.md`.
+- Integration agent: reconcile code+tests to spec; run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, and finish with `make integ-checks`; run feature-local smoke scripts and record results in `session_log.md`.
 
 ## Triads overview (spec slices)
 
@@ -84,7 +84,7 @@ These are the primary locations expected to change when implementing ADR-0003:
 
 ## End checklist (integration)
 1. Merge code+test branches into the integration worktree; reconcile to spec.
-2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make preflight`.
+2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make integ-checks`.
 3. Run feature-local smoke scripts:
    - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh`
    - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh`

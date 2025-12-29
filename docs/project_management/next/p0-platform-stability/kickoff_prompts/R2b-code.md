@@ -37,3 +37,6 @@ Record any manual `substrate --replay ...` showcasing fallback/warnings.
 4. Update `tasks.json` + `session_log.md` END entry summarizing results.
 5. Confirm R2c-integ prompt remains accurate.
 6. Commit doc/task/log updates (`git commit -am "docs: finish R2b-code"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

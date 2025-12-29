@@ -33,3 +33,6 @@ Add/adjust tests to validate manifest resolution and override behavior per M4-sp
 3. Switch back to orchestration branch; mark task completed; add END entry; commit docs (`docs: finish M4-test`).
 4. Remove worktree `wt/mp-m4-world-deps-manifest-test`.
 
+
+
+Do not edit planning docs inside the worktree.

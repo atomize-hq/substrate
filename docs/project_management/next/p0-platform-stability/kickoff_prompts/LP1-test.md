@@ -4,6 +4,9 @@
 - Tests/fixtures/harnesses only; no production code. Cover provisioner parity per LP1-spec (SocketGroup=substrate, group/linger guidance, corrected socket metadata). Use stubs/dry-runs where privileged ops would be required; document skips.
 
 ## Start Checklist
+
+Do not edit planning docs inside the worktree.
+
 1. `git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only`
 2. Read: plan.md, tasks.json, session_log.md, LP1-spec.md, this prompt.
 3. Set `LP1-test` status to `in_progress` in tasks.json (orchestration branch only).

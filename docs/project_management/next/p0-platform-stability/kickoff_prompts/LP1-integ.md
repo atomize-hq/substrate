@@ -1,9 +1,12 @@
 # Kickoff Prompt – LP1-integ (Linux world provision parity fix)
 
 ## Scope
-- Merge `LP1-code` + `LP1-test`, reconcile to LP1-spec, and gate with fmt/clippy/tests + `make preflight`. Integration owns final provisioner parity.
+- Merge `LP1-code` + `LP1-test`, reconcile to LP1-spec, and gate with fmt/clippy/tests + `make integ-checks`. Integration owns final provisioner parity.
 
 ## Start Checklist
+
+Do not edit planning docs inside the worktree.
+
 1. `git checkout feat/p0-platform-stability && git pull --ff-only`
 2. Read: plan.md, tasks.json, session_log.md, LP1-spec.md, this prompt.
 3. Set `LP1-integ` status to `in_progress` in tasks.json (orchestration branch only).
@@ -17,11 +20,11 @@
   - `cargo fmt`  
   - `cargo clippy --workspace --all-targets -- -D warnings`  
   - Relevant tests/harnesses added in LP1-test (note privileged skips)  
-  - `make preflight`
+  - `make integ-checks`
 
 ## End Checklist
 1. Merge the LP1 code/test branches into `ps-lp1-provision-integ` inside `wt/ps-lp1-provision-integ` and reconcile behavior to the spec.
-2. Run the required commands (cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; `make preflight`) and capture outputs.
+2. Run the required commands (cargo fmt; cargo clippy --workspace --all-targets -- -D warnings; relevant tests; `make integ-checks`) and capture outputs.
 3. Commit integration changes on branch `ps-lp1-provision-integ`.
 4. Fast-forward merge `ps-lp1-provision-integ` into `feat/p0-platform-stability-macOS-parity`; update tasks.json to completed; add an END entry to session_log.md with commands/results/blockers; commit docs (`docs: finish LP1-integ`).
 5. Remove worktree `wt/ps-lp1-provision-integ`.

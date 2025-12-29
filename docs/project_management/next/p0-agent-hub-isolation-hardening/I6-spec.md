@@ -23,9 +23,9 @@
 
 ### Platform expectations
 - Linux/macOS: **required parity** when the world backend is available (`substrate world doctor --json` ok=true).
-  - The implementation must avoid Linux-host assumptions (e.g., `/run/substrate.sock`) and should rely on
+  - The implementation must avoid Linux-host assumptions (e.g., `/run/substrate.sock`) and must rely on
     normal world routing so it works on macOS (Lima) as well.
-  - Full cage may require privileges/user namespaces; failures should be clearly explained.
+  - Full cage may require privileges/user namespaces; failures must be clearly explained.
 - Windows: allowed to be `SKIP` or “not yet supported” initially (explicit message + non-zero only if the
   user requested strict mode).
 
@@ -39,7 +39,7 @@
 - Exit codes:
   - `0` on success.
   - Non-zero on any failed check (including a missing world backend when checks require it).
-  - If a check is skipped due to platform/privileges, the default behavior should be to `SKIP` that check
+  - If a check is skipped due to platform/privileges, the default behavior must be to `SKIP` that check
     and continue, but still return non-zero if *no* checks ran or if the user requested strict mode.
 
 ## Acceptance

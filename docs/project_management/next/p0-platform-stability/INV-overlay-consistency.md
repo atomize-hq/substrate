@@ -19,7 +19,7 @@
 
 ## Next steps for the agent
 1. Confirm PTY execution path in writable mode: trace where `ensure_session_world` sets `fs_mode` and how `world-agent/src/pty.rs` mounts overlays (read-only only). Verify there is no writable overlay for PTY.
-2. Design: either run PTY sessions through a writable overlay (persistent per world) or explicitly document/guard host writes. Aim for parity: PTY and non-PTY should see the same world root and isolation rules.
+2. Design: either run PTY sessions through a writable overlay (persistent per world) or explicitly document/guard host writes. Aim for parity: PTY and non-PTY must see the same world root and isolation rules.
 3. Update fs_mode reuse logic to remount the same overlay for PTY and non-PTY so mode switches do not drop overlay state or leak host writes.
 4. Add targeted tests:
    - Writable: PTY and non-PTY create files and are visible across commands; host remains unchanged when exiting.

@@ -4,7 +4,7 @@
 Integration agent: merge code+tests, reconcile to spec, and own final green. Do not edit docs/tasks/session logs from the worktree.
 
 ## Goal
-Integrate M5b-code + M5b-test and ensure behavior matches M5b-spec; gate with fmt/clippy/tests and finish with `make preflight`.
+Integrate M5b-code + M5b-test and ensure behavior matches M5b-spec; gate with fmt/clippy/tests and finish with `make integ-checks`.
 
 ## Read first
 - `docs/project_management/next/p0-platform-stability-macOS-parity/plan.md`
@@ -23,7 +23,7 @@ Integrate M5b-code + M5b-test and ensure behavior matches M5b-spec; gate with fm
 - `cargo fmt`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - Relevant `cargo test ...`
-- `make preflight` (required)
+- `make integ-checks` (required)
 
 ## End checklist
 1. Merge `mp-m5b-world-deps-host-detect-code` and `mp-m5b-world-deps-host-detect-test` into the integration worktree; reconcile to spec.
@@ -32,3 +32,6 @@ Integrate M5b-code + M5b-test and ensure behavior matches M5b-spec; gate with fm
 4. Update docs on orchestration branch: mark task completed; END entry; commit (`docs: finish M5b-integ`).
 5. Remove worktree `wt/mp-m5b-world-deps-host-detect-integ`.
 
+
+
+Do not edit planning docs inside the worktree.

@@ -30,3 +30,6 @@ Note platform skips or additional manual `substrate --replay ...` validation.
 2. Run required fmt/lint/tests; capture results.
 3. Update `tasks.json` + `session_log.md` END entry with executed commands/outcomes.
 4. Commit doc/task/log updates (`git commit -am "docs: finish R2c-integ"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

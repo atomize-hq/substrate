@@ -30,3 +30,6 @@ substrate world doctor --json   # capture output/skip rationale
 3. Update `tasks.json` (`S1b-integ` → completed) and append END session entry summarizing commands/results.
 4. Ensure S1c-code/test prompts reference any new assumptions; edit if required.
 5. Commit doc/task/log updates (`git commit -am "docs: finish S1b-integ"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.
