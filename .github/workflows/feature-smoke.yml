@@ -82,7 +82,7 @@ jobs:
 
   linux_self_hosted:
     if: (inputs.platform == 'linux' || inputs.platform == 'all') && inputs.runner_kind == 'self-hosted'
-    runs-on: [self-hosted, linux]
+    runs-on: [self-hosted, Linux]
     steps:
       - name: Checkout repository (override ref)
         if: inputs.checkout_ref != ''
@@ -151,7 +151,7 @@ jobs:
 
   macos_self_hosted:
     if: (inputs.platform == 'macos' || inputs.platform == 'all') && inputs.runner_kind == 'self-hosted'
-    runs-on: [self-hosted, macos]
+    runs-on: [self-hosted, macOS]
     steps:
       - name: Checkout repository (override ref)
         if: inputs.checkout_ref != ''
@@ -217,7 +217,7 @@ jobs:
 
   windows_self_hosted:
     if: (inputs.platform == 'windows' || inputs.platform == 'all') && inputs.runner_kind == 'self-hosted'
-    runs-on: [self-hosted, windows]
+    runs-on: [self-hosted, Windows]
     steps:
       - name: Checkout repository (override ref)
         if: inputs.checkout_ref != ''
@@ -251,7 +251,7 @@ jobs:
 
   wsl:
     if: inputs.run_wsl
-    runs-on: [self-hosted, windows, wsl]
+    runs-on: [self-hosted, Windows, wsl]
     steps:
       - name: Checkout repository (override ref)
         if: inputs.checkout_ref != ''
