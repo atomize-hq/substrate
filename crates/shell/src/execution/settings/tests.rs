@@ -106,6 +106,21 @@ fn write_workspace_config(
     marker_path
 }
 
+fn normalize_windows_verbatim_prefix(value: &str) -> String {
+    #[cfg(windows)]
+    {
+        value.replace("\\\\?\\", "")
+    }
+    #[cfg(not(windows))]
+    {
+        value.to_string()
+    }
+}
+
+fn normalize_path_display(path: &Path) -> String {
+    normalize_windows_verbatim_prefix(&path.display().to_string())
+}
+
 #[test]
 #[serial]
 fn resolve_world_root_defaults_to_launch_dir_project() {
@@ -150,21 +165,18 @@ fn resolve_world_root_refuses_legacy_workspace_settings_yaml() {
     let err = resolve_world_root(None, None, None, &workspace_root)
         .expect_err("legacy settings.yaml should be rejected");
     let message = err.to_string();
+    let normalized_message = normalize_windows_verbatim_prefix(&message);
     assert!(
         message.contains("unsupported legacy workspace config detected"),
         "unexpected error message: {message}"
     );
     assert!(
-        message.contains(&legacy_settings.display().to_string()),
+        normalized_message.contains(&normalize_path_display(&legacy_settings)),
         "error message missing legacy path: {message}"
     );
+    let workspace_yaml = workspace_root.join(".substrate").join("workspace.yaml");
     assert!(
-        message.contains(
-            &workspace_root
-                .join(".substrate/workspace.yaml")
-                .display()
-                .to_string()
-        ),
+        normalized_message.contains(&normalize_path_display(&workspace_yaml)),
         "error message missing workspace.yaml path: {message}"
     );
 }
