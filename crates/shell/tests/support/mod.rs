@@ -69,9 +69,18 @@ pub fn substrate_command_for_home(fixture: &ShellEnvFixture) -> Command {
     let mut cmd = get_substrate_binary();
     cmd.env("HOME", fixture.home())
         .env("USERPROFILE", fixture.home())
+        .current_dir(fixture.home())
         .env("SHELL", "/bin/bash")
+        .env("SUBSTRATE_HOME", fixture.home().join(".substrate"))
         .env("SUBSTRATE_WORLD", "enabled")
         .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env_remove("SUBSTRATE_NO_SHIMS")
+        // Force host execution even when a world-agent socket exists on the host.
+        // These tests validate host-side env injection (BASH_ENV + shimmed PATH).
+        .env(
+            "SUBSTRATE_WORLD_SOCKET",
+            fixture.home().join("missing-world.sock"),
+        )
         // Ensure host-installed shims do not affect PATH injection in tests.
         .env_remove("SUBSTRATE_SHIM_PATH")
         .env_remove("SUBSTRATE_SHIM_ORIGINAL_PATH")

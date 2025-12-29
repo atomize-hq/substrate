@@ -66,7 +66,6 @@ managers:
     let output = substrate_command_for_home(&fixture)
         .env("PATH", &host_path_str)
         .env("BASH_ENV", &host_bash_env)
-        .env_remove("SUBSTRATE_HOME")
         .env_remove("SUBSTRATE_SKIP_MANAGER_INIT")
         .env_remove("SUBSTRATE_SKIP_MANAGER_INIT_LIST")
         .env("SUBSTRATE_SHIM_PATH", path_str(&fixture.shim_dir()))
