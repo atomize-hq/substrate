@@ -1,0 +1,85 @@
+{
+    "purpose": "Ad-hoc tracker for planning-system improvements.",
+    "last_updated_utc": "2025-12-29T00:00:00Z",
+    "items": [
+        {
+            "id": "HF-001",
+            "area": "Standards consistency",
+            "title": "Replace broken docs-edit sentinel phrase",
+            "status": "completed",
+            "result": "Canonical sentinel is `Do not edit planning docs inside the worktree.`; standards, lint, and existing Planning Packs updated."
+        },
+        {
+            "id": "HF-002",
+            "area": "Tooling / schema",
+            "title": "Standardize tasks.json to object-with-tasks array",
+            "status": "completed",
+            "result": "All Planning Packs under `docs/project_management/next/*` now use `{ \"tasks\": [...] }`."
+        },
+        {
+            "id": "HF-003",
+            "area": "Standards consistency",
+            "title": "Fix worktree path prefix mismatch",
+            "status": "completed",
+            "result": "`worktree` is treated as a full path; `git worktree add <worktree> <branch>` is the canonical instruction."
+        },
+        {
+            "id": "HF-004",
+            "area": "Integration gate",
+            "title": "Add fast integration check target",
+            "status": "completed",
+            "result": "Added `make integ-checks` (no `cargo clean`, clippy uses `-D warnings`) and updated triad standards to use it."
+        },
+        {
+            "id": "P0-001",
+            "area": "Validation",
+            "title": "Add canonical tasks.json validator + JSON Schema",
+            "status": "completed",
+            "files": [
+                "scripts/planning/validate_tasks_json.py",
+                "docs/project_management/standards/tasks.schema.json"
+            ]
+        },
+        {
+            "id": "P1-001",
+            "area": "Automation",
+            "title": "Add planning lint runner scripts",
+            "status": "completed",
+            "files": [
+                "scripts/planning/lint.sh",
+                "scripts/planning/lint.ps1"
+            ]
+        },
+        {
+            "id": "P1-002",
+            "area": "Automation",
+            "title": "Add feature Planning Pack scaffolder",
+            "status": "completed",
+            "files": [
+                "scripts/planning/new_feature.sh",
+                "scripts/planning/new_feature.ps1",
+                "docs/project_management/standards/templates/"
+            ]
+        },
+        {
+            "id": "P2-001",
+            "area": "Drift prevention",
+            "title": "Introduce per-feature contract surface file",
+            "status": "completed",
+            "files": ["docs/project_management/standards/CONTRACT_SURFACE_STANDARD.md"]
+        },
+        {
+            "id": "P2-002",
+            "area": "Parallel integration",
+            "title": "Add platform-specific integration model + GitHub Actions support",
+            "status": "completed",
+            "files": [
+                "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md",
+                ".github/workflows/feature-smoke.yml",
+                "scripts/ci/dispatch_feature_smoke.sh"
+            ],
+            "notes": "WSL smoke is supported via a self-hosted runner stub; hosted-runner WSL is not assumed."
+        }
+    ]
+}
+
