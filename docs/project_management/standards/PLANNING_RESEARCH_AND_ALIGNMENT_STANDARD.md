@@ -221,6 +221,8 @@ To make validation repeatable and auditable:
   - the exact command(s) to run the script(s),
   - what success looks like (exit code and key expected output),
   - how to run sections manually for debugging.
+  - if cross-platform validation is required, how to run smoke scripts via GitHub Actions on self-hosted runners (preferred):
+    - `scripts/ci/dispatch_feature_smoke.sh --feature-dir "$FEATURE_DIR" --runner-kind self-hosted --platform all --run-wsl --cleanup`
 
 Prohibited:
 - “Verify it works”

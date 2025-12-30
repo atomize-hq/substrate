@@ -9,18 +9,35 @@ When a feature has platform smoke scripts under:
 - `docs/project_management/next/<feature>/smoke/`
 
 …treat platform validation as integration work that may run in different execution environments:
-- Linux: typically run locally
-- macOS/Windows: typically run on GitHub Actions runners
-- WSL: treat as a distinct platform (best-effort on hosted runners; reliably on self-hosted runners)
+- Prefer GitHub Actions + self-hosted runners for cross-platform parity (Linux/macOS/Windows).
+- WSL is treated as a distinct environment and runs on a dedicated self-hosted **Linux-in-WSL** runner.
+- GitHub-hosted runners are allowed as a fallback, but are not the default for this repo’s “full fidelity” platform validation.
+
+## Runner label contract (self-hosted)
+
+To avoid accidental cross-environment pickup (e.g., a WSL runner taking a native Linux job), self-hosted runner selection is label-based:
+- Native Linux runner: `[self-hosted, Linux, linux-host]`
+- Linux-in-WSL runner: `[self-hosted, Linux, wsl]`
+- macOS runner: `[self-hosted, macOS]`
+- Windows runner: `[self-hosted, Windows]`
+
+If you add a new runner, ensure it has a unique, positive label for its environment (no negative matching exists).
+
+## Runner preflight (recommended)
+
+Before relying on self-hosted smoke runs, validate runner availability and labels:
+- `scripts/ci/check_self_hosted_runners.sh`
 
 ## Recommended task structuring
 
 For cross-platform work, split integration into:
-- `X-integ-linux` (runner: local)
-- `X-integ-macos` (runner: github-actions)
-- `X-integ-windows` (runner: github-actions)
-- optional: `X-integ-wsl` (runner: github-actions or self-hosted)
-- `X-integ` (final aggregator): depends on all platform integ tasks, performs merge + `make integ-checks` on the primary dev platform, and records the combined result in `session_log.md`.
+- **Option A (minimum friction, still parallel):** one integration task runs the smoke workflow with `platform=all` (and optionally `run_wsl=true`) and records the run id/URL in `session_log.md`.
+- **Option B (maximum explicitness / targeted gating):** split into platform tasks:
+  - `X-integ-linux` (runner: github-actions, runner_kind: self-hosted)
+  - `X-integ-macos` (runner: github-actions, runner_kind: self-hosted)
+  - `X-integ-windows` (runner: github-actions, runner_kind: self-hosted)
+  - optional: `X-integ-wsl` (runner: github-actions, runner_kind: self-hosted)
+  - `X-integ` (final aggregator): depends on required platform tasks, performs merge + `make integ-checks` on the primary dev platform, and records combined results in `session_log.md`.
 
 This preserves parallelism and makes it explicit which validations happened where.
 
@@ -40,25 +57,30 @@ These fields are optional for now, but recommended for cross-platform planning p
 This repo provides a reusable workflow:
 - `.github/workflows/feature-smoke.yml`
 
-It runs the feature-local smoke script for the selected platform(s).
+It runs the feature-local smoke script for the selected platform(s), on either:
+- GitHub-hosted runners (`runner_kind=github-hosted`), or
+- your self-hosted runners (`runner_kind=self-hosted`).
 
 ## Trigger mechanism (repeatable)
 
-GitHub Actions must run on a ref that exists on the remote, so the repeatable pattern is:
-1) Create a throwaway remote branch from the integration worktree commit
-2) Dispatch the workflow against that branch
+GitHub Actions must run on a ref that exists on the remote. The repeatable pattern is:
+1) Create a throwaway remote branch from the integration worktree commit (the code under test)
+2) Dispatch the workflow from a stable workflow ref, checking out the throwaway branch (`checkout_ref`)
 3) Wait for success/failure
 4) Merge if green
 5) Delete the throwaway branch
 
 Helper script (requires `gh` auth):
 - `scripts/ci/dispatch_feature_smoke.sh`
+  - Defaults to dispatching from a stable workflow ref (`feat/policy_and_config`) and using `runner_kind=self-hosted`; override with `--workflow-ref` / `--runner-kind` if needed.
 
 ## WSL testing note
 
-WSL testing on GitHub-hosted Windows runners is not guaranteed to be available/configured across all environments.
-For reliable WSL coverage, prefer:
-- a self-hosted Windows runner with WSL pre-provisioned, or
-- a dedicated CI environment where WSL is known-good.
+This repo treats WSL as “Linux-in-WSL” and runs it on a dedicated self-hosted runner labeled `[self-hosted, Linux, wsl]`.
+Do not assume WSL is available on GitHub-hosted Windows runners, and do not couple WSL coverage to the Windows runner.
 
-The workflow includes a WSL job stub that is intended for self-hosted runners.
+## Public repo safety note (self-hosted)
+
+Self-hosted runners must never be exposed to untrusted code. For this repo:
+- Keep self-hosted jobs behind `workflow_dispatch` only (no `pull_request` / fork triggers).
+- Restrict who can trigger workflows (write access required) and who can administer runners.

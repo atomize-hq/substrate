@@ -66,6 +66,7 @@ Before execution triads begin, the Planning Pack must include:
 Planning agents must read end-to-end:
 - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+- `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md` (when cross-platform / smoke scripts exist)
 - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
 - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
 - `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`
@@ -102,6 +103,7 @@ Constraints (non-negotiable):
 Required reading (end-to-end):
 - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
 - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+- `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md` (when cross-platform / smoke scripts exist)
 - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
 - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
@@ -125,6 +127,7 @@ Required interoperability rules:
 - `tasks.json` must match the required fields and workflow described in `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`.
 - Every task must have a kickoff prompt file and must include the exact rule: `Do not edit planning docs inside the worktree.`
 - Integration tasks must include running the feature-local smoke script (if present) and recording results in `session_log.md`.
+  - For cross-platform smoke, prefer GitHub Actions + self-hosted runners via `scripts/ci/dispatch_feature_smoke.sh` (see `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`).
 
 Sequencing rules:
 - Align `docs/project_management/next/sequencing.json` with task dependencies.

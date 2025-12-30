@@ -6,6 +6,7 @@ This diagram shows the intended handoff flow:
 - Planning Pack creation (execution-ready specs/tasks/prompts)
 - Third-party Planning Quality Gate (accept/flag)
 - Execution triads (code/test/integ)
+- Cross-platform smoke via `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
 
 ```mermaid
 flowchart TD

@@ -116,7 +116,10 @@ End (integration):
 - Code: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; optional targeted/manual sanity checks allowed but not required; no unit/integration suite requirement.
 - Test: `cargo fmt`; targeted `cargo test ...` for tests added/modified; no production code; no responsibility for full suite.
 - Integration: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; run relevant tests (at least new/affected suites) and finish with `make integ-checks` (required full-suite gate). Integration must reconcile code/tests to the spec.
-  - If the feature includes a manual validation playbook and smoke scripts (see `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`), integration must run the relevant platform smoke scripts under `docs/project_management/next/<feature>/smoke/` and record results in the feature `session_log.md`.
+  - If the feature includes a manual validation playbook and smoke scripts (see `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`), integration must run the relevant platform smoke scripts under `docs/project_management/next/<feature>/smoke/` and record results (including run ids/URLs for CI) in the feature `session_log.md`.
+    - Preferred cross-platform mechanism: `scripts/ci/dispatch_feature_smoke.sh` (self-hosted runners), e.g.:
+      - `scripts/ci/dispatch_feature_smoke.sh --feature-dir "$FEATURE_DIR" --runner-kind self-hosted --platform all --run-wsl --cleanup`
+    - Use direct local execution only when the platform matches the current machine (e.g., `bash "$FEATURE_DIR/smoke/linux-smoke.sh"` on Linux).
 
 ## Context Budget & Triad Sizing
 - Agents typically have a 272k token context window. Size each task so a single agent needs no more than ~40–50% of that window (roughly 110–150k tokens) to hold the spec, plan, code/tests, and recent history.
