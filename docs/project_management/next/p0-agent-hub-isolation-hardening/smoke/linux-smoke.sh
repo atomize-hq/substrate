@@ -11,6 +11,9 @@ if ! command -v substrate >/dev/null 2>&1; then
   exit 1
 fi
 
-# This smoke script is intentionally minimal and only verifies that the harness can run.
-# Deeper validation is described in manual_testing_playbook.md and must be exercised once the I0–I5 work lands.
-echo "OK: agent hub hardening linux smoke (preflight)"
+out="$(substrate --version 2>/dev/null || true)"
+if [[ -z "${out}" ]]; then
+  echo "FAIL: substrate --version produced no output" >&2
+  exit 1
+fi
+echo "OK: agent hub hardening linux smoke"
