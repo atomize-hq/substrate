@@ -19,7 +19,7 @@ flowchart TD
   ADR --> PACK --> GATE
 
   %% ======== Triad execution ========
-  subgraph ORCH[Orchestration Branch (docs edits only)]
+  subgraph ORCH["Orchestration Branch (docs edits only)"]
     START["Pick triad slice: X<br/>(e.g., C3)"]
     TASKS["tasks.json statuses<br/>START/END in session_log.md"]
   end
@@ -27,7 +27,7 @@ flowchart TD
   GATE --> START
   START --> TASKS
 
-  subgraph WT[Parallel Worktrees (no docs edits)]
+  subgraph WT["Parallel Worktrees (no docs edits)"]
     CODE["X-code<br/>(prod code only)<br/>branch + worktree"]
     TEST["X-test<br/>(tests only)<br/>branch + worktree"]
   end
@@ -35,7 +35,7 @@ flowchart TD
   TASKS --> CODE
   TASKS --> TEST
 
-  subgraph INTEG_CORE[Core Integration (host integration worktree)]
+  subgraph INTEG_CORE["Core Integration (host integration worktree)"]
     MERGE["X-integ-core<br/>merge X-code + X-test<br/>resolve spec drift"]
     CORE_CHECKS["Required checks:<br/>- cargo fmt<br/>- cargo clippy ... -- -D warnings<br/>- relevant tests<br/>- make integ-checks"]
   end
@@ -45,7 +45,7 @@ flowchart TD
   MERGE --> CORE_CHECKS
 
   %% ======== Cross-platform smoke (parallel) ========
-  subgraph CI[GitHub Actions (self-hosted runners)]
+  subgraph CI["GitHub Actions (self-hosted runners)"]
     TMPBR["Create throwaway remote branch<br/>(tmp/feature-smoke/...)<br/>from X-integ-core SHA"]
     DISPATCH["Dispatch workflow from stable ref<br/>(ref: feat/policy_and_config)<br/>inputs: checkout_ref=tmp branch<br/>runner_kind=self-hosted"]
 
@@ -68,7 +68,7 @@ flowchart TD
   WSL -. fail -> MERGE
 
   %% ======== Final aggregator ========
-  subgraph INTEG_FINAL[Final Cross-Platform Integration]
+  subgraph INTEG_FINAL["Final Cross-Platform Integration"]
     AGG["X-integ (final)<br/>wait for required platform smoke<br/>record run ids/URLs in session_log.md"]
     MERGE_BACK["Fast-forward merge to orchestration branch<br/>update tasks.json/session_log.md<br/>(remove worktrees)"]
   end
