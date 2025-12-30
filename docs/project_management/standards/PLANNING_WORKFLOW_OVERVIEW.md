@@ -4,6 +4,7 @@ This diagram shows the intended handoff flow:
 - ADR creation (after brainstorming converges)
 - Operator review via `## Executive Summary (Operator)` + drift guard
 - Planning Pack creation (execution-ready specs/tasks/prompts)
+- Platform parity plan (required when cross-platform)
 - Third-party Planning Quality Gate (accept/flag)
 - Execution triads (code/test/integ)
 - Cross-platform smoke via `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
@@ -19,6 +20,7 @@ flowchart TD
 
   P["Planning agent reads: docs/project_management/standards/PLANNING_README.md"]
   PACK[Planning Pack created under docs/project_management/next/**FEATURE_NAME**/]
+  PP["Platform parity plan (schema v2 when used)\n- meta.schema_version\n- meta.platforms_required\n- X-integ-core / X-integ-<platform> / X-integ"]
 
   Q["Quality gate reviewer reads: docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md"]
   LINT["Run mechanical checks: docs/project_management/standards/PLANNING_LINT_CHECKLIST.md"]
@@ -36,7 +38,8 @@ flowchart TD
 
   D_YES --> P
   P --> PACK
-  PACK --> Q
+  PACK --> PP
+  PP --> Q
   Q --> LINT
   LINT --> REPORT
   REPORT --> GATE
