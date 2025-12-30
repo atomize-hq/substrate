@@ -1,0 +1,31 @@
+# Kickoff: {{TASK_ID}} (integration platform-fix — {{PLATFORM}})
+
+## Scope
+- Ensure the slice behaves correctly on **{{PLATFORM}}**.
+- This task is allowed to make production-code and/or test changes as needed to achieve cross-platform parity, but must not edit planning docs inside the worktree.
+- Spec: `{{FEATURE_DIR}}/{{SPEC_FILE}}`
+
+## Start Checklist
+Do not edit planning docs inside the worktree.
+
+1. Run this task on a machine that matches the required platform: **{{PLATFORM}}**.
+2. `git checkout feat/{{FEATURE}} && git pull --ff-only`
+3. Read: plan.md, tasks.json, session_log.md, spec, this prompt.
+4. Set `{{TASK_ID}}` status to `in_progress` in tasks.json; add START entry to session_log.md; commit docs (`docs: start {{TASK_ID}}`).
+5. Create branch `{{BRANCH}}`; create worktree `{{WORKTREE}}`.
+
+## Requirements
+- First, validate platform smoke via CI for this platform:
+  - `scripts/ci/dispatch_feature_smoke.sh --feature-dir "{{FEATURE_DIR}}" --runner-kind self-hosted --platform {{PLATFORM}} --cleanup`
+- If smoke passes: record run id/URL in the END entry and do not change code.
+- If smoke fails:
+  1) Fix the issue in this worktree (platform-specific guards, path handling, deps, etc.) while keeping the spec contract intact.
+  2) Run the appropriate local checks for your change (fmt/clippy and targeted tests).
+  3) Re-run the CI smoke for this platform until green.
+
+## End Checklist
+1. Ensure smoke is green for {{PLATFORM}} and capture the run id/URL.
+2. Commit worktree changes (if any).
+3. Merge back to orchestration branch (ff-only).
+4. Update tasks.json + session_log.md END entry; commit docs (`docs: finish {{TASK_ID}}`); remove worktree.
+

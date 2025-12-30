@@ -53,11 +53,230 @@ Render-Template (Join-Path $templatesDir "contract.md.tmpl") (Join-Path $feature
 - None yet.
 "@ | Set-Content -LiteralPath (Join-Path $featureDir "C0-spec.md")
 
+if ($CrossPlatform.IsPresent) {
 @"
 {
   `"meta`": {
+    `"schema_version`": 2,
     `"feature`": `"$Feature`",
-    `"cross_platform`": $($CrossPlatform.IsPresent.ToString().ToLowerInvariant())
+    `"cross_platform`": true,
+    `"platforms_required`": [`"linux`", `"macos`", `"windows`"]
+  },
+  `"tasks`": [
+    {
+      `"id`": `"C0-code`",
+      `"name`": `"C0 slice (code)`",
+      `"type`": `"code`",
+      `"phase`": `"C0`",
+      `"status`": `"pending`",
+      `"description`": `"Implement C0 spec (production code only).`",
+      `"references`": [`"$featureDir/plan.md`", `"$featureDir/C0-spec.md`"],
+      `"acceptance_criteria`": [`"Meets all acceptance criteria in C0-spec.md`"],
+      `"start_checklist`": [
+        `"git checkout feat/$Feature && git pull --ff-only`",
+        `"Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt`",
+        `"Set status to in_progress; add START entry; commit docs`",
+        `"Create branch c0-code and worktree wt/$Feature-c0-code; do not edit planning docs inside the worktree`"
+      ],
+      `"end_checklist`": [
+        `"cargo fmt`",
+        `"cargo clippy --workspace --all-targets -- -D warnings`",
+        `"Commit worktree changes; merge back ff-only; update docs; remove worktree`"
+      ],
+      `"worktree`": `"wt/$Feature-c0-code`",
+      `"integration_task`": `"C0-integ`",
+      `"kickoff_prompt`": `"$featureDir/kickoff_prompts/C0-code.md`",
+      `"depends_on`": [],
+      `"concurrent_with`": [`"C0-test`"]
+    },
+    {
+      `"id`": `"C0-test`",
+      `"name`": `"C0 slice (test)`",
+      `"type`": `"test`",
+      `"phase`": `"C0`",
+      `"status`": `"pending`",
+      `"description`": `"Add/modify tests for C0 spec (tests only).`",
+      `"references`": [`"$featureDir/plan.md`", `"$featureDir/C0-spec.md`"],
+      `"acceptance_criteria`": [`"Tests enforce C0 acceptance criteria`"],
+      `"start_checklist`": [
+        `"git checkout feat/$Feature && git pull --ff-only`",
+        `"Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt`",
+        `"Set status to in_progress; add START entry; commit docs`",
+        `"Create branch c0-test and worktree wt/$Feature-c0-test; do not edit planning docs inside the worktree`"
+      ],
+      `"end_checklist`": [
+        `"cargo fmt`",
+        `"Run the targeted tests you add/touch`",
+        `"Commit worktree changes; merge back ff-only; update docs; remove worktree`"
+      ],
+      `"worktree`": `"wt/$Feature-c0-test`",
+      `"integration_task`": `"C0-integ`",
+      `"kickoff_prompt`": `"$featureDir/kickoff_prompts/C0-test.md`",
+      `"depends_on`": [],
+      `"concurrent_with`": [`"C0-code`"]
+    },
+    {
+      `"id`": `"C0-integ-core`",
+      `"name`": `"C0 slice (integration core)`",
+      `"type`": `"integration`",
+      `"phase`": `"C0`",
+      `"status`": `"pending`",
+      `"description`": `"Merge C0 code+tests and make the slice green on the primary dev platform.`",
+      `"references`": [`"$featureDir/plan.md`", `"$featureDir/C0-spec.md`"],
+      `"acceptance_criteria`": [`"Core slice is green under make integ-checks and matches the spec`"],
+      `"start_checklist`": [
+        `"git checkout feat/$Feature && git pull --ff-only`",
+        `"Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt`",
+        `"Set status to in_progress; add START entry; commit docs`",
+        `"Create branch c0-integ-core and worktree wt/$Feature-c0-integ-core; do not edit planning docs inside the worktree`"
+      ],
+      `"end_checklist`": [
+        `"cargo fmt`",
+        `"cargo clippy --workspace --all-targets -- -D warnings`",
+        `"Run relevant tests`",
+        `"make integ-checks`",
+        `"Dispatch cross-platform smoke via scripts/ci/dispatch_feature_smoke.sh (record run ids/URLs)`",
+        `"Commit worktree changes; merge back ff-only; update docs; remove worktree`"
+      ],
+      `"worktree`": `"wt/$Feature-c0-integ-core`",
+      `"integration_task`": `"C0-integ-core`",
+      `"kickoff_prompt`": `"$featureDir/kickoff_prompts/C0-integ-core.md`",
+      `"depends_on`": [`"C0-code`", `"C0-test`"],
+      `"concurrent_with`": []
+    },
+    {
+      `"id`": `"C0-integ-linux`",
+      `"name`": `"C0 slice (integration linux)`",
+      `"type`": `"integration`",
+      `"phase`": `"C0`",
+      `"status`": `"pending`",
+      `"description`": `"Linux platform-fix integration task (may be a no-op if already green).`",
+      `"references`": [`"$featureDir/plan.md`", `"$featureDir/C0-spec.md`"],
+      `"acceptance_criteria`": [`"Linux smoke is green for this slice`"],
+      `"start_checklist`": [
+        `"Run on Linux host if possible`",
+        `"git checkout feat/$Feature && git pull --ff-only`",
+        `"Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt`",
+        `"Set status to in_progress; add START entry; commit docs`",
+        `"Create branch c0-integ-linux and worktree wt/$Feature-c0-integ-linux; do not edit planning docs inside the worktree`"
+      ],
+      `"end_checklist`": [
+        `"Dispatch platform smoke: scripts/ci/dispatch_feature_smoke.sh --platform linux`",
+        `"If needed: fix + fmt/clippy + targeted tests`",
+        `"Ensure Linux smoke is green; record run id/URL`",
+        `"Commit worktree changes (if any); merge back ff-only; update docs; remove worktree`"
+      ],
+      `"worktree`": `"wt/$Feature-c0-integ-linux`",
+      `"integration_task`": `"C0-integ-linux`",
+      `"kickoff_prompt`": `"$featureDir/kickoff_prompts/C0-integ-linux.md`",
+      `"depends_on`": [`"C0-integ-core`"],
+      `"concurrent_with`": [],
+      `"platform`": `"linux`",
+      `"runner`": `"github-actions`",
+      `"workflow`": `".github/workflows/feature-smoke.yml`"
+    },
+    {
+      `"id`": `"C0-integ-macos`",
+      `"name`": `"C0 slice (integration macOS)`",
+      `"type`": `"integration`",
+      `"phase`": `"C0`",
+      `"status`": `"pending`",
+      `"description`": `"macOS platform-fix integration task (may be a no-op if already green).`",
+      `"references`": [`"$featureDir/plan.md`", `"$featureDir/C0-spec.md`"],
+      `"acceptance_criteria`": [`"macOS smoke is green for this slice`"],
+      `"start_checklist`": [
+        `"Run on macOS host if possible`",
+        `"git checkout feat/$Feature && git pull --ff-only`",
+        `"Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt`",
+        `"Set status to in_progress; add START entry; commit docs`",
+        `"Create branch c0-integ-macos and worktree wt/$Feature-c0-integ-macos; do not edit planning docs inside the worktree`"
+      ],
+      `"end_checklist`": [
+        `"Dispatch platform smoke: scripts/ci/dispatch_feature_smoke.sh --platform macos`",
+        `"If needed: fix + fmt/clippy + targeted tests`",
+        `"Ensure macOS smoke is green; record run id/URL`",
+        `"Commit worktree changes (if any); merge back ff-only; update docs; remove worktree`"
+      ],
+      `"worktree`": `"wt/$Feature-c0-integ-macos`",
+      `"integration_task`": `"C0-integ-macos`",
+      `"kickoff_prompt`": `"$featureDir/kickoff_prompts/C0-integ-macos.md`",
+      `"depends_on`": [`"C0-integ-core`"],
+      `"concurrent_with`": [],
+      `"platform`": `"macos`",
+      `"runner`": `"github-actions`",
+      `"workflow`": `".github/workflows/feature-smoke.yml`"
+    },
+    {
+      `"id`": `"C0-integ-windows`",
+      `"name`": `"C0 slice (integration Windows)`",
+      `"type`": `"integration`",
+      `"phase`": `"C0`",
+      `"status`": `"pending`",
+      `"description`": `"Windows platform-fix integration task (may be a no-op if already green).`",
+      `"references`": [`"$featureDir/plan.md`", `"$featureDir/C0-spec.md`"],
+      `"acceptance_criteria`": [`"Windows smoke is green for this slice`"],
+      `"start_checklist`": [
+        `"Run on Windows host if possible`",
+        `"git checkout feat/$Feature && git pull --ff-only`",
+        `"Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt`",
+        `"Set status to in_progress; add START entry; commit docs`",
+        `"Create branch c0-integ-windows and worktree wt/$Feature-c0-integ-windows; do not edit planning docs inside the worktree`"
+      ],
+      `"end_checklist`": [
+        `"Dispatch platform smoke: scripts/ci/dispatch_feature_smoke.sh --platform windows`",
+        `"If needed: fix + fmt/clippy + targeted tests`",
+        `"Ensure Windows smoke is green; record run id/URL`",
+        `"Commit worktree changes (if any); merge back ff-only; update docs; remove worktree`"
+      ],
+      `"worktree`": `"wt/$Feature-c0-integ-windows`",
+      `"integration_task`": `"C0-integ-windows`",
+      `"kickoff_prompt`": `"$featureDir/kickoff_prompts/C0-integ-windows.md`",
+      `"depends_on`": [`"C0-integ-core`"],
+      `"concurrent_with`": [],
+      `"platform`": `"windows`",
+      `"runner`": `"github-actions`",
+      `"workflow`": `".github/workflows/feature-smoke.yml`"
+    },
+    {
+      `"id`": `"C0-integ`",
+      `"name`": `"C0 slice (integration final)`",
+      `"type`": `"integration`",
+      `"phase`": `"C0`",
+      `"status`": `"pending`",
+      `"description`": `"Final cross-platform integration: merge any platform fixes and confirm all platforms are green.`",
+      `"references`": [`"$featureDir/plan.md`", `"$featureDir/C0-spec.md`"],
+      `"acceptance_criteria`": [`"All required platforms are green and the slice matches the spec`"],
+      `"start_checklist`": [
+        `"git checkout feat/$Feature && git pull --ff-only`",
+        `"Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt`",
+        `"Set status to in_progress; add START entry; commit docs`",
+        `"Create branch c0-integ and worktree wt/$Feature-c0-integ; do not edit planning docs inside the worktree`"
+      ],
+      `"end_checklist`": [
+        `"Merge platform-fix branches (if any) + resolve conflicts`",
+        `"cargo fmt`",
+        `"cargo clippy --workspace --all-targets -- -D warnings`",
+        `"Run relevant tests`",
+        `"make integ-checks`",
+        `"Dispatch cross-platform smoke via scripts/ci/dispatch_feature_smoke.sh (record run ids/URLs)`",
+        `"Commit worktree changes; merge back ff-only; update docs; remove worktree`"
+      ],
+      `"worktree`": `"wt/$Feature-c0-integ`",
+      `"integration_task`": `"C0-integ`",
+      `"kickoff_prompt`": `"$featureDir/kickoff_prompts/C0-integ.md`",
+      `"depends_on`": [`"C0-integ-core`", `"C0-integ-linux`", `"C0-integ-macos`", `"C0-integ-windows`"],
+      `"concurrent_with`": []
+    }
+  ]
+}
+"@ | Set-Content -LiteralPath (Join-Path $featureDir "tasks.json")
+} else {
+@"
+{
+  `"meta`": {
+    `"schema_version`": 2,
+    `"feature`": `"$Feature`",
+    `"cross_platform`": false
   },
   `"tasks`": [
     {
@@ -143,19 +362,29 @@ Render-Template (Join-Path $templatesDir "contract.md.tmpl") (Join-Path $feature
   ]
 }
 "@ | Set-Content -LiteralPath (Join-Path $featureDir "tasks.json")
+}
 
-function Render-Kickoff([string]$Template, [string]$OutFile, [string]$TaskId, [string]$Branch, [string]$Worktree) {
+function Render-Kickoff([string]$Template, [string]$OutFile, [string]$TaskId, [string]$Branch, [string]$Worktree, [string]$Platform = "") {
     $vars2 = $vars.Clone()
     $vars2["TASK_ID"] = $TaskId
     $vars2["SPEC_FILE"] = "C0-spec.md"
     $vars2["BRANCH"] = $Branch
     $vars2["WORKTREE"] = $Worktree
+    $vars2["PLATFORM"] = $Platform
     Render-Template (Join-Path $templatesDir $Template) (Join-Path $featureDir "kickoff_prompts/$OutFile") $vars2
 }
 
 Render-Kickoff "kickoff_code.md.tmpl" "C0-code.md" "C0-code" "c0-code" "wt/$Feature-c0-code"
 Render-Kickoff "kickoff_test.md.tmpl" "C0-test.md" "C0-test" "c0-test" "wt/$Feature-c0-test"
-Render-Kickoff "kickoff_integ.md.tmpl" "C0-integ.md" "C0-integ" "c0-integ" "wt/$Feature-c0-integ"
+if ($CrossPlatform.IsPresent) {
+    Render-Kickoff "kickoff_integ_core.md.tmpl" "C0-integ-core.md" "C0-integ-core" "c0-integ-core" "wt/$Feature-c0-integ-core"
+    Render-Kickoff "kickoff_integ_platform.md.tmpl" "C0-integ-linux.md" "C0-integ-linux" "c0-integ-linux" "wt/$Feature-c0-integ-linux" "linux"
+    Render-Kickoff "kickoff_integ_platform.md.tmpl" "C0-integ-macos.md" "C0-integ-macos" "c0-integ-macos" "wt/$Feature-c0-integ-macos" "macos"
+    Render-Kickoff "kickoff_integ_platform.md.tmpl" "C0-integ-windows.md" "C0-integ-windows" "c0-integ-windows" "wt/$Feature-c0-integ-windows" "windows"
+    Render-Kickoff "kickoff_integ_final.md.tmpl" "C0-integ.md" "C0-integ" "c0-integ" "wt/$Feature-c0-integ"
+} else {
+    Render-Kickoff "kickoff_integ.md.tmpl" "C0-integ.md" "C0-integ" "c0-integ" "wt/$Feature-c0-integ"
+}
 
 if ($DecisionHeavy.IsPresent -or $CrossPlatform.IsPresent) {
     "# Decision Register`n`nUse the template in:`n- `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`" |
@@ -191,4 +420,3 @@ exit 1
 }
 
 Write-Host "OK: created $featureDir"
-

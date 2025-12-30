@@ -12,6 +12,7 @@ ALLOWED_TASK_TYPES = {"code", "test", "integration", "ops", "investigation"}
 ALLOWED_TASK_STATUSES = {"pending", "in_progress", "completed", "queued", "blocked", "canceled"}
 ALLOWED_PLATFORMS = {"linux", "macos", "windows", "wsl"}
 ALLOWED_RUNNERS = {"local", "github-actions", "manual"}
+DEFAULT_SCHEMA_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,36 @@ def _validate_tasks_shape(data: Any, errors: List[ValidationError], path: str) -
         _error(errors, f"{path}: every entry in `tasks` must be an object")
         return None
     return tasks
+
+
+def _validate_meta(data: Any, errors: List[ValidationError], path: str) -> Dict[str, Any]:
+    if not isinstance(data, dict):
+        return {}
+
+    meta = data.get("meta", {})
+    if meta is None:
+        return {}
+    if not isinstance(meta, dict):
+        _error(errors, f"{path}: meta must be an object when present")
+        return {}
+
+    schema_version = meta.get("schema_version", DEFAULT_SCHEMA_VERSION)
+    if not isinstance(schema_version, int) or schema_version < 1:
+        _error(errors, f"{path}: meta.schema_version must be an integer >= 1")
+
+    platforms_required = meta.get("platforms_required")
+    if platforms_required is not None:
+        if not isinstance(platforms_required, list) or not all(isinstance(p, str) for p in platforms_required):
+            _error(errors, f"{path}: meta.platforms_required must be an array of strings")
+        else:
+            unknown = sorted({p for p in platforms_required if p not in ALLOWED_PLATFORMS})
+            if unknown:
+                _error(errors, f"{path}: meta.platforms_required contains unknown platform(s): {', '.join(unknown)}")
+            duplicates = sorted({p for p in platforms_required if platforms_required.count(p) > 1})
+            if duplicates:
+                _error(errors, f"{path}: meta.platforms_required contains duplicate platform(s): {', '.join(duplicates)}")
+
+    return meta
 
 
 def _validate_task_fields(tasks: List[Dict[str, Any]], errors: List[ValidationError], path: str) -> None:
@@ -229,6 +260,103 @@ def _validate_smoke_linkage(feature_dir: str, tasks: List[Dict[str, Any]], error
                 f"{path}:tasks[{index}]({task.get('id')}): integration task must reference smoke scripts in references/end_checklist",
             )
 
+def _validate_platform_integ_model(
+    feature_dir: str, tasks: List[Dict[str, Any]], meta: Dict[str, Any], errors: List[ValidationError], path: str
+) -> None:
+    """
+    Enforce the cross-platform integration structure only when the planning pack opts in via:
+      - meta.schema_version >= 2, and
+      - meta.platforms_required is present.
+
+    Model (per slice X):
+      - X-integ-core (integration): merges code+tests and gets primary-platform green
+      - X-integ-<platform> (integration, platform set): platform-fix task (may be no-op if already green)
+      - X-integ (integration): final aggregator merges any platform fixes and records results
+    """
+    schema_version = meta.get("schema_version", DEFAULT_SCHEMA_VERSION)
+    if not isinstance(schema_version, int) or schema_version < 2:
+        return
+
+    platforms_required = meta.get("platforms_required")
+    if not isinstance(platforms_required, list) or not platforms_required:
+        return
+
+    tasks_by_id: Dict[str, Dict[str, Any]] = {t.get("id"): t for t in tasks if isinstance(t.get("id"), str)}
+
+    # Determine slices present by looking for platform integ task ids.
+    slices: Dict[str, Set[str]] = {}
+    for task_id, task in tasks_by_id.items():
+        if not isinstance(task_id, str):
+            continue
+        if task.get("type") != "integration":
+            continue
+        for platform in platforms_required:
+            suffix = f"-integ-{platform}"
+            if task_id.endswith(suffix):
+                slice_id = task_id[: -len(suffix)]
+                slices.setdefault(slice_id, set()).add(platform)
+                break
+
+    if not slices:
+        _error(
+            errors,
+            f"{path}: meta.schema_version>=2 and meta.platforms_required set, but no '*-integ-<platform>' integration tasks found",
+        )
+        return
+
+    for slice_id, platforms_present in sorted(slices.items()):
+        missing = sorted(set(platforms_required) - platforms_present)
+        if missing:
+            _error(
+                errors,
+                f"{path}: slice {slice_id!r} missing required platform integration task(s): {', '.join(missing)}",
+            )
+
+        core_id = f"{slice_id}-integ-core"
+        final_id = f"{slice_id}-integ"
+
+        core = tasks_by_id.get(core_id)
+        if core is None:
+            _error(errors, f"{path}: missing required core integration task: {core_id!r}")
+        elif core.get("type") != "integration":
+            _error(errors, f"{path}: {core_id!r} must have type=integration")
+
+        final = tasks_by_id.get(final_id)
+        if final is None:
+            _error(errors, f"{path}: missing required final integration task: {final_id!r}")
+        elif final.get("type") != "integration":
+            _error(errors, f"{path}: {final_id!r} must have type=integration")
+
+        # Dependency wiring: platform tasks depend on core; final depends on core + all platform tasks.
+        if core is None or final is None:
+            continue
+
+        for platform in platforms_required:
+            platform_id = f"{slice_id}-integ-{platform}"
+            platform_task = tasks_by_id.get(platform_id)
+            if platform_task is None:
+                continue
+            if platform_task.get("type") != "integration":
+                _error(errors, f"{path}: {platform_id!r} must have type=integration")
+                continue
+            if platform_task.get("platform") != platform:
+                _error(errors, f"{path}: {platform_id!r} must set platform={platform!r}")
+
+            depends_on = platform_task.get("depends_on")
+            if not isinstance(depends_on, list) or core_id not in depends_on:
+                _error(errors, f"{path}: {platform_id!r} depends_on must include {core_id!r}")
+
+        final_deps = final.get("depends_on")
+        if not isinstance(final_deps, list):
+            _error(errors, f"{path}: {final_id!r} depends_on must be an array")
+            continue
+        if core_id not in final_deps:
+            _error(errors, f"{path}: {final_id!r} depends_on must include {core_id!r}")
+        for platform in platforms_required:
+            platform_id = f"{slice_id}-integ-{platform}"
+            if platform_id in tasks_by_id and platform_id not in final_deps:
+                _error(errors, f"{path}: {final_id!r} depends_on must include {platform_id!r}")
+
 
 def validate_tasks_json(feature_dir: str) -> Tuple[List[ValidationError], str]:
     tasks_path = os.path.join(feature_dir, "tasks.json")
@@ -244,11 +372,12 @@ def validate_tasks_json(feature_dir: str) -> Tuple[List[ValidationError], str]:
         _error(errors, f"{tasks_path}: invalid JSON: {exc}")
         return errors, tasks_path
 
+    meta = _validate_meta(data, errors, tasks_path)
+
     tasks = _validate_tasks_shape(data, errors, tasks_path)
     if tasks is None:
         return errors, tasks_path
 
-    meta = data.get("meta", {}) if isinstance(data, dict) else {}
     external_list = meta.get("external_task_ids", []) if isinstance(meta, dict) else []
     external_task_ids: Set[str] = set(external_list) if isinstance(external_list, list) else set()
     if not all(isinstance(x, str) for x in external_task_ids):
@@ -257,6 +386,7 @@ def validate_tasks_json(feature_dir: str) -> Tuple[List[ValidationError], str]:
     _validate_task_fields(tasks, errors, tasks_path)
     _validate_references(feature_dir, tasks, external_task_ids, errors, tasks_path)
     _validate_smoke_linkage(feature_dir, tasks, errors, tasks_path)
+    _validate_platform_integ_model(feature_dir, tasks, meta, errors, tasks_path)
 
     return errors, tasks_path
 
