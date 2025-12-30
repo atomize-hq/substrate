@@ -40,6 +40,7 @@ Review checklist (pass/fail):
    - Acceptance criteria are runnable and include expected exit codes/output.
    - Manual playbooks exist where required.
    - Smoke scripts exist where required and are referenced by the manual playbook.
+   - If `tasks.json` opts into schema v2 cross-platform parity (`meta.schema_version >= 2` and `meta.platforms_required`), the required `X-integ-core`, `X-integ-<platform>`, and `X-integ` tasks exist and are correctly wired.
 5) Auditability:
    - Decisions map to triad task IDs via `references` and follow-up tasks.
 

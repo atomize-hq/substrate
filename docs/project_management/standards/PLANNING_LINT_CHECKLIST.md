@@ -27,6 +27,7 @@ This runner checks (at minimum):
 - Hard-ban scan (no `TBD/TODO/WIP/TBA`, no “open question”, no “etc.”/“and so on”)
 - Ambiguity scan (no `should|could|might|maybe` in behavior/contracts)
 - `tasks.json` invariants (`scripts/planning/validate_tasks_json.py`)
+  - If `tasks.json` opts into schema v2 cross-platform parity (`meta.schema_version >= 2` and `meta.platforms_required`), it must include the required `X-integ-core`, `X-integ-<platform>`, and `X-integ` tasks per slice.
 - ADR Executive Summary drift checks for any ADRs found/referenced (`scripts/planning/check_adr_exec_summary.py`)
 - Kickoff prompt sentinel coverage (must contain `Do not edit planning docs inside the worktree.`)
 - Manual playbook must reference smoke scripts (when both exist)

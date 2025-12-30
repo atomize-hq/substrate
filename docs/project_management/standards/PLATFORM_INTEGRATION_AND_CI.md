@@ -31,17 +31,27 @@ Before relying on self-hosted smoke runs, validate runner availability and label
 ## Recommended task structuring
 
 For cross-platform work, split integration into:
-- **Option A (minimum friction, still parallel):** one integration task runs the smoke workflow with `platform=all` (and optionally `run_wsl=true`) and records the run id/URL in `session_log.md`.
-- **Option B (maximum explicitness / targeted gating):** split into platform tasks:
-  - `X-integ-linux` (runner: github-actions, runner_kind: self-hosted)
-  - `X-integ-macos` (runner: github-actions, runner_kind: self-hosted)
-  - `X-integ-windows` (runner: github-actions, runner_kind: self-hosted)
-  - optional: `X-integ-wsl` (runner: github-actions, runner_kind: self-hosted)
-  - `X-integ` (final aggregator): depends on required platform tasks, performs merge + `make integ-checks` on the primary dev platform, and records combined results in `session_log.md`.
+- **Option A (validation-only):** one integration task runs the smoke workflow with `platform=all` (and optionally `run_wsl=true`) and records the run id/URL in `session_log.md`.
+- **Option B (platform-fix when needed):** split integration into core + platform-fix tasks:
+  - `X-integ-core` (core integration): merges code+tests and gets primary-platform green.
+  - `X-integ-linux` (platform-fix): runs Linux smoke; if it fails, applies fixes on a Linux machine/worktree and re-runs smoke.
+  - `X-integ-macos` (platform-fix): same for macOS.
+  - `X-integ-windows` (platform-fix): same for Windows.
+  - optional: `X-integ-wsl` (platform-fix): same for WSL (Linux-in-WSL).
+  - `X-integ` (final aggregator): merges any platform-fix branches, re-runs `make integ-checks` on the primary dev platform, and confirms cross-platform smoke is green.
 
 This preserves parallelism and makes it explicit which validations happened where.
 
 Only include platform-specific integration tasks for platforms that are actually required by the feature’s platform guarantees (as defined in ADR/spec/contract). If a feature is Linux-only, do not add macOS/Windows integration tasks.
+
+## Planning Pack requirement (schema v2)
+
+If a planning pack opts into the platform-fix model, encode it in `tasks.json`:
+- `meta.schema_version: 2`
+- `meta.platforms_required: ["linux","macos","windows"]` (plus `"wsl"` if required)
+
+The mechanical tasks validator enforces the required task shape when `meta.schema_version >= 2` and `meta.platforms_required` is present:
+- `scripts/planning/validate_tasks_json.py`
 
 ## `tasks.json` (recommended fields)
 
@@ -73,6 +83,17 @@ GitHub Actions must run on a ref that exists on the remote. The repeatable patte
 Helper script (requires `gh` auth):
 - `scripts/ci/dispatch_feature_smoke.sh`
   - Defaults to dispatching from a stable workflow ref (`feat/policy_and_config`) and using `runner_kind=self-hosted`; override with `--workflow-ref` / `--runner-kind` if needed.
+
+## Platform-fix note (important)
+
+GitHub Actions workflows in this repo are **validation mechanisms**. They run smoke scripts, but they do not commit fixes back to the repository.
+
+Platform-fix work happens on the corresponding platform machine:
+- create a platform-fix branch + worktree,
+- apply the fix,
+- commit,
+- re-run smoke via `scripts/ci/dispatch_feature_smoke.sh`,
+- fast-forward merge back to the orchestration branch.
 
 ## WSL testing note
 

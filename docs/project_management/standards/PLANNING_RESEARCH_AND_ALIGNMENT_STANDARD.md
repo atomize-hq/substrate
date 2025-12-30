@@ -74,6 +74,19 @@ Planning outputs must be directly executable under the triad workflow. Therefore
   - docs/tasks/session logs are edited only on the orchestration branch,
   - docs/tasks/session logs are never edited from inside worktrees.
 
+### 3.1.2 Cross-platform parity planning (required when cross-platform)
+
+If the work requires cross-platform parity (Linux/macOS/Windows and optionally WSL):
+- The planning pack must explicitly state the required platform set and the parity guarantees (in ADR/specs/contract).
+- The planning pack must choose an integration task model:
+  - validation-only, or
+  - platform-fix when needed (recommended for any feature that could plausibly diverge by platform).
+- If using platform-fix when needed, encode it mechanically in `tasks.json`:
+  - `meta.schema_version: 2`
+  - `meta.platforms_required: ["linux","macos","windows"]` (plus `"wsl"` if required)
+  - per slice: `X-integ-core`, `X-integ-<platform>`, and `X-integ` (final)
+  - include platform smoke scripts under `smoke/` and reference them in integration tasks/end checklists.
+
 ### 3.2 Required for “decision-heavy” or “cross-platform” work
 
 Add these files when the work introduces new user contracts, config, or platform behaviors:

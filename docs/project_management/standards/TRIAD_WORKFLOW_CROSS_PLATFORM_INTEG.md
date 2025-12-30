@@ -5,9 +5,9 @@ This diagram is the “execution phase” complement to:
 
 It shows:
 - code/test running in parallel worktrees,
-- a core integration merge task,
-- platform-specific integration smoke tasks running in parallel on self-hosted runners via GitHub Actions, and
-- a final cross-platform integration aggregator that merges + records results.
+- a core integration merge task (`X-integ-core`),
+- parallel platform-fix integration tasks (`X-integ-<platform>`) that only make changes if a platform fails, and
+- a final cross-platform integration aggregator (`X-integ`) that merges platform fixes and re-validates.
 
 ```mermaid
 flowchart TD
@@ -35,41 +35,40 @@ flowchart TD
   TASKS --> CODE
   TASKS --> TEST
 
-  subgraph INTEG_CORE["Core Integration (host integration worktree)"]
+  subgraph INTEG_CORE["Core Integration (primary dev platform)"]
     MERGE["X-integ-core<br/>merge X-code + X-test<br/>resolve spec drift"]
     CORE_CHECKS["Required checks:<br/>- cargo fmt<br/>- cargo clippy ... -- -D warnings<br/>- relevant tests<br/>- make integ-checks"]
+    CORE_DISPATCH["Dispatch cross-platform smoke<br/>via scripts/ci/dispatch_feature_smoke.sh<br/>platform=all (+ optional WSL)"]
   end
 
   CODE --> MERGE
   TEST --> MERGE
   MERGE --> CORE_CHECKS
+  CORE_CHECKS --> CORE_DISPATCH
 
-  %% ======== Cross-platform smoke (parallel) ========
-  subgraph CI["GitHub Actions (self-hosted runners)"]
-    TMPBR["Create throwaway remote branch<br/>(tmp/feature-smoke/...)<br/>from X-integ-core SHA"]
-    DISPATCH["Dispatch workflow from stable ref<br/>(ref: feat/policy_and_config)<br/>inputs: checkout_ref=tmp branch<br/>runner_kind=self-hosted"]
-
-    LNX["X-integ-linux<br/>Feature Smoke: platform=linux<br/>runs-on: self-hosted / Linux / linux-host"]
-    MAC["X-integ-macos<br/>Feature Smoke: platform=macos<br/>runs-on: self-hosted / macOS"]
-    WIN["X-integ-windows<br/>Feature Smoke: platform=windows<br/>runs-on: self-hosted / Windows"]
-    WSL["X-integ-wsl (optional)<br/>Feature Smoke: run_wsl=true<br/>runs-on: self-hosted / Linux / wsl"]
+  %% ======== Smoke validation (CI) ========
+  subgraph CI["GitHub Actions (validation only)"]
+    SMOKE_ALL["Feature Smoke workflow<br/>(self-hosted runners)<br/>linux + macos + windows (+ optional WSL)"]
   end
 
-  CORE_CHECKS --> TMPBR --> DISPATCH
-  DISPATCH --> LNX
-  DISPATCH --> MAC
-  DISPATCH --> WIN
-  DISPATCH --> WSL
+  CORE_DISPATCH --> SMOKE_ALL
 
-  %% If a platform smoke fails, fix in core integration then re-dispatch
-  LNX -.->|fail| MERGE
-  MAC -.->|fail| MERGE
-  WIN -.->|fail| MERGE
-  WSL -.->|fail| MERGE
+  %% ======== Platform-fix tasks (parallel, only if needed) ========
+  subgraph PF["Platform-fix Integration Tasks (worktrees on platform machines)"]
+    LNX["X-integ-linux<br/>If Linux fails: fix in Linux worktree<br/>re-run smoke until green"]
+    MAC["X-integ-macos<br/>If macOS fails: fix in macOS worktree<br/>re-run smoke until green"]
+    WIN["X-integ-windows<br/>If Windows fails: fix in Windows worktree<br/>re-run smoke until green"]
+    WSL["X-integ-wsl (optional)<br/>If WSL fails: fix in WSL worktree<br/>re-run smoke until green"]
+  end
+
+  SMOKE_ALL --> LNX
+  SMOKE_ALL --> MAC
+  SMOKE_ALL --> WIN
+  SMOKE_ALL --> WSL
 
   %% ======== Final aggregator ========
   subgraph INTEG_FINAL["Final Cross-Platform Integration"]
-    AGG["X-integ (final)<br/>wait for required platform smoke<br/>record run ids/URLs in session_log.md"]
+    AGG["X-integ (final)<br/>merge platform-fix branches (if any)<br/>run integ checks + re-run cross-platform smoke"]
     MERGE_BACK["Fast-forward merge to orchestration branch<br/>update tasks.json/session_log.md<br/>(remove worktrees)"]
   end
 
@@ -77,6 +76,6 @@ flowchart TD
   MAC --> AGG
   WIN --> AGG
   WSL --> AGG
-  CORE_CHECKS --> AGG
+  CORE_DISPATCH --> AGG
   AGG --> MERGE_BACK --> TASKS
 ```

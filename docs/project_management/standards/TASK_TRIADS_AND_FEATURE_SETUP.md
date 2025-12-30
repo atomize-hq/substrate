@@ -121,6 +121,21 @@ End (integration):
       - `scripts/ci/dispatch_feature_smoke.sh --feature-dir "$FEATURE_DIR" --runner-kind self-hosted --platform all --run-wsl --cleanup`
     - Use direct local execution only when the platform matches the current machine (e.g., `bash "$FEATURE_DIR/smoke/linux-smoke.sh"` on Linux).
 
+## Cross-platform integration task model (platform-fix when needed)
+
+When a slice requires cross-platform parity, use this integration task structure (see also `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`):
+- `X-integ-core`: merges `X-code` + `X-test`, gets primary-platform green, and dispatches smoke for all required platforms.
+- `X-integ-linux|macos|windows` (and optional `X-integ-wsl`): platform-fix tasks that:
+  - validate via `scripts/ci/dispatch_feature_smoke.sh` for the platform,
+  - apply fixes on the corresponding platform machine/worktree only if smoke fails,
+  - re-run smoke until green.
+- `X-integ` (final): merges any platform-fix branches, runs `make integ-checks`, and re-runs cross-platform smoke to confirm the merged result is green.
+
+Kickoff prompt templates for this model:
+- Core integration: `docs/project_management/standards/templates/kickoff_integ_core.md.tmpl`
+- Platform-fix integration: `docs/project_management/standards/templates/kickoff_integ_platform.md.tmpl`
+- Final aggregator integration: `docs/project_management/standards/templates/kickoff_integ_final.md.tmpl`
+
 ## Context Budget & Triad Sizing
 - Agents typically have a 272k token context window. Size each task so a single agent needs no more than ~40–50% of that window (roughly 110–150k tokens) to hold the spec, plan, code/tests, and recent history.
 - If a task risks breaching that budget (large migration, many platforms, or broad refactors), split into additional triads or narrower phases before kickoff.
