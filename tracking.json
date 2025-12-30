@@ -1,6 +1,6 @@
 {
     "purpose": "Ad-hoc tracker for planning-system improvements.",
-    "last_updated_utc": "2025-12-29T03:34:53Z",
+    "last_updated_utc": "2025-12-30T18:05:27Z",
     "items": [
         {
             "id": "HF-001",
@@ -103,6 +103,104 @@
                 "docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md"
             ],
             "notes": "Exec summaries include Existing→New→Why + Links, and `ADR_BODY_SHA256` enforces summary/body sync."
+        },
+        {
+            "id": "P2-005",
+            "area": "Planning pack ergonomics",
+            "title": "Introduce per-slice directory layout (v3) to reduce clutter and improve auditability",
+            "status": "planned",
+            "proposal": {
+                "current_layout": {
+                    "feature_root": [
+                        "plan.md",
+                        "tasks.json",
+                        "session_log.md",
+                        "contract.md",
+                        "C0-spec.md",
+                        "kickoff_prompts/*.md",
+                        "smoke/*"
+                    ]
+                },
+                "proposed_layout_v3": {
+                    "feature_root": [
+                        "plan.md",
+                        "tasks.json",
+                        "session_log.md",
+                        "contract.md",
+                        "decision_register.md (if decision-heavy/cross-platform)",
+                        "integration_map.md (if decision-heavy/cross-platform)",
+                        "manual_testing_playbook.md (if decision-heavy/cross-platform)",
+                        "smoke/ (feature-level smoke scripts; optionally add slice-specific subfolders only when needed)"
+                    ],
+                    "slices_directory": "slices/<SLICE_ID>/",
+                    "slice_contents": [
+                        "slices/C0/spec.md (canonical slice spec, replaces C0-spec.md)",
+                        "slices/C0/kickoff/code.md",
+                        "slices/C0/kickoff/test.md",
+                        "slices/C0/kickoff/integ-core.md",
+                        "slices/C0/kickoff/integ-linux.md",
+                        "slices/C0/kickoff/integ-macos.md",
+                        "slices/C0/kickoff/integ-windows.md",
+                        "slices/C0/kickoff/integ-wsl.md (only when meta.wsl_required && meta.wsl_task_mode == 'separate')",
+                        "slices/C0/artifacts/ (optional: CI run URLs, logs, screenshots, manual test notes)"
+                    ],
+                    "task_id_mapping": {
+                        "C0-code": "slices/C0/kickoff/code.md",
+                        "C0-test": "slices/C0/kickoff/test.md",
+                        "C0-integ-core": "slices/C0/kickoff/integ-core.md",
+                        "C0-integ-linux": "slices/C0/kickoff/integ-linux.md",
+                        "C0-integ-macos": "slices/C0/kickoff/integ-macos.md",
+                        "C0-integ-windows": "slices/C0/kickoff/integ-windows.md",
+                        "C0-integ-wsl": "slices/C0/kickoff/integ-wsl.md",
+                        "C0-integ": "slices/C0/kickoff/integ-final.md"
+                    }
+                }
+            },
+            "required_work": {
+                "standards_and_docs": [
+                    "Update docs/project_management/standards/PLANNING_README.md to describe the v3 layout and migration strategy.",
+                    "Update docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md to reference per-slice locations (spec + kickoff prompts).",
+                    "Update docs/project_management/standards/PLANNING_LINT_CHECKLIST.md to validate the new locations (and continue to support v2/v1 packs)."
+                ],
+                "tooling_changes": [
+                    "Update scripts/planning/new_feature.sh and scripts/planning/new_feature.ps1 to scaffold v3 layout.",
+                    "Update scripts/planning/validate_tasks_json.py to accept and/or enforce v3 layout when opted in (e.g., meta.schema_version >= 3 or meta.layout_version='v3').",
+                    "Update scripts/planning/lint.sh and scripts/planning/lint.ps1 (and any other linters) to locate specs/kickoff prompts in per-slice directories.",
+                    "Update scripts/planning/ensure_kickoff_prompt_sentinel.py and any path-based checks to discover kickoff prompts under slices/**/kickoff/."
+                ],
+                "repo_wide_reference_updates": [
+                    "Run comprehensive searches to replace hard-coded references to C0-spec.md, kickoff_prompts/, and feature-root spec conventions.",
+                    "Search locations: docs/project_management/standards/**, scripts/planning/**, scripts/ci/**, and any examples in docs/project_management/next/**.",
+                    "Add guardrails to prevent partial migrations (e.g., a validator error if some tasks reference v2 paths while others use v3 paths under the same feature)."
+                ],
+                "migration_strategy": [
+                    "Do not break existing Planning Packs: make v3 opt-in via an explicit meta flag/version.",
+                    "Optionally add a one-shot migrator script that converts a v2 feature pack to v3 and updates tasks.json references."
+                ]
+            },
+            "notes": "Defer until after current WSL/platform-fix workflow changes land; this is a structural migration that requires careful repo-wide reference updates."
+        },
+        {
+            "id": "P2-006",
+            "area": "Execution drift prevention",
+            "title": "Add feature start preflight gate + per-slice closeout gate (smoke↔manual parity + no-drift evidence)",
+            "status": "completed",
+            "files": [
+                "docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md",
+                "docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md",
+                "docs/project_management/standards/templates/execution_preflight_report.md.tmpl",
+                "docs/project_management/standards/templates/slice_closeout_report.md.tmpl",
+                "docs/project_management/standards/templates/kickoff_exec_preflight.md.tmpl",
+                "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+                "docs/project_management/standards/PLANNING_WORKFLOW_OVERVIEW.md",
+                "docs/project_management/standards/PLANNING_README.md",
+                "docs/project_management/standards/PLANNING_LINT_CHECKLIST.md",
+                "scripts/planning/new_feature.sh",
+                "scripts/planning/new_feature.ps1",
+                "scripts/planning/validate_tasks_json.py",
+                "docs/project_management/standards/tasks.schema.json"
+            ],
+            "notes": "Scaffolders now generate an ops task `F0-exec-preflight`, `execution_preflight_report.md`, and per-slice `<SLICE>-closeout_report.md`. Validator enforces these only when tasks.json opts in via `meta.execution_gates: true`."
         },
         {
             "id": "P2-004",

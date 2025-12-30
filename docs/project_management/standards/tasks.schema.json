@@ -11,7 +11,10 @@
                 "schema_version": { "type": "integer", "minimum": 1 },
                 "feature": { "type": "string" },
                 "cross_platform": { "type": "boolean" },
-                "platforms_required": { "type": "array", "items": { "type": "string", "enum": ["linux", "macos", "windows", "wsl"] } },
+                "platforms_required": { "type": "array", "items": { "type": "string", "enum": ["linux", "macos", "windows"] } },
+                "wsl_required": { "type": "boolean" },
+                "wsl_task_mode": { "type": "string", "enum": ["bundled", "separate"] },
+                "execution_gates": { "type": "boolean" },
                 "notes": { "type": "string" },
                 "external_task_ids": { "type": "array", "items": { "type": "string" } }
             }

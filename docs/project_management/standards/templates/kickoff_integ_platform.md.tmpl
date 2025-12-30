@@ -17,6 +17,8 @@ Do not edit planning docs inside the worktree.
 ## Requirements
 - First, validate platform smoke via CI for this platform:
   - `scripts/ci/dispatch_feature_smoke.sh --feature-dir "{{FEATURE_DIR}}" --runner-kind self-hosted --platform {{PLATFORM}} --cleanup`
+- If this is the Linux task and WSL coverage is required (see `tasks.json` meta: `wsl_required` + `wsl_task_mode`):
+  - Bundled (default): include `--run-wsl` in the Linux smoke dispatch.
 - If smoke passes: record run id/URL in the END entry and do not change code.
 - If smoke fails:
   1) Fix the issue in this worktree (platform-specific guards, path handling, deps, etc.) while keeping the spec contract intact.
@@ -28,4 +30,3 @@ Do not edit planning docs inside the worktree.
 2. Commit worktree changes (if any).
 3. Merge back to orchestration branch (ff-only).
 4. Update tasks.json + session_log.md END entry; commit docs (`docs: finish {{TASK_ID}}`); remove worktree.
-

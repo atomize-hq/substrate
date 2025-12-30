@@ -28,6 +28,7 @@ on:
           - linux
           - macos
           - windows
+          - wsl
           - all
       run_wsl:
         description: "Also run WSL smoke (requires suitable runner)"
@@ -43,7 +44,29 @@ permissions:
   contents: read
 
 jobs:
+  validate_inputs:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Validate inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          platform="${{ inputs.platform }}"
+          runner_kind="${{ inputs.runner_kind }}"
+          run_wsl="${{ inputs.run_wsl }}"
+
+          if [[ "${platform}" == "wsl" && "${runner_kind}" != "self-hosted" ]]; then
+            echo "ERROR: platform=wsl requires runner_kind=self-hosted" >&2
+            exit 1
+          fi
+
+          if [[ "${run_wsl}" == "true" && "${runner_kind}" != "self-hosted" ]]; then
+            echo "ERROR: run_wsl=true requires runner_kind=self-hosted" >&2
+            exit 1
+          fi
+
   linux_hosted:
+    needs: validate_inputs
     if: (inputs.platform == 'linux' || inputs.platform == 'all') && inputs.runner_kind == 'github-hosted'
     runs-on: ubuntu-24.04
     steps:
@@ -81,6 +104,7 @@ jobs:
         run: bash "${{ inputs.feature_dir }}/smoke/linux-smoke.sh"
 
   linux_self_hosted:
+    needs: validate_inputs
     if: (inputs.platform == 'linux' || inputs.platform == 'all') && inputs.runner_kind == 'self-hosted'
     runs-on: [self-hosted, Linux, linux-host]
     steps:
@@ -126,6 +150,7 @@ jobs:
         run: bash "${{ inputs.feature_dir }}/smoke/linux-smoke.sh"
 
   macos_hosted:
+    needs: validate_inputs
     if: (inputs.platform == 'macos' || inputs.platform == 'all') && inputs.runner_kind == 'github-hosted'
     runs-on: macos-14
     steps:
@@ -163,6 +188,7 @@ jobs:
         run: bash "${{ inputs.feature_dir }}/smoke/macos-smoke.sh"
 
   macos_self_hosted:
+    needs: validate_inputs
     if: (inputs.platform == 'macos' || inputs.platform == 'all') && inputs.runner_kind == 'self-hosted'
     runs-on: [self-hosted, macOS]
     steps:
@@ -195,6 +221,7 @@ jobs:
         run: bash "${{ inputs.feature_dir }}/smoke/macos-smoke.sh"
 
   windows_hosted:
+    needs: validate_inputs
     if: (inputs.platform == 'windows' || inputs.platform == 'all') && inputs.runner_kind == 'github-hosted'
     runs-on: windows-2022
     steps:
@@ -229,6 +256,7 @@ jobs:
         run: pwsh -File "${{ inputs.feature_dir }}/smoke/windows-smoke.ps1"
 
   windows_self_hosted:
+    needs: validate_inputs
     if: (inputs.platform == 'windows' || inputs.platform == 'all') && inputs.runner_kind == 'self-hosted'
     runs-on: [self-hosted, Windows]
     steps:
@@ -283,7 +311,8 @@ jobs:
         run: pwsh -File "${{ inputs.feature_dir }}/smoke/windows-smoke.ps1"
 
   wsl:
-    if: inputs.run_wsl
+    needs: validate_inputs
+    if: inputs.runner_kind == 'self-hosted' && (inputs.run_wsl || inputs.platform == 'wsl')
     runs-on: [self-hosted, Linux, wsl]
     steps:
       - name: Checkout repository (override ref)

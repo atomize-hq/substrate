@@ -8,6 +8,7 @@ This document explains, step by step, how to create a new feature directory, def
 - Test agent: tests only (plus minimal test-only helpers if absolutely needed). No production code. Runs `cargo fmt` and the targeted tests they add/touch; not responsible for full suite.
 - Integration agent: merges code+tests, resolves drift to the spec, ensures behavior matches the spec, runs `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, all relevant tests, and finishes with `make integ-checks` (required). They own the final green state.
 - Execution triads must not begin until the Planning Pack has a quality gate report with `RECOMMENDATION: ACCEPT` at `docs/project_management/next/<feature>/quality_gate_report.md` (see `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`).
+- If the feature opts into execution gates (`tasks.json` meta: `execution_gates: true`), triads must not begin until the execution preflight gate is completed (see `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`).
 - Docs/tasks/session log edits happen **only** on the orchestration branch (never in worktrees).
 - Specs are the single source of truth; integration reconciles code/tests to the spec.
 
@@ -20,6 +21,9 @@ This document explains, step by step, how to create a new feature directory, def
    - `session_log.md` (START/END entries only).
    - Specs: `C0-spec.md`, `C1-spec.md`, ... (one per triad).
    - `kickoff_prompts/` directory with `<triad>-code.md`, `<triad>-test.md`, `<triad>-integ.md`.
+   - Execution gates (when used):
+     - `execution_preflight_report.md`
+     - `<triad>-closeout_report.md` (e.g., `C0-closeout_report.md`)
    - Optional user-facing drafts (e.g., `DRAFT_*.md`).
 4. Update `plan.md` triad overview to list all triads.
 5. Commit the scaffolding on the orchestration branch.
@@ -84,6 +88,30 @@ Each prompt must include:
 - Requirements: what to build/test, protected paths/safety, required commands (code: fmt/clippy only; test: fmt + targeted tests; integration: fmt/clippy/tests + `make integ-checks`), sanity-check expectations.
 - End checklist: run required commands; commit worktree; merge back to orchestration branch (ff-only); update tasks.json status; add END entry (commands/results/blockers); create downstream prompts if missing (mandatory when absent); commit docs (`docs: finish <task-id>`); remove worktree.
 
+## Execution gates (recommended for high-fidelity work)
+
+### Feature start: Execution Preflight Gate
+
+Purpose:
+- Confirm the Planning Pack is runnable and the smoke/manual validation plan is strong enough before starting any triads.
+
+Mechanics:
+- Use the task `F0-exec-preflight` (type `ops`) and fill:
+  - `docs/project_management/next/<feature>/execution_preflight_report.md`
+- Standard:
+  - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+
+### Slice end: Slice Closeout Gate
+
+Purpose:
+- Ensure there is no drift between the slice spec and the shipped behavior, with evidence (commands run + smoke run ids/URLs).
+
+Mechanics:
+- At the end of `<triad>-integ`, fill:
+  - `docs/project_management/next/<feature>/<triad>-closeout_report.md`
+- Standard:
+  - `docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md`
+
 ## Branch/Worktree Naming
 - Branch: `<feature-prefix>-<triad>-<short-scope>` (e.g., `ws-c3-autosync-code` for world-sync, `ss-s2-settings-code` for settings-stack style). Use a consistent prefix per feature.
 - Worktree: `wt/<branch>` or `wt/<feature-prefix>-<triad>-<short-scope>`.
@@ -140,6 +168,28 @@ Kickoff prompt templates for this model:
 - Agents typically have a 272k token context window. Size each task so a single agent needs no more than ~40–50% of that window (roughly 110–150k tokens) to hold the spec, plan, code/tests, and recent history.
 - If a task risks breaching that budget (large migration, many platforms, or broad refactors), split into additional triads or narrower phases before kickoff.
 - Use specs to keep scope crisp; avoid “grab bag” triads. Aim for small, testable chunks with clear acceptance criteria.
+
+Practical sizing rules (recommended):
+- Define each slice as **one behavior delta** (one “Existing → New → Why”) with a small, explicit contract surface.
+- Prefer **more slices** over bigger slices. Small slices are the main hedge against context compaction and multi-agent handoffs.
+
+Good slice boundaries:
+- A single CLI command/subcommand behavior change (including its config/flags, errors, and tests).
+- One config key/precedence rule end-to-end (parse → validate → apply → observe).
+- One platform-sensitive behavior (plus the platform guards) with explicit parity expectations.
+- One failure mode/edge case class with tests (e.g., redaction, permissions, missing deps).
+
+Split triggers (if any are true, split into additional slices):
+- The slice has multiple independent UX flows (multiple “Existing → New → Why” deltas).
+- The slice touches multiple major subsystems (e.g., shim + broker + world-agent + world backend) without a narrow, single-threaded data flow.
+- The acceptance criteria list is “wide” (many unrelated bullets) instead of “deep” (few bullets with clear constraints).
+- The work requires heavy refactors plus new behavior in the same slice (split “refactor enabling change” from “feature behavior”).
+- Cross-platform parity requires substantial platform-specific behavior differences (split to isolate platform-fix work).
+
+Anti-patterns (avoid):
+- Slice titles/descriptions that contain “and”/“plus”/“misc”.
+- Slices that include “implement everything” for a feature.
+- Slices where tests are the only definition of the behavior (spec must be explicit).
 
 ## Protected Paths
 If relevant to the feature (e.g., sync/FS operations), explicitly list in specs/prompts: `.git`, `.substrate-git`, `.substrate`, sockets, device nodes, and any feature-specific exclusions.

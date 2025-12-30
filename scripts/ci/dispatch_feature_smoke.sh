@@ -7,7 +7,7 @@ Usage:
   scripts/ci/dispatch_feature_smoke.sh \
     --feature-dir docs/project_management/next/<feature> \
     [--runner-kind github-hosted|self-hosted] \
-    --platform linux|macos|windows|all \
+    --platform linux|macos|windows|wsl|all \
     [--run-wsl] \
     [--workflow .github/workflows/feature-smoke.yml] \
     [--workflow-ref <ref>] \
@@ -85,6 +85,15 @@ if [[ -z "${FEATURE_DIR}" || -z "${PLATFORM}" ]]; then
     usage >&2
     exit 2
 fi
+
+case "${PLATFORM}" in
+    linux|macos|windows|wsl|all) ;;
+    *)
+        echo "Invalid --platform: ${PLATFORM}" >&2
+        usage >&2
+        exit 2
+        ;;
+esac
 
 case "${RUNNER_KIND}" in
     github-hosted|self-hosted) ;;

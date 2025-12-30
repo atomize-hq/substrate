@@ -28,6 +28,8 @@ This runner checks (at minimum):
 - Ambiguity scan (no `should|could|might|maybe` in behavior/contracts)
 - `tasks.json` invariants (`scripts/planning/validate_tasks_json.py`)
   - If `tasks.json` opts into schema v2 cross-platform parity (`meta.schema_version >= 2` and `meta.platforms_required`), it must include the required `X-integ-core`, `X-integ-<platform>`, and `X-integ` tasks per slice.
+  - If WSL coverage is required, use `meta.wsl_required: true` + `meta.wsl_task_mode: "bundled"|"separate"` (do not include `"wsl"` in `meta.platforms_required`).
+  - If `meta.execution_gates: true`, it must include the execution preflight task/report and per-slice closeout report linkage.
 - ADR Executive Summary drift checks for any ADRs found/referenced (`scripts/planning/check_adr_exec_summary.py`)
 - Kickoff prompt sentinel coverage (must contain `Do not edit planning docs inside the worktree.`)
 - Manual playbook must reference smoke scripts (when both exist)

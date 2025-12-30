@@ -53,6 +53,7 @@ Planning work must use these standards:
 
 1) `plan.md`
 - A runbook: scope boundaries, triad overview, invariants, and operator UX expectations.
+  - Include a short triad sizing plan: each slice should represent one behavior delta and avoid “grab bag” scope (see `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`).
 
 2) `tasks.json`
 - Triad tasks (code/test/integration) with explicit dependencies, references, and acceptance criteria.
@@ -83,7 +84,8 @@ If the work requires cross-platform parity (Linux/macOS/Windows and optionally W
   - platform-fix when needed (recommended for any feature that could plausibly diverge by platform).
 - If using platform-fix when needed, encode it mechanically in `tasks.json`:
   - `meta.schema_version: 2`
-  - `meta.platforms_required: ["linux","macos","windows"]` (plus `"wsl"` if required)
+  - `meta.platforms_required: ["linux","macos","windows"]`
+  - If WSL coverage is required, do not add `"wsl"` to `meta.platforms_required`; instead use `meta.wsl_required: true` and `meta.wsl_task_mode: "bundled"|"separate"`.
   - per slice: `X-integ-core`, `X-integ-<platform>`, and `X-integ` (final)
   - include platform smoke scripts under `smoke/` and reference them in integration tasks/end checklists.
 

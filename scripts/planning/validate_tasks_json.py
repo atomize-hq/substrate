@@ -11,8 +11,10 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 ALLOWED_TASK_TYPES = {"code", "test", "integration", "ops", "investigation"}
 ALLOWED_TASK_STATUSES = {"pending", "in_progress", "completed", "queued", "blocked", "canceled"}
 ALLOWED_PLATFORMS = {"linux", "macos", "windows", "wsl"}
+ALLOWED_PLATFORMS_REQUIRED = {"linux", "macos", "windows"}
 ALLOWED_RUNNERS = {"local", "github-actions", "manual"}
 DEFAULT_SCHEMA_VERSION = 1
+ALLOWED_WSL_TASK_MODES = {"bundled", "separate"}
 
 
 @dataclass(frozen=True)
@@ -70,14 +72,87 @@ def _validate_meta(data: Any, errors: List[ValidationError], path: str) -> Dict[
         if not isinstance(platforms_required, list) or not all(isinstance(p, str) for p in platforms_required):
             _error(errors, f"{path}: meta.platforms_required must be an array of strings")
         else:
-            unknown = sorted({p for p in platforms_required if p not in ALLOWED_PLATFORMS})
+            unknown = sorted({p for p in platforms_required if p not in ALLOWED_PLATFORMS_REQUIRED})
             if unknown:
                 _error(errors, f"{path}: meta.platforms_required contains unknown platform(s): {', '.join(unknown)}")
+                if "wsl" in unknown:
+                    _error(
+                        errors,
+                        f"{path}: do not include 'wsl' in meta.platforms_required; use meta.wsl_required=true and meta.wsl_task_mode='bundled'|'separate'",
+                    )
             duplicates = sorted({p for p in platforms_required if platforms_required.count(p) > 1})
             if duplicates:
                 _error(errors, f"{path}: meta.platforms_required contains duplicate platform(s): {', '.join(duplicates)}")
 
+    wsl_required = meta.get("wsl_required")
+    if wsl_required is not None and not isinstance(wsl_required, bool):
+        _error(errors, f"{path}: meta.wsl_required must be a boolean when present")
+
+    wsl_task_mode = meta.get("wsl_task_mode")
+    if wsl_task_mode is not None:
+        if not isinstance(wsl_task_mode, str) or wsl_task_mode not in ALLOWED_WSL_TASK_MODES:
+            _error(errors, f"{path}: meta.wsl_task_mode must be one of {sorted(ALLOWED_WSL_TASK_MODES)} when present")
+        if wsl_required is not True:
+            _error(errors, f"{path}: meta.wsl_task_mode requires meta.wsl_required=true")
+
+    # Back-compat convenience: if WSL is required but no mode specified, default to bundled.
+    if wsl_required is True and wsl_task_mode is None:
+        meta["wsl_task_mode"] = "bundled"
+
+    if wsl_required is True:
+        if not isinstance(platforms_required, list) or "linux" not in platforms_required:
+            _error(errors, f"{path}: meta.wsl_required=true requires meta.platforms_required to include 'linux'")
+
+    execution_gates = meta.get("execution_gates")
+    if execution_gates is not None and not isinstance(execution_gates, bool):
+        _error(errors, f"{path}: meta.execution_gates must be a boolean when present")
+
     return meta
+
+
+def _validate_execution_gates(
+    feature_dir: str, tasks: List[Dict[str, Any]], meta: Dict[str, Any], errors: List[ValidationError], path: str
+) -> None:
+    if meta.get("execution_gates") is not True:
+        return
+
+    preflight_report = os.path.join(feature_dir, "execution_preflight_report.md")
+    if not os.path.isfile(preflight_report):
+        _error(errors, f"{path}: meta.execution_gates=true requires {preflight_report!r} to exist")
+
+    tasks_by_id: Dict[str, Dict[str, Any]] = {t.get("id"): t for t in tasks if isinstance(t.get("id"), str)}
+    preflight_task = tasks_by_id.get("F0-exec-preflight")
+    if preflight_task is None:
+        _error(errors, f"{path}: meta.execution_gates=true requires a task with id 'F0-exec-preflight'")
+    else:
+        if preflight_task.get("type") != "ops":
+            _error(errors, f"{path}: 'F0-exec-preflight' must have type='ops'")
+        txt = "\n".join(preflight_task.get("references", []) + preflight_task.get("start_checklist", []) + preflight_task.get("end_checklist", []))
+        if "execution_preflight_report.md" not in txt:
+            _error(errors, f"{path}: 'F0-exec-preflight' must reference execution_preflight_report.md")
+
+    # Per-slice closeout reports: require <SLICE>-closeout_report.md and linkage from <SLICE>-integ.
+    slice_ids: Set[str] = set()
+    for task_id, task in tasks_by_id.items():
+        if not isinstance(task_id, str):
+            continue
+        if task.get("type") != "integration":
+            continue
+        if task_id.endswith("-integ") and not task_id.endswith("-integ-core"):
+            slice_ids.add(task_id[: -len("-integ")])
+
+    for slice_id in sorted(slice_ids):
+        closeout_report = os.path.join(feature_dir, f"{slice_id}-closeout_report.md")
+        if not os.path.isfile(closeout_report):
+            _error(errors, f"{path}: meta.execution_gates=true requires {closeout_report!r} to exist")
+
+        final_id = f"{slice_id}-integ"
+        final_task = tasks_by_id.get(final_id)
+        if final_task is None:
+            continue
+        txt = "\n".join(final_task.get("references", []) + final_task.get("end_checklist", []))
+        if f"{slice_id}-closeout_report.md" not in txt:
+            _error(errors, f"{path}: {final_id!r} must reference {slice_id}-closeout_report.md in references/end_checklist")
 
 
 def _validate_task_fields(tasks: List[Dict[str, Any]], errors: List[ValidationError], path: str) -> None:
@@ -281,6 +356,13 @@ def _validate_platform_integ_model(
     if not isinstance(platforms_required, list) or not platforms_required:
         return
 
+    wsl_required = meta.get("wsl_required") is True
+    wsl_task_mode = meta.get("wsl_task_mode", "bundled") if wsl_required else None
+
+    effective_platform_tasks = list(platforms_required)
+    if wsl_required and wsl_task_mode == "separate":
+        effective_platform_tasks.append("wsl")
+
     tasks_by_id: Dict[str, Dict[str, Any]] = {t.get("id"): t for t in tasks if isinstance(t.get("id"), str)}
 
     # Determine slices present by looking for platform integ task ids.
@@ -290,7 +372,7 @@ def _validate_platform_integ_model(
             continue
         if task.get("type") != "integration":
             continue
-        for platform in platforms_required:
+        for platform in effective_platform_tasks:
             suffix = f"-integ-{platform}"
             if task_id.endswith(suffix):
                 slice_id = task_id[: -len(suffix)]
@@ -305,7 +387,7 @@ def _validate_platform_integ_model(
         return
 
     for slice_id, platforms_present in sorted(slices.items()):
-        missing = sorted(set(platforms_required) - platforms_present)
+        missing = sorted(set(effective_platform_tasks) - platforms_present)
         if missing:
             _error(
                 errors,
@@ -331,7 +413,15 @@ def _validate_platform_integ_model(
         if core is None or final is None:
             continue
 
-        for platform in platforms_required:
+        if wsl_required and wsl_task_mode == "bundled":
+            wsl_id = f"{slice_id}-integ-wsl"
+            if wsl_id in tasks_by_id:
+                _error(
+                    errors,
+                    f"{path}: {wsl_id!r} exists but meta.wsl_task_mode='bundled' (remove the task or set meta.wsl_task_mode='separate')",
+                )
+
+        for platform in effective_platform_tasks:
             platform_id = f"{slice_id}-integ-{platform}"
             platform_task = tasks_by_id.get(platform_id)
             if platform_task is None:
@@ -346,13 +436,22 @@ def _validate_platform_integ_model(
             if not isinstance(depends_on, list) or core_id not in depends_on:
                 _error(errors, f"{path}: {platform_id!r} depends_on must include {core_id!r}")
 
+            # Bundled WSL: require the Linux platform task to include WSL smoke.
+            if wsl_required and wsl_task_mode == "bundled" and platform == "linux":
+                txt = "\n".join(platform_task.get("references", []) + platform_task.get("end_checklist", []))
+                if "--run-wsl" not in txt and "run_wsl=true" not in txt and "run_wsl" not in txt:
+                    _error(
+                        errors,
+                        f"{path}: {platform_id!r} must include WSL smoke dispatch (expected '--run-wsl') because meta.wsl_required=true and meta.wsl_task_mode='bundled'",
+                    )
+
         final_deps = final.get("depends_on")
         if not isinstance(final_deps, list):
             _error(errors, f"{path}: {final_id!r} depends_on must be an array")
             continue
         if core_id not in final_deps:
             _error(errors, f"{path}: {final_id!r} depends_on must include {core_id!r}")
-        for platform in platforms_required:
+        for platform in effective_platform_tasks:
             platform_id = f"{slice_id}-integ-{platform}"
             if platform_id in tasks_by_id and platform_id not in final_deps:
                 _error(errors, f"{path}: {final_id!r} depends_on must include {platform_id!r}")
@@ -387,6 +486,7 @@ def validate_tasks_json(feature_dir: str) -> Tuple[List[ValidationError], str]:
     _validate_references(feature_dir, tasks, external_task_ids, errors, tasks_path)
     _validate_smoke_linkage(feature_dir, tasks, errors, tasks_path)
     _validate_platform_integ_model(feature_dir, tasks, meta, errors, tasks_path)
+    _validate_execution_gates(feature_dir, tasks, meta, errors, tasks_path)
 
     return errors, tasks_path
 
