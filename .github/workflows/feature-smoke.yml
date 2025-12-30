@@ -257,11 +257,17 @@ jobs:
 
           $cargoBin = Join-Path $env:USERPROFILE ".cargo\\bin"
           if (Test-Path $cargoBin) {
+            $env:Path = "$cargoBin;$env:Path"
             Add-Content -LiteralPath $env:GITHUB_PATH -Value $cargoBin
           }
 
-          rustup toolchain install $env:RUST_TOOLCHAIN --profile minimal
-          rustup component add rustfmt clippy --toolchain $env:RUST_TOOLCHAIN
+          $rustupExe = Join-Path $cargoBin "rustup.exe"
+          if (-not (Test-Path $rustupExe)) {
+            throw "rustup.exe not found at expected path: $rustupExe"
+          }
+
+          & $rustupExe toolchain install $env:RUST_TOOLCHAIN --profile minimal
+          & $rustupExe component add rustfmt clippy --toolchain $env:RUST_TOOLCHAIN
           rustc --version
           cargo --version
 
