@@ -245,11 +245,25 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          components: rustfmt, clippy
+      - name: Ensure Rust toolchain (self-hosted)
+        shell: pwsh
+        run: |
+          if (-not (Get-Command rustup -ErrorAction SilentlyContinue)) {
+            Write-Host "rustup not found; installing rustup for the runner user..."
+            $rustupInit = Join-Path $env:RUNNER_TEMP "rustup-init.exe"
+            Invoke-WebRequest -Uri "https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe" -OutFile $rustupInit
+            & $rustupInit -y --profile minimal --default-toolchain $env:RUST_TOOLCHAIN
+          }
+
+          $cargoBin = Join-Path $env:USERPROFILE ".cargo\\bin"
+          if (Test-Path $cargoBin) {
+            Add-Content -LiteralPath $env:GITHUB_PATH -Value $cargoBin
+          }
+
+          rustup toolchain install $env:RUST_TOOLCHAIN --profile minimal
+          rustup component add rustfmt clippy --toolchain $env:RUST_TOOLCHAIN
+          rustc --version
+          cargo --version
 
       - name: Build substrate (debug)
         run: cargo build --bin substrate
