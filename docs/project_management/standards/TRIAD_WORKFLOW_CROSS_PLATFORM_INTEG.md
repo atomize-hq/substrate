@@ -12,32 +12,32 @@ It shows:
 ```mermaid
 flowchart TD
   %% ======== Inputs / gating ========
-  ADR[ADR accepted\n+ Executive Summary drift guard OK]
-  PACK[Planning Pack ready\n(plan/tasks/specs/prompts)]
-  GATE[Quality Gate\nRECOMMENDATION: ACCEPT]
+  ADR["ADR accepted<br/>Executive Summary drift guard OK"]
+  PACK["Planning Pack ready<br/>(plan/tasks/specs/prompts)"]
+  GATE["Quality Gate<br/>RECOMMENDATION: ACCEPT"]
 
   ADR --> PACK --> GATE
 
   %% ======== Triad execution ========
   subgraph ORCH[Orchestration Branch (docs edits only)]
-    START[Pick triad slice: X\n(e.g., C3)]
-    TASKS[tasks.json statuses\nSTART/END in session_log.md]
+    START["Pick triad slice: X<br/>(e.g., C3)"]
+    TASKS["tasks.json statuses<br/>START/END in session_log.md"]
   end
 
   GATE --> START
   START --> TASKS
 
   subgraph WT[Parallel Worktrees (no docs edits)]
-    CODE[X-code\n(prod code only)\nbranch+worktree]
-    TEST[X-test\n(tests only)\nbranch+worktree]
+    CODE["X-code<br/>(prod code only)<br/>branch + worktree"]
+    TEST["X-test<br/>(tests only)<br/>branch + worktree"]
   end
 
   TASKS --> CODE
   TASKS --> TEST
 
   subgraph INTEG_CORE[Core Integration (host integration worktree)]
-    MERGE[X-integ-core\nmerge X-code + X-test\nresolve spec drift]
-    CORE_CHECKS[Required checks:\n- cargo fmt\n- cargo clippy ... -D warnings\n- relevant tests\n- make integ-checks]
+    MERGE["X-integ-core<br/>merge X-code + X-test<br/>resolve spec drift"]
+    CORE_CHECKS["Required checks:<br/>- cargo fmt<br/>- cargo clippy ... -- -D warnings<br/>- relevant tests<br/>- make integ-checks"]
   end
 
   CODE --> MERGE
@@ -46,13 +46,13 @@ flowchart TD
 
   %% ======== Cross-platform smoke (parallel) ========
   subgraph CI[GitHub Actions (self-hosted runners)]
-    TMPBR[Create throwaway remote branch\n(tmp/feature-smoke/…)\nfrom X-integ-core SHA]
-    DISPATCH[Dispatch workflow from stable ref\n(ref: feat/policy_and_config)\ninputs: checkout_ref=tmp branch,\nrunner_kind=self-hosted]
+    TMPBR["Create throwaway remote branch<br/>(tmp/feature-smoke/...)<br/>from X-integ-core SHA"]
+    DISPATCH["Dispatch workflow from stable ref<br/>(ref: feat/policy_and_config)<br/>inputs: checkout_ref=tmp branch<br/>runner_kind=self-hosted"]
 
-    LNX[X-integ-linux\nFeature Smoke: platform=linux\nruns-on: [self-hosted, Linux, linux-host]]
-    MAC[X-integ-macos\nFeature Smoke: platform=macos\nruns-on: [self-hosted, macOS]]
-    WIN[X-integ-windows\nFeature Smoke: platform=windows\nruns-on: [self-hosted, Windows]]
-    WSL[X-integ-wsl (optional)\nFeature Smoke: run_wsl=true\nruns-on: [self-hosted, Linux, wsl]]
+    LNX["X-integ-linux<br/>Feature Smoke: platform=linux<br/>runs-on: self-hosted / Linux / linux-host"]
+    MAC["X-integ-macos<br/>Feature Smoke: platform=macos<br/>runs-on: self-hosted / macOS"]
+    WIN["X-integ-windows<br/>Feature Smoke: platform=windows<br/>runs-on: self-hosted / Windows"]
+    WSL["X-integ-wsl (optional)<br/>Feature Smoke: run_wsl=true<br/>runs-on: self-hosted / Linux / wsl"]
   end
 
   CORE_CHECKS --> TMPBR --> DISPATCH
@@ -69,8 +69,8 @@ flowchart TD
 
   %% ======== Final aggregator ========
   subgraph INTEG_FINAL[Final Cross-Platform Integration]
-    AGG[X-integ (final)\nwait for required platform smoke\nrecord run ids/URLs in session_log.md]
-    MERGE_BACK[Fast-forward merge to orchestration branch\nupdate tasks.json/session_log.md\n(remove worktrees)]
+    AGG["X-integ (final)<br/>wait for required platform smoke<br/>record run ids/URLs in session_log.md"]
+    MERGE_BACK["Fast-forward merge to orchestration branch<br/>update tasks.json/session_log.md<br/>(remove worktrees)"]
   end
 
   LNX --> AGG
