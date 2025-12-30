@@ -1,0 +1,320 @@
+{
+  "meta": {
+    "schema_version": 2,
+    "feature": "tmp-make-scaffold",
+    "cross_platform": true,
+    "execution_gates": true,
+    "platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
+    "wsl_required": true,
+    "wsl_task_mode": "bundled"
+  },
+  "tasks": [
+    {
+      "id": "F0-exec-preflight",
+      "name": "Execution preflight gate (feature start)",
+      "type": "ops",
+      "phase": "F0",
+      "status": "pending",
+      "description": "Run the execution preflight gate to confirm smoke/manual/CI plans are adequate before starting triads.",
+      "references": [
+        "docs/project_management/next/tmp-make-scaffold/plan.md",
+        "docs/project_management/next/tmp-make-scaffold/tasks.json",
+        "docs/project_management/next/tmp-make-scaffold/session_log.md",
+        "docs/project_management/next/tmp-make-scaffold/execution_preflight_report.md"
+      ],
+      "acceptance_criteria": [
+        "Execution preflight recommendation recorded (ACCEPT or REVISE)"
+      ],
+      "start_checklist": [
+        "git checkout feat/tmp-make-scaffold && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, specs, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "end_checklist": [
+        "Complete execution_preflight_report.md with ACCEPT/REVISE and required fixes",
+        "Set status to completed; add END entry; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/tmp-make-scaffold/kickoff_prompts/F0-exec-preflight.md",
+      "depends_on": [],
+      "concurrent_with": []
+    },
+    {
+      "id": "C0-code",
+      "name": "C0 slice (code)",
+      "type": "code",
+      "phase": "C0",
+      "status": "pending",
+      "description": "Implement C0 spec (production code only).",
+      "references": [
+        "docs/project_management/next/tmp-make-scaffold/plan.md",
+        "docs/project_management/next/tmp-make-scaffold/C0-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Meets all acceptance criteria in C0-spec.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/tmp-make-scaffold && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Create branch c0-code and worktree wt/tmp-make-scaffold-c0-code; do not edit planning docs inside the worktree"
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Commit worktree changes; merge back ff-only; update docs; remove worktree"
+      ],
+      "worktree": "wt/tmp-make-scaffold-c0-code",
+      "integration_task": "C0-integ-core",
+      "kickoff_prompt": "docs/project_management/next/tmp-make-scaffold/kickoff_prompts/C0-code.md",
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
+      "concurrent_with": [
+        "C0-test"
+      ]
+    },
+    {
+      "id": "C0-test",
+      "name": "C0 slice (test)",
+      "type": "test",
+      "phase": "C0",
+      "status": "pending",
+      "description": "Add/modify tests for C0 spec (tests only).",
+      "references": [
+        "docs/project_management/next/tmp-make-scaffold/plan.md",
+        "docs/project_management/next/tmp-make-scaffold/C0-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Tests enforce C0 acceptance criteria"
+      ],
+      "start_checklist": [
+        "git checkout feat/tmp-make-scaffold && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Create branch c0-test and worktree wt/tmp-make-scaffold-c0-test; do not edit planning docs inside the worktree"
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add/touch",
+        "Commit worktree changes; merge back ff-only; update docs; remove worktree"
+      ],
+      "worktree": "wt/tmp-make-scaffold-c0-test",
+      "integration_task": "C0-integ-core",
+      "kickoff_prompt": "docs/project_management/next/tmp-make-scaffold/kickoff_prompts/C0-test.md",
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
+      "concurrent_with": [
+        "C0-code"
+      ]
+    },
+    {
+      "id": "C0-integ-core",
+      "name": "C0 slice (integration core)",
+      "type": "integration",
+      "phase": "C0",
+      "status": "pending",
+      "description": "Merge C0 code+tests and make the slice green on the primary dev platform.",
+      "references": [
+        "docs/project_management/next/tmp-make-scaffold/plan.md",
+        "docs/project_management/next/tmp-make-scaffold/C0-spec.md",
+        "docs/project_management/next/tmp-make-scaffold/smoke/linux-smoke.sh",
+        "docs/project_management/next/tmp-make-scaffold/smoke/macos-smoke.sh",
+        "docs/project_management/next/tmp-make-scaffold/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "Core slice is green under make integ-checks and matches the spec"
+      ],
+      "start_checklist": [
+        "git checkout feat/tmp-make-scaffold && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Create branch c0-integ-core and worktree wt/tmp-make-scaffold-c0-integ-core; do not edit planning docs inside the worktree"
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "Dispatch cross-platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir \"docs/project_management/next/tmp-make-scaffold\" --runner-kind self-hosted --platform all --run-wsl --cleanup (record run ids/URLs)",
+        "Commit worktree changes; merge back ff-only; update docs; remove worktree"
+      ],
+      "worktree": "wt/tmp-make-scaffold-c0-integ-core",
+      "integration_task": "C0-integ-core",
+      "kickoff_prompt": "docs/project_management/next/tmp-make-scaffold/kickoff_prompts/C0-integ-core.md",
+      "depends_on": [
+        "C0-code",
+        "C0-test"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "C0-integ-linux",
+      "name": "C0 slice (integration Linux)",
+      "type": "integration",
+      "phase": "C0",
+      "status": "pending",
+      "description": "Linux platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/tmp-make-scaffold/plan.md",
+        "docs/project_management/next/tmp-make-scaffold/C0-spec.md",
+        "docs/project_management/next/tmp-make-scaffold/smoke/linux-smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "linux smoke is green for this slice"
+      ],
+      "start_checklist": [
+        "Run on linux host if possible",
+        "git checkout feat/tmp-make-scaffold && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Create branch c0-integ-linux and worktree wt/tmp-make-scaffold-c0-integ-linux; do not edit planning docs inside the worktree"
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir \"docs/project_management/next/tmp-make-scaffold\" --runner-kind self-hosted --platform linux --run-wsl --cleanup",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "Commit worktree changes (if any); merge back ff-only; update docs; remove worktree"
+      ],
+      "worktree": "wt/tmp-make-scaffold-c0-integ-linux",
+      "integration_task": "C0-integ-linux",
+      "kickoff_prompt": "docs/project_management/next/tmp-make-scaffold/kickoff_prompts/C0-integ-linux.md",
+      "depends_on": [
+        "C0-integ-core"
+      ],
+      "concurrent_with": [],
+      "platform": "linux",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml"
+    },
+    {
+      "id": "C0-integ-macos",
+      "name": "C0 slice (integration macOS)",
+      "type": "integration",
+      "phase": "C0",
+      "status": "pending",
+      "description": "macOS platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/tmp-make-scaffold/plan.md",
+        "docs/project_management/next/tmp-make-scaffold/C0-spec.md",
+        "docs/project_management/next/tmp-make-scaffold/smoke/macos-smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "macos smoke is green for this slice"
+      ],
+      "start_checklist": [
+        "Run on macos host if possible",
+        "git checkout feat/tmp-make-scaffold && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Create branch c0-integ-macos and worktree wt/tmp-make-scaffold-c0-integ-macos; do not edit planning docs inside the worktree"
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir \"docs/project_management/next/tmp-make-scaffold\" --runner-kind self-hosted --platform macos --cleanup",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "Commit worktree changes (if any); merge back ff-only; update docs; remove worktree"
+      ],
+      "worktree": "wt/tmp-make-scaffold-c0-integ-macos",
+      "integration_task": "C0-integ-macos",
+      "kickoff_prompt": "docs/project_management/next/tmp-make-scaffold/kickoff_prompts/C0-integ-macos.md",
+      "depends_on": [
+        "C0-integ-core"
+      ],
+      "concurrent_with": [],
+      "platform": "macos",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml"
+    },
+    {
+      "id": "C0-integ-windows",
+      "name": "C0 slice (integration Windows)",
+      "type": "integration",
+      "phase": "C0",
+      "status": "pending",
+      "description": "Windows platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/tmp-make-scaffold/plan.md",
+        "docs/project_management/next/tmp-make-scaffold/C0-spec.md",
+        "docs/project_management/next/tmp-make-scaffold/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "windows smoke is green for this slice"
+      ],
+      "start_checklist": [
+        "Run on windows host if possible",
+        "git checkout feat/tmp-make-scaffold && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Create branch c0-integ-windows and worktree wt/tmp-make-scaffold-c0-integ-windows; do not edit planning docs inside the worktree"
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir \"docs/project_management/next/tmp-make-scaffold\" --runner-kind self-hosted --platform windows --cleanup",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "Commit worktree changes (if any); merge back ff-only; update docs; remove worktree"
+      ],
+      "worktree": "wt/tmp-make-scaffold-c0-integ-windows",
+      "integration_task": "C0-integ-windows",
+      "kickoff_prompt": "docs/project_management/next/tmp-make-scaffold/kickoff_prompts/C0-integ-windows.md",
+      "depends_on": [
+        "C0-integ-core"
+      ],
+      "concurrent_with": [],
+      "platform": "windows",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml"
+    },
+    {
+      "id": "C0-integ",
+      "name": "C0 slice (integration final)",
+      "type": "integration",
+      "phase": "C0",
+      "status": "pending",
+      "description": "Final cross-platform integration: merge any platform fixes and confirm all platforms are green.",
+      "references": [
+        "docs/project_management/next/tmp-make-scaffold/plan.md",
+        "docs/project_management/next/tmp-make-scaffold/C0-spec.md",
+        "docs/project_management/next/tmp-make-scaffold/smoke/linux-smoke.sh",
+        "docs/project_management/next/tmp-make-scaffold/smoke/macos-smoke.sh",
+        "docs/project_management/next/tmp-make-scaffold/smoke/windows-smoke.ps1",
+        "docs/project_management/next/tmp-make-scaffold/C0-closeout_report.md"
+      ],
+      "acceptance_criteria": [
+        "All required platforms are green and the slice matches the spec"
+      ],
+      "start_checklist": [
+        "git checkout feat/tmp-make-scaffold && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Create branch c0-integ and worktree wt/tmp-make-scaffold-c0-integ; do not edit planning docs inside the worktree"
+      ],
+      "end_checklist": [
+        "Merge platform-fix branches (if any) + resolve conflicts",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "Re-run cross-platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir \"docs/project_management/next/tmp-make-scaffold\" --runner-kind self-hosted --platform all --run-wsl --cleanup",
+        "Complete slice closeout gate report: docs/project_management/next/tmp-make-scaffold/C0-closeout_report.md",
+        "Commit worktree changes; merge back ff-only; update docs; remove worktree"
+      ],
+      "worktree": "wt/tmp-make-scaffold-c0-integ",
+      "integration_task": "C0-integ",
+      "kickoff_prompt": "docs/project_management/next/tmp-make-scaffold/kickoff_prompts/C0-integ.md",
+      "depends_on": [
+        "C0-integ-core",
+        "C0-integ-linux",
+        "C0-integ-macos",
+        "C0-integ-windows"
+      ],
+      "concurrent_with": []
+    }
+  ]
+}

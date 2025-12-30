@@ -117,7 +117,7 @@ Required deliverables (must create or update):
    - `docs/project_management/next/<feature>/session_log.md` (START/END entries only)
    - Specs: `docs/project_management/next/<feature>/*-spec*.md`
    - Kickoff prompts: `docs/project_management/next/<feature>/kickoff_prompts/*-{code,test,integ}.md`
-   - Execution gates (recommended; scaffolded by `scripts/planning/new_feature.*`):
+   - Execution gates (recommended; scaffolded by `make planning-new-feature` / `make planning-new-feature-ps`):
      - `docs/project_management/next/<feature>/execution_preflight_report.md`
      - `docs/project_management/next/<feature>/<slice>-closeout_report.md` (e.g., `C0-closeout_report.md`)
 2) If decision-heavy or cross-platform:
@@ -130,9 +130,13 @@ Required interoperability rules:
 - `tasks.json` must match the required fields and workflow described in `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`.
 - Every task must have a kickoff prompt file and must include the exact rule: `Do not edit planning docs inside the worktree.`
 - Integration tasks must include running the feature-local smoke script (if present) and recording results in `session_log.md`.
-  - For cross-platform smoke, prefer GitHub Actions + self-hosted runners via `scripts/ci/dispatch_feature_smoke.sh` (see `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`).
+  - For cross-platform smoke, prefer GitHub Actions + self-hosted runners via `make feature-smoke` (see `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`).
   - If you opt into the platform-fix integration model, set `meta.schema_version: 2` and `meta.platforms_required: [...]` in `tasks.json` and create `X-integ-core`, `X-integ-<platform>`, and `X-integ` tasks per slice (see `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`).
   - If WSL coverage is required, use `meta.wsl_required: true` and `meta.wsl_task_mode: "bundled"|"separate"` (do not add `"wsl"` to `meta.platforms_required`).
+  - Preferred smoke dispatch examples:
+    - All platforms: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=all`
+    - Linux + WSL bundled: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux RUN_WSL=1`
+    - WSL-only (separate WSL task): `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=wsl`
 
 Sequencing rules:
 - Align `docs/project_management/next/sequencing.json` with task dependencies.

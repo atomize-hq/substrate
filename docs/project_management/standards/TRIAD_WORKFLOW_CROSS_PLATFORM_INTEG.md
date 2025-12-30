@@ -44,7 +44,7 @@ flowchart TD
   subgraph INTEG_CORE["Core Integration (primary dev platform)"]
     MERGE["X-integ-core<br/>merge X-code + X-test<br/>resolve spec drift"]
     CORE_CHECKS["Required checks:<br/>- cargo fmt<br/>- cargo clippy ... -- -D warnings<br/>- relevant tests<br/>- make integ-checks"]
-    CORE_DISPATCH["Dispatch cross-platform smoke<br/>via scripts/ci/dispatch_feature_smoke.sh<br/>platform=all (+ optional WSL)"]
+    CORE_DISPATCH["Dispatch cross-platform smoke<br/>via make feature-smoke<br/>PLATFORM=all (+ optional RUN_WSL=1)"]
   end
 
   CODE --> MERGE

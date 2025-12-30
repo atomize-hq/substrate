@@ -14,23 +14,23 @@ Set a feature directory variable:
 
 On Linux/macOS:
 ```bash
-scripts/planning/lint.sh --feature-dir "$FEATURE_DIR"
+make planning-lint FEATURE_DIR="$FEATURE_DIR"
 ```
 
 On Windows:
 ```powershell
-pwsh -File scripts/planning/lint.ps1 -FeatureDir $env:FEATURE_DIR
+make planning-lint-ps FEATURE_DIR=$env:FEATURE_DIR
 ```
 
 This runner checks (at minimum):
 - Required Planning Pack artifacts exist (`plan.md`, `tasks.json`, `session_log.md`, `kickoff_prompts/`, and `smoke/*` when applicable)
 - Hard-ban scan (no `TBD/TODO/WIP/TBA`, no “open question”, no “etc.”/“and so on”)
 - Ambiguity scan (no `should|could|might|maybe` in behavior/contracts)
-- `tasks.json` invariants (`scripts/planning/validate_tasks_json.py`)
+- `tasks.json` invariants (`make planning-validate`)
   - If `tasks.json` opts into schema v2 cross-platform parity (`meta.schema_version >= 2` and `meta.platforms_required`), it must include the required `X-integ-core`, `X-integ-<platform>`, and `X-integ` tasks per slice.
   - If WSL coverage is required, use `meta.wsl_required: true` + `meta.wsl_task_mode: "bundled"|"separate"` (do not include `"wsl"` in `meta.platforms_required`).
   - If `meta.execution_gates: true`, it must include the execution preflight task/report and per-slice closeout report linkage.
-- ADR Executive Summary drift checks for any ADRs found/referenced (`scripts/planning/check_adr_exec_summary.py`)
+- ADR Executive Summary drift checks for any ADRs found/referenced (`make adr-check`)
 - Kickoff prompt sentinel coverage (must contain `Do not edit planning docs inside the worktree.`)
 - Manual playbook must reference smoke scripts (when both exist)
 - `sequencing.json` includes this feature directory
@@ -41,5 +41,5 @@ If the runner fails, use these to isolate the cause:
 
 - Hard bans: `rg -n --hidden --glob '!**/.git/**' '\\b(TBD|TODO|WIP|TBA)\\b|open question|\\betc\\.|and so on' "$FEATURE_DIR"`
 - Ambiguity words: `rg -n --hidden --glob '!**/.git/**' --glob '!**/decision_register.md' '\\b(should|could|might|maybe)\\b' "$FEATURE_DIR"`
-- `tasks.json` invariants: `python3 scripts/planning/validate_tasks_json.py --feature-dir "$FEATURE_DIR"`
-- ADR exec summary drift: `python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/next/ADR-000X-foo.md`
+- `tasks.json` invariants: `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
+- ADR exec summary drift: `make adr-check ADR=docs/project_management/next/ADR-000X-foo.md`

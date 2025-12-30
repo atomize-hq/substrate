@@ -1,16 +1,16 @@
-# Kickoff: {{TASK_ID}} (integration final — cross-platform merge)
+# Kickoff: C0-integ (integration final — cross-platform merge)
 
 ## Scope
 - Merge platform-fix branches (if any) and finalize the slice with a clean, auditable cross-platform green state.
-- Spec: `{{FEATURE_DIR}}/{{SPEC_FILE}}`
+- Spec: `docs/project_management/next/tmp-make-scaffold/C0-spec.md`
 
 ## Start Checklist
 Do not edit planning docs inside the worktree.
 
-1. `git checkout feat/{{FEATURE}} && git pull --ff-only`
+1. `git checkout feat/tmp-make-scaffold && git pull --ff-only`
 2. Read: plan.md, tasks.json, session_log.md, spec, this prompt.
-3. Set `{{TASK_ID}}` status to `in_progress` in tasks.json; add START entry to session_log.md; commit docs (`docs: start {{TASK_ID}}`).
-4. Create branch `{{BRANCH}}`; create worktree `{{WORKTREE}}`.
+3. Set `C0-integ` status to `in_progress` in tasks.json; add START entry to session_log.md; commit docs (`docs: start C0-integ`).
+4. Create branch `c0-integ`; create worktree `wt/tmp-make-scaffold-c0-integ`.
 
 ## Requirements
 - Merge the relevant integration branches for this slice:
@@ -21,13 +21,13 @@ Do not edit planning docs inside the worktree.
   - relevant tests
   - `make integ-checks`
 - Run cross-platform smoke via CI to confirm the merged result is green:
-  - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=all`
-  - If WSL coverage is required for this feature, add `RUN_WSL=1`.
+  - `scripts/ci/dispatch_feature_smoke.sh --feature-dir "docs/project_management/next/tmp-make-scaffold" --runner-kind self-hosted --platform all --cleanup`
+  - If WSL coverage is required for this feature, add `--run-wsl`.
 - Complete the slice closeout gate report:
-  - `{{FEATURE_DIR}}/<SLICE>-closeout_report.md` (e.g., `{{FEATURE_DIR}}/C0-closeout_report.md`)
+  - `docs/project_management/next/tmp-make-scaffold/<SLICE>-closeout_report.md` (e.g., `docs/project_management/next/tmp-make-scaffold/C0-closeout_report.md`)
 
 ## End Checklist
 1. Ensure all required platforms are green (include run ids/URLs).
 2. Commit worktree changes.
 3. Merge back to orchestration branch (ff-only).
-4. Update tasks.json + session_log.md END entry; commit docs (`docs: finish {{TASK_ID}}`); remove worktree.
+4. Update tasks.json + session_log.md END entry; commit docs (`docs: finish C0-integ`); remove worktree.

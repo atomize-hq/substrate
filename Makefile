@@ -80,3 +80,107 @@ pre-ci:
 	  echo "shellcheck not installed; skipping Shell lint"; \
 	fi
 	cargo run --bin substrate -- --version
+
+# =========================
+# Planning-system automation
+# =========================
+
+# Feature directory under docs/project_management/next/<feature>
+FEATURE_DIR ?=
+
+# ADR path under docs/project_management/next/...
+ADR ?=
+
+.PHONY: planning-validate
+planning-validate:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	python3 scripts/planning/validate_tasks_json.py --feature-dir "$(FEATURE_DIR)"
+
+.PHONY: planning-lint
+planning-lint:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	scripts/planning/lint.sh --feature-dir "$(FEATURE_DIR)"
+
+.PHONY: planning-lint-ps
+planning-lint-ps:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if ! command -v pwsh >/dev/null 2>&1; then echo "ERROR: pwsh not found on PATH"; exit 2; fi
+	pwsh -File scripts/planning/lint.ps1 -FeatureDir "$(FEATURE_DIR)"
+
+.PHONY: adr-check
+adr-check:
+	@if [ -z "$(ADR)" ]; then echo "ERROR: set ADR=docs/project_management/next/ADR-XXXX-....md"; exit 2; fi
+	python3 scripts/planning/check_adr_exec_summary.py --adr "$(ADR)"
+
+.PHONY: adr-fix
+adr-fix:
+	@if [ -z "$(ADR)" ]; then echo "ERROR: set ADR=docs/project_management/next/ADR-XXXX-....md"; exit 2; fi
+	python3 scripts/planning/check_adr_exec_summary.py --adr "$(ADR)" --fix
+
+# =========================
+# Cross-platform smoke (CI)
+# =========================
+
+# Dispatch defaults (override as needed)
+PLATFORM ?= linux
+RUNNER_KIND ?= self-hosted
+RUN_WSL ?= 0
+WORKFLOW ?= .github/workflows/feature-smoke.yml
+WORKFLOW_REF ?= feat/policy_and_config
+REMOTE ?= origin
+CLEANUP ?= 1
+
+.PHONY: feature-smoke
+feature-smoke:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ "$(PLATFORM)" = "wsl" ] && [ "$(RUNNER_KIND)" != "self-hosted" ]; then echo "ERROR: PLATFORM=wsl requires RUNNER_KIND=self-hosted"; exit 2; fi
+	@if [ "$(RUN_WSL)" = "1" ] && [ "$(RUNNER_KIND)" != "self-hosted" ]; then echo "ERROR: RUN_WSL=1 requires RUNNER_KIND=self-hosted"; exit 2; fi
+	@set -euo pipefail; \
+	args="--feature-dir \"$(FEATURE_DIR)\" --runner-kind $(RUNNER_KIND) --platform $(PLATFORM) --workflow \"$(WORKFLOW)\" --workflow-ref \"$(WORKFLOW_REF)\" --remote \"$(REMOTE)\""; \
+	if [ "$(RUN_WSL)" = "1" ]; then args="$$args --run-wsl"; fi; \
+	if [ "$(CLEANUP)" = "1" ]; then args="$$args --cleanup"; fi; \
+	eval "scripts/ci/dispatch_feature_smoke.sh $$args"
+
+.PHONY: feature-smoke-all
+feature-smoke-all:
+	@$(MAKE) feature-smoke PLATFORM=all
+
+.PHONY: feature-smoke-wsl
+feature-smoke-wsl:
+	@$(MAKE) feature-smoke PLATFORM=wsl RUN_WSL=0 RUNNER_KIND=self-hosted
+
+# =========================
+# Planning pack scaffolding
+# =========================
+
+# New feature directory name under docs/project_management/next/<feature>
+FEATURE ?=
+DECISION_HEAVY ?= 0
+CROSS_PLATFORM ?= 0
+WSL_REQUIRED ?= 0
+WSL_SEPARATE ?= 0
+
+.PHONY: planning-new-feature
+planning-new-feature:
+	@if [ -z "$(FEATURE)" ]; then echo "ERROR: set FEATURE=<feature_dir_name>"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="scripts/planning/new_feature.sh --feature \"$(FEATURE)\""; \
+	if [ "$(DECISION_HEAVY)" = "1" ]; then cmd="$$cmd --decision-heavy"; fi; \
+	if [ "$(CROSS_PLATFORM)" = "1" ]; then cmd="$$cmd --cross-platform"; fi; \
+	if [ "$(WSL_REQUIRED)" = "1" ]; then cmd="$$cmd --wsl-required"; fi; \
+	if [ "$(WSL_SEPARATE)" = "1" ]; then cmd="$$cmd --wsl-separate"; fi; \
+	eval "$$cmd"; \
+	$(MAKE) planning-validate FEATURE_DIR="docs/project_management/next/$(FEATURE)"
+
+.PHONY: planning-new-feature-ps
+planning-new-feature-ps:
+	@if [ -z "$(FEATURE)" ]; then echo "ERROR: set FEATURE=<feature_dir_name>"; exit 2; fi
+	@if ! command -v pwsh >/dev/null 2>&1; then echo "ERROR: pwsh not found on PATH"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="pwsh -File scripts/planning/new_feature.ps1 -Feature \"$(FEATURE)\""; \
+	if [ "$(DECISION_HEAVY)" = "1" ]; then cmd="$$cmd -DecisionHeavy"; fi; \
+	if [ "$(CROSS_PLATFORM)" = "1" ]; then cmd="$$cmd -CrossPlatform"; fi; \
+	if [ "$(WSL_REQUIRED)" = "1" ]; then cmd="$$cmd -WslRequired"; fi; \
+	if [ "$(WSL_SEPARATE)" = "1" ]; then cmd="$$cmd -WslSeparate"; fi; \
+	eval "$$cmd"; \
+	$(MAKE) planning-validate FEATURE_DIR="docs/project_management/next/$(FEATURE)"

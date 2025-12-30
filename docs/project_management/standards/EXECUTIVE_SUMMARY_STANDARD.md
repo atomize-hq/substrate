@@ -53,6 +53,5 @@ Line anchors are expected to change as ADRs evolve; update them as part of any A
 The `ADR_BODY_SHA256` value is a hash of the ADR body **excluding** the `## Executive Summary (Operator)` section.
 
 Mechanics:
-- Check: `python3 scripts/planning/check_adr_exec_summary.py --adr <adr.md>`
-- Fix hash: `python3 scripts/planning/check_adr_exec_summary.py --adr <adr.md> --fix`
-
+- Check: `make adr-check ADR=<adr.md>`
+- Fix hash: `make adr-fix ADR=<adr.md>`

@@ -45,7 +45,7 @@ Smoke scripts must be a runnable, minimal version of how a careful human would v
 
 ### 4) CI dispatch path is runnable
 - Cross-platform dispatch commands listed in the integration tasks are valid and runnable:
-  - `scripts/ci/dispatch_feature_smoke.sh ...`
+  - `make feature-smoke ...`
 - Any required self-hosted runners exist and are labeled correctly.
 
 ## Output and rules

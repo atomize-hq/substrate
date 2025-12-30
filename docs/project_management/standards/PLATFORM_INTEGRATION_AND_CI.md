@@ -56,7 +56,7 @@ If a planning pack opts into the platform-fix model, encode it in `tasks.json`:
     - `"separate"`: add `X-integ-wsl` as its own platform-fix task
 
 The mechanical tasks validator enforces the required task shape when `meta.schema_version >= 2` and `meta.platforms_required` is present:
-- `scripts/planning/validate_tasks_json.py`
+- `make planning-validate FEATURE_DIR="docs/project_management/next/<feature>"`
 
 ## WSL task rubric (bundled vs separate)
 
@@ -103,8 +103,8 @@ GitHub Actions must run on a ref that exists on the remote. The repeatable patte
 5) Delete the throwaway branch
 
 Helper script (requires `gh` auth):
-- `scripts/ci/dispatch_feature_smoke.sh`
-  - Defaults to dispatching from a stable workflow ref (`feat/policy_and_config`) and using `runner_kind=self-hosted`; override with `--workflow-ref` / `--runner-kind` if needed.
+- `make feature-smoke`
+  - Defaults to dispatching from a stable workflow ref (`feat/policy_and_config`) and using `RUNNER_KIND=self-hosted`; override with `WORKFLOW_REF=...` / `RUNNER_KIND=...` if needed.
 
 ## Platform-fix note (important)
 
@@ -114,7 +114,7 @@ Platform-fix work happens on the corresponding platform machine:
 - create a platform-fix branch + worktree,
 - apply the fix,
 - commit,
-- re-run smoke via `scripts/ci/dispatch_feature_smoke.sh`,
+- re-run smoke via `make feature-smoke`,
 - fast-forward merge back to the orchestration branch.
 
 ## WSL testing note

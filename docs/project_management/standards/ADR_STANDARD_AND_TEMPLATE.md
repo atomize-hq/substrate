@@ -49,7 +49,7 @@ Every ADR must include an operator-facing summary section:
   - `Links:` (deep links into the ADR/specs/code/docs; prefer `path#L<line>` when possible)
 
 Drift is enforced mechanically via:
-- `scripts/planning/check_adr_exec_summary.py`
+- `make adr-check ADR=<adr.md>` (and `make adr-fix ADR=<adr.md>` to update the hash)
 
 See also:
 - `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md`
@@ -147,7 +147,7 @@ Every ADR must include all sections below. Every behavior statement must be sing
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: <run `python3 scripts/planning/check_adr_exec_summary.py --adr <this-file> --fix` after drafting>
+ADR_BODY_SHA256: <run `make adr-fix ADR=<this-file>` after drafting>
 
 ### Changes (operator-facing)
 - <short change title>

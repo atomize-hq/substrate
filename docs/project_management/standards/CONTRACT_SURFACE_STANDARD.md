@@ -28,6 +28,5 @@ Create `docs/project_management/next/<feature>/contract.md` when the work define
 
 ## Tooling
 
-- Scaffold: `scripts/planning/new_feature.sh --feature <feature>` creates `contract.md` from `docs/project_management/standards/templates/contract.md.tmpl`.
-- Lint: `scripts/planning/lint.sh` does not (yet) enforce `contract.md`; it remains a planning-level drift prevention tool.
-
+- Scaffold: `make planning-new-feature FEATURE=<feature>` creates `contract.md` from `docs/project_management/standards/templates/contract.md.tmpl`.
+- Lint: `make planning-lint` does not (yet) enforce `contract.md`; it remains a planning-level drift prevention tool.
