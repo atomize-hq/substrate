@@ -245,17 +245,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Ensure Rust toolchain (self-hosted)
-        shell: pwsh
-        run: |
-          if (-not (Get-Command rustup -ErrorAction SilentlyContinue)) {
-            throw "rustup not found on PATH. Install Rust via rustup-init.exe, then restart the runner service."
-          }
-          rustup toolchain install $env:RUST_TOOLCHAIN --profile minimal
-          rustup component add rustfmt clippy --toolchain $env:RUST_TOOLCHAIN
-          Add-Content -LiteralPath $env:GITHUB_ENV -Value "RUSTUP_TOOLCHAIN=$env:RUST_TOOLCHAIN"
-          rustc --version
-          cargo --version
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
 
       - name: Build substrate (debug)
         run: cargo build --bin substrate
