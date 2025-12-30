@@ -62,10 +62,10 @@ flowchart TD
   DISPATCH --> WSL
 
   %% If a platform smoke fails, fix in core integration then re-dispatch
-  LNX -. fail -> MERGE
-  MAC -. fail -> MERGE
-  WIN -. fail -> MERGE
-  WSL -. fail -> MERGE
+  LNX -.->|fail| MERGE
+  MAC -.->|fail| MERGE
+  WIN -.->|fail| MERGE
+  WSL -.->|fail| MERGE
 
   %% ======== Final aggregator ========
   subgraph INTEG_FINAL["Final Cross-Platform Integration"]
