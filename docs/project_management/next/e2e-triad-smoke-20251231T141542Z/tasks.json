@@ -51,7 +51,7 @@
       "name": "C0 slice (code)",
       "type": "code",
       "phase": "C0",
-      "status": "pending",
+      "status": "completed",
       "description": "Implement C0 spec (production code only).",
       "references": [
         "docs/project_management/next/e2e-triad-smoke-20251231T141542Z/plan.md",
@@ -91,7 +91,7 @@
       "name": "C0 slice (test)",
       "type": "test",
       "phase": "C0",
-      "status": "pending",
+      "status": "completed",
       "description": "Add/modify tests for C0 spec (tests only).",
       "references": [
         "docs/project_management/next/e2e-triad-smoke-20251231T141542Z/plan.md",
