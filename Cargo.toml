@@ -53,6 +53,7 @@ members = [
     # "crates/trace",   # TODO: Implement after broker
     "crates/telemetry-lib",
     "crates/replay", "crates/substrate-graph", "crates/forwarder", "crates/world-windows-wsl",
+    "crates/triad_e2e_smoke_demo",
     "tools/version-bump",
 ]
 
