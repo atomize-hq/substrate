@@ -179,7 +179,7 @@ fi
 parse_kv() {
     local key="$1"
     local text="$2"
-    printf '%s' "${text}" | awk -F= -v k="${key}" '$1==k {sub($1"=","",$0); print $0}'
+    printf '%s\n' "${text}" | awk -F= -v k="${key}" '$1==k { sub(/^[^=]*=/, "", $0); print $0; exit }'
 }
 
 declare -A task_worktree=()
@@ -285,4 +285,3 @@ for p in "${PLATFORMS[@]}"; do
     printf 'TASK_BRANCH=%s\n' "${task_branch[${task_id}]}"
     printf 'CODEX_EXIT=%s\n' "${codex_exit[${task_id}]}"
 done
-
