@@ -160,7 +160,7 @@ echo "exit=$?"
 
 Expected:
 - Command succeeds (the report includes a structured `.landlock` object).
-- On Landlock-capable hosts, `.landlock.supported` should be `true` (inspect via `substrate world doctor --json | jq '.landlock'`).
+- On Landlock-capable hosts, `.landlock.supported` is expected to be `true` (inspect via `substrate world doctor --json | jq '.landlock'`).
 
 ## 5) I5: verification tooling (optional)
 

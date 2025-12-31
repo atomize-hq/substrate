@@ -5,7 +5,7 @@
   - Ensure the socket unit uses `SocketGroup=substrate` and results in `/run/substrate.sock` owned `root:substrate 0660` after the script runs.
   - Create the `substrate` group when missing, add the invoking user (with warnings when unknown), and emit logout/newgrp guidance.
   - Include linger guidance so socket activation survives logout.
-  - Keep `--skip-build`/profile handling intact; no root-only invocation (script should self-escalate via sudo as today).
+  - Keep `--skip-build`/profile handling intact; no root-only invocation (script must self-escalate via sudo as today).
 - Update supporting docs/scripts so Linux standalone provisioning instructions match the corrected behavior (e.g., WORLD.md/INSTALLATION.md/world-socket-verify references).
 
 ## Acceptance Criteria

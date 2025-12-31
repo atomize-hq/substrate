@@ -168,6 +168,8 @@ pub mod doctor_fixture {
             let mut cmd = super::substrate_shell_driver();
             cmd.env("HOME", &self.home)
                 .env("USERPROFILE", &self.home)
+                .current_dir(&self.home)
+                .env("SUBSTRATE_HOME", self.home.join(".substrate"))
                 .env("SUBSTRATE_MANAGER_MANIFEST", &self.manifest)
                 .env("SHIM_TRACE_LOG", &self.trace);
             cmd

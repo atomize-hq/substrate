@@ -35,3 +35,6 @@ Implement M4-spec so `substrate world deps` uses the installed manifest by defau
 3. Switch back to orchestration branch; mark task completed; add END entry; commit docs (`docs: finish M4-code`).
 4. Remove worktree `wt/mp-m4-world-deps-manifest-code`.
 
+
+
+Do not edit planning docs inside the worktree.

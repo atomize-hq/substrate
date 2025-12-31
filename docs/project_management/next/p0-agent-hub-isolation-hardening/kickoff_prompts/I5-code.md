@@ -33,3 +33,6 @@ git ls-files '*.sh' | xargs -r shellcheck -x -S warning
 3. Merge back to `feat/p0-agent-hub-isolation-hardening` (ff-only).
 4. Update `tasks.json` + `session_log.md` (END entry) and commit docs (`docs: finish I5-code`).
 5. Remove worktree.
+
+
+Do not edit planning docs inside the worktree.

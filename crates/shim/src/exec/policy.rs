@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::path::Path;
-use substrate_broker::{quick_check, Decision};
+use substrate_broker::{policy_mode, quick_check, Decision, PolicyMode};
 use substrate_trace::{
     create_span_builder, init_trace, ActiveSpan, PolicyDecision as TracePolicyDecision,
 };
@@ -20,7 +20,14 @@ pub(crate) fn evaluate_policy(
     argv: &[String],
 ) -> Result<PolicyResult> {
     let _ = init_trace(None);
+    let mode = policy_mode();
     let mut policy_decision = None;
+
+    if mode == PolicyMode::Disabled {
+        return Ok(PolicyResult::Proceed(Box::new(PolicyContext {
+            span: start_span(command_str, cwd, None)?,
+        })));
+    }
 
     match quick_check(argv, cwd.to_str().unwrap_or(".")) {
         Ok(Decision::Allow) => {
@@ -31,10 +38,6 @@ pub(crate) fn evaluate_policy(
             });
         }
         Ok(Decision::AllowWithRestrictions(restrictions)) => {
-            eprintln!(
-                "substrate: command requires restrictions: {:?}",
-                restrictions
-            );
             policy_decision = Some(TracePolicyDecision {
                 action: "allow_with_restrictions".to_string(),
                 restrictions: Some(restrictions.iter().map(|r| format!("{:?}", r)).collect()),
@@ -42,30 +45,60 @@ pub(crate) fn evaluate_policy(
             });
         }
         Ok(Decision::Deny(reason)) => {
-            eprintln!("substrate: command denied by policy: {}", reason);
+            if mode == PolicyMode::Enforce {
+                eprintln!("substrate: command denied by policy: {}", reason);
+                policy_decision = Some(TracePolicyDecision {
+                    action: "deny".to_string(),
+                    restrictions: None,
+                    reason: Some(reason.clone()),
+                });
+                return Ok(deny_with_span(command_str, cwd, policy_decision));
+            }
+
             policy_decision = Some(TracePolicyDecision {
                 action: "deny".to_string(),
                 restrictions: None,
-                reason: Some(reason.clone()),
+                reason: Some(format!("would deny (policy.mode=observe): {reason}")),
             });
-            return Ok(deny_with_span(command_str, cwd, policy_decision));
         }
         Err(e) => {
             eprintln!("substrate: policy check failed: {}", e);
         }
     }
 
+    Ok(PolicyResult::Proceed(Box::new(PolicyContext {
+        span: start_span(command_str, cwd, policy_decision)?,
+    })))
+}
+
+fn deny_with_span(
+    command_str: &str,
+    cwd: &Path,
+    policy_decision: Option<TracePolicyDecision>,
+) -> PolicyResult {
+    if let Ok(Some(span)) = start_span(command_str, cwd, policy_decision) {
+        let _ = span.finish(126, vec![], None);
+    }
+
+    PolicyResult::Deny(126)
+}
+
+fn start_span(
+    command_str: &str,
+    cwd: &Path,
+    policy_decision: Option<TracePolicyDecision>,
+) -> Result<Option<ActiveSpan>> {
     let mut builder = match create_span_builder() {
         Ok(builder) => builder
             .with_command(command_str)
             .with_cwd(cwd.to_str().unwrap_or(".")),
         Err(err) => {
             eprintln!("substrate: failed to create span builder: {}", err);
-            return Ok(PolicyResult::Deny(126));
+            return Ok(None);
         }
     };
 
-    if let Some(pd) = policy_decision.clone() {
+    if let Some(pd) = policy_decision {
         builder = builder.with_policy_decision(pd);
     }
 
@@ -80,33 +113,7 @@ pub(crate) fn evaluate_policy(
         }
     };
 
-    Ok(PolicyResult::Proceed(Box::new(PolicyContext { span })))
-}
-
-fn deny_with_span(
-    command_str: &str,
-    cwd: &Path,
-    policy_decision: Option<TracePolicyDecision>,
-) -> PolicyResult {
-    let mut builder = match create_span_builder() {
-        Ok(builder) => builder
-            .with_command(command_str)
-            .with_cwd(cwd.to_str().unwrap_or(".")),
-        Err(err) => {
-            eprintln!("substrate: failed to create span: {}", err);
-            return PolicyResult::Deny(126);
-        }
-    };
-
-    if let Some(pd) = policy_decision.clone() {
-        builder = builder.with_policy_decision(pd);
-    }
-
-    if let Ok(span) = builder.start() {
-        let _ = span.finish(126, vec![], None);
-    }
-
-    PolicyResult::Deny(126)
+    Ok(span)
 }
 
 #[cfg(test)]

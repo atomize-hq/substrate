@@ -21,7 +21,7 @@
 ## Scope & Guardrails
 - Code touches replay/shell/world-agent/trace; tests/fixtures live in R2d-test.
 - Keep existing flags/env compatible; new flag aliases allowed but avoid breaking current CLI.
-- Keep warnings single-shot per replay; agent failure should not abort if local backend succeeds.
+- Keep warnings single-shot per replay; agent failure must not abort if local backend succeeds.
 
 ## Required Commands
 ```
@@ -39,3 +39,6 @@ Capture any manual `substrate --replay --replay-verbose` runs (agent healthy vs 
 4. Update `tasks.json` + `session_log.md` END entry summarizing results.
 5. Confirm R2d-integ prompt remains accurate.
 6. Commit doc/task/log updates (`git commit -am "docs: finish R2d-code"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

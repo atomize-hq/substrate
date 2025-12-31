@@ -52,6 +52,12 @@ flightcheck:
 	@echo "##flightcheck -- must run pass for *integ tasks to be considered green"
 	cargo fmt && cargo clippy --workspace --all-targets && cargo clean && cargo check --workspace --all-targets && cargo test --workspace --all-targets
 
+.PHONY: integ-checks
+integ-checks:
+	@echo "##integ-checks -- must run from repo root"
+	@echo "##integ-checks -- integration gate without cargo clean"
+	cargo fmt && cargo clippy --workspace --all-targets -- -D warnings && cargo check --workspace --all-targets && cargo test --workspace --all-targets
+
 .PHONY: preflight
 preflight: flightcheck
 
@@ -74,3 +80,253 @@ pre-ci:
 	  echo "shellcheck not installed; skipping Shell lint"; \
 	fi
 	cargo run --bin substrate -- --version
+
+# =========================
+# Planning-system automation
+# =========================
+
+# Feature directory under docs/project_management/next/<feature>
+FEATURE_DIR ?=
+
+# ADR path under docs/project_management/next/...
+ADR ?=
+
+.PHONY: planning-validate
+planning-validate:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	python3 scripts/planning/validate_tasks_json.py --feature-dir "$(FEATURE_DIR)"
+
+.PHONY: planning-lint
+planning-lint:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	scripts/planning/lint.sh --feature-dir "$(FEATURE_DIR)"
+
+.PHONY: planning-lint-ps
+planning-lint-ps:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if ! command -v pwsh >/dev/null 2>&1; then echo "ERROR: pwsh not found on PATH"; exit 2; fi
+	pwsh -File scripts/planning/lint.ps1 -FeatureDir "$(FEATURE_DIR)"
+
+.PHONY: adr-check
+adr-check:
+	@if [ -z "$(ADR)" ]; then echo "ERROR: set ADR=docs/project_management/next/ADR-XXXX-....md"; exit 2; fi
+	python3 scripts/planning/check_adr_exec_summary.py --adr "$(ADR)"
+
+.PHONY: adr-fix
+adr-fix:
+	@if [ -z "$(ADR)" ]; then echo "ERROR: set ADR=docs/project_management/next/ADR-XXXX-....md"; exit 2; fi
+	python3 scripts/planning/check_adr_exec_summary.py --adr "$(ADR)" --fix
+
+# =========================
+# Cross-platform smoke (CI)
+# =========================
+
+# Dispatch defaults (override as needed)
+PLATFORM ?= linux
+RUNNER_KIND ?= self-hosted
+RUN_WSL ?= 0
+WORKFLOW ?= .github/workflows/feature-smoke.yml
+WORKFLOW_REF ?= feat/policy_and_config
+REMOTE ?= origin
+CLEANUP ?= 1
+
+.PHONY: feature-smoke
+feature-smoke:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ "$(PLATFORM)" = "wsl" ] && [ "$(RUNNER_KIND)" != "self-hosted" ]; then echo "ERROR: PLATFORM=wsl requires RUNNER_KIND=self-hosted"; exit 2; fi
+	@if [ "$(RUN_WSL)" = "1" ] && [ "$(RUNNER_KIND)" != "self-hosted" ]; then echo "ERROR: RUN_WSL=1 requires RUNNER_KIND=self-hosted"; exit 2; fi
+	@set -euo pipefail; \
+	args="--feature-dir \"$(FEATURE_DIR)\" --runner-kind $(RUNNER_KIND) --platform $(PLATFORM) --workflow \"$(WORKFLOW)\" --workflow-ref \"$(WORKFLOW_REF)\" --remote \"$(REMOTE)\""; \
+	if [ "$(RUN_WSL)" = "1" ]; then args="$$args --run-wsl"; fi; \
+	if [ "$(CLEANUP)" = "1" ]; then args="$$args --cleanup"; fi; \
+	eval "scripts/ci/dispatch_feature_smoke.sh $$args"
+
+.PHONY: feature-smoke-all
+feature-smoke-all:
+	@$(MAKE) feature-smoke PLATFORM=all
+
+.PHONY: feature-smoke-wsl
+feature-smoke-wsl:
+	@$(MAKE) feature-smoke PLATFORM=wsl RUN_WSL=0 RUNNER_KIND=self-hosted
+
+# =========================
+# Planning pack scaffolding
+# =========================
+
+# New feature directory name under docs/project_management/next/<feature>
+FEATURE ?=
+DECISION_HEAVY ?= 0
+CROSS_PLATFORM ?= 0
+WSL_REQUIRED ?= 0
+WSL_SEPARATE ?= 0
+AUTOMATION ?= 0
+
+.PHONY: planning-new-feature
+planning-new-feature:
+	@if [ -z "$(FEATURE)" ]; then echo "ERROR: set FEATURE=<feature_dir_name>"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="scripts/planning/new_feature.sh --feature \"$(FEATURE)\""; \
+	if [ "$(DECISION_HEAVY)" = "1" ]; then cmd="$$cmd --decision-heavy"; fi; \
+	if [ "$(CROSS_PLATFORM)" = "1" ]; then cmd="$$cmd --cross-platform"; fi; \
+	if [ "$(WSL_REQUIRED)" = "1" ]; then cmd="$$cmd --wsl-required"; fi; \
+	if [ "$(WSL_SEPARATE)" = "1" ]; then cmd="$$cmd --wsl-separate"; fi; \
+	if [ "$(AUTOMATION)" = "1" ]; then cmd="$$cmd --automation"; fi; \
+	eval "$$cmd"; \
+	$(MAKE) planning-validate FEATURE_DIR="docs/project_management/next/$(FEATURE)"
+
+.PHONY: planning-new-feature-ps
+planning-new-feature-ps:
+	@if [ -z "$(FEATURE)" ]; then echo "ERROR: set FEATURE=<feature_dir_name>"; exit 2; fi
+	@if ! command -v pwsh >/dev/null 2>&1; then echo "ERROR: pwsh not found on PATH"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="pwsh -File scripts/planning/new_feature.ps1 -Feature \"$(FEATURE)\""; \
+	if [ "$(DECISION_HEAVY)" = "1" ]; then cmd="$$cmd -DecisionHeavy"; fi; \
+	if [ "$(CROSS_PLATFORM)" = "1" ]; then cmd="$$cmd -CrossPlatform"; fi; \
+	if [ "$(WSL_REQUIRED)" = "1" ]; then cmd="$$cmd -WslRequired"; fi; \
+	if [ "$(WSL_SEPARATE)" = "1" ]; then cmd="$$cmd -WslSeparate"; fi; \
+	if [ "$(AUTOMATION)" = "1" ]; then cmd="$$cmd -Automation"; fi; \
+	eval "$$cmd"; \
+	$(MAKE) planning-validate FEATURE_DIR="docs/project_management/next/$(FEATURE)"
+
+# =========================
+# Triad execution automation
+# =========================
+
+TASK_ID ?=
+TASK_PLATFORM ?=
+SLICE_ID ?=
+CODE_TASK_ID ?=
+TEST_TASK_ID ?=
+PLATFORMS ?=
+SMOKE_RUN_ID ?=
+
+LAUNCH_CODEX ?= 0
+CODEX_PROFILE ?=
+CODEX_MODEL ?=
+CODEX_JSONL ?= 0
+
+VERIFY_ONLY ?= 0
+NO_COMMIT ?= 0
+SMOKE ?= 0
+
+REMOVE_WORKTREES ?= 0
+PRUNE_LOCAL ?= 0
+PRUNE_REMOTE ?=
+FORCE ?= 0
+DRY_RUN ?= 0
+
+.PHONY: triad-code-checks
+triad-code-checks:
+	cargo fmt
+	cargo clippy --workspace --all-targets -- -D warnings
+
+.PHONY: triad-test-checks
+triad-test-checks:
+	cargo fmt
+
+.PHONY: triad-task-start
+triad-task-start:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(TASK_ID)" ]; then echo "ERROR: set TASK_ID=<task-id>"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="scripts/triad/task_start.sh --feature-dir \"$(FEATURE_DIR)\" --task-id \"$(TASK_ID)\""; \
+	if [ "$(LAUNCH_CODEX)" = "1" ]; then cmd="$$cmd --launch-codex"; fi; \
+	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
+	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
+	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
+	if [ -n "$(TASK_PLATFORM)" ]; then cmd="$$cmd --platform \"$(TASK_PLATFORM)\""; fi; \
+	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
+	eval "$$cmd"
+
+.PHONY: triad-task-start-pair
+triad-task-start-pair:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(SLICE_ID)" ] && ( [ -z "$(CODE_TASK_ID)" ] || [ -z "$(TEST_TASK_ID)" ] ); then \
+	  echo "ERROR: set SLICE_ID=<slice> OR set CODE_TASK_ID=<id> TEST_TASK_ID=<id>"; exit 2; \
+	fi
+	@set -euo pipefail; \
+	cmd="scripts/triad/task_start_pair.sh --feature-dir \"$(FEATURE_DIR)\""; \
+	if [ -n "$(SLICE_ID)" ]; then cmd="$$cmd --slice-id \"$(SLICE_ID)\""; fi; \
+	if [ -n "$(CODE_TASK_ID)" ]; then cmd="$$cmd --code-task-id \"$(CODE_TASK_ID)\""; fi; \
+	if [ -n "$(TEST_TASK_ID)" ]; then cmd="$$cmd --test-task-id \"$(TEST_TASK_ID)\""; fi; \
+	if [ "$(LAUNCH_CODEX)" = "1" ]; then cmd="$$cmd --launch-codex"; fi; \
+	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
+	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
+	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
+	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
+	eval "$$cmd"
+
+.PHONY: triad-orch-ensure
+triad-orch-ensure:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="scripts/triad/orch_ensure.sh --feature-dir \"$(FEATURE_DIR)\""; \
+	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
+	eval "$$cmd"
+
+.PHONY: triad-task-start-platform-fixes
+triad-task-start-platform-fixes:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(SLICE_ID)" ]; then echo "ERROR: set SLICE_ID=<slice>"; exit 2; fi
+	@if [ -z "$(PLATFORMS)" ]; then echo "ERROR: set PLATFORMS=linux,macos,windows[,wsl]"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="scripts/triad/task_start_platform_fixes.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\""; \
+	IFS=',' read -r -a platforms <<<"$(PLATFORMS)"; \
+	for p in "$${platforms[@]}"; do cmd="$$cmd --platform \"$$p\""; done; \
+	if [ "$(LAUNCH_CODEX)" = "1" ]; then cmd="$$cmd --launch-codex"; fi; \
+	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
+	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
+	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
+	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
+	eval "$$cmd"
+
+.PHONY: triad-task-start-platform-fixes-from-smoke
+triad-task-start-platform-fixes-from-smoke:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(SLICE_ID)" ]; then echo "ERROR: set SLICE_ID=<slice>"; exit 2; fi
+	@if [ -z "$(SMOKE_RUN_ID)" ]; then echo "ERROR: set SMOKE_RUN_ID=<gh-run-id>"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="scripts/triad/task_start_platform_fixes.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\" --from-smoke-run \"$(SMOKE_RUN_ID)\""; \
+	if [ "$(LAUNCH_CODEX)" = "1" ]; then cmd="$$cmd --launch-codex"; fi; \
+	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
+	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
+	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
+	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
+	eval "$$cmd"
+
+.PHONY: triad-task-start-integ-final
+triad-task-start-integ-final:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(SLICE_ID)" ]; then echo "ERROR: set SLICE_ID=<slice>"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="scripts/triad/task_start_integ_final.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\""; \
+	if [ "$(LAUNCH_CODEX)" = "1" ]; then cmd="$$cmd --launch-codex"; fi; \
+	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
+	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
+	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
+	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
+	eval "$$cmd"
+
+.PHONY: triad-task-finish
+triad-task-finish:
+	@if [ -z "$(TASK_ID)" ]; then echo "ERROR: set TASK_ID=<task-id>"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="scripts/triad/task_finish.sh --task-id \"$(TASK_ID)\""; \
+	if [ "$(VERIFY_ONLY)" = "1" ]; then cmd="$$cmd --verify-only"; fi; \
+	if [ "$(NO_COMMIT)" = "1" ]; then cmd="$$cmd --no-commit"; fi; \
+	if [ "$(SMOKE)" = "1" ]; then cmd="$$cmd --smoke"; fi; \
+	if [ -n "$(TASK_PLATFORM)" ]; then cmd="$$cmd --platform \"$(TASK_PLATFORM)\""; fi; \
+	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
+	eval "$$cmd"
+
+.PHONY: triad-feature-cleanup
+triad-feature-cleanup:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="scripts/triad/feature_cleanup.sh --feature-dir \"$(FEATURE_DIR)\""; \
+	if [ "$(REMOVE_WORKTREES)" = "1" ]; then cmd="$$cmd --remove-worktrees"; fi; \
+	if [ "$(PRUNE_LOCAL)" = "1" ]; then cmd="$$cmd --prune-local-branches"; fi; \
+	if [ -n "$(PRUNE_REMOTE)" ]; then cmd="$$cmd --prune-remote-branches \"$(PRUNE_REMOTE)\""; fi; \
+	if [ "$(FORCE)" = "1" ]; then cmd="$$cmd --force"; fi; \
+	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
+	eval "$$cmd"

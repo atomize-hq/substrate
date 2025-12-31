@@ -33,8 +33,6 @@ use world::{copydiff, overlayfs};
 
 const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
 const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
-const LEGACY_ROOT_MODE_ENV: &str = "SUBSTRATE_WORLD_ROOT_MODE";
-const LEGACY_ROOT_PATH_ENV: &str = "SUBSTRATE_WORLD_ROOT_PATH";
 
 #[cfg(target_os = "linux")]
 #[derive(Clone, Debug)]
@@ -667,13 +665,11 @@ fn emit_scopes_line(verbose: bool, scopes: &[String]) {
 fn project_dir_from_env(env: &HashMap<String, String>, cwd: &Path) -> Result<PathBuf> {
     let mode = env
         .get(ANCHOR_MODE_ENV)
-        .or_else(|| env.get(LEGACY_ROOT_MODE_ENV))
         .and_then(|value| WorldRootMode::parse(value))
         .unwrap_or(WorldRootMode::Project);
 
     let root_path = env
         .get(ANCHOR_PATH_ENV)
-        .or_else(|| env.get(LEGACY_ROOT_PATH_ENV))
         .map(|value| value.trim())
         .filter(|value| !value.is_empty())
         .map(PathBuf::from);
@@ -681,9 +677,8 @@ fn project_dir_from_env(env: &HashMap<String, String>, cwd: &Path) -> Result<Pat
     let base_dir = match mode {
         WorldRootMode::Project => root_path.unwrap_or_else(|| cwd.to_path_buf()),
         WorldRootMode::FollowCwd => cwd.to_path_buf(),
-        WorldRootMode::Custom => root_path.ok_or_else(|| {
-            anyhow!("world root mode 'custom' requires SUBSTRATE_WORLD_ROOT_PATH")
-        })?,
+        WorldRootMode::Custom => root_path
+            .ok_or_else(|| anyhow!("anchor mode 'custom' requires SUBSTRATE_ANCHOR_PATH"))?,
     };
 
     Ok(base_dir)

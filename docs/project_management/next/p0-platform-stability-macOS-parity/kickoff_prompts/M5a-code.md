@@ -36,3 +36,6 @@ Implement M5a-spec: align the world deps tool inventory with shim doctor/health 
 3. Switch back to orchestration branch; mark task completed; add END entry; commit docs (`docs: finish M5a-code`).
 4. Remove worktree `wt/mp-m5a-world-deps-inventory-code`.
 
+
+
+Do not edit planning docs inside the worktree.

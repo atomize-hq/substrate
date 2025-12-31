@@ -73,7 +73,7 @@ set -f
 
 mount --make-rprivate / 2>/dev/null || mount --make-private / 2>/dev/null || true
 
-if [ "${SUBSTRATE_WORLD_FS_CAGE:-project}" = "full" ]; then
+if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-project}" = "full" ]; then
   new_root="$(mktemp -d /tmp/substrate-full-cage.XXXXXX)"
 
   # Ensure new_root is a mountpoint (required by pivot_root).
@@ -270,7 +270,7 @@ pub fn execute_shell_command_with_project_bind_mount(
         );
 
         let cage_full = env_map
-            .get("SUBSTRATE_WORLD_FS_CAGE")
+            .get("SUBSTRATE_WORLD_FS_ISOLATION")
             .is_some_and(|raw| raw.trim().eq_ignore_ascii_case("full"));
         if cage_full {
             env_map.insert("HOME".to_string(), "/tmp/substrate-home".to_string());
@@ -312,7 +312,7 @@ pub fn execute_shell_command_with_project_bind_mount(
             Err(err) => {
                 if cage_full {
                     let message = format!(
-                        "substrate: error: world_fs.cage=full requested but failed to spawn unshare wrapper: {err}\n"
+                        "substrate: error: world_fs.isolation=full requested but failed to spawn unshare wrapper: {err}\n"
                     );
                     return Ok(Output {
                         status: std::process::ExitStatus::from_raw(126 << 8),
@@ -347,7 +347,7 @@ pub fn execute_shell_command_with_project_bind_mount(
             if let Ok(stderr_str) = std::str::from_utf8(&stderr_buf) {
                 if stderr_str.starts_with("unshare:") {
                     let mut wrapped = Vec::new();
-                    wrapped.extend_from_slice(b"substrate: error: world_fs.cage=full requested but failed to enter a mount namespace (unshare).\n");
+                    wrapped.extend_from_slice(b"substrate: error: world_fs.isolation=full requested but failed to enter a mount namespace (unshare).\n");
                     wrapped.extend_from_slice(b"substrate: hint: run with CAP_SYS_ADMIN (root) or enable unprivileged user namespaces (kernel.unprivileged_userns_clone=1).\n");
                     wrapped.extend_from_slice(stderr_buf.as_slice());
                     stderr_buf = wrapped;

@@ -14,8 +14,27 @@ fn invalid_substrate_profile_fails_fast() {
     fs::create_dir_all(&home).expect("create home");
     fs::create_dir_all(&project).expect("create project");
 
-    fs::write(project.join(".substrate-profile"), "not: [valid: yaml")
-        .expect("write invalid profile");
+    let substrate_dir = project.join(".substrate");
+    fs::create_dir_all(&substrate_dir).expect("create .substrate");
+    fs::write(
+        substrate_dir.join("workspace.yaml"),
+        r#"world:
+  enabled: false
+  anchor_mode: workspace
+  anchor_path: ""
+  caged: true
+policy:
+  mode: observe
+sync:
+  auto_sync: false
+  direction: from_world
+  conflict_policy: prefer_host
+  exclude: []
+"#,
+    )
+    .expect("write workspace.yaml marker");
+    fs::write(substrate_dir.join("policy.yaml"), "not: [valid: yaml")
+        .expect("write invalid policy.yaml");
 
     let assert = substrate_shell_driver()
         .env("HOME", &home)
@@ -28,11 +47,12 @@ fn invalid_substrate_profile_fails_fast() {
 
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
     assert!(
-        stderr.contains("failed to load Substrate profile"),
-        "expected profile load error, got: {stderr}"
+        stderr.contains("Failed to parse policy")
+            || stderr.contains("failed to load Substrate profile"),
+        "expected policy load error, got: {stderr}"
     );
     assert!(
-        stderr.contains(".substrate-profile") || stderr.contains("profile"),
-        "expected stderr to mention profile context, got: {stderr}"
+        stderr.contains("policy.yaml") || stderr.contains("policy"),
+        "expected stderr to mention policy context, got: {stderr}"
     );
 }

@@ -797,6 +797,7 @@ normalize_prefix() {
 }
 
 initialize_metadata_paths() {
+  ENV_SH_PATH="${PREFIX}/env.sh"
   MANAGER_ENV_PATH="${PREFIX}/manager_env.sh"
   MANAGER_INIT_PATH="${PREFIX}/manager_init.sh"
   INSTALL_CONFIG_PATH="${PREFIX}/config.yaml"
@@ -837,11 +838,8 @@ EOF
 write_manager_env_script() {
   local enabled="$1"
   local state="disabled"
-  local enabled_flag="0"
-  local caged_flag="1"
   if [[ "${enabled}" -eq 1 ]]; then
     state="enabled"
-    enabled_flag="1"
   fi
 
   if [[ "${DRY_RUN}" -eq 1 ]]; then
@@ -854,24 +852,28 @@ write_manager_env_script() {
   mkdir -p "${env_dir}"
   local today
   today="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  local manager_env_literal manager_init_literal legacy_literal
-  manager_env_literal="$(printf '%q' "${MANAGER_ENV_PATH}")"
-  manager_init_literal="$(printf '%q' "${MANAGER_INIT_PATH}")"
+  local legacy_literal
   legacy_literal="\${HOME}/.substrate_bashenv"
   cat > "${MANAGER_ENV_PATH}.tmp" <<EOF
 #!/usr/bin/env bash
 # Managed by ${INSTALLER_NAME} on ${today}
-export SUBSTRATE_WORLD=${state}
-export SUBSTRATE_WORLD_ENABLED=${enabled_flag}
-export SUBSTRATE_CAGED=${caged_flag}
-export SUBSTRATE_ANCHOR_MODE="project"
-export SUBSTRATE_ANCHOR_PATH=""
-export SUBSTRATE_WORLD_ROOT_MODE="project"
-export SUBSTRATE_WORLD_ROOT_PATH=""
-export SUBSTRATE_MANAGER_ENV=${manager_env_literal}
-export SUBSTRATE_MANAGER_INIT=${manager_init_literal}
+if [[ -n "\${SUBSTRATE_MANAGER_ENV_ACTIVE:-}" ]]; then
+  return 0
+fi
+export SUBSTRATE_MANAGER_ENV_ACTIVE=1
 
-manager_init_path=${manager_init_literal}
+substrate_home="\${SUBSTRATE_HOME:-}"
+if [[ -z "\${substrate_home}" ]]; then
+  substrate_home="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+fi
+
+substrate_env="\${substrate_home}/env.sh"
+if [[ -f "\${substrate_env}" ]]; then
+  # shellcheck disable=SC1090
+  source "\${substrate_env}"
+fi
+
+manager_init_path="\${substrate_home}/manager_init.sh"
 if [[ -f "\${manager_init_path}" ]]; then
   # shellcheck disable=SC1090
   source "\${manager_init_path}"
@@ -893,6 +895,41 @@ EOF
   chmod 0644 "${MANAGER_ENV_PATH}" || true
 }
 
+write_env_sh_script() {
+  local enabled="$1"
+  local state="disabled"
+  if [[ "${enabled}" -eq 1 ]]; then
+    state="enabled"
+  fi
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    printf '[%s][dry-run] Write env.sh at %s (world=%s)\n' "${INSTALLER_NAME}" "${ENV_SH_PATH}" "${state}" >&2
+    return
+  fi
+
+  local env_dir
+  env_dir="$(dirname "${ENV_SH_PATH}")"
+  mkdir -p "${env_dir}"
+
+  local substrate_home_literal anchor_mode_literal anchor_path_literal policy_mode_literal world_literal
+  substrate_home_literal="$(printf '%q' "${PREFIX}")"
+  anchor_mode_literal="$(printf '%q' "workspace")"
+  anchor_path_literal="$(printf '%q' "")"
+  policy_mode_literal="$(printf '%q' "observe")"
+  world_literal="$(printf '%q' "${state}")"
+  cat > "${ENV_SH_PATH}.tmp" <<EOF
+#!/usr/bin/env bash
+export SUBSTRATE_HOME=${substrate_home_literal}
+export SUBSTRATE_WORLD=${world_literal}
+export SUBSTRATE_CAGED=1
+export SUBSTRATE_ANCHOR_MODE=${anchor_mode_literal}
+export SUBSTRATE_ANCHOR_PATH=${anchor_path_literal}
+export SUBSTRATE_POLICY_MODE=${policy_mode_literal}
+EOF
+  mv "${ENV_SH_PATH}.tmp" "${ENV_SH_PATH}"
+  chmod 0644 "${ENV_SH_PATH}" || true
+}
+
 write_install_config() {
   local enabled="$1"
   local flag="false"
@@ -909,14 +946,18 @@ write_install_config() {
   config_dir="$(dirname "${INSTALL_CONFIG_PATH}")"
   mkdir -p "${config_dir}"
   cat > "${INSTALL_CONFIG_PATH}.tmp" <<EOF
-install:
-  world_enabled: ${flag}
 world:
-  anchor_mode: project
+  enabled: ${flag}
+  anchor_mode: workspace
   anchor_path: ""
-  root_mode: project
-  root_path: ""
   caged: true
+policy:
+  mode: observe
+sync:
+  auto_sync: false
+  direction: from_world
+  conflict_policy: prefer_host
+  exclude: []
 EOF
   mv "${INSTALL_CONFIG_PATH}.tmp" "${INSTALL_CONFIG_PATH}"
   chmod 0644 "${INSTALL_CONFIG_PATH}" || true
@@ -926,6 +967,7 @@ finalize_install_metadata() {
   local enabled="$1"
   ensure_no_legacy_toml_install_config
   ensure_manager_init_placeholder
+  write_env_sh_script "${enabled}"
   write_manager_env_script "${enabled}"
   write_install_config "${enabled}"
 }
@@ -1705,7 +1747,7 @@ install_macos() {
   if [[ "${world_enabled}" -eq 1 ]]; then
     log "World backend enabled; run '${bin_dir}/substrate world doctor --json' or '${bin_dir}/substrate world deps sync' as needed."
   else
-    log "World backend disabled (--no-world). Run '${bin_dir}/substrate world enable --prefix \"${PREFIX}\"' when you are ready to provision."
+    log "World backend disabled (--no-world). Run '${bin_dir}/substrate world enable --home \"${PREFIX}\"' when you are ready to provision."
   fi
 
   write_host_state_metadata "${world_enabled}"
@@ -1794,7 +1836,7 @@ install_linux() {
     log "World backend enabled; run '${bin_dir}/substrate world doctor --json' for diagnostics or '${bin_dir}/substrate world deps sync' to mirror host tools."
     print_linger_guidance_linux "${primary_user}"
   else
-    log "World backend disabled (--no-world). Run '${bin_dir}/substrate world enable --prefix \"${PREFIX}\"' when you are ready to provision."
+    log "World backend disabled (--no-world). Run '${bin_dir}/substrate world enable --home \"${PREFIX}\"' when you are ready to provision."
   fi
 
   write_host_state_metadata "${world_enabled}"

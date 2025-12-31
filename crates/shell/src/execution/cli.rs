@@ -4,18 +4,18 @@ use substrate_common::WorldRootMode;
 
 #[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
 #[value(rename_all = "kebab-case")]
-pub enum WorldRootModeArg {
-    Project,
+pub enum AnchorModeArg {
+    Workspace,
     FollowCwd,
     Custom,
 }
 
-impl From<WorldRootModeArg> for WorldRootMode {
-    fn from(value: WorldRootModeArg) -> Self {
+impl From<AnchorModeArg> for WorldRootMode {
+    fn from(value: AnchorModeArg) -> Self {
         match value {
-            WorldRootModeArg::Project => WorldRootMode::Project,
-            WorldRootModeArg::FollowCwd => WorldRootMode::FollowCwd,
-            WorldRootModeArg::Custom => WorldRootMode::Custom,
+            AnchorModeArg::Workspace => WorldRootMode::Project,
+            AnchorModeArg::FollowCwd => WorldRootMode::FollowCwd,
+            AnchorModeArg::Custom => WorldRootMode::Custom,
         }
     }
 }
@@ -115,21 +115,13 @@ pub struct Cli {
     #[arg(long = "uncaged", action = ArgAction::SetTrue, conflicts_with = "caged")]
     pub uncaged: bool,
 
-    /// Control how the anchor root is selected (project, follow-cwd, or custom)
-    #[arg(
-        long = "anchor-mode",
-        visible_alias = "world-root-mode",
-        value_name = "MODE"
-    )]
-    pub world_root_mode: Option<WorldRootModeArg>,
+    /// Control how the anchor root is selected (workspace, follow-cwd, or custom)
+    #[arg(long = "anchor-mode", value_name = "MODE")]
+    pub anchor_mode: Option<AnchorModeArg>,
 
     /// Explicit anchor path (used when --anchor-mode=custom)
-    #[arg(
-        long = "anchor-path",
-        visible_alias = "world-root-path",
-        value_name = "PATH"
-    )]
-    pub world_root_path: Option<PathBuf>,
+    #[arg(long = "anchor-path", value_name = "PATH")]
+    pub anchor_path: Option<PathBuf>,
 
     /// Force world isolation for this run (overrides disabled install/config/env)
     #[arg(
@@ -159,6 +151,8 @@ pub enum SubCommands {
     Graph(GraphCmd),
     World(WorldCmd),
     Config(ConfigCmd),
+    Policy(PolicyCmd),
+    Workspace(WorkspaceCmd),
     Shim(ShimCmd),
     Health(HealthCmd),
 }
@@ -194,13 +188,35 @@ pub struct ConfigCmd {
     pub action: ConfigAction,
 }
 
+#[derive(Args, Debug)]
+pub struct PolicyCmd {
+    #[command(subcommand)]
+    pub action: PolicyAction,
+}
+
 #[derive(Subcommand, Debug)]
 pub enum ConfigAction {
-    /// Initialize or regenerate ~/.substrate/config.yaml
-    Init(ConfigInitArgs),
-    /// Print the global config (YAML by default, JSON with --json)
+    /// Print the effective config for the current workspace (YAML by default, JSON with --json)
     Show(ConfigShowArgs),
-    /// Update config keys via dotted key=value assignments
+    /// Update the workspace config via dotted updates (key=value, key+=value, key-=value)
+    Set(ConfigSetArgs),
+    /// Global config commands ($SUBSTRATE_HOME/config.yaml)
+    Global(ConfigGlobalCmd),
+}
+
+#[derive(Args, Debug)]
+pub struct ConfigGlobalCmd {
+    #[command(subcommand)]
+    pub action: ConfigGlobalAction,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ConfigGlobalAction {
+    /// Initialize $SUBSTRATE_HOME/config.yaml (creates if missing; overwrites with --force)
+    Init(ConfigInitArgs),
+    /// Print $SUBSTRATE_HOME/config.yaml if present; otherwise print built-in defaults
+    Show(ConfigShowArgs),
+    /// Update $SUBSTRATE_HOME/config.yaml via dotted updates (key=value, key+=value, key-=value)
     Set(ConfigSetArgs),
 }
 
@@ -220,12 +236,86 @@ pub struct ConfigShowArgs {
 
 #[derive(Args, Debug)]
 pub struct ConfigSetArgs {
-    /// Emit JSON summary instead of the human-readable diff
+    /// Emit JSON summary instead of human output
     #[arg(long)]
     pub json: bool,
-    /// One or more dotted key assignments (key=value)
-    #[arg(value_name = "key=value", required = true)]
+    /// One or more dotted updates (key=value, key+=value, key-=value)
+    #[arg(value_name = "UPDATE", required = true)]
     pub updates: Vec<String>,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum PolicyAction {
+    /// Initialize <workspace_root>/.substrate/policy.yaml (creates if missing; overwrites with --force)
+    Init(PolicyInitArgs),
+    /// Print the effective policy for the current workspace (YAML by default, JSON with --json)
+    Show(PolicyShowArgs),
+    /// Update <workspace_root>/.substrate/policy.yaml via dotted updates (key=value, key+=value, key-=value)
+    Set(PolicySetArgs),
+    /// Global policy commands ($SUBSTRATE_HOME/policy.yaml)
+    Global(PolicyGlobalCmd),
+}
+
+#[derive(Args, Debug)]
+pub struct PolicyGlobalCmd {
+    #[command(subcommand)]
+    pub action: PolicyGlobalAction,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum PolicyGlobalAction {
+    /// Initialize $SUBSTRATE_HOME/policy.yaml (creates if missing; overwrites with --force)
+    Init(PolicyInitArgs),
+    /// Print $SUBSTRATE_HOME/policy.yaml if present; otherwise print built-in defaults
+    Show(PolicyShowArgs),
+    /// Update $SUBSTRATE_HOME/policy.yaml via dotted updates (key=value, key+=value, key-=value)
+    Set(PolicySetArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct PolicyInitArgs {
+    /// Overwrite the policy even if it already exists
+    #[arg(long)]
+    pub force: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct PolicyShowArgs {
+    /// Emit JSON instead of YAML
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct PolicySetArgs {
+    /// Emit JSON instead of human output
+    #[arg(long)]
+    pub json: bool,
+    /// One or more dotted updates (key=value, key+=value, key-=value)
+    #[arg(value_name = "UPDATE", required = true)]
+    pub updates: Vec<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct WorkspaceCmd {
+    #[command(subcommand)]
+    pub action: WorkspaceAction,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum WorkspaceAction {
+    /// Initialize a workspace at PATH (defaults to .)
+    Init(WorkspaceInitArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct WorkspaceInitArgs {
+    /// Workspace root path (defaults to .)
+    #[arg(value_name = "PATH")]
+    pub path: Option<PathBuf>,
+    /// Repair missing directories/files without overwriting existing files
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -244,9 +334,9 @@ pub enum WorldAction {
 
 #[derive(Args, Debug, Clone)]
 pub struct WorldEnableArgs {
-    /// Installation prefix to upgrade (defaults to ~/.substrate or SUBSTRATE_HOME)
-    #[arg(long = "prefix", value_name = "PATH")]
-    pub prefix: Option<PathBuf>,
+    /// Substrate home directory for this operation (defaults to ~/.substrate or $SUBSTRATE_HOME)
+    #[arg(long = "home", value_name = "PATH")]
+    pub home: Option<PathBuf>,
     /// Provisioning profile label passed to the helper script
     #[arg(long = "profile", value_name = "NAME", default_value = "release")]
     pub profile: String,

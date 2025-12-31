@@ -34,3 +34,6 @@ cargo clippy --workspace --all-targets -- -D warnings
 4. Update `tasks.json` + `session_log.md` (END entry) and commit docs (`docs: finish I9-code`).
 5. Remove worktree.
 
+
+
+Do not edit planning docs inside the worktree.

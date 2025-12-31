@@ -4,6 +4,9 @@
 - Tests/fixtures/harnesses only; no production code changes. Cover replacement/provisioning detection, socket activation state, and doctor outputs per M1-spec (no backwards compatibility or user-data carry-over expected).
 
 ## Start Checklist
+
+Do not edit planning docs inside the worktree.
+
 1. `git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only`
 2. Read: plan.md, tasks.json, session_log.md, M1-spec.md, this prompt.
 3. Set `M1-test` status to `in_progress` in tasks.json (orchestration branch only).

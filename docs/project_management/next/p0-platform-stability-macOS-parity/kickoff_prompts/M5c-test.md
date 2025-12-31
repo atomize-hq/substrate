@@ -33,3 +33,6 @@ Add tests/fixtures validating first-run wiring and coherent recommendations acro
 3. Switch back to orchestration branch; mark task completed; add END entry; commit docs (`docs: finish M5c-test`).
 4. Remove worktree `wt/mp-m5c-world-deps-first-run-test`.
 
+
+
+Do not edit planning docs inside the worktree.

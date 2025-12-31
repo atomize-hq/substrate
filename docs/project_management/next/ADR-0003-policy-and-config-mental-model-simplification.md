@@ -35,6 +35,24 @@
   - `docs/project_management/next/world-sync/C0-spec.md`
   - `docs/project_management/next/world-sync/C1-spec.md`
 
+## Executive Summary (Operator)
+
+ADR_BODY_SHA256: e8d328d623951d68134863af5a22efa7ef683f360ce0518038aac10a223d5f7a
+
+ADR_BODY_SHA256: <run `python3 scripts/planning/check_adr_exec_summary.py --adr <this-file> --fix` after editing>
+
+- Existing: Config/policy discovery and naming is ambiguous (multiple file names, “settings vs config vs policy”, and colliding terms like `cage/caged` and `root/anchor`).
+- New: One strict, testable inventory of config/policy files + precedence, with explicit removals and no legacy fallbacks.
+- Why: Shrinks the mental model, reduces bug surface, and increases reproducibility (operators can predict exactly what is loaded).
+- Links:
+  - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md`
+
+- Existing: Policy mode semantics and runtime state can be drift-prone/hard to reason about.
+- New: Policy mode is explicit (`disabled|observe|enforce`), strict parsing is required, and cached state is stabilized via `env.sh`.
+- Why: Makes enforcement reliable and removes footguns for agent workflows.
+- Links:
+  - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM1-spec.md`
+
 ## Problem / Context
 
 Substrate currently has overlapping configuration/policy artifacts and naming collisions that make the runtime mental model hard to reason about. Examples include:

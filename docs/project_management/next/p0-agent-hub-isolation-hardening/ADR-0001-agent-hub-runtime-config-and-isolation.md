@@ -12,6 +12,19 @@ Related work:
 
 ---
 
+## Executive Summary (Operator)
+
+ADR_BODY_SHA256: 1c743bfa97e7e8f4c6ebfd76e66481fa63ce920553348c09fc58a566dc83f649
+
+ADR_BODY_SHA256: <run `python3 scripts/planning/check_adr_exec_summary.py --adr <this-file> --fix` after editing>
+
+- Existing: Substrate can feel like a “best effort wrapper” where some operations (world-deps, config, isolation) are ambiguous, drift-prone, or silently degrade when guarantees are not met.
+- New: Substrate behaves like a strict agent-hub execution layer: selection-driven world-deps (no-op when unconfigured), YAML-only runtime config, and Linux isolation guarantees that prevent absolute-path project writes from bypassing the overlay.
+- Why: Reduces security footguns and makes guarantees auditable/reproducible across tools (humans + multiple agent CLIs).
+- Links:
+  - `docs/project_management/next/world_deps_selection_layer/`
+  - `docs/project_management/next/yaml-settings-migration/Y0-spec.md`
+
 ## 0) Executive Summary
 
 Substrate is evolving into a multi-agent hub where multiple frontier-model CLIs (Codex, Claude, Gemini, and similar tools)

@@ -1,4 +1,7 @@
 {
+  "meta": {
+    "external_task_ids": ["Y0-integ", "C1-integ"]
+  },
   "tasks": [
     {
       "id": "WDL0-code",
@@ -92,7 +95,7 @@
       ],
       "acceptance_criteria": [
         "WDL0 code and tests are merged and match S0 exactly",
-        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
@@ -102,7 +105,7 @@
         "Create worktree wt/wdl0-selection-integ; do not edit docs/tasks/session_log.md inside the worktree"
       ],
       "end_checklist": [
-        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
         "Run: bash docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh",
         "Run: bash docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh",
         "Run: pwsh -File docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1",
@@ -201,7 +204,7 @@
       ],
       "acceptance_criteria": [
         "WDL1 code and tests are merged and match S1 exactly",
-        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
@@ -211,7 +214,7 @@
         "Create worktree wt/wdl1-classes-integ; do not edit docs/tasks/session_log.md inside the worktree"
       ],
       "end_checklist": [
-        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
         "Run: bash docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh",
         "Run: bash docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh",
         "Run: pwsh -File docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1",
@@ -313,7 +316,7 @@
       ],
       "acceptance_criteria": [
         "WDL2 code and tests are merged and match S2 exactly",
-        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make preflight succeed",
+        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
         "Feature-local smoke scripts run and results are recorded in session_log.md"
       ],
       "start_checklist": [
@@ -323,7 +326,7 @@
         "Create worktree wt/wdl2-provision-integ; do not edit docs/tasks/session_log.md inside the worktree"
       ],
       "end_checklist": [
-        "Run cargo fmt, cargo clippy, relevant cargo test, and make preflight",
+        "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
         "Run: bash docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh",
         "Run: bash docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh",
         "Run: pwsh -File docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1",

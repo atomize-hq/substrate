@@ -13,7 +13,7 @@
 
 ## Scope
 - Merge ps-r2e-world-fs-code/test, resolve conflicts across broker/shell/world-agent/docs.
-- Verify read-only vs writable policy plumbing across PTY + non-PTY paths; doctor/traces should reflect the active mode.
+- Verify read-only vs writable policy plumbing across PTY + non-PTY paths; doctor/traces must reflect the active mode.
 - Ensure systemd socket/service defaults remain compatible (policy controls writes, not unit hardening).
 
 ## Required Commands
@@ -30,3 +30,6 @@ cargo test -p world-agent   # or document skips if privileged requirements block
 3. Fast-forward merge into feat/p0-platform-stability-follow-up.
 4. Update `tasks.json` + `session_log.md` END entry with command results.
 5. Commit doc/task/log updates (`git commit -am "docs: finish R2e-integ"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

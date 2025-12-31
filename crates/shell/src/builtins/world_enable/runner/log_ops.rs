@@ -28,13 +28,13 @@ pub(super) fn initialize_log_file(path: &Path) -> Result<()> {
 pub(super) fn print_dry_run_plan(
     script: &Path,
     args: &WorldEnableArgs,
-    prefix: &Path,
+    substrate_home: &Path,
     log_path: &Path,
 ) -> Result<()> {
     let mut command_line = vec![
         script.display().to_string(),
-        "--prefix".to_string(),
-        prefix.display().to_string(),
+        "--home".to_string(),
+        substrate_home.display().to_string(),
         "--profile".to_string(),
         args.profile.clone(),
     ];
@@ -99,7 +99,7 @@ mod tests {
 
     fn sample_args() -> WorldEnableArgs {
         WorldEnableArgs {
-            prefix: None,
+            home: None,
             profile: "release".to_string(),
             dry_run: true,
             verbose: true,

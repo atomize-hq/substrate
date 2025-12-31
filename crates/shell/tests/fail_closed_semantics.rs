@@ -37,11 +37,23 @@ fn write_profile(project_dir: &Path, require_world: bool) {
 name: Test Policy
 world_fs:
   mode: writable
-  cage: project
+  isolation: project
   require_world: {require_world}
   read_allowlist:
     - "*"
   write_allowlist: []
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+require_approval: false
+allow_shell_operators: true
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+metadata: {{}}
 "#
     );
     fs::write(project_dir.join(".substrate-profile"), profile).expect("write .substrate-profile");
@@ -68,7 +80,7 @@ fn base_env_cmd(
 }
 
 #[test]
-fn require_world_true_refuses_host_fallback_when_world_socket_unavailable() {
+fn require_world_true_allows_host_fallback_in_observe_mode_when_world_socket_unavailable() {
     let temp = temp_dir("substrate-i1-require-world-");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
@@ -86,28 +98,28 @@ fn require_world_true_refuses_host_fallback_when_world_socket_unavailable() {
         .arg("-c")
         .arg("printf should-not-run")
         .assert()
-        .failure();
+        .success();
 
     let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
     assert!(
-        !stdout.contains("should-not-run"),
-        "expected command to not run, got stdout: {stdout}"
+        stdout.contains("should-not-run"),
+        "expected command to run on host, got stdout: {stdout}"
     );
 
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
     assert_eq!(
         count_error_lines(&stderr),
-        1,
-        "expected exactly one error line, got: {stderr}"
+        0,
+        "expected no errors, got: {stderr}"
     );
     assert_eq!(
         count_warning_lines(&stderr),
-        0,
-        "expected no warnings for require_world=true, got: {stderr}"
+        1,
+        "expected exactly one warning for world fallback, got: {stderr}"
     );
     assert!(
-        stderr.contains("world execution required"),
-        "expected fail-closed error, got: {stderr}"
+        stderr.contains("world backend unavailable") && stderr.contains("running on host"),
+        "expected host fallback warning, got: {stderr}"
     );
     assert!(
         stderr.contains("SUBSTRATE_WORLD_SOCKET override")

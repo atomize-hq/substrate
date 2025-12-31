@@ -38,6 +38,7 @@ fn seed_shims(home: &Path) {
 fn write_read_only_policy(home: &Path) {
     let policy = Policy {
         world_fs_mode: WorldFsMode::ReadOnly,
+        world_fs_require_world: true,
         ..Default::default()
     };
     let yaml = serde_yaml::to_string(&policy).expect("policy yaml");

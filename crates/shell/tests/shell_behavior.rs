@@ -4,6 +4,7 @@ mod support;
 
 use predicates::prelude::*;
 use std::fs;
+use std::path::PathBuf;
 #[cfg(not(target_os = "macos"))]
 use std::process::{Command as StdCommand, Stdio};
 #[cfg(not(target_os = "macos"))]
@@ -13,9 +14,22 @@ use substrate_shell::needs_shell;
 use support::{binary_path, ensure_substrate_built};
 use support::{get_substrate_binary, temp_dir};
 
+fn setup_isolated_home(temp: &tempfile::TempDir) -> PathBuf {
+    let home = temp.path().join("home");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(substrate_home.join("shims")).expect("create shims directory");
+    fs::write(
+        substrate_home.join("config.yaml"),
+        "world:\n  enabled: true\n  anchor_mode: workspace\n  anchor_path: \"\"\n  caged: true\n\npolicy:\n  mode: observe\n\nsync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: []\n",
+    )
+    .expect("write default config");
+    home
+}
+
 #[test]
 fn test_builtin_cd_side_effects() {
     let temp = temp_dir("substrate-test-");
+    let home = setup_isolated_home(&temp);
     let target_dir = temp.path().join("test_dir");
     fs::create_dir(&target_dir).unwrap();
 
@@ -23,6 +37,9 @@ fn test_builtin_cd_side_effects() {
     let script = format!("cd {} && pwd", canonical_dir.display());
 
     get_substrate_binary()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", home.join(".substrate"))
         .env("SUBSTRATE_CAGED", "0")
         .arg("--uncaged")
         .arg("-c")
@@ -37,9 +54,13 @@ fn test_builtin_cd_side_effects() {
 #[test]
 fn test_ci_flag_strict_mode_ordering() {
     let temp = temp_dir("substrate-test-");
+    let home = setup_isolated_home(&temp);
     let log_file = temp.path().join("trace.jsonl");
 
     get_substrate_binary()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", home.join(".substrate"))
         .env("SHIM_TRACE_LOG", &log_file)
         .arg("--no-world")
         .arg("--shell")
@@ -51,6 +72,9 @@ fn test_ci_flag_strict_mode_ordering() {
         .failure();
 
     get_substrate_binary()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", home.join(".substrate"))
         .env("SHIM_TRACE_LOG", &log_file)
         .arg("--no-world")
         .arg("--shell")
@@ -64,11 +88,15 @@ fn test_ci_flag_strict_mode_ordering() {
 #[test]
 fn test_script_mode_single_process() {
     let temp = temp_dir("substrate-test-");
+    let home = setup_isolated_home(&temp);
     let script_file = temp.path().join("test.sh");
 
     fs::write(&script_file, "cd /tmp\npwd\nexport FOO=bar\necho $FOO").unwrap();
 
     get_substrate_binary()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", home.join(".substrate"))
         .arg("-f")
         .arg(&script_file)
         .assert()
@@ -95,9 +123,14 @@ fn test_sigterm_exit_code() {
     use std::thread;
 
     ensure_substrate_built();
+    let temp = temp_dir("substrate-test-");
+    let home = setup_isolated_home(&temp);
     let substrate_bin = std::path::PathBuf::from(binary_path());
 
     let mut child = StdCommand::new(substrate_bin)
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", home.join(".substrate"))
         .arg("--no-world")
         .arg("-c")
         .arg("sleep 5")
@@ -136,9 +169,13 @@ fn test_sigterm_exit_code() {
 #[test]
 fn test_cd_minus_behavior() {
     let temp = temp_dir("substrate-test-");
+    let home = setup_isolated_home(&temp);
     let log_file = temp.path().join("trace.jsonl");
 
     get_substrate_binary()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", home.join(".substrate"))
         .env("SHIM_TRACE_LOG", &log_file)
         .env("SUBSTRATE_CAGED", "0")
         .arg("--uncaged")
@@ -158,9 +195,13 @@ fn test_cd_minus_behavior() {
 #[test]
 fn test_export_complex_values_deferred() {
     let temp = temp_dir("substrate-test-");
+    let home = setup_isolated_home(&temp);
     let log_file = temp.path().join("trace.jsonl");
 
     get_substrate_binary()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", home.join(".substrate"))
         .env("SHIM_TRACE_LOG", &log_file)
         .arg("-c")
         .arg("export FOO=\"bar baz\" && echo $FOO")

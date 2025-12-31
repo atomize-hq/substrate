@@ -9,11 +9,11 @@ This triad is about **workflow + UX coherence**, not reworking manifests (M4/M5a
 ### Required behavior
 1. **Installer/provision integration**
    - `--sync-deps` (and/or equivalent first-run flow) invokes the correct world deps sync logic after provisioning completes successfully.
-   - Output should be concise and clearly state what was synced vs skipped and why.
+   - Output must be concise and must clearly state what was synced vs skipped and why.
 2. **Coherent recommendations**
-   - `substrate health` and `substrate shim doctor` recommendations should point users to the correct follow-up (`world deps sync`, `shim repair`, etc.) without contradictions.
+   - `substrate health` and `substrate shim doctor` recommendations must point users to the correct follow-up (e.g., `world deps sync`, `shim repair`) without contradictions.
 3. **Safe defaults**
-   - First-run sync should not attempt guest installs for tools that are not host-present (per M5b semantics), unless explicitly requested (e.g., `--all`).
+   - First-run sync must not attempt guest installs for tools that are not host-present (per M5b semantics), unless explicitly requested (e.g., `--all`).
 
 ### Out of scope
 - Expanding tool lists or recipes beyond what the manifests already define.
@@ -21,6 +21,5 @@ This triad is about **workflow + UX coherence**, not reworking manifests (M4/M5a
 
 ## Acceptance criteria
 - Fresh macOS install + provision + `--sync-deps` yields a world session where common host capabilities are available inside the guest with minimal manual steps.
-- Health/doctor outputs and installer logs do not disagree about what is “missing” or what action the user should take.
+- Health/doctor outputs and installer logs do not disagree about what is “missing” or what action the user is expected to take.
 - Sync behavior is explicit about skipped tools and includes actionable next steps.
-

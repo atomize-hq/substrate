@@ -5,6 +5,9 @@
 - Production code only; do not add or modify tests.
 
 ## Start Checklist
+
+Do not edit planning docs inside the worktree.
+
 1. `git checkout feat/world-sync && git pull --ff-only`
 2. Read: `docs/project_management/next/world_deps_selection_layer/plan.md`, `docs/project_management/next/world_deps_selection_layer/tasks.json`, `docs/project_management/next/world_deps_selection_layer/session_log.md`, `docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`, and this prompt.
 3. Set `WDL2-code` status to `in_progress` in `docs/project_management/next/world_deps_selection_layer/tasks.json`; add a START entry to `docs/project_management/next/world_deps_selection_layer/session_log.md`; commit docs (`docs: start WDL2-code`).

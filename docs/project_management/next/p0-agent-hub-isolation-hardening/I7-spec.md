@@ -18,7 +18,7 @@
     may differ until an explicit exit-code triad lands.
 
 ### Guardrails
-- This triad is documentation-first: it should not introduce new runtime behavior requirements.
+- This triad is documentation-first: it must not introduce new runtime behavior requirements.
 - Any “new contract” changes (e.g., changing CLI exit codes) belong in a separate triad/spec.
 
 ## Acceptance

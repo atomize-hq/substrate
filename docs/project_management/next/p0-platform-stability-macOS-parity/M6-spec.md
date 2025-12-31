@@ -12,7 +12,7 @@ World deps currently has a fallback path that can run “guest” detection/inst
 ### Required behavior
 1. **No silent host fallback for install/sync on macOS**
    - `substrate world deps install ...` and `substrate world deps sync ...` must fail with an actionable error when the world backend is unavailable.
-   - The error should guide users to `substrate world doctor --json` and forwarding diagnostics.
+   - The error must guide users to `substrate world doctor --json` and forwarding diagnostics.
 2. **Status remains diagnostic**
    - `substrate world deps status` may still return a report, but guest status must clearly indicate “unavailable” with a reason when the backend cannot be reached.
 3. **Observability**
@@ -26,4 +26,3 @@ World deps currently has a fallback path that can run “guest” detection/inst
 - On macOS, an unreachable world backend causes `world deps sync/install` to exit non-zero with a clear remediation message.
 - `world deps status` clearly distinguishes “missing in guest” from “guest unavailable”.
 - No macOS run can “successfully install” guest tools by executing Linux recipes on the host.
-

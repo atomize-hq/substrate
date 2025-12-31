@@ -30,3 +30,6 @@ substrate health --json
 3. Update `tasks.json` (`H1b-integ` → completed) + session log END entry summarizing final outputs and next steps/follow-ups.
 4. Ensure plan/docs mention completion status; capture any carry-over items in the log.
 5. Commit doc/task/log updates (`git commit -am "docs: finish H1b-integ"`), remove worktree, and hand off artifacts for review.
+
+
+Do not edit planning docs inside the worktree.

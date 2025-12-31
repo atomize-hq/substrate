@@ -53,6 +53,7 @@ Planning work must use these standards:
 
 1) `plan.md`
 - A runbook: scope boundaries, triad overview, invariants, and operator UX expectations.
+  - Include a short triad sizing plan: each slice should represent one behavior delta and avoid “grab bag” scope (see `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`).
 
 2) `tasks.json`
 - Triad tasks (code/test/integration) with explicit dependencies, references, and acceptance criteria.
@@ -73,6 +74,20 @@ Planning outputs must be directly executable under the triad workflow. Therefore
 - Docs discipline must match the triad standard:
   - docs/tasks/session logs are edited only on the orchestration branch,
   - docs/tasks/session logs are never edited from inside worktrees.
+
+### 3.1.2 Cross-platform parity planning (required when cross-platform)
+
+If the work requires cross-platform parity (Linux/macOS/Windows and optionally WSL):
+- The planning pack must explicitly state the required platform set and the parity guarantees (in ADR/specs/contract).
+- The planning pack must choose an integration task model:
+  - validation-only, or
+  - platform-fix when needed (recommended for any feature that could plausibly diverge by platform).
+- If using platform-fix when needed, encode it mechanically in `tasks.json`:
+  - `meta.schema_version: 2`
+  - `meta.platforms_required: ["linux","macos","windows"]`
+  - If WSL coverage is required, do not add `"wsl"` to `meta.platforms_required`; instead use `meta.wsl_required: true` and `meta.wsl_task_mode: "bundled"|"separate"`.
+  - per slice: `X-integ-core`, `X-integ-<platform>`, and `X-integ` (final)
+  - include platform smoke scripts under `smoke/` and reference them in integration tasks/end checklists.
 
 ### 3.2 Required for “decision-heavy” or “cross-platform” work
 
@@ -221,6 +236,8 @@ To make validation repeatable and auditable:
   - the exact command(s) to run the script(s),
   - what success looks like (exit code and key expected output),
   - how to run sections manually for debugging.
+  - if cross-platform validation is required, how to run smoke scripts via GitHub Actions on self-hosted runners (preferred):
+    - `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=all RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
 
 Prohibited:
 - “Verify it works”

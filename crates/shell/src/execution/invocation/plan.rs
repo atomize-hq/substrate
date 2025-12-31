@@ -1,14 +1,15 @@
 //! Shell invocation planning and environment preparation.
 
-use crate::builtins as commands;
 use crate::execution::cli::*;
+use crate::execution::config_model::PolicyMode;
 use crate::execution::settings::{self, apply_world_root_env, resolve_world_root};
 use crate::execution::shim_deploy::{DeploymentStatus, ShimDeployer};
 #[cfg(target_os = "linux")]
 use crate::execution::socket_activation;
 use crate::execution::{
-    handle_config_command, handle_graph_command, handle_health_command, handle_replay_command,
-    handle_shim_command, handle_trace_command, handle_world_command, update_world_env,
+    handle_config_command, handle_graph_command, handle_health_command, handle_policy_command,
+    handle_replay_command, handle_shim_command, handle_trace_command, handle_workspace_command,
+    handle_world_command, update_world_env,
 };
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -19,7 +20,9 @@ use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 #[cfg(test)]
 use std::sync::{Mutex, OnceLock};
+use substrate_broker::{set_global_broker, BrokerHandle};
 use substrate_common::{dedupe_path, paths as substrate_paths, WorldRootMode};
+use substrate_trace::{init_trace, set_global_trace_context, TraceContext};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -42,6 +45,9 @@ pub struct ShellConfig {
     pub no_exit_on_error: bool,
     pub skip_shims: bool,
     pub no_world: bool,
+    pub cli_world: bool,
+    pub cli_no_world: bool,
+    pub(crate) policy_mode: PolicyMode,
     pub world_root: settings::WorldRootSettings,
     pub async_repl: bool,
     pub env_vars: HashMap<String, String>,
@@ -418,6 +424,11 @@ impl ShellConfig {
 
         // Handle --replay flag
         if let Some(span_id) = cli.replay.clone() {
+            let _ = set_global_broker(BrokerHandle::new());
+            let _ = set_global_trace_context(TraceContext::default());
+            if let Err(e) = init_trace(None) {
+                eprintln!("substrate: warning: failed to initialize trace: {}", e);
+            }
             if cli.replay_verbose {
                 env::set_var("SUBSTRATE_REPLAY_VERBOSE", "1");
             }
@@ -437,8 +448,16 @@ impl ShellConfig {
                     std::process::exit(0);
                 }
                 SubCommands::Config(config_cmd) => {
-                    handle_config_command(config_cmd)?;
-                    std::process::exit(0);
+                    let code = handle_config_command(config_cmd, &cli);
+                    std::process::exit(code);
+                }
+                SubCommands::Policy(policy_cmd) => {
+                    let code = handle_policy_command(policy_cmd, &cli);
+                    std::process::exit(code);
+                }
+                SubCommands::Workspace(workspace_cmd) => {
+                    let code = handle_workspace_command(workspace_cmd);
+                    std::process::exit(code);
                 }
                 SubCommands::Shim(shim_cmd) => {
                     handle_shim_command(shim_cmd, &cli);
@@ -459,8 +478,8 @@ impl ShellConfig {
             None
         };
         let world_root_settings = resolve_world_root(
-            cli.world_root_mode.map(WorldRootMode::from),
-            cli.world_root_path.clone(),
+            cli.anchor_mode.map(WorldRootMode::from),
+            cli.anchor_path.clone(),
             cli_caged,
             &launch_cwd,
         )?;
@@ -483,27 +502,28 @@ impl ShellConfig {
         let shim_dir = substrate_common::paths::shims_dir()?;
         let substrate_home = substrate_paths::substrate_home()?;
         let config_path = substrate_paths::config_file()?;
-        let install_config = commands::world_enable::load_install_config(&config_path)?;
-        if !install_config.exists() {
+        if !config_path.exists() {
             eprintln!(
-                "substrate: info: no config file at {}; run `substrate config init` to create defaults",
+                "substrate: info: no config file at {}; run `substrate config global init` to create defaults",
                 config_path.display()
             );
         }
-        let config_disables_world = !install_config.world_enabled;
-        let env_disables_world = env::var("SUBSTRATE_WORLD")
-            .map(|value| value.eq_ignore_ascii_case("disabled"))
-            .unwrap_or(false)
-            || env::var("SUBSTRATE_WORLD_ENABLED")
-                .map(|value| value == "0")
-                .unwrap_or(false);
-        let final_no_world = if cli.world {
-            false
+        let cli_world_enabled = if cli.world {
+            Some(true)
         } else if cli.no_world {
-            true
+            Some(false)
         } else {
-            config_disables_world || env_disables_world
+            None
         };
+        let effective = crate::execution::config_model::resolve_effective_config(
+            &launch_cwd,
+            &crate::execution::config_model::CliConfigOverrides {
+                world_enabled: cli_world_enabled,
+                ..Default::default()
+            },
+        )?;
+        env::set_var("SUBSTRATE_POLICY_MODE", effective.policy.mode.as_str());
+        let final_no_world = !effective.world.enabled;
         update_world_env(final_no_world);
         let manager_init_path = substrate_home.join("manager_init.sh");
         let manager_env_path = substrate_home.join("manager_env.sh");
@@ -570,6 +590,9 @@ impl ShellConfig {
             no_exit_on_error: cli.no_exit_on_error,
             skip_shims: skip_shims_flag,
             no_world: final_no_world,
+            cli_world: cli.world,
+            cli_no_world: cli.no_world,
+            policy_mode: effective.policy.mode,
             world_root: world_root_settings,
             async_repl: async_repl_enabled,
             env_vars: HashMap::new(),

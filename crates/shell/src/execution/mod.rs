@@ -1,6 +1,8 @@
 pub mod agent_events;
 mod cli;
 mod config_cmd;
+pub(crate) mod config_model;
+mod env_scripts;
 mod invocation;
 pub mod lock;
 mod manager;
@@ -8,17 +10,25 @@ pub mod manager_init;
 mod platform;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) mod platform_world;
+mod policy_cmd;
+pub(crate) mod policy_model;
 mod pty;
 mod routing;
 mod settings;
 pub mod shim_deploy;
 #[cfg(target_os = "linux")]
 pub(crate) mod socket_activation; // Made public for integration tests
+mod value_parse;
+mod workspace;
+mod workspace_cmd;
 
 pub use cli::*;
 pub(crate) use config_cmd::handle_config_command;
+pub(crate) use env_scripts::{env_sh_path, write_env_sh, write_env_sh_at};
 pub use invocation::{needs_shell, ShellConfig, ShellMode};
+pub(crate) use policy_cmd::handle_policy_command;
 pub use routing::*;
+pub(crate) use workspace_cmd::handle_workspace_command;
 
 pub(crate) use manager::{
     configure_child_shell_env, configure_manager_init, current_platform, log_manager_init_event,

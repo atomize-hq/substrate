@@ -5,6 +5,9 @@
 - Keep changes Linux-specific; avoid regressions on other platforms.
 
 ## Start Checklist
+
+Do not edit planning docs inside the worktree.
+
 1. `git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only`
 2. Read: plan.md, tasks.json, session_log.md, LP1-spec.md, this prompt.
 3. Set `LP1-code` status to `in_progress` in tasks.json (orchestration branch only).

@@ -24,8 +24,8 @@ Options:
   --profile <name>          Cargo profile to build (debug or release; default: debug)
   --version-label <name>    Version directory label under <prefix>/versions (default: dev)
   --no-world                Mark install metadata as world_disabled (skips provisioning entirely)
-  --anchor-mode <mode>      Default anchor mode (project|follow-cwd|custom; default: project) [alias: --world-root-mode]
-  --anchor-path <path>      Default anchor path (for custom mode; alias: --world-root-path)
+  --anchor-mode <mode>      Default anchor mode (workspace|follow-cwd|custom; default: workspace)
+  --anchor-path <path>      Default anchor path (for custom mode)
   --caged                   Write caged=true to install metadata (default)
   --uncaged                 Write caged=false to install metadata
   --no-shims                Skip shim deployment (only run cargo build)
@@ -64,23 +64,25 @@ write_install_metadata() {
   fi
 
   local anchor_path_yaml='""'
-  local root_path_yaml='""'
   if [[ -n "${ANCHOR_PATH}" ]]; then
     local escaped_anchor_path
     escaped_anchor_path="$(printf '%s' "${ANCHOR_PATH}" | sed "s/'/''/g")"
     anchor_path_yaml="'${escaped_anchor_path}'"
-    root_path_yaml="${anchor_path_yaml}"
   fi
 
   cat > "${INSTALL_CONFIG_PATH}.tmp" <<EOF
-install:
-  world_enabled: ${flag}
 world:
+  enabled: ${flag}
   anchor_mode: ${ANCHOR_MODE}
   anchor_path: ${anchor_path_yaml}
-  root_mode: ${ANCHOR_MODE}
-  root_path: ${root_path_yaml}
   caged: ${caged_yaml}
+policy:
+  mode: observe
+sync:
+  auto_sync: false
+  direction: from_world
+  conflict_policy: prefer_host
+  exclude: []
 EOF
   mv "${INSTALL_CONFIG_PATH}.tmp" "${INSTALL_CONFIG_PATH}"
   chmod 0644 "${INSTALL_CONFIG_PATH}" || true
@@ -90,32 +92,75 @@ write_manager_env_script() {
   local enabled="$1"
   local today
   today="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  local manager_env_literal
-  manager_env_literal="$(printf '%q' "${MANAGER_ENV_PATH}")"
-  local manager_init_literal
-  manager_init_literal="$(printf '%q' "${MANAGER_INIT_PATH}")"
 
   cat > "${MANAGER_ENV_PATH}.tmp" <<EOF
 #!/usr/bin/env bash
 # Managed by ${SCRIPT_NAME} on ${today}
-export SUBSTRATE_WORLD=$([[ "${enabled}" -eq 1 ]] && echo "enabled" || echo "disabled")
-export SUBSTRATE_WORLD_ENABLED=$([[ "${enabled}" -eq 1 ]] && echo "1" || echo "0")
-export SUBSTRATE_CAGED=$([[ "${WORLD_CAGED}" -eq 1 ]] && echo "1" || echo "0")
-export SUBSTRATE_ANCHOR_MODE="${ANCHOR_MODE}"
-export SUBSTRATE_ANCHOR_PATH="${ANCHOR_PATH}"
-export SUBSTRATE_WORLD_ROOT_MODE="${ANCHOR_MODE}"
-export SUBSTRATE_WORLD_ROOT_PATH="${ANCHOR_PATH}"
-export SUBSTRATE_MANAGER_ENV=${manager_env_literal}
-export SUBSTRATE_MANAGER_INIT=${manager_init_literal}
+if [[ -n "\${SUBSTRATE_MANAGER_ENV_ACTIVE:-}" ]]; then
+  return 0
+fi
+export SUBSTRATE_MANAGER_ENV_ACTIVE=1
 
-manager_init_path=${manager_init_literal}
+substrate_home="\${SUBSTRATE_HOME:-}"
+if [[ -z "\${substrate_home}" ]]; then
+  substrate_home="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+fi
+
+substrate_env="\${substrate_home}/env.sh"
+if [[ -f "\${substrate_env}" ]]; then
+  # shellcheck disable=SC1090
+  source "\${substrate_env}"
+fi
+
+manager_init_path="\${substrate_home}/manager_init.sh"
 if [[ -f "\${manager_init_path}" ]]; then
   # shellcheck disable=SC1090
   source "\${manager_init_path}"
 fi
+
+substrate_original="\${SUBSTRATE_ORIGINAL_BASH_ENV:-}"
+if [[ -n "\${substrate_original}" && -f "\${substrate_original}" ]]; then
+  # shellcheck disable=SC1090
+  source "\${substrate_original}"
+fi
+
+legacy_bashenv="\${HOME}/.substrate_bashenv"
+if [[ -f "\${legacy_bashenv}" ]]; then
+  # shellcheck disable=SC1090
+  source "\${legacy_bashenv}"
+fi
 EOF
   mv "${MANAGER_ENV_PATH}.tmp" "${MANAGER_ENV_PATH}"
   chmod 0644 "${MANAGER_ENV_PATH}" || true
+}
+
+write_env_sh_script() {
+  local enabled="$1"
+  local state="disabled"
+  if [[ "${enabled}" -eq 1 ]]; then
+    state="enabled"
+  fi
+
+  local substrate_home_literal world_literal anchor_mode_literal anchor_path_literal policy_mode_literal caged_literal
+  substrate_home_literal="$(printf '%q' "${PREFIX%/}")"
+  world_literal="$(printf '%q' "${state}")"
+  caged_literal="$(printf '%q' "$([[ "${WORLD_CAGED}" -eq 1 ]] && echo "1" || echo "0")")"
+  anchor_mode_literal="$(printf '%q' "${ANCHOR_MODE}")"
+  anchor_path_literal="$(printf '%q' "${ANCHOR_PATH}")"
+  policy_mode_literal="$(printf '%q' "observe")"
+
+  mkdir -p "$(dirname "${ENV_SH_PATH}")"
+  cat > "${ENV_SH_PATH}.tmp" <<EOF
+#!/usr/bin/env bash
+export SUBSTRATE_HOME=${substrate_home_literal}
+export SUBSTRATE_WORLD=${world_literal}
+export SUBSTRATE_CAGED=${caged_literal}
+export SUBSTRATE_ANCHOR_MODE=${anchor_mode_literal}
+export SUBSTRATE_ANCHOR_PATH=${anchor_path_literal}
+export SUBSTRATE_POLICY_MODE=${policy_mode_literal}
+EOF
+  mv "${ENV_SH_PATH}.tmp" "${ENV_SH_PATH}"
+  chmod 0644 "${ENV_SH_PATH}" || true
 }
 
 detect_invoking_user() {
@@ -518,7 +563,7 @@ PREFIX="${HOME}/.substrate"
 PROFILE="debug"
 DEPLOY_SHIMS=1
 WORLD_ENABLED=1
-ANCHOR_MODE="project"
+ANCHOR_MODE="workspace"
 ANCHOR_PATH=""
 WORLD_CAGED=1
 VERSION_LABEL="dev"
@@ -557,12 +602,18 @@ while [[ $# -gt 0 ]]; do
       WORLD_ENABLED=0
       shift
       ;;
-    --anchor-mode|--world-root-mode)
+    --world-root-mode)
+      fatal "--world-root-mode was removed; use --anchor-mode"
+      ;;
+    --anchor-mode)
       [[ $# -ge 2 ]] || fatal "--anchor-mode requires a value"
       ANCHOR_MODE="$2"
       shift 2
       ;;
-    --anchor-path|--world-root-path)
+    --world-root-path)
+      fatal "--world-root-path was removed; use --anchor-path"
+      ;;
+    --anchor-path)
       [[ $# -ge 2 ]] || fatal "--anchor-path requires a value"
       ANCHOR_PATH="$2"
       shift 2
@@ -597,8 +648,8 @@ case "${PROFILE}" in
 esac
 
 case "${ANCHOR_MODE}" in
-  project|follow-cwd|custom) ;;
-  *) fatal "Unsupported anchor mode '${ANCHOR_MODE}'. Use project, follow-cwd, or custom." ;;
+  workspace|follow-cwd|custom) ;;
+  *) fatal "Unsupported anchor mode '${ANCHOR_MODE}'. Use workspace, follow-cwd, or custom." ;;
 esac
 
 if [[ "${ANCHOR_MODE}" == "custom" && -z "${ANCHOR_PATH}" ]]; then
@@ -643,6 +694,7 @@ VERSION_CONFIG_DIR="${VERSION_DIR}/config"
 MANAGER_INIT_PATH="${PREFIX%/}/manager_init.sh"
 MANAGER_ENV_PATH="${PREFIX%/}/manager_env.sh"
 INSTALL_CONFIG_PATH="${PREFIX%/}/config.yaml"
+ENV_SH_PATH="${PREFIX%/}/env.sh"
 
 mkdir -p "${PREFIX}" "${BIN_DIR}" "${VERSION_CONFIG_DIR}"
 
@@ -672,6 +724,7 @@ chmod 0644 "${MANAGER_INIT_PATH}" || true
 
 # Write install metadata (install + world mappings) like the production installer.
 write_install_metadata "${WORLD_ENABLED}"
+write_env_sh_script "${WORLD_ENABLED}"
 write_manager_env_script "${WORLD_ENABLED}"
 
 shim_note=""
@@ -716,9 +769,10 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
       WORLD_PROVISION_FAILED=1
       WORLD_ENABLED=0
       write_install_metadata "${WORLD_ENABLED}"
+      write_env_sh_script "${WORLD_ENABLED}"
       write_manager_env_script "${WORLD_ENABLED}"
       warn "Unable to cache sudo credentials; world-agent service not provisioned."
-      warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run `substrate world enable` to flip it back on."
+      warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run `substrate world enable --home \"${PREFIX}\"` to flip it back on."
     fi
   fi
   if [[ "${WORLD_ENABLED}" -eq 0 ]]; then
@@ -732,14 +786,16 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
       WORLD_PROVISION_FAILED=1
       WORLD_ENABLED=0
       write_install_metadata "${WORLD_ENABLED}"
+      write_env_sh_script "${WORLD_ENABLED}"
       write_manager_env_script "${WORLD_ENABLED}"
       warn "world-provision script reported an error; rerun ${PROVISION_SCRIPT} manually to enable the world-agent service."
-      warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run `substrate world enable` to flip it back on."
+      warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run `substrate world enable --home \"${PREFIX}\"` to flip it back on."
     fi
   else
     WORLD_PROVISION_FAILED=1
     WORLD_ENABLED=0
     write_install_metadata "${WORLD_ENABLED}"
+    write_env_sh_script "${WORLD_ENABLED}"
     write_manager_env_script "${WORLD_ENABLED}"
     warn "Linux world-provision script missing at ${PROVISION_SCRIPT}; world-agent service not configured."
     warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures."
@@ -888,7 +944,11 @@ cat >"${ENV_FILE}" <<EOF_ENV
 # Generated by ${SCRIPT_NAME} on $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 # Source this file to enable Substrate dev shims for the current shell session.
 export SUBSTRATE_ROOT="${PREFIX}"
-export SUBSTRATE_MANAGER_ENV="${MANAGER_ENV_PATH}"
+export SUBSTRATE_HOME="${PREFIX}"
+if [[ -f "${PREFIX}/env.sh" ]]; then
+  # shellcheck disable=SC1090
+  source "${PREFIX}/env.sh"
+fi
 export SUBSTRATE_MANAGER_INIT="${MANAGER_INIT_PATH}"
 if [[ -z "\${SHIM_ORIGINAL_PATH:-}" ]]; then
   export SHIM_ORIGINAL_PATH="\$PATH"

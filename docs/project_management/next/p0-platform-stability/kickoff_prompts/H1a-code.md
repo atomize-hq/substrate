@@ -12,7 +12,7 @@
    ```
 
 ## Spec
-- Refactor manager detection data structures to capture host/world presence + version info per manager (direnv, asdf, conda, pyenv, etc.).
+- Refactor manager detection data structures to capture host/world presence + version info per manager (direnv, asdf, conda, pyenv, and similar).
 - Update the health aggregator to compute severity (“attention required” only when host has a manager and world is missing) and provide structured telemetry.
 - Keep legacy JSON outputs backward compatible while adding new fields described in docs.
 
@@ -37,3 +37,6 @@ Record any manual `substrate health --json` runs used for validation.
 4. Update `tasks.json` + `session_log.md` END entry summarizing results.
 5. Confirm H1a-integ prompt remains accurate.
 6. Commit doc/task/log updates (`git commit -am "docs: finish H1a-code"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

@@ -1,6 +1,5 @@
+use crate::execution::config_model::{parse_config_yaml, SubstrateConfig};
 use anyhow::{anyhow, bail, Context, Result};
-use serde_json::{Map, Value as JsonValue};
-use serde_yaml::{Mapping as YamlMapping, Value as YamlValue};
 use std::fs;
 use std::io;
 use std::io::Write;
@@ -11,7 +10,6 @@ use tempfile::NamedTempFile;
 pub struct InstallConfig {
     pub world_enabled: bool,
     existed: bool,
-    extras: YamlMapping,
 }
 
 impl InstallConfig {
@@ -33,7 +31,6 @@ impl Default for InstallConfig {
         Self {
             world_enabled: true,
             existed: false,
-            extras: YamlMapping::new(),
         }
     }
 }
@@ -41,8 +38,14 @@ impl Default for InstallConfig {
 pub fn load_install_config(path: &Path) -> Result<InstallConfig> {
     ensure_no_legacy_toml_config(path)?;
     match fs::read_to_string(path) {
-        Ok(contents) => parse_yaml_config(path, &contents),
-        Err(err) if err.kind() == io::ErrorKind::NotFound => load_legacy_install_config(path),
+        Ok(contents) => {
+            let cfg = parse_config_yaml(path, &contents)?;
+            Ok(InstallConfig {
+                world_enabled: cfg.world.enabled,
+                existed: true,
+            })
+        }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(InstallConfig::default()),
         Err(err) => Err(anyhow!("failed to read {}: {err}", path.display())),
     }
 }
@@ -55,166 +58,22 @@ pub fn save_install_config(path: &Path, cfg: &InstallConfig) -> Result<()> {
     fs::create_dir_all(parent)
         .with_context(|| format!("failed to create directory for {}", path.display()))?;
 
-    let mut data = cfg.extras.clone();
-    let install_key = YamlValue::String("install".to_string());
-    let mut install_table = match data.remove(&install_key) {
-        Some(YamlValue::Mapping(table)) => table,
-        Some(other) => {
-            bail!(
-                "install section in {} must be a mapping (found {})",
-                path.display(),
-                yaml_type_name(&other)
-            );
-        }
-        None => YamlMapping::new(),
+    let mut current = match fs::read_to_string(path) {
+        Ok(raw) => parse_config_yaml(path, &raw).unwrap_or_default(),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => SubstrateConfig::default(),
+        Err(err) => return Err(anyhow!("failed to read {}: {err}", path.display())),
     };
-    install_table.insert(
-        YamlValue::String("world_enabled".to_string()),
-        YamlValue::Bool(cfg.world_enabled),
-    );
-    data.insert(install_key, YamlValue::Mapping(install_table));
+    current.world.enabled = cfg.world_enabled;
 
     let mut tmp = NamedTempFile::new_in(parent)
         .with_context(|| format!("failed to create temp file near {}", path.display()))?;
-    let body = serde_yaml::to_string(&YamlValue::Mapping(data))
-        .with_context(|| format!("failed to serialize install config at {}", path.display()))?;
+    let body = serde_yaml::to_string(&current)
+        .with_context(|| format!("failed to serialize config at {}", path.display()))?;
     tmp.write_all(body.as_bytes())?;
     tmp.flush()?;
     tmp.persist(path)
         .map_err(|e| anyhow!("failed to persist {}: {}", path.display(), e.error))?;
     Ok(())
-}
-
-fn load_legacy_install_config(new_path: &Path) -> Result<InstallConfig> {
-    let legacy_path = legacy_config_path(new_path);
-    match fs::read_to_string(&legacy_path) {
-        Ok(contents) => parse_legacy_json(&legacy_path, &contents),
-        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(InstallConfig::default()),
-        Err(err) => Err(anyhow!(
-            "failed to read legacy {}: {err}",
-            legacy_path.display()
-        )),
-    }
-}
-
-fn parse_yaml_config(path: &Path, contents: &str) -> Result<InstallConfig> {
-    let root: YamlValue = serde_yaml::from_str(contents)
-        .with_context(|| format!("invalid YAML in {}", path.display()))?;
-    let mut raw = match root {
-        YamlValue::Mapping(map) => map,
-        other => bail!(
-            "config in {} must be a mapping (found {})",
-            path.display(),
-            yaml_type_name(&other)
-        ),
-    };
-
-    let install_key = YamlValue::String("install".to_string());
-    let mut install = match raw.remove(&install_key) {
-        Some(YamlValue::Mapping(table)) => table,
-        Some(other) => bail!(
-            "install section in {} must be a mapping (found {})",
-            path.display(),
-            yaml_type_name(&other)
-        ),
-        None => YamlMapping::new(),
-    };
-
-    let world_enabled_key = YamlValue::String("world_enabled".to_string());
-    let world_enabled = match install.remove(&world_enabled_key) {
-        Some(YamlValue::Bool(value)) => value,
-        Some(other) => bail!(
-            "install.world_enabled in {} must be a boolean (found {})",
-            path.display(),
-            yaml_type_name(&other)
-        ),
-        None => true,
-    };
-
-    if !install.is_empty() {
-        raw.insert(install_key, YamlValue::Mapping(install));
-    }
-
-    Ok(InstallConfig {
-        world_enabled,
-        existed: true,
-        extras: raw,
-    })
-}
-
-fn parse_legacy_json(path: &Path, contents: &str) -> Result<InstallConfig> {
-    let mut raw: Map<String, JsonValue> = serde_json::from_str(contents)
-        .with_context(|| format!("invalid JSON in {}", path.display()))?;
-    let world_enabled = match raw.remove("world_enabled") {
-        Some(JsonValue::Bool(value)) => value,
-        Some(other) => bail!(
-            "world_enabled in {} must be a boolean (found {other})",
-            path.display()
-        ),
-        None => true,
-    };
-
-    Ok(InstallConfig {
-        world_enabled,
-        existed: true,
-        extras: json_map_to_yaml(raw),
-    })
-}
-
-fn legacy_config_path(new_path: &Path) -> PathBuf {
-    new_path
-        .parent()
-        .map(|parent| parent.join("config.json"))
-        .unwrap_or_else(|| PathBuf::from("config.json"))
-}
-
-fn json_map_to_yaml(raw: Map<String, JsonValue>) -> YamlMapping {
-    let mut table = YamlMapping::new();
-    for (key, value) in raw {
-        if let Some(converted) = json_to_yaml(value) {
-            table.insert(YamlValue::String(key), converted);
-        }
-    }
-    table
-}
-
-fn json_to_yaml(value: JsonValue) -> Option<YamlValue> {
-    match value {
-        JsonValue::Null => Some(YamlValue::Null),
-        JsonValue::Bool(value) => Some(YamlValue::Bool(value)),
-        JsonValue::Number(num) => serde_yaml::to_value(num).ok(),
-        JsonValue::String(value) => Some(YamlValue::String(value)),
-        JsonValue::Array(values) => {
-            let mut items = Vec::with_capacity(values.len());
-            for value in values {
-                if let Some(converted) = json_to_yaml(value) {
-                    items.push(converted);
-                }
-            }
-            Some(YamlValue::Sequence(items))
-        }
-        JsonValue::Object(map) => {
-            let mut table = YamlMapping::new();
-            for (key, value) in map {
-                if let Some(converted) = json_to_yaml(value) {
-                    table.insert(YamlValue::String(key), converted);
-                }
-            }
-            Some(YamlValue::Mapping(table))
-        }
-    }
-}
-
-fn yaml_type_name(value: &YamlValue) -> &'static str {
-    match value {
-        YamlValue::Null => "null",
-        YamlValue::Bool(_) => "boolean",
-        YamlValue::Number(_) => "number",
-        YamlValue::String(_) => "string",
-        YamlValue::Sequence(_) => "sequence",
-        YamlValue::Mapping(_) => "mapping",
-        YamlValue::Tagged(_) => "tagged",
-    }
 }
 
 fn ensure_no_legacy_toml_config(config_yaml_path: &Path) -> Result<()> {
@@ -228,7 +87,7 @@ fn ensure_no_legacy_toml_config(config_yaml_path: &Path) -> Result<()> {
     }
 
     let message = format!(
-        "substrate: unsupported legacy TOML config detected:\n  - {}\nYAML config is now required:\n  - {}\nNext steps:\n  - Delete the TOML file and run `substrate config init --force`\n  - Re-apply changes via `substrate config set ...`\n",
+        "substrate: unsupported legacy TOML config detected:\n  - {}\nYAML config is now required:\n  - {}\nNext steps:\n  - Delete the TOML file and run `substrate config global init --force`\n  - Re-apply changes via `substrate config global set ...`\n",
         legacy.display(),
         config_yaml_path.display()
     );
@@ -238,6 +97,7 @@ fn ensure_no_legacy_toml_config(config_yaml_path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_yaml::Value as YamlValue;
     use std::fs;
     use tempfile::tempdir;
 
@@ -261,117 +121,56 @@ mod tests {
 
         assert!(cfg.world_enabled);
         assert!(!cfg.exists());
-        assert!(cfg.extras.is_empty(), "extras should be empty by default");
     }
 
     #[test]
-    fn load_install_config_errors_on_non_bool_flag() {
+    fn load_install_config_errors_on_invalid_types() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("config.yaml");
-        write_config(&path, "install:\n  world_enabled: \"yes\"\n");
+        write_config(
+            &path,
+            "world:\n  enabled: \"yes\"\n  anchor_mode: workspace\n  anchor_path: \"\"\n  caged: true\npolicy:\n  mode: observe\nsync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: []\n",
+        );
 
-        let err = load_install_config(&path).expect_err("invalid flag should error");
+        let err = load_install_config(&path).expect_err("invalid type should error");
         let message = err.to_string();
         assert!(
-            message.contains("world_enabled"),
+            message.contains("enabled") || message.contains("boolean"),
             "unexpected error message: {message}"
         );
     }
 
     #[test]
-    fn load_and_save_install_config_preserves_unknown_keys() {
+    fn save_install_config_creates_or_updates_world_enabled() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("config.yaml");
-        write_config(
-            &path,
-            "install:\n  world_enabled: false\n  mode: keep-me\nworld:\n  root_mode: follow-cwd\n  root_path: /tmp/custom\n",
-        );
 
-        let mut cfg = load_install_config(&path).expect("load config with extras");
-        assert!(cfg.exists());
-        assert!(!cfg.world_enabled);
-
-        cfg.set_world_enabled(true);
-        save_install_config(&path, &cfg).expect("save updated config");
+        let mut cfg = InstallConfig::default();
+        cfg.set_world_enabled(false);
+        save_install_config(&path, &cfg).expect("save new config");
 
         let saved = read_yaml(&path);
         let root = saved.as_mapping().expect("root mapping missing after save");
-
-        let install_key = YamlValue::String("install".to_string());
-        let world_enabled_key = YamlValue::String("world_enabled".to_string());
-        let mode_key = YamlValue::String("mode".to_string());
-        let world_key = YamlValue::String("world".to_string());
-        let root_mode_key = YamlValue::String("root_mode".to_string());
-        let root_path_key = YamlValue::String("root_path".to_string());
-
-        let install = root
-            .get(&install_key)
-            .and_then(|value| value.as_mapping())
-            .expect("install mapping missing after save");
-        assert_eq!(
-            install
-                .get(&world_enabled_key)
-                .and_then(|value| value.as_bool()),
-            Some(true)
-        );
-        assert_eq!(
-            install.get(&mode_key).and_then(|value| value.as_str()),
-            Some("keep-me")
-        );
-
         let world = root
-            .get(&world_key)
+            .get("world")
             .and_then(|value| value.as_mapping())
             .expect("world mapping missing after save");
         assert_eq!(
-            world.get(&root_mode_key).and_then(|value| value.as_str()),
-            Some("follow-cwd")
-        );
-        assert_eq!(
-            world.get(&root_path_key).and_then(|value| value.as_str()),
-            Some("/tmp/custom")
-        );
-    }
-
-    #[test]
-    fn load_install_config_defaults_missing_flag_and_retains_sections() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join("config.yaml");
-        write_config(&path, "world:\n  root_mode: project\n");
-
-        let mut cfg = load_install_config(&path).expect("load config without install flag");
-        assert!(cfg.exists());
-        assert!(cfg.world_enabled, "missing flag should default to enabled");
-
-        cfg.set_world_enabled(false);
-        save_install_config(&path, &cfg).expect("persist updated config");
-
-        let saved = read_yaml(&path);
-        let root = saved.as_mapping().expect("root mapping missing after save");
-
-        let install_key = YamlValue::String("install".to_string());
-        let world_enabled_key = YamlValue::String("world_enabled".to_string());
-        let world_key = YamlValue::String("world".to_string());
-        let root_mode_key = YamlValue::String("root_mode".to_string());
-
-        let install = root
-            .get(&install_key)
-            .and_then(|value| value.as_mapping())
-            .expect("install mapping missing after save");
-        assert_eq!(
-            install
-                .get(&world_enabled_key)
-                .and_then(|value| value.as_bool()),
+            world.get("enabled").and_then(|value| value.as_bool()),
             Some(false)
         );
 
+        cfg.set_world_enabled(true);
+        save_install_config(&path, &cfg).expect("update existing config");
+        let saved = read_yaml(&path);
+        let root = saved.as_mapping().expect("root mapping missing after save");
         let world = root
-            .get(&world_key)
+            .get("world")
             .and_then(|value| value.as_mapping())
             .expect("world mapping missing after save");
         assert_eq!(
-            world.get(&root_mode_key).and_then(|value| value.as_str()),
-            Some("project")
+            world.get("enabled").and_then(|value| value.as_bool()),
+            Some(true)
         );
     }
 }

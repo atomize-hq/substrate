@@ -1,0 +1,41 @@
+# Kickoff: {{TASK_ID}} (integration core)
+
+## Scope
+- Merge code + tests, resolve drift to spec, and make the slice green on the primary dev platform.
+- Spec: `{{FEATURE_DIR}}/{{SPEC_FILE}}`
+
+## Start Checklist
+Do not edit planning docs inside the worktree.
+
+1. Verify you are in the task worktree `{{WORKTREE}}` on branch `{{BRANCH}}` and that `.taskmeta.json` exists at the worktree root.
+2. Read: plan.md, tasks.json, session_log.md, spec, this prompt.
+3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
+   - `make triad-task-start FEATURE_DIR="{{FEATURE_DIR}}" TASK_ID="{{TASK_ID}}"`
+
+## Requirements
+- Reconcile code/tests to spec (spec wins).
+- Run required integration gates (must be green before any CI smoke dispatch):
+  - `cargo fmt`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+  - relevant tests
+  - `make integ-checks`
+- Optional (once per feature, when you want a clean-cache assurance): `make preflight`
+- If the feature directory contains `smoke/`, run cross-platform smoke via CI (validation-only):
+  - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=all WORKFLOW_REF="{{ORCH_BRANCH}}"`
+  - If WSL coverage is required for this feature, add `RUN_WSL=1`.
+  - Record the emitted `RUN_ID=<id>` (and URL).
+- If any platform smoke fails, start only the failing platform-fix tasks (do not attempt platform-specific fixes here):
+  - Ask the operator to run from the orchestration worktree:
+    - `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="{{FEATURE_DIR}}" SLICE_ID="<slice>" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
+  - `<slice>` is the triad id prefix (e.g., `C0`, `C3`).
+  - `<run-id>` is the `RUN_ID` from the failing `PLATFORM=all` smoke run.
+  - Platform-fix tasks commit to their own branches and iterate CI smoke until green; the final aggregator task merges fixes.
+- Once all failing platform-fix tasks report green smoke, start the final aggregator:
+  - Ask the operator to run from the orchestration worktree:
+    - `make triad-task-start-integ-final FEATURE_DIR="{{FEATURE_DIR}}" SLICE_ID="<slice>" LAUNCH_CODEX=1`
+
+## End Checklist
+1. Run required commands; capture outputs (including any smoke run ids/URLs).
+2. From inside the worktree, run: `make triad-task-finish TASK_ID="{{TASK_ID}}"`
+3. On the orchestration branch, update tasks.json + session_log.md END entry; commit docs (`docs: finish {{TASK_ID}}`).
+4. Do not delete the worktree (feature cleanup removes worktrees at feature end).

@@ -167,6 +167,10 @@ Keep concise, actionable, and security-focused.
 - Heavy isolation wiring (optional)
   - Provide a mode to invoke `LinuxIsolation::apply()` for non-PTY when capabilities allow; keep current lightweight/PTy approach as default.
   - Acceptance: gated by capability checks; clear degrade messages.
+- Linux world fs last-resort fallback: copy-diff execution
+  - If kernel overlayfs is unhealthy and `fuse-overlayfs` is unavailable, allow a copy-diff strategy to keep world usable for basic workflows.
+  - Safety requirement: copy-diff MUST preserve the project bind-mount enforcement (private mount namespace bind of the work tree onto the host project path) to prevent absolute-path escapes.
+  - Observability: record selected strategy + fallback reason in trace and surface in `substrate world doctor --json`.
 - Docs consistency
   - Document non-PTY agent auto-start behavior and fallback; update REPLAY/WORLD runbooks accordingly.
 

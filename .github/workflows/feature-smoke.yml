@@ -1,0 +1,355 @@
+name: Feature Smoke (Planning Pack)
+
+on:
+  workflow_dispatch:
+    inputs:
+      feature_dir:
+        description: "Feature Planning Pack directory (e.g., docs/project_management/next/world-sync)"
+        required: true
+        type: string
+      checkout_ref:
+        description: "Git ref to checkout for running the smoke scripts (defaults to the workflow ref)."
+        required: false
+        type: string
+        default: ""
+      runner_kind:
+        description: "Where to run the smoke job(s)"
+        required: true
+        type: choice
+        options:
+          - github-hosted
+          - self-hosted
+        default: github-hosted
+      platform:
+        description: "Which platform smoke to run"
+        required: true
+        type: choice
+        options:
+          - linux
+          - macos
+          - windows
+          - wsl
+          - all
+      run_wsl:
+        description: "Also run WSL smoke (requires suitable runner)"
+        required: false
+        type: boolean
+        default: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_TOOLCHAIN: 1.89.0
+
+permissions:
+  contents: read
+
+jobs:
+  validate_inputs:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Validate inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          platform="${{ inputs.platform }}"
+          runner_kind="${{ inputs.runner_kind }}"
+          run_wsl="${{ inputs.run_wsl }}"
+
+          if [[ "${platform}" == "wsl" && "${runner_kind}" != "self-hosted" ]]; then
+            echo "ERROR: platform=wsl requires runner_kind=self-hosted" >&2
+            exit 1
+          fi
+
+          if [[ "${run_wsl}" == "true" && "${runner_kind}" != "self-hosted" ]]; then
+            echo "ERROR: run_wsl=true requires runner_kind=self-hosted" >&2
+            exit 1
+          fi
+
+  linux_hosted:
+    needs: validate_inputs
+    if: (inputs.platform == 'linux' || inputs.platform == 'all') && inputs.runner_kind == 'github-hosted'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository (override ref)
+        if: inputs.checkout_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          submodules: recursive
+
+      - name: Checkout repository
+        if: inputs.checkout_ref == ''
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq ripgrep pkg-config libseccomp-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      - name: Build substrate (debug)
+        run: cargo build --bin substrate
+
+      - name: Add substrate to PATH
+        run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+
+      - name: Run linux smoke
+        run: bash "${{ inputs.feature_dir }}/smoke/linux-smoke.sh"
+
+  linux_self_hosted:
+    needs: validate_inputs
+    if: (inputs.platform == 'linux' || inputs.platform == 'all') && inputs.runner_kind == 'self-hosted'
+    runs-on: [self-hosted, Linux, linux-host]
+    steps:
+      - name: Checkout repository (override ref)
+        if: inputs.checkout_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          submodules: recursive
+
+      - name: Checkout repository
+        if: inputs.checkout_ref == ''
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      - name: Preflight native deps (Linux)
+        run: |
+          if ! command -v pkg-config >/dev/null 2>&1; then
+            echo "Missing pkg-config. Install it (e.g., pkgconf/pkg-config) on this runner." >&2
+            exit 1
+          fi
+          if ! pkg-config --exists libseccomp; then
+            echo "Missing libseccomp development package on this runner." >&2
+            echo "  - Ubuntu/Debian: sudo apt-get install -y libseccomp-dev pkg-config" >&2
+            echo "  - Manjaro/Arch:  sudo pacman -Syu --needed libseccomp pkgconf" >&2
+            exit 1
+          fi
+
+      - name: Build substrate (debug)
+        run: cargo build --bin substrate
+
+      - name: Add substrate to PATH
+        run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+
+      - name: Run linux smoke
+        run: bash "${{ inputs.feature_dir }}/smoke/linux-smoke.sh"
+
+  macos_hosted:
+    needs: validate_inputs
+    if: (inputs.platform == 'macos' || inputs.platform == 'all') && inputs.runner_kind == 'github-hosted'
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository (override ref)
+        if: inputs.checkout_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          submodules: recursive
+
+      - name: Checkout repository
+        if: inputs.checkout_ref == ''
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          if ! command -v jq >/dev/null 2>&1; then brew install jq; fi
+          if ! command -v rg >/dev/null 2>&1; then brew install ripgrep; fi
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      - name: Build substrate (debug)
+        run: cargo build --bin substrate
+
+      - name: Add substrate to PATH
+        run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+
+      - name: Run macOS smoke
+        run: bash "${{ inputs.feature_dir }}/smoke/macos-smoke.sh"
+
+  macos_self_hosted:
+    needs: validate_inputs
+    if: (inputs.platform == 'macos' || inputs.platform == 'all') && inputs.runner_kind == 'self-hosted'
+    runs-on: [self-hosted, macOS]
+    steps:
+      - name: Checkout repository (override ref)
+        if: inputs.checkout_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          submodules: recursive
+
+      - name: Checkout repository
+        if: inputs.checkout_ref == ''
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      - name: Build substrate (debug)
+        run: cargo build --bin substrate
+
+      - name: Add substrate to PATH
+        run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+
+      - name: Run macOS smoke
+        run: bash "${{ inputs.feature_dir }}/smoke/macos-smoke.sh"
+
+  windows_hosted:
+    needs: validate_inputs
+    if: (inputs.platform == 'windows' || inputs.platform == 'all') && inputs.runner_kind == 'github-hosted'
+    runs-on: windows-2022
+    steps:
+      - name: Checkout repository (override ref)
+        if: inputs.checkout_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          submodules: recursive
+
+      - name: Checkout repository
+        if: inputs.checkout_ref == ''
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      - name: Build substrate (debug)
+        run: cargo build --bin substrate
+
+      - name: Add substrate to PATH
+        shell: pwsh
+        run: Add-Content -LiteralPath $env:GITHUB_PATH -Value "$pwd\\target\\debug"
+
+      - name: Run Windows smoke
+        shell: pwsh
+        run: pwsh -File "${{ inputs.feature_dir }}/smoke/windows-smoke.ps1"
+
+  windows_self_hosted:
+    needs: validate_inputs
+    if: (inputs.platform == 'windows' || inputs.platform == 'all') && inputs.runner_kind == 'self-hosted'
+    runs-on: [self-hosted, Windows]
+    steps:
+      - name: Checkout repository (override ref)
+        if: inputs.checkout_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          submodules: recursive
+
+      - name: Checkout repository
+        if: inputs.checkout_ref == ''
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Ensure Rust toolchain (self-hosted)
+        shell: pwsh
+        run: |
+          if (-not (Get-Command rustup -ErrorAction SilentlyContinue)) {
+            Write-Host "rustup not found; installing rustup for the runner user..."
+            $rustupInit = Join-Path $env:RUNNER_TEMP "rustup-init.exe"
+            Invoke-WebRequest -Uri "https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe" -OutFile $rustupInit
+            & $rustupInit -y --profile minimal --default-toolchain $env:RUST_TOOLCHAIN
+          }
+
+          $cargoBin = Join-Path $env:USERPROFILE ".cargo\\bin"
+          if (Test-Path $cargoBin) {
+            $env:Path = "$cargoBin;$env:Path"
+            Add-Content -LiteralPath $env:GITHUB_PATH -Value $cargoBin
+          }
+
+          $rustupExe = Join-Path $cargoBin "rustup.exe"
+          if (-not (Test-Path $rustupExe)) {
+            throw "rustup.exe not found at expected path: $rustupExe"
+          }
+
+          & $rustupExe toolchain install $env:RUST_TOOLCHAIN --profile minimal
+          & $rustupExe component add rustfmt clippy --toolchain $env:RUST_TOOLCHAIN
+          rustc --version
+          cargo --version
+
+      - name: Build substrate (debug)
+        run: cargo build --bin substrate
+
+      - name: Add substrate to PATH
+        shell: pwsh
+        run: Add-Content -LiteralPath $env:GITHUB_PATH -Value "$pwd\\target\\debug"
+
+      - name: Run Windows smoke
+        shell: pwsh
+        run: pwsh -File "${{ inputs.feature_dir }}/smoke/windows-smoke.ps1"
+
+  wsl:
+    needs: validate_inputs
+    if: inputs.runner_kind == 'self-hosted' && (inputs.run_wsl || inputs.platform == 'wsl')
+    runs-on: [self-hosted, Linux, wsl]
+    steps:
+      - name: Checkout repository (override ref)
+        if: inputs.checkout_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          submodules: recursive
+
+      - name: Checkout repository
+        if: inputs.checkout_ref == ''
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      - name: Preflight native deps (WSL runner)
+        run: |
+          if ! command -v pkg-config >/dev/null 2>&1; then
+            echo "Missing pkg-config. Install it on this runner." >&2
+            exit 1
+          fi
+          if ! pkg-config --exists libseccomp; then
+            echo "Missing libseccomp development package on this runner." >&2
+            exit 1
+          fi
+
+      - name: Build substrate (debug)
+        run: cargo build --bin substrate
+
+      - name: Add substrate to PATH
+        run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
+
+      - name: Run WSL (Linux) smoke
+        run: bash "${{ inputs.feature_dir }}/smoke/linux-smoke.sh"

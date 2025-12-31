@@ -161,8 +161,19 @@ if [[ -n "${SUBSTRATE_MANAGER_ENV_ACTIVE:-}" ]]; then
 fi
 export SUBSTRATE_MANAGER_ENV_ACTIVE=1
 
-substrate_manager_init="${SUBSTRATE_MANAGER_INIT:-}"
-if [[ -n "$substrate_manager_init" && -f "$substrate_manager_init" ]]; then
+substrate_home="${SUBSTRATE_HOME:-}"
+if [[ -z "${substrate_home}" ]]; then
+    substrate_home="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+
+substrate_env="${substrate_home}/env.sh"
+if [[ -f "$substrate_env" ]]; then
+    # shellcheck disable=SC1090
+    source "$substrate_env"
+fi
+
+substrate_manager_init="${substrate_home}/manager_init.sh"
+if [[ -f "$substrate_manager_init" ]]; then
     # shellcheck disable=SC1090
     source "$substrate_manager_init"
 fi
@@ -261,6 +272,7 @@ pub(crate) fn configure_child_shell_env<E: CommandEnvAdapter>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::execution::config_model::PolicyMode;
     use crate::execution::settings::WorldRootSettings;
     use crate::execution::ShellMode;
     use serial_test::serial;
@@ -292,6 +304,9 @@ mod tests {
             no_exit_on_error: false,
             skip_shims: false,
             no_world: false,
+            cli_world: false,
+            cli_no_world: false,
+            policy_mode: PolicyMode::Observe,
             world_root: WorldRootSettings {
                 mode: WorldRootMode::Project,
                 path: temp.path().to_path_buf(),
@@ -405,7 +420,8 @@ managers:
         let config = test_shell_config(&temp);
         write_manager_env_script(&config).expect("write manager env");
         let script = fs::read_to_string(&config.manager_env_path).unwrap();
-        assert!(script.contains("SUBSTRATE_MANAGER_INIT"));
+        assert!(script.contains("env.sh"));
+        assert!(script.contains("manager_init.sh"));
         assert!(script.contains("SUBSTRATE_ORIGINAL_BASH_ENV"));
         assert!(script.contains(".substrate_bashenv"));
     }

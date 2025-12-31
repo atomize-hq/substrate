@@ -28,7 +28,7 @@ Implement M5b-spec: make world deps host detection reflect the Substrate-managed
 ## Scope risk watchlist (stop and split if triggered)
 If you hit any of the following, **do not broaden scope inside M5b**. Instead, stop and request a new triad (create M5d/M5e specs + tasks + prompts on the orchestration branch):
 - You need to add support for multiple interactive shells (zsh/fish) with materially different init behavior.
-- You need to source user rc files (`~/.bashrc`, `~/.zshrc`, etc.) or otherwise risk mutating user environments.
+- You need to source user rc files (`~/.bashrc`, `~/.zshrc`, and similar) or otherwise risk mutating user environments.
 - You need cross-platform changes that alter Linux/WSL behavior beyond minor refactors.
 - The change requires large refactors across routing/manager init/world deps that won’t fit comfortably in a single PR-sized triad.
 
@@ -46,3 +46,6 @@ If you hit any of the following, **do not broaden scope inside M5b**. Instead, s
 2. Commit changes inside the worktree (no docs edits).
 3. Switch back to orchestration branch; mark task completed; add END entry; commit docs (`docs: finish M5b-code`).
 4. Remove worktree `wt/mp-m5b-world-deps-host-detect-code`.
+
+
+Do not edit planning docs inside the worktree.

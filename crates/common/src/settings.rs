@@ -78,7 +78,7 @@ impl WorldRootMode {
     /// Convert mode to its canonical string representation.
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Project => "project",
+            Self::Project => "workspace",
             Self::FollowCwd => "follow-cwd",
             Self::Custom => "custom",
         }
@@ -95,8 +95,8 @@ impl FromStr for WorldRootMode {
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value.to_ascii_lowercase().as_str() {
-            "project" => Ok(Self::Project),
-            "follow-cwd" | "follow_cwd" => Ok(Self::FollowCwd),
+            "workspace" => Ok(Self::Project),
+            "follow-cwd" => Ok(Self::FollowCwd),
             "custom" => Ok(Self::Custom),
             other => Err(format!("invalid world root mode: {}", other)),
         }
@@ -106,6 +106,25 @@ impl FromStr for WorldRootMode {
 impl fmt::Display for WorldRootMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for WorldRootMode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = String::deserialize(deserializer)?;
+        raw.parse().map_err(serde::de::Error::custom)
+    }
+}
+
+impl Serialize for WorldRootMode {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.as_str())
     }
 }
 

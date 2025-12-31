@@ -123,12 +123,12 @@ This document captures the full end-to-end validation flow for the socket-activa
    nano pty-smoke.md
    ```
    Expectations:
-   - Keystrokes are not line-buffered (arrow keys, backspace, etc. respond immediately).
+   - Keystrokes are not line-buffered (arrow keys, backspace, and similar respond immediately).
    - `Ctrl+X` exits `nano` normally (no need to press Enter to “flush” input).
    - No `nano` warning about failing to create `~/.local/share/nano` (XDG data dir).
 
 7. Optional: installer/uninstaller parity checks (M2)
-   - Warm should prefer copying a bundled Linux agent (ELF) into Lima, and only fall back to in-guest builds when the bundle is missing/invalid (see `scripts/mac/lima-warm.sh` logs).
+   - Warm must prefer copying a bundled Linux agent (ELF) into Lima, and only fall back to in-guest builds when the bundle is missing/invalid (see `scripts/mac/lima-warm.sh` logs).
    - If you ran an install/uninstall flow, confirm the host forwarded socket is removed on uninstall:
      ```bash
      test ! -S "$HOME/.substrate/sock/agent.sock" || echo "expected $HOME/.substrate/sock/agent.sock to be removed"
@@ -259,14 +259,14 @@ rm -f "$SHIM_TRACE_LOG"
    ./target/debug/substrate --replay <SPAN_WORLD_ID> --replay-verbose
    ./target/debug/substrate --replay <SPAN_HOST_ID> --replay-verbose
    ```
-   Expect world span to route via agent; host span should stay on host with no cgroup/netns warnings.
+   Expect world span to route via agent; host span is expected to stay on host with no cgroup/netns warnings.
 
 4. **Flip flag inverts origin**
    ```bash
    ./target/debug/substrate --replay <SPAN_WORLD_ID> --replay-verbose --flip-world
    ./target/debug/substrate --replay <SPAN_HOST_ID> --replay-verbose --flip-world
    ```
-   World span should drop to host; host span should use agent/local world path. Verbose output should cite the flip reason.
+   World span is expected to drop to host; host span is expected to use the agent/local world path. Verbose output must cite the flip reason.
 
 5. **Agent unavailable fallback (single warning)**
    Temporarily point to a dead socket:

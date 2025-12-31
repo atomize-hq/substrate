@@ -30,3 +30,6 @@ Add any manual `substrate --replay ...` runs or cleanup helper invocations to th
 3. Update `tasks.json` (`R1a-integ` → completed) and append END session log entry summarizing results.
 4. Ensure R1b-code/test prompts reflect any changes exposed during integration.
 5. Commit doc/task/log updates (`git commit -am "docs: finish R1a-integ"`), remove worktree, hand off to R1b.
+
+
+Do not edit planning docs inside the worktree.

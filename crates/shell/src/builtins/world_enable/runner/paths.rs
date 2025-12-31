@@ -4,25 +4,6 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::Utc;
 use std::env;
 use std::path::{Component, Path, PathBuf};
-use substrate_common::paths as substrate_paths;
-
-pub(super) fn resolve_prefix(explicit: Option<&Path>) -> Result<PathBuf> {
-    if let Some(prefix) = explicit {
-        return Ok(prefix.to_path_buf());
-    }
-    if let Ok(prefix) = env::var("SUBSTRATE_PREFIX") {
-        return Ok(PathBuf::from(prefix));
-    }
-    substrate_paths::substrate_home()
-        .context("failed to locate Substrate home (override via --prefix or SUBSTRATE_HOME)")
-}
-
-pub(super) fn resolve_manager_env_path() -> Result<PathBuf> {
-    if let Ok(path) = env::var("SUBSTRATE_MANAGER_ENV") {
-        return Ok(PathBuf::from(path));
-    }
-    Ok(substrate_paths::substrate_home()?.join("manager_env.sh"))
-}
 
 pub(super) fn resolve_version_dir(prefix: &Path) -> Result<PathBuf> {
     let bin_name = if cfg!(target_os = "windows") {
@@ -33,7 +14,7 @@ pub(super) fn resolve_version_dir(prefix: &Path) -> Result<PathBuf> {
     let bin_path = prefix.join("bin").join(bin_name);
     if !bin_path.exists() {
         bail!(
-            "Substrate binary not found at {}. Reinstall or pass --prefix to an existing install.",
+            "Substrate binary not found at {}. Reinstall Substrate or use --home to point at a valid Substrate home.",
             bin_path.display()
         );
     }
@@ -162,47 +143,6 @@ mod tests {
         } else {
             env::remove_var(key);
         }
-    }
-
-    #[test]
-    #[serial]
-    fn resolve_prefix_prefers_explicit_then_env_then_home() {
-        let temp = tempdir().unwrap();
-        let explicit = temp.path().join("explicit");
-        let env_prefix = temp.path().join("from-env");
-        let home = temp.path().join("home").join(".substrate");
-
-        let prev_prefix = set_env("SUBSTRATE_PREFIX", &env_prefix);
-        let prev_home = set_env("SUBSTRATE_HOME", &home);
-
-        assert_eq!(resolve_prefix(Some(explicit.as_ref())).unwrap(), explicit);
-
-        assert_eq!(resolve_prefix(None).unwrap(), env_prefix);
-
-        env::remove_var("SUBSTRATE_PREFIX");
-        assert_eq!(resolve_prefix(None).unwrap(), home);
-
-        restore_env("SUBSTRATE_PREFIX", prev_prefix);
-        restore_env("SUBSTRATE_HOME", prev_home);
-    }
-
-    #[test]
-    #[serial]
-    fn resolve_manager_env_path_uses_env_or_home() {
-        let temp = tempdir().unwrap();
-        let custom = temp.path().join("custom/env.sh");
-        let prev_manager_env = set_env("SUBSTRATE_MANAGER_ENV", &custom);
-
-        // When SUBSTRATE_MANAGER_ENV is set, it should be used verbatim
-        assert_eq!(resolve_manager_env_path().unwrap(), custom);
-
-        // When SUBSTRATE_MANAGER_ENV is unset, we should fall back to the
-        // standard substrate_home() location for manager_env.sh
-        restore_env("SUBSTRATE_MANAGER_ENV", prev_manager_env);
-        let expected_default = substrate_paths::substrate_home()
-            .unwrap()
-            .join("manager_env.sh");
-        assert_eq!(resolve_manager_env_path().unwrap(), expected_default);
     }
 
     #[test]

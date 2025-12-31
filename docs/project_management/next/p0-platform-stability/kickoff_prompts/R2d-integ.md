@@ -29,3 +29,6 @@ Capture any manual `substrate --replay ...` validation (agent healthy vs missing
 2. Run required fmt/lint/tests; capture results.
 3. Update `tasks.json` + `session_log.md` END entry with commands/outcomes.
 4. Commit doc/task/log updates (`git commit -am "docs: finish R2d-integ"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

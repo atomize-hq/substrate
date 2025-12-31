@@ -1,6 +1,7 @@
 //! Global broker API surface and singleton orchestration.
 
 use crate::handle::BrokerHandle;
+use crate::mode::PolicyMode;
 use crate::policy::Decision;
 use crate::policy::WorldFsPolicy;
 use anyhow::Result;
@@ -61,6 +62,22 @@ pub fn set_observe_only(observe: bool) {
         Err(err) => {
             warn!("Failed to set observe_only on global broker: {}", err);
         }
+    }
+}
+
+pub fn set_policy_mode(mode: PolicyMode) {
+    match global_broker() {
+        Ok(broker) => broker.set_policy_mode(mode),
+        Err(err) => {
+            warn!("Failed to set policy_mode on global broker: {}", err);
+        }
+    }
+}
+
+pub fn policy_mode() -> PolicyMode {
+    match global_broker() {
+        Ok(broker) => broker.policy_mode(),
+        Err(_) => PolicyMode::from_env(),
     }
 }
 

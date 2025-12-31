@@ -30,3 +30,6 @@ substrate health --json   # capture/skip
 3. Update `tasks.json` (`H1a-integ` → completed) + session log END entry summarizing results.
 4. Ensure H1b-code/test prompts incorporate any new assumptions.
 5. Commit doc/task/log updates (`git commit -am "docs: finish H1a-integ"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

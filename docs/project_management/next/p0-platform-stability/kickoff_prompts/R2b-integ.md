@@ -30,3 +30,6 @@ Note any skips/platform limitations plus manual `substrate --replay ...` validat
 2. Run required fmt/lint/tests; capture results.
 3. Update `tasks.json` + `session_log.md` END entry (commands + outcomes).
 4. Commit doc/task/log updates (`git commit -am "docs: finish R2b-integ"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

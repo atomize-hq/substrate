@@ -1,0 +1,24 @@
+# Kickoff: {{TASK_ID}} (test)
+
+## Scope
+- Tests only (plus minimal test-only helpers if absolutely needed); no production code.
+- Spec: `{{FEATURE_DIR}}/{{SPEC_FILE}}`
+
+## Start Checklist
+Do not edit planning docs inside the worktree.
+
+1. Verify you are in the task worktree `{{WORKTREE}}` on branch `{{BRANCH}}` and that `.taskmeta.json` exists at the worktree root.
+2. Read: plan.md, tasks.json, session_log.md, spec, this prompt.
+3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
+   - `make triad-task-start-pair FEATURE_DIR="{{FEATURE_DIR}}" SLICE_ID="<slice>"` (preferred; starts code+test in parallel; `<slice>` is `{{TASK_ID}}` without `-test`)
+   - `make triad-task-start FEATURE_DIR="{{FEATURE_DIR}}" TASK_ID="{{TASK_ID}}"` (single task only)
+
+## Requirements
+- Add/modify tests that enforce the spec’s acceptance criteria.
+- Run: `cargo fmt`, plus the targeted tests you add/touch.
+
+## End Checklist
+1. Run required commands; capture outputs.
+2. From inside the worktree, run: `make triad-task-finish TASK_ID="{{TASK_ID}}"`
+3. On the orchestration branch, update tasks.json + session_log.md END entry; commit docs (`docs: finish {{TASK_ID}}`).
+4. Do not delete the worktree (feature cleanup removes worktrees at feature end).

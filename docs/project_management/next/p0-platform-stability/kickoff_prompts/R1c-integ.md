@@ -31,3 +31,6 @@ substrate --replay --replay-verbose --no-world --span <fixture>   # capture/skip
 3. Update `tasks.json` (`R1c-integ` → completed) + session log END entry summarizing results.
 4. Ensure H1a-code/test prompts incorporate relevant assumptions from R1.
 5. Commit doc/task/log updates (`git commit -am "docs: finish R1c-integ"`), remove worktree, and hand off to H1.
+
+
+Do not edit planning docs inside the worktree.

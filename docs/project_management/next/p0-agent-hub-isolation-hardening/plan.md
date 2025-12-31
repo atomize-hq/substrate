@@ -30,7 +30,7 @@ recorded in the ADR:
   - `cargo fmt`
   - `cargo clippy --workspace --all-targets -- -D warnings`
   - relevant `cargo test ...`
-  - `make preflight` (required)
+  - `make integ-checks` (required)
 
 ## Triads Overview
 
@@ -74,6 +74,6 @@ per-command mappings and messages.
 ## End Checklist (integration)
 
 1. Merge code+test branches into the integration worktree; reconcile to the spec.
-2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make preflight`.
+2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make integ-checks`.
 3. Commit integration changes; fast-forward into orchestration branch.
 4. Update `tasks.json` + `session_log.md`; commit docs; remove worktree.

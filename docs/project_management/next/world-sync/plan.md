@@ -10,7 +10,7 @@
 - Work happens in dedicated task branches + worktrees per task (names in tasks.json).
 - Code agent: writes production code only. No tests. Not required to run unit/integration suites—must run fmt/clippy and validate functionality per spec.
 - Test agent: writes tests/fixtures/mocks/harnesses only (and tiny test-only helpers). No production code changes. Runs relevant tests they add/touch.
-- Integration agent: merges code+test branches, resolves mismatches, ensures functionality matches the spec, and runs full verification ending with `make preflight` (after fmt/clippy/tests). They own the final green state even if code/test drifted.
+- Integration agent: merges code+test branches, resolves mismatches, ensures functionality matches the spec, and runs full verification ending with `make integ-checks` (after fmt/clippy/tests). They own the final green state even if code/test drifted.
 - Protected paths: `.git`, `.substrate-git`, `.substrate`, sockets, device files must never be mutated by sync.
 - Each task must fit comfortably < 40–50% of 272k context (~110–140k tokens). Keep changes scoped and testable.
 
@@ -41,7 +41,7 @@ World-sync commands use these exit codes:
   5. Remove worktree if done.
 - Integration tasks:
   1. Merge code+test branches into integration worktree; resolve conflicts/mismatches to spec.
-  2. Run fmt/clippy + required test suites; finish with `make preflight`. Record outputs.
+  2. Run fmt/clippy + required test suites; finish with `make integ-checks`. Record outputs.
   3. Merge integration branch back to `feat/world-sync` (ff-only), update `tasks.json`/`session_log.md`, commit docs, remove worktree.
 
 ## Triads Overview

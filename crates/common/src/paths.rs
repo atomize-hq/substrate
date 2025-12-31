@@ -6,8 +6,10 @@ pub const SHIMS_SUBDIR: &str = "shims";
 pub const OLD_SHIM_DIR: &str = ".cmdshim_rust";
 
 pub fn substrate_home() -> Result<PathBuf> {
-    if let Ok(override_home) = std::env::var("SUBSTRATE_HOME") {
-        return Ok(PathBuf::from(override_home));
+    if let Some(override_home) = std::env::var_os("SUBSTRATE_HOME") {
+        if !override_home.is_empty() {
+            return Ok(PathBuf::from(override_home));
+        }
     }
     Ok(dirs::home_dir()
         .ok_or_else(|| anyhow::anyhow!("No home directory found"))?
@@ -20,7 +22,12 @@ pub fn shims_dir() -> Result<PathBuf> {
 
 pub fn old_shims_dir() -> Result<PathBuf> {
     // If SUBSTRATE_HOME is set (e.g., in tests), use its parent as the home base for the legacy dir
-    if let Ok(override_home) = std::env::var("SUBSTRATE_HOME") {
+    if let Some(override_home) = std::env::var_os("SUBSTRATE_HOME") {
+        if override_home.is_empty() {
+            return Ok(dirs::home_dir()
+                .ok_or_else(|| anyhow::anyhow!("No home directory found"))?
+                .join(OLD_SHIM_DIR));
+        }
         let base = PathBuf::from(override_home);
         let home_base = base
             .parent()
@@ -43,6 +50,10 @@ pub fn lock_file() -> Result<PathBuf> {
 
 pub fn config_file() -> Result<PathBuf> {
     Ok(substrate_home()?.join("config.yaml"))
+}
+
+pub fn policy_file() -> Result<PathBuf> {
+    Ok(substrate_home()?.join("policy.yaml"))
 }
 
 #[cfg(test)]

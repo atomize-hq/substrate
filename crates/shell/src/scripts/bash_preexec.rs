@@ -3,7 +3,8 @@ use std::fs;
 use std::path::Path;
 
 pub const BASH_PREEXEC_SCRIPT: &str = r#"# Substrate PTY command logging
-substrate_manager_env="${SUBSTRATE_MANAGER_ENV:-$HOME/.substrate/manager_env.sh}"
+substrate_home="${SUBSTRATE_HOME:-$HOME/.substrate}"
+substrate_manager_env="${substrate_home%/}/manager_env.sh"
 if [[ -n "$substrate_manager_env" && -f "$substrate_manager_env" ]]; then
     # shellcheck disable=SC1090
     source "$substrate_manager_env"

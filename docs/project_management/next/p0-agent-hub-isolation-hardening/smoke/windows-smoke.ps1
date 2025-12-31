@@ -10,6 +10,11 @@ if (-not (Get-Command substrate -ErrorAction SilentlyContinue)) {
   exit 1
 }
 
-Write-Host "OK: agent hub hardening Windows smoke (preflight)"
-exit 0
+$out = & substrate --version 2>$null
+if ([string]::IsNullOrWhiteSpace($out)) {
+  Write-Error "FAIL: substrate --version produced no output"
+  exit 1
+}
 
+Write-Host "OK: agent hub hardening Windows smoke"
+exit 0

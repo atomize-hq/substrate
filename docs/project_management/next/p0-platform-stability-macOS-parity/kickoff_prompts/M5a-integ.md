@@ -4,7 +4,7 @@
 Integration agent: merge code+tests, reconcile to spec, and own final green. Do not edit docs/tasks/session logs from the worktree.
 
 ## Goal
-Integrate M5a-code + M5a-test and ensure behavior matches M5a-spec; gate with fmt/clippy/tests and finish with `make preflight`.
+Integrate M5a-code + M5a-test and ensure behavior matches M5a-spec; gate with fmt/clippy/tests and finish with `make integ-checks`.
 
 ## Read first
 - `docs/project_management/next/p0-platform-stability-macOS-parity/plan.md`
@@ -23,7 +23,7 @@ Integrate M5a-code + M5a-test and ensure behavior matches M5a-spec; gate with fm
 - `cargo fmt`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - Relevant `cargo test ...`
-- `make preflight` (required)
+- `make integ-checks` (required)
 
 ## End checklist
 1. Merge `mp-m5a-world-deps-inventory-code` and `mp-m5a-world-deps-inventory-test` into the integration worktree; reconcile to spec.
@@ -32,3 +32,6 @@ Integrate M5a-code + M5a-test and ensure behavior matches M5a-spec; gate with fm
 4. Update docs on orchestration branch: mark task completed; END entry; commit (`docs: finish M5a-integ`).
 5. Remove worktree `wt/mp-m5a-world-deps-inventory-integ`.
 
+
+
+Do not edit planning docs inside the worktree.

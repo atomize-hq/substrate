@@ -8,8 +8,8 @@
   - Establish forwarding before probing the agent; avoid UDS checks that fail prior to forwarding.
   - Document/adjust socket ownership/group model so mac matches Linux intent or clearly states the divergence.
 - Align CLI surfacing with Linux P0:
-  - `substrate --shim-status` / `--shim-status-json` on mac should report socket activation state and fs_mode in parity with Linux (noting any platform-specific caveats).
-  - `substrate health` (text/JSON) should reflect manager parity decisions and socket state the same way Linux does, or explicitly document mac differences.
+  - `substrate --shim-status` / `--shim-status-json` on mac must report socket activation state and fs_mode in parity with Linux (noting any platform-specific caveats).
+  - `substrate health` (text/JSON) must reflect manager parity decisions and socket state the same way Linux does, or explicitly document mac differences.
 - Align world doctor/manual flows with P0 outputs:
   - Ensure doctor reflects the socket-activation state and fs_mode.
   - Update manual playbooks/cross-platform docs for the mac flow (host vs in-VM doctor, reprovision steps).

@@ -35,3 +35,6 @@ cargo test -p substrate-shell replay_world   # if applicable / note skip
 4. Update `tasks.json` + `session_log.md` END entry summarizing test results.
 5. Confirm R1a-integ prompt matches the suites you touched.
 6. Commit doc/task/log updates (`git commit -am "docs: finish R1a-test"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

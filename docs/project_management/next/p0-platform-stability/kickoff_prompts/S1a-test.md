@@ -35,3 +35,6 @@ Add any helper scripts or harness invocations you run to the session log.
 4. Update `tasks.json` + `session_log.md` with END entry describing command results/skips.
 5. Verify S1a-integ prompt remains accurate; update only if new requirements surfaced.
 6. Commit doc/task/log updates (`git commit -am "docs: finish S1a-test"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

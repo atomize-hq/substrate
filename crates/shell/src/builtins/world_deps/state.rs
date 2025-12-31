@@ -61,7 +61,7 @@ impl WorldState {
         } else if self.env_disabled {
             Some("SUBSTRATE_WORLD=disabled".to_string())
         } else if self.config_disabled {
-            Some("install metadata reports world disabled".to_string())
+            Some("global config reports world disabled".to_string())
         } else {
             None
         }
@@ -96,7 +96,7 @@ mod tests {
         fs::write(
             substrate_home.join("config.yaml"),
             format!(
-                "install:\n  world_enabled: {flag}\nworld:\n  root_mode: project\n  root_path: \"\"\n  caged: true\n"
+                "world:\n  enabled: {flag}\n  anchor_mode: workspace\n  anchor_path: \"\"\n  caged: true\n\npolicy:\n  mode: observe\n\nsync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: []\n"
             ),
         )
         .expect("write config");
@@ -197,7 +197,7 @@ mod tests {
         assert!(state.is_disabled());
         assert_eq!(
             state.reason().as_deref(),
-            Some("install metadata reports world disabled")
+            Some("global config reports world disabled")
         );
 
         restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);

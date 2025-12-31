@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 use substrate_common::WorldRootMode;
 
 const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
-const LEGACY_ROOT_MODE_ENV: &str = "SUBSTRATE_WORLD_ROOT_MODE";
 const CAGED_ENV: &str = "SUBSTRATE_CAGED";
 
 /// Return true when the current execution should enforce the caged guard.
@@ -21,7 +20,6 @@ pub fn should_guard_anchor(env: &HashMap<String, String>) -> bool {
 
     let mode = env
         .get(ANCHOR_MODE_ENV)
-        .or_else(|| env.get(LEGACY_ROOT_MODE_ENV))
         .and_then(|value| WorldRootMode::parse(value))
         .unwrap_or(WorldRootMode::Project);
 

@@ -69,7 +69,6 @@ fn execute_non_pty(
 
 fn base_cage_env() -> HashMap<String, String> {
     let mut env = HashMap::new();
-    env.insert("SUBSTRATE_WORLD_FS_CAGE".to_string(), "full".to_string());
     env.insert("SUBSTRATE_WORLD_REQUIRE_WORLD".to_string(), "1".to_string());
     env
 }
@@ -93,12 +92,21 @@ fn write_profile_policy(project_dir: &Path, write_allowlist: &[&str]) {
 name: Full Cage Test Policy
 world_fs:
   mode: writable
-  cage: full
+  isolation: full
   require_world: true
   read_allowlist: ["*"]
-{allowlist_yaml}cmd_denied: []
+{allowlist_yaml}net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
 require_approval: false
 allow_shell_operators: true
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+metadata: {{}}
 "#
     );
 

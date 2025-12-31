@@ -14,7 +14,7 @@ fi
 # Reuse installer helpers (log/run_cmd/provision functions)
 source "${SCRIPT_DIR}/install-substrate.sh"
 
-PREFIX="${HOME}/.substrate"
+PREFIX="${SUBSTRATE_HOME:-${HOME}/.substrate}"
 PROFILE="release"
 DRY_RUN=0
 VERBOSE=0
@@ -28,7 +28,7 @@ Substrate World Enable Helper
 Usage: world-enable.sh [options]
 
 Options:
-  --prefix <path>    Installation prefix to update (default: ~/.substrate)
+  --home <path>      Substrate home to update (default: $SUBSTRATE_HOME or ~/.substrate)
   --profile <name>   Provisioning profile label for logging (default: release)
   --dry-run          Show the provisioning commands without executing
   --verbose          Print verbose execution details
@@ -40,9 +40,10 @@ USAGE
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --prefix)
-      [[ $# -lt 2 ]] && fatal "Missing value for --prefix"
+    --home)
+      [[ $# -lt 2 ]] && fatal "Missing value for --home"
       PREFIX="$2"
+      export SUBSTRATE_HOME="${PREFIX}"
       shift 2
       ;;
     --profile)
@@ -85,7 +86,7 @@ ORIGINAL_PATH="${PATH}"
 detect_platform
 prepare_tmpdir
 
-log "world-enable: prefix=${PREFIX} profile=${PROFILE} force=${FORCE} dry_run=${DRY_RUN}"
+log "world-enable: home=${PREFIX} profile=${PROFILE} force=${FORCE} dry_run=${DRY_RUN}"
 log "world-enable: release root located at ${RELEASE_ROOT}"
 
 case "${PLATFORM}" in

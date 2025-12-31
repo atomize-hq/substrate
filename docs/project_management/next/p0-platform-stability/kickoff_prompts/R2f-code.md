@@ -19,7 +19,7 @@
 ## Scope & Guardrails
 - Touch production code in shell/shim/replay/trace; test-only helpers belong in R2f-test.
 - Avoid duplicate span emission; async REPL behavior must remain intact.
-- Do not regress world-mode replay or socket activation flows; host-only path should remain lightweight when the agent/socket is absent.
+- Do not regress world-mode replay or socket activation flows; host-only path must remain lightweight when the agent/socket is absent.
 
 ## Required Commands
 ```
@@ -36,3 +36,6 @@ cargo test -p substrate-replay -- --nocapture
 4. Update `tasks.json` + `session_log.md` END entry with command results.
 5. Confirm R2f-integ prompt remains accurate.
 6. Commit doc/task/log updates (`git commit -am "docs: finish R2f-code"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

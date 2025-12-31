@@ -32,3 +32,6 @@ Document any additional manual `substrate --replay ...` used for assertions (not
 4. Update `tasks.json` + `session_log.md` END entry (include command results).
 5. Confirm R2c-integ prompt contents.
 6. Commit doc/task/log updates (`git commit -am "docs: finish R2c-test"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

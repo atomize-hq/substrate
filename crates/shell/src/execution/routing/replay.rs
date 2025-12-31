@@ -1,15 +1,17 @@
 //! Trace and replay helpers for routing.
 
 use crate::execution::cli::Cli;
-use crate::execution::settings::world_root_from_env;
+use crate::execution::value_parse::parse_bool_flag;
 #[cfg(test)]
 use crate::execution::world_env_guard;
 use anyhow::Result;
 use serde_json::json;
 use std::collections::HashMap;
 use std::env;
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::Stdio;
+use substrate_common::WorldRootMode;
 use substrate_replay::replay::record_replay_strategy;
 use substrate_replay::state::{load_span_from_trace, reconstruct_state};
 use substrate_trace::ExecutionOrigin;
@@ -229,20 +231,35 @@ fn recorded_origin_source(
     }
 }
 
-fn inject_world_root_env(env: &mut HashMap<String, String>) {
-    let world_root = world_root_from_env();
-    let mode = world_root.mode.as_str().to_string();
-    let path = world_root.path.to_string_lossy().to_string();
+fn inject_world_root_env(env: &mut HashMap<String, String>, cwd: &Path) {
+    let mode = env
+        .get("SUBSTRATE_ANCHOR_MODE")
+        .and_then(|value| WorldRootMode::parse(value))
+        .unwrap_or(WorldRootMode::Project);
+
+    let root_path = env
+        .get("SUBSTRATE_ANCHOR_PATH")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| cwd.to_path_buf());
+
+    let path = match mode {
+        WorldRootMode::FollowCwd => cwd.to_path_buf(),
+        _ => root_path,
+    };
+
+    let caged = env
+        .get("SUBSTRATE_CAGED")
+        .and_then(|value| parse_bool_flag(value))
+        .unwrap_or(true);
+
     env.entry("SUBSTRATE_ANCHOR_MODE".to_string())
-        .or_insert_with(|| mode.clone());
-    env.entry("SUBSTRATE_WORLD_ROOT_MODE".to_string())
-        .or_insert(mode);
+        .or_insert_with(|| mode.as_str().to_string());
     env.entry("SUBSTRATE_ANCHOR_PATH".to_string())
-        .or_insert_with(|| path.clone());
-    env.entry("SUBSTRATE_WORLD_ROOT_PATH".to_string())
-        .or_insert(path);
+        .or_insert_with(|| path.to_string_lossy().to_string());
     env.entry("SUBSTRATE_CAGED".to_string())
-        .or_insert_with(|| if world_root.caged { "1" } else { "0" }.to_string());
+        .or_insert_with(|| if caged { "1" } else { "0" }.to_string());
 }
 
 pub(crate) fn handle_trace_command(span_id: &str) -> Result<()> {
@@ -345,7 +362,7 @@ pub(crate) fn handle_replay_command(span_id: &str, cli: &Cli) -> Result<()> {
     state.origin_reason_code = Some(replay_world_mode.reason_code().to_string());
 
     apply_replay_world_mode_env(&mut state.env, &replay_world_mode);
-    inject_world_root_env(&mut state.env);
+    inject_world_root_env(&mut state.env, &state.cwd);
     replay_world_mode.apply_env();
 
     if verbose_requested {

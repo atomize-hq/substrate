@@ -32,3 +32,6 @@ cargo clippy --workspace --all-targets -- -D warnings
 3. Merge back to `feat/yaml-settings-migration` (ff-only).
 4. Update `tasks.json` + `session_log.md` (END entry) and commit docs (`docs: finish Y0-code`).
 5. Remove worktree.
+
+
+Do not edit planning docs inside the worktree.

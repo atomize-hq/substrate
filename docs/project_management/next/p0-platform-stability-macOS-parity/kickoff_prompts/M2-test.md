@@ -4,6 +4,9 @@
 - Tests/fixtures/harnesses only; no production code. Cover mac installer/uninstaller parity, including build-in-VM fallback, cleanup-state metadata, and logging guidance per M2-spec.
 
 ## Start Checklist
+
+Do not edit planning docs inside the worktree.
+
 1. `git checkout feat/p0-platform-stability-macOS-parity && git pull --ff-only`
 2. Read: plan.md, tasks.json, session_log.md, M2-spec.md, this prompt.
 3. Set `M2-test` status to `in_progress` in tasks.json (orchestration branch only).

@@ -20,7 +20,7 @@
 - Tests/fixtures only; keep detections mocked so real host tooling isn’t required.
 - Use hermetic temp directories/environment overrides to mimic manager presence.
 - Document any manual `substrate health` runs used for sample output.
-- Preserve the R1c replay world coverage assumptions: the CLI already emits `[replay] world toggle` + warning lines when worlds are disabled, so your tests should avoid mutating those toggles outside of targeted health scenarios and keep fixtures aligned with the new verbose output.
+- Preserve the R1c replay world coverage assumptions: the CLI already emits `[replay] world toggle` + warning lines when worlds are disabled, so your tests must avoid mutating those toggles outside of targeted health scenarios and keep fixtures aligned with the new verbose output.
 
 ## Required Commands
 ```
@@ -36,3 +36,6 @@ Add any extra suites in the session log (e.g., world doctor harness if touched).
 4. Update `tasks.json` + `session_log.md` END entry summarizing results.
 5. Confirm H1a-integ prompt stays accurate.
 6. Commit doc/task/log updates (`git commit -am "docs: finish H1a-test"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

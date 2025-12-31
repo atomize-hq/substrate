@@ -51,7 +51,7 @@ Template (START/END only):
   - `cargo fmt` (pass)
   - `cargo clippy --workspace --all-targets -- -D warnings` (pass)
   - `cargo test -p substrate-shell --tests -- --nocapture` (pass)
-  - `make preflight` (pass)
+  - `make integ-checks` (pass)
 - Results: merged code+test branches; CI gate commands green
 - Kickoff prompts created/verified: n/a
 - Docs commit: pending
@@ -69,7 +69,7 @@ Template (START/END only):
   - cargo fmt
   - cargo clippy --workspace --all-targets -- -D warnings
   - cargo test ... (only for test/integration tasks)
-  - make preflight (integration only)
+  - make integ-checks (integration only)
 - Results: <pass/fail/skips>
 - Kickoff prompts created/verified: <paths or n/a>
 - Docs commit: <hash>

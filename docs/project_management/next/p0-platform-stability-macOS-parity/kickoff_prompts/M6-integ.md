@@ -4,7 +4,7 @@
 Integration agent: merge code+tests, reconcile to spec, and own final green. Do not edit docs/tasks/session logs from the worktree.
 
 ## Goal
-Integrate M6-code + M6-test and ensure macOS world deps failure safety matches M6-spec; gate with fmt/clippy/tests and finish with `make preflight`.
+Integrate M6-code + M6-test and ensure macOS world deps failure safety matches M6-spec; gate with fmt/clippy/tests and finish with `make integ-checks`.
 
 ## Read first
 - `docs/project_management/next/p0-platform-stability-macOS-parity/plan.md`
@@ -23,7 +23,7 @@ Integrate M6-code + M6-test and ensure macOS world deps failure safety matches M
 - `cargo fmt`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - Relevant `cargo test ...`
-- `make preflight` (required)
+- `make integ-checks` (required)
 
 ## End checklist
 1. Merge `mp-m6-world-deps-safety-code` and `mp-m6-world-deps-safety-test` into the integration worktree; reconcile to spec.
@@ -32,3 +32,6 @@ Integrate M6-code + M6-test and ensure macOS world deps failure safety matches M
 4. Update docs on orchestration branch: mark task completed; END entry; commit (`docs: finish M6-integ`).
 5. Remove worktree `wt/mp-m6-world-deps-safety-integ`.
 
+
+
+Do not edit planning docs inside the worktree.

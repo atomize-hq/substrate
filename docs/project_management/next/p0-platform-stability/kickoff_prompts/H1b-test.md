@@ -36,3 +36,6 @@ substrate health --json   # via harness or real CLI; log skip if unavailable
 4. Update `tasks.json` + `session_log.md` END entry summarizing results.
 5. Confirm H1b-integ prompt still matches.
 6. Commit doc/task/log updates (`git commit -am "docs: finish H1b-test"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

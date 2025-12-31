@@ -15,7 +15,7 @@
 - Merge `ps-s1c-provision-code` + `ps-s1c-provision-test`, resolve conflicts, and fast-forward back to `feat/p0-platform-stability`.
 - Re-run fmt/lint/tests plus representative provisioning dry-runs to validate combined changes.
 - Update docs/tasks/session log and publish the R1a prompts.
-- Double-check that the merged provisioning flows still drive the S1b shell signals: `substrate world doctor --json` should report the expected `world_socket` block and `substrate --shim-status` should surface the socket-activation summary called out in the docs.
+- Double-check that the merged provisioning flows still drive the S1b shell signals: `substrate world doctor --json` must report the expected `world_socket` block and `substrate --shim-status` must surface the socket-activation summary called out in the docs.
 
 ## Required Commands
 ```
@@ -35,3 +35,6 @@ pwsh -File scripts/windows/wsl-warm.ps1 -WhatIf   # skip ok w/notes
 3. Update `tasks.json` (`S1c-integ` → completed) and append END session log entry summarizing commands/results.
 4. Ensure R1a-code/test prompts are present/accurate; edit if provisioning discoveries affect them.
 5. Commit doc/task/log updates (`git commit -am "docs: finish S1c-integ"`), remove worktree, and hand off to replay work.
+
+
+Do not edit planning docs inside the worktree.

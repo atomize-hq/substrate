@@ -33,3 +33,6 @@ Add tests/fixtures validating that macOS world deps install/sync fail when the b
 3. Switch back to orchestration branch; mark task completed; add END entry; commit docs (`docs: finish M6-test`).
 4. Remove worktree `wt/mp-m6-world-deps-safety-test`.
 
+
+
+Do not edit planning docs inside the worktree.

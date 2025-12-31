@@ -30,3 +30,6 @@ substrate --replay --replay-verbose --span <fixture>   # capture output/skip
 3. Update `tasks.json` (`R1b-integ` → completed) + session log END entry.
 4. Ensure R1c-code/test prompts reflect the new verbose behavior.
 5. Commit doc/task/log updates (`git commit -am "docs: finish R1b-integ"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

@@ -215,7 +215,7 @@ pub fn request_interactive_approval(
             {
                 if response {
                     // Add the command to the policy's allowed list
-                    if let Err(e) = add_command_to_policy(cmd) {
+                    if let Err(e) = add_command_to_policy(cmd, &context.cwd) {
                         println!(
                             "{}",
                             format!("Warning: Failed to update policy file: {}", e).yellow()
@@ -242,53 +242,49 @@ pub fn request_interactive_approval(
 }
 
 /// Add a command pattern to the policy file's allowed list
-fn add_command_to_policy(cmd: &str) -> anyhow::Result<()> {
+fn add_command_to_policy(cmd: &str, cwd: &str) -> anyhow::Result<()> {
     use std::fs;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
+    use substrate_common::paths as substrate_paths;
 
-    // Look for policy file in standard locations
-    let mut policy_paths = vec![
-        Path::new(".substrate/policy.yaml").to_path_buf(),
-        Path::new(".substrate-policy.yaml").to_path_buf(),
-    ];
+    fn find_workspace_root(start: &Path) -> Option<PathBuf> {
+        let start = start.canonicalize().unwrap_or_else(|_| start.to_path_buf());
 
-    if let Some(home) = dirs::home_dir() {
-        policy_paths.push(home.join(".substrate/policy.yaml"));
-    }
-
-    for path in &policy_paths {
-        if path.exists() {
-            // Read existing policy
-            let content = fs::read_to_string(path)?;
-            let mut policy: crate::Policy = serde_yaml::from_str(&content)?;
-
-            // Add command to allowed list if not already present
-            let cmd_pattern = simplify_command_pattern(cmd);
-            if !policy.cmd_allowed.contains(&cmd_pattern) {
-                policy.cmd_allowed.push(cmd_pattern);
-
-                // Write updated policy back
-                let updated_content = serde_yaml::to_string(&policy)?;
-                fs::write(path, updated_content)?;
+        for dir in start.ancestors() {
+            let marker = dir.join(".substrate").join("workspace.yaml");
+            if marker.is_file() {
+                return Some(dir.to_path_buf());
             }
-
-            return Ok(());
         }
+        None
     }
 
-    // If no existing policy file, create a new one
-    let policy_dir = dirs::home_dir()
-        .ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?
-        .join(".substrate");
+    let cwd_path = Path::new(cwd);
+    let target = if let Some(workspace_root) = find_workspace_root(cwd_path) {
+        workspace_root.join(".substrate").join("policy.yaml")
+    } else {
+        substrate_paths::substrate_home()?.join("policy.yaml")
+    };
 
-    fs::create_dir_all(&policy_dir)?;
-    let policy_path = policy_dir.join("policy.yaml");
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent)?;
+    }
 
-    let mut policy = crate::Policy::default();
-    policy.cmd_allowed.push(simplify_command_pattern(cmd));
+    let mut policy = if target.exists() {
+        let content = fs::read_to_string(&target)?;
+        serde_yaml::from_str::<crate::Policy>(&content)?
+    } else {
+        crate::Policy::default()
+    };
+
+    // Add command to allowed list if not already present
+    let cmd_pattern = simplify_command_pattern(cmd);
+    if !policy.cmd_allowed.contains(&cmd_pattern) {
+        policy.cmd_allowed.push(cmd_pattern);
+    }
 
     let content = serde_yaml::to_string(&policy)?;
-    fs::write(policy_path, content)?;
+    fs::write(target, content)?;
 
     Ok(())
 }

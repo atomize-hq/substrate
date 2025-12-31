@@ -1,0 +1,28 @@
+# {{FEATURE}} — session log
+
+## START — {{NOW_UTC}} — planning — init
+- Feature: `{{FEATURE_DIR}}`
+- Branch: `feat/{{FEATURE}}`
+- Goal: Establish Planning Pack scaffolding
+- Inputs to read end-to-end:
+  - `docs/project_management/standards/PLANNING_README.md`
+- Commands planned (if any):
+  - `make planning-lint FEATURE_DIR="{{FEATURE_DIR}}"`
+
+## END — {{NOW_UTC}} — planning — init
+- Summary of changes (exhaustive):
+  - Created initial Planning Pack scaffolding
+- Files created/modified:
+  - `{{FEATURE_DIR}}/plan.md`
+  - `{{FEATURE_DIR}}/tasks.json`
+  - `{{FEATURE_DIR}}/session_log.md`
+  - `{{FEATURE_DIR}}/kickoff_prompts/`
+- Rubric checks run (with results):
+  - `jq -e . tasks.json` → `0` → `PASS`
+- Sequencing alignment:
+  - `sequencing.json` reviewed: `NO`
+  - Changes required: `NONE`
+- Blockers:
+  - `NONE`
+- Next steps:
+  - Fill specs + tasks + prompts; then run the planning quality gate.

@@ -1,0 +1,436 @@
+{
+    "purpose": "Ad-hoc tracker for planning-system improvements.",
+    "last_updated_utc": "2025-12-30T18:30:45Z",
+    "items": [
+        {
+            "id": "HF-001",
+            "area": "Standards consistency",
+            "title": "Replace broken docs-edit sentinel phrase",
+            "status": "completed",
+            "result": "Canonical sentinel is `Do not edit planning docs inside the worktree.`; standards, lint, and existing Planning Packs updated."
+        },
+        {
+            "id": "HF-002",
+            "area": "Tooling / schema",
+            "title": "Standardize tasks.json to object-with-tasks array",
+            "status": "completed",
+            "result": "All Planning Packs under `docs/project_management/next/*` now use `{ \"tasks\": [...] }`."
+        },
+        {
+            "id": "HF-003",
+            "area": "Standards consistency",
+            "title": "Fix worktree path prefix mismatch",
+            "status": "completed",
+            "result": "`worktree` is treated as a full path; `git worktree add <worktree> <branch>` is the canonical instruction."
+        },
+        {
+            "id": "HF-004",
+            "area": "Integration gate",
+            "title": "Add fast integration check target",
+            "status": "completed",
+            "result": "Added `make integ-checks` (no `cargo clean`, clippy uses `-D warnings`) and updated triad standards to use it."
+        },
+        {
+            "id": "HF-005",
+            "area": "Standards / tooling mismatch",
+            "title": "Make lint checklist reflect lint runners",
+            "status": "completed",
+            "result": "`docs/project_management/standards/PLANNING_LINT_CHECKLIST.md` now instructs running `scripts/planning/lint.sh` / `scripts/planning/lint.ps1` (single source of truth)."
+        },
+        {
+            "id": "P0-001",
+            "area": "Validation",
+            "title": "Add canonical tasks.json validator + JSON Schema",
+            "status": "completed",
+            "files": [
+                "scripts/planning/validate_tasks_json.py",
+                "docs/project_management/standards/tasks.schema.json"
+            ]
+        },
+        {
+            "id": "P1-001",
+            "area": "Automation",
+            "title": "Add planning lint runner scripts",
+            "status": "completed",
+            "files": [
+                "scripts/planning/lint.sh",
+                "scripts/planning/lint.ps1"
+            ]
+        },
+        {
+            "id": "P1-002",
+            "area": "Automation",
+            "title": "Add feature Planning Pack scaffolder",
+            "status": "completed",
+            "files": [
+                "scripts/planning/new_feature.sh",
+                "scripts/planning/new_feature.ps1",
+                "docs/project_management/standards/templates/"
+            ]
+        },
+        {
+            "id": "P2-001",
+            "area": "Drift prevention",
+            "title": "Introduce per-feature contract surface file",
+            "status": "completed",
+            "files": ["docs/project_management/standards/CONTRACT_SURFACE_STANDARD.md"]
+        },
+        {
+            "id": "P2-002",
+            "area": "Parallel integration",
+            "title": "Add platform-specific integration model + GitHub Actions support",
+            "status": "completed",
+            "files": [
+                "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md",
+                ".github/workflows/feature-smoke.yml",
+                "scripts/ci/dispatch_feature_smoke.sh"
+            ],
+            "notes": "WSL smoke is supported via a self-hosted runner stub; hosted-runner WSL is not assumed."
+        },
+        {
+            "id": "P2-003",
+            "area": "Drift prevention",
+            "title": "Embed ADR executive summary + drift guard",
+            "status": "completed",
+            "files": [
+                "docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md",
+                "docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md",
+                "scripts/planning/check_adr_exec_summary.py",
+                "docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md",
+                "docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md",
+                "docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification_OG.md",
+                "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",
+                "docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md"
+            ],
+            "notes": "Exec summaries include Existing→New→Why + Links, and `ADR_BODY_SHA256` enforces summary/body sync."
+        },
+        {
+            "id": "P2-005",
+            "area": "Planning pack ergonomics",
+            "title": "Introduce per-slice directory layout (v3) to reduce clutter and improve auditability",
+            "status": "planned",
+            "proposal": {
+                "current_layout": {
+                    "feature_root": [
+                        "plan.md",
+                        "tasks.json",
+                        "session_log.md",
+                        "contract.md",
+                        "C0-spec.md",
+                        "kickoff_prompts/*.md",
+                        "smoke/*"
+                    ]
+                },
+                "proposed_layout_v3": {
+                    "feature_root": [
+                        "plan.md",
+                        "tasks.json",
+                        "session_log.md",
+                        "contract.md",
+                        "decision_register.md (if decision-heavy/cross-platform)",
+                        "integration_map.md (if decision-heavy/cross-platform)",
+                        "manual_testing_playbook.md (if decision-heavy/cross-platform)",
+                        "smoke/ (feature-level smoke scripts; optionally add slice-specific subfolders only when needed)"
+                    ],
+                    "slices_directory": "slices/<SLICE_ID>/",
+                    "slice_contents": [
+                        "slices/C0/spec.md (canonical slice spec, replaces C0-spec.md)",
+                        "slices/C0/kickoff/code.md",
+                        "slices/C0/kickoff/test.md",
+                        "slices/C0/kickoff/integ-core.md",
+                        "slices/C0/kickoff/integ-linux.md",
+                        "slices/C0/kickoff/integ-macos.md",
+                        "slices/C0/kickoff/integ-windows.md",
+                        "slices/C0/kickoff/integ-wsl.md (only when meta.wsl_required && meta.wsl_task_mode == 'separate')",
+                        "slices/C0/artifacts/ (optional: CI run URLs, logs, screenshots, manual test notes)"
+                    ],
+                    "task_id_mapping": {
+                        "C0-code": "slices/C0/kickoff/code.md",
+                        "C0-test": "slices/C0/kickoff/test.md",
+                        "C0-integ-core": "slices/C0/kickoff/integ-core.md",
+                        "C0-integ-linux": "slices/C0/kickoff/integ-linux.md",
+                        "C0-integ-macos": "slices/C0/kickoff/integ-macos.md",
+                        "C0-integ-windows": "slices/C0/kickoff/integ-windows.md",
+                        "C0-integ-wsl": "slices/C0/kickoff/integ-wsl.md",
+                        "C0-integ": "slices/C0/kickoff/integ-final.md"
+                    }
+                }
+            },
+            "required_work": {
+                "standards_and_docs": [
+                    "Update docs/project_management/standards/PLANNING_README.md to describe the v3 layout and migration strategy.",
+                    "Update docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md to reference per-slice locations (spec + kickoff prompts).",
+                    "Update docs/project_management/standards/PLANNING_LINT_CHECKLIST.md to validate the new locations (and continue to support v2/v1 packs)."
+                ],
+                "tooling_changes": [
+                    "Update scripts/planning/new_feature.sh and scripts/planning/new_feature.ps1 to scaffold v3 layout.",
+                    "Update scripts/planning/validate_tasks_json.py to accept and/or enforce v3 layout when opted in (e.g., meta.schema_version >= 3 or meta.layout_version='v3').",
+                    "Update scripts/planning/lint.sh and scripts/planning/lint.ps1 (and any other linters) to locate specs/kickoff prompts in per-slice directories.",
+                    "Update scripts/planning/ensure_kickoff_prompt_sentinel.py and any path-based checks to discover kickoff prompts under slices/**/kickoff/."
+                ],
+                "repo_wide_reference_updates": [
+                    "Run comprehensive searches to replace hard-coded references to C0-spec.md, kickoff_prompts/, and feature-root spec conventions.",
+                    "Search locations: docs/project_management/standards/**, scripts/planning/**, scripts/ci/**, and any examples in docs/project_management/next/**.",
+                    "Add guardrails to prevent partial migrations (e.g., a validator error if some tasks reference v2 paths while others use v3 paths under the same feature)."
+                ],
+                "migration_strategy": [
+                    "Do not break existing Planning Packs: make v3 opt-in via an explicit meta flag/version.",
+                    "Optionally add a one-shot migrator script that converts a v2 feature pack to v3 and updates tasks.json references."
+                ]
+            },
+            "notes": "Defer until after current WSL/platform-fix workflow changes land; this is a structural migration that requires careful repo-wide reference updates."
+        },
+        {
+            "id": "P2-006",
+            "area": "Execution drift prevention",
+            "title": "Add feature start preflight gate + per-slice closeout gate (smoke↔manual parity + no-drift evidence)",
+            "status": "completed",
+            "files": [
+                "docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md",
+                "docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md",
+                "docs/project_management/standards/templates/execution_preflight_report.md.tmpl",
+                "docs/project_management/standards/templates/slice_closeout_report.md.tmpl",
+                "docs/project_management/standards/templates/kickoff_exec_preflight.md.tmpl",
+                "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+                "docs/project_management/standards/PLANNING_WORKFLOW_OVERVIEW.md",
+                "docs/project_management/standards/PLANNING_README.md",
+                "docs/project_management/standards/PLANNING_LINT_CHECKLIST.md",
+                "scripts/planning/new_feature.sh",
+                "scripts/planning/new_feature.ps1",
+                "scripts/planning/validate_tasks_json.py",
+                "docs/project_management/standards/tasks.schema.json"
+            ],
+            "notes": "Scaffolders now generate an ops task `F0-exec-preflight`, `execution_preflight_report.md`, and per-slice `<SLICE>-closeout_report.md`. Validator enforces these only when tasks.json opts in via `meta.execution_gates: true`."
+        },
+        {
+            "id": "P2-007",
+            "area": "Automation / reproducibility",
+            "title": "Add Makefile targets for planning gates and cross-platform smoke dispatch",
+            "status": "completed",
+            "files": [
+                "Makefile",
+                "scripts/planning/lint.sh",
+                "scripts/planning/validate_tasks_json.py",
+                "scripts/planning/check_adr_exec_summary.py",
+                "scripts/ci/dispatch_feature_smoke.sh"
+            ],
+            "notes": "Introduces canonical `make planning-lint`, `make planning-lint-ps`, `make planning-validate`, `make adr-check`, and `make feature-smoke` wrappers to reduce flag/path drift in automated gates."
+        },
+        {
+            "id": "P2-008",
+            "area": "Automation / reproducibility",
+            "title": "Add Makefile targets for Planning Pack scaffolding",
+            "status": "completed",
+            "files": [
+                "Makefile",
+                "scripts/planning/new_feature.sh",
+                "scripts/planning/new_feature.ps1"
+            ],
+            "notes": "Adds `make planning-new-feature` (bash) and `make planning-new-feature-ps` (pwsh) wrappers with variables for cross-platform/WSL flags, and runs tasks.json validation automatically."
+        },
+        {
+            "id": "P2-009",
+            "area": "Automation / execution workflow",
+            "title": "Add task-runner + task-finish scripts (worktree lifecycle + headless Codex execution) and a feature cleanup task",
+            "status": "completed",
+            "files": [
+                "scripts/triad/orch_ensure.sh",
+                "scripts/triad/task_start.sh",
+                "scripts/triad/task_start_pair.sh",
+                "scripts/triad/task_finish.sh",
+                "scripts/triad/feature_cleanup.sh",
+                "Makefile",
+                "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+                "docs/project_management/standards/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md",
+                "docs/project_management/standards/tasks.schema.json",
+                "scripts/planning/validate_tasks_json.py",
+                "scripts/planning/new_feature.sh",
+                "scripts/planning/new_feature.ps1",
+                "docs/project_management/standards/templates/"
+            ],
+            "goal": "Reduce git/worktree ceremony and improve reproducibility by standardizing task branch/worktree creation and launching the agent from inside the worktree with the correct kickoff prompt; keep final merging discipline aligned to the triad model.",
+            "design": {
+                "scripts": [
+                    "scripts/triad/orch_ensure.sh (runs on orchestration worktree; ensures orchestration branch exists locally; fetches/creates/pushes as needed; ff-only pull)",
+                    "scripts/triad/task_start.sh (runs on orchestration branch; creates/updates task branch + worktree; prints kickoff prompt path; optionally launches codex headless inside the worktree)",
+                    "scripts/triad/task_start_pair.sh (runs on orchestration branch; starts code+test tasks for a slice together; optionally launches codex headless for both in parallel)",
+                    "scripts/triad/task_finish.sh (runs from inside the task worktree; verifies required checks were run and/or runs them; commits; prints summary; does NOT delete worktree)",
+                    "scripts/triad/feature_cleanup.sh (runs at end of feature; removes all task worktrees + optionally prunes task branches)"
+                ],
+                "cli_contract": {
+                    "task_start": {
+                        "required_args": ["--feature-dir <path>", "--task-id <id>"],
+                        "optional_args": [
+                            "--launch-codex",
+                            "--codex-profile <profile>",
+                            "--codex-model <model>",
+                            "--codex-jsonl (captures `codex exec --json` output to a file)",
+                            "--platform <linux|macos|windows|wsl> (for platform-fix tasks)",
+                            "--dry-run"
+                        ],
+                        "stdout_contract": [
+                            "WORKTREE=<path>",
+                            "TASK_BRANCH=<branch>",
+                            "ORCH_BRANCH=<branch>",
+                            "KICKOFF_PROMPT=<path>",
+                            "NEXT=<recommended next command>"
+                        ]
+                    },
+                    "task_start_pair": {
+                        "required_args": ["--feature-dir <path>", "--slice-id <slice>|--code-task-id <id> --test-task-id <id>"],
+                        "optional_args": [
+                            "--launch-codex",
+                            "--codex-profile <profile>",
+                            "--codex-model <model>",
+                            "--codex-jsonl",
+                            "--dry-run"
+                        ],
+                        "stdout_contract": [
+                            "ORCH_BRANCH=<branch>",
+                            "CODE_TASK_ID=<id>",
+                            "TEST_TASK_ID=<id>",
+                            "CODE_WORKTREE=<path>",
+                            "TEST_WORKTREE=<path>",
+                            "CODE_TASK_BRANCH=<branch>",
+                            "TEST_TASK_BRANCH=<branch>",
+                            "CODEX_CODE_EXIT=<code or empty>",
+                            "CODEX_TEST_EXIT=<code or empty>"
+                        ]
+                    },
+                    "task_finish": {
+                        "required_args": ["--task-id <id>"],
+                        "optional_args": [
+                            "--verify-only",
+                            "--no-commit (for investigation-only runs)",
+                            "--platform <linux|macos|windows|wsl>",
+                            "--smoke (run make feature-smoke for platform-fix tasks)",
+                            "--dry-run"
+                        ],
+                        "stdout_contract": [
+                            "TASK_BRANCH=<branch>",
+                            "WORKTREE=<path>",
+                            "HEAD=<sha>",
+                            "COMMITS=<count>",
+                            "CHECKS=<what ran / verified>",
+                            "SMOKE_RUN=<run id/url if executed>",
+                            "MERGED_TO_ORCH=<true|false|empty>"
+                        ]
+                    },
+                    "feature_cleanup": {
+                        "required_args": ["--feature-dir <path>"],
+                        "optional_args": [
+                            "--remove-worktrees",
+                            "--prune-local-branches",
+                            "--prune-remote-branches <remote>",
+                            "--force (required to delete dirty worktrees or branches with unpushed commits)",
+                            "--dry-run"
+                        ],
+                        "stdout_contract": [
+                            "REMOVED_WORKTREES=<count>",
+                            "PRUNED_LOCAL_BRANCHES=<count>",
+                            "PRUNED_REMOTE_BRANCHES=<count>"
+                        ]
+                    }
+                },
+                "merge_policy": {
+                    "code_test_tasks": "task_finish commits to the task branch; integration tasks are responsible for merging code/test branches into integration worktrees (no auto-merge to orchestration from code/test).",
+                    "integration_tasks": "task_finish may optionally fast-forward merge the integration branch back to orchestration (safe FF-only). Any conflicts must be resolved explicitly in the integration worktree."
+                },
+                "worktree_retention": {
+                    "policy": "Worktrees are retained throughout the feature to allow reach-back debugging; they are removed only by a feature-level cleanup task at the end of the feature.",
+                    "mechanism": "Introduce a dedicated ops task at feature end (e.g., `FZ-feature-cleanup`) with a kickoff prompt that runs `scripts/triad/feature_cleanup.sh`."
+                },
+                "task_metadata": {
+                    "worktree_marker": "Write a small `.taskmeta.json` file at the root of each worktree containing: { task_id, feature_dir, orchestration_branch, task_branch, created_from_sha, created_at_utc }.",
+                    "feature_registry": {
+                        "intent": "Feature cleanup must be deterministic (no guessing by scanning).",
+                        "proposal": [
+                            "Write/update a feature registry file (e.g., `docs/project_management/next/<feature>/.worktrees.json`) listing all known task worktrees/branches, last updated UTC, and whether each worktree is clean.",
+                            "task_start registers; task_finish updates status; feature_cleanup consumes the registry."
+                        ],
+                        "notes": "If a feature directory should remain pure-docs, store the registry in `target/triad/<feature>/.worktrees.json` and link it from the feature docs. Decide and document one canonical location."
+                    },
+                    "guardrails": [
+                        "Refuse to operate if git status is dirty in the wrong place (orchestration vs worktree).",
+                        "Refuse to merge if not FF-only (integration finish only).",
+                        "Refuse to finish if the worktree does not contain a matching `.taskmeta.json`.",
+                        "Refuse to start if the target worktree path already exists but points to the wrong branch/feature."
+                    ]
+                },
+                "naming_rules": {
+                    "goal": "No ad-hoc naming; mapping must be deterministic.",
+                    "proposal": [
+                        "Primary source: tasks.json fields `worktree`, `kickoff_prompt`, and a new optional `git_branch` field (opt-in automation).",
+                        "Fallback: derive branch/worktree from task id using a single transform (e.g., `C0-code` -> `c0-code`; `C0-integ-linux` -> `c0-integ-linux`; worktree `wt/<feature>-<branch>`).",
+                        "Enforce a single canonical feature prefix (from tasks.json meta.feature or directory basename)."
+                    ]
+                },
+                "required_task_fields": {
+                    "problem": "Automation needs a structured way to derive branch/worktree/kickoff/spec per task. Parsing start_checklist text is too brittle.",
+                    "proposal": [
+                        "Extend tasks.json schema with optional structured fields for automation (e.g., `git_branch`, `orchestration_branch`, `slice_id`, `role`, `required_make_targets`, `merge_to_orchestration`).",
+                        "Keep it opt-in (e.g., `meta.schema_version >= 3` or `meta.automation: true`) to avoid breaking existing packs.",
+                        "Update scaffolders to populate these fields for new packs."
+                    ]
+                },
+                "checks_integration": {
+                    "idea": "task_finish should verify required commands were run/recorded and/or run them via canonical make targets.",
+                    "examples": [
+                        "code: `make fmt` / `make clippy` (or keep as `make integ-checks` only for integration; decide target set)",
+                        "integration: `make integ-checks`",
+                        "platform-fix: `make feature-smoke FEATURE_DIR=... PLATFORM=... [RUN_WSL=1]`"
+                    ],
+                    "note": "Prefer verifying/recording over enforcing too strictly at first; tighten later once stable.",
+                    "evidence_recording": {
+                        "min_requirement": "Scripts must print a machine-parseable summary to stdout and instruct the operator to paste it into the session_log END entry.",
+                        "nice_to_have": "Optionally append a short standardized block into `docs/project_management/next/<feature>/session_log.md` via orchestration branch only (never from within a worktree)."
+                    }
+                },
+                "codex_headless_launch": {
+                    "intent": "task_start should be able to launch Codex headless from inside the worktree using the kickoff prompt as the initial instruction, so the agent begins in the correct directory with minimal human steps.",
+                    "mcp_research_required": "Use DeepWiki MCP (`openai/codex`) to confirm flags and behavior for headless mode.",
+                    "expected_invocation_shape": [
+                        "Start from the worktree: `codex exec --cd <worktree> ...`",
+                        "Pass the kickoff prompt via stdin: `codex exec ... - < <kickoff_prompt.md>`",
+                        "Ensure non-interactive execution for scripting (e.g., JSONL output when needed)."
+                    ],
+                    "flags_to_confirm": [
+                        "No approvals / non-interactive: `--dangerously-bypass-approvals-and-sandbox` (required for scripting automation)",
+                        "Working directory: `--cd` / `-C`",
+                        "Prompt from stdin: omit prompt arg or use `-`",
+                        "Output shaping: `--json`, `--output-last-message <file>` (and any schema/output options)",
+                        "Danger bypass: `--dangerously-bypass-approvals-and-sandbox`"
+                    ],
+                    "minimum_viable_behavior": [
+                        "Detect codex binary presence; if missing, print an actionable error.",
+                        "Refuse to launch if the worktree does not exist or lacks `.taskmeta.json`.",
+                        "Write the final assistant message to a file under the worktree (or a feature-level artifacts dir) for auditing.",
+                        "Emit JSONL events when running in CI-like automation mode (optional flag).",
+                        "Propagate codex exit code as the script exit code so automation can detect failures."
+                    ],
+                    "note": "We must ensure the headless invocation runs without interactive approvals and behaves deterministically for automation; document all flags and defaults."
+                }
+            },
+            "docs_and_tooling_updates_required": [
+                "Update docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md to describe task_start/task_finish/feature_cleanup workflows.",
+                "Update kickoff prompt templates to reference the task scripts (and canonical make targets) rather than manual git steps.",
+                "Update scripts/planning/new_feature.* to scaffold the cleanup task and any required structured task fields when automation is enabled.",
+                "Update scripts/planning/validate_tasks_json.py and lint runners to enforce the new automation shape only when opted in.",
+                "Add Makefile targets to wrap task_start/task_finish/feature_cleanup for consistency.",
+                "Add explicit documentation for branch/worktree naming conventions so humans can reason about state without reading script source."
+            ]
+        },
+        {
+            "id": "P2-004",
+            "area": "Sequencing / dependencies",
+            "title": "Fix missing sprints and cross-feature deps",
+            "status": "completed",
+            "files": [
+                "docs/project_management/next/sequencing.json",
+                "docs/project_management/next/world_deps_selection_layer/tasks.json",
+                "docs/project_management/next/world-sync/tasks.json"
+            ],
+            "notes": "Added missing sprint entries (incl. `p0_platform_stability`, `p0_platform_stability_macos_parity`, `world_deps_selection_layer`) and declared cross-feature task deps via `meta.external_task_ids`."
+        }
+    ]
+}

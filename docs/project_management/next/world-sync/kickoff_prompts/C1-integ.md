@@ -5,6 +5,9 @@
 - Ensure final state matches spec; resolve any code/test mismatches.
 
 ## Start Checklist
+
+Do not edit planning docs inside the worktree.
+
 1. Confirm C1-code and C1-test are completed.
 2. `git checkout feat/world-sync && git pull --ff-only`
 3. Read: plan.md, tasks.json, session_log.md, C1-spec.md, this prompt.
@@ -14,7 +17,7 @@
 
 ## Requirements
 - Merge code+tests; align behavior with C1-spec (stub command only).
-- Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests (at least those added in C1-test), then `make preflight`.
+- Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests (at least those added in C1-test), then `make integ-checks`.
 - You own resolving drift: adjust code/tests as needed to match spec.
 - Run the feature-local smoke script for your platform and record results in `docs/project_management/next/world-sync/session_log.md`:
   - Linux: `bash docs/project_management/next/world-sync/smoke/linux-smoke.sh`
@@ -22,7 +25,7 @@
   - Windows: `pwsh -File docs/project_management/next/world-sync/smoke/windows-smoke.ps1`
 
 ## End Checklist
-1. Ensure fmt/clippy/tests pass; ensure `make preflight` completes; capture outputs.
+1. Ensure fmt/clippy/tests pass; ensure `make integ-checks` completes; capture outputs.
 2. Run the feature-local smoke script for your platform; capture output in the END entry.
 3. Commit integration worktree changes.
 4. Merge back to feat/world-sync (ff-only).

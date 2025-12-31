@@ -18,8 +18,8 @@
 
 ## Scope & Guardrails
 - No interactive prompts yet—just the underlying plumbing plus a CLI flag (e.g., `--auto-cleanup` / `--cleanup-state`) that the upcoming UX work can call.
-- Metadata must be resilient to partial installs/uninstalls; corrupted or absent files should not prevent install/uninstall, merely downgrade to warnings.
-- Keep installers idempotent: re-running should merge/refresh metadata without duplicating entries.
+- Metadata must be resilient to partial installs/uninstalls; corrupted or absent files must not prevent install/uninstall and must downgrade to warnings.
+- Keep installers idempotent: re-running must merge/refresh metadata without duplicating entries.
 - Continue logging reminders when cleanup is skipped so existing scripts/tests don’t lose their current messaging.
 
 ## Required Commands
@@ -36,3 +36,6 @@ Capture output (or note justified skips) in the session log.
 4. Update `tasks.json` + `session_log.md` END entry (include commands run).
 5. Confirm/create the `S1e-integ` prompt if scope changed.
 6. Commit doc/task/log updates (`git commit -am "docs: finish S1e-code"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

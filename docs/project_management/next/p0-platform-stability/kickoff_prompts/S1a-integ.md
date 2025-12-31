@@ -30,3 +30,6 @@ Document any supplemental smoke commands or skips.
 3. Update `tasks.json` (`S1a-integ` → completed) and append END session log entry summarizing commands/results.
 4. Ensure S1b-code/test kickoff prompts reference the now-available agent behavior; edit if required.
 5. Commit doc/task/log updates (`git commit -am "docs: finish S1a-integ"`), remove worktree, hand off to S1b.
+
+
+Do not edit planning docs inside the worktree.

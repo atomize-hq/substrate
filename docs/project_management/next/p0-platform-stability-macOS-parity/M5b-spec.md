@@ -16,7 +16,7 @@ Many host tools are available only after manager init (nvm/asdf/pyenv/mise/etc).
 2. **Compatibility**
    - Maintain support for non-bash hosts where possible; where not possible, behavior must be explicit and documented.
 3. **Observability**
-   - When host detection is skipped or degraded (e.g., missing shell), the reason should be surfaced clearly so users understand why sync did not occur.
+   - When host detection is skipped or degraded (e.g., missing shell), the reason must be surfaced clearly so users understand why sync did not occur.
 
 ### Out of scope
 - Changing the set of tools (handled in M5a).
@@ -27,4 +27,3 @@ Many host tools are available only after manager init (nvm/asdf/pyenv/mise/etc).
 - On macOS, tools available via common managers (e.g., nvm/asdf/pyenv) are detected as host-present during `world deps status/sync` when they are effectively available in Substrate-managed shells.
 - `world deps sync` decisions align with what users experience when running commands on the host through Substrate.
 - Failure/degraded detection modes are visible and actionable.
-

@@ -68,3 +68,221 @@
 - Next steps:
   - Quality gate reviewer: run `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md` and create `docs/project_management/next/policy_and_config_mental_model_simplification/quality_gate_report.md` with `RECOMMENDATION: ACCEPT`.
   - Execution triads: start `PCM0-code` and `PCM0-test` after the quality gate is `ACCEPT`.
+
+## START — 2025-12-28T12:49:11Z — PCM0-code — workspace + config inventory and CLI
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm0-config-code`
+- Worktree: `wt/pcm0-config-code`
+- Scope: workspace discovery/init; strict config schema/discovery/precedence; `substrate workspace init` and `substrate config *` per `PCM0-spec.md`
+
+## END — 2025-12-28T13:23:14Z — PCM0-code — workspace + config inventory and CLI
+- Summary of changes:
+  - Implemented workspace marker discovery (`.substrate/workspace.yaml`) and `substrate workspace init` scaffolding (`.substrate/`, `.substrate-git/repo.git/`, `.gitignore` rules) with nested-workspace refusal.
+  - Implemented strict config schema parsing and effective-config precedence (CLI > env > workspace > global > defaults), including protected sync excludes and hard rejection of legacy `.substrate/settings.yaml`.
+  - Implemented `substrate config show|set` (workspace scope) and `substrate config global init|show|set` (global scope) per `PCM0-spec.md`.
+- Commands run (required):
+  - `cargo fmt` → exit `0`
+  - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
+    - Output: `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in 3.17s`
+
+## START — 2025-12-28T13:48:44Z — PCM0-integ — workspace + config inventory and CLI (integration)
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm0-config-integ`
+- Worktree: `wt/pcm0-config-integ`
+- Scope: merge PCM0 code+tests, reconcile to `PCM0-spec.md`, and run fmt/clippy/tests/preflight + smoke scripts.
+
+## START — 2025-12-28T13:50:26Z — PCM0-test — workspace + config inventory and CLI (test)
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm0-config-test`
+- Worktree: `wt/pcm0-config-test`
+- Scope: tests for PCM0 workspace discovery/init, config precedence + strict parsing, and protected excludes per `PCM0-spec.md`.
+
+## END — 2025-12-28T14:12:56Z — PCM0-test — workspace + config inventory and CLI (test)
+- Summary of changes:
+  - Added integration tests covering workspace init/discovery semantics, config CLI (global + workspace scope), strict parsing, and config precedence per `PCM0-spec.md`.
+  - Verified protected sync excludes are always present in effective config and cannot be removed via config updates.
+- Commands run (required):
+  - `cargo fmt` → exit `0`
+  - `cargo test -p substrate-shell --test config_init --test config_show --test config_set --test workspace_init -- --nocapture` → exit `0`
+
+## END — 2025-12-28T14:54:20Z — PCM0-integ — workspace + config inventory and CLI (integration)
+- Summary of changes:
+  - Fixed integration/unit tests and world enable plumbing to match the strict PCM0 config schema (no legacy `install.*` / `root_mode` / `root_path`).
+  - Made `substrate world enable` overwrite invalid legacy config files with fresh PCM0 defaults before enabling `world.enabled`.
+  - Hardened `substrate-shell` integration tests to run with an isolated `$HOME`/`$SUBSTRATE_HOME` so host config does not break CI.
+- Commands run (required):
+  - `cargo fmt` → exit `0`
+  - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
+  - `cargo test -p substrate-shell --test config_init --test config_show --test config_set --test workspace_init -- --nocapture` → exit `0`
+  - `make integ-checks` → exit `0`
+- Smoke scripts:
+  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `1` (fails on `$SUBSTRATE_HOME/env.sh` check; `substrate policy *` not yet implemented in PCM0)
+  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
+  - `pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `127` (`pwsh` not found)
+
+## START — 2025-12-28T15:02:47Z — PCM1-code — policy inventory and CLI
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm1-policy-code`
+- Worktree: `wt/pcm1-policy-code`
+- Scope: policy schema/discovery/strict parsing/invariants; `substrate policy *` per `PCM1-spec.md`
+
+## END — 2025-12-28T15:24:23Z — PCM1-code — policy inventory and CLI
+- Summary of changes:
+  - Implemented strict policy schema parsing (deny unknown keys/type mismatches) with load-time invariants per `PCM1-spec.md`.
+  - Implemented policy discovery precedence (workspace `.substrate/policy.yaml` > global `$SUBSTRATE_HOME/policy.yaml` > defaults) for broker refresh and CLI show.
+  - Implemented `substrate policy init|show|set` and `substrate policy global init|show|set`, including dotted update syntax and `--json` output.
+- Commands run (required):
+  - `cargo fmt` → exit `0`
+  - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
+    - Output: `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in 3.00s`
+
+## START — 2025-12-28T15:10:24Z — PCM1-test — policy inventory and CLI (test)
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm1-policy-test`
+- Worktree: `wt/pcm1-policy-test`
+- Scope: tests for policy strict parsing, invariants, discovery selection order, and policy CLI behavior per `PCM1-spec.md`.
+
+## END — 2025-12-28T15:20:27Z — PCM1-test — policy inventory and CLI (test)
+- Summary of changes:
+  - Added broker unit tests that lock strict policy parsing expectations (including rejecting legacy `world_fs.cage`) and invariant failures per `PCM1-spec.md`.
+  - Added shell integration tests that lock policy discovery precedence (workspace > global > default) and workspace-scope guardrails per `PCM1-spec.md`.
+- Commands run (required):
+  - `cargo fmt` → exit `0`
+  - `cargo test -p substrate-broker policy::tests::pcm1_ -- --nocapture` → exit `101` (fails: broker policy schema still expects `world_fs.cage` and accepts it; rejects `world_fs.isolation`)
+  - `cargo test -p substrate-shell --test policy_discovery -- --nocapture` → exit `101` (fails: `substrate policy *` subcommands not yet implemented)
+
+## START — 2025-12-28T15:32:03Z — PCM1-integ — policy inventory and CLI (integration)
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm1-policy-integ`
+- Worktree: `wt/pcm1-policy-integ`
+- Scope: merge PCM1 code+tests, reconcile to `PCM1-spec.md`, and run fmt/clippy/tests/preflight + smoke scripts.
+
+## END — 2025-12-28T16:07:50Z — PCM1-integ — policy inventory and CLI (integration)
+- Summary of changes:
+  - Updated remaining policy fixtures (broker/shell/shim/world-agent) to use strict PCM1 schema (`world_fs.isolation`, required keys) and to satisfy invariants (`read_only` requires `require_world=true`).
+  - Adjusted built-in default policy (struct + YAML template) to include baseline `cmd_denied` patterns so enforced mode can deny obviously dangerous commands.
+  - Fixed a shell policy discovery test to reflect workspace-init creating `.substrate/policy.yaml`.
+- Commands run (required):
+  - `cargo fmt --all` → exit `0`
+  - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
+  - `cargo test -p substrate-broker policy::tests::pcm1_ -- --nocapture` → exit `0`
+  - `cargo test -p substrate-shell --test policy_discovery -- --nocapture` → exit `0`
+  - `make integ-checks` → exit `0`
+- Smoke scripts:
+  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `1` (fails: `$SUBSTRATE_HOME/env.sh` not yet created by `substrate config global init --force`)
+  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
+  - `pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `127` (`pwsh` not found)
+
+## START — 2025-12-28T17:07:56Z — PCM3-code — env scripts + world enable home + legacy removals (code)
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm3-env-code`
+- Worktree: `wt/pcm3-env-code`
+- Scope: implement env scripts behavior + world enable `--home` semantics + legacy removals per `PCM3-spec.md` (production code only; no tests).
+
+## END — 2025-12-28T17:50:12Z — PCM3-code — env scripts + world enable home + legacy removals (code)
+- Summary of changes:
+  - Implemented `$SUBSTRATE_HOME/env.sh` generation and ensured `substrate config global init|set` and `substrate world enable` write it (runtime does not rewrite it).
+  - Updated `$SUBSTRATE_HOME/manager_env.sh` wiring and runtime regeneration behavior; removed `SUBSTRATE_MANAGER_ENV` usage and updated bash preexec sourcing accordingly.
+  - Implemented `substrate world enable --home` semantics (removed `--prefix`), updated the helper script, and removed legacy names/flags/env vars per `PCM3-spec.md` (anchor/root + world_fs.cage + profile artifacts).
+- Commands run (required):
+  - `cargo fmt` → exit `0`
+  - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
+    - Output: `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in 2.02s`
+
+## START — 2025-12-28T16:18:19Z — PCM2-code — policy mode + routing semantics (code)
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm2-routing-code`
+- Worktree: `wt/pcm2-routing-code`
+- Scope: implement `policy.mode=disabled|observe|enforce`, requires-world constraints, host/world selection precedence, and enforce-mode save-to-policy write target selection per `PCM2-spec.md`.
+
+## START — 2025-12-28T16:19:14Z — PCM2-test — policy mode + routing semantics (test)
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm2-routing-test`
+- Worktree: `wt/pcm2-routing-test`
+- Scope: tests for policy.mode semantics, requires-world behavior, and approval “save to policy” write target selection per `PCM2-spec.md`.
+
+## END — 2025-12-28T16:34:45Z — PCM2-test — policy mode + routing semantics (test)
+- Summary of changes:
+  - Added shell integration tests covering `policy.mode=disabled|observe|enforce`, including enforce-mode fail-closed behavior when world is required and unavailable.
+  - Added broker unit tests covering approval “save to policy” write target selection (workspace policy vs global policy).
+- Commands run (required):
+  - `cargo fmt` → exit `0`
+  - `cargo test -p substrate-shell --test pcm2_routing_semantics -- --nocapture` → exit `101` (fails: observe-mode would-deny recording and enforce deny semantics not yet implemented)
+  - `cargo test -p substrate-broker pcm2_save_to_policy -- --nocapture` → exit `101` (fails: save-to-policy target selection not yet implemented)
+
+## END — 2025-12-28T16:52:14Z — PCM2-code — policy mode + routing semantics (code)
+- Summary of changes:
+  - Implemented `policy.mode=disabled|observe|enforce` runtime semantics and command evaluation behavior per `PCM2-spec.md`.
+  - Implemented requires-world constraints and host/world routing semantics, including fail-closed enforcement and host fallback warning behavior when world is optional and unavailable.
+  - Implemented approval “save to policy” write target selection (workspace `.substrate/policy.yaml` vs `$SUBSTRATE_HOME/policy.yaml`) per `PCM2-spec.md`.
+- Commands run (required):
+  - `cargo fmt` → exit `0`
+  - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
+    - Output: `Finished \`dev\` profile [unoptimized + debuginfo] target(s) in 2.24s`
+
+## START — 2025-12-28T16:57:39Z — PCM2-integ — policy mode + routing semantics (integration)
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm2-routing-integ`
+- Worktree: `wt/pcm2-routing-integ`
+- Scope: merge PCM2 code+tests, reconcile to `PCM2-spec.md`, and run fmt/clippy/tests/preflight + smoke scripts.
+
+## END — 2025-12-28T17:04:54Z — PCM2-integ — policy mode + routing semantics (integration)
+- Summary of changes:
+  - Merged `pcm-pcm2-routing-code` and `pcm-pcm2-routing-test` and reconciled to `PCM2-spec.md`.
+  - Fixed broker approval tests to pass `cwd` into save-to-policy write target selection helpers.
+- Commands run (required):
+  - `cargo fmt --all` → exit `0`
+  - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
+  - `cargo test -p substrate-shell --test pcm2_routing_semantics -- --nocapture` → exit `0`
+  - `cargo test -p substrate-broker pcm2_save_to_policy -- --nocapture` → exit `0`
+  - `make integ-checks` → exit `0`
+- Smoke scripts:
+  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `1` (fails: `$SUBSTRATE_HOME/env.sh` not yet created by `substrate config global init --force`)
+  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
+  - `pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `127` (`pwsh` not found)
+
+## START — 2025-12-28T17:51:46Z — PCM3-test — env scripts + world enable home + legacy removals (test)
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm3-env-test`
+- Worktree: `wt/pcm3-env-test`
+- Scope: tests for env script ownership/regeneration, world enable `--home` semantics, and legacy removal no-ops per `PCM3-spec.md`.
+
+## END — 2025-12-28T18:15:23Z — PCM3-test — env scripts + world enable home + legacy removals (test)
+- Summary of changes:
+  - Updated shell integration tests to lock `env.sh` ownership (runtime does not rewrite) and `manager_env.sh` regeneration + `env.sh` sourcing when shims are enabled.
+  - Updated `substrate world enable` integration tests to enforce `--home` state writes and reject `--prefix`; confirmed legacy `SUBSTRATE_PREFIX` has no effect.
+  - Updated replay integration tests to confirm legacy `SUBSTRATE_WORLD_ROOT_*` env vars have no effect (anchor env vars take precedence).
+  - Removed legacy `SUBSTRATE_WORLD_FS_CAGE` from world-agent full-cage tests.
+- Commands run (required):
+  - `cargo fmt` → exit `0`
+  - `cargo test -p substrate-shell --test world_enable -- --nocapture` → exit `0`
+  - `cargo test -p substrate-shell --test shell_env -- --nocapture` → exit `0`
+  - `cargo test -p substrate-shell --test replay_world -- --nocapture` → exit `0`
+  - `cargo test -p world-agent --test full_cage_nonpty -- --nocapture` → exit `0` (some cases skipped: overlay support or privileges missing)
+  - `cargo test -p world-agent --test full_cage_pty -- --nocapture` → exit `0` (some cases skipped: overlay support or privileges missing)
+
+## START — 2025-12-28T18:20:30Z — PCM3-integ — env scripts + world enable home + legacy removals (integration)
+- Orchestration branch: `feat/policy_and_config`
+- Task branch: `pcm-pcm3-env-integ`
+- Worktree: `wt/pcm3-env-integ`
+- Scope: merge PCM3 code+tests, reconcile to `PCM3-spec.md`, and run fmt/clippy/tests/preflight + smoke scripts.
+
+## END — 2025-12-28T18:45:00Z — PCM3-integ — env scripts + world enable home + legacy removals (integration)
+- Summary of changes:
+  - Reconciled lingering PCM3 unit tests/helpers to ADR-0003 (removed legacy `SUBSTRATE_PREFIX`/`SUBSTRATE_MANAGER_ENV` test hooks, renamed `WorldEnableArgs.home`, updated manager env script assertions).
+  - Updated broker profile detector tests to match ADR-0003 policy discovery (workspace policy > global policy) and avoid host-global policy bleed-through.
+  - Fixed linux smoke script `.gitignore` assertions to use exact-line matching (previous regex over-escaped and always failed).
+- Commands run (required):
+  - `cargo fmt` → exit `0`
+  - `cargo clippy --workspace --all-targets -- -D warnings` → exit `0`
+  - `cargo test -p substrate-shell --lib -- --nocapture` → exit `0`
+  - `cargo test -p substrate-shell --test world_enable -- --nocapture` → exit `0`
+  - `cargo test -p substrate-shell --test shell_env -- --nocapture` → exit `0`
+  - `cargo test -p substrate-shell --test replay_world -- --nocapture` → exit `0`
+  - `cargo test -p world-agent --test full_cage_nonpty -- --nocapture` → exit `0` (some cases skipped: overlay support or privileges missing)
+  - `cargo test -p world-agent --test full_cage_pty -- --nocapture` → exit `0` (some cases skipped: overlay support or privileges missing)
+  - `make integ-checks` → exit `0`
+- Smoke scripts:
+  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/linux-smoke.sh` (with `PATH=target/debug:$PATH`) → exit `0`
+  - `bash docs/project_management/next/policy_and_config_mental_model_simplification/smoke/macos-smoke.sh` → exit `0` (SKIP: not macOS)
+  - `pwsh -File docs/project_management/next/policy_and_config_mental_model_simplification/smoke/windows-smoke.ps1` → exit `127` (`pwsh` not found)

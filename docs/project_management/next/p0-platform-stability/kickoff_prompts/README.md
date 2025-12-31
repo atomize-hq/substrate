@@ -6,3 +6,6 @@ Each task in `tasks.json` references a prompt in this directory. Prompts must in
 - Scope/guardrails clarifying allowed work (code vs test vs integration).
 - Required commands/tests/scripts.
 - End checklist describing fmt/lint/test verification, merges, docs/log updates, and downstream prompt creation.
+
+
+Do not edit planning docs inside the worktree.

@@ -38,3 +38,6 @@ Record any manual `substrate --replay ...` smoke (agent available vs disabled).
 4. Update `tasks.json` + `session_log.md` END entry summarizing results.
 5. Confirm R2a-integ prompt remains accurate.
 6. Commit doc/task/log updates (`git commit -am "docs: finish R2a-code"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.

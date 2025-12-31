@@ -28,3 +28,6 @@ cargo test -p substrate-shell replay_world
 3. Fast-forward merge into `feat/p0-platform-stability-follow-up`.
 4. Update `tasks.json` + `session_log.md` END entry with command results.
 5. Commit doc/task/log updates (`git commit -am "docs: finish R2f-integ"`), remove worktree, hand off.
+
+
+Do not edit planning docs inside the worktree.
