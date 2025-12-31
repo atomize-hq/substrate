@@ -561,10 +561,16 @@ def _validate_platform_integ_model(
             # Bundled WSL: require the Linux platform task to include WSL smoke.
             if wsl_required and wsl_task_mode == "bundled" and platform == "linux":
                 txt = "\n".join(platform_task.get("references", []) + platform_task.get("end_checklist", []))
-                if "--run-wsl" not in txt and "run_wsl=true" not in txt and "run_wsl" not in txt:
+                if (
+                    "--run-wsl" not in txt
+                    and "run_wsl=true" not in txt
+                    and "run_wsl" not in txt
+                    and "RUN_WSL=1" not in txt
+                    and "RUN_WSL=true" not in txt
+                ):
                     _error(
                         errors,
-                        f"{path}: {platform_id!r} must include WSL smoke dispatch (expected '--run-wsl') because meta.wsl_required=true and meta.wsl_task_mode='bundled'",
+                        f"{path}: {platform_id!r} must include WSL smoke dispatch (expected '--run-wsl' or 'RUN_WSL=1') because meta.wsl_required=true and meta.wsl_task_mode='bundled'",
                     )
 
         final_deps = final.get("depends_on")

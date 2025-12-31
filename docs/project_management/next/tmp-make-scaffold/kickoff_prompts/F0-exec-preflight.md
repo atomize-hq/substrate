@@ -10,7 +10,8 @@
 
 Do not edit planning docs inside the worktree.
 
-1. `git checkout feat/tmp-make-scaffold && git pull --ff-only`
+1. Ensure the orchestration branch exists and is checked out:
+   - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/tmp-make-scaffold"`
 2. Read: ADR + Executive Summary, `docs/project_management/next/tmp-make-scaffold/plan.md`, `docs/project_management/next/tmp-make-scaffold/tasks.json`, `docs/project_management/next/tmp-make-scaffold/session_log.md`, relevant specs, and this prompt.
 3. Set `F0-exec-preflight` status to `in_progress` in `tasks.json`; add START entry to `session_log.md`; commit docs (`docs: start F0-exec-preflight`).
 
@@ -29,4 +30,3 @@ At minimum, verify:
 
 1. Set `F0-exec-preflight` status to `completed` in `tasks.json`; add END entry to `session_log.md` (include the recommendation and any required fixes).
 2. Commit docs (`docs: finish F0-exec-preflight`).
-
