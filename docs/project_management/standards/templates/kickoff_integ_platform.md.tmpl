@@ -4,6 +4,7 @@
 - Ensure the slice behaves correctly on **{{PLATFORM}}**.
 - This task is allowed to make production-code and/or test changes as needed to achieve cross-platform parity, but must not edit planning docs inside the worktree.
 - Spec: `{{FEATURE_DIR}}/{{SPEC_FILE}}`
+- This task must not merge back to the orchestration branch; the final aggregator integration task performs the merge once all platforms are green.
 
 ## Start Checklist
 Do not edit planning docs inside the worktree.

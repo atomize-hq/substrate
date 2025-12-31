@@ -71,6 +71,10 @@ utc_now() {
     date -u +%Y-%m-%dT%H:%M:%SZ
 }
 
+shell_escape() {
+    printf '%q' "$1"
+}
+
 FEATURE_DIR=""
 TASK_ID=""
 LAUNCH_CODEX=0
@@ -452,6 +456,10 @@ printf 'WORKTREE=%s\n' "${WORKTREE_ABS}"
 printf 'TASK_BRANCH=%s\n' "${TASK_BRANCH}"
 printf 'ORCH_BRANCH=%s\n' "${ORCH_BRANCH}"
 printf 'KICKOFF_PROMPT=%s\n' "${KICKOFF_ABS}"
+if [[ "${LAUNCH_CODEX}" -ne 1 ]]; then
+    # Make NEXT copy/pasteable by ensuring the output dir exists.
+    next_cmd="mkdir -p $(shell_escape "${codex_out_dir}") && ${next_cmd}"
+fi
 printf 'NEXT=%s\n' "${next_cmd}"
 
 if [[ "${LAUNCH_CODEX}" -eq 1 ]]; then
@@ -461,19 +469,11 @@ if [[ "${LAUNCH_CODEX}" -eq 1 ]]; then
         exit 0
     fi
     mkdir -p "${codex_out_dir}"
-    if [[ "${CODEX_JSONL}" -eq 1 ]]; then
-        codex exec --dangerously-bypass-approvals-and-sandbox --cd "${WORKTREE_ABS}" \
-            ${CODEX_PROFILE:+--profile "${CODEX_PROFILE}"} \
-            ${CODEX_MODEL:+--model "${CODEX_MODEL}"} \
-            --json \
-            --output-last-message "${codex_last_message}" \
-            - < "${KICKOFF_ABS}" >"${codex_events}" 2>"${codex_stderr}"
-    else
-        codex exec --dangerously-bypass-approvals-and-sandbox --cd "${WORKTREE_ABS}" \
-            ${CODEX_PROFILE:+--profile "${CODEX_PROFILE}"} \
-            ${CODEX_MODEL:+--model "${CODEX_MODEL}"} \
-            --output-last-message "${codex_last_message}" \
-            - < "${KICKOFF_ABS}" >"${codex_events}" 2>"${codex_stderr}"
-    fi
+    codex_args=(codex exec --dangerously-bypass-approvals-and-sandbox --cd "${WORKTREE_ABS}")
+    if [[ -n "${CODEX_PROFILE}" ]]; then codex_args+=(--profile "${CODEX_PROFILE}"); fi
+    if [[ -n "${CODEX_MODEL}" ]]; then codex_args+=(--model "${CODEX_MODEL}"); fi
+    if [[ "${CODEX_JSONL}" -eq 1 ]]; then codex_args+=(--json); fi
+    codex_args+=(--output-last-message "${codex_last_message}" -)
+    "${codex_args[@]}" < "${KICKOFF_ABS}" >"${codex_events}" 2>"${codex_stderr}"
     exit $?
 fi

@@ -44,6 +44,7 @@ This document explains, step by step, how to create a new feature directory, def
 - Optional (required when triad automation is enabled; schema v3):
   - `git_branch` (deterministic task branch name)
   - `required_make_targets` (array of make targets for `task_finish`)
+  - `merge_to_orchestration` (integration tasks only; boolean; only `true` for the integration task that should FF-merge back to orchestration)
 - Example entry:
 ```json
 {
@@ -62,7 +63,7 @@ This document explains, step by step, how to create a new feature directory, def
   "start_checklist": [
     "Checkout feat/world-sync, pull ff-only",
     "Set status to in_progress, log START, commit docs",
-    "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-sync\" TASK_ID=\"C2-code\""
+    "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-sync\" SLICE_ID=\"C2\""
   ],
   "end_checklist": [
     "Run fmt/clippy",
@@ -136,9 +137,19 @@ Start (all tasks):
 2. Read plan/tasks/session_log/spec/prompt.
 3. Set task status to `in_progress` in tasks.json.
 4. Add START entry to session_log.md; commit docs (`docs: start <task-id>`).
-5. Create task branch + worktree via the task runner:
-   - `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>"`
+5. Create task branch + worktrees via the task runner:
+   - Code+test (always parallel): `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>"`
+   - Integration (single task): `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>"`
 6. Do not edit planning docs inside the worktree.
+
+Optional: also launch Codex headless for both code+test tasks:
+- `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1`
+
+Optional: start only the failing platform-fix integration tasks (after smoke results are known):
+- `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" PLATFORMS="linux,macos,windows" LAUNCH_CODEX=1`
+
+Optional: start the final aggregator integration task for a slice (requires its deps are completed):
+- `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1`
 
 End (code/test):
 1. Run required commands (code: fmt/clippy; test: fmt + targeted tests). Capture outputs.
@@ -150,7 +161,7 @@ End (code/test):
 End (integration):
 1. Merge code+test task branches into the integration worktree; resolve drift to spec.
 2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make integ-checks`. Capture outputs.
-3. From inside the worktree, run the task finisher (commits; then fast-forward merges back to orchestration FF-only; non-FF hard-fails):
+3. From inside the worktree, run the task finisher (commits to the task branch; fast-forward merge back to orchestration happens only when `merge_to_orchestration=true` for that task; non-FF hard-fails):
    - `make triad-task-finish TASK_ID="<task-id>"`
 4. On the orchestration branch, update tasks.json/session_log.md with END entry; commit docs (`docs: finish <task-id>`).
 5. Do not remove the worktree (worktrees are retained until feature cleanup).

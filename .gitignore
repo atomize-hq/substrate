@@ -15,3 +15,5 @@ releases/
 dist/supporting-artifacts/
 wt/
 .taskmeta.json
+__pycache__/
+*.pyc

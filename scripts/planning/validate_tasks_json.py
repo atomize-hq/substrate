@@ -235,9 +235,46 @@ def _validate_task_automation(
         elif not _is_str_list(required_targets):
             _error(errors, f"{prefix}.required_make_targets: must be an array of strings")
 
+        if task_type == "integration":
+            merge_to_orch = task.get("merge_to_orchestration")
+            if not isinstance(merge_to_orch, bool):
+                _error(errors, f"{prefix}.merge_to_orchestration: required boolean for integration tasks in automation packs")
+
     duplicates = {b for b in branches if branches.count(b) > 1}
     if duplicates:
         _error(errors, f"{path}: duplicate git_branch values (must be unique): {', '.join(sorted(duplicates))}")
+
+    # Parallel code/test pairing is required for automation packs so the pair launcher can be used
+    # deterministically and without ad-hoc task selection.
+    for code_id, code_task in tasks_by_id.items():
+        if not isinstance(code_id, str) or not code_id.endswith("-code"):
+            continue
+        if code_task.get("type") != "code":
+            _error(errors, f"{path}: {code_id!r} ends with '-code' but has type={code_task.get('type')!r}")
+            continue
+
+        test_id = f"{code_id[:-5]}-test"
+        test_task = tasks_by_id.get(test_id)
+        if test_task is None:
+            _error(errors, f"{path}: automation packs require a matching test task {test_id!r} for code task {code_id!r}")
+            continue
+        if test_task.get("type") != "test":
+            _error(errors, f"{path}: {test_id!r} must have type='test' (paired with {code_id!r})")
+
+        code_concurrent = code_task.get("concurrent_with")
+        test_concurrent = test_task.get("concurrent_with")
+        if isinstance(code_concurrent, list) and test_id not in code_concurrent:
+            _error(errors, f"{path}: {code_id!r}.concurrent_with must include {test_id!r} (parallel code/test is required)")
+        if isinstance(test_concurrent, list) and code_id not in test_concurrent:
+            _error(errors, f"{path}: {test_id!r}.concurrent_with must include {code_id!r} (parallel code/test is required)")
+
+        code_integration = code_task.get("integration_task")
+        test_integration = test_task.get("integration_task")
+        if code_integration != test_integration:
+            _error(
+                errors,
+                f"{path}: {code_id!r} and {test_id!r} must share the same integration_task (got {code_integration!r} vs {test_integration!r})",
+            )
 
 
 def _validate_task_fields(tasks: List[Dict[str, Any]], errors: List[ValidationError], path: str) -> None:

@@ -72,7 +72,8 @@
                     "runner": { "type": "string", "enum": ["local", "github-actions", "manual"] },
                     "workflow": { "type": "string" },
                     "git_branch": { "type": "string" },
-                    "required_make_targets": { "type": "array", "items": { "type": "string" } }
+                    "required_make_targets": { "type": "array", "items": { "type": "string" } },
+                    "merge_to_orchestration": { "type": "boolean" }
                 }
             }
         }

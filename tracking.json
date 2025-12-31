@@ -232,11 +232,28 @@
             "id": "P2-009",
             "area": "Automation / execution workflow",
             "title": "Add task-runner + task-finish scripts (worktree lifecycle + headless Codex execution) and a feature cleanup task",
-            "status": "planned",
+            "status": "completed",
+            "files": [
+                "scripts/triad/orch_ensure.sh",
+                "scripts/triad/task_start.sh",
+                "scripts/triad/task_start_pair.sh",
+                "scripts/triad/task_finish.sh",
+                "scripts/triad/feature_cleanup.sh",
+                "Makefile",
+                "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+                "docs/project_management/standards/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md",
+                "docs/project_management/standards/tasks.schema.json",
+                "scripts/planning/validate_tasks_json.py",
+                "scripts/planning/new_feature.sh",
+                "scripts/planning/new_feature.ps1",
+                "docs/project_management/standards/templates/"
+            ],
             "goal": "Reduce git/worktree ceremony and improve reproducibility by standardizing task branch/worktree creation and launching the agent from inside the worktree with the correct kickoff prompt; keep final merging discipline aligned to the triad model.",
             "design": {
                 "scripts": [
+                    "scripts/triad/orch_ensure.sh (runs on orchestration worktree; ensures orchestration branch exists locally; fetches/creates/pushes as needed; ff-only pull)",
                     "scripts/triad/task_start.sh (runs on orchestration branch; creates/updates task branch + worktree; prints kickoff prompt path; optionally launches codex headless inside the worktree)",
+                    "scripts/triad/task_start_pair.sh (runs on orchestration branch; starts code+test tasks for a slice together; optionally launches codex headless for both in parallel)",
                     "scripts/triad/task_finish.sh (runs from inside the task worktree; verifies required checks were run and/or runs them; commits; prints summary; does NOT delete worktree)",
                     "scripts/triad/feature_cleanup.sh (runs at end of feature; removes all task worktrees + optionally prunes task branches)"
                 ],
@@ -247,8 +264,7 @@
                             "--launch-codex",
                             "--codex-profile <profile>",
                             "--codex-model <model>",
-                            "--codex-sandbox <read-only|workspace-write|danger-full-access>",
-                            "--codex-add-dir <path> (repeatable)",
+                            "--codex-jsonl (captures `codex exec --json` output to a file)",
                             "--platform <linux|macos|windows|wsl> (for platform-fix tasks)",
                             "--dry-run"
                         ],
@@ -258,6 +274,27 @@
                             "ORCH_BRANCH=<branch>",
                             "KICKOFF_PROMPT=<path>",
                             "NEXT=<recommended next command>"
+                        ]
+                    },
+                    "task_start_pair": {
+                        "required_args": ["--feature-dir <path>", "--slice-id <slice>|--code-task-id <id> --test-task-id <id>"],
+                        "optional_args": [
+                            "--launch-codex",
+                            "--codex-profile <profile>",
+                            "--codex-model <model>",
+                            "--codex-jsonl",
+                            "--dry-run"
+                        ],
+                        "stdout_contract": [
+                            "ORCH_BRANCH=<branch>",
+                            "CODE_TASK_ID=<id>",
+                            "TEST_TASK_ID=<id>",
+                            "CODE_WORKTREE=<path>",
+                            "TEST_WORKTREE=<path>",
+                            "CODE_TASK_BRANCH=<branch>",
+                            "TEST_TASK_BRANCH=<branch>",
+                            "CODEX_CODE_EXIT=<code or empty>",
+                            "CODEX_TEST_EXIT=<code or empty>"
                         ]
                     },
                     "task_finish": {
@@ -275,7 +312,8 @@
                             "HEAD=<sha>",
                             "COMMITS=<count>",
                             "CHECKS=<what ran / verified>",
-                            "SMOKE_RUN=<run id/url if executed>"
+                            "SMOKE_RUN=<run id/url if executed>",
+                            "MERGED_TO_ORCH=<true|false|empty>"
                         ]
                     },
                     "feature_cleanup": {
@@ -330,7 +368,7 @@
                 "required_task_fields": {
                     "problem": "Automation needs a structured way to derive branch/worktree/kickoff/spec per task. Parsing start_checklist text is too brittle.",
                     "proposal": [
-                        "Extend tasks.json schema with optional structured fields for automation (e.g., `git_branch`, `orchestration_branch`, `slice_id`, `role`, `required_make_targets`).",
+                        "Extend tasks.json schema with optional structured fields for automation (e.g., `git_branch`, `orchestration_branch`, `slice_id`, `role`, `required_make_targets`, `merge_to_orchestration`).",
                         "Keep it opt-in (e.g., `meta.schema_version >= 3` or `meta.automation: true`) to avoid breaking existing packs.",
                         "Update scaffolders to populate these fields for new packs."
                     ]
@@ -357,12 +395,11 @@
                         "Ensure non-interactive execution for scripting (e.g., JSONL output when needed)."
                     ],
                     "flags_to_confirm": [
-                        "No approvals / non-interactive: `codex exec` defaults and/or `--config approval_policy=never`",
-                        "Sandbox/filesystem access: `--sandbox` (read-only|workspace-write|danger-full-access) and `--add-dir`",
+                        "No approvals / non-interactive: `--dangerously-bypass-approvals-and-sandbox` (required for scripting automation)",
                         "Working directory: `--cd` / `-C`",
                         "Prompt from stdin: omit prompt arg or use `-`",
                         "Output shaping: `--json`, `--output-last-message <file>` (and any schema/output options)",
-                        "Danger bypass: `--dangerously-bypass-approvals-and-sandbox` (only if truly required; document risks)"
+                        "Danger bypass: `--dangerously-bypass-approvals-and-sandbox`"
                     ],
                     "minimum_viable_behavior": [
                         "Detect codex binary presence; if missing, print an actionable error.",

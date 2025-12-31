@@ -147,13 +147,13 @@ $code.start_checklist = @(
     "git checkout feat/$Feature && git pull --ff-only",
     "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
     "Set status to in_progress; add START entry; commit docs",
-    "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"C0-code`""
+    $(if ($Automation.IsPresent) { "Run: make triad-task-start-pair FEATURE_DIR=`"$featureDir`" SLICE_ID=`"C0`"" } else { "Run: git worktree add -b c0-code wt/$Feature-c0-code feat/$Feature" })
 )
 $code.end_checklist = @(
     "cargo fmt",
     "cargo clippy --workspace --all-targets -- -D warnings",
-    "From inside the worktree: scripts/triad/task_finish.sh --task-id C0-code",
-    "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+    $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"C0-code`"" } else { "From inside the worktree: git add -A && git commit -m `"code: $Feature C0-code`"" }),
+    $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-c0-code (per plan.md)" })
 )
 $code.worktree = "wt/$Feature-c0-code"
 $code.git_branch = if ($Automation.IsPresent) { "$Feature-c0-code" } else { "c0-code" }
@@ -170,13 +170,13 @@ $test.start_checklist = @(
     "git checkout feat/$Feature && git pull --ff-only",
     "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
     "Set status to in_progress; add START entry; commit docs",
-    "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"C0-test`""
+    $(if ($Automation.IsPresent) { "Run: make triad-task-start-pair FEATURE_DIR=`"$featureDir`" SLICE_ID=`"C0`"" } else { "Run: git worktree add -b c0-test wt/$Feature-c0-test feat/$Feature" })
 )
 $test.end_checklist = @(
     "cargo fmt",
     "Run the targeted tests you add/touch",
-    "From inside the worktree: scripts/triad/task_finish.sh --task-id C0-test",
-    "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+    $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"C0-test`"" } else { "From inside the worktree: git add -A && git commit -m `"test: $Feature C0-test`"" }),
+    $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-c0-test (per plan.md)" })
 )
 $test.worktree = "wt/$Feature-c0-test"
 $test.git_branch = if ($Automation.IsPresent) { "$Feature-c0-test" } else { "c0-test" }
@@ -196,7 +196,7 @@ if ($CrossPlatform.IsPresent) {
         "git checkout feat/$Feature && git pull --ff-only",
         "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
         "Set status to in_progress; add START entry; commit docs",
-        "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"C0-integ-core`""
+        $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"C0-integ-core`"" } else { "Run: git worktree add -b c0-integ-core wt/$Feature-c0-integ-core feat/$Feature" })
     )
     $dispatchAll = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform all"
     if ($WslRequired.IsPresent) { $dispatchAll += " --run-wsl" }
@@ -207,12 +207,15 @@ if ($CrossPlatform.IsPresent) {
         "Run relevant tests",
         "make integ-checks",
         "Dispatch cross-platform smoke via CI: $dispatchAll (record run ids/URLs)",
-        "From inside the worktree: scripts/triad/task_finish.sh --task-id C0-integ-core",
-        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+        "If any platform smoke fails: start only failing platform-fix tasks via: make triad-task-start-platform-fixes FEATURE_DIR=`"$featureDir`" SLICE_ID=`"C0`" PLATFORMS=`"linux,macos,windows`"",
+        "After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=`"$featureDir`" SLICE_ID=`"C0`"",
+        $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"C0-integ-core`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature C0-integ-core`"" }),
+        $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-c0-integ-core (per plan.md)" })
     )
     $core.worktree = "wt/$Feature-c0-integ-core"
     $core.git_branch = if ($Automation.IsPresent) { "$Feature-c0-integ-core" } else { "c0-integ-core" }
     $core.required_make_targets = if ($Automation.IsPresent) { @("integ-checks") } else { $null }
+    $core.merge_to_orchestration = if ($Automation.IsPresent) { $false } else { $null }
     $core.kickoff_prompt = "$featureDir/kickoff_prompts/C0-integ-core.md"
     $core.depends_on = @("C0-code", "C0-test")
     $tasks += $core
@@ -260,18 +263,19 @@ if ($CrossPlatform.IsPresent) {
             "git checkout feat/$Feature && git pull --ff-only",
             "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
-            "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"$id`""
+            $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"$id`"" } else { "Run: git worktree add -b c0-integ-$platform wt/$Feature-c0-integ-$platform feat/$Feature" })
         )
         $t.end_checklist = @(
             "Dispatch platform smoke via CI: $dispatch",
             "If needed: fix + fmt/clippy + targeted tests",
             "Ensure smoke is green; record run id/URL",
-            "From inside the worktree: scripts/triad/task_finish.sh --task-id $id --smoke --platform $platform",
-            "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+            $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"$id`" SMOKE=1 TASK_PLATFORM=`"$platform`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature $id`"" }),
+            $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-c0-integ-$platform (per plan.md)" })
         )
         $t.worktree = "wt/$Feature-c0-integ-$platform"
         $t.git_branch = if ($Automation.IsPresent) { "$Feature-c0-integ-$platform" } else { "c0-integ-$platform" }
         $t.required_make_targets = if ($Automation.IsPresent) { @("triad-code-checks") } else { $null }
+        $t.merge_to_orchestration = if ($Automation.IsPresent) { $false } else { $null }
         $t.kickoff_prompt = "$featureDir/kickoff_prompts/$id.md"
         $t.depends_on = @("C0-integ-core")
         $t.platform = $platform
@@ -288,7 +292,7 @@ if ($CrossPlatform.IsPresent) {
         "git checkout feat/$Feature && git pull --ff-only",
         "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
         "Set status to in_progress; add START entry; commit docs",
-        "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"C0-integ`""
+        $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"C0-integ`"" } else { "Run: git worktree add -b c0-integ wt/$Feature-c0-integ feat/$Feature" })
     )
     $dispatchFinal = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform all"
     if ($WslRequired.IsPresent) { $dispatchFinal += " --run-wsl" }
@@ -301,12 +305,13 @@ if ($CrossPlatform.IsPresent) {
         "make integ-checks",
         "Re-run cross-platform smoke via CI: $dispatchFinal",
         "Complete slice closeout gate report: $featureDir/C0-closeout_report.md",
-        "From inside the worktree: scripts/triad/task_finish.sh --task-id C0-integ",
-        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+        $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"C0-integ`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature C0-integ`"" }),
+        $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-c0-integ (per plan.md)" })
     )
     $final.worktree = "wt/$Feature-c0-integ"
     $final.git_branch = if ($Automation.IsPresent) { "$Feature-c0-integ" } else { "c0-integ" }
     $final.required_make_targets = if ($Automation.IsPresent) { @("integ-checks") } else { $null }
+    $final.merge_to_orchestration = if ($Automation.IsPresent) { $true } else { $null }
     $final.kickoff_prompt = "$featureDir/kickoff_prompts/C0-integ.md"
     $final.depends_on = @("C0-integ-core") + ($platforms | ForEach-Object { "C0-integ-$_" })
     $tasks += $final
@@ -319,7 +324,7 @@ if ($CrossPlatform.IsPresent) {
         "git checkout feat/$Feature && git pull --ff-only",
         "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
         "Set status to in_progress; add START entry; commit docs",
-        "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"C0-integ`""
+        $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"C0-integ`"" } else { "Run: git worktree add -b c0-integ wt/$Feature-c0-integ feat/$Feature" })
     )
     $integ.end_checklist = @(
         "cargo fmt",
@@ -327,12 +332,13 @@ if ($CrossPlatform.IsPresent) {
         "Run relevant tests",
         "make integ-checks",
         "Complete slice closeout gate report: $featureDir/C0-closeout_report.md",
-        "From inside the worktree: scripts/triad/task_finish.sh --task-id C0-integ",
-        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+        $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"C0-integ`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature C0-integ`"" }),
+        $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-c0-integ (per plan.md)" })
     )
     $integ.worktree = "wt/$Feature-c0-integ"
     $integ.git_branch = if ($Automation.IsPresent) { "$Feature-c0-integ" } else { "c0-integ" }
     $integ.required_make_targets = if ($Automation.IsPresent) { @("integ-checks") } else { $null }
+    $integ.merge_to_orchestration = if ($Automation.IsPresent) { $true } else { $null }
     $integ.kickoff_prompt = "$featureDir/kickoff_prompts/C0-integ.md"
     $integ.depends_on = @("C0-code", "C0-test")
     $tasks += $integ

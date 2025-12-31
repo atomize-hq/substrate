@@ -27,7 +27,7 @@ Stdout contract (machine-parseable):
 Notes:
   - Run this script from inside the task worktree.
   - This script does NOT delete the worktree (feature_cleanup removes worktrees at feature end).
-  - Integration tasks attempt a fast-forward merge back to the orchestration branch (FF-only); non-FF hard-fails.
+  - Integration tasks fast-forward merge back to orchestration only when tasks.json sets `merge_to_orchestration=true` (FF-only); non-FF hard-fails.
 USAGE
 }
 
@@ -179,9 +179,19 @@ fi
 TASK_TYPE="$(jq -r '.type' <<<"${TASK_JSON}")"
 REQUIRED_TARGETS="$(jq -r '.required_make_targets // [] | join(\" \")' <<<"${TASK_JSON}")"
 TASK_PLATFORM="$(jq -r '.platform // empty' <<<"${TASK_JSON}")"
+MERGE_TO_ORCH="$(jq -r '.merge_to_orchestration // empty' <<<"${TASK_JSON}")"
 FEATURE_NAME="$(jq -r '.meta.feature // empty' "${TASKS_JSON}")"
 if [[ -z "${FEATURE_NAME}" ]]; then
     die "tasks.json meta.feature is required for automation packs"
+fi
+
+if [[ "${TASK_TYPE}" == "integration" ]]; then
+    case "${MERGE_TO_ORCH}" in
+        true|false) ;;
+        *)
+            die "tasks.json integration tasks must set merge_to_orchestration to true/false (task ${TASK_ID})"
+            ;;
+    esac
 fi
 
 GIT_COMMON_DIR="$(python_abs_path "$(git rev-parse --git-common-dir)")"
@@ -255,6 +265,10 @@ find_orch_worktree() {
 
 merge_to_orchestration_ff_only() {
     if [[ "${TASK_TYPE}" != "integration" ]]; then
+        return 0
+    fi
+    if [[ "${MERGE_TO_ORCH}" != "true" ]]; then
+        log "merge_to_orchestration is not true; skipping merge back to ${ORCH_BRANCH}"
         return 0
     fi
 
@@ -384,3 +398,4 @@ printf 'HEAD=%s\n' "${HEAD_SHA}"
 printf 'COMMITS=%s\n' "${COMMITS_COUNT}"
 printf 'CHECKS=%s\n' "${checks_summary}"
 printf 'SMOKE_RUN=%s\n' "${smoke_run_id}"
+printf 'MERGED_TO_ORCH=%s\n' "${MERGE_TO_ORCH}"

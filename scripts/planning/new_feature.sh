@@ -185,13 +185,25 @@ def code_task(task_id: str, other_id: str) -> dict:
             f"git checkout feat/{feature} && git pull --ff-only",
             "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
-            f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"{task_id}\"",
+            (
+                f"Run: make triad-task-start-pair FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"C0\""
+                if automation
+                else f"Run: git worktree add -b c0-code wt/{feature}-c0-code feat/{feature}"
+            ),
         ],
         "end_checklist": [
             "cargo fmt",
             "cargo clippy --workspace --all-targets -- -D warnings",
-            f"From inside the worktree: scripts/triad/task_finish.sh --task-id {task_id}",
-            "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)",
+            (
+                f"From inside the worktree: make triad-task-finish TASK_ID=\"{task_id}\""
+                if automation
+                else f"From inside the worktree: git add -A && git commit -m \"code: {feature} {task_id}\""
+            ),
+            (
+                "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+                if automation
+                else f"Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/{feature}-c0-code (per plan.md)"
+            ),
         ],
         "worktree": f"wt/{feature}-c0-code",
         "integration_task": "C0-integ-core" if cross_platform else "C0-integ",
@@ -219,13 +231,25 @@ def test_task(task_id: str, other_id: str) -> dict:
             f"git checkout feat/{feature} && git pull --ff-only",
             "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
-            f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"{task_id}\"",
+            (
+                f"Run: make triad-task-start-pair FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"C0\""
+                if automation
+                else f"Run: git worktree add -b c0-test wt/{feature}-c0-test feat/{feature}"
+            ),
         ],
         "end_checklist": [
             "cargo fmt",
             "Run the targeted tests you add/touch",
-            f"From inside the worktree: scripts/triad/task_finish.sh --task-id {task_id}",
-            "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)",
+            (
+                f"From inside the worktree: make triad-task-finish TASK_ID=\"{task_id}\""
+                if automation
+                else f"From inside the worktree: git add -A && git commit -m \"test: {feature} {task_id}\""
+            ),
+            (
+                "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+                if automation
+                else f"Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/{feature}-c0-test (per plan.md)"
+            ),
         ],
         "worktree": f"wt/{feature}-c0-test",
         "integration_task": "C0-integ-core" if cross_platform else "C0-integ",
@@ -259,7 +283,11 @@ def integ_core_task() -> dict:
             f"git checkout feat/{feature} && git pull --ff-only",
             "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
-            f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"C0-integ-core\"",
+            (
+                f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"C0-integ-core\""
+                if automation
+                else f"Run: git worktree add -b c0-integ-core wt/{feature}-c0-integ-core feat/{feature}"
+            ),
         ],
         "end_checklist": [
             "cargo fmt",
@@ -267,8 +295,18 @@ def integ_core_task() -> dict:
             "Run relevant tests",
             "make integ-checks",
             f"Dispatch cross-platform smoke via CI: {dispatch} (record run ids/URLs)",
-            "From inside the worktree: scripts/triad/task_finish.sh --task-id C0-integ-core",
-            "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)",
+            f"If any platform smoke fails: start only failing platform-fix tasks via: make triad-task-start-platform-fixes FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"C0\" PLATFORMS=\"linux,macos,windows\"",
+            f"After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"C0\"",
+            (
+                "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ-core\""
+                if automation
+                else f"From inside the worktree: git add -A && git commit -m \"integ: {feature} C0-integ-core\""
+            ),
+            (
+                "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+                if automation
+                else f"Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/{feature}-c0-integ-core (per plan.md)"
+            ),
         ],
         "worktree": f"wt/{feature}-c0-integ-core",
         "integration_task": "C0-integ-core",
@@ -279,6 +317,7 @@ def integ_core_task() -> dict:
     if automation:
         task["git_branch"] = _branch("c0-integ-core")
         task["required_make_targets"] = ["integ-checks"]
+        task["merge_to_orchestration"] = False
     return task
 
 
@@ -324,14 +363,26 @@ def integ_platform_task(platform: str) -> dict:
             f"git checkout feat/{feature} && git pull --ff-only",
             "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
-            f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"{task_id}\"",
+            (
+                f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"{task_id}\""
+                if automation
+                else f"Run: git worktree add -b c0-integ-{platform} wt/{feature}-c0-integ-{platform} feat/{feature}"
+            ),
         ],
         "end_checklist": [
             f"Dispatch platform smoke via CI: {dispatch}",
             "If needed: fix + fmt/clippy + targeted tests",
             "Ensure smoke is green; record run id/URL",
-            f"From inside the worktree: scripts/triad/task_finish.sh --task-id {task_id} --smoke --platform {platform}",
-            "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)",
+            (
+                f"From inside the worktree: make triad-task-finish TASK_ID=\"{task_id}\" SMOKE=1 TASK_PLATFORM=\"{platform}\""
+                if automation
+                else f"From inside the worktree: git add -A && git commit -m \"integ: {feature} {task_id}\""
+            ),
+            (
+                "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+                if automation
+                else f"Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/{feature}-c0-integ-{platform} (per plan.md)"
+            ),
         ],
         "worktree": f"wt/{feature}-c0-integ-{platform}",
         "integration_task": task_id,
@@ -345,6 +396,7 @@ def integ_platform_task(platform: str) -> dict:
     if automation:
         task["git_branch"] = _branch(f"c0-integ-{platform}")
         task["required_make_targets"] = ["triad-code-checks"]
+        task["merge_to_orchestration"] = False
     return task
 
 
@@ -368,7 +420,11 @@ def integ_final_task(platform_tasks: list) -> dict:
             f"git checkout feat/{feature} && git pull --ff-only",
             "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
-            f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"C0-integ\"",
+            (
+                f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"C0-integ\""
+                if automation
+                else f"Run: git worktree add -b c0-integ wt/{feature}-c0-integ feat/{feature}"
+            ),
         ],
         "end_checklist": [
             "Merge platform-fix branches (if any) + resolve conflicts",
@@ -378,8 +434,16 @@ def integ_final_task(platform_tasks: list) -> dict:
             "make integ-checks",
             f"Re-run cross-platform smoke via CI: {dispatch}",
             f"Complete slice closeout gate report: {os.path.join(feature_dir, 'C0-closeout_report.md')}",
-            "From inside the worktree: scripts/triad/task_finish.sh --task-id C0-integ",
-            "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)",
+            (
+                "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ\""
+                if automation
+                else f"From inside the worktree: git add -A && git commit -m \"integ: {feature} C0-integ\""
+            ),
+            (
+                "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+                if automation
+                else f"Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/{feature}-c0-integ (per plan.md)"
+            ),
         ],
         "worktree": f"wt/{feature}-c0-integ",
         "integration_task": "C0-integ",
@@ -390,6 +454,7 @@ def integ_final_task(platform_tasks: list) -> dict:
     if automation:
         task["git_branch"] = _branch("c0-integ")
         task["required_make_targets"] = ["integ-checks"]
+        task["merge_to_orchestration"] = True
     return task
 
 
@@ -407,7 +472,11 @@ def integ_single_task() -> dict:
             f"git checkout feat/{feature} && git pull --ff-only",
             "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
-            f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"C0-integ\"",
+            (
+                f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"C0-integ\""
+                if automation
+                else f"Run: git worktree add -b c0-integ wt/{feature}-c0-integ feat/{feature}"
+            ),
         ],
         "end_checklist": [
             "cargo fmt",
@@ -415,8 +484,16 @@ def integ_single_task() -> dict:
             "Run relevant tests",
             "make integ-checks",
             f"Complete slice closeout gate report: {os.path.join(feature_dir, 'C0-closeout_report.md')}",
-            "From inside the worktree: scripts/triad/task_finish.sh --task-id C0-integ",
-            "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)",
+            (
+                "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ\""
+                if automation
+                else f"From inside the worktree: git add -A && git commit -m \"integ: {feature} C0-integ\""
+            ),
+            (
+                "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+                if automation
+                else f"Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/{feature}-c0-integ (per plan.md)"
+            ),
         ],
         "worktree": f"wt/{feature}-c0-integ",
         "integration_task": "C0-integ",
@@ -427,6 +504,7 @@ def integ_single_task() -> dict:
     if automation:
         task["git_branch"] = _branch("c0-integ")
         task["required_make_targets"] = ["integ-checks"]
+        task["merge_to_orchestration"] = True
     return task
 
 
