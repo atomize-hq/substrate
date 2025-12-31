@@ -257,7 +257,11 @@ if [[ "${SKIP_CODEX}" -eq 0 ]]; then
     require_cmd codex
 fi
 
-gh auth status >/dev/null
+if [[ "${DRY_RUN}" -ne 1 ]]; then
+    if ! gh api user >/dev/null 2>&1; then
+        die "GitHub CLI auth is not usable (token invalid or missing). Fix with: gh auth login -h github.com (or set GH_TOKEN for non-interactive runs)."
+    fi
+fi
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || die "Not in a git repo"
 cd "${REPO_ROOT}"

@@ -109,7 +109,10 @@ if ! command -v gh >/dev/null 2>&1; then
     exit 3
 fi
 
-gh auth status >/dev/null
+if ! gh api user >/dev/null 2>&1; then
+    echo "GitHub CLI auth is not usable (token invalid or missing). Fix with: gh auth login -h github.com (or set GH_TOKEN for non-interactive runs)." >&2
+    exit 3
+fi
 
 if [[ -z "${WORKFLOW_REF}" ]]; then
     echo "Missing --workflow-ref" >&2

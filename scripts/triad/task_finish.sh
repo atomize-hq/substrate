@@ -354,6 +354,11 @@ run_smoke_if_requested() {
     fi
 
     require_cmd gh
+    if ! gh auth status -h github.com >/dev/null 2>&1; then
+        die "GitHub CLI is not authenticated for github.com (run: gh auth login -h github.com) or provide a token via GH_TOKEN for non-interactive runs"
+    fi
+
+    feature_dir_ci="$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "${FEATURE_DIR_ABS}" "${REPO_ROOT}")"
     log "Running feature smoke via CI: PLATFORM=${PLATFORM}"
     if [[ "${DRY_RUN}" -eq 1 ]]; then
         smoke_run_id="dry-run"
@@ -361,7 +366,10 @@ run_smoke_if_requested() {
     fi
 
     out="$(mktemp)"
-    make feature-smoke FEATURE_DIR="${FEATURE_DIR_ABS}" PLATFORM="${PLATFORM}" 1>&2 | tee "${out}" >/dev/null || true
+    smoke_ok=0
+    if (make feature-smoke FEATURE_DIR="${feature_dir_ci}" PLATFORM="${PLATFORM}" 2>&1 | tee "${out}" 1>&2); then
+        smoke_ok=1
+    fi
 
     # Best-effort parse: "Run: <id>"
     if rg -n '^Run: ' "${out}" >/dev/null 2>&1; then
@@ -370,6 +378,10 @@ run_smoke_if_requested() {
         smoke_run_id="unknown"
     fi
     rm -f "${out}"
+
+    if [[ "${smoke_ok}" -ne 1 ]]; then
+        die "feature-smoke failed for PLATFORM=${PLATFORM} (SMOKE_RUN=${smoke_run_id})"
+    fi
 }
 
 if [[ "${VERIFY_ONLY}" -eq 1 ]]; then
