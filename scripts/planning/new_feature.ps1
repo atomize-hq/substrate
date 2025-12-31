@@ -735,14 +735,14 @@ if ($CrossPlatform.IsPresent) {
     Render-Kickoff "kickoff_integ.md.tmpl" "C0-integ.md" "C0-integ" $c0IntegBranch "wt/$Feature-c0-integ"
 }
 
-if ($DecisionHeavy.IsPresent -or $CrossPlatform.IsPresent) {
-    "# Decision Register`n`nUse the template in:`n- `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`" |
-        Set-Content -LiteralPath (Join-Path $featureDir "decision_register.md")
-    "# Integration Map`n`nUse the standard in:`n- `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`" |
-        Set-Content -LiteralPath (Join-Path $featureDir "integration_map.md")
-    "# Manual Testing Playbook`n`nThis playbook must contain runnable commands and expected exit codes/output." |
-        Set-Content -LiteralPath (Join-Path $featureDir "manual_testing_playbook.md")
-}
+	if ($DecisionHeavy.IsPresent -or $CrossPlatform.IsPresent) {
+	    "# Decision Register`n`nUse the template in:`n- `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`" |
+	        Set-Content -LiteralPath (Join-Path $featureDir "decision_register.md")
+	    "# Integration Map`n`nUse the standard in:`n- `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`" |
+	        Set-Content -LiteralPath (Join-Path $featureDir "integration_map.md")
+	    "# Manual Testing Playbook`n`nThis playbook must contain runnable commands and expected exit codes/output.`n`n## CI Smoke Scripts`n`nThese are invoked by the Feature Smoke workflow. Keep them deterministic and fast.`n`n- Linux: `bash smoke/linux-smoke.sh` (expected exit: 0)`n- macOS: `bash smoke/macos-smoke.sh` (expected exit: 0)`n- Windows: `pwsh -File smoke/windows-smoke.ps1` (expected exit: 0)" |
+	        Set-Content -LiteralPath (Join-Path $featureDir "manual_testing_playbook.md")
+	}
 
 if ($CrossPlatform.IsPresent) {
     New-Item -ItemType Directory -Force -Path (Join-Path $featureDir "smoke") | Out-Null
