@@ -334,7 +334,7 @@ os.makedirs(os.path.dirname(out_path), exist_ok=True)
 tmp = out_path + ".tmp"
 with open(tmp, "w", encoding="utf-8") as f:
   json.dump(data, f, indent=2, sort_keys=True)
-  f.write("\\n")
+  f.write("\n")
 os.replace(tmp, out_path)
 PY
 }
@@ -403,7 +403,7 @@ data["updated_at_utc"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ
 tmp = registry_abs + ".tmp"
 with open(tmp, "w", encoding="utf-8") as f:
   json.dump(data, f, indent=2, sort_keys=True)
-  f.write("\\n")
+  f.write("\n")
 os.replace(tmp, registry_abs)
 PY
 }

@@ -339,7 +339,7 @@ data["updated_at_utc"] = now
 tmp = registry_abs + ".tmp"
 with open(tmp, "w", encoding="utf-8") as f:
     json.dump(data, f, indent=2, sort_keys=True)
-    f.write("\\n")
+    f.write("\n")
 os.replace(tmp, registry_abs)
 PY
 }
