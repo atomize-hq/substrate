@@ -24,7 +24,7 @@ Options:
   --workflow-ref <ref>         Ref containing the workflow definition (default: meta.automation.orchestration_branch)
 
   --platform-fixes <csv>       Force-start platform-fix tasks for these platforms (e.g., linux,macos,windows[,wsl])
-                               If omitted, platform-fix tasks are NOT started unless --platform-fixes is provided.
+                               If omitted, failing platforms are auto-detected from the PLATFORM=all smoke run.
 
   --codex-profile <p>          Passed to Codex (`codex exec --profile`)
   --codex-model <m>            Passed to Codex (`codex exec --model`)
@@ -122,6 +122,12 @@ append_session_log() {
         return 0
     fi
     printf '%s\n' "${line}" >>"${session_log}"
+}
+
+parse_kv_text() {
+    local key="$1"
+    local text="$2"
+    printf '%s\n' "${text}" | awk -F= -v k="${key}" '$1==k { sub(/^[^=]*=/, "", $0); print $0; exit }'
 }
 
 task_branch() {
@@ -339,18 +345,38 @@ log "Dispatching cross-platform smoke (PLATFORM=all)"
 smoke_cmd=(make feature-smoke FEATURE_DIR="${FEATURE_DIR}" PLATFORM=all RUNNER_KIND="${RUNNER_KIND}" WORKFLOW_REF="${WORKFLOW_REF}" REMOTE="${REMOTE}" CLEANUP=1)
 if [[ "${RUN_WSL}" -eq 1 ]]; then smoke_cmd+=(RUN_WSL=1); fi
 smoke_all_rc=0
+smoke_all_out=""
+smoke_run_id_all=""
+PLATFORM_FIXES_STARTED=0
 set +e
 if [[ "${DRY_RUN}" -eq 1 ]]; then
     echo "+ (cd ${core_wt} && ${smoke_cmd[*]})" >&2
     smoke_all_rc=0
 else
-    bash -lc "cd \"${core_wt}\" && ${smoke_cmd[*]}"
+    smoke_all_out="$(bash -lc "cd \"${core_wt}\" && ${smoke_cmd[*]}")"
+    echo "${smoke_all_out}"
     smoke_all_rc=$?
+    smoke_run_id_all="$(parse_kv_text RUN_ID "${smoke_all_out}")"
 fi
 set -e
 
 if [[ "${smoke_all_rc}" -ne 0 && -z "${PLATFORM_FIXES_CSV}" ]]; then
-    die "Cross-platform smoke failed; re-run with --platform-fixes linux,macos,windows[,wsl] to exercise platform-fix tasks"
+    if [[ -z "${smoke_run_id_all}" ]]; then
+        die "Cross-platform smoke failed and RUN_ID could not be parsed; re-run with --platform-fixes linux,macos,windows[,wsl]"
+    fi
+    log "Cross-platform smoke failed; auto-starting only failing platform-fix tasks from run ${smoke_run_id_all}"
+    pf_cmd=(make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="C0" SMOKE_RUN_ID="${smoke_run_id_all}")
+    if [[ "${SKIP_CODEX}" -eq 0 ]]; then pf_cmd+=(LAUNCH_CODEX=1); fi
+    if [[ -n "${CODEX_PROFILE}" ]]; then pf_cmd+=(CODEX_PROFILE="${CODEX_PROFILE}"); fi
+    if [[ -n "${CODEX_MODEL}" ]]; then pf_cmd+=(CODEX_MODEL="${CODEX_MODEL}"); fi
+    if [[ "${CODEX_JSONL}" -eq 1 ]]; then pf_cmd+=(CODEX_JSONL=1); fi
+    pf_out="$("${pf_cmd[@]}")"
+    echo "${pf_out}"
+    PLATFORM_FIXES_CSV="$(parse_kv_text FAILED_PLATFORMS "${pf_out}")"
+    if [[ -z "${PLATFORM_FIXES_CSV}" ]]; then
+        die "Cross-platform smoke failed but no failing platforms could be inferred from run ${smoke_run_id_all}; set --platform-fixes manually"
+    fi
+    PLATFORM_FIXES_STARTED=1
 fi
 
 if [[ "${smoke_all_rc}" -eq 0 && -z "${PLATFORM_FIXES_CSV}" ]]; then
@@ -377,14 +403,17 @@ if [[ "${smoke_all_rc}" -eq 0 && -z "${PLATFORM_FIXES_CSV}" ]]; then
 fi
 
 if [[ -n "${PLATFORM_FIXES_CSV}" ]]; then
-    log "Starting platform-fix tasks in parallel (forced): ${PLATFORM_FIXES_CSV}"
-    pf_cmd=(make triad-task-start-platform-fixes FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="C0" PLATFORMS="${PLATFORM_FIXES_CSV}")
-    if [[ "${SKIP_CODEX}" -eq 0 ]]; then pf_cmd+=(LAUNCH_CODEX=1); fi
-    if [[ -n "${CODEX_PROFILE}" ]]; then pf_cmd+=(CODEX_PROFILE="${CODEX_PROFILE}"); fi
-    if [[ -n "${CODEX_MODEL}" ]]; then pf_cmd+=(CODEX_MODEL="${CODEX_MODEL}"); fi
-    if [[ "${CODEX_JSONL}" -eq 1 ]]; then pf_cmd+=(CODEX_JSONL=1); fi
-    pf_out="$("${pf_cmd[@]}")"
-    echo "${pf_out}"
+    if [[ "${PLATFORM_FIXES_STARTED}" -eq 0 ]]; then
+        log "Starting platform-fix tasks in parallel: ${PLATFORM_FIXES_CSV}"
+        pf_cmd=(make triad-task-start-platform-fixes FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="C0" PLATFORMS="${PLATFORM_FIXES_CSV}")
+        if [[ "${SKIP_CODEX}" -eq 0 ]]; then pf_cmd+=(LAUNCH_CODEX=1); fi
+        if [[ -n "${CODEX_PROFILE}" ]]; then pf_cmd+=(CODEX_PROFILE="${CODEX_PROFILE}"); fi
+        if [[ -n "${CODEX_MODEL}" ]]; then pf_cmd+=(CODEX_MODEL="${CODEX_MODEL}"); fi
+        if [[ "${CODEX_JSONL}" -eq 1 ]]; then pf_cmd+=(CODEX_JSONL=1); fi
+        pf_out="$("${pf_cmd[@]}")"
+        echo "${pf_out}"
+        PLATFORM_FIXES_STARTED=1
+    fi
 
     IFS=',' read -r -a platforms <<<"${PLATFORM_FIXES_CSV}"
     for p in "${platforms[@]}"; do

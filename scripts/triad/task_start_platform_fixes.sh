@@ -4,12 +4,13 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  scripts/triad/task_start_platform_fixes.sh --feature-dir <path> --slice-id <slice> --platform <p> [--platform <p> ...] [options]
+  scripts/triad/task_start_platform_fixes.sh --feature-dir <path> --slice-id <slice> (--platform <p> [--platform <p> ...] | --from-smoke-run <id>) [options]
 
 Required:
   --feature-dir <path>     Feature Planning Pack dir (docs/project_management/next/<feature> or equivalent)
   --slice-id <slice>       Slice prefix (e.g., C0)
   --platform <p>           linux|macos|windows|wsl (repeatable; failing platforms only)
+  --from-smoke-run <id>    GitHub Actions run id for Feature Smoke (platform=all); selects only failing platforms automatically
 
 Options:
   --launch-codex           Launch Codex headless for ALL selected platform-fix tasks (runs in parallel after worktrees are created)
@@ -21,6 +22,8 @@ Options:
 Stdout contract (machine-parseable):
   ORCH_BRANCH=<branch>
   SLICE_ID=<slice>
+  SMOKE_RUN_ID=<id or empty>
+  FAILED_PLATFORMS=<csv or empty>
   PLATFORM=<platform>
   TASK_ID=<task-id>
   WORKTREE=<path>
@@ -66,6 +69,7 @@ PY
 
 FEATURE_DIR=""
 SLICE_ID=""
+SMOKE_RUN_ID=""
 LAUNCH_CODEX=0
 CODEX_PROFILE=""
 CODEX_MODEL=""
@@ -85,6 +89,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --platform)
             PLATFORMS+=("${2:-}")
+            shift 2
+            ;;
+        --from-smoke-run)
+            SMOKE_RUN_ID="${2:-}"
             shift 2
             ;;
         --launch-codex)
@@ -117,9 +125,16 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ -z "${FEATURE_DIR}" || -z "${SLICE_ID}" || "${#PLATFORMS[@]}" -eq 0 ]]; then
+if [[ -z "${FEATURE_DIR}" || -z "${SLICE_ID}" ]]; then
     usage >&2
     die "Missing required args"
+fi
+if [[ -n "${SMOKE_RUN_ID}" && "${#PLATFORMS[@]}" -ne 0 ]]; then
+    die "Use either --platform ... or --from-smoke-run <id>, not both"
+fi
+if [[ -z "${SMOKE_RUN_ID}" && "${#PLATFORMS[@]}" -eq 0 ]]; then
+    usage >&2
+    die "Missing required platform selection (--platform or --from-smoke-run)"
 fi
 
 for p in "${PLATFORMS[@]}"; do
@@ -132,6 +147,9 @@ done
 require_cmd git
 require_cmd jq
 require_cmd python3
+if [[ -n "${SMOKE_RUN_ID}" ]]; then
+    require_cmd gh
+fi
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || die "Not in a git repo"
 cd "${REPO_ROOT}"
@@ -146,12 +164,107 @@ SCHEMA_VERSION="$(jq -r '.meta.schema_version // 1' "${TASKS_JSON}")"
 AUTOMATION_ENABLED="$(jq -r '.meta.automation.enabled // false' "${TASKS_JSON}")"
 ORCH_BRANCH="$(jq -r '.meta.automation.orchestration_branch // empty' "${TASKS_JSON}")"
 FEATURE_NAME="$(jq -r '.meta.feature // empty' "${TASKS_JSON}")"
+WSL_TASK_MODE="$(jq -r '.meta.wsl_task_mode // "bundled"' "${TASKS_JSON}")"
 
 if [[ "${SCHEMA_VERSION}" -lt 3 || "${AUTOMATION_ENABLED}" != "true" ]]; then
     die "task_start_platform_fixes requires tasks.json meta.schema_version>=3 and meta.automation.enabled=true"
 fi
 if [[ -z "${ORCH_BRANCH}" || -z "${FEATURE_NAME}" ]]; then
     die "tasks.json must include meta.feature and meta.automation.orchestration_branch"
+fi
+case "${WSL_TASK_MODE}" in
+    bundled|separate) ;;
+    *) die "Invalid tasks.json meta.wsl_task_mode: ${WSL_TASK_MODE} (expected bundled|separate)" ;;
+esac
+
+failed_platforms_csv=""
+if [[ -n "${SMOKE_RUN_ID}" ]]; then
+    log "Selecting failing platforms from Feature Smoke run: ${SMOKE_RUN_ID}"
+    run_json="$(gh run view "${SMOKE_RUN_ID}" --json status,conclusion,workflowName,url,jobs 2>/dev/null || true)"
+    if [[ -z "${run_json}" ]]; then
+        die "Could not read run ${SMOKE_RUN_ID} via gh (check permissions/auth)"
+    fi
+    set +e
+    failed_platforms_csv="$(python3 - "${run_json}" 2>&1 <<'PY'
+import json
+import sys
+
+data = json.loads(sys.argv[1])
+status = data.get("status")
+workflow = data.get("workflowName") or ""
+
+if status != "completed":
+    raise SystemExit("ERROR: smoke run is not completed yet; wait for completion and retry")
+
+if "Feature Smoke" not in workflow:
+    raise SystemExit(f"ERROR: run is not Feature Smoke workflow (workflowName={workflow!r})")
+
+jobs = data.get("jobs") or []
+failed = set()
+
+def job_platform(name: str):
+    if name.startswith("linux_"):
+        return "linux"
+    if name.startswith("macos_"):
+        return "macos"
+    if name.startswith("windows_"):
+        return "windows"
+    if name == "wsl":
+        return "wsl"
+    return None
+
+for j in jobs:
+    if not isinstance(j, dict):
+        continue
+    name = str(j.get("name") or "")
+    concl = j.get("conclusion")
+    if concl in (None, "skipped"):
+        continue
+    p = job_platform(name)
+    if not p:
+        continue
+    if concl != "success":
+        failed.add(p)
+
+print(",".join(sorted(failed)))
+PY
+)"
+    rc=$?
+    set -e
+    if [[ "${rc}" -ne 0 ]]; then
+        die "${failed_platforms_csv}"
+    fi
+    if [[ -z "${failed_platforms_csv}" ]]; then
+        log "Smoke run has no failing platform jobs; nothing to start"
+        printf 'ORCH_BRANCH=%s\n' "${ORCH_BRANCH}"
+        printf 'SLICE_ID=%s\n' "${SLICE_ID}"
+        printf 'SMOKE_RUN_ID=%s\n' "${SMOKE_RUN_ID}"
+        printf 'FAILED_PLATFORMS=%s\n' ""
+        exit 0
+    fi
+    IFS=',' read -r -a PLATFORMS <<<"${failed_platforms_csv}"
+    normalized=()
+    for p in "${PLATFORMS[@]}"; do
+        case "${p}" in
+            linux|macos|windows|wsl) ;;
+            *) die "Invalid platform inferred from smoke run: ${p}" ;;
+        esac
+        if [[ "${p}" == "wsl" && "${WSL_TASK_MODE}" == "bundled" ]]; then
+            normalized+=("linux")
+        else
+            normalized+=("${p}")
+        fi
+    done
+    declare -A seen=()
+    PLATFORMS=()
+    for p in "${normalized[@]}"; do
+        [[ -z "${p}" ]] && continue
+        if [[ -z "${seen[${p}]:-}" ]]; then
+            seen["${p}"]=1
+            PLATFORMS+=("${p}")
+        fi
+    done
+    failed_platforms_csv="$(IFS=','; echo "${PLATFORMS[*]}")"
 fi
 
 task_exists() {
@@ -277,6 +390,8 @@ fi
 
 printf 'ORCH_BRANCH=%s\n' "${ORCH_BRANCH}"
 printf 'SLICE_ID=%s\n' "${SLICE_ID}"
+printf 'SMOKE_RUN_ID=%s\n' "${SMOKE_RUN_ID}"
+printf 'FAILED_PLATFORMS=%s\n' "${failed_platforms_csv}"
 for p in "${PLATFORMS[@]}"; do
     task_id="${SLICE_ID}-integ-${p}"
     printf 'PLATFORM=%s\n' "${p}"

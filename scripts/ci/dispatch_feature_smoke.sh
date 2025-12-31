@@ -150,9 +150,64 @@ if [[ -z "${run_id}" ]]; then
 fi
 
 echo "Run: ${run_id}"
+echo "RUN_ID=${run_id}"
+run_url="$(gh run view "${run_id}" --json url -q '.url' 2>/dev/null || true)"
+if [[ -n "${run_url}" ]]; then
+    echo "RUN_URL=${run_url}"
+fi
 gh run watch "${run_id}"
 conclusion="$(gh run view "${run_id}" --json conclusion -q '.conclusion')"
 echo "Conclusion: ${conclusion}"
+
+platform_summary="$(gh run view "${run_id}" --json jobs 2>/dev/null || true)"
+if [[ -n "${platform_summary}" ]]; then
+    python3 - "${platform_summary}" <<'PY' || true
+import json
+import sys
+
+raw = sys.argv[1]
+try:
+    data = json.loads(raw)
+except Exception:
+    raise SystemExit(0)
+
+jobs = data.get("jobs") or []
+failed = set()
+passed = set()
+
+def job_platform(name):
+    if name.startswith("linux_"):
+        return "linux"
+    if name.startswith("macos_"):
+        return "macos"
+    if name.startswith("windows_"):
+        return "windows"
+    if name == "wsl":
+        return "wsl"
+    return None
+
+for j in jobs:
+    if not isinstance(j, dict):
+        continue
+    name = j.get("name") or ""
+    concl = j.get("conclusion")
+    if concl in (None, "skipped"):
+        continue
+    p = job_platform(str(name))
+    if not p:
+        continue
+    if concl == "success":
+        passed.add(p)
+    else:
+        failed.add(p)
+
+def csv(xs):
+    return ",".join(sorted(xs))
+
+print(f"SMOKE_PASSED_PLATFORMS={csv(passed)}")
+print(f"SMOKE_FAILED_PLATFORMS={csv(failed)}")
+PY
+fi
 
 if [[ "${CLEANUP}" -eq 1 ]]; then
     echo "Cleaning up remote branch: ${temp_branch}"

@@ -14,18 +14,21 @@ Do not edit planning docs inside the worktree.
 
 ## Requirements
 - Reconcile code/tests to spec (spec wins).
-- Run required integration gates:
+- Run required integration gates (must be green before any CI smoke dispatch):
   - `cargo fmt`
   - `cargo clippy --workspace --all-targets -- -D warnings`
   - relevant tests
   - `make integ-checks`
+- Optional (once per feature, when you want a clean-cache assurance): `make preflight`
 - If the feature directory contains `smoke/`, run cross-platform smoke via CI (validation-only):
   - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=all WORKFLOW_REF="{{ORCH_BRANCH}}"`
   - If WSL coverage is required for this feature, add `RUN_WSL=1`.
+  - Record the emitted `RUN_ID=<id>` (and URL).
 - If any platform smoke fails, start only the failing platform-fix tasks (do not attempt platform-specific fixes here):
   - Ask the operator to run from the orchestration worktree:
-    - `make triad-task-start-platform-fixes FEATURE_DIR="{{FEATURE_DIR}}" SLICE_ID="<slice>" PLATFORMS="linux,macos,windows" LAUNCH_CODEX=1`
+    - `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="{{FEATURE_DIR}}" SLICE_ID="<slice>" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
   - `<slice>` is the triad id prefix (e.g., `C0`, `C3`).
+  - `<run-id>` is the `RUN_ID` from the failing `PLATFORM=all` smoke run.
   - Platform-fix tasks commit to their own branches and iterate CI smoke until green; the final aggregator task merges fixes.
 - Once all failing platform-fix tasks report green smoke, start the final aggregator:
   - Ask the operator to run from the orchestration worktree:

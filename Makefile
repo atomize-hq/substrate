@@ -198,6 +198,7 @@ SLICE_ID ?=
 CODE_TASK_ID ?=
 TEST_TASK_ID ?=
 PLATFORMS ?=
+SMOKE_RUN_ID ?=
 
 LAUNCH_CODEX ?= 0
 CODEX_PROFILE ?=
@@ -272,6 +273,20 @@ triad-task-start-platform-fixes:
 	cmd="scripts/triad/task_start_platform_fixes.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\""; \
 	IFS=',' read -r -a platforms <<<"$(PLATFORMS)"; \
 	for p in "$${platforms[@]}"; do cmd="$$cmd --platform \"$$p\""; done; \
+	if [ "$(LAUNCH_CODEX)" = "1" ]; then cmd="$$cmd --launch-codex"; fi; \
+	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
+	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
+	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
+	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
+	eval "$$cmd"
+
+.PHONY: triad-task-start-platform-fixes-from-smoke
+triad-task-start-platform-fixes-from-smoke:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(SLICE_ID)" ]; then echo "ERROR: set SLICE_ID=<slice>"; exit 2; fi
+	@if [ -z "$(SMOKE_RUN_ID)" ]; then echo "ERROR: set SMOKE_RUN_ID=<gh-run-id>"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="scripts/triad/task_start_platform_fixes.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\" --from-smoke-run \"$(SMOKE_RUN_ID)\""; \
 	if [ "$(LAUNCH_CODEX)" = "1" ]; then cmd="$$cmd --launch-codex"; fi; \
 	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
 	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
