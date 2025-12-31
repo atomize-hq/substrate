@@ -115,7 +115,7 @@ Dispatch cross-platform smoke:
 - Add WSL coverage when required: `RUN_WSL=1`
 
 If smoke fails, start only the failing platform-fix tasks:
-- `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="C0" PLATFORMS="linux,macos,windows" LAUNCH_CODEX=1`
+- `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="C0" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
 
 After all failing platform-fix tasks are green, start the final aggregator:
 - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="C0" LAUNCH_CODEX=1`

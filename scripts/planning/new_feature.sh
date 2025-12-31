@@ -297,7 +297,7 @@ def integ_core_task() -> dict:
             "Run relevant tests",
             "make integ-checks",
             f"Dispatch cross-platform smoke via CI: {dispatch} (record run ids/URLs)",
-            f"If any platform smoke fails: start only failing platform-fix tasks via: make triad-task-start-platform-fixes FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"C0\" PLATFORMS=\"linux,macos,windows\"",
+            f"If any platform smoke fails: start only failing platform-fix tasks via: make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"C0\" SMOKE_RUN_ID=\"<run-id>\"",
             f"After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"C0\"",
             (
                 "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ-core\""

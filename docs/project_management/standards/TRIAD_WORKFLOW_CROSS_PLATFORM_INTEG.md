@@ -52,7 +52,7 @@ flowchart TD
     CORE_DISPATCH["Dispatch cross-platform smoke via make feature-smoke (PLATFORM=all; optional RUN_WSL=1)"]
     CORE_RESULTS["Wait for smoke results (self-hosted runners)"]
     CORE_IDENTIFY["Identify failing platforms from runner results"]
-    CORE_START_PF["Start failing platform-fix tasks (make triad-task-start-platform-fixes PLATFORMS=...)"]
+    CORE_START_PF["Start failing platform-fix tasks (make triad-task-start-platform-fixes-from-smoke SMOKE_RUN_ID=...)"]
     CORE_START_FINAL["After fixes are green: start final aggregator (make triad-task-start-integ-final SLICE_ID=X)"]
   end
 
@@ -140,7 +140,7 @@ flowchart TD
     CORE_DISPATCH["Dispatch smoke via CI (platform=all; optional WSL)"]
     CORE_RESULTS["Wait for smoke results (self-hosted runners)"]
     CORE_IDENTIFY["Identify failing platforms from runner results"]
-    CORE_START_PF["Start failing platform-fix tasks (make triad-task-start-platform-fixes PLATFORMS=...)"]
+    CORE_START_PF["Start failing platform-fix tasks (make triad-task-start-platform-fixes-from-smoke SMOKE_RUN_ID=...)"]
     CORE_START_FINAL["After fixes are green: start final aggregator (make triad-task-start-integ-final SLICE_ID=X)"]
   end
 
@@ -192,7 +192,7 @@ flowchart TD
 This diagram zooms in on the automation pieces used during execution:
 - orchestration branch bootstrap (`make triad-orch-ensure`)
 - code+test parallel worktree creation (`make triad-task-start-pair`)
-- failing platform-fix worktree creation (`make triad-task-start-platform-fixes`)
+- failing platform-fix worktree creation (`make triad-task-start-platform-fixes-from-smoke`)
 - single-task worktree creation + registration (`make triad-task-start`)
 - optional headless Codex launch (from inside the worktree; kickoff prompt via stdin)
 - task finishing (`make triad-task-finish`)
@@ -205,7 +205,7 @@ flowchart TD
     ENSURE["make triad-orch-ensure (ensures orchestration branch exists, checks out, ff-only pull)"]
     DOCS_START["docs: set task status in tasks.json; START entry in session_log.md; commit"]
     START_PAIR_RUN["make triad-task-start-pair FEATURE_DIR=... SLICE_ID=X (code+test; optional LAUNCH_CODEX=1)"]
-    START_PF_RUN["make triad-task-start-platform-fixes FEATURE_DIR=... SLICE_ID=X PLATFORMS=linux,macos,... (optional LAUNCH_CODEX=1)"]
+    START_PF_RUN["make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=... SLICE_ID=X SMOKE_RUN_ID=<run-id> (optional LAUNCH_CODEX=1)"]
     START_FINAL_RUN["make triad-task-start-integ-final FEATURE_DIR=... SLICE_ID=X (optional LAUNCH_CODEX=1)"]
     START_RUN["make triad-task-start FEATURE_DIR=... TASK_ID=... (single task; optional LAUNCH_CODEX=1)"]
     DOCS_END["docs: update tasks.json; END entry in session_log.md; commit"]

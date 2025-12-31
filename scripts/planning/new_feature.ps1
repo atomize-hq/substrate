@@ -208,7 +208,7 @@ if ($CrossPlatform.IsPresent) {
         "Run relevant tests",
         "make integ-checks",
         "Dispatch cross-platform smoke via CI: $dispatchAll (record run ids/URLs)",
-        "If any platform smoke fails: start only failing platform-fix tasks via: make triad-task-start-platform-fixes FEATURE_DIR=`"$featureDir`" SLICE_ID=`"C0`" PLATFORMS=`"linux,macos,windows`"",
+        "If any platform smoke fails: start only failing platform-fix tasks via: make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=`"$featureDir`" SLICE_ID=`"C0`" SMOKE_RUN_ID=`"<run-id>`"",
         "After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=`"$featureDir`" SLICE_ID=`"C0`"",
         $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"C0-integ-core`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature C0-integ-core`"" }),
         $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-c0-integ-core (per plan.md)" })

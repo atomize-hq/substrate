@@ -428,7 +428,7 @@ Steps:
 3) Dispatch smoke:
    - \`make feature-smoke FEATURE_DIR="${FEATURE_DIR}" PLATFORM=all WORKFLOW_REF="${ORCH_BRANCH}"\`
 4) If any platform smoke fails, start only failing platform-fix tasks:
-   - \`make triad-task-start-platform-fixes FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="C0" PLATFORMS="linux,macos,windows"\`
+   - \`make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="C0" SMOKE_RUN_ID="<run-id>"\`
 5) After all failing platforms are green, start the final aggregator:
    - \`make triad-task-start-integ-final FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="C0"\`
 

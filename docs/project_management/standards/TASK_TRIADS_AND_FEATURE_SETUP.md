@@ -146,7 +146,7 @@ Optional: also launch Codex headless for both code+test tasks:
 - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1`
 
 Optional: start only the failing platform-fix integration tasks (after smoke results are known):
-- `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" PLATFORMS="linux,macos,windows" LAUNCH_CODEX=1`
+- `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
 
 Optional: start the final aggregator integration task for a slice (requires its deps are completed):
 - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1`
