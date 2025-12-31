@@ -1,0 +1,398 @@
+{
+  "meta": {
+    "schema_version": 3,
+    "feature": "e2e-triad-smoke-20251231T140247Z",
+    "cross_platform": true,
+    "execution_gates": true,
+    "automation": {
+      "enabled": true,
+      "orchestration_branch": "feat/e2e-triad-smoke-20251231T140247Z"
+    },
+    "platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "F0-exec-preflight",
+      "name": "Execution preflight gate (feature start)",
+      "type": "ops",
+      "phase": "F0",
+      "status": "pending",
+      "description": "Run the execution preflight gate to confirm smoke/manual/CI plans are adequate before starting triads.",
+      "references": [
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/plan.md",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/tasks.json",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/session_log.md",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/execution_preflight_report.md"
+      ],
+      "acceptance_criteria": [
+        "Execution preflight recommendation recorded (ACCEPT or REVISE)"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/e2e-triad-smoke-20251231T140247Z\"",
+        "Read plan.md, tasks.json, session_log.md, specs, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "end_checklist": [
+        "Complete execution_preflight_report.md with ACCEPT/REVISE and required fixes",
+        "Set status to completed; add END entry; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/kickoff_prompts/F0-exec-preflight.md",
+      "depends_on": [],
+      "concurrent_with": []
+    },
+    {
+      "id": "C0-code",
+      "name": "C0 slice (code)",
+      "type": "code",
+      "phase": "C0",
+      "status": "pending",
+      "description": "Implement C0 spec (production code only).",
+      "references": [
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/plan.md",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/C0-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Meets all acceptance criteria in C0-spec.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/e2e-triad-smoke-20251231T140247Z && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/e2e-triad-smoke-20251231T140247Z\" SLICE_ID=\"C0\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"C0-code\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/e2e-triad-smoke-20251231T140247Z-c0-code",
+      "integration_task": "C0-integ-core",
+      "kickoff_prompt": "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/kickoff_prompts/C0-code.md",
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
+      "concurrent_with": [
+        "C0-test"
+      ],
+      "git_branch": "e2e-triad-smoke-20251231T140247Z-c0-code",
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
+    },
+    {
+      "id": "C0-test",
+      "name": "C0 slice (test)",
+      "type": "test",
+      "phase": "C0",
+      "status": "pending",
+      "description": "Add/modify tests for C0 spec (tests only).",
+      "references": [
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/plan.md",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/C0-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Tests enforce C0 acceptance criteria"
+      ],
+      "start_checklist": [
+        "git checkout feat/e2e-triad-smoke-20251231T140247Z && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/e2e-triad-smoke-20251231T140247Z\" SLICE_ID=\"C0\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add/touch",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"C0-test\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/e2e-triad-smoke-20251231T140247Z-c0-test",
+      "integration_task": "C0-integ-core",
+      "kickoff_prompt": "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/kickoff_prompts/C0-test.md",
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
+      "concurrent_with": [
+        "C0-code"
+      ],
+      "git_branch": "e2e-triad-smoke-20251231T140247Z-c0-test",
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
+    },
+    {
+      "id": "C0-integ-core",
+      "name": "C0 slice (integration core)",
+      "type": "integration",
+      "phase": "C0",
+      "status": "pending",
+      "description": "Merge C0 code+tests and make the slice green on the primary dev platform.",
+      "references": [
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/plan.md",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/C0-spec.md",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/smoke/linux-smoke.sh",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/smoke/macos-smoke.sh",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "Core slice is green under make integ-checks and matches the spec"
+      ],
+      "start_checklist": [
+        "git checkout feat/e2e-triad-smoke-20251231T140247Z && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/e2e-triad-smoke-20251231T140247Z\" TASK_ID=\"C0-integ-core\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "Dispatch cross-platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir \"docs/project_management/next/e2e-triad-smoke-20251231T140247Z\" --runner-kind self-hosted --platform all --cleanup (record run ids/URLs)",
+        "If any platform smoke fails: start only failing platform-fix tasks via: make triad-task-start-platform-fixes FEATURE_DIR=\"docs/project_management/next/e2e-triad-smoke-20251231T140247Z\" SLICE_ID=\"C0\" PLATFORMS=\"linux,macos,windows\"",
+        "After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=\"docs/project_management/next/e2e-triad-smoke-20251231T140247Z\" SLICE_ID=\"C0\"",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ-core\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/e2e-triad-smoke-20251231T140247Z-c0-integ-core",
+      "integration_task": "C0-integ-core",
+      "kickoff_prompt": "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/kickoff_prompts/C0-integ-core.md",
+      "depends_on": [
+        "C0-code",
+        "C0-test"
+      ],
+      "concurrent_with": [],
+      "git_branch": "e2e-triad-smoke-20251231T140247Z-c0-integ-core",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "C0-integ-linux",
+      "name": "C0 slice (integration Linux)",
+      "type": "integration",
+      "phase": "C0",
+      "status": "pending",
+      "description": "Linux platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/plan.md",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/C0-spec.md",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/smoke/linux-smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "linux smoke is green for this slice"
+      ],
+      "start_checklist": [
+        "Run on linux host if possible",
+        "git checkout feat/e2e-triad-smoke-20251231T140247Z && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/e2e-triad-smoke-20251231T140247Z\" TASK_ID=\"C0-integ-linux\""
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir \"docs/project_management/next/e2e-triad-smoke-20251231T140247Z\" --runner-kind self-hosted --platform linux --cleanup",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ-linux\" SMOKE=1 TASK_PLATFORM=\"linux\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/e2e-triad-smoke-20251231T140247Z-c0-integ-linux",
+      "integration_task": "C0-integ-linux",
+      "kickoff_prompt": "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/kickoff_prompts/C0-integ-linux.md",
+      "depends_on": [
+        "C0-integ-core"
+      ],
+      "concurrent_with": [],
+      "platform": "linux",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "e2e-triad-smoke-20251231T140247Z-c0-integ-linux",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "C0-integ-macos",
+      "name": "C0 slice (integration macOS)",
+      "type": "integration",
+      "phase": "C0",
+      "status": "pending",
+      "description": "macOS platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/plan.md",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/C0-spec.md",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/smoke/macos-smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "macos smoke is green for this slice"
+      ],
+      "start_checklist": [
+        "Run on macos host if possible",
+        "git checkout feat/e2e-triad-smoke-20251231T140247Z && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/e2e-triad-smoke-20251231T140247Z\" TASK_ID=\"C0-integ-macos\""
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir \"docs/project_management/next/e2e-triad-smoke-20251231T140247Z\" --runner-kind self-hosted --platform macos --cleanup",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ-macos\" SMOKE=1 TASK_PLATFORM=\"macos\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/e2e-triad-smoke-20251231T140247Z-c0-integ-macos",
+      "integration_task": "C0-integ-macos",
+      "kickoff_prompt": "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/kickoff_prompts/C0-integ-macos.md",
+      "depends_on": [
+        "C0-integ-core"
+      ],
+      "concurrent_with": [],
+      "platform": "macos",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "e2e-triad-smoke-20251231T140247Z-c0-integ-macos",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "C0-integ-windows",
+      "name": "C0 slice (integration Windows)",
+      "type": "integration",
+      "phase": "C0",
+      "status": "pending",
+      "description": "Windows platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/plan.md",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/C0-spec.md",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "windows smoke is green for this slice"
+      ],
+      "start_checklist": [
+        "Run on windows host if possible",
+        "git checkout feat/e2e-triad-smoke-20251231T140247Z && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/e2e-triad-smoke-20251231T140247Z\" TASK_ID=\"C0-integ-windows\""
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir \"docs/project_management/next/e2e-triad-smoke-20251231T140247Z\" --runner-kind self-hosted --platform windows --cleanup",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ-windows\" SMOKE=1 TASK_PLATFORM=\"windows\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/e2e-triad-smoke-20251231T140247Z-c0-integ-windows",
+      "integration_task": "C0-integ-windows",
+      "kickoff_prompt": "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/kickoff_prompts/C0-integ-windows.md",
+      "depends_on": [
+        "C0-integ-core"
+      ],
+      "concurrent_with": [],
+      "platform": "windows",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "e2e-triad-smoke-20251231T140247Z-c0-integ-windows",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "C0-integ",
+      "name": "C0 slice (integration final)",
+      "type": "integration",
+      "phase": "C0",
+      "status": "pending",
+      "description": "Final cross-platform integration: merge any platform fixes and confirm all platforms are green.",
+      "references": [
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/plan.md",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/C0-spec.md",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/smoke/linux-smoke.sh",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/smoke/macos-smoke.sh",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/smoke/windows-smoke.ps1",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/C0-closeout_report.md"
+      ],
+      "acceptance_criteria": [
+        "All required platforms are green and the slice matches the spec"
+      ],
+      "start_checklist": [
+        "git checkout feat/e2e-triad-smoke-20251231T140247Z && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/e2e-triad-smoke-20251231T140247Z\" TASK_ID=\"C0-integ\""
+      ],
+      "end_checklist": [
+        "Merge platform-fix branches (if any) + resolve conflicts",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "Re-run cross-platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir \"docs/project_management/next/e2e-triad-smoke-20251231T140247Z\" --runner-kind self-hosted --platform all --cleanup",
+        "Complete slice closeout gate report: docs/project_management/next/e2e-triad-smoke-20251231T140247Z/C0-closeout_report.md",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/e2e-triad-smoke-20251231T140247Z-c0-integ",
+      "integration_task": "C0-integ",
+      "kickoff_prompt": "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/kickoff_prompts/C0-integ.md",
+      "depends_on": [
+        "C0-integ-core",
+        "C0-integ-linux",
+        "C0-integ-macos",
+        "C0-integ-windows"
+      ],
+      "concurrent_with": [],
+      "git_branch": "e2e-triad-smoke-20251231T140247Z-c0-integ",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": true
+    },
+    {
+      "id": "FZ-feature-cleanup",
+      "name": "Feature cleanup (worktrees + branches)",
+      "type": "ops",
+      "phase": "FZ",
+      "status": "pending",
+      "description": "At feature end, remove retained worktrees and optionally prune task branches via scripts/triad/feature_cleanup.sh.",
+      "references": [
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/plan.md",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/tasks.json",
+        "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/session_log.md",
+        "scripts/triad/feature_cleanup.sh"
+      ],
+      "acceptance_criteria": [
+        "All worktrees removed (or intentionally retained) and cleanup summary recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/e2e-triad-smoke-20251231T140247Z && git pull --ff-only",
+        "Confirm all tasks are completed and merged as intended",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "end_checklist": [
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/e2e-triad-smoke-20251231T140247Z\" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Then run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/e2e-triad-smoke-20251231T140247Z\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Set status to completed; add END entry with script summary; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/e2e-triad-smoke-20251231T140247Z/kickoff_prompts/FZ-feature-cleanup.md",
+      "depends_on": [
+        "C0-integ"
+      ],
+      "concurrent_with": []
+    }
+  ]
+}
