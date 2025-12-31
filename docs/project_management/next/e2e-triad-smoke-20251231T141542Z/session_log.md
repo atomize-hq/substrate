@@ -26,3 +26,6 @@
   - `NONE`
 - Next steps:
   - Fill specs + tasks + prompts; then run the planning quality gate.
+
+START 2025-12-31T14:15:44Z F0-exec-preflight
+END   2025-12-31T14:15:44Z F0-exec-preflight (ACCEPT)
