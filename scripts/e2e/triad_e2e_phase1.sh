@@ -523,16 +523,17 @@ if [[ "${SKIP_SEQUENCING_UPDATE}" -eq 0 ]]; then
     if [[ "${DRY_RUN}" -eq 1 ]]; then
         echo "+ update docs/project_management/next/sequencing.json" >&2
     else
-        python3 - <<PY
+        python3 - "${FEATURE_DIR}" "${FEATURE}" "${ORCH_BRANCH}" <<'PY'
 import json
+import sys
 from pathlib import Path
 
 path = Path("docs/project_management/next/sequencing.json")
 data = json.loads(path.read_text(encoding="utf-8"))
 sprints = data.get("sprints", [])
-feat_dir = ${FEATURE_DIR!r}
-feat_id = f"e2e_{${FEATURE!r}}"
-branch = ${ORCH_BRANCH!r}
+feat_dir = sys.argv[1]
+feat_id = f"e2e_{sys.argv[2]}"
+branch = sys.argv[3]
 
 if any(s.get("directory") == feat_dir for s in sprints if isinstance(s, dict)):
     raise SystemExit("sequencing.json already has an entry for this directory")
