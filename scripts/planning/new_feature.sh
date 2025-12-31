@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  scripts/planning/new_feature.sh --feature <feature_dir_name> [--decision-heavy] [--cross-platform] [--wsl-required] [--wsl-separate]
+  scripts/planning/new_feature.sh --feature <feature_dir_name> [--decision-heavy] [--cross-platform] [--wsl-required] [--wsl-separate] [--automation]
 
 Example:
   scripts/planning/new_feature.sh --feature world-sync --decision-heavy --cross-platform
@@ -24,6 +24,7 @@ DECISION_HEAVY=0
 CROSS_PLATFORM=0
 WSL_REQUIRED=0
 WSL_SEPARATE=0
+AUTOMATION=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -45,6 +46,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --wsl-separate)
             WSL_SEPARATE=1
+            shift 1
+            ;;
+        --automation)
+            AUTOMATION=1
             shift 1
             ;;
         -h|--help)
@@ -134,8 +139,11 @@ render "${TEMPLATES_DIR}/execution_preflight_report.md.tmpl" "${FEATURE_DIR}/exe
 render "${TEMPLATES_DIR}/slice_closeout_report.md.tmpl" "${FEATURE_DIR}/C0-closeout_report.md" "" "C0-spec.md" "" "" "" "C0"
 
 render "${TEMPLATES_DIR}/kickoff_exec_preflight.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/F0-exec-preflight.md" "F0-exec-preflight"
+if [[ "${AUTOMATION}" -eq 1 ]]; then
+    render "${TEMPLATES_DIR}/kickoff_feature_cleanup.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/FZ-feature-cleanup.md" "FZ-feature-cleanup"
+fi
 
-FEATURE="${FEATURE}" FEATURE_DIR="${FEATURE_DIR}" CROSS_PLATFORM="${CROSS_PLATFORM}" WSL_REQUIRED="${WSL_REQUIRED}" WSL_SEPARATE="${WSL_SEPARATE}" \
+FEATURE="${FEATURE}" FEATURE_DIR="${FEATURE_DIR}" CROSS_PLATFORM="${CROSS_PLATFORM}" WSL_REQUIRED="${WSL_REQUIRED}" WSL_SEPARATE="${WSL_SEPARATE}" AUTOMATION="${AUTOMATION}" \
 python3 - <<'PY'
 import json
 import os
@@ -145,6 +153,7 @@ feature_dir = os.environ["FEATURE_DIR"]
 cross_platform = os.environ["CROSS_PLATFORM"] == "1"
 wsl_required = os.environ["WSL_REQUIRED"] == "1"
 wsl_separate = os.environ["WSL_SEPARATE"] == "1"
+automation = os.environ.get("AUTOMATION", "0") == "1"
 
 tasks_path = os.path.join(feature_dir, "tasks.json")
 
@@ -158,8 +167,12 @@ def refs(*extra: str) -> list:
     return base + [os.path.join(feature_dir, x) for x in extra]
 
 
+def _branch(suffix: str) -> str:
+    return f"{feature}-{suffix}" if automation else suffix
+
+
 def code_task(task_id: str, other_id: str) -> dict:
-    return {
+    task = {
         "id": task_id,
         "name": "C0 slice (code)",
         "type": "code",
@@ -172,12 +185,13 @@ def code_task(task_id: str, other_id: str) -> dict:
             f"git checkout feat/{feature} && git pull --ff-only",
             "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
-            f"Create branch c0-code and worktree wt/{feature}-c0-code; do not edit planning docs inside the worktree",
+            f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"{task_id}\"",
         ],
         "end_checklist": [
             "cargo fmt",
             "cargo clippy --workspace --all-targets -- -D warnings",
-            "Commit worktree changes; merge back ff-only; update docs; remove worktree",
+            f"From inside the worktree: scripts/triad/task_finish.sh --task-id {task_id}",
+            "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)",
         ],
         "worktree": f"wt/{feature}-c0-code",
         "integration_task": "C0-integ-core" if cross_platform else "C0-integ",
@@ -185,10 +199,14 @@ def code_task(task_id: str, other_id: str) -> dict:
         "depends_on": ["F0-exec-preflight"],
         "concurrent_with": [other_id],
     }
+    if automation:
+        task["git_branch"] = _branch("c0-code")
+        task["required_make_targets"] = ["triad-code-checks"]
+    return task
 
 
 def test_task(task_id: str, other_id: str) -> dict:
-    return {
+    task = {
         "id": task_id,
         "name": "C0 slice (test)",
         "type": "test",
@@ -201,12 +219,13 @@ def test_task(task_id: str, other_id: str) -> dict:
             f"git checkout feat/{feature} && git pull --ff-only",
             "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
-            f"Create branch c0-test and worktree wt/{feature}-c0-test; do not edit planning docs inside the worktree",
+            f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"{task_id}\"",
         ],
         "end_checklist": [
             "cargo fmt",
             "Run the targeted tests you add/touch",
-            "Commit worktree changes; merge back ff-only; update docs; remove worktree",
+            f"From inside the worktree: scripts/triad/task_finish.sh --task-id {task_id}",
+            "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)",
         ],
         "worktree": f"wt/{feature}-c0-test",
         "integration_task": "C0-integ-core" if cross_platform else "C0-integ",
@@ -214,15 +233,20 @@ def test_task(task_id: str, other_id: str) -> dict:
         "depends_on": ["F0-exec-preflight"],
         "concurrent_with": [other_id],
     }
+    if automation:
+        task["git_branch"] = _branch("c0-test")
+        task["required_make_targets"] = ["triad-test-checks"]
+    return task
 
 
 def integ_core_task() -> dict:
+    task: dict
     dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform all'
     if wsl_required:
         dispatch += " --run-wsl"
     dispatch += " --cleanup"
 
-    return {
+    task = {
         "id": "C0-integ-core",
         "name": "C0 slice (integration core)",
         "type": "integration",
@@ -235,7 +259,7 @@ def integ_core_task() -> dict:
             f"git checkout feat/{feature} && git pull --ff-only",
             "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
-            f"Create branch c0-integ-core and worktree wt/{feature}-c0-integ-core; do not edit planning docs inside the worktree",
+            f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"C0-integ-core\"",
         ],
         "end_checklist": [
             "cargo fmt",
@@ -243,7 +267,8 @@ def integ_core_task() -> dict:
             "Run relevant tests",
             "make integ-checks",
             f"Dispatch cross-platform smoke via CI: {dispatch} (record run ids/URLs)",
-            "Commit worktree changes; merge back ff-only; update docs; remove worktree",
+            "From inside the worktree: scripts/triad/task_finish.sh --task-id C0-integ-core",
+            "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)",
         ],
         "worktree": f"wt/{feature}-c0-integ-core",
         "integration_task": "C0-integ-core",
@@ -251,6 +276,10 @@ def integ_core_task() -> dict:
         "depends_on": ["C0-code", "C0-test"],
         "concurrent_with": [],
     }
+    if automation:
+        task["git_branch"] = _branch("c0-integ-core")
+        task["required_make_targets"] = ["integ-checks"]
+    return task
 
 
 def integ_platform_task(platform: str) -> dict:
@@ -281,7 +310,7 @@ def integ_platform_task(platform: str) -> dict:
         raise SystemExit(f"unexpected platform: {platform}")
 
     task_id = f"C0-integ-{platform}"
-    return {
+    task = {
         "id": task_id,
         "name": name,
         "type": "integration",
@@ -295,13 +324,14 @@ def integ_platform_task(platform: str) -> dict:
             f"git checkout feat/{feature} && git pull --ff-only",
             "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
-            f"Create branch c0-integ-{platform} and worktree wt/{feature}-c0-integ-{platform}; do not edit planning docs inside the worktree",
+            f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"{task_id}\"",
         ],
         "end_checklist": [
             f"Dispatch platform smoke via CI: {dispatch}",
             "If needed: fix + fmt/clippy + targeted tests",
             "Ensure smoke is green; record run id/URL",
-            "Commit worktree changes (if any); merge back ff-only; update docs; remove worktree",
+            f"From inside the worktree: scripts/triad/task_finish.sh --task-id {task_id} --smoke --platform {platform}",
+            "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)",
         ],
         "worktree": f"wt/{feature}-c0-integ-{platform}",
         "integration_task": task_id,
@@ -312,15 +342,20 @@ def integ_platform_task(platform: str) -> dict:
         "runner": "github-actions",
         "workflow": ".github/workflows/feature-smoke.yml",
     }
+    if automation:
+        task["git_branch"] = _branch(f"c0-integ-{platform}")
+        task["required_make_targets"] = ["triad-code-checks"]
+    return task
 
 
 def integ_final_task(platform_tasks: list) -> dict:
+    task: dict
     dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform all'
     if wsl_required:
         dispatch += " --run-wsl"
     dispatch += " --cleanup"
 
-    return {
+    task = {
         "id": "C0-integ",
         "name": "C0 slice (integration final)",
         "type": "integration",
@@ -333,7 +368,7 @@ def integ_final_task(platform_tasks: list) -> dict:
             f"git checkout feat/{feature} && git pull --ff-only",
             "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
-            f"Create branch c0-integ and worktree wt/{feature}-c0-integ; do not edit planning docs inside the worktree",
+            f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"C0-integ\"",
         ],
         "end_checklist": [
             "Merge platform-fix branches (if any) + resolve conflicts",
@@ -343,7 +378,8 @@ def integ_final_task(platform_tasks: list) -> dict:
             "make integ-checks",
             f"Re-run cross-platform smoke via CI: {dispatch}",
             f"Complete slice closeout gate report: {os.path.join(feature_dir, 'C0-closeout_report.md')}",
-            "Commit worktree changes; merge back ff-only; update docs; remove worktree",
+            "From inside the worktree: scripts/triad/task_finish.sh --task-id C0-integ",
+            "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)",
         ],
         "worktree": f"wt/{feature}-c0-integ",
         "integration_task": "C0-integ",
@@ -351,10 +387,14 @@ def integ_final_task(platform_tasks: list) -> dict:
         "depends_on": ["C0-integ-core"] + [f"C0-integ-{p}" for p in platform_tasks],
         "concurrent_with": [],
     }
+    if automation:
+        task["git_branch"] = _branch("c0-integ")
+        task["required_make_targets"] = ["integ-checks"]
+    return task
 
 
 def integ_single_task() -> dict:
-    return {
+    task = {
         "id": "C0-integ",
         "name": "C0 slice (integration)",
         "type": "integration",
@@ -367,7 +407,7 @@ def integ_single_task() -> dict:
             f"git checkout feat/{feature} && git pull --ff-only",
             "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
-            f"Create branch c0-integ and worktree wt/{feature}-c0-integ; do not edit planning docs inside the worktree",
+            f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"C0-integ\"",
         ],
         "end_checklist": [
             "cargo fmt",
@@ -375,7 +415,8 @@ def integ_single_task() -> dict:
             "Run relevant tests",
             "make integ-checks",
             f"Complete slice closeout gate report: {os.path.join(feature_dir, 'C0-closeout_report.md')}",
-            "Commit worktree changes; merge back ff-only; update docs; remove worktree",
+            "From inside the worktree: scripts/triad/task_finish.sh --task-id C0-integ",
+            "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)",
         ],
         "worktree": f"wt/{feature}-c0-integ",
         "integration_task": "C0-integ",
@@ -383,14 +424,20 @@ def integ_single_task() -> dict:
         "depends_on": ["C0-code", "C0-test"],
         "concurrent_with": [],
     }
+    if automation:
+        task["git_branch"] = _branch("c0-integ")
+        task["required_make_targets"] = ["integ-checks"]
+    return task
 
 
 meta = {
-    "schema_version": 2 if cross_platform else 1,
+    "schema_version": 3 if automation else (2 if cross_platform else 1),
     "feature": feature,
     "cross_platform": cross_platform,
     "execution_gates": True,
 }
+if automation:
+    meta["automation"] = {"enabled": True, "orchestration_branch": f"feat/{feature}"}
 
 tasks = []
 
@@ -410,7 +457,7 @@ tasks.append(
         ],
         "acceptance_criteria": ["Execution preflight recommendation recorded (ACCEPT or REVISE)"],
         "start_checklist": [
-            f"git checkout feat/{feature} && git pull --ff-only",
+            f"Run: make triad-orch-ensure FEATURE_DIR=\"{feature_dir}\"" if automation else f"git checkout feat/{feature} && git pull --ff-only",
             "Read plan.md, tasks.json, session_log.md, specs, kickoff prompt",
             "Set status to in_progress; add START entry; commit docs",
         ],
@@ -446,6 +493,42 @@ if cross_platform:
     tasks.append(integ_final_task(platforms))
 else:
     tasks.append(integ_single_task())
+
+if automation:
+    tasks.append(
+        {
+            "id": "FZ-feature-cleanup",
+            "name": "Feature cleanup (worktrees + branches)",
+            "type": "ops",
+            "phase": "FZ",
+            "status": "pending",
+            "description": "At feature end, remove retained worktrees and optionally prune task branches via scripts/triad/feature_cleanup.sh.",
+            "references": [
+                os.path.join(feature_dir, "plan.md"),
+                os.path.join(feature_dir, "tasks.json"),
+                os.path.join(feature_dir, "session_log.md"),
+                "scripts/triad/feature_cleanup.sh",
+            ],
+            "acceptance_criteria": [
+                "All worktrees removed (or intentionally retained) and cleanup summary recorded in session_log.md",
+            ],
+            "start_checklist": [
+                f"git checkout feat/{feature} && git pull --ff-only",
+                "Confirm all tasks are completed and merged as intended",
+                "Set status to in_progress; add START entry; commit docs",
+            ],
+            "end_checklist": [
+                f"Run: make triad-feature-cleanup FEATURE_DIR=\"{feature_dir}\" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+                f"Then run: make triad-feature-cleanup FEATURE_DIR=\"{feature_dir}\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+                "Set status to completed; add END entry with script summary; commit docs",
+            ],
+            "worktree": None,
+            "integration_task": None,
+            "kickoff_prompt": os.path.join(feature_dir, "kickoff_prompts", "FZ-feature-cleanup.md"),
+            "depends_on": ["C0-integ"],
+            "concurrent_with": [],
+        }
+    )
 
 data = {"meta": meta, "tasks": tasks}
 with open(tasks_path, "w", encoding="utf-8") as handle:
@@ -802,19 +885,31 @@ JSON
 fi
 LEGACY_TASKS_JSON
 
-render "${TEMPLATES_DIR}/kickoff_code.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-code.md" "C0-code" "C0-spec.md" "c0-code" "wt/${FEATURE}-c0-code"
-render "${TEMPLATES_DIR}/kickoff_test.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-test.md" "C0-test" "C0-spec.md" "c0-test" "wt/${FEATURE}-c0-test"
-if [[ "${CROSS_PLATFORM}" -eq 1 ]]; then
-    render "${TEMPLATES_DIR}/kickoff_integ_core.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ-core.md" "C0-integ-core" "C0-spec.md" "c0-integ-core" "wt/${FEATURE}-c0-integ-core"
-    render "${TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ-linux.md" "C0-integ-linux" "C0-spec.md" "c0-integ-linux" "wt/${FEATURE}-c0-integ-linux" "linux"
-    render "${TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ-macos.md" "C0-integ-macos" "C0-spec.md" "c0-integ-macos" "wt/${FEATURE}-c0-integ-macos" "macos"
-    render "${TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ-windows.md" "C0-integ-windows" "C0-spec.md" "c0-integ-windows" "wt/${FEATURE}-c0-integ-windows" "windows"
-    if [[ "${WSL_REQUIRED}" -eq 1 && "${WSL_SEPARATE}" -eq 1 ]]; then
-        render "${TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ-wsl.md" "C0-integ-wsl" "C0-spec.md" "c0-integ-wsl" "wt/${FEATURE}-c0-integ-wsl" "wsl"
-    fi
-    render "${TEMPLATES_DIR}/kickoff_integ_final.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ.md" "C0-integ" "C0-spec.md" "c0-integ" "wt/${FEATURE}-c0-integ"
+if [[ "${AUTOMATION}" -eq 1 ]]; then
+    C0_CODE_BRANCH="${FEATURE}-c0-code"
+    C0_TEST_BRANCH="${FEATURE}-c0-test"
+    C0_INTEG_BRANCH="${FEATURE}-c0-integ"
+    C0_INTEG_CORE_BRANCH="${FEATURE}-c0-integ-core"
 else
-    render "${TEMPLATES_DIR}/kickoff_integ.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ.md" "C0-integ" "C0-spec.md" "c0-integ" "wt/${FEATURE}-c0-integ"
+    C0_CODE_BRANCH="c0-code"
+    C0_TEST_BRANCH="c0-test"
+    C0_INTEG_BRANCH="c0-integ"
+    C0_INTEG_CORE_BRANCH="c0-integ-core"
+fi
+
+render "${TEMPLATES_DIR}/kickoff_code.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-code.md" "C0-code" "C0-spec.md" "${C0_CODE_BRANCH}" "wt/${FEATURE}-c0-code"
+render "${TEMPLATES_DIR}/kickoff_test.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-test.md" "C0-test" "C0-spec.md" "${C0_TEST_BRANCH}" "wt/${FEATURE}-c0-test"
+if [[ "${CROSS_PLATFORM}" -eq 1 ]]; then
+    render "${TEMPLATES_DIR}/kickoff_integ_core.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ-core.md" "C0-integ-core" "C0-spec.md" "${C0_INTEG_CORE_BRANCH}" "wt/${FEATURE}-c0-integ-core"
+    render "${TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ-linux.md" "C0-integ-linux" "C0-spec.md" "${FEATURE}-c0-integ-linux" "wt/${FEATURE}-c0-integ-linux" "linux"
+    render "${TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ-macos.md" "C0-integ-macos" "C0-spec.md" "${FEATURE}-c0-integ-macos" "wt/${FEATURE}-c0-integ-macos" "macos"
+    render "${TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ-windows.md" "C0-integ-windows" "C0-spec.md" "${FEATURE}-c0-integ-windows" "wt/${FEATURE}-c0-integ-windows" "windows"
+    if [[ "${WSL_REQUIRED}" -eq 1 && "${WSL_SEPARATE}" -eq 1 ]]; then
+        render "${TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ-wsl.md" "C0-integ-wsl" "C0-spec.md" "${FEATURE}-c0-integ-wsl" "wt/${FEATURE}-c0-integ-wsl" "wsl"
+    fi
+    render "${TEMPLATES_DIR}/kickoff_integ_final.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ.md" "C0-integ" "C0-spec.md" "${C0_INTEG_BRANCH}" "wt/${FEATURE}-c0-integ"
+else
+    render "${TEMPLATES_DIR}/kickoff_integ.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ.md" "C0-integ" "C0-spec.md" "${C0_INTEG_BRANCH}" "wt/${FEATURE}-c0-integ"
 fi
 
 if [[ "${DECISION_HEAVY}" -eq 1 || "${CROSS_PLATFORM}" -eq 1 ]]; then

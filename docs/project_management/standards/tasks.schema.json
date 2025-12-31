@@ -15,6 +15,14 @@
                 "wsl_required": { "type": "boolean" },
                 "wsl_task_mode": { "type": "string", "enum": ["bundled", "separate"] },
                 "execution_gates": { "type": "boolean" },
+                "automation": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                        "enabled": { "type": "boolean" },
+                        "orchestration_branch": { "type": "string" }
+                    }
+                },
                 "notes": { "type": "string" },
                 "external_task_ids": { "type": "array", "items": { "type": "string" } }
             }
@@ -62,7 +70,9 @@
                     "concurrent_with": { "type": "array", "items": { "type": "string" } },
                     "platform": { "type": "string", "enum": ["linux", "macos", "windows", "wsl"] },
                     "runner": { "type": "string", "enum": ["local", "github-actions", "manual"] },
-                    "workflow": { "type": "string" }
+                    "workflow": { "type": "string" },
+                    "git_branch": { "type": "string" },
+                    "required_make_targets": { "type": "array", "items": { "type": "string" } }
                 }
             }
         }

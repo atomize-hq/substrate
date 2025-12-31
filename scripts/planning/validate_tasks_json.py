@@ -15,6 +15,7 @@ ALLOWED_PLATFORMS_REQUIRED = {"linux", "macos", "windows"}
 ALLOWED_RUNNERS = {"local", "github-actions", "manual"}
 DEFAULT_SCHEMA_VERSION = 1
 ALLOWED_WSL_TASK_MODES = {"bundled", "separate"}
+AUTOMATION_SCHEMA_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -153,6 +154,90 @@ def _validate_execution_gates(
         txt = "\n".join(final_task.get("references", []) + final_task.get("end_checklist", []))
         if f"{slice_id}-closeout_report.md" not in txt:
             _error(errors, f"{path}: {final_id!r} must reference {slice_id}-closeout_report.md in references/end_checklist")
+
+
+def _validate_task_automation(
+    feature_dir: str, tasks: List[Dict[str, Any]], meta: Dict[str, Any], errors: List[ValidationError], path: str
+) -> None:
+    """
+    Enforce the triad automation shape only when explicitly opted in:
+      - meta.schema_version >= 3, and
+      - meta.automation.enabled == true
+
+    This avoids breaking existing Planning Packs.
+    """
+    schema_version = meta.get("schema_version", DEFAULT_SCHEMA_VERSION)
+    automation = meta.get("automation")
+    if not isinstance(schema_version, int):
+        return
+    if schema_version < AUTOMATION_SCHEMA_VERSION:
+        # If someone sets meta.automation.enabled=true without bumping schema_version, treat as invalid opt-in.
+        if isinstance(automation, dict) and automation.get("enabled") is True:
+            _error(errors, f"{path}: meta.automation.enabled=true requires meta.schema_version >= {AUTOMATION_SCHEMA_VERSION}")
+        return
+
+    if not isinstance(automation, dict) or automation.get("enabled") is not True:
+        _error(errors, f"{path}: meta.schema_version >= {AUTOMATION_SCHEMA_VERSION} requires meta.automation.enabled=true")
+        return
+
+    feature = meta.get("feature")
+    if not isinstance(feature, str) or not feature:
+        _error(errors, f"{path}: meta.schema_version >= {AUTOMATION_SCHEMA_VERSION} requires meta.feature to be a non-empty string")
+
+    orchestration_branch = automation.get("orchestration_branch")
+    if not isinstance(orchestration_branch, str) or not orchestration_branch:
+        _error(
+            errors,
+            f"{path}: meta.schema_version >= {AUTOMATION_SCHEMA_VERSION} requires meta.automation.orchestration_branch to be a non-empty string",
+        )
+
+    tasks_by_id: Dict[str, Dict[str, Any]] = {t.get("id"): t for t in tasks if isinstance(t.get("id"), str)}
+
+    # Feature-level cleanup task (required for worktree retention model).
+    cleanup = tasks_by_id.get("FZ-feature-cleanup")
+    if cleanup is None:
+        _error(errors, f"{path}: meta.schema_version >= {AUTOMATION_SCHEMA_VERSION} requires an ops task with id 'FZ-feature-cleanup'")
+    else:
+        if cleanup.get("type") != "ops":
+            _error(errors, f"{path}: 'FZ-feature-cleanup' must have type='ops'")
+        if cleanup.get("worktree") is not None:
+            _error(errors, f"{path}: 'FZ-feature-cleanup' must set worktree=null")
+        kickoff = cleanup.get("kickoff_prompt")
+        if not isinstance(kickoff, str) or not kickoff:
+            _error(errors, f"{path}: 'FZ-feature-cleanup' must have a kickoff_prompt path")
+        else:
+            expected_prefix = os.path.join(feature_dir, "kickoff_prompts")
+            if os.path.commonpath([os.path.abspath(kickoff), os.path.abspath(expected_prefix)]) != os.path.abspath(expected_prefix):
+                _error(errors, f"{path}: 'FZ-feature-cleanup' kickoff_prompt must live under feature_dir/kickoff_prompts")
+
+    # Per-task structured automation fields.
+    branches: List[str] = []
+    for index, task in enumerate(tasks):
+        task_id = task.get("id")
+        if not isinstance(task_id, str):
+            continue
+
+        task_type = task.get("type")
+        if task_type not in {"code", "test", "integration"}:
+            continue
+
+        prefix = f"{path}:tasks[{index}]({task_id})"
+
+        git_branch = task.get("git_branch")
+        if not isinstance(git_branch, str) or not git_branch:
+            _error(errors, f"{prefix}.git_branch: required non-empty string for automation packs")
+        else:
+            branches.append(git_branch)
+
+        required_targets = task.get("required_make_targets")
+        if required_targets is None:
+            _error(errors, f"{prefix}.required_make_targets: required array of strings (may be empty) for automation packs")
+        elif not _is_str_list(required_targets):
+            _error(errors, f"{prefix}.required_make_targets: must be an array of strings")
+
+    duplicates = {b for b in branches if branches.count(b) > 1}
+    if duplicates:
+        _error(errors, f"{path}: duplicate git_branch values (must be unique): {', '.join(sorted(duplicates))}")
 
 
 def _validate_task_fields(tasks: List[Dict[str, Any]], errors: List[ValidationError], path: str) -> None:
@@ -487,6 +572,7 @@ def validate_tasks_json(feature_dir: str) -> Tuple[List[ValidationError], str]:
     _validate_smoke_linkage(feature_dir, tasks, errors, tasks_path)
     _validate_platform_integ_model(feature_dir, tasks, meta, errors, tasks_path)
     _validate_execution_gates(feature_dir, tasks, meta, errors, tasks_path)
+    _validate_task_automation(feature_dir, tasks, meta, errors, tasks_path)
 
     return errors, tasks_path
 

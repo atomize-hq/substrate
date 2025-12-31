@@ -159,6 +159,7 @@ DECISION_HEAVY ?= 0
 CROSS_PLATFORM ?= 0
 WSL_REQUIRED ?= 0
 WSL_SEPARATE ?= 0
+AUTOMATION ?= 0
 
 .PHONY: planning-new-feature
 planning-new-feature:
@@ -169,6 +170,7 @@ planning-new-feature:
 	if [ "$(CROSS_PLATFORM)" = "1" ]; then cmd="$$cmd --cross-platform"; fi; \
 	if [ "$(WSL_REQUIRED)" = "1" ]; then cmd="$$cmd --wsl-required"; fi; \
 	if [ "$(WSL_SEPARATE)" = "1" ]; then cmd="$$cmd --wsl-separate"; fi; \
+	if [ "$(AUTOMATION)" = "1" ]; then cmd="$$cmd --automation"; fi; \
 	eval "$$cmd"; \
 	$(MAKE) planning-validate FEATURE_DIR="docs/project_management/next/$(FEATURE)"
 
@@ -182,5 +184,83 @@ planning-new-feature-ps:
 	if [ "$(CROSS_PLATFORM)" = "1" ]; then cmd="$$cmd -CrossPlatform"; fi; \
 	if [ "$(WSL_REQUIRED)" = "1" ]; then cmd="$$cmd -WslRequired"; fi; \
 	if [ "$(WSL_SEPARATE)" = "1" ]; then cmd="$$cmd -WslSeparate"; fi; \
+	if [ "$(AUTOMATION)" = "1" ]; then cmd="$$cmd -Automation"; fi; \
 	eval "$$cmd"; \
 	$(MAKE) planning-validate FEATURE_DIR="docs/project_management/next/$(FEATURE)"
+
+# =========================
+# Triad execution automation
+# =========================
+
+TASK_ID ?=
+TASK_PLATFORM ?=
+
+LAUNCH_CODEX ?= 0
+CODEX_PROFILE ?=
+CODEX_MODEL ?=
+CODEX_JSONL ?= 0
+
+VERIFY_ONLY ?= 0
+NO_COMMIT ?= 0
+SMOKE ?= 0
+
+REMOVE_WORKTREES ?= 0
+PRUNE_LOCAL ?= 0
+PRUNE_REMOTE ?=
+FORCE ?= 0
+DRY_RUN ?= 0
+
+.PHONY: triad-code-checks
+triad-code-checks:
+	cargo fmt
+	cargo clippy --workspace --all-targets -- -D warnings
+
+.PHONY: triad-test-checks
+triad-test-checks:
+	cargo fmt
+
+.PHONY: triad-task-start
+triad-task-start:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(TASK_ID)" ]; then echo "ERROR: set TASK_ID=<task-id>"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="scripts/triad/task_start.sh --feature-dir \"$(FEATURE_DIR)\" --task-id \"$(TASK_ID)\""; \
+	if [ "$(LAUNCH_CODEX)" = "1" ]; then cmd="$$cmd --launch-codex"; fi; \
+	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
+	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
+	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
+	if [ -n "$(TASK_PLATFORM)" ]; then cmd="$$cmd --platform \"$(TASK_PLATFORM)\""; fi; \
+	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
+	eval "$$cmd"
+
+.PHONY: triad-orch-ensure
+triad-orch-ensure:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="scripts/triad/orch_ensure.sh --feature-dir \"$(FEATURE_DIR)\""; \
+	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
+	eval "$$cmd"
+
+.PHONY: triad-task-finish
+triad-task-finish:
+	@if [ -z "$(TASK_ID)" ]; then echo "ERROR: set TASK_ID=<task-id>"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="scripts/triad/task_finish.sh --task-id \"$(TASK_ID)\""; \
+	if [ "$(VERIFY_ONLY)" = "1" ]; then cmd="$$cmd --verify-only"; fi; \
+	if [ "$(NO_COMMIT)" = "1" ]; then cmd="$$cmd --no-commit"; fi; \
+	if [ "$(SMOKE)" = "1" ]; then cmd="$$cmd --smoke"; fi; \
+	if [ -n "$(TASK_PLATFORM)" ]; then cmd="$$cmd --platform \"$(TASK_PLATFORM)\""; fi; \
+	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
+	eval "$$cmd"
+
+.PHONY: triad-feature-cleanup
+triad-feature-cleanup:
+	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="scripts/triad/feature_cleanup.sh --feature-dir \"$(FEATURE_DIR)\""; \
+	if [ "$(REMOVE_WORKTREES)" = "1" ]; then cmd="$$cmd --remove-worktrees"; fi; \
+	if [ "$(PRUNE_LOCAL)" = "1" ]; then cmd="$$cmd --prune-local-branches"; fi; \
+	if [ -n "$(PRUNE_REMOTE)" ]; then cmd="$$cmd --prune-remote-branches \"$(PRUNE_REMOTE)\""; fi; \
+	if [ "$(FORCE)" = "1" ]; then cmd="$$cmd --force"; fi; \
+	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
+	eval "$$cmd"

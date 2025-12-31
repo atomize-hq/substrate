@@ -41,6 +41,9 @@ This document explains, step by step, how to create a new feature directory, def
   - `end_checklist` (array of steps)
   - `worktree`, `integration_task`, `kickoff_prompt`
   - `depends_on` (list), `concurrent_with` (list)
+- Optional (required when triad automation is enabled; schema v3):
+  - `git_branch` (deterministic task branch name)
+  - `required_make_targets` (array of make targets for `task_finish`)
 - Example entry:
 ```json
 {
@@ -59,15 +62,16 @@ This document explains, step by step, how to create a new feature directory, def
   "start_checklist": [
     "Checkout feat/world-sync, pull ff-only",
     "Set status to in_progress, log START, commit docs",
-    "Create branch ws-c2-sync-code and worktree wt/ws-c2-sync-code"
+    "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-sync\" TASK_ID=\"C2-code\""
   ],
   "end_checklist": [
     "Run fmt/clippy",
-    "Commit worktree changes",
-    "Merge back ff-only to feat/world-sync",
-    "Update tasks/session log, commit docs, remove worktree"
+    "From inside the worktree: make triad-task-finish TASK_ID=\"C2-code\"",
+    "Update tasks/session log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
   ],
-  "worktree": "wt/ws-c2-sync-code",
+  "worktree": "wt/world-sync-c2-sync-code",
+  "git_branch": "world-sync-c2-sync-code",
+  "required_make_targets": ["triad-code-checks"],
   "integration_task": "C2-integ",
   "kickoff_prompt": "docs/project_management/next/world-sync/kickoff_prompts/C2-code.md",
   "depends_on": ["C1-integ"],
@@ -84,9 +88,9 @@ Must include:
 ### Kickoff prompts
 Each prompt must include:
 - Scope and explicit role boundaries (“prod code only, no tests” for code; “tests only” for test; integration owns aligning to spec).
-- Start checklist (always): checkout orchestration branch, pull ff-only, read plan/tasks/session_log/spec/prompt, set task status to `in_progress` in tasks.json, add START entry to session_log.md, commit docs (`docs: start <task-id>`), create task branch and worktree, no docs/tasks/log edits in worktree.
+- Start checklist (always): read plan/tasks/session_log/spec/prompt, verify the task worktree exists and contains `.taskmeta.json`, and repeat the sentinel rule: `Do not edit planning docs inside the worktree.`
 - Requirements: what to build/test, protected paths/safety, required commands (code: fmt/clippy only; test: fmt + targeted tests; integration: fmt/clippy/tests + `make integ-checks`), sanity-check expectations.
-- End checklist: run required commands; commit worktree; merge back to orchestration branch (ff-only); update tasks.json status; add END entry (commands/results/blockers); create downstream prompts if missing (mandatory when absent); commit docs (`docs: finish <task-id>`); remove worktree.
+- End checklist: run required commands; run `make triad-task-finish`; update tasks.json status and add END entry; commit docs (`docs: finish <task-id>`); do not remove the worktree (feature cleanup removes worktrees at feature end).
 
 ## Execution gates (recommended for high-fidelity work)
 
@@ -117,28 +121,61 @@ Mechanics:
 - Worktree: `wt/<branch>` or `wt/<feature-prefix>-<triad>-<short-scope>`.
 - Integration worktrees may be created from a dedicated integration branch or directly from the orchestration branch; ensure tasks.json/kickoff prompts specify the expected workflow.
 
+### Automation naming (opt-in)
+If the Planning Pack opts into triad automation (`tasks.json` meta: `schema_version >= 3` and `meta.automation.enabled=true`):
+- Every code/test/integration task must declare a deterministic branch name in `tasks.json` as `git_branch`.
+- Worktree paths remain explicit via `tasks.json` `worktree`.
+
 ## Start/End Checklists (copy/paste)
+Note: `make triad-task-start` / `make triad-task-finish` require an automation-enabled Planning Pack (`tasks.json` meta: `schema_version >= 3` and `meta.automation.enabled=true`). Legacy packs must either migrate or follow the manual worktree workflow described in their existing prompts.
+
 Start (all tasks):
-1. `git checkout <orchestration-branch> && git pull --ff-only`
+1. Ensure the orchestration branch exists and is checked out:
+   - Automation packs: `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/<feature>"`
+   - Legacy packs: `git checkout <orchestration-branch> && git pull --ff-only`
 2. Read plan/tasks/session_log/spec/prompt.
 3. Set task status to `in_progress` in tasks.json.
 4. Add START entry to session_log.md; commit docs (`docs: start <task-id>`).
-5. Create task branch; create worktree: `git worktree add wt/<worktree> <branch>`.
-6. Do not edit docs/tasks/logs inside worktree.
+5. Create task branch + worktree via the task runner:
+   - `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>"`
+6. Do not edit planning docs inside the worktree.
 
 End (code/test):
 1. Run required commands (code: fmt/clippy; test: fmt + targeted tests). Capture outputs.
-2. Commit worktree changes to the task branch (from inside the worktree). Do **not** touch the orchestration branch.
-3. From the task branch (outside the worktree), fast-forward/merge the worktree commit into the task branch if needed.
-4. Switch to the orchestration branch; update tasks.json status and add the END entry (commands/results/blockers) to session_log.md; create downstream prompts if missing; commit docs (`docs: finish <task-id>`).
-5. Remove worktree: `git worktree remove wt/<worktree>`. Leave the task branch intact for integration.
+2. From inside the worktree, run the task finisher (commits to the task branch; does not merge to orchestration for code/test):
+   - `make triad-task-finish TASK_ID="<task-id>"`
+3. Switch to the orchestration branch; update tasks.json status and add the END entry (commands/results/blockers) to session_log.md; commit docs (`docs: finish <task-id>`).
+4. Do not remove the worktree (worktrees are retained until feature cleanup).
 
 End (integration):
 1. Merge code+test task branches into the integration worktree; resolve drift to spec.
 2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make integ-checks`. Capture outputs.
-3. Commit integration changes to the integration branch.
-4. Fast-forward merge the integration branch into the orchestration branch; update tasks.json/session_log.md with END entry; commit docs (`docs: finish <task-id>`).
-5. Remove worktree.
+3. From inside the worktree, run the task finisher (commits; then fast-forward merges back to orchestration FF-only; non-FF hard-fails):
+   - `make triad-task-finish TASK_ID="<task-id>"`
+4. On the orchestration branch, update tasks.json/session_log.md with END entry; commit docs (`docs: finish <task-id>`).
+5. Do not remove the worktree (worktrees are retained until feature cleanup).
+
+### Feature cleanup (worktree retention model)
+Worktrees are removed only by a feature-level cleanup task (recommended id: `FZ-feature-cleanup`) using:
+- `make triad-feature-cleanup FEATURE_DIR="docs/project_management/next/<feature>" REMOVE_WORKTREES=1 PRUNE_LOCAL=1`
+
+Cleanup consumes the deterministic registry created by `task_start`:
+- `<git-common-dir>/triad/features/<feature>/worktrees.json`
+
+Guardrails:
+- Cleanup refuses to remove dirty worktrees or delete unmerged/unpushed branches unless forced (`FORCE=1`).
+
+### Headless Codex launch (optional)
+`task_start` may launch Codex headless from inside the worktree using the kickoff prompt as stdin. Canonical invocation shape:
+- `codex exec --dangerously-bypass-approvals-and-sandbox --cd <worktree> --output-last-message <path> - < <kickoff_prompt.md>`
+
+Optional flags (when needed):
+- `--profile <profile>` (selects a codex config profile)
+- `--model <model>` (selects a model)
+- `--json` (emit JSONL events to stdout; redirect to a file for auditability)
+
+Automation wrapper:
+- `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="<task-id>" LAUNCH_CODEX=1`
 
 ## Role Command Requirements
 - Code: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; optional targeted/manual sanity checks allowed but not required; no unit/integration suite requirement.

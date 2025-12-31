@@ -120,6 +120,9 @@ Required deliverables (must create or update):
    - Execution gates (recommended; scaffolded by `make planning-new-feature` / `make planning-new-feature-ps`):
      - `docs/project_management/next/<feature>/execution_preflight_report.md`
      - `docs/project_management/next/<feature>/<slice>-closeout_report.md` (e.g., `C0-closeout_report.md`)
+   - If you want to use triad execution automation (task runner/finisher + feature cleanup), scaffold with `AUTOMATION=1`:
+     - `make planning-new-feature FEATURE=<feature> AUTOMATION=1`
+     - `make planning-new-feature-ps FEATURE=<feature> AUTOMATION=1`
 2) If decision-heavy or cross-platform:
    - `docs/project_management/next/<feature>/decision_register.md`
    - `docs/project_management/next/<feature>/integration_map.md`
