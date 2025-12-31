@@ -140,7 +140,68 @@ fi
 echo "Waiting for run to start..."
 sleep 5
 
-run_id="$(gh run list --workflow "${WORKFLOW}" --event workflow_dispatch --branch "${WORKFLOW_REF}" --limit 20 --json databaseId,createdAt -q "map(select(.createdAt >= \"${dispatch_started}\")) | .[0].databaseId")"
+find_run_id_for_checkout_ref() {
+    local checkout_ref="$1"
+    local started_after="$2"
+
+    local candidate_ids
+    candidate_ids="$(
+        gh run list \
+            --workflow "${WORKFLOW}" \
+            --event workflow_dispatch \
+            --branch "${WORKFLOW_REF}" \
+            --limit 50 \
+            --json databaseId,createdAt \
+            -q "map(select(.createdAt >= \"${started_after}\")) | .[].databaseId"
+    )"
+
+    if [[ -z "${candidate_ids}" ]]; then
+        return 1
+    fi
+
+    local candidate_id
+    while IFS= read -r candidate_id; do
+        [[ -z "${candidate_id}" ]] && continue
+
+        local job_ids
+        job_ids="$(gh run view "${candidate_id}" --json jobs -q '.jobs[].databaseId' 2>/dev/null || true)"
+        if [[ -z "${job_ids}" ]]; then
+            continue
+        fi
+
+        local job_id
+        while IFS= read -r job_id; do
+            [[ -z "${job_id}" ]] && continue
+            if gh run view "${candidate_id}" --log --job "${job_id}" 2>/dev/null | grep -Fq "${checkout_ref}"; then
+                echo "${candidate_id}"
+                return 0
+            fi
+        done <<<"${job_ids}"
+    done <<<"${candidate_ids}"
+
+    return 1
+}
+
+run_id=""
+for _attempt in $(seq 1 30); do
+    if run_id="$(find_run_id_for_checkout_ref "${temp_branch}" "${dispatch_started}")"; then
+        break
+    fi
+    sleep 2
+done
+
+if [[ -z "${run_id}" ]]; then
+    run_id="$(
+        gh run list \
+            --workflow "${WORKFLOW}" \
+            --event workflow_dispatch \
+            --branch "${WORKFLOW_REF}" \
+            --limit 50 \
+            --json databaseId,createdAt \
+            -q "map(select(.createdAt >= \"${dispatch_started}\")) | .[0].databaseId"
+    )"
+fi
+
 if [[ -z "${run_id}" ]]; then
     echo "Could not find a matching workflow run for ${temp_branch}" >&2
     exit 4
