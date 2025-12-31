@@ -131,7 +131,7 @@
       "name": "C0 slice (integration core)",
       "type": "integration",
       "phase": "C0",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge C0 code+tests and make the slice green on the primary dev platform.",
       "references": [
         "docs/project_management/next/e2e-triad-smoke-20251231T141542Z/plan.md",
@@ -179,7 +179,7 @@
       "name": "C0 slice (integration Linux)",
       "type": "integration",
       "phase": "C0",
-      "status": "pending",
+      "status": "completed",
       "description": "Linux platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/e2e-triad-smoke-20251231T141542Z/plan.md",
@@ -224,7 +224,7 @@
       "name": "C0 slice (integration macOS)",
       "type": "integration",
       "phase": "C0",
-      "status": "pending",
+      "status": "completed",
       "description": "macOS platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/e2e-triad-smoke-20251231T141542Z/plan.md",
@@ -269,7 +269,7 @@
       "name": "C0 slice (integration Windows)",
       "type": "integration",
       "phase": "C0",
-      "status": "pending",
+      "status": "completed",
       "description": "Windows platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/e2e-triad-smoke-20251231T141542Z/plan.md",
