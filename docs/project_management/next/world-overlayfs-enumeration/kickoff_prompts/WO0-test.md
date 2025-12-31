@@ -1,19 +1,18 @@
-# Kickoff — WO0-test (Tests: enumeration probe + fallback + metadata)
+# Kickoff: WO0-test (Tests: enumeration probe + fallback + metadata)
 
-Role: Test agent (tests only; no production code).
+## Scope
+- Tests only (plus minimal test-only helpers if required for deterministic testing); no production code.
+- ADR: `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+- Spec: `docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md`
 
-## Scope (authoritative)
-- Add tests required by ADR-0004 + `docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md`.
-- Do not modify production code outside of minimal test-only helpers that are strictly required for deterministic testing.
-- Do not edit planning docs from the worktree.
+## Start Checklist
 
-## Start checklist
-1. `git checkout feat/world-overlayfs-enumeration && git pull --ff-only`
-2. Read:
-   - `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
-   - `docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md`
-3. On `feat/world-overlayfs-enumeration`, set `WO0-test` to `in_progress` in `docs/project_management/next/world-overlayfs-enumeration/tasks.json` and commit docs.
-4. Create branch + worktree: `git checkout -b woe-wo0-test` then `git worktree add wt/woe-wo0-test woe-wo0-test`.
+Do not edit planning docs inside the worktree.
+
+1. Verify you are in the task worktree `wt/woe-wo0-test` on branch `woe-wo0-test` and that `.taskmeta.json` exists at the worktree root.
+2. Read: `docs/project_management/next/world-overlayfs-enumeration/plan.md`, `docs/project_management/next/world-overlayfs-enumeration/tasks.json`, `docs/project_management/next/world-overlayfs-enumeration/session_log.md`, ADR, spec, and this prompt.
+3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
+   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/world-overlayfs-enumeration" SLICE_ID="WO0"`
 
 ## Requirements
 - Add Linux coverage for:
@@ -26,13 +25,8 @@ Role: Test agent (tests only; no production code).
 - `cargo fmt`
 - Run targeted `cargo test ...` commands for the tests you add/modify.
 
-## End checklist
-1. Run required commands and fix failures.
-2. Commit changes in `wt/woe-wo0-test` to branch `woe-wo0-test`.
-3. Fast-forward merge back to `feat/world-overlayfs-enumeration`.
-4. Update `WO0-test` status to `completed` in `docs/project_management/next/world-overlayfs-enumeration/tasks.json` and commit docs on `feat/world-overlayfs-enumeration`.
-5. Remove worktree: `git worktree remove wt/woe-wo0-test`.
-
-
-
-Do not edit planning docs inside the worktree.
+## End Checklist
+1. Run required commands and capture outputs.
+2. From inside the worktree, run: `make triad-task-finish TASK_ID="WO0-test"`.
+3. On the orchestration branch, update `tasks.json` and add the END entry to `session_log.md`; commit docs (`docs: finish WO0-test`).
+4. Do not delete the worktree (feature cleanup removes worktrees at feature end).

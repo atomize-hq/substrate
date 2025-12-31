@@ -117,8 +117,23 @@ fn normalize_windows_verbatim_prefix(value: &str) -> String {
     }
 }
 
-fn normalize_path_display(path: &Path) -> String {
-    normalize_windows_verbatim_prefix(&path.display().to_string())
+fn canonicalize_or_self(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn extract_bulleted_paths(message: &str) -> Vec<PathBuf> {
+    message
+        .lines()
+        .filter_map(|line| line.strip_prefix("  - "))
+        .map(|path| PathBuf::from(path.trim()))
+        .collect()
+}
+
+fn message_mentions_path(message: &str, path: &Path) -> bool {
+    let expected = canonicalize_or_self(path);
+    extract_bulleted_paths(message)
+        .iter()
+        .any(|candidate| canonicalize_or_self(candidate) == expected)
 }
 
 #[test]
@@ -171,12 +186,12 @@ fn resolve_world_root_refuses_legacy_workspace_settings_yaml() {
         "unexpected error message: {message}"
     );
     assert!(
-        normalized_message.contains(&normalize_path_display(&legacy_settings)),
+        message_mentions_path(&normalized_message, &legacy_settings),
         "error message missing legacy path: {message}"
     );
     let workspace_yaml = workspace_root.join(".substrate").join("workspace.yaml");
     assert!(
-        normalized_message.contains(&normalize_path_display(&workspace_yaml)),
+        message_mentions_path(&normalized_message, &workspace_yaml),
         "error message missing workspace.yaml path: {message}"
     );
 }

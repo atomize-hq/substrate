@@ -1,34 +1,34 @@
-# Kickoff — WO0-integ (Integration: land WO0 with smoke + playbook validation)
+# Kickoff: WO0-integ (Integration: land WO0 with smoke + playbook validation)
 
-Role: Integration agent (owns final alignment to spec and green state).
+## Scope
+- Merge `WO0-code` + `WO0-test`, reconcile drift to spec, and make the slice green.
+- ADR: `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+- Spec: `docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md`
+- Closeout gate report: `docs/project_management/next/world-overlayfs-enumeration/WO0-closeout_report.md`
 
-## Scope (authoritative)
-- Integrate `woe-wo0-code` + `woe-wo0-test` and reconcile final behavior to:
-  - `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
-  - `docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md`
-- Run required validation commands, Linux smoke script, and manual playbook steps.
-- Do not edit planning docs from the worktree (only from the orchestration branch).
+## Start Checklist
 
-## Start checklist
-1. `git checkout feat/world-overlayfs-enumeration && git pull --ff-only`
-2. On `feat/world-overlayfs-enumeration`, set `WO0-integ` to `in_progress` in `docs/project_management/next/world-overlayfs-enumeration/tasks.json` and commit docs.
-3. Create branch + worktree: `git checkout -b woe-wo0-integ` then `git worktree add wt/woe-wo0-integ woe-wo0-integ`.
-4. Merge `woe-wo0-code` and `woe-wo0-test` into `wt/woe-wo0-integ` and resolve drift to spec.
+Do not edit planning docs inside the worktree.
+
+1. Verify you are in the task worktree `wt/woe-wo0-integ` on branch `woe-wo0-integ` and that `.taskmeta.json` exists at the worktree root.
+2. Read: `docs/project_management/next/world-overlayfs-enumeration/plan.md`, `docs/project_management/next/world-overlayfs-enumeration/tasks.json`, `docs/project_management/next/world-overlayfs-enumeration/session_log.md`, ADR, spec, and this prompt.
+3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
+   - `make triad-task-start FEATURE_DIR="docs/project_management/next/world-overlayfs-enumeration" TASK_ID="WO0-integ"`
+4. Merge `woe-wo0-code` and `woe-wo0-test` into this worktree and resolve drift to spec (spec wins).
 
 ## Commands (required)
 - `cargo fmt`
 - `cargo clippy --workspace --all-targets -- -D warnings`
-- Relevant `cargo test ...` suites (at minimum the ones added/modified by WO0-test)
+- Relevant `cargo test ...` suites (at minimum the ones added or modified by `WO0-test`)
 - `docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh`
 - `make integ-checks`
 
-## End checklist
-1. Run required commands and fix failures until green.
-2. Commit integration changes to branch `woe-wo0-integ`.
-3. Fast-forward merge `woe-wo0-integ` back to `feat/world-overlayfs-enumeration`.
-4. Update `WO0-integ` status to `completed` in `docs/project_management/next/world-overlayfs-enumeration/tasks.json` and commit docs on `feat/world-overlayfs-enumeration`.
-5. Remove worktree: `git worktree remove wt/woe-wo0-integ`.
+## Requirements
+- Run the manual playbook: `docs/project_management/next/world-overlayfs-enumeration/manual_testing_playbook.md`.
+- Fill the closeout report: `docs/project_management/next/world-overlayfs-enumeration/WO0-closeout_report.md`.
 
-
-
-Do not edit planning docs inside the worktree.
+## End Checklist
+1. Run required commands and capture outputs (including smoke results).
+2. From inside the worktree, run: `make triad-task-finish TASK_ID="WO0-integ"`.
+3. On the orchestration branch, update `tasks.json` and add the END entry to `session_log.md`; commit docs (`docs: finish WO0-integ`).
+4. Do not delete the worktree (feature cleanup removes worktrees at feature end).

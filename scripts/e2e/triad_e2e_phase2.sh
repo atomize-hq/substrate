@@ -352,12 +352,12 @@ set +e
 if [[ "${DRY_RUN}" -eq 1 ]]; then
     echo "+ (cd ${core_wt} && ${smoke_cmd[*]})" >&2
     smoke_all_rc=0
-else
-    smoke_all_out="$(bash -lc "cd \"${core_wt}\" && ${smoke_cmd[*]}")"
-    echo "${smoke_all_out}"
-    smoke_all_rc=$?
-    smoke_run_id_all="$(parse_kv_text RUN_ID "${smoke_all_out}")"
-fi
+	else
+	    smoke_all_out="$(bash -lc "cd \"${core_wt}\" && ${smoke_cmd[*]}")"
+	    smoke_all_rc=$?
+	    echo "${smoke_all_out}"
+	    smoke_run_id_all="$(parse_kv_text RUN_ID "${smoke_all_out}")"
+	fi
 set -e
 
 if [[ "${smoke_all_rc}" -ne 0 && -z "${PLATFORM_FIXES_CSV}" ]]; then

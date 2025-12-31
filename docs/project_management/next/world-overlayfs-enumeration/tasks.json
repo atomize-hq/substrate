@@ -2,9 +2,51 @@
   "meta": {
     "feature": "world-overlayfs-enumeration",
     "cross_platform": false,
-    "notes": "Linux-only work per ADR-0004; fixes overlayfs directory enumeration reliability and adds fuse-overlayfs fallback + observability."
+    "schema_version": 3,
+    "execution_gates": true,
+    "automation": {
+      "enabled": true,
+      "orchestration_branch": "feat/world-overlayfs-enumeration"
+    },
+    "notes": "Linux-only work per ADR-0004; fixes overlayfs directory enumeration reliability and adds fuse-overlayfs fallback and observability."
   },
   "tasks": [
+    {
+      "id": "F0-exec-preflight",
+      "name": "Execution preflight gate",
+      "type": "ops",
+      "phase": "Feature Gates",
+      "status": "pending",
+      "description": "Run the feature execution preflight gate and fill execution_preflight_report.md before starting WO0.",
+      "references": [
+        "docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md",
+        "docs/project_management/next/world-overlayfs-enumeration/execution_preflight_report.md",
+        "docs/project_management/next/world-overlayfs-enumeration/plan.md",
+        "docs/project_management/next/world-overlayfs-enumeration/tasks.json",
+        "docs/project_management/next/world-overlayfs-enumeration/session_log.md",
+        "docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md",
+        "docs/project_management/next/world-overlayfs-enumeration/manual_testing_playbook.md",
+        "docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh",
+        "docs/project_management/next/world-overlayfs-enumeration/smoke/macos-smoke.sh",
+        "docs/project_management/next/world-overlayfs-enumeration/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "execution_preflight_report.md contains a concrete recommendation (ACCEPT or REVISE)",
+        "If the recommendation is REVISE, WO0 work does not start until the listed issues are resolved"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world-overlayfs-enumeration\"",
+        "Set F0-exec-preflight status to in_progress in tasks.json; add START entry to session_log.md; commit docs"
+      ],
+      "end_checklist": [
+        "Set F0-exec-preflight status to completed in tasks.json; add END entry to session_log.md; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/F0-exec-preflight.md",
+      "depends_on": [],
+      "concurrent_with": []
+    },
     {
       "id": "WO0-code",
       "name": "Stable mount topology + strategy probe + fallback metadata",
@@ -28,23 +70,22 @@
         "substrate world doctor --json includes the required world_fs_strategy_* keys defined in ADR-0004"
       ],
       "start_checklist": [
-        "git checkout feat/world-overlayfs-enumeration && git pull --ff-only",
         "Read ADR/spec/decision register/integration map",
-        "Update this task status to in_progress in tasks.json and commit docs on the orchestration branch",
-        "Create branch woe-wo0-code and worktree wt/woe-wo0-code"
+        "Set WO0-code and WO0-test status to in_progress in tasks.json; add START entries to session_log.md; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-overlayfs-enumeration\" SLICE_ID=\"WO0\""
       ],
       "end_checklist": [
-        "Run cargo fmt",
-        "Run cargo clippy --workspace --all-targets -- -D warnings",
-        "Commit worktree changes to woe-wo0-code",
-        "Fast-forward merge woe-wo0-code back into feat/world-overlayfs-enumeration",
-        "Update this task status to completed in tasks.json and commit docs on the orchestration branch",
-        "Remove worktree wt/woe-wo0-code"
+        "Run required commands and capture outputs",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WO0-code\"",
+        "On the orchestration branch: set WO0-code status to completed in tasks.json; add END entry to session_log.md; commit docs",
+        "Do not delete the worktree (feature cleanup removes worktrees at feature end)"
       ],
       "worktree": "wt/woe-wo0-code",
+      "git_branch": "woe-wo0-code",
+      "required_make_targets": ["triad-code-checks"],
       "integration_task": "WO0-integ",
       "kickoff_prompt": "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-code.md",
-      "depends_on": [],
+      "depends_on": ["F0-exec-preflight"],
       "concurrent_with": ["WO0-test"]
     },
     {
@@ -65,23 +106,22 @@
         "A test asserts doctor JSON includes world_fs_strategy_primary, world_fs_strategy_fallback, and world_fs_strategy_probe keys"
       ],
       "start_checklist": [
-        "git checkout feat/world-overlayfs-enumeration && git pull --ff-only",
         "Read ADR/spec",
-        "Update this task status to in_progress in tasks.json and commit docs on the orchestration branch",
-        "Create branch woe-wo0-test and worktree wt/woe-wo0-test"
+        "Set WO0-code and WO0-test status to in_progress in tasks.json; add START entries to session_log.md; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world-overlayfs-enumeration\" SLICE_ID=\"WO0\""
       ],
       "end_checklist": [
-        "Run cargo fmt",
-        "Run targeted cargo test commands for the tests added/modified",
-        "Commit worktree changes to woe-wo0-test",
-        "Fast-forward merge woe-wo0-test back into feat/world-overlayfs-enumeration",
-        "Update this task status to completed in tasks.json and commit docs on the orchestration branch",
-        "Remove worktree wt/woe-wo0-test"
+        "Run required commands and capture outputs",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WO0-test\"",
+        "On the orchestration branch: set WO0-test status to completed in tasks.json; add END entry to session_log.md; commit docs",
+        "Do not delete the worktree (feature cleanup removes worktrees at feature end)"
       ],
       "worktree": "wt/woe-wo0-test",
+      "git_branch": "woe-wo0-test",
+      "required_make_targets": ["triad-test-checks"],
       "integration_task": "WO0-integ",
       "kickoff_prompt": "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-test.md",
-      "depends_on": [],
+      "depends_on": ["F0-exec-preflight"],
       "concurrent_with": ["WO0-code"]
     },
     {
@@ -107,26 +147,53 @@
         "make integ-checks passes"
       ],
       "start_checklist": [
-        "git checkout feat/world-overlayfs-enumeration && git pull --ff-only",
-        "Update this task status to in_progress in tasks.json and commit docs on the orchestration branch",
-        "Create branch woe-wo0-integ and worktree wt/woe-wo0-integ",
-        "Merge/fetch woe-wo0-code and woe-wo0-test into the integration worktree"
+        "Set WO0-integ status to in_progress in tasks.json; add START entry to session_log.md; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-overlayfs-enumeration\" TASK_ID=\"WO0-integ\"",
+        "Merge woe-wo0-code and woe-wo0-test into wt/woe-wo0-integ and resolve drift to spec"
       ],
       "end_checklist": [
-        "Run cargo fmt",
-        "Run cargo clippy --workspace --all-targets -- -D warnings",
-        "Run relevant cargo test suites",
-        "Run docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh",
-        "Run make integ-checks",
-        "Commit integration changes to woe-wo0-integ",
-        "Fast-forward merge woe-wo0-integ back into feat/world-overlayfs-enumeration",
-        "Update this task status to completed in tasks.json and commit docs on the orchestration branch",
-        "Remove worktree wt/woe-wo0-integ"
+        "Run required commands and capture outputs",
+        "Complete docs/project_management/next/world-overlayfs-enumeration/WO0-closeout_report.md",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WO0-integ\"",
+        "On the orchestration branch: set WO0-integ status to completed in tasks.json; add END entry to session_log.md; commit docs",
+        "Do not delete the worktree (feature cleanup removes worktrees at feature end)"
       ],
       "worktree": "wt/woe-wo0-integ",
-      "integration_task": "WO0-integ",
+      "git_branch": "woe-wo0-integ",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": true,
+      "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ.md",
       "depends_on": ["WO0-code", "WO0-test"],
+      "concurrent_with": []
+    },
+    {
+      "id": "FZ-feature-cleanup",
+      "name": "Feature cleanup: remove retained worktrees",
+      "type": "ops",
+      "phase": "Feature Cleanup",
+      "status": "pending",
+      "description": "Remove retained task worktrees for this feature and optionally prune task branches using the triad automation registry.",
+      "references": [
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "triad-feature-cleanup completes and prints a summary block",
+        "session_log.md END entry for this task includes the cleanup summary block"
+      ],
+      "start_checklist": [
+        "Verify orchestration worktree is clean and all tasks are completed",
+        "Dry-run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/world-overlayfs-enumeration\" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1"
+      ],
+      "end_checklist": [
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/world-overlayfs-enumeration\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Paste the stdout summary block into the session_log.md END entry for this task",
+        "Set FZ-feature-cleanup status to completed in tasks.json; add END entry to session_log.md; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/FZ-feature-cleanup.md",
+      "depends_on": ["WO0-integ"],
       "concurrent_with": []
     }
   ]
