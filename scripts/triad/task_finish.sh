@@ -177,7 +177,7 @@ if [[ -z "${TASK_JSON}" ]]; then
 fi
 
 TASK_TYPE="$(jq -r '.type' <<<"${TASK_JSON}")"
-REQUIRED_TARGETS="$(jq -r '.required_make_targets // [] | join(\" \")' <<<"${TASK_JSON}")"
+REQUIRED_TARGETS="$(jq -r '.required_make_targets // [] | join(" ")' <<<"${TASK_JSON}")"
 TASK_PLATFORM="$(jq -r '.platform // empty' <<<"${TASK_JSON}")"
 MERGE_TO_ORCH="$(jq -r '.merge_to_orchestration // empty' <<<"${TASK_JSON}")"
 FEATURE_NAME="$(jq -r '.meta.feature // empty' "${TASKS_JSON}")"
