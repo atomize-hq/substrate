@@ -148,7 +148,7 @@ GIT_COMMON_DIR="$(python_abs_path "$(git rev-parse --git-common-dir)")"
 REGISTRY_ABS="${GIT_COMMON_DIR}/triad/features/${FEATURE_NAME}/worktrees.json"
 
 mapfile -t worktrees < <(
-    jq -r '.tasks[] | select(.git_worktree? and (.git_worktree | length) > 0) | .git_worktree' "${TASKS_JSON}" | sort -u
+    jq -r '.tasks[] | select(.worktree? and (.worktree | length) > 0) | .worktree' "${TASKS_JSON}" | sort -u
 )
 mapfile -t branches < <(
     jq -r '.tasks[] | select(.git_branch? and (.git_branch | length) > 0) | .git_branch' "${TASKS_JSON}" | sort -u
