@@ -217,7 +217,7 @@ if [[ -n "${validate_job_id}" ]]; then
     resolved_platform="$(
         gh run view "${run_id}" --log --job "${validate_job_id}" 2>/dev/null \
             | sed -E 's/\x1b\\[[0-9;]*m//g' \
-            | grep -oE 'platform=\"[^\"]+\"' \
+            | grep -oE 'platform="[^"]+"' \
             | head -n 1 \
             | cut -d '"' -f 2 \
             || true
