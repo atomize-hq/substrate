@@ -153,3 +153,10 @@ At feature end, remove retained worktrees and optionally prune branches:
 - Automation workflow and commands: `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
 - Cross-platform flow and automation diagrams: `docs/project_management/standards/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md`
 - CI smoke dispatch expectations: `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
+
+## End-to-End Smoke Scripts (for debugging the workflow)
+
+These are intentionally operator-facing scripts to exercise the full system (planning pack scaffolding, triad worktrees, Codex headless launch, CI smoke dispatch, and final merge-back):
+- Phase 1 (scaffold + C0 code/test parallel): `scripts/e2e/triad_e2e_phase1.sh`
+- Phase 2 (integration + CI smoke + optional platform-fix tasks + final aggregator): `scripts/e2e/triad_e2e_phase2.sh`
+- Combined runner: `scripts/e2e/triad_e2e_all.sh`
