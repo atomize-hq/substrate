@@ -308,13 +308,15 @@ update_registry() {
     if [[ "${DRY_RUN}" -eq 1 ]]; then
         return 0
     fi
-    python3 - <<PY
+    python3 - "${registry_abs}" "${TASK_ID}" "${HEAD_SHA}" <<'PY'
 import json
 import os
+import sys
 from datetime import datetime, timezone
 
-registry_abs = ${registry_abs!r}
-task_id = ${TASK_ID!r}
+registry_abs = sys.argv[1]
+task_id = sys.argv[2]
+head = sys.argv[3]
 
 if not os.path.exists(registry_abs):
     # Registry is best-effort; task_finish still succeeds without it.
@@ -325,7 +327,6 @@ with open(registry_abs, "r", encoding="utf-8") as f:
 
 entries = data.get("entries", [])
 now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-head = ${HEAD_SHA!r}
 
 for e in entries:
     if e.get("task_id") == task_id:

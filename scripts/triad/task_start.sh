@@ -304,23 +304,32 @@ write_taskmeta() {
     local created_from_sha="$1"
     local created_at_utc="$2"
     local out_path="${WORKTREE_ABS}/.taskmeta.json"
-    python3 - "${out_path}" <<PY
+    python3 - "${out_path}" "${TASK_ID}" "${FEATURE_DIR_ABS}" "${REPO_ROOT}" "${ORCH_BRANCH}" "${TASK_BRANCH}" "${created_from_sha}" "${created_at_utc}" "${PLATFORM}" <<'PY'
 import json
 import os
 import sys
 
 out_path = sys.argv[1]
+task_id = sys.argv[2]
+feature_dir_abs = sys.argv[3]
+repo_root = sys.argv[4]
+orch_branch = sys.argv[5]
+task_branch = sys.argv[6]
+created_from_sha = sys.argv[7]
+created_at_utc = sys.argv[8]
+platform = sys.argv[9]
+
 data = {
   "schema_version": 1,
-  "task_id": ${TASK_ID!r},
-  "feature_dir": os.path.relpath(${FEATURE_DIR_ABS!r}, ${REPO_ROOT!r}),
-  "orchestration_branch": ${ORCH_BRANCH!r},
-  "task_branch": ${TASK_BRANCH!r},
-  "created_from_sha": ${created_from_sha!r},
-  "created_at_utc": ${created_at_utc!r},
+  "task_id": task_id,
+  "feature_dir": os.path.relpath(feature_dir_abs, repo_root),
+  "orchestration_branch": orch_branch,
+  "task_branch": task_branch,
+  "created_from_sha": created_from_sha,
+  "created_at_utc": created_at_utc,
 }
-if ${PLATFORM!r}:
-  data["platform"] = ${PLATFORM!r}
+if platform:
+  data["platform"] = platform
 os.makedirs(os.path.dirname(out_path), exist_ok=True)
 tmp = out_path + ".tmp"
 with open(tmp, "w", encoding="utf-8") as f:
@@ -333,26 +342,37 @@ PY
 update_registry() {
     local created_from_sha="$1"
     local created_at_utc="$2"
-    python3 - <<PY
+    python3 - "${REPO_ROOT}" "${REGISTRY_ABS}" "${FEATURE_DIR_ABS}" "${WORKTREE_ABS}" "${TASK_ID}" "${TASK_TYPE}" "${TASK_BRANCH}" "${created_from_sha}" "${created_at_utc}" "${ORCH_BRANCH}" "${PLATFORM}" <<'PY'
 import json
 import os
+import sys
 from datetime import datetime, timezone
 
-repo_root = ${REPO_ROOT!r}
-registry_abs = ${REGISTRY_ABS!r}
-feature_dir_rel = os.path.relpath(${FEATURE_DIR_ABS!r}, repo_root)
-worktree_rel = os.path.relpath(${WORKTREE_ABS!r}, repo_root)
+repo_root = sys.argv[1]
+registry_abs = sys.argv[2]
+feature_dir_abs = sys.argv[3]
+worktree_abs = sys.argv[4]
+task_id = sys.argv[5]
+task_type = sys.argv[6]
+task_branch = sys.argv[7]
+created_from_sha = sys.argv[8]
+created_at_utc = sys.argv[9]
+orch_branch = sys.argv[10]
+platform = sys.argv[11]
+
+feature_dir_rel = os.path.relpath(feature_dir_abs, repo_root)
+worktree_rel = os.path.relpath(worktree_abs, repo_root)
 
 entry = {
-  "task_id": ${TASK_ID!r},
-  "task_type": ${TASK_TYPE!r},
-  "task_branch": ${TASK_BRANCH!r},
-  "worktree": ${WORKTREE_ABS!r},
-  "created_from_sha": ${created_from_sha!r},
-  "created_at_utc": ${created_at_utc!r},
+  "task_id": task_id,
+  "task_type": task_type,
+  "task_branch": task_branch,
+  "worktree": worktree_abs,
+  "created_from_sha": created_from_sha,
+  "created_at_utc": created_at_utc,
 }
-if ${PLATFORM!r}:
-  entry["platform"] = ${PLATFORM!r}
+if platform:
+  entry["platform"] = platform
 
 os.makedirs(os.path.dirname(registry_abs), exist_ok=True)
 if os.path.exists(registry_abs):
@@ -362,7 +382,7 @@ else:
   data = {
     "schema_version": 1,
     "feature_dir": feature_dir_rel,
-    "orchestration_branch": ${ORCH_BRANCH!r},
+    "orchestration_branch": orch_branch,
     "updated_at_utc": None,
     "entries": [],
   }

@@ -209,12 +209,12 @@ fi
 
 require_deps_completed() {
     local id="$1"
-    python3 - <<PY
+    python3 - "${TASKS_JSON}" "${id}" <<'PY'
 import json
 import sys
 
-tasks_path = ${TASKS_JSON!r}
-task_id = ${id!r}
+tasks_path = sys.argv[1]
+task_id = sys.argv[2]
 
 with open(tasks_path, "r", encoding="utf-8") as f:
   data = json.load(f)

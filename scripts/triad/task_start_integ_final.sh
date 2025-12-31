@@ -163,12 +163,12 @@ else
 fi
 
 log "Validating depends_on statuses for ${FINAL_TASK_ID}"
-python3 - <<PY
+python3 - "${TASKS_JSON}" "${FINAL_TASK_ID}" <<'PY'
 import json
 import sys
 
-tasks_path = ${TASKS_JSON!r}
-final_id = ${FINAL_TASK_ID!r}
+tasks_path = sys.argv[1]
+final_id = sys.argv[2]
 
 with open(tasks_path, "r", encoding="utf-8") as f:
     data = json.load(f)
@@ -215,4 +215,3 @@ printf 'ORCH_BRANCH=%s\n' "${ORCH_BRANCH}"
 printf 'SLICE_ID=%s\n' "${SLICE_ID}"
 printf 'FINAL_TASK_ID=%s\n' "${FINAL_TASK_ID}"
 printf '%s\n' "${out}"
-
