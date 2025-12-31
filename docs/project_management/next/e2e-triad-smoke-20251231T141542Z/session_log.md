@@ -32,3 +32,5 @@ END   2025-12-31T14:15:44Z F0-exec-preflight (ACCEPT)
 
 END   2025-12-31T14:17:43Z C0-code (e2e smoke)
 END   2025-12-31T14:17:43Z C0-test (e2e smoke)
+
+END   2025-12-31T14:38:50Z C0-integ-core (e2e smoke)
