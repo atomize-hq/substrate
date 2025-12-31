@@ -198,7 +198,7 @@ if [[ -z "${run_id}" ]]; then
             --branch "${WORKFLOW_REF}" \
             --limit 50 \
             --json databaseId,createdAt \
-            -q "map(select(.createdAt >= \"${dispatch_started}\")) | .[0].databaseId"
+            -q "map(select(.createdAt >= \"${dispatch_started}\")) | sort_by(.createdAt) | .[0].databaseId"
     )"
 fi
 
@@ -211,6 +211,22 @@ echo "Run: ${run_id}"
 gh run watch "${run_id}"
 conclusion="$(gh run view "${run_id}" --json conclusion -q '.conclusion')"
 echo "Conclusion: ${conclusion}"
+
+validate_job_id="$(gh run view "${run_id}" --json jobs -q '.jobs[] | select(.name=="validate_inputs") | .databaseId' || true)"
+if [[ -n "${validate_job_id}" ]]; then
+    resolved_platform="$(
+        gh run view "${run_id}" --log --job "${validate_job_id}" 2>/dev/null \
+            | sed -E 's/\x1b\\[[0-9;]*m//g' \
+            | grep -oE 'platform=\"[^\"]+\"' \
+            | head -n 1 \
+            | cut -d '"' -f 2 \
+            || true
+    )"
+    if [[ -n "${resolved_platform}" && "${resolved_platform}" != "${PLATFORM}" ]]; then
+        echo "ERROR: resolved platform (${resolved_platform}) != requested platform (${PLATFORM}) for ${run_id}" >&2
+        exit 5
+    fi
+fi
 
 if [[ "${CLEANUP}" -eq 1 ]]; then
     echo "Cleaning up remote branch: ${temp_branch}"
