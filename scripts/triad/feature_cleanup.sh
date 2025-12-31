@@ -146,12 +146,27 @@ fi
 
 GIT_COMMON_DIR="$(python_abs_path "$(git rev-parse --git-common-dir)")"
 REGISTRY_ABS="${GIT_COMMON_DIR}/triad/features/${FEATURE_NAME}/worktrees.json"
-if [[ ! -f "${REGISTRY_ABS}" ]]; then
-    die "Missing registry file: ${REGISTRY_ABS} (run task_start for tasks in this feature before cleanup)"
-fi
 
-mapfile -t worktrees < <(jq -r '.entries[]?.worktree // empty' "${REGISTRY_ABS}" | sort -u)
-mapfile -t branches < <(jq -r '.entries[]?.task_branch // empty' "${REGISTRY_ABS}" | sort -u)
+mapfile -t worktrees < <(
+    jq -r '.tasks[] | select(.git_worktree? and (.git_worktree | length) > 0) | .git_worktree' "${TASKS_JSON}" | sort -u
+)
+mapfile -t branches < <(
+    jq -r '.tasks[] | select(.git_branch? and (.git_branch | length) > 0) | .git_branch' "${TASKS_JSON}" | sort -u
+)
+
+# Best-effort: merge in registry entries (if present + valid) to catch any extra spawned worktrees.
+if [[ -f "${REGISTRY_ABS}" ]]; then
+    if jq -e . >/dev/null 2>&1 <"${REGISTRY_ABS}"; then
+        mapfile -t reg_worktrees < <(jq -r '.entries[]?.worktree // empty' "${REGISTRY_ABS}" | sort -u)
+        mapfile -t reg_branches < <(jq -r '.entries[]?.task_branch // empty' "${REGISTRY_ABS}" | sort -u)
+        worktrees+=("${reg_worktrees[@]}")
+        branches+=("${reg_branches[@]}")
+        mapfile -t worktrees < <(printf '%s\n' "${worktrees[@]}" | rg -v '^[[:space:]]*$' | sort -u)
+        mapfile -t branches < <(printf '%s\n' "${branches[@]}" | rg -v '^[[:space:]]*$' | sort -u)
+    else
+        log "Warning: registry exists but is not valid JSON; ignoring registry: ${REGISTRY_ABS}"
+    fi
+fi
 
 removed_worktrees=0
 pruned_local=0
@@ -212,6 +227,9 @@ if [[ "${REMOVE_WT}" -eq 1 ]]; then
     for wt_rel in "${worktrees[@]}"; do
         [[ -z "${wt_rel}" ]] && continue
         wt_abs="${wt_rel}"
+        if [[ "${wt_abs}" != /* ]]; then
+            wt_abs="${REPO_ROOT}/${wt_abs}"
+        fi
         if [[ ! -d "${wt_abs}" ]]; then
             log "Skipping missing worktree path: ${wt_abs}"
             continue
