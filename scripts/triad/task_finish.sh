@@ -367,7 +367,16 @@ run_smoke_if_requested() {
 
     out="$(mktemp)"
     smoke_ok=0
-    if (make feature-smoke FEATURE_DIR="${feature_dir_ci}" PLATFORM="${PLATFORM}" 2>&1 | tee "${out}" 1>&2); then
+    smoke_args=(make feature-smoke FEATURE_DIR="${feature_dir_ci}" PLATFORM="${PLATFORM}" WORKFLOW_REF="${ORCH_BRANCH}" CLEANUP=1)
+    if [[ "${PLATFORM}" == "linux" ]]; then
+        wsl_required="$(jq -r '.meta.wsl_required // false' "${TASKS_JSON}")"
+        wsl_mode="$(jq -r '.meta.wsl_task_mode // "bundled"' "${TASKS_JSON}")"
+        if [[ "${wsl_required}" == "true" && "${wsl_mode}" == "bundled" ]]; then
+            smoke_args+=(RUN_WSL=1)
+        fi
+    fi
+
+    if ("${smoke_args[@]}" 2>&1 | tee "${out}" 1>&2); then
         smoke_ok=1
     fi
 

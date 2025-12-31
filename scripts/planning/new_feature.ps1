@@ -40,6 +40,7 @@ $vars = @{
     FEATURE     = $Feature
     FEATURE_DIR = $featureDir
     NOW_UTC     = $nowUtc
+    ORCH_BRANCH = "feat/$Feature"
 }
 
 New-Item -ItemType Directory -Force -Path (Join-Path $featureDir "kickoff_prompts") | Out-Null

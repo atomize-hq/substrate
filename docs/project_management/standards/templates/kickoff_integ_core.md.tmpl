@@ -20,7 +20,7 @@ Do not edit planning docs inside the worktree.
   - relevant tests
   - `make integ-checks`
 - If the feature directory contains `smoke/`, run cross-platform smoke via CI (validation-only):
-  - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=all`
+  - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=all WORKFLOW_REF="{{ORCH_BRANCH}}"`
   - If WSL coverage is required for this feature, add `RUN_WSL=1`.
 - If any platform smoke fails, start only the failing platform-fix tasks (do not attempt platform-specific fixes here):
   - Ask the operator to run from the orchestration worktree:

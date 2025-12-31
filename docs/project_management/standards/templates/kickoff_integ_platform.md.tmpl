@@ -16,19 +16,19 @@ Do not edit planning docs inside the worktree.
    - `make triad-task-start FEATURE_DIR="{{FEATURE_DIR}}" TASK_ID="{{TASK_ID}}" TASK_PLATFORM={{PLATFORM}}`
 
 ## Requirements
-- First, validate platform smoke via CI for this platform:
-  - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM={{PLATFORM}}`
+- Validate platform smoke via CI for this platform (repeat until green if you make fixes):
+  - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM={{PLATFORM}} WORKFLOW_REF="{{ORCH_BRANCH}}"`
 - If this is the Linux task and WSL coverage is required (see `tasks.json` meta: `wsl_required` + `wsl_task_mode`):
   - Bundled (default): dispatch with `RUN_WSL=1`:
     - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=linux RUN_WSL=1`
 - If smoke passes: record run id/URL in the END entry and do not change code.
 - If smoke fails:
-  1) Fix the issue in this worktree (platform-specific guards, path handling, deps, etc.) while keeping the spec contract intact.
+  1) Fix the issue in this worktree (platform-specific guards, path handling, deps) while keeping the spec contract intact.
   2) Run the appropriate local checks for your change (fmt/clippy and targeted tests).
   3) Re-run the CI smoke for this platform until green.
 
 ## End Checklist
 1. Ensure smoke is green for {{PLATFORM}} and capture the run id/URL.
-2. From inside the worktree, run: `make triad-task-finish TASK_ID="{{TASK_ID}}" SMOKE=1 TASK_PLATFORM={{PLATFORM}}`
+2. From inside the worktree, run: `make triad-task-finish TASK_ID="{{TASK_ID}}"`
 3. On the orchestration branch, update tasks.json + session_log.md END entry; commit docs (`docs: finish {{TASK_ID}}`).
 4. Do not delete the worktree (feature cleanup removes worktrees at feature end).

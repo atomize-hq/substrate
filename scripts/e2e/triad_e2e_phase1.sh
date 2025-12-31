@@ -426,7 +426,7 @@ Steps:
 2) Run required checks:
    - \`make integ-checks\`
 3) Dispatch smoke:
-   - \`make feature-smoke FEATURE_DIR="${FEATURE_DIR}" PLATFORM=all\`
+   - \`make feature-smoke FEATURE_DIR="${FEATURE_DIR}" PLATFORM=all WORKFLOW_REF="${ORCH_BRANCH}"\`
 4) If any platform smoke fails, start only failing platform-fix tasks:
    - \`make triad-task-start-platform-fixes FEATURE_DIR="${FEATURE_DIR}" SLICE_ID="C0" PLATFORMS="linux,macos,windows"\`
 5) After all failing platforms are green, start the final aggregator:
@@ -447,10 +447,10 @@ Goal:
 
 Steps:
 1) Merge C0-integ-core into this branch.
-2) Run CI smoke for ${p} until green:
-   - \`make feature-smoke FEATURE_DIR="${FEATURE_DIR}" PLATFORM=${p}\`
+2) Run CI smoke for ${p} until green (repeat after fixes):
+   - \`make feature-smoke FEATURE_DIR="${FEATURE_DIR}" PLATFORM=${p} WORKFLOW_REF="${ORCH_BRANCH}"\`
 3) Finish (commits to this task branch; does not merge back to orchestration):
-   - \`make triad-task-finish TASK_ID="C0-integ-${p}" SMOKE=1 TASK_PLATFORM=${p}\`
+   - \`make triad-task-finish TASK_ID="C0-integ-${p}"\`
 MD
     done
 
@@ -466,9 +466,9 @@ Goal:
 Steps:
 1) Merge C0-integ-core into this branch.
 2) Run CI smoke for wsl until green:
-   - \`make feature-smoke FEATURE_DIR="${FEATURE_DIR}" PLATFORM=wsl RUNNER_KIND=self-hosted\`
+   - \`make feature-smoke FEATURE_DIR="${FEATURE_DIR}" PLATFORM=wsl RUNNER_KIND=self-hosted WORKFLOW_REF="${ORCH_BRANCH}"\`
 3) Finish:
-   - \`make triad-task-finish TASK_ID="C0-integ-wsl" SMOKE=1 TASK_PLATFORM=wsl\`
+   - \`make triad-task-finish TASK_ID="C0-integ-wsl"\`
 MD
     fi
 
@@ -482,7 +482,7 @@ Goal:
 
 Required:
 - \`make integ-checks\`
-- \`make feature-smoke FEATURE_DIR="${FEATURE_DIR}" PLATFORM=all\`
+- \`make feature-smoke FEATURE_DIR="${FEATURE_DIR}" PLATFORM=all WORKFLOW_REF="${ORCH_BRANCH}"\`
 
 Finish:
 - From inside this worktree run: \`make triad-task-finish TASK_ID="C0-integ"\`

@@ -397,8 +397,13 @@ if [[ -n "${PLATFORM_FIXES_CSV}" ]]; then
         log "Platform-fix ${task_id}: merging integ-core branch (${core_branch})"
         merge_if_needed "${wt_abs}" "${core_branch}"
 
-        log "Platform-fix ${task_id}: finishing (per-platform smoke via CI)"
-        run bash -lc "cd \"${wt_abs}\" && make triad-task-finish TASK_ID=\"${task_id}\" SMOKE=1 TASK_PLATFORM=\"${p}\""
+        log "Platform-fix ${task_id}: per-platform smoke via CI (repeat after fixes until green)"
+        smoke_one=(make feature-smoke FEATURE_DIR="${FEATURE_DIR}" PLATFORM="${p}" RUNNER_KIND="${RUNNER_KIND}" WORKFLOW_REF="${WORKFLOW_REF}" REMOTE="${REMOTE}" CLEANUP=1)
+        if [[ "${RUN_WSL}" -eq 1 && "${p}" == "linux" ]]; then smoke_one+=(RUN_WSL=1); fi
+        run bash -lc "cd \"${wt_abs}\" && ${smoke_one[*]}"
+
+        log "Platform-fix ${task_id}: finishing (commit only; no extra smoke dispatch)"
+        run bash -lc "cd \"${wt_abs}\" && make triad-task-finish TASK_ID=\"${task_id}\""
 
         run git checkout "${ORCH_BRANCH}"
         set_task_status "${TASKS_JSON}" "${task_id}" "completed"

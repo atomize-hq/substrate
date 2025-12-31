@@ -82,6 +82,7 @@ fi
 
 FEATURE_DIR="docs/project_management/next/${FEATURE}"
 TEMPLATES_DIR="docs/project_management/standards/templates"
+ORCH_BRANCH="feat/${FEATURE}"
 
 if [[ -e "${FEATURE_DIR}" ]]; then
     echo "Refusing to overwrite existing directory: ${FEATURE_DIR}" >&2
@@ -103,6 +104,7 @@ render() {
     sed \
         -e "s|{{FEATURE}}|${FEATURE}|g" \
         -e "s|{{FEATURE_DIR}}|${FEATURE_DIR}|g" \
+        -e "s|{{ORCH_BRANCH}}|${ORCH_BRANCH}|g" \
         -e "s|{{NOW_UTC}}|${NOW_UTC}|g" \
         -e "s|{{TASK_ID}}|${task_id}|g" \
         -e "s|{{SPEC_FILE}}|${spec_file}|g" \
