@@ -49,7 +49,7 @@ flowchart TD
   subgraph INTEG_CORE["Core Integration (primary dev platform)"]
     MERGE["X-integ-core (merge X-code + X-test; resolve spec drift)"]
     CORE_CHECKS["Required checks: cargo fmt; cargo clippy ... -- -D warnings; relevant tests; make integ-checks"]
-    CORE_DISPATCH["Dispatch cross-platform smoke via make feature-smoke (PLATFORM=all; optional RUN_WSL=1)"]
+    CORE_DISPATCH["Dispatch cross-platform smoke via make feature-smoke (PLATFORM=all; optional RUN_WSL=1; WORKFLOW_REF=ORCH_BRANCH)"]
     CORE_RESULTS["Wait for smoke results (self-hosted runners)"]
     CORE_IDENTIFY["Identify failing platforms from runner results"]
     CORE_START_PF["Start failing platform-fix tasks (make triad-task-start-platform-fixes-from-smoke SMOKE_RUN_ID=...)"]
@@ -137,7 +137,7 @@ flowchart TD
   subgraph INTEG_CORE["Core Integration (primary dev platform)"]
     CORE["X-integ-core (merge X-code + X-test; resolve spec drift)"]
     CORE_CHECKS["Core checks: cargo fmt; cargo clippy ... -- -D warnings; relevant tests; make integ-checks"]
-    CORE_DISPATCH["Dispatch smoke via CI (platform=all; optional WSL)"]
+    CORE_DISPATCH["Dispatch smoke via CI (platform=all; optional WSL; WORKFLOW_REF=ORCH_BRANCH)"]
     CORE_RESULTS["Wait for smoke results (self-hosted runners)"]
     CORE_IDENTIFY["Identify failing platforms from runner results"]
     CORE_START_PF["Start failing platform-fix tasks (make triad-task-start-platform-fixes-from-smoke SMOKE_RUN_ID=...)"]
@@ -250,7 +250,7 @@ flowchart TD
   subgraph WT["Task worktree (no planning doc edits)"]
     CODEX_OPT["optional: codex exec (headless) from worktree using kickoff prompt via stdin; writes last_message file"]
     DEV["agent work happens here (code/test/integ)"]
-    FINISH_RUN["make triad-task-finish TASK_ID=... (optional SMOKE=1 TASK_PLATFORM=...)"]
+    FINISH_RUN["make triad-task-finish TASK_ID=... (optional: SMOKE=1 TASK_PLATFORM=...; do not also run make feature-smoke)"]
   end
 
   %% ======== task_finish internals ========

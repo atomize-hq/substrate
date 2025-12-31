@@ -199,7 +199,7 @@ if ($CrossPlatform.IsPresent) {
         "Set status to in_progress; add START entry; commit docs",
         $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"C0-integ-core`"" } else { "Run: git worktree add -b c0-integ-core wt/$Feature-c0-integ-core feat/$Feature" })
     )
-    $dispatchAll = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform all"
+    $dispatchAll = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform all --workflow-ref `\"feat/$Feature`\""
     if ($WslRequired.IsPresent) { $dispatchAll += " --run-wsl" }
     $dispatchAll += " --cleanup"
     $core.end_checklist = @(
@@ -231,7 +231,7 @@ if ($CrossPlatform.IsPresent) {
                 $name = "C0 slice (integration Linux)"
                 $desc = "Linux platform-fix integration task (may be a no-op if already green)."
                 $refs = @("$featureDir/smoke/linux-smoke.sh")
-                $dispatch = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform linux"
+                $dispatch = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform linux --workflow-ref `\"feat/$Feature`\""
                 if ($WslRequired.IsPresent -and -not $WslSeparate.IsPresent) { $dispatch += " --run-wsl" }
                 $dispatch += " --cleanup"
             }
@@ -239,19 +239,19 @@ if ($CrossPlatform.IsPresent) {
                 $name = "C0 slice (integration macOS)"
                 $desc = "macOS platform-fix integration task (may be a no-op if already green)."
                 $refs = @("$featureDir/smoke/macos-smoke.sh")
-                $dispatch = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform macos --cleanup"
+                $dispatch = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform macos --workflow-ref `\"feat/$Feature`\" --cleanup"
             }
             "windows" {
                 $name = "C0 slice (integration Windows)"
                 $desc = "Windows platform-fix integration task (may be a no-op if already green)."
                 $refs = @("$featureDir/smoke/windows-smoke.ps1")
-                $dispatch = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform windows --cleanup"
+                $dispatch = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform windows --workflow-ref `\"feat/$Feature`\" --cleanup"
             }
             "wsl" {
                 $name = "C0 slice (integration WSL)"
                 $desc = "WSL platform-fix integration task (Linux-in-WSL)."
                 $refs = @("$featureDir/smoke/linux-smoke.sh")
-                $dispatch = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform wsl --cleanup"
+                $dispatch = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform wsl --workflow-ref `\"feat/$Feature`\" --cleanup"
             }
         }
 
@@ -270,7 +270,7 @@ if ($CrossPlatform.IsPresent) {
             "Dispatch platform smoke via CI: $dispatch",
             "If needed: fix + fmt/clippy + targeted tests",
             "Ensure smoke is green; record run id/URL",
-            $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"$id`" SMOKE=1 TASK_PLATFORM=`"$platform`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature $id`"" }),
+            $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"$id`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature $id`"" }),
             $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-c0-integ-$platform (per plan.md)" })
         )
         $t.worktree = "wt/$Feature-c0-integ-$platform"
@@ -295,7 +295,7 @@ if ($CrossPlatform.IsPresent) {
         "Set status to in_progress; add START entry; commit docs",
         $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"C0-integ`"" } else { "Run: git worktree add -b c0-integ wt/$Feature-c0-integ feat/$Feature" })
     )
-    $dispatchFinal = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform all"
+    $dispatchFinal = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform all --workflow-ref `\"feat/$Feature`\""
     if ($WslRequired.IsPresent) { $dispatchFinal += " --run-wsl" }
     $dispatchFinal += " --cleanup"
     $final.end_checklist = @(
@@ -418,7 +418,7 @@ if ($CrossPlatform.IsPresent) {
       `"end_checklist`": [
         `"cargo fmt`",
         `"cargo clippy --workspace --all-targets -- -D warnings`",
-        `"Commit worktree changes; merge back ff-only; update docs; remove worktree`"
+        `"Commit changes to the task branch; do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)`"
       ],
       `"worktree`": `"wt/$Feature-c0-code`",
       `"integration_task`": `"C0-integ`",
@@ -444,7 +444,7 @@ if ($CrossPlatform.IsPresent) {
       `"end_checklist`": [
         `"cargo fmt`",
         `"Run the targeted tests you add/touch`",
-        `"Commit worktree changes; merge back ff-only; update docs; remove worktree`"
+        `"Commit changes to the task branch; do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)`"
       ],
       `"worktree`": `"wt/$Feature-c0-test`",
       `"integration_task`": `"C0-integ`",
@@ -472,8 +472,8 @@ if ($CrossPlatform.IsPresent) {
         `"cargo clippy --workspace --all-targets -- -D warnings`",
         `"Run relevant tests`",
         `"make integ-checks`",
-        `"Dispatch cross-platform smoke via scripts/ci/dispatch_feature_smoke.sh (record run ids/URLs)`",
-        `"Commit worktree changes; merge back ff-only; update docs; remove worktree`"
+        `"Dispatch cross-platform smoke via CI (record run ids/URLs): scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform all --workflow-ref `"feat/$Feature`" --cleanup`",
+        `"Commit worktree changes; do not merge to orchestration yet; update docs; do not delete the worktree (cleanup at feature end)`"
       ],
       `"worktree`": `"wt/$Feature-c0-integ-core`",
       `"integration_task`": `"C0-integ-core`",
@@ -498,10 +498,10 @@ if ($CrossPlatform.IsPresent) {
         `"Create branch c0-integ-linux and worktree wt/$Feature-c0-integ-linux; do not edit planning docs inside the worktree`"
       ],
       `"end_checklist`": [
-        `"Dispatch platform smoke: scripts/ci/dispatch_feature_smoke.sh --platform linux`",
+        `"Dispatch platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform linux --workflow-ref `"feat/$Feature`" --cleanup`",
         `"If needed: fix + fmt/clippy + targeted tests`",
         `"Ensure Linux smoke is green; record run id/URL`",
-        `"Commit worktree changes (if any); merge back ff-only; update docs; remove worktree`"
+        `"Commit changes to the platform-fix branch (if any); do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)`"
       ],
       `"worktree`": `"wt/$Feature-c0-integ-linux`",
       `"integration_task`": `"C0-integ-linux`",
@@ -529,10 +529,10 @@ if ($CrossPlatform.IsPresent) {
         `"Create branch c0-integ-macos and worktree wt/$Feature-c0-integ-macos; do not edit planning docs inside the worktree`"
       ],
       `"end_checklist`": [
-        `"Dispatch platform smoke: scripts/ci/dispatch_feature_smoke.sh --platform macos`",
+        `"Dispatch platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform macos --workflow-ref `"feat/$Feature`" --cleanup`",
         `"If needed: fix + fmt/clippy + targeted tests`",
         `"Ensure macOS smoke is green; record run id/URL`",
-        `"Commit worktree changes (if any); merge back ff-only; update docs; remove worktree`"
+        `"Commit changes to the platform-fix branch (if any); do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)`"
       ],
       `"worktree`": `"wt/$Feature-c0-integ-macos`",
       `"integration_task`": `"C0-integ-macos`",
@@ -560,10 +560,10 @@ if ($CrossPlatform.IsPresent) {
         `"Create branch c0-integ-windows and worktree wt/$Feature-c0-integ-windows; do not edit planning docs inside the worktree`"
       ],
       `"end_checklist`": [
-        `"Dispatch platform smoke: scripts/ci/dispatch_feature_smoke.sh --platform windows`",
+        `"Dispatch platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform windows --workflow-ref `"feat/$Feature`" --cleanup`",
         `"If needed: fix + fmt/clippy + targeted tests`",
         `"Ensure Windows smoke is green; record run id/URL`",
-        `"Commit worktree changes (if any); merge back ff-only; update docs; remove worktree`"
+        `"Commit changes to the platform-fix branch (if any); do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)`"
       ],
       `"worktree`": `"wt/$Feature-c0-integ-windows`",
       `"integration_task`": `"C0-integ-windows`",
@@ -595,8 +595,8 @@ if ($CrossPlatform.IsPresent) {
         `"cargo clippy --workspace --all-targets -- -D warnings`",
         `"Run relevant tests`",
         `"make integ-checks`",
-        `"Dispatch cross-platform smoke via scripts/ci/dispatch_feature_smoke.sh (record run ids/URLs)`",
-        `"Commit worktree changes; merge back ff-only; update docs; remove worktree`"
+        `"Dispatch cross-platform smoke via CI (record run ids/URLs): scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform all --workflow-ref `"feat/$Feature`" --cleanup`",
+        `"Commit worktree changes; fast-forward merge this branch into feat/$Feature; update docs; do not delete the worktree (cleanup at feature end)`"
       ],
       `"worktree`": `"wt/$Feature-c0-integ`",
       `"integration_task`": `"C0-integ`",
@@ -634,7 +634,7 @@ if ($CrossPlatform.IsPresent) {
       `"end_checklist`": [
         `"cargo fmt`",
         `"cargo clippy --workspace --all-targets -- -D warnings`",
-        `"Commit worktree changes; merge back ff-only; update docs; remove worktree`"
+        `"Commit changes to the task branch; do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)`"
       ],
       `"worktree`": `"wt/$Feature-c0-code`",
       `"integration_task`": `"C0-integ`",
@@ -660,7 +660,7 @@ if ($CrossPlatform.IsPresent) {
       `"end_checklist`": [
         `"cargo fmt`",
         `"Run the targeted tests you add/touch`",
-        `"Commit worktree changes; merge back ff-only; update docs; remove worktree`"
+        `"Commit changes to the task branch; do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)`"
       ],
       `"worktree`": `"wt/$Feature-c0-test`",
       `"integration_task`": `"C0-integ`",
@@ -688,7 +688,7 @@ if ($CrossPlatform.IsPresent) {
         `"cargo clippy --workspace --all-targets -- -D warnings`",
         `"Run relevant tests`",
         `"make integ-checks`",
-        `"Commit worktree changes; merge back ff-only; update docs; remove worktree`"
+        `"Commit worktree changes; fast-forward merge this branch into feat/$Feature; update docs; do not delete the worktree (cleanup at feature end)`"
       ],
       `"worktree`": `"wt/$Feature-c0-integ`",
       `"integration_task`": `"C0-integ`",

@@ -267,7 +267,7 @@ def test_task(task_id: str, other_id: str) -> dict:
 
 def integ_core_task() -> dict:
     task: dict
-    dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform all'
+    dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform all --workflow-ref "feat/{feature}"'
     if wsl_required:
         dispatch += " --run-wsl"
     dispatch += " --cleanup"
@@ -329,24 +329,24 @@ def integ_platform_task(platform: str) -> dict:
         name = "C0 slice (integration Linux)"
         desc = "Linux platform-fix integration task (may be a no-op if already green)."
         if wsl_required and not wsl_separate:
-            dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform linux --run-wsl --cleanup'
+            dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform linux --run-wsl --workflow-ref "feat/{feature}" --cleanup'
         else:
-            dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform linux --cleanup'
+            dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform linux --workflow-ref "feat/{feature}" --cleanup'
     elif platform == "macos":
         smoke_refs = ("smoke/macos-smoke.sh",)
         name = "C0 slice (integration macOS)"
         desc = "macOS platform-fix integration task (may be a no-op if already green)."
-        dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform macos --cleanup'
+        dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform macos --workflow-ref "feat/{feature}" --cleanup'
     elif platform == "windows":
         smoke_refs = ("smoke/windows-smoke.ps1",)
         name = "C0 slice (integration Windows)"
         desc = "Windows platform-fix integration task (may be a no-op if already green)."
-        dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform windows --cleanup'
+        dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform windows --workflow-ref "feat/{feature}" --cleanup'
     elif platform == "wsl":
         smoke_refs = ("smoke/linux-smoke.sh",)
         name = "C0 slice (integration WSL)"
         desc = "WSL platform-fix integration task (Linux-in-WSL)."
-        dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform wsl --cleanup'
+        dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform wsl --workflow-ref "feat/{feature}" --cleanup'
     else:
         raise SystemExit(f"unexpected platform: {platform}")
 
@@ -376,7 +376,7 @@ def integ_platform_task(platform: str) -> dict:
             "If needed: fix + fmt/clippy + targeted tests",
             "Ensure smoke is green; record run id/URL",
             (
-                f"From inside the worktree: make triad-task-finish TASK_ID=\"{task_id}\" SMOKE=1 TASK_PLATFORM=\"{platform}\""
+                f"From inside the worktree: make triad-task-finish TASK_ID=\"{task_id}\""
                 if automation
                 else f"From inside the worktree: git add -A && git commit -m \"integ: {feature} {task_id}\""
             ),
@@ -404,7 +404,7 @@ def integ_platform_task(platform: str) -> dict:
 
 def integ_final_task(platform_tasks: list) -> dict:
     task: dict
-    dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform all'
+    dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform all --workflow-ref "feat/{feature}"'
     if wsl_required:
         dispatch += " --run-wsl"
     dispatch += " --cleanup"
@@ -647,7 +647,7 @@ if [[ "${CROSS_PLATFORM}" -eq 1 ]]; then
       "end_checklist": [
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
-        "Commit worktree changes; merge back ff-only; update docs; remove worktree"
+        "Commit changes to the task branch; do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)"
       ],
       "worktree": "wt/${FEATURE}-c0-code",
       "integration_task": "C0-integ",
@@ -673,7 +673,7 @@ if [[ "${CROSS_PLATFORM}" -eq 1 ]]; then
       "end_checklist": [
         "cargo fmt",
         "Run the targeted tests you add/touch",
-        "Commit worktree changes; merge back ff-only; update docs; remove worktree"
+        "Commit changes to the task branch; do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)"
       ],
       "worktree": "wt/${FEATURE}-c0-test",
       "integration_task": "C0-integ",
@@ -701,8 +701,8 @@ if [[ "${CROSS_PLATFORM}" -eq 1 ]]; then
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
         "make integ-checks",
-        "Dispatch cross-platform smoke via scripts/ci/dispatch_feature_smoke.sh (record run ids/URLs)",
-        "Commit worktree changes; merge back ff-only; update docs; remove worktree"
+        "Dispatch cross-platform smoke via CI (record run ids/URLs): scripts/ci/dispatch_feature_smoke.sh --feature-dir \"${FEATURE_DIR}\" --runner-kind self-hosted --platform all$( [[ \"${WSL_REQUIRED}\" -eq 1 ]] && echo \" --run-wsl\" || echo \"\" ) --workflow-ref \"feat/${FEATURE}\" --cleanup",
+        "Commit worktree changes; do not merge to orchestration yet; update docs; do not delete the worktree (cleanup at feature end)"
       ],
       "worktree": "wt/${FEATURE}-c0-integ-core",
       "integration_task": "C0-integ-core",
@@ -727,10 +727,10 @@ if [[ "${CROSS_PLATFORM}" -eq 1 ]]; then
         "Create branch c0-integ-linux and worktree wt/${FEATURE}-c0-integ-linux; do not edit planning docs inside the worktree"
       ],
       "end_checklist": [
-        "Dispatch platform smoke: scripts/ci/dispatch_feature_smoke.sh --platform linux$( [[ "${WSL_REQUIRED}" -eq 1 && "${WSL_SEPARATE}" -eq 0 ]] && echo " --run-wsl" || echo "" )",
+        "Dispatch platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir \"${FEATURE_DIR}\" --runner-kind self-hosted --platform linux$( [[ \"${WSL_REQUIRED}\" -eq 1 && \"${WSL_SEPARATE}\" -eq 0 ]] && echo \" --run-wsl\" || echo \"\" ) --workflow-ref \"feat/${FEATURE}\" --cleanup",
         "If needed: fix + fmt/clippy + targeted tests",
         "Ensure Linux smoke is green; record run id/URL",
-        "Commit worktree changes (if any); merge back ff-only; update docs; remove worktree"
+        "Commit changes to the platform-fix branch (if any); do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)"
       ],
       "worktree": "wt/${FEATURE}-c0-integ-linux",
       "integration_task": "C0-integ-linux",
@@ -758,10 +758,10 @@ if [[ "${CROSS_PLATFORM}" -eq 1 ]]; then
         "Create branch c0-integ-macos and worktree wt/${FEATURE}-c0-integ-macos; do not edit planning docs inside the worktree"
       ],
       "end_checklist": [
-        "Dispatch platform smoke: scripts/ci/dispatch_feature_smoke.sh --platform macos",
+        "Dispatch platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir \"${FEATURE_DIR}\" --runner-kind self-hosted --platform macos --workflow-ref \"feat/${FEATURE}\" --cleanup",
         "If needed: fix + fmt/clippy + targeted tests",
         "Ensure macOS smoke is green; record run id/URL",
-        "Commit worktree changes (if any); merge back ff-only; update docs; remove worktree"
+        "Commit changes to the platform-fix branch (if any); do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)"
       ],
       "worktree": "wt/${FEATURE}-c0-integ-macos",
       "integration_task": "C0-integ-macos",
@@ -789,10 +789,10 @@ if [[ "${CROSS_PLATFORM}" -eq 1 ]]; then
         "Create branch c0-integ-windows and worktree wt/${FEATURE}-c0-integ-windows; do not edit planning docs inside the worktree"
       ],
       "end_checklist": [
-        "Dispatch platform smoke: scripts/ci/dispatch_feature_smoke.sh --platform windows",
+        "Dispatch platform smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir \"${FEATURE_DIR}\" --runner-kind self-hosted --platform windows --workflow-ref \"feat/${FEATURE}\" --cleanup",
         "If needed: fix + fmt/clippy + targeted tests",
         "Ensure Windows smoke is green; record run id/URL",
-        "Commit worktree changes (if any); merge back ff-only; update docs; remove worktree"
+        "Commit changes to the platform-fix branch (if any); do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)"
       ],
       "worktree": "wt/${FEATURE}-c0-integ-windows",
       "integration_task": "C0-integ-windows",
@@ -821,10 +821,10 @@ if [[ "${CROSS_PLATFORM}" -eq 1 ]]; then
         "Create branch c0-integ-wsl and worktree wt/{{FEATURE}}-c0-integ-wsl; do not edit planning docs inside the worktree"
       ],
       "end_checklist": [
-        "Dispatch WSL smoke: scripts/ci/dispatch_feature_smoke.sh --platform linux --run-wsl",
+        "Dispatch WSL smoke via CI: scripts/ci/dispatch_feature_smoke.sh --feature-dir \"{{FEATURE_DIR}}\" --runner-kind self-hosted --platform wsl --workflow-ref \"feat/{{FEATURE}}\" --cleanup",
         "If needed: fix + fmt/clippy + targeted tests",
         "Ensure WSL smoke is green; record run id/URL",
-        "Commit worktree changes (if any); merge back ff-only; update docs; remove worktree"
+        "Commit changes to the platform-fix branch (if any); do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)"
       ],
       "worktree": "wt/{{FEATURE}}-c0-integ-wsl",
       "integration_task": "C0-integ-wsl",
@@ -858,8 +858,8 @@ WSLTASK
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
         "make integ-checks",
-        "Dispatch cross-platform smoke via scripts/ci/dispatch_feature_smoke.sh (record run ids/URLs)$( [[ \"${WSL_REQUIRED}\" -eq 1 ]] && echo \" including WSL\" || echo \"\" )",
-        "Commit worktree changes; merge back ff-only; update docs; remove worktree"
+        "Dispatch cross-platform smoke via CI (record run ids/URLs): scripts/ci/dispatch_feature_smoke.sh --feature-dir \"${FEATURE_DIR}\" --runner-kind self-hosted --platform all$( [[ \"${WSL_REQUIRED}\" -eq 1 ]] && echo \" --run-wsl\" || echo \"\" ) --workflow-ref \"feat/${FEATURE}\" --cleanup",
+        "Commit worktree changes; fast-forward merge this branch into feat/${FEATURE}; update docs; do not delete the worktree (cleanup at feature end)"
       ],
       "worktree": "wt/${FEATURE}-c0-integ",
       "integration_task": "C0-integ",
@@ -897,7 +897,7 @@ else
       "end_checklist": [
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
-        "Commit worktree changes; merge back ff-only; update docs; remove worktree"
+        "Commit changes to the task branch; do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)"
       ],
       "worktree": "wt/${FEATURE}-c0-code",
       "integration_task": "C0-integ",
@@ -923,7 +923,7 @@ else
       "end_checklist": [
         "cargo fmt",
         "Run the targeted tests you add/touch",
-        "Commit worktree changes; merge back ff-only; update docs; remove worktree"
+        "Commit changes to the task branch; do not merge to orchestration; update docs; do not delete the worktree (cleanup at feature end)"
       ],
       "worktree": "wt/${FEATURE}-c0-test",
       "integration_task": "C0-integ",
@@ -951,7 +951,7 @@ else
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
         "make integ-checks",
-        "Commit worktree changes; merge back ff-only; update docs; remove worktree"
+        "Commit worktree changes; fast-forward merge this branch into feat/${FEATURE}; update docs; do not delete the worktree (cleanup at feature end)"
       ],
       "worktree": "wt/${FEATURE}-c0-integ",
       "integration_task": "C0-integ",

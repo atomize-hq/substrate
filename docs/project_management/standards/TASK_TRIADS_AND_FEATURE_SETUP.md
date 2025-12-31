@@ -194,7 +194,7 @@ Automation wrapper:
 - Integration: `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`; run relevant tests (at least new/affected suites) and finish with `make integ-checks` (required full-suite gate). Integration must reconcile code/tests to the spec.
   - If the feature includes a manual validation playbook and smoke scripts (see `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`), integration must run the relevant platform smoke scripts under `docs/project_management/next/<feature>/smoke/` and record results (including run ids/URLs for CI) in the feature `session_log.md`.
     - Preferred cross-platform mechanism: `make feature-smoke` (self-hosted runners), e.g.:
-      - `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=all RUN_WSL=1`
+      - `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=all RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
     - Use direct local execution only when the platform matches the current machine (e.g., `bash "$FEATURE_DIR/smoke/linux-smoke.sh"` on Linux).
 
 ## Cross-platform integration task model (platform-fix when needed)
@@ -202,7 +202,7 @@ Automation wrapper:
 When a slice requires cross-platform parity, use this integration task structure (see also `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`):
 - `X-integ-core`: merges `X-code` + `X-test`, gets primary-platform green, and dispatches smoke for all required platforms.
 - `X-integ-linux|macos|windows` (and optional `X-integ-wsl`): platform-fix tasks that:
-  - validate via `make feature-smoke` for the platform,
+  - validate via `make feature-smoke` for the platform (pin `WORKFLOW_REF="feat/<feature>"`),
   - apply fixes on the corresponding platform machine/worktree only if smoke fails,
   - re-run smoke until green.
 - `X-integ` (final): merges any platform-fix branches, runs `make integ-checks`, and re-runs cross-platform smoke to confirm the merged result is green.

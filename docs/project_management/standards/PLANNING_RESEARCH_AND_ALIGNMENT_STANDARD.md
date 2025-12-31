@@ -237,7 +237,7 @@ To make validation repeatable and auditable:
   - what success looks like (exit code and key expected output),
   - how to run sections manually for debugging.
   - if cross-platform validation is required, how to run smoke scripts via GitHub Actions on self-hosted runners (preferred):
-    - `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=all RUN_WSL=1`
+    - `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=all RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
 
 Prohibited:
 - “Verify it works”

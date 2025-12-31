@@ -20,7 +20,7 @@ Do not edit planning docs inside the worktree.
   - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM={{PLATFORM}} WORKFLOW_REF="{{ORCH_BRANCH}}"`
 - If this is the Linux task and WSL coverage is required (see `tasks.json` meta: `wsl_required` + `wsl_task_mode`):
   - Bundled (default): dispatch with `RUN_WSL=1`:
-    - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=linux RUN_WSL=1`
+    - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=linux RUN_WSL=1 WORKFLOW_REF="{{ORCH_BRANCH}}"`
 - If smoke passes: record run id/URL in the END entry and do not change code.
 - If smoke fails:
   1) Fix the issue in this worktree (platform-specific guards, path handling, deps) while keeping the spec contract intact.

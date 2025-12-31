@@ -104,7 +104,8 @@ GitHub Actions must run on a ref that exists on the remote. The repeatable patte
 
 Helper script (requires `gh` auth):
 - `make feature-smoke`
-  - Defaults to dispatching from a stable workflow ref (`feat/policy_and_config`) and using `RUNNER_KIND=self-hosted`; override with `WORKFLOW_REF=...` / `RUNNER_KIND=...` if needed.
+  - Defaults to dispatching from a stable workflow ref (`feat/policy_and_config`) and using `RUNNER_KIND=self-hosted`.
+  - For triad execution, set `WORKFLOW_REF` to the orchestration branch (typically `feat/<feature>`) so the workflow definition matches the feature branch.
 
 ## Platform-fix note (important)
 
@@ -115,7 +116,7 @@ Platform-fix work happens on the corresponding platform machine:
 - apply the fix,
 - commit,
 - re-run smoke via `make feature-smoke`,
-- fast-forward merge back to the orchestration branch.
+- do not merge to the orchestration branch (the final aggregator integration task merges platform-fix branches, re-runs smoke, and is the only FF-merge back).
 
 ## WSL testing note
 

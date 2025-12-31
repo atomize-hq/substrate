@@ -111,7 +111,7 @@ Start integration worktree:
 - `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="C0-integ-core"`
 
 Dispatch cross-platform smoke:
-- `make feature-smoke FEATURE_DIR="docs/project_management/next/<feature>" PLATFORM=all`
+- `make feature-smoke FEATURE_DIR="docs/project_management/next/<feature>" PLATFORM=all WORKFLOW_REF="feat/<feature>"`
 - Add WSL coverage when required: `RUN_WSL=1`
 
 If smoke fails, start only the failing platform-fix tasks:

@@ -137,9 +137,9 @@ Required interoperability rules:
   - If you opt into the platform-fix integration model, set `meta.schema_version: 2` and `meta.platforms_required: [...]` in `tasks.json` and create `X-integ-core`, `X-integ-<platform>`, and `X-integ` tasks per slice (see `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`).
   - If WSL coverage is required, use `meta.wsl_required: true` and `meta.wsl_task_mode: "bundled"|"separate"` (do not add `"wsl"` to `meta.platforms_required`).
   - Preferred smoke dispatch examples:
-    - All platforms: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=all`
-    - Linux + WSL bundled: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux RUN_WSL=1`
-    - WSL-only (separate WSL task): `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=wsl`
+    - All platforms: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=all WORKFLOW_REF="feat/<feature>"`
+    - Linux + WSL bundled: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
+    - WSL-only (separate WSL task): `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=wsl WORKFLOW_REF="feat/<feature>"`
 
 Sequencing rules:
 - Align `docs/project_management/next/sequencing.json` with task dependencies.
