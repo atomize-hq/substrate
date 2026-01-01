@@ -89,7 +89,7 @@
       "branch": "feat/policy_and_config",
       "directory": "docs/project_management/next/policy_and_config_mental_model_simplification",
       "plan": "docs/project_management/next/policy_and_config_mental_model_simplification/plan.md",
-      "status": "not_started",
+      "status": "completed",
       "sequence": [
         {
           "id": "PCM0",

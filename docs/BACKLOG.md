@@ -5,27 +5,6 @@ Keep concise, actionable, and security-focused.
 
 ## Next
 
-- **P0 – Socket-activated world-agent service (parallelizable --  runs concurrently with: "Replay polish – isolation + verbose scopes")**
-  - Current provisioning only installs `substrate-world-agent.service`; the agent binds `/run/substrate.sock` itself and must stay running. Introduce a matching `.socket` unit so systemd listens on the socket, launches the agent on demand, and restarts it transparently.
-  - Work items:
-    - Update `world-agent` to accept an inherited listener (LISTEN_FDS) in addition to binding directly; keep the existing code path for non-systemd environments.
-    - Teach `ensure_world_agent_ready()` to tolerate socket-activated setups (socket already present, service only starts when probed).
-    - Extend Linux/Lima/WSL installers, world-enable helper, and uninstall scripts to deploy/remove both `.service` and `.socket` units.
-    - Refresh docs/tests to describe the new flow; ensure guidance around sudo/user installs and permissions highlights the benefit.
-  - Can run in parallel with other features—touches agent + provisioning scripts but does not block shell, tracing, or UX work.
-
-- **P0 - Replay polish – isolation + verbose scopes (parallelizable -- runs concurrently with: "Socket-activated world-agent service")**
-  - *Isolation follow-up:* Most of the Phase 4.5 isolation plan shipped (per-replay netns + nft scoping), but optional enhancements remain: nft cgroup matching fallback, documentation updates (`COMPLETE_FIXES_PHASE4_PRE45.md`), and diagnostic tooling for leftover netns/rules.
-  - *Verbose scopes:* When running `substrate --replay --replay-verbose`, show a concise `scopes: [...]` line next to the “world strategy” output so operators can see which policy scopes were exercised per replay.
-  - *Clear warnings:* Differentiate shell vs. replay world warnings—shell path messages should explicitly say “shell world-agent path”, while replay warnings keep the `[replay] …` prefix.
-  - *Default-to-world replay tests:* Add integration coverage for the default world-on path, `--no-world`, and env opt-out so replay regressions are caught automatically.
-  - Treat all of the above as a single replay-focused bucket so backend polish and CLI visibility ship together (shared tests/docs).  
-
-
-- **P0 - Health command manager mismatch bug (parallelizable -- runs concurrently with: "Socket-activated world-agent service" AND "Replay polish – isolation + verbose scopes")**
-  - `substrate health` currently reports “attention required” whenever optional manager detection hooks (direnv, asdf, conda, etc.) aren’t found on the host, even though the host never had them. We only care when the world and host detection disagree (host has a manager, world doesn’t), not when both sides are missing a manager entirely.
-  - Fix: adjust health summary logic to only flag mismatches when the host reports a manager and the world fails to mirror it. Missing managers that the host doesn’t have should not trigger an “attention required” status.
-
 - **P1 – Policy-driven world fs mode**
   - Problem: write permissions inside worlds currently depend on systemd hardening + overlay success, not on broker policy. Sensitive repos need a policy bit to force read-only worlds while other projects remain writable, without editing unit files manually.
   - Work: extend broker schema to accept `world.fs_mode = read_only|writable` (global + per-project), plumb into shell/world-agent so PTY + non-PTY sessions honor it, and update docs/doctor to surface the active mode. Systemd units must allow `/home` writes so policy can enforce RO vs writable deterministically.
@@ -275,6 +254,28 @@ Risks / considerations
 
 
 ## DONE -- IMPLEMENTED
+
+
+- ~~**P0 –Socket-activated world-agent service~~ **(Done)**
+  - Current provisioning only installs `substrate-world-agent.service`; the agent binds `/run/substrate.sock` itself and must stay running. Introduce a matching `.socket` unit so systemd listens on the socket, launches the agent on demand, and restarts it transparently.
+  - Work items:
+    - Update `world-agent` to accept an inherited listener (LISTEN_FDS) in addition to binding directly; keep the existing code path for non-systemd environments.
+    - Teach `ensure_world_agent_ready()` to tolerate socket-activated setups (socket already present, service only starts when probed).
+    - Extend Linux/Lima/WSL installers, world-enable helper, and uninstall scripts to deploy/remove both `.service` and `.socket` units.
+    - Refresh docs/tests to describe the new flow; ensure guidance around sudo/user installs and permissions highlights the benefit.
+  - Can run in parallel with other features—touches agent + provisioning scripts but does not block shell, tracing, or UX work.
+
+- ~~**Replay polish – isolation + verbose scopes~~ **(Done)**
+  - *Isolation follow-up:* Most of the Phase 4.5 isolation plan shipped (per-replay netns + nft scoping), but optional enhancements remain: nft cgroup matching fallback, documentation updates (`COMPLETE_FIXES_PHASE4_PRE45.md`), and diagnostic tooling for leftover netns/rules.
+  - *Verbose scopes:* When running `substrate --replay --replay-verbose`, show a concise `scopes: [...]` line next to the “world strategy” output so operators can see which policy scopes were exercised per replay.
+  - *Clear warnings:* Differentiate shell vs. replay world warnings—shell path messages should explicitly say “shell world-agent path”, while replay warnings keep the `[replay] …` prefix.
+  - *Default-to-world replay tests:* Add integration coverage for the default world-on path, `--no-world`, and env opt-out so replay regressions are caught automatically.
+  - Treat all of the above as a single replay-focused bucket so backend polish and CLI visibility ship together (shared tests/docs).  
+
+
+- ~~Health command manager mismatch bug~~  **(Done)**
+  - `substrate health` currently reports “attention required” whenever optional manager detection hooks (direnv, asdf, conda, etc.) aren’t found on the host, even though the host never had them. We only care when the world and host detection disagree (host has a manager, world doesn’t), not when both sides are missing a manager entirely.
+  - Fix: adjust health summary logic to only flag mismatches when the host reports a manager and the world fails to mirror it. Missing managers that the host doesn’t have should not trigger an “attention required” status.
 
 - ~~Top Priority – Global configuration UX~~ **(Done)**
   - Implementation: `substrate config init` scaffolds `~/.substrate/config.yaml`, `config show` renders YAML/JSON with redaction hooks, and `config set` applies multi-key updates atomically with schema validation.
