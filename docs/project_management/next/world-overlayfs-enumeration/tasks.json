@@ -57,13 +57,13 @@
       "references": [
         "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",
         "docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md",
-        "docs/project_management/next/world-overlayfs-enumeration/decision_register.md",
+        "docs/project_management/next/world-overlayfs-enumeration/decision_register.md (DR-0001, DR-0002)",
         "docs/project_management/next/world-overlayfs-enumeration/integration_map.md"
       ],
       "acceptance_criteria": [
         "Project isolation mount choreography uses mount --move (not mount --bind) to place the overlay mount at the project path inside the private mount namespace",
         "Kernel overlayfs is tried first; if it is unavailable or fails the enumeration health check, fuse-overlayfs is tried exactly once as fallback",
-        "Enumeration health check uses a dedicated probe overlay and the exact POSIX sh probe command specified in ADR-0004",
+        "Enumeration health check implements the ADR-0004 enumeration probe contract (probe id enumeration_v1; probe file .substrate_enum_probe; directory enumeration validated via ls -a1 on a dedicated probe overlay)",
         "When world is required and no viable strategy exists, Substrate fails closed with exit code 3 and does not execute the user command on the host",
         "When world is optional and no viable strategy exists, Substrate executes on host and emits exactly one warning line containing substrings 'world unavailable' and 'falling back to host'",
         "Trace spans include the required world_fs_strategy_* fields and fallback reason enums defined in ADR-0004",

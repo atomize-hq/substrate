@@ -23,20 +23,31 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: ce2d1407e0a28e63907b72ec3bc460d34bebd804682ed35454397b249248a336
-
-ADR_BODY_SHA256: <run `python3 scripts/planning/check_adr_exec_summary.py --adr <this-file> --fix` after editing>
-
-- Existing: On some Linux hosts, a “world” overlay mount can succeed but directory enumeration in the merged view is broken (e.g., `ls` shows empty even though `stat` works), making worlds unsafe/confusing.
-- New: Substrate refuses to run a “world” command on any filesystem strategy that fails an enumeration health check; it selects a strategy + fallback chain deterministically and records the choice/fallback reason in trace/doctor output.
-- Why: Restores the core world contract (observable filesystem state) and improves reproducibility/debuggability when host/filesystem combinations are problematic.
-- Links:
-  - `docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md`
+ADR_BODY_SHA256: 93e79ffae9fac917443fb22f7cac5063cffdb6aff57ac5f560152d2182e4946b
+### Changes (operator-facing)
+- World overlay directory enumeration reliability (Linux)
+  - Existing: On some Linux hosts, a world overlay mount can succeed but directory enumeration in the merged view is broken (e.g., `ls` shows empty even though `stat` works), making worlds unsafe/confusing.
+  - New: Substrate refuses to run a world command on any filesystem strategy that fails an enumeration health check; it selects a strategy + fallback chain deterministically and records the choice/fallback reason in trace and doctor output.
+  - Why: Restores the core world contract (observable filesystem state) and makes host variance reproducible and debuggable.
+  - Links:
+    - `docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md`
+    - `docs/project_management/next/world-overlayfs-enumeration/manual_testing_playbook.md`
+    - `docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh`
 
 ## Problem / Context
 - Substrate’s Linux world execution uses overlayfs to present an isolated, writable view of the project and to compute filesystem diffs.
 - On some hosts, the overlay mount can succeed and writes can occur, but directory enumeration in the merged overlay view returns an empty listing (e.g., `ls` shows nothing) even when files exist and can be `stat`’d.
 - This breaks the fundamental world contract: interactive workflows (shell, editors, build tools) depend on accurate directory listings, and Substrate becomes confusing/unsafe to use because “writes happened” but the user cannot observe them inside the world.
+
+## Reality Check / Evidence (Grounding)
+- This ADR is grounded in the current Linux project isolation implementation, which today:
+  - Mounts an overlay at a Substrate-managed merged directory, then
+  - Enters a private mount namespace and bind-mounts the merged directory onto the host project path for “project cage” enforcement.
+- Implementation references (for grounding only; this ADR remains authoritative):
+  - Project cage enforcement script: `crates/world/src/exec.rs` (mount namespace wrapper; bind-mount enforcement)
+  - Overlay mount + fuse fallback plumbing: `crates/world/src/overlayfs/`
+- The “enumeration broken but stat works” failure mode is consistent with a merged-view `readdir(3)` failure while direct path lookup continues to succeed; Substrate’s operator-visible symptom is `ls`/`find` returning empty while tools can still access known paths.
+- This ADR treats directory enumeration correctness as a hard safety prerequisite for world execution: if enumeration is unhealthy, world execution is refused (or degrades to host only when world is optional).
 
 ## Goals
 - Ensure directory enumeration inside the world overlay is correct and stable (files created in the world are visible via `readdir`/`ls`).
@@ -55,11 +66,21 @@ ADR_BODY_SHA256: <run `python3 scripts/planning/check_adr_exec_summary.py --adr 
   - `substrate` interactive shell and `substrate --world ...` MUST present a coherent filesystem view:
     - A file created in the project directory inside the world MUST be discoverable via directory enumeration (e.g., `ls`, `find`, `readdir`) for the duration of that world session/command.
   - `substrate world doctor --json` MUST report whether the host supports a functional overlay-based world filesystem strategy for the current environment (see “Platform guarantees”).
+- World requirement:
+  - World is **required** if either is true:
+    - The CLI explicitly requests world execution (`--world`), or
+    - Policy mode is `enforce` and the command is under a “requires world” constraint, including any of:
+      - `world_fs.require_world=true`
+      - `world_fs.mode=read_only`
+      - `world_fs.isolation=full`
+      - command matched `allow_with_restrictions` (isolated match)
+  - World is **optional** otherwise.
 - Exit codes:
   - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
-  - `0`: command succeeded
-  - `3`: world filesystem strategy unavailable when required (no viable strategy passes the enumeration health check)
-  - `4`: host prerequisites missing for the requested world/isolation mode and Substrate is not allowed to degrade
+  - `0`: command succeeded (in world, or in host fallback when world is optional)
+  - `2`: usage/config error (invalid flags/config that prevent execution)
+  - `3`: world filesystem strategy unavailable when required (no viable in-world strategy passes the enumeration health check)
+  - `5`: safety/policy violation (policy deny, protected-path violation)
 
 ### Config
 - Files and locations (precedence): unchanged by this ADR.
@@ -70,6 +91,25 @@ ADR_BODY_SHA256: <run `python3 scripts/planning/check_adr_exec_summary.py --adr 
   - Substrate MUST NOT run a “world” command on a filesystem strategy that cannot enumerate directories correctly.
   - Substrate MUST attempt the selected primary world filesystem strategy first; if it fails the enumeration health check, Substrate MUST attempt the configured fallback strategy chain (see “Security / Safety Posture”).
   - Substrate MUST record the chosen strategy and any fallback reason in trace spans for reproducibility.
+  - Enumeration probe contract (authoritative):
+    - Probe id: `enumeration_v1`
+    - Probe mechanism:
+      1. Create a dedicated probe overlay mount (not the user session overlay) whose merged directory represents the project root.
+      2. In the probe merged directory, create a probe file at `./.substrate_enum_probe` (exact filename).
+      3. Enumerate the directory entries using `ls -a1` and assert the output contains a line exactly equal to `.substrate_enum_probe`.
+      4. Remove the probe file.
+    - A strategy is “enumeration healthy” if and only if the probe succeeds.
+    - Any failure in steps (1)-(4) is an unhealthy result for that strategy.
+  - Strategy selection contract (authoritative):
+    - Primary strategy: kernel overlayfs (`overlay`)
+    - Fallback strategy: fuse-overlayfs (`fuse`)
+    - If primary is unavailable or probe-unhealthy: attempt fallback exactly once.
+    - If neither strategy is viable:
+      - If world is required: exit `3` and do not execute on host.
+      - If world is optional: execute on host and emit the warning line defined below.
+  - Warning line contract (authoritative):
+    - If and only if Substrate executes on host due to “world optional + no viable strategy”, it MUST emit exactly one warning line to stderr:
+      - `substrate: warn: world unavailable; falling back to host`
 - macOS:
   - No behavior changes required by this ADR (Lima-backed worlds are out of scope).
 - Windows:
@@ -108,10 +148,31 @@ ADR_BODY_SHA256: <run `python3 scripts/planning/check_adr_exec_summary.py --adr 
 - Fail-closed rules:
   - If world execution is required (CLI `--world` or enforce-mode “requires world”) and no viable world filesystem strategy passes the enumeration health check, Substrate MUST fail closed with exit code `3`.
 - Degrade rules:
-  - If world execution is selected but not required, and no viable strategy exists, Substrate MAY fall back to host execution, but MUST record the fallback reason in trace/telemetry and MUST surface a clear warning to the user.
+  - If world execution is selected but not required, and no viable strategy exists, Substrate MUST fall back to host execution, MUST record the fallback reason in trace/telemetry, and MUST surface a clear warning to the user.
 - Protected paths/invariants:
   - Mount operations MUST remain confined to Substrate-managed overlay roots and the target project path within a private mount namespace.
   - The project bind enforcement MUST prevent absolute-path escapes back into the host project when running in “project” isolation mode.
+- Observability contract (authoritative):
+  - Trace spans (on `command_complete` events) MUST include these keys:
+    - `world_fs_strategy_primary`: `overlay|fuse`
+    - `world_fs_strategy_final`: `overlay|fuse|host`
+    - `world_fs_strategy_fallback_reason`: one of:
+      - `none` (no fallback occurred)
+      - `primary_unavailable`
+      - `primary_mount_failed`
+      - `primary_probe_failed`
+      - `fallback_unavailable`
+      - `fallback_mount_failed`
+      - `fallback_probe_failed`
+      - `world_optional_fallback_to_host`
+  - `substrate world doctor --json` MUST include these keys:
+    - `world_fs_strategy_primary`: `overlay`
+    - `world_fs_strategy_fallback`: `fuse`
+    - `world_fs_strategy_probe`:
+      - `id`: `enumeration_v1`
+      - `probe_file`: `.substrate_enum_probe`
+      - `result`: `pass|fail`
+      - `failure_reason`: string or null
 
 ## Validation Plan (Authoritative)
 
