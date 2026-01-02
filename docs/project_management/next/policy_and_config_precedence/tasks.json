@@ -57,7 +57,7 @@
       "name": "Workspace config precedence over env (code)",
       "type": "code",
       "phase": "Policy + Config Precedence",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Implement workspace-over-env precedence in the effective config resolver (production code only).",
       "references": [
         "docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md",

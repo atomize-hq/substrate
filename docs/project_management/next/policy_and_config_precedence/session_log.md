@@ -132,3 +132,12 @@
 - Task branch: `pcp-pcp0-precedence-code`
 - Worktree: `wt/pcp0-precedence-code`
 - Goal: Implement the precedence change in the effective-config resolver: when a workspace exists, workspace config overrides `SUBSTRATE_*` env vars (production code only).
+
+## END — 2026-01-02T01:46:52Z — code — PCP0-code (workspace config precedence over env)
+- Summary of changes:
+  - Updated effective-config precedence so that, when a workspace exists, `<workspace_root>/.substrate/workspace.yaml` wins over `SUBSTRATE_*` env vars.
+- Files changed:
+  - `crates/shell/src/execution/config_model.rs`
+- Evidence (commands):
+  - `cargo fmt` → success
+  - `cargo clippy --workspace --all-targets -- -D warnings` → success
