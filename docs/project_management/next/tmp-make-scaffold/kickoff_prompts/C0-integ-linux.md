@@ -11,15 +11,16 @@ Do not edit planning docs inside the worktree.
 
 1. Run this task on a machine that matches the required platform: **linux**.
 2. Verify you are in the task worktree `wt/tmp-make-scaffold-c0-integ-linux` on branch `tmp-make-scaffold-c0-integ-linux` and that `.taskmeta.json` exists at the worktree root.
+   - Do all work (edits, builds/tests, commits, and `make triad-task-finish`) from inside this worktree.
 3. Read: plan.md, tasks.json, session_log.md, spec, this prompt.
 4. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
-   - `make triad-task-start FEATURE_DIR="docs/project_management/next/tmp-make-scaffold" TASK_ID="C0-integ-linux" TASK_PLATFORM=linux`
+   - `make triad-task-start FEATURE_DIR="docs/project_management/next/tmp-make-scaffold" TASK_ID="C0-integ-linux" TASK_PLATFORM=linux LAUNCH_CODEX=1`
 
 ## Requirements
+- Before validating smoke or making fixes, merge the slice’s core integration branch into this worktree:
+  - Merge `tmp-make-scaffold-c0-integ-core` into `tmp-make-scaffold-c0-integ-linux`.
 - Validate platform smoke via CI for this platform (repeat until green if you make fixes):
-  - `make feature-smoke FEATURE_DIR="docs/project_management/next/tmp-make-scaffold" PLATFORM=linux WORKFLOW_REF="feat/tmp-make-scaffold"`
-- This feature requires WSL coverage and uses bundled mode, so dispatch Linux smoke with `RUN_WSL=1`:
-  - `make feature-smoke FEATURE_DIR="docs/project_management/next/tmp-make-scaffold" PLATFORM=linux RUN_WSL=1 WORKFLOW_REF="feat/tmp-make-scaffold"`
+  - `make feature-smoke FEATURE_DIR="docs/project_management/next/tmp-make-scaffold" PLATFORM=linux RUN_WSL=1 RUNNER_KIND=self-hosted WORKFLOW_REF="feat/tmp-make-scaffold" REMOTE=origin CLEANUP=1`
 - If smoke passes: record run id/URL in the END entry and do not change code.
 - If smoke fails:
   1) Fix the issue in this worktree (platform-specific guards, path handling, deps) while keeping the spec contract intact.
@@ -29,5 +30,5 @@ Do not edit planning docs inside the worktree.
 ## End Checklist
 1. Ensure smoke is green for linux and capture the run id/URL.
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="C0-integ-linux"`
-3. On the orchestration branch, update tasks.json + session_log.md END entry; commit docs (`docs: finish C0-integ-linux`).
+3. Hand off run id/URL and any Linux-specific notes to the operator (do not edit planning docs inside the worktree).
 4. Do not delete the worktree (feature cleanup removes worktrees at feature end).

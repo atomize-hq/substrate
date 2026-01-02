@@ -22,13 +22,13 @@ Do not edit planning docs inside the worktree.
   - relevant tests
   - `make integ-checks`
 - Run cross-platform smoke via CI to confirm the merged result is green:
-  - `make feature-smoke FEATURE_DIR="docs/project_management/next/tmp-make-scaffold" PLATFORM=all WORKFLOW_REF="feat/tmp-make-scaffold"`
-  - This feature requires WSL coverage, so add `RUN_WSL=1`.
+  - Run from this worktree (smoke validates current `HEAD` via a throwaway remote branch):
+  - `make feature-smoke FEATURE_DIR="docs/project_management/next/tmp-make-scaffold" PLATFORM=all RUN_WSL=1 RUNNER_KIND=self-hosted WORKFLOW_REF="feat/tmp-make-scaffold" REMOTE=origin CLEANUP=1`
 - Complete the slice closeout gate report:
   - `docs/project_management/next/tmp-make-scaffold/C0-closeout_report.md`
 
 ## End Checklist
 1. Ensure all required platforms are green (include run ids/URLs).
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="C0-integ"`
-3. On the orchestration branch, update tasks.json + session_log.md END entry; commit docs (`docs: finish C0-integ`).
+3. Hand off run ids/URLs and closeout report completion to the operator (do not edit planning docs inside the worktree).
 4. Do not delete the worktree (feature cleanup removes worktrees at feature end).

@@ -27,7 +27,8 @@ Do not edit planning docs inside the worktree.
   - relevant tests
   - `make integ-checks`
 - Re-run cross-platform smoke via CI to confirm the merged result is green:
-  - `make feature-smoke FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy_and_config_precedence"`
+  - Run from this worktree (smoke validates current `HEAD` via a throwaway remote branch):
+  - `make feature-smoke FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy_and_config_precedence" REMOTE=origin CLEANUP=1`
 - Complete the slice closeout gate report:
   - `docs/project_management/next/policy_and_config_precedence/PCP0-closeout_report.md`
 

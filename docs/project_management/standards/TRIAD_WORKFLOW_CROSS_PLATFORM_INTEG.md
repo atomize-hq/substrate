@@ -10,6 +10,10 @@ It shows:
 - a final cross-platform integration aggregator (`X-integ`) that merges platform fixes and re-validates.
 - worktrees retained through the feature and removed only by the feature cleanup task (`FZ-feature-cleanup`).
 
+Operational notes (important for correct orchestration):
+- CI smoke dispatch (`make feature-smoke ...`) validates the **current `HEAD`** by creating/pushing a throwaway branch at that commit; run it from the worktree that contains the code you intend to validate (e.g., the `X-integ-core` or `X-integ` worktree).
+- Platform-fix tasks should begin by merging the `X-integ-core` task branch into their own branch before running smoke or making fixes.
+
 This file includes two diagrams:
 - **Diagram A:** The overall cross-platform platform-fix triad flow.
 - **Diagram B:** The same flow with explicit emphasis on **WSL bundled-by-default** behavior.

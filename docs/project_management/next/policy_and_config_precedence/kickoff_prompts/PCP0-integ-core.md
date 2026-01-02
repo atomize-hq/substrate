@@ -18,19 +18,31 @@ Do not edit planning docs inside the worktree.
 - Merge the task branches for this slice into this worktree (resolve conflicts/drift):
   - `pcp-pcp0-precedence-code`
   - `pcp-pcp0-precedence-test`
-- Run integration gates:
+- Run integration gates and ensure the state you intend to validate is committed on `HEAD`:
   - `cargo fmt`
   - `cargo clippy --workspace --all-targets -- -D warnings`
   - relevant `cargo test` suites for affected areas
   - `make integ-checks`
-- Dispatch cross-platform smoke via CI:
-  - `make feature-smoke FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy_and_config_precedence"`
-  - If any platform fails, ask the operator to start only the failing platform-fix tasks from the emitted `RUN_ID`:
-    - `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" SLICE_ID="PCP0" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
-  - After all required platforms are green, ask the operator to start `PCP0-integ` (integration final):
-    - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" SLICE_ID="PCP0" LAUNCH_CODEX=1`
+- Preferred sequencing (matches the e2e flow): finish this task (runs gates + commits) before dispatching smoke:
+  - From inside this worktree: `make triad-task-finish TASK_ID="PCP0-integ-core"`
+
+### Cross-platform smoke via CI (validation-only)
+
+Dispatch from this **integ-core worktree**, because the smoke dispatcher validates the current `HEAD` by creating/pushing a throwaway branch at that commit.
+
+- `make feature-smoke FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy_and_config_precedence" REMOTE=origin CLEANUP=1`
+
+If any platform fails:
+- Ask the operator to start only the failing platform-fix tasks from the emitted `RUN_ID` (operator runs this from the orchestration checkout, not a task worktree):
+  - `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" SLICE_ID="PCP0" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
+
+If `PLATFORM=all` smoke is green:
+- Mark `PCP0-integ-linux|macos|windows` as `completed` as no-ops on the orchestration branch so `PCP0-integ` can start (its `depends_on` includes these tasks).
+
+After all required platforms are green (and platform-fix tasks are completed), ask the operator to start `PCP0-integ` (integration final):
+- `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" SLICE_ID="PCP0" LAUNCH_CODEX=1`
 
 ## End Checklist
-1. Ensure `make integ-checks` is green; capture key outputs and smoke run id/URL (if dispatched).
-2. From inside the worktree, run: `make triad-task-finish TASK_ID="PCP0-integ-core"`.
+1. Ensure this worktree is finished via `make triad-task-finish TASK_ID="PCP0-integ-core"`.
+2. Dispatch cross-platform smoke; capture `RUN_ID`/URL and failing platforms summary (if any).
 3. Hand off key outputs + smoke run ids/URLs to the operator (do not edit planning docs inside the worktree).
