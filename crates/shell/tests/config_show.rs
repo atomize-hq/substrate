@@ -206,11 +206,11 @@ fn config_show_resolves_effective_config_with_precedence() {
     assert_json_str(&json, "/world/anchor_path", "/cli/anchor");
     assert_json_bool(&json, "/world/caged", false);
 
-    // Env overrides workspace/global for the remaining keys.
-    assert_json_str(&json, "/policy/mode", "enforce");
-    assert_json_bool(&json, "/sync/auto_sync", true);
-    assert_json_str(&json, "/sync/direction", "both");
-    assert_json_str(&json, "/sync/conflict_policy", "abort");
+    // Workspace overrides env/global for all remaining keys when a workspace exists.
+    assert_json_str(&json, "/policy/mode", "observe");
+    assert_json_bool(&json, "/sync/auto_sync", false);
+    assert_json_str(&json, "/sync/direction", "from_host");
+    assert_json_str(&json, "/sync/conflict_policy", "prefer_world");
 
     let exclude = json
         .pointer("/sync/exclude")
@@ -226,10 +226,10 @@ fn config_show_resolves_effective_config_with_precedence() {
         [".git/**", ".substrate/**", ".substrate-git/**"],
         "protected excludes must be present and leading"
     );
-    assert!(items.contains(&"env-a"));
-    assert!(items.contains(&"env-b"));
+    assert!(items.contains(&"workspace-only"));
     assert!(!items.contains(&"global-only"));
-    assert!(!items.contains(&"workspace-only"));
+    assert!(!items.contains(&"env-a"));
+    assert!(!items.contains(&"env-b"));
 }
 
 #[test]
