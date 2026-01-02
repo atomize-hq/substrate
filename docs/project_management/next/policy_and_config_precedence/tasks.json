@@ -89,7 +89,7 @@
       "git_branch": "pcp-pcp0-precedence-code",
       "required_make_targets": ["triad-code-checks"],
       "worktree": "wt/pcp0-precedence-code",
-      "integration_task": "PCP0-integ",
+      "integration_task": "PCP0-integ-core",
       "kickoff_prompt": "docs/project_management/next/policy_and_config_precedence/kickoff_prompts/PCP0-code.md",
       "depends_on": ["F0-exec-preflight"],
       "concurrent_with": ["PCP0-test"]
@@ -127,18 +127,189 @@
       "git_branch": "pcp-pcp0-precedence-test",
       "required_make_targets": ["triad-test-checks"],
       "worktree": "wt/pcp0-precedence-test",
-      "integration_task": "PCP0-integ",
+      "integration_task": "PCP0-integ-core",
       "kickoff_prompt": "docs/project_management/next/policy_and_config_precedence/kickoff_prompts/PCP0-test.md",
       "depends_on": ["F0-exec-preflight"],
       "concurrent_with": ["PCP0-code"]
     },
     {
-      "id": "PCP0-integ",
-      "name": "Workspace config precedence over env (integration)",
+      "id": "PCP0-integ-core",
+      "name": "Workspace config precedence over env (integration core)",
       "type": "integration",
       "phase": "Policy + Config Precedence",
       "status": "pending",
-      "description": "Merge PCP0 code+tests, reconcile to PCP0-spec, and run fmt/clippy/tests plus smoke validation.",
+      "description": "Merge PCP0 code+tests and make the slice green on the primary dev platform.",
+      "references": [
+        "docs/project_management/next/policy_and_config_precedence/PCP0-spec.md",
+        "docs/project_management/next/policy_and_config_precedence/smoke/linux-smoke.sh",
+        "docs/project_management/next/policy_and_config_precedence/smoke/macos-smoke.sh",
+        "docs/project_management/next/policy_and_config_precedence/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md",
+        "docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "Core slice is green under make integ-checks and matches PCP0-spec.md"
+      ],
+      "start_checklist": [
+        "make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\"",
+        "Read PCP0-spec.md and confirm PCP0-code and PCP0-test branches are ready to merge",
+        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\" TASK_ID=\"PCP0-integ-core\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "Dispatch cross-platform smoke via CI (record run ids/URLs): make feature-smoke FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/policy_and_config_precedence\"",
+        "If any platform fails, start only the failing platform-fix tasks from the emitted RUN_ID: make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\" SLICE_ID=\"PCP0\" SMOKE_RUN_ID=\"<run-id>\"",
+        "After failing platforms are green, start the final aggregator: make triad-task-start-integ-final FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\" SLICE_ID=\"PCP0\"",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"PCP0-integ-core\"",
+        "On the orchestration branch: update tasks.json + session_log.md END entry; commit docs"
+      ],
+      "git_branch": "pcp-pcp0-precedence-integ-core",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": false,
+      "worktree": "wt/pcp0-precedence-integ-core",
+      "integration_task": "PCP0-integ-core",
+      "kickoff_prompt": "docs/project_management/next/policy_and_config_precedence/kickoff_prompts/PCP0-integ-core.md",
+      "depends_on": ["PCP0-code", "PCP0-test"],
+      "concurrent_with": []
+    },
+    {
+      "id": "PCP0-integ-linux",
+      "name": "Workspace config precedence over env (integration Linux)",
+      "type": "integration",
+      "phase": "Policy + Config Precedence",
+      "status": "pending",
+      "description": "Linux platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/policy_and_config_precedence/PCP0-spec.md",
+        "docs/project_management/next/policy_and_config_precedence/smoke/linux-smoke.sh",
+        "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "linux smoke is green for this slice"
+      ],
+      "start_checklist": [
+        "Run on linux host if possible",
+        "make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\"",
+        "Read PCP0-spec.md and kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\" TASK_ID=\"PCP0-integ-linux\""
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\" PLATFORM=linux RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/policy_and_config_precedence\"",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"PCP0-integ-linux\"",
+        "On the orchestration branch: update tasks.json + session_log.md END entry; commit docs"
+      ],
+      "git_branch": "pcp-pcp0-precedence-integ-linux",
+      "required_make_targets": ["triad-code-checks"],
+      "merge_to_orchestration": false,
+      "worktree": "wt/pcp0-precedence-integ-linux",
+      "integration_task": "PCP0-integ-linux",
+      "kickoff_prompt": "docs/project_management/next/policy_and_config_precedence/kickoff_prompts/PCP0-integ-linux.md",
+      "depends_on": ["PCP0-integ-core"],
+      "concurrent_with": [],
+      "platform": "linux",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml"
+    },
+    {
+      "id": "PCP0-integ-macos",
+      "name": "Workspace config precedence over env (integration macOS)",
+      "type": "integration",
+      "phase": "Policy + Config Precedence",
+      "status": "pending",
+      "description": "macOS platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/policy_and_config_precedence/PCP0-spec.md",
+        "docs/project_management/next/policy_and_config_precedence/smoke/macos-smoke.sh",
+        "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "macos smoke is green for this slice"
+      ],
+      "start_checklist": [
+        "Run on macos host if possible",
+        "make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\"",
+        "Read PCP0-spec.md and kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\" TASK_ID=\"PCP0-integ-macos\""
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\" PLATFORM=macos RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/policy_and_config_precedence\"",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"PCP0-integ-macos\"",
+        "On the orchestration branch: update tasks.json + session_log.md END entry; commit docs"
+      ],
+      "git_branch": "pcp-pcp0-precedence-integ-macos",
+      "required_make_targets": ["triad-code-checks"],
+      "merge_to_orchestration": false,
+      "worktree": "wt/pcp0-precedence-integ-macos",
+      "integration_task": "PCP0-integ-macos",
+      "kickoff_prompt": "docs/project_management/next/policy_and_config_precedence/kickoff_prompts/PCP0-integ-macos.md",
+      "depends_on": ["PCP0-integ-core"],
+      "concurrent_with": [],
+      "platform": "macos",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml"
+    },
+    {
+      "id": "PCP0-integ-windows",
+      "name": "Workspace config precedence over env (integration Windows)",
+      "type": "integration",
+      "phase": "Policy + Config Precedence",
+      "status": "pending",
+      "description": "Windows platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/policy_and_config_precedence/PCP0-spec.md",
+        "docs/project_management/next/policy_and_config_precedence/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md",
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "acceptance_criteria": [
+        "windows smoke is green for this slice"
+      ],
+      "start_checklist": [
+        "Run on windows host if possible",
+        "make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\"",
+        "Read PCP0-spec.md and kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\" TASK_ID=\"PCP0-integ-windows\""
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\" PLATFORM=windows RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/policy_and_config_precedence\"",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"PCP0-integ-windows\"",
+        "On the orchestration branch: update tasks.json + session_log.md END entry; commit docs"
+      ],
+      "git_branch": "pcp-pcp0-precedence-integ-windows",
+      "required_make_targets": ["triad-code-checks"],
+      "merge_to_orchestration": false,
+      "worktree": "wt/pcp0-precedence-integ-windows",
+      "integration_task": "PCP0-integ-windows",
+      "kickoff_prompt": "docs/project_management/next/policy_and_config_precedence/kickoff_prompts/PCP0-integ-windows.md",
+      "depends_on": ["PCP0-integ-core"],
+      "concurrent_with": [],
+      "platform": "windows",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml"
+    },
+    {
+      "id": "PCP0-integ",
+      "name": "Workspace config precedence over env (integration final)",
+      "type": "integration",
+      "phase": "Policy + Config Precedence",
+      "status": "pending",
+      "description": "Final cross-platform integration: merge any platform fixes and confirm all required platforms are green.",
       "references": [
         "docs/project_management/next/policy_and_config_precedence/PCP0-spec.md",
         "docs/project_management/next/policy_and_config_precedence/PCP0-closeout_report.md",
@@ -157,25 +328,56 @@
         "PCP0-closeout_report.md is completed with command evidence and cross-platform smoke results/URLs"
       ],
       "start_checklist": [
-        "git checkout feat/policy_and_config_precedence && git pull --ff-only",
-        "Read PCP0-spec.md and confirm PCP0-code and PCP0-test branches are ready to merge",
+        "make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\"",
+        "Confirm PCP0-integ-core and all required platform integration tasks are completed",
         "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
-        "Create branch pcp-pcp0-precedence-integ and worktree wt/pcp0-precedence-integ; do not edit planning docs inside the worktree"
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\" TASK_ID=\"PCP0-integ\""
       ],
       "end_checklist": [
+        "Merge platform-fix branches (if any) + resolve conflicts",
         "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
-        "Run platform-local smoke script for the current platform",
-        "Dispatch cross-platform smoke via: make feature-smoke FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\" PLATFORM=all WORKFLOW_REF=\"feat/policy_and_config_precedence\"",
+        "Re-run cross-platform smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/policy_and_config_precedence\"",
         "Fill PCP0-closeout_report.md (required end gate for PCP0) and reference it in the END entry",
-        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs"
+        "From inside the worktree: make triad-task-finish TASK_ID=\"PCP0-integ\"",
+        "On the orchestration branch: update tasks.json + session_log.md END entry; commit docs"
       ],
       "git_branch": "pcp-pcp0-precedence-integ",
       "required_make_targets": ["integ-checks"],
       "merge_to_orchestration": true,
       "worktree": "wt/pcp0-precedence-integ",
-      "integration_task": null,
+      "integration_task": "PCP0-integ",
       "kickoff_prompt": "docs/project_management/next/policy_and_config_precedence/kickoff_prompts/PCP0-integ.md",
-      "depends_on": ["PCP0-code", "PCP0-test"],
+      "depends_on": ["PCP0-integ-core", "PCP0-integ-linux", "PCP0-integ-macos", "PCP0-integ-windows"],
+      "concurrent_with": []
+    },
+    {
+      "id": "FZ-feature-cleanup",
+      "name": "Feature cleanup (worktree retention)",
+      "type": "ops",
+      "phase": "Feature Cleanup",
+      "status": "pending",
+      "description": "Feature-level cleanup: remove retained task worktrees and optionally prune task branches.",
+      "references": [
+        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+        "scripts/triad/feature_cleanup.sh"
+      ],
+      "acceptance_criteria": [
+        "Cleanup completed and summary recorded in session_log.md"
+      ],
+      "start_checklist": [
+        "make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\"",
+        "Confirm all tasks are completed and merged as intended",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "end_checklist": [
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Then run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Set status to completed; add END entry with script summary; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/policy_and_config_precedence/kickoff_prompts/FZ-feature-cleanup.md",
+      "depends_on": ["PCP0-integ"],
       "concurrent_with": []
     }
   ]

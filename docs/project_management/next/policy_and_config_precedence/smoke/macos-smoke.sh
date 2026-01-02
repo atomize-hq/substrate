@@ -29,7 +29,12 @@ substrate workspace init "$TMP_WS" >/dev/null
 cd "$TMP_WS"
 
 substrate config set world.caged=false >/dev/null
-SUBSTRATE_CAGED=1 substrate config show --json | jq -e '.world.caged==false' >/dev/null
+out="$(SUBSTRATE_CAGED=1 substrate config show --json)"
+if ! jq -e '.world.caged==false' <<<"$out" >/dev/null; then
+  got="$(jq -r '.world.caged' <<<"$out" 2>/dev/null || true)"
+  echo "FAIL: expected world.caged=false from workspace config even when SUBSTRATE_CAGED=1; got world.caged=$got" >&2
+  exit 1
+fi
 
 cd "$TMP_NOWS"
 set +e

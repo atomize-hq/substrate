@@ -27,9 +27,12 @@ Specs (single source of truth):
 - `docs/project_management/next/policy_and_config_precedence/PCP0-spec.md`
 
 ## Cross-platform integration model
-- Model: validation-only integration (single integration task).
+- Model: schema v2 cross-platform integration tasks (core + per-platform + final).
+  - `PCP0-integ-core`: merge code+tests, run `make integ-checks`, and dispatch cross-platform smoke via CI.
+  - `PCP0-integ-{linux,macos,windows}`: platform-fix tasks (no-op if already green; only used if CI smoke fails).
+  - `PCP0-integ`: final aggregator merges any platform fixes and re-confirms all required platforms are green.
 - Cross-platform validation mechanism:
-  - Preferred: GitHub Actions self-hosted runners via `make feature-smoke` (see `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`)
+  - Preferred: GitHub Actions self-hosted runners via `make feature-smoke` (see `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`).
   - Local smoke execution is valid only on the matching platform (Linux script on Linux, macOS script on macOS, Windows script on Windows).
 
 ## Primary code touchpoints (expected)
@@ -43,11 +46,11 @@ Specs (single source of truth):
   - `crates/shell/tests/config_set.rs` (if impacted)
 
 ## Start checklist (all tasks)
-1. `git checkout feat/policy_and_config_precedence && git pull --ff-only`
+1. `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/policy_and_config_precedence"`
 2. Read: `plan.md`, `tasks.json`, `session_log.md`, `PCP0-spec.md`, and your kickoff prompt.
 3. Set task status to `in_progress` in `tasks.json`.
 4. Add a START entry to `session_log.md`; commit docs (`docs: start <task-id>`).
-5. Create the task branch and worktree per the kickoff prompt.
+5. Create the task worktree per the kickoff prompt (prefer triad automation where available).
 6. Do not edit planning docs inside the worktree.
 
 ## End checklist (code/test)
@@ -58,9 +61,8 @@ Specs (single source of truth):
 5. Do not remove the worktree (worktrees are retained until feature cleanup).
 
 ## End checklist (integration)
-1. Merge code+test branches into the integration worktree; reconcile to `PCP0-spec.md`.
-2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make integ-checks`.
-3. Run the feature-local smoke script for the current platform.
-4. Dispatch cross-platform smoke via GitHub Actions and record run URLs/ids in `session_log.md`.
-5. Commit integration changes; merge/fast-forward into the orchestration branch.
-6. Update `tasks.json` + add END entry to `session_log.md`; commit docs (`docs: finish <task-id>`).
+1. `PCP0-integ-core`: merge code+tests, run `cargo fmt`, `cargo clippy`, relevant tests, then `make integ-checks`.
+2. `PCP0-integ-core`: dispatch cross-platform smoke via GitHub Actions and record run URLs/ids in `session_log.md`.
+3. If any platforms fail smoke: complete the failing `PCP0-integ-{platform}` tasks (platform-fix work) before starting `PCP0-integ`.
+4. `PCP0-integ`: merge any platform fixes, run required checks, re-run cross-platform smoke, and complete `PCP0-closeout_report.md`.
+5. Update `tasks.json` + add END entry to `session_log.md`; commit docs (`docs: finish <task-id>`).
