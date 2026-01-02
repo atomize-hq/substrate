@@ -137,7 +137,7 @@
       "name": "Workspace config precedence over env (integration core)",
       "type": "integration",
       "phase": "Policy + Config Precedence",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge PCP0 code+tests and make the slice green on the primary dev platform.",
       "references": [
         "docs/project_management/next/policy_and_config_precedence/PCP0-spec.md",
@@ -182,7 +182,7 @@
       "name": "Workspace config precedence over env (integration Linux)",
       "type": "integration",
       "phase": "Policy + Config Precedence",
-      "status": "pending",
+      "status": "completed",
       "description": "Linux platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/policy_and_config_precedence/PCP0-spec.md",
@@ -224,7 +224,7 @@
       "name": "Workspace config precedence over env (integration macOS)",
       "type": "integration",
       "phase": "Policy + Config Precedence",
-      "status": "pending",
+      "status": "completed",
       "description": "macOS platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/policy_and_config_precedence/PCP0-spec.md",
@@ -266,7 +266,7 @@
       "name": "Workspace config precedence over env (integration Windows)",
       "type": "integration",
       "phase": "Policy + Config Precedence",
-      "status": "pending",
+      "status": "completed",
       "description": "Windows platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/policy_and_config_precedence/PCP0-spec.md",
