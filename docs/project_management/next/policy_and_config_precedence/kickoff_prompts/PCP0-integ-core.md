@@ -38,11 +38,17 @@ If any platform fails:
 
 If `PLATFORM=all` smoke is green:
 - Mark `PCP0-integ-linux|macos|windows` as `completed` as no-ops on the orchestration branch so `PCP0-integ` can start (its `depends_on` includes these tasks).
+  - Preferred helper:
+    - `scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir "docs/project_management/next/policy_and_config_precedence" --slice-id "PCP0" --from-smoke-run "<run-id>"`
 
 After all required platforms are green (and platform-fix tasks are completed), ask the operator to start `PCP0-integ` (integration final):
 - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" SLICE_ID="PCP0" LAUNCH_CODEX=1`
 
 ## End Checklist
 1. Ensure this worktree is finished via `make triad-task-finish TASK_ID="PCP0-integ-core"`.
-2. Dispatch cross-platform smoke; capture `RUN_ID`/URL and failing platforms summary (if any).
+2. Dispatch cross-platform smoke and include these exact key/value lines in your handoff (wrapper agents parse them):
+   - `RUN_ID=<id>`
+   - `RUN_URL=<url>` (if printed)
+   - `SMOKE_PASSED_PLATFORMS=<csv>`
+   - `SMOKE_FAILED_PLATFORMS=<csv>` (empty means success)
 3. Hand off key outputs + smoke run ids/URLs to the operator (do not edit planning docs inside the worktree).
