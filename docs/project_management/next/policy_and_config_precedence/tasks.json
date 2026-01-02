@@ -308,7 +308,7 @@
       "name": "Workspace config precedence over env (integration final)",
       "type": "integration",
       "phase": "Policy + Config Precedence",
-      "status": "pending",
+      "status": "completed",
       "description": "Final cross-platform integration: merge any platform fixes and confirm all required platforms are green.",
       "references": [
         "docs/project_management/next/policy_and_config_precedence/PCP0-spec.md",
