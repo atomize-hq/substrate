@@ -99,7 +99,7 @@
       "name": "Workspace config precedence over env (test)",
       "type": "test",
       "phase": "Policy + Config Precedence",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Update/add tests that lock the workspace-over-env precedence contract (tests only).",
       "references": [
         "docs/project_management/next/policy_and_config_precedence/PCP0-spec.md",

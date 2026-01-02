@@ -141,3 +141,13 @@
 - Evidence (commands):
   - `cargo fmt` → success
   - `cargo clippy --workspace --all-targets -- -D warnings` → success
+
+## END — 2026-01-02T01:48:42Z — test — PCP0-test (workspace config precedence over env — tests)
+- Summary of changes:
+  - Updated `config_show_resolves_effective_config_with_precedence` to assert ADR-0005 precedence: workspace config overrides `SUBSTRATE_*` env vars (workspace present), while CLI flags still override for CLI-covered `world.*` keys.
+  - Preserved protected excludes assertions for `sync.exclude`.
+- Files changed:
+  - `crates/shell/tests/config_show.rs`
+- Evidence (commands):
+  - `cargo fmt` → success
+  - `cargo test -p substrate-shell --test config_show -- --nocapture` → success
