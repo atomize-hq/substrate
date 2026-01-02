@@ -355,7 +355,7 @@
       "name": "Feature cleanup (worktree retention)",
       "type": "ops",
       "phase": "Feature Cleanup",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Feature-level cleanup: remove retained task worktrees and optionally prune task branches.",
       "references": [
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",

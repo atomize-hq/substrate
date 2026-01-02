@@ -151,3 +151,10 @@
 - Evidence (commands):
   - `cargo fmt` → success
   - `cargo test -p substrate-shell --test config_show -- --nocapture` → success
+
+## START — 2026-01-02T23:47:37Z — docs — FZ-feature-cleanup (feature cleanup: worktree retention)
+- Feature: `docs/project_management/next/policy_and_config_precedence/`
+- Branch: `feat/policy_and_config_precedence`
+- Goal: Remove retained task worktrees and prune merged task branches for this feature.
+- Notes:
+  - Expected retained worktrees: `wt/pcp0-precedence-code`, `wt/pcp0-precedence-test`, `wt/pcp0-precedence-integ-core`, `wt/pcp0-precedence-integ`
