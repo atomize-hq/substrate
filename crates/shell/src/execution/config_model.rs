@@ -223,6 +223,8 @@ pub(crate) fn resolve_effective_config(
 ) -> Result<SubstrateConfig> {
     let (mut effective, _) = read_global_config_or_defaults()?;
 
+    apply_env_overrides(&mut effective)?;
+
     let workspace_root = workspace::find_workspace_root(cwd);
     if let Some(root) = &workspace_root {
         let legacy = workspace::workspace_legacy_settings_path(root);
@@ -240,7 +242,6 @@ pub(crate) fn resolve_effective_config(
         effective = parse_config_yaml(&workspace_path, &raw)?;
     }
 
-    apply_env_overrides(&mut effective)?;
     apply_cli_overrides(&mut effective, cli);
     apply_protected_excludes(&mut effective.sync.exclude);
 
