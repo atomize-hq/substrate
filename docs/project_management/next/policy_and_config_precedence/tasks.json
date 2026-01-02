@@ -57,7 +57,7 @@
       "name": "Workspace config precedence over env (code)",
       "type": "code",
       "phase": "Policy + Config Precedence",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Implement workspace-over-env precedence in the effective config resolver (production code only).",
       "references": [
         "docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md",
@@ -99,7 +99,7 @@
       "name": "Workspace config precedence over env (test)",
       "type": "test",
       "phase": "Policy + Config Precedence",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Update/add tests that lock the workspace-over-env precedence contract (tests only).",
       "references": [
         "docs/project_management/next/policy_and_config_precedence/PCP0-spec.md",

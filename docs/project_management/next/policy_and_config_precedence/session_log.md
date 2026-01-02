@@ -118,3 +118,17 @@
 - CI readiness:
   - Self-hosted runner inventory verified via GitHub API: `linux-manjaro-runner`, `macOS-runner`, `windows11-runner` (WSL runner present but not required).
 - Required fixes before starting `PCP0-code` / `PCP0-test`: none.
+
+## START — 2026-01-02T01:42:48Z — docs — PCP0-test (workspace config precedence over env — tests)
+- Feature: `docs/project_management/next/policy_and_config_precedence/`
+- Branch: `feat/policy_and_config_precedence` (orchestration), `pcp-pcp0-precedence-test` (task)
+- Goal: Update `crates/shell/tests/config_show.rs` precedence assertions to match ADR-0005 while preserving protected excludes assertions.
+- Notes:
+  - Worktree: `wt/pcp0-precedence-test`
+
+## START — 2026-01-02T01:42:27Z — code — PCP0-code (workspace config precedence over env)
+- Feature: `docs/project_management/next/policy_and_config_precedence/`
+- Branch: `feat/policy_and_config_precedence`
+- Task branch: `pcp-pcp0-precedence-code`
+- Worktree: `wt/pcp0-precedence-code`
+- Goal: Implement the precedence change in the effective-config resolver: when a workspace exists, workspace config overrides `SUBSTRATE_*` env vars (production code only).
