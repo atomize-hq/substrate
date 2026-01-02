@@ -136,6 +136,7 @@ Every ADR must include all sections below. Every behavior statement must be sing
 - Standards:
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 
 ## Related Docs
 - Plan: `docs/project_management/next/<feature>/plan.md`

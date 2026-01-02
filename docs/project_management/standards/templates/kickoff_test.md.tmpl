@@ -3,6 +3,7 @@
 ## Scope
 - Tests only (plus minimal test-only helpers if absolutely needed); no production code.
 - Spec: `{{FEATURE_DIR}}/{{SPEC_FILE}}`
+- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist
 Do not edit planning docs inside the worktree.
@@ -16,9 +17,10 @@ Do not edit planning docs inside the worktree.
 ## Requirements
 - Add/modify tests that enforce the spec’s acceptance criteria.
 - Run: `cargo fmt`, plus the targeted tests you add/touch.
+  - Note: your branch is not expected to be fully green until the code branch lands; tests must compile and fail deterministically for spec-driven reasons.
 
 ## End Checklist
 1. Run required commands; capture outputs.
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="{{TASK_ID}}"`
-3. On the orchestration branch, update tasks.json + session_log.md END entry; commit docs (`docs: finish {{TASK_ID}}`).
+3. Hand off the targeted test command(s) and outcomes to the operator (do not edit planning docs inside the worktree).
 4. Do not delete the worktree (feature cleanup removes worktrees at feature end).

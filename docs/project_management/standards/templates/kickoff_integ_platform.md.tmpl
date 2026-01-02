@@ -4,6 +4,7 @@
 - Ensure the slice behaves correctly on **{{PLATFORM}}**.
 - This task is allowed to make production-code and/or test changes as needed to achieve cross-platform parity, but must not edit planning docs inside the worktree.
 - Spec: `{{FEATURE_DIR}}/{{SPEC_FILE}}`
+- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 - This task must not merge back to the orchestration branch; the final aggregator integration task performs the merge once all platforms are green.
 
 ## Start Checklist
@@ -30,5 +31,5 @@ Do not edit planning docs inside the worktree.
 ## End Checklist
 1. Ensure smoke is green for {{PLATFORM}} and capture the run id/URL.
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="{{TASK_ID}}"`
-3. On the orchestration branch, update tasks.json + session_log.md END entry; commit docs (`docs: finish {{TASK_ID}}`).
+3. Hand off run id/URL and any platform-specific notes to the operator (do not edit planning docs inside the worktree).
 4. Do not delete the worktree (feature cleanup removes worktrees at feature end).

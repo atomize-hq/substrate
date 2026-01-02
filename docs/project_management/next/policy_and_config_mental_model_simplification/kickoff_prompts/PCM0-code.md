@@ -1,20 +1,16 @@
-# Kickoff: PCM0-code (Workspace + config inventory and CLI)
+# Kickoff: PCM0-code (code) — Workspace + config inventory and CLI
 
 ## Scope
-- Implement workspace discovery/init and config schema/discovery/precedence and config CLI per `PCM0-spec.md`.
-- Production code only; do not add or modify tests.
+- Production code only; no new tests.
+- Spec: `docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md`
+- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist
-
 Do not edit planning docs inside the worktree.
 
-1. `git checkout feat/policy_and_config && git pull --ff-only`
-2. Read: `docs/project_management/next/policy_and_config_mental_model_simplification/plan.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/tasks.json`, `docs/project_management/next/policy_and_config_mental_model_simplification/session_log.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md`, `docs/project_management/next/policy_and_config_mental_model_simplification/integration_map.md`, and this prompt.
-3. Set `PCM0-code` status to `in_progress` in `docs/project_management/next/policy_and_config_mental_model_simplification/tasks.json`; add a START entry to `docs/project_management/next/policy_and_config_mental_model_simplification/session_log.md`; commit docs (`docs: start PCM0-code`).
-4. Create branch and worktree:
-   - `git checkout -b pcm-pcm0-config-code`
-   - `git worktree add wt/pcm0-config-code pcm-pcm0-config-code`
-5. Do not edit docs/tasks/session_log.md inside the worktree.
+1. If `.taskmeta.json` exists at the worktree root, you were started via triad automation and are already on the correct task branch; proceed.
+2. If `.taskmeta.json` is missing, stop and ask the operator to start the task in a dedicated worktree (preferred: concurrent code+test) and re-run you from inside that worktree.
+3. Read (end-to-end): `plan.md`, `tasks.json`, `session_log.md`, `PCM0-spec.md`, `decision_register.md`, `integration_map.md`, and this prompt.
 
 ## Requirements
 - Implement strict YAML parsing and legacy `.substrate/settings.yaml` rejection per `PCM0-spec.md`.
@@ -24,9 +20,12 @@ Do not edit planning docs inside the worktree.
 - `cargo fmt`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 
+Baseline testing (required):
+- Before changes: run a targeted baseline test set relevant to your change.
+- After changes: re-run the same tests and ensure results are unchanged (or improved).
+
 ## End Checklist
-1. Run required commands; capture outputs for the END entry.
-2. Commit worktree changes.
-3. Merge back to `feat/policy_and_config` (ff-only).
-4. Update `docs/project_management/next/policy_and_config_mental_model_simplification/tasks.json` + `docs/project_management/next/policy_and_config_mental_model_simplification/session_log.md` (END entry), commit docs (`docs: finish PCM0-code`).
-5. Remove worktree.
+1. Run required commands and baseline tests; capture outcomes.
+2. Commit changes to the task branch in this worktree.
+3. If triad automation is configured for this feature, run: `make triad-task-finish TASK_ID="PCM0-code"`.
+4. Hand off results to the operator (do not edit planning docs inside the worktree; do not delete the worktree).

@@ -4,13 +4,21 @@ This document explains, step by step, how to create a new feature directory, def
 
 ## Principles
 - Every slice of work ships as a triad: code, test, integration.
-- Code agent: production code only. No tests. Runs `cargo fmt` and `cargo clippy --workspace --all-targets -- -D warnings`. Optional targeted/manual sanity checks are allowed but not required. No unit/integration suite requirement.
-- Test agent: tests only (plus minimal test-only helpers if absolutely needed). No production code. Runs `cargo fmt` and the targeted tests they add/touch; not responsible for full suite.
+- Code agent: production code only. No new tests. Runs `cargo fmt` and `cargo clippy --workspace --all-targets -- -D warnings`. Optional targeted/manual sanity checks are allowed but not required. No unit/integration suite requirement.
+  - When the spec changes behavior that invalidates an existing test expectation, the code agent may update the existing test to match the spec (still no new test files or new test cases).
+  - Preferred safety practice: run a targeted baseline test set before changes and re-run the same set after to ensure no regressions.
+- Test agent: tests only (plus minimal test-only helpers/fixtures/mocks if absolutely needed). No production code. Runs `cargo fmt` and the targeted tests they add/touch; not responsible for full suite.
+  - Passing is owned by integration; test-only branches may be red until the code branch lands, but tests must compile and fail deterministically for spec-driven reasons.
 - Integration agent: merges code+tests, resolves drift to the spec, ensures behavior matches the spec, runs `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, all relevant tests, and finishes with `make integ-checks` (required). They own the final green state.
 - Execution triads must not begin until the Planning Pack has a quality gate report with `RECOMMENDATION: ACCEPT` at `docs/project_management/next/<feature>/quality_gate_report.md` (see `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`).
 - If the feature opts into execution gates (`tasks.json` meta: `execution_gates: true`), triads must not begin until the execution preflight gate is completed (see `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`).
 - Docs/tasks/session log edits happen **only** on the orchestration branch (never in worktrees).
 - Specs are the single source of truth; integration reconciles code/tests to the spec.
+
+## Worktree execution (automation mode)
+
+When tasks are started via triad automation (preferred) and agents run inside an already-created task worktree, follow:
+- `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Creating a New Feature Directory (from scratch)
 1. Choose orchestration branch name (e.g., `feat/<feature>`). Create/pull it.

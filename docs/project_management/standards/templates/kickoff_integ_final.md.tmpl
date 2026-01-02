@@ -3,6 +3,7 @@
 ## Scope
 - Merge platform-fix branches (if any) and finalize the slice with a clean, auditable cross-platform green state.
 - Spec: `{{FEATURE_DIR}}/{{SPEC_FILE}}`
+- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 - This task is responsible for the fast-forward merge back to the orchestration branch after all platforms are green.
 
 ## Start Checklist
@@ -30,5 +31,5 @@ Do not edit planning docs inside the worktree.
 ## End Checklist
 1. Ensure all required platforms are green (include run ids/URLs).
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="{{TASK_ID}}"`
-3. On the orchestration branch, update tasks.json + session_log.md END entry; commit docs (`docs: finish {{TASK_ID}}`).
+3. Hand off run ids/URLs and closeout report completion to the operator (do not edit planning docs inside the worktree).
 4. Do not delete the worktree (feature cleanup removes worktrees at feature end).

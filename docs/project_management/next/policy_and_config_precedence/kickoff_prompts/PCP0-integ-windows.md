@@ -1,31 +1,29 @@
-# PCP0-integ-windows Kickoff — Workspace Config Precedence Over Env (Windows platform integ)
+# Kickoff: PCP0-integ-windows (integration platform-fix — windows)
 
-You are the integration agent for `PCP0-integ-windows`.
+## Scope
+- Ensure PCP0 is green on Windows (no-op if already green).
+- Spec: `docs/project_management/next/policy_and_config_precedence/PCP0-spec.md`
+- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
-Scope:
-- Ensure Windows smoke is green for PCP0. If smoke fails, apply the minimal Windows-specific fix (behind `#[cfg]` gates if needed), then re-run smoke.
+## Start Checklist
+Do not edit planning docs inside the worktree.
 
-Non-negotiable rule:
-- Do not edit planning docs inside the worktree.
+1. Run this task on a Windows machine.
+2. Verify you are in the task worktree `wt/pcp0-precedence-integ-windows` on branch `pcp-pcp0-precedence-integ-windows` and that `.taskmeta.json` exists at the worktree root.
+3. Read (end-to-end): `plan.md`, `tasks.json`, `session_log.md`, `PCP0-spec.md`, and this prompt.
+4. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
+   - `make triad-task-start FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" TASK_ID="PCP0-integ-windows" TASK_PLATFORM=windows LAUNCH_CODEX=1`
 
-Start checklist:
-1. Ensure the orchestration branch is checked out:
-   - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/policy_and_config_precedence"`
-2. Confirm `PCP0-integ-core` is completed.
-3. Update `docs/project_management/next/policy_and_config_precedence/tasks.json`:
-   - set `PCP0-integ-windows.status` to `in_progress`
-4. Append a START entry to `docs/project_management/next/policy_and_config_precedence/session_log.md`; commit docs (`docs: start PCP0-integ-windows`)
-5. Create the worktree via automation:
-   - `make triad-task-start FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" TASK_ID="PCP0-integ-windows"`
-6. Enter the worktree: `cd wt/pcp0-precedence-integ-windows`
-7. Do not edit planning docs inside the worktree.
-
-Validation:
-- Dispatch Windows smoke via CI:
+## Requirements
+- Validate Windows smoke via CI (repeat until green if you make fixes):
   - `make feature-smoke FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" PLATFORM=windows RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy_and_config_precedence"`
-- Record the run id/URL and outcome in the END entry.
+- If smoke passes: record the run id/URL for the operator and do not change code.
+- If smoke fails:
+  1) Fix the issue in this worktree while keeping the spec contract intact.
+  2) Run the appropriate local checks for your change (fmt/clippy and targeted tests).
+  3) Re-run the Windows CI smoke until green.
 
-End checklist:
-1. If fixes were needed, run required formatting/lint/tests for touched areas.
-2. From inside the worktree: `make triad-task-finish TASK_ID="PCP0-integ-windows"`.
-3. On the orchestration branch: update `tasks.json` + append an END entry to `session_log.md`; commit docs (`docs: finish PCP0-integ-windows`).
+## End Checklist
+1. Ensure Windows smoke is green; capture the run id/URL.
+2. From inside the worktree, run: `make triad-task-finish TASK_ID="PCP0-integ-windows"`.
+3. Hand off run id/URL and any Windows-specific notes to the operator (do not edit planning docs inside the worktree).
