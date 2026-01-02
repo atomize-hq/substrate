@@ -158,3 +158,16 @@
 - Goal: Remove retained task worktrees and prune merged task branches for this feature.
 - Notes:
   - Expected retained worktrees: `wt/pcp0-precedence-code`, `wt/pcp0-precedence-test`, `wt/pcp0-precedence-integ-core`, `wt/pcp0-precedence-integ`
+
+## END — 2026-01-02T23:49:55Z — docs — FZ-feature-cleanup (feature cleanup: worktree retention)
+- Summary of changes:
+  - Removed retained task worktrees: `wt/pcp0-precedence-code`, `wt/pcp0-precedence-test`, `wt/pcp0-precedence-integ-core`, `wt/pcp0-precedence-integ`
+  - Pruned merged local task branches: `pcp-pcp0-precedence-code`, `pcp-pcp0-precedence-test`, `pcp-pcp0-precedence-integ-core`, `pcp-pcp0-precedence-integ`
+- Evidence (commands):
+  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1` → non-zero (dry-run cannot prune branches while worktrees are still present)
+  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" REMOVE_WORKTREES=1 PRUNE_LOCAL=1` → non-zero (branches had no upstream configured); worktrees removed before the error
+  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" REMOVE_WORKTREES=1 PRUNE_LOCAL=1 FORCE=1` → success
+- Cleanup summary (stdout contract):
+    REMOVED_WORKTREES=0
+    PRUNED_LOCAL_BRANCHES=4
+    PRUNED_REMOTE_BRANCHES=0
