@@ -30,6 +30,12 @@ Stdout contract (machine-parseable):
   TEST_TASK_BRANCH=<branch>
   CODEX_CODE_EXIT=<code or empty>
   CODEX_TEST_EXIT=<code or empty>
+  CODEX_CODE_LAST_MESSAGE_PATH=<path>
+  CODEX_TEST_LAST_MESSAGE_PATH=<path>
+  CODEX_CODE_EVENTS_PATH=<path>
+  CODEX_TEST_EVENTS_PATH=<path>
+  CODEX_CODE_STDERR_PATH=<path>
+  CODEX_TEST_STDERR_PATH=<path>
 
 Notes:
   - Requires an automation-enabled planning pack (tasks.json meta.schema_version>=3 and meta.automation.enabled=true).
@@ -286,15 +292,24 @@ fi
 
 CODEX_CODE_EXIT=""
 CODEX_TEST_EXIT=""
+CODEX_PAIR_FAILED=0
+
+CODEX_CODE_OUT_DIR="${REPO_ROOT}/target/triad/${FEATURE_NAME}/codex/${CODE_TASK_ID}"
+CODEX_TEST_OUT_DIR="${REPO_ROOT}/target/triad/${FEATURE_NAME}/codex/${TEST_TASK_ID}"
+CODEX_CODE_LAST_MESSAGE_PATH="${CODEX_CODE_OUT_DIR}/last_message.md"
+CODEX_TEST_LAST_MESSAGE_PATH="${CODEX_TEST_OUT_DIR}/last_message.md"
+CODEX_CODE_EVENTS_PATH="${CODEX_CODE_OUT_DIR}/events.jsonl"
+CODEX_TEST_EVENTS_PATH="${CODEX_TEST_OUT_DIR}/events.jsonl"
+CODEX_CODE_STDERR_PATH="${CODEX_CODE_OUT_DIR}/stderr.log"
+CODEX_TEST_STDERR_PATH="${CODEX_TEST_OUT_DIR}/stderr.log"
 
 launch_codex_one() {
-    local task_id="$1"
-    local worktree="$2"
-    local kickoff="$3"
-    local out_dir="${REPO_ROOT}/target/triad/${FEATURE_NAME}/codex/${task_id}"
-    local last_message="${out_dir}/last_message.md"
-    local events="${out_dir}/events.jsonl"
-    local stderr="${out_dir}/stderr.log"
+    local worktree="$1"
+    local kickoff="$2"
+    local out_dir="$3"
+    local last_message="$4"
+    local events="$5"
+    local stderr="$6"
 
     mkdir -p "${out_dir}"
 
@@ -315,9 +330,9 @@ if [[ "${LAUNCH_CODEX}" -eq 1 ]]; then
     else
         log "Launching Codex headless for both tasks (in parallel)"
         set +e
-        launch_codex_one "${CODE_TASK_ID}" "${CODE_WORKTREE}" "${CODE_KICKOFF}" &
+        launch_codex_one "${CODE_WORKTREE}" "${CODE_KICKOFF}" "${CODEX_CODE_OUT_DIR}" "${CODEX_CODE_LAST_MESSAGE_PATH}" "${CODEX_CODE_EVENTS_PATH}" "${CODEX_CODE_STDERR_PATH}" &
         pid_code=$!
-        launch_codex_one "${TEST_TASK_ID}" "${TEST_WORKTREE}" "${TEST_KICKOFF}" &
+        launch_codex_one "${TEST_WORKTREE}" "${TEST_KICKOFF}" "${CODEX_TEST_OUT_DIR}" "${CODEX_TEST_LAST_MESSAGE_PATH}" "${CODEX_TEST_EVENTS_PATH}" "${CODEX_TEST_STDERR_PATH}" &
         pid_test=$!
 
         wait "${pid_code}"
@@ -327,7 +342,7 @@ if [[ "${LAUNCH_CODEX}" -eq 1 ]]; then
         set -e
 
         if [[ "${CODEX_CODE_EXIT}" -ne 0 || "${CODEX_TEST_EXIT}" -ne 0 ]]; then
-            die "One or both codex exec runs failed (code=${CODEX_CODE_EXIT}, test=${CODEX_TEST_EXIT})"
+            CODEX_PAIR_FAILED=1
         fi
     fi
 fi
@@ -341,3 +356,14 @@ printf 'CODE_TASK_BRANCH=%s\n' "${CODE_TASK_BRANCH}"
 printf 'TEST_TASK_BRANCH=%s\n' "${TEST_TASK_BRANCH}"
 printf 'CODEX_CODE_EXIT=%s\n' "${CODEX_CODE_EXIT}"
 printf 'CODEX_TEST_EXIT=%s\n' "${CODEX_TEST_EXIT}"
+printf 'CODEX_CODE_LAST_MESSAGE_PATH=%s\n' "${CODEX_CODE_LAST_MESSAGE_PATH}"
+printf 'CODEX_TEST_LAST_MESSAGE_PATH=%s\n' "${CODEX_TEST_LAST_MESSAGE_PATH}"
+printf 'CODEX_CODE_EVENTS_PATH=%s\n' "${CODEX_CODE_EVENTS_PATH}"
+printf 'CODEX_TEST_EVENTS_PATH=%s\n' "${CODEX_TEST_EVENTS_PATH}"
+printf 'CODEX_CODE_STDERR_PATH=%s\n' "${CODEX_CODE_STDERR_PATH}"
+printf 'CODEX_TEST_STDERR_PATH=%s\n' "${CODEX_TEST_STDERR_PATH}"
+
+if [[ "${CODEX_PAIR_FAILED}" -eq 1 ]]; then
+    echo "ERROR: One or both codex exec runs failed (code=${CODEX_CODE_EXIT}, test=${CODEX_TEST_EXIT})" >&2
+    exit 2
+fi

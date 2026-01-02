@@ -151,6 +151,7 @@ Start (all tasks):
 6. Do not edit planning docs inside the worktree.
 
 Optional: also launch Codex headless for both code+test tasks:
+- Preferred (for reliable artifact reporting): `docs/project_management/standards/TRIAD_WRAPPER_PROMPT.md`
 - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1`
 
 Optional: start only the failing platform-fix integration tasks (after smoke results are known):

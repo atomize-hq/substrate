@@ -95,6 +95,7 @@ Orchestration branch bootstrap (used by the opening gate):
 #### Code + test (always parallel)
 
 Start both worktrees:
+- Preferred (post-preflight): use `docs/project_management/standards/TRIAD_WRAPPER_PROMPT.md` (runs start-pair with `LAUNCH_CODEX=1` and reports exit codes + last messages + artifact paths).
 - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="C0" LAUNCH_CODEX=1`
 
 Finish each task from inside its worktree (commits to the task branch; does not merge to orchestration):
