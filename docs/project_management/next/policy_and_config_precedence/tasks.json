@@ -17,7 +17,7 @@
       "name": "Execution preflight gate (feature start)",
       "type": "ops",
       "phase": "Feature Gates",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Run the execution preflight gate and fill execution_preflight_report.md before starting PCP0 triads.",
       "references": [
         "docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md",

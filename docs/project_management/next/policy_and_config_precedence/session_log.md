@@ -97,3 +97,24 @@
 - Goal: Run the execution preflight start gate and produce an ACCEPT/REVISE recommendation.
 - Notes:
   - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/policy_and_config_precedence"` initially failed because this Planning Pack is not yet automation-enabled (`tasks.json` meta.schema_version=1 / no meta.automation); preflight will upgrade the pack to schema v3 + automation and re-run `triad-orch-ensure`.
+
+## END — 2026-01-02T01:31:48Z — docs — F0-exec-preflight (execution preflight gate)
+- Recommendation: `ACCEPT`
+- Summary of changes (exhaustive):
+  - Created and pushed the orchestration branch: `feat/policy_and_config_precedence`.
+  - Upgraded the Planning Pack to the current automation + cross-platform integration model:
+    - `tasks.json` schema v3 + `meta.automation.*`
+    - `PCP0-integ-core` + `PCP0-integ-{linux,macos,windows}` + `PCP0-integ` (final)
+    - `FZ-feature-cleanup` task + kickoff prompt
+  - Hardened smoke scripts to match the manual playbook and validate exit codes:
+    - Asserts workspace-over-env precedence for `world.caged` (and prints the observed value on failure)
+    - Asserts `substrate config show --json` exits `2` when no workspace exists
+    - Missing prerequisites (e.g., `substrate`, `jq`) exit `3` per smoke/playbook convention
+  - Updated `plan.md` to reflect the schema v2/v3 integration model.
+- Evidence (commands):
+  - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/policy_and_config_precedence"` → success
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/policy_and_config_precedence"` → success
+  - `bash docs/project_management/next/policy_and_config_precedence/smoke/linux-smoke.sh` (with `substrate` on PATH) → fails on baseline as expected (feature not implemented yet)
+- CI readiness:
+  - Self-hosted runner inventory verified via GitHub API: `linux-manjaro-runner`, `macOS-runner`, `windows11-runner` (WSL runner present but not required).
+- Required fixes before starting `PCP0-code` / `PCP0-test`: none.
