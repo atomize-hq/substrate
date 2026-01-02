@@ -111,6 +111,9 @@ Integration tasks should set `merge_to_orchestration` in `tasks.json`:
 Start integration worktree:
 - `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="C0-integ-core"`
 
+Optional: run an end-to-end integration orchestration wrapper (integ-core -> smoke -> platform-fix -> final) with artifact reporting:
+- `docs/project_management/standards/TRIAD_INTEGRATION_WRAPPER_PROMPT.md`
+
 Dispatch cross-platform smoke:
 - `make feature-smoke FEATURE_DIR="docs/project_management/next/<feature>" PLATFORM=all WORKFLOW_REF="feat/<feature>"`
 - Add WSL coverage when required: `RUN_WSL=1`
