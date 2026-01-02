@@ -90,3 +90,10 @@
   - `NONE`
 - Next steps:
   - Run `F0-exec-preflight` and fill `execution_preflight_report.md` before starting `PCP0-code` / `PCP0-test`.
+
+## START — 2026-01-02T01:18:48Z — docs — F0-exec-preflight (execution preflight gate)
+- Feature: `docs/project_management/next/policy_and_config_precedence/`
+- Branch: `feat/policy_and_config_precedence`
+- Goal: Run the execution preflight start gate and produce an ACCEPT/REVISE recommendation.
+- Notes:
+  - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/policy_and_config_precedence"` initially failed because this Planning Pack is not yet automation-enabled (`tasks.json` meta.schema_version=1 / no meta.automation); preflight will upgrade the pack to schema v3 + automation and re-run `triad-orch-ensure`.
