@@ -15,14 +15,15 @@ Required reading (end-to-end):
 
 Start checklist:
 1. On the orchestration branch: `git checkout feat/policy_and_config_precedence && git pull --ff-only`
-2. Update `docs/project_management/next/policy_and_config_precedence/tasks.json`:
+2. Confirm `F0-exec-preflight` is completed (execution gates are enabled for this feature).
+3. Update `docs/project_management/next/policy_and_config_precedence/tasks.json`:
    - set `PCP0-test.status` to `in_progress`
-3. Append a START entry to `docs/project_management/next/policy_and_config_precedence/session_log.md`; commit docs (`docs: start PCP0-test`)
-4. Create a task branch and worktree:
+4. Append a START entry to `docs/project_management/next/policy_and_config_precedence/session_log.md`; commit docs (`docs: start PCP0-test`)
+5. Create a task branch and worktree:
    - `git checkout -b pcp-pcp0-precedence-test`
    - `git worktree add wt/pcp0-precedence-test -b pcp-pcp0-precedence-test`
-5. Enter the worktree: `cd wt/pcp0-precedence-test`
-6. Do not edit planning docs inside the worktree.
+6. Enter the worktree: `cd wt/pcp0-precedence-test`
+7. Do not edit planning docs inside the worktree.
 
 Test requirements:
 - Update `crates/shell/tests/config_show.rs` precedence assertions to match ADR-0005.
@@ -37,4 +38,3 @@ End checklist:
 2. Commit changes in the worktree to `pcp-pcp0-precedence-test`.
 3. On the orchestration branch, merge/fast-forward the task branch.
 4. Update `docs/project_management/next/policy_and_config_precedence/tasks.json` to `completed` and append an END entry to `docs/project_management/next/policy_and_config_precedence/session_log.md`; commit docs (`docs: finish PCP0-test`).
-

@@ -59,3 +59,34 @@
   - `PCP0-code`: implement resolver change in `crates/shell/src/execution/config_model.rs`
   - `PCP0-test`: update `crates/shell/tests/config_show.rs` precedence assertions
   - `PCP0-integ`: merge, run `make integ-checks`, run smoke, and record CI run ids/URLs
+
+## START — 2026-01-02T01:04:22Z — docs — scaffold execution gates (feature start + slice closeout)
+- Feature: `docs/project_management/next/policy_and_config_precedence/`
+- Branch: `feat/policy_and_config_precedence`
+- Goal: Add the execution preflight start gate and the per-slice closeout gate scaffolds so triads start with runnable smoke coverage and end with no-drift evidence.
+
+## END — 2026-01-02T01:08:06Z — docs — scaffold execution gates (feature start + slice closeout)
+- Summary of changes (exhaustive):
+  - Enabled execution gates in `tasks.json` meta and added the `F0-exec-preflight` gate task.
+  - Wired `PCP0-code` and `PCP0-test` to depend on `F0-exec-preflight`.
+  - Added per-slice closeout gate scaffolding for PCP0 and linked it from `PCP0-integ` (references + end checklist).
+  - Updated kickoff prompts to include the execution gate prerequisites.
+  - Adjusted planning docs to satisfy mechanical lint bans.
+- Files created/modified:
+  - `docs/project_management/next/policy_and_config_precedence/tasks.json`
+  - `docs/project_management/next/policy_and_config_precedence/execution_preflight_report.md`
+  - `docs/project_management/next/policy_and_config_precedence/kickoff_prompts/F0-exec-preflight.md`
+  - `docs/project_management/next/policy_and_config_precedence/PCP0-closeout_report.md`
+  - `docs/project_management/next/policy_and_config_precedence/plan.md`
+  - `docs/project_management/next/policy_and_config_precedence/kickoff_prompts/PCP0-code.md`
+  - `docs/project_management/next/policy_and_config_precedence/kickoff_prompts/PCP0-test.md`
+  - `docs/project_management/next/policy_and_config_precedence/kickoff_prompts/PCP0-integ.md`
+  - `docs/project_management/next/policy_and_config_precedence/quality_gate_report.md`
+- Rubric checks run (with results):
+  - `jq -e . docs/project_management/next/policy_and_config_precedence/tasks.json >/dev/null` → `0` → pass
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/policy_and_config_precedence"` → `0` → pass
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/policy_and_config_precedence"` → `0` → pass
+- Blockers:
+  - `NONE`
+- Next steps:
+  - Run `F0-exec-preflight` and fill `execution_preflight_report.md` before starting `PCP0-code` / `PCP0-test`.

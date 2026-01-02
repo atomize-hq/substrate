@@ -88,7 +88,7 @@ Mark `YES` only if read end-to-end.
 - Evidence:
   - `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md` (User Contract; precedence order)
   - `docs/project_management/next/policy_and_config_precedence/PCP0-spec.md` (Effective config precedence; acceptance criteria)
-- Notes: Precedence is singular, ordered, and testable; no “TBD/open question/should/might” language detected by `make planning-lint`.
+- Notes: Precedence is singular, ordered, and testable; no planning-lint hard-ban or ambiguity matches detected.
 
 ### 2) Decision quality (2 options, explicit tradeoffs, explicit selection)
 - Result: `PASS`

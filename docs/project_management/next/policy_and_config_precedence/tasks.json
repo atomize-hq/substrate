@@ -1,5 +1,53 @@
 {
+  "meta": {
+    "feature": "policy_and_config_precedence",
+    "schema_version": 1,
+    "cross_platform": true,
+    "execution_gates": true,
+    "platforms_required": ["linux", "macos", "windows"],
+    "wsl_required": false
+  },
   "tasks": [
+    {
+      "id": "F0-exec-preflight",
+      "name": "Execution preflight gate (feature start)",
+      "type": "ops",
+      "phase": "Feature Gates",
+      "status": "pending",
+      "description": "Run the execution preflight gate and fill execution_preflight_report.md before starting PCP0 triads.",
+      "references": [
+        "docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md",
+        "docs/project_management/next/policy_and_config_precedence/execution_preflight_report.md",
+        "docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md",
+        "docs/project_management/next/policy_and_config_precedence/plan.md",
+        "docs/project_management/next/policy_and_config_precedence/tasks.json",
+        "docs/project_management/next/policy_and_config_precedence/session_log.md",
+        "docs/project_management/next/policy_and_config_precedence/PCP0-spec.md",
+        "docs/project_management/next/policy_and_config_precedence/integration_map.md",
+        "docs/project_management/next/policy_and_config_precedence/manual_testing_playbook.md",
+        "docs/project_management/next/policy_and_config_precedence/smoke/linux-smoke.sh",
+        "docs/project_management/next/policy_and_config_precedence/smoke/macos-smoke.sh",
+        "docs/project_management/next/policy_and_config_precedence/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "execution_preflight_report.md contains a concrete recommendation (ACCEPT or REVISE)",
+        "If the recommendation is REVISE, PCP0 triads do not start until the listed issues are resolved and preflight is re-run"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\"",
+        "Read ADR + plan/spec/playbook + this kickoff prompt",
+        "Set F0-exec-preflight status to in_progress in tasks.json; add START entry to session_log.md; commit docs"
+      ],
+      "end_checklist": [
+        "Fill execution_preflight_report.md with ACCEPT/REVISE and any required fixes",
+        "Set F0-exec-preflight status to completed in tasks.json; add END entry to session_log.md; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/policy_and_config_precedence/kickoff_prompts/F0-exec-preflight.md",
+      "depends_on": [],
+      "concurrent_with": []
+    },
     {
       "id": "PCP0-code",
       "name": "Workspace config precedence over env (code)",
@@ -37,7 +85,7 @@
       "worktree": "wt/pcp0-precedence-code",
       "integration_task": "PCP0-integ",
       "kickoff_prompt": "docs/project_management/next/policy_and_config_precedence/kickoff_prompts/PCP0-code.md",
-      "depends_on": [],
+      "depends_on": ["F0-exec-preflight"],
       "concurrent_with": ["PCP0-test"]
     },
     {
@@ -73,7 +121,7 @@
       "worktree": "wt/pcp0-precedence-test",
       "integration_task": "PCP0-integ",
       "kickoff_prompt": "docs/project_management/next/policy_and_config_precedence/kickoff_prompts/PCP0-test.md",
-      "depends_on": [],
+      "depends_on": ["F0-exec-preflight"],
       "concurrent_with": ["PCP0-code"]
     },
     {
@@ -85,17 +133,20 @@
       "description": "Merge PCP0 code+tests, reconcile to PCP0-spec, and run fmt/clippy/tests plus smoke validation.",
       "references": [
         "docs/project_management/next/policy_and_config_precedence/PCP0-spec.md",
+        "docs/project_management/next/policy_and_config_precedence/PCP0-closeout_report.md",
         "docs/project_management/next/policy_and_config_precedence/manual_testing_playbook.md",
         "docs/project_management/next/policy_and_config_precedence/smoke/linux-smoke.sh",
         "docs/project_management/next/policy_and_config_precedence/smoke/macos-smoke.sh",
         "docs/project_management/next/policy_and_config_precedence/smoke/windows-smoke.ps1",
         "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md",
+        "docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md",
         "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
       ],
       "acceptance_criteria": [
         "PCP0 code and tests are merged and match PCP0-spec.md exactly",
         "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
-        "Feature-local smoke scripts validate workspace-over-env precedence and results are recorded in session_log.md"
+        "Feature-local smoke scripts validate workspace-over-env precedence and results are recorded in session_log.md",
+        "PCP0-closeout_report.md is completed with command evidence and cross-platform smoke results/URLs"
       ],
       "start_checklist": [
         "git checkout feat/policy_and_config_precedence && git pull --ff-only",
@@ -107,6 +158,7 @@
         "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
         "Run platform-local smoke script for the current platform",
         "Dispatch cross-platform smoke via: make feature-smoke FEATURE_DIR=\"docs/project_management/next/policy_and_config_precedence\" PLATFORM=all WORKFLOW_REF=\"feat/policy_and_config_precedence\"",
+        "Fill PCP0-closeout_report.md (required end gate for PCP0) and reference it in the END entry",
         "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs"
       ],
       "worktree": "wt/pcp0-precedence-integ",
@@ -117,4 +169,3 @@
     }
   ]
 }
-

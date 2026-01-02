@@ -11,6 +11,7 @@ Baseline semantics live in:
 - Orchestration branch: `feat/policy_and_config_precedence`
 - Planning Pack directory: `docs/project_management/next/policy_and_config_precedence/`
 - Docs/tasks/session log edits happen only on the orchestration branch (never in worktrees).
+- Execution gates are enabled (`tasks.json` meta: `execution_gates: true`): complete `F0-exec-preflight` before starting `PCP0-code` / `PCP0-test`.
 - Config parsing remains strict (unknown keys and type mismatches are hard errors).
 - Exit codes follow: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 - Cross-platform parity is required for the precedence contract (Linux/macOS/Windows).
@@ -63,4 +64,3 @@ Specs (single source of truth):
 4. Dispatch cross-platform smoke via GitHub Actions and record run URLs/ids in `session_log.md`.
 5. Commit integration changes; merge/fast-forward into the orchestration branch.
 6. Update `tasks.json` + add END entry to `session_log.md`; commit docs (`docs: finish <task-id>`).
-
