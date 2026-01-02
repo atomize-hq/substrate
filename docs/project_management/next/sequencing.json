@@ -114,6 +114,25 @@
       ]
     },
     {
+      "order": 26,
+      "id": "policy_and_config_precedence",
+      "title": "Policy + config precedence correction (workspace > env)",
+      "branch": "feat/policy_and_config_precedence",
+      "directory": "docs/project_management/next/policy_and_config_precedence",
+      "plan": "docs/project_management/next/policy_and_config_precedence/plan.md",
+      "status": "not_started",
+      "sequence": [
+        {
+          "id": "PCP0",
+          "spec": "docs/project_management/next/policy_and_config_precedence/PCP0-spec.md"
+        }
+      ],
+      "notes": [
+        "Implements ADR-0005 by reordering effective config precedence so workspace config overrides env exports when a workspace exists.",
+        "Land before world_sync so future features do not depend on the env-overrides-workspace footgun."
+      ]
+    },
+    {
       "order": 27,
       "id": "world_overlayfs_enumeration",
       "title": "Linux world overlayfs enumeration reliability",

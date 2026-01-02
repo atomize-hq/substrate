@@ -1,0 +1,61 @@
+## START — 2026-01-02T00:41:02Z — planning — ADR-0005 planning pack
+- Feature: `docs/project_management/next/policy_and_config_precedence/`
+- Branch: `feat/policy_and_config_precedence`
+- Goal: Produce an execution-ready Planning Pack for ADR-0005 with zero ambiguity.
+- Inputs to read end-to-end:
+  - `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
+  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md`
+  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
+  - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
+  - `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`
+  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
+  - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+- Commands planned (if any):
+  - `make adr-check ADR=docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
+  - `make adr-fix ADR=docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
+  - `jq -e . docs/project_management/next/policy_and_config_precedence/tasks.json >/dev/null`
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/policy_and_config_precedence"`
+
+## END — 2026-01-02T00:43:55Z — planning — ADR-0005 planning pack
+- Summary of changes (exhaustive):
+  - Created a dedicated Planning Pack for ADR-0005 under `docs/project_management/next/policy_and_config_precedence/` (plan/tasks/specs/decision register/integration map/playbook/smoke scripts/kickoff prompts).
+  - Updated `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md` to reference the new feature directory and added the missing executive-summary drift guard.
+  - Updated `docs/project_management/next/sequencing.json` to add the `policy_and_config_precedence` sprint and PCP0 slice.
+  - Fixed ADR executive summary hashes via `make adr-fix` where required for mechanical lint.
+- Files created/modified:
+  - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`
+  - `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
+  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/next/policy_and_config_precedence/plan.md`
+  - `docs/project_management/next/policy_and_config_precedence/tasks.json`
+  - `docs/project_management/next/policy_and_config_precedence/session_log.md`
+  - `docs/project_management/next/policy_and_config_precedence/PCP0-spec.md`
+  - `docs/project_management/next/policy_and_config_precedence/decision_register.md`
+  - `docs/project_management/next/policy_and_config_precedence/integration_map.md`
+  - `docs/project_management/next/policy_and_config_precedence/manual_testing_playbook.md`
+  - `docs/project_management/next/policy_and_config_precedence/quality_gate_report.md`
+  - `docs/project_management/next/policy_and_config_precedence/kickoff_prompts/PCP0-code.md`
+  - `docs/project_management/next/policy_and_config_precedence/kickoff_prompts/PCP0-test.md`
+  - `docs/project_management/next/policy_and_config_precedence/kickoff_prompts/PCP0-integ.md`
+  - `docs/project_management/next/policy_and_config_precedence/smoke/linux-smoke.sh`
+  - `docs/project_management/next/policy_and_config_precedence/smoke/macos-smoke.sh`
+  - `docs/project_management/next/policy_and_config_precedence/smoke/windows-smoke.ps1`
+- Rubric checks run (with results):
+  - `jq -e . docs/project_management/next/policy_and_config_precedence/tasks.json >/dev/null` → `0` → pass
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → pass
+  - `make adr-check ADR=docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md` → `0` → pass
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/policy_and_config_precedence"` → `0` → pass
+- Sequencing alignment:
+  - `sequencing.json` reviewed: `YES`
+  - Changes required: added `policy_and_config_precedence` sprint (order 26)
+- Blockers:
+  - `NONE`
+- Next steps:
+  - `PCP0-code`: implement resolver change in `crates/shell/src/execution/config_model.rs`
+  - `PCP0-test`: update `crates/shell/tests/config_show.rs` precedence assertions
+  - `PCP0-integ`: merge, run `make integ-checks`, run smoke, and record CI run ids/URLs

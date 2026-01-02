@@ -37,8 +37,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: e8d328d623951d68134863af5a22efa7ef683f360ce0518038aac10a223d5f7a
-
+ADR_BODY_SHA256: c480dfd2cb3b686172cfd0476304215bd45b284bb181754dfc069afe9d66cf20
 ADR_BODY_SHA256: <run `python3 scripts/planning/check_adr_exec_summary.py --adr <this-file> --fix` after editing>
 
 - Existing: Config/policy discovery and naming is ambiguous (multiple file names, “settings vs config vs policy”, and colliding terms like `cage/caged` and `root/anchor`).

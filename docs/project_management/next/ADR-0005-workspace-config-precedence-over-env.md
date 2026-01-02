@@ -6,25 +6,29 @@
 - Owner(s): spenser
 
 ## Scope
-- Feature directory: `docs/project_management/next/policy_and_config_mental_model_simplification/`
+- Feature directory: `docs/project_management/next/policy_and_config_precedence/`
 - Sequencing spine: `docs/project_management/next/sequencing.json`
 - Intended branch: `feat/policy_and_config_precedence`
 - Standards:
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
 
 ## Related Docs
 - Prior ADR (baseline semantics): `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`
+- Plan: `docs/project_management/next/policy_and_config_precedence/plan.md`
+- Tasks: `docs/project_management/next/policy_and_config_precedence/tasks.json`
 - Specs:
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md`
-  - `docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md`
-- Decision Register (baseline env scripts split): `docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md` (DR-0005)
+  - `docs/project_management/next/policy_and_config_precedence/PCP0-spec.md`
+- Decision Register:
+  - `docs/project_management/next/policy_and_config_precedence/decision_register.md`
+  - Baseline env scripts split: `docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md` (DR-0005)
+- Integration Map: `docs/project_management/next/policy_and_config_precedence/integration_map.md`
+- Manual Playbook: `docs/project_management/next/policy_and_config_precedence/manual_testing_playbook.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 55fddf49d269f07d4ab7fd797609ad2d5439e7ef7b68f1ed5465439902205157
-
-ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md` after drafting>
+ADR_BODY_SHA256: c67df2c96a14a7c15b622e29729fb3c9cb8a0936792552e4b0c8ef8cc23119a6
 
 ### Changes (operator-facing)
 - Workspace config always wins over sourced exports
@@ -35,6 +39,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0005-wo
     - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md#L255` (effective config precedence in ADR-0003)
     - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md#L605` (env scripts and `env.sh` purpose)
     - `crates/shell/src/execution/config_model.rs#L220` (current effective-config merge order)
+    - `docs/project_management/next/policy_and_config_precedence/PCP0-spec.md` (implementation slice; authoritative acceptance criteria)
 
 ## Problem / Context
 - `ADR-0003` introduced stable exports via `$SUBSTRATE_HOME/env.sh` (sourced by `$SUBSTRATE_HOME/manager_env.sh`) to stabilize cached state for Substrate-owned shells and tooling.
@@ -121,7 +126,7 @@ Exit codes:
     - Exit code per taxonomy
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` → `policy_and_config_mental_model_simplification`
+- Sequencing entry: `docs/project_management/next/sequencing.json` → `policy_and_config_precedence`
 - Prerequisite integration task IDs:
   - None (this ADR is a follow-up correction to ADR-0003’s precedence contract; it can be implemented as a small dedicated triad under a new branch, e.g. `feat/policy_and_config_precedence`).
 
@@ -145,11 +150,16 @@ Exit codes:
     - No-workspace behavior is unchanged (workspace-scoped commands still exit `2`).
 
 ### Manual validation
-- Update manual playbook section in `docs/project_management/next/policy_and_config_mental_model_simplification/manual_testing_playbook.md` (or add a new section) to include:
+- Manual playbook (required):
+  - `docs/project_management/next/policy_and_config_precedence/manual_testing_playbook.md`
+  - Includes a repro that sources `$SUBSTRATE_HOME/env.sh` and confirms `substrate config show` reflects `.substrate/workspace.yaml` values for overlapping keys.
   - Repro: source `$SUBSTRATE_HOME/env.sh`, then verify `substrate config show` reflects `.substrate/workspace.yaml` values for overlapping keys.
 
 ### Smoke scripts
-- Linux/macOS: extend existing smoke checks under `docs/project_management/next/policy_and_config_mental_model_simplification/smoke/` to validate workspace precedence when `SUBSTRATE_*` is set.
+- Feature-local scripts (required):
+  - `docs/project_management/next/policy_and_config_precedence/smoke/linux-smoke.sh`
+  - `docs/project_management/next/policy_and_config_precedence/smoke/macos-smoke.sh`
+  - `docs/project_management/next/policy_and_config_precedence/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed, but this ADR is targeted to reduce surprising behavior.
@@ -159,4 +169,4 @@ Exit codes:
 
 ## Decision Summary
 - Decision Register entries:
-  - None required: this ADR makes a single, narrow contract correction (workspace config must override env exports when a workspace exists) and does not introduce new architectural options beyond reordering precedence.
+  - `docs/project_management/next/policy_and_config_precedence/decision_register.md` (DR-0001)
