@@ -32,15 +32,15 @@ impl<'de> Deserialize<'de> for StrictWorldFsMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WorldFsCage {
-    Project,
+pub enum WorldFsIsolation {
+    Workspace,
     Full,
 }
 
-impl WorldFsCage {
+impl WorldFsIsolation {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Project => "project",
+            Self::Workspace => "workspace",
             Self::Full => "full",
         }
     }
@@ -50,22 +50,22 @@ impl WorldFsCage {
     }
 }
 
-impl FromStr for WorldFsCage {
+impl FromStr for WorldFsIsolation {
     type Err = String;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value.trim().to_ascii_lowercase().as_str() {
-            "project" => Ok(Self::Project),
+            "workspace" | "project" => Ok(Self::Workspace),
             "full" => Ok(Self::Full),
             other => Err(format!(
-                "invalid world_fs.isolation: {} (expected project or full)",
+                "invalid world_fs.isolation: {} (expected workspace or full)",
                 other
             )),
         }
     }
 }
 
-impl<'de> Deserialize<'de> for WorldFsCage {
+impl<'de> Deserialize<'de> for WorldFsIsolation {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -75,7 +75,7 @@ impl<'de> Deserialize<'de> for WorldFsCage {
     }
 }
 
-impl Serialize for WorldFsCage {
+impl Serialize for WorldFsIsolation {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -87,7 +87,7 @@ impl Serialize for WorldFsCage {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorldFsPolicy {
     pub mode: WorldFsMode,
-    pub cage: WorldFsCage,
+    pub isolation: WorldFsIsolation,
     pub require_world: bool,
     pub read_allowlist: Vec<String>,
     pub write_allowlist: Vec<String>,
@@ -99,11 +99,11 @@ pub struct Policy {
     pub name: String,
 
     // Filesystem (policy schema: world_fs.*)
-    pub fs_read: Vec<String>,         // world_fs.read_allowlist
-    pub fs_write: Vec<String>,        // world_fs.write_allowlist
-    pub world_fs_mode: WorldFsMode,   // world_fs.mode
-    pub world_fs_cage: WorldFsCage,   // world_fs.isolation
-    pub world_fs_require_world: bool, // world_fs.require_world
+    pub fs_read: Vec<String>,                 // world_fs.read_allowlist
+    pub fs_write: Vec<String>,                // world_fs.write_allowlist
+    pub world_fs_mode: WorldFsMode,           // world_fs.mode
+    pub world_fs_isolation: WorldFsIsolation, // world_fs.isolation
+    pub world_fs_require_world: bool,         // world_fs.require_world
 
     // Network
     pub net_allowed: Vec<String>, // Allowed hosts/domains
@@ -132,7 +132,7 @@ impl Default for Policy {
             fs_read: vec!["*".to_string()],
             fs_write: vec![],
             world_fs_mode: WorldFsMode::Writable,
-            world_fs_cage: WorldFsCage::Project,
+            world_fs_isolation: WorldFsIsolation::Workspace,
             world_fs_require_world: false,
             net_allowed: vec![],
             cmd_allowed: vec![],
@@ -160,7 +160,7 @@ impl Default for Policy {
 struct RawWorldFsV1 {
     mode: StrictWorldFsMode,
     #[serde(rename = "isolation")]
-    cage: WorldFsCage,
+    isolation: WorldFsIsolation,
     require_world: bool,
     read_allowlist: Vec<String>,
     write_allowlist: Vec<String>,
@@ -191,7 +191,7 @@ struct RawPolicyV1 {
 #[serde(deny_unknown_fields)]
 struct WorldFsFileV1<'a> {
     mode: WorldFsMode,
-    isolation: WorldFsCage,
+    isolation: WorldFsIsolation,
     require_world: bool,
     read_allowlist: &'a [String],
     write_allowlist: &'a [String],
@@ -252,7 +252,7 @@ impl Policy {
     pub fn world_fs_policy(&self) -> WorldFsPolicy {
         WorldFsPolicy {
             mode: self.world_fs_mode,
-            cage: self.world_fs_cage,
+            isolation: self.world_fs_isolation,
             require_world: self.world_fs_require_world,
             read_allowlist: self.fs_read.clone(),
             write_allowlist: self.fs_write.clone(),
@@ -276,7 +276,7 @@ impl Policy {
             return Err("world_fs.mode=read_only requires world_fs.require_world=true".to_string());
         }
 
-        if world_fs.cage == WorldFsCage::Full && !world_fs.require_world {
+        if world_fs.isolation == WorldFsIsolation::Full && !world_fs.require_world {
             return Err("world_fs.isolation=full requires world_fs.require_world=true".to_string());
         }
 
@@ -329,9 +329,9 @@ impl Policy {
             (WorldFsMode::ReadOnly, _) | (_, WorldFsMode::ReadOnly) => WorldFsMode::ReadOnly,
             _ => WorldFsMode::Writable,
         };
-        self.world_fs_cage = match (self.world_fs_cage, other.world_fs_cage) {
-            (WorldFsCage::Full, _) | (_, WorldFsCage::Full) => WorldFsCage::Full,
-            _ => WorldFsCage::Project,
+        self.world_fs_isolation = match (self.world_fs_isolation, other.world_fs_isolation) {
+            (WorldFsIsolation::Full, _) | (_, WorldFsIsolation::Full) => WorldFsIsolation::Full,
+            _ => WorldFsIsolation::Workspace,
         };
         self.world_fs_require_world = self.world_fs_require_world || other.world_fs_require_world;
 
@@ -413,7 +413,7 @@ impl<'de> Deserialize<'de> for Policy {
             fs_read: raw.world_fs.read_allowlist,
             fs_write: raw.world_fs.write_allowlist,
             world_fs_mode: raw.world_fs.mode.0,
-            world_fs_cage: raw.world_fs.cage,
+            world_fs_isolation: raw.world_fs.isolation,
             world_fs_require_world: raw.world_fs.require_world,
             net_allowed: raw.net_allowed,
             cmd_allowed: raw.cmd_allowed,
@@ -437,7 +437,7 @@ impl Serialize for Policy {
             name: &self.name,
             world_fs: WorldFsFileV1 {
                 mode: self.world_fs_mode,
-                isolation: self.world_fs_cage,
+                isolation: self.world_fs_isolation,
                 require_world: self.world_fs_require_world,
                 read_allowlist: &self.fs_read,
                 write_allowlist: &self.fs_write,

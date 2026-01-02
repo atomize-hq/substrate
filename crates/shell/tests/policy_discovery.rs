@@ -71,7 +71,7 @@ name: "{id}"
 
 world_fs:
   mode: writable
-  isolation: project
+  isolation: workspace
   require_world: false
   read_allowlist: ["*"]
   write_allowlist: []

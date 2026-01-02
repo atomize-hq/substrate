@@ -165,25 +165,29 @@ impl WorldAgentService {
         let env_ref = req.env.as_ref();
         let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
         let fs_mode = resolve_fs_mode(req.world_fs_mode, env_ref);
-        let cage_full = is_full_cage(env_ref);
+        let isolation_full = is_full_isolation(env_ref);
 
-        let (write_allowlist_prefixes, landlock_read_paths, landlock_write_paths) = if cage_full {
-            if let Err(e) = substrate_broker::detect_profile(&cwd) {
-                tracing::warn!(
-                    error = %e,
-                    cwd = %cwd.display(),
-                    "world-agent: failed to detect policy profile for request"
-                );
-            }
-            let world_fs = substrate_broker::world_fs_policy();
-            (
-                resolve_project_write_allowlist_prefixes(&project_dir, &world_fs.write_allowlist),
-                resolve_landlock_allowlist_paths(&project_dir, &world_fs.read_allowlist),
-                resolve_landlock_allowlist_paths(&project_dir, &world_fs.write_allowlist),
-            )
-        } else {
-            (Vec::new(), Vec::new(), Vec::new())
-        };
+        let (write_allowlist_prefixes, landlock_read_paths, landlock_write_paths) =
+            if isolation_full {
+                if let Err(e) = substrate_broker::detect_profile(&cwd) {
+                    tracing::warn!(
+                        error = %e,
+                        cwd = %cwd.display(),
+                        "world-agent: failed to detect policy profile for request"
+                    );
+                }
+                let world_fs = substrate_broker::world_fs_policy();
+                (
+                    resolve_project_write_allowlist_prefixes(
+                        &project_dir,
+                        &world_fs.write_allowlist,
+                    ),
+                    resolve_landlock_allowlist_paths(&project_dir, &world_fs.read_allowlist),
+                    resolve_landlock_allowlist_paths(&project_dir, &world_fs.write_allowlist),
+                )
+            } else {
+                (Vec::new(), Vec::new(), Vec::new())
+            };
 
         // Create world spec from request
         let spec = WorldSpec {
@@ -210,30 +214,28 @@ impl WorldAgentService {
 
         // Prepare execution request
         let mut env_map = req.env.unwrap_or_default();
-        if cage_full && !write_allowlist_prefixes.is_empty() {
+        if isolation_full && !write_allowlist_prefixes.is_empty() {
             env_map.insert(
                 WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(),
                 write_allowlist_prefixes.join("\n"),
             );
         }
-        if cage_full && !landlock_read_paths.is_empty() {
+        if isolation_full && !landlock_read_paths.is_empty() {
             env_map.insert(
                 WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string(),
                 landlock_read_paths.join("\n"),
             );
         }
-        if cage_full && !landlock_write_paths.is_empty() {
+        if isolation_full && !landlock_write_paths.is_empty() {
             env_map.insert(
                 WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV.to_string(),
                 landlock_write_paths.join("\n"),
             );
         }
-        if cage_full {
-            if let Ok(exe) = std::env::current_exe() {
-                env_map
-                    .entry(LANDLOCK_HELPER_SRC_ENV.to_string())
-                    .or_insert_with(|| exe.display().to_string());
-            }
+        if let Ok(exe) = std::env::current_exe() {
+            env_map
+                .entry(LANDLOCK_HELPER_SRC_ENV.to_string())
+                .or_insert_with(|| exe.display().to_string());
         }
         let exec_req = world_api::ExecRequest {
             cmd: req.cmd,
@@ -295,25 +297,29 @@ impl WorldAgentService {
         let env_ref = req.env.as_ref();
         let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
         let fs_mode = resolve_fs_mode(req.world_fs_mode, env_ref);
-        let cage_full = is_full_cage(env_ref);
+        let isolation_full = is_full_isolation(env_ref);
 
-        let (write_allowlist_prefixes, landlock_read_paths, landlock_write_paths) = if cage_full {
-            if let Err(e) = substrate_broker::detect_profile(&cwd) {
-                tracing::warn!(
-                    error = %e,
-                    cwd = %cwd.display(),
-                    "world-agent: failed to detect policy profile for request"
-                );
-            }
-            let world_fs = substrate_broker::world_fs_policy();
-            (
-                resolve_project_write_allowlist_prefixes(&project_dir, &world_fs.write_allowlist),
-                resolve_landlock_allowlist_paths(&project_dir, &world_fs.read_allowlist),
-                resolve_landlock_allowlist_paths(&project_dir, &world_fs.write_allowlist),
-            )
-        } else {
-            (Vec::new(), Vec::new(), Vec::new())
-        };
+        let (write_allowlist_prefixes, landlock_read_paths, landlock_write_paths) =
+            if isolation_full {
+                if let Err(e) = substrate_broker::detect_profile(&cwd) {
+                    tracing::warn!(
+                        error = %e,
+                        cwd = %cwd.display(),
+                        "world-agent: failed to detect policy profile for request"
+                    );
+                }
+                let world_fs = substrate_broker::world_fs_policy();
+                (
+                    resolve_project_write_allowlist_prefixes(
+                        &project_dir,
+                        &world_fs.write_allowlist,
+                    ),
+                    resolve_landlock_allowlist_paths(&project_dir, &world_fs.read_allowlist),
+                    resolve_landlock_allowlist_paths(&project_dir, &world_fs.write_allowlist),
+                )
+            } else {
+                (Vec::new(), Vec::new(), Vec::new())
+            };
 
         let spec = WorldSpec {
             reuse_session: true,
@@ -339,23 +345,28 @@ impl WorldAgentService {
             cwd: cwd.clone(),
             env: {
                 let mut env_map = req.env.clone().unwrap_or_default();
-                if cage_full && !write_allowlist_prefixes.is_empty() {
+                if isolation_full && !write_allowlist_prefixes.is_empty() {
                     env_map.insert(
                         WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(),
                         write_allowlist_prefixes.join("\n"),
                     );
                 }
-                if cage_full && !landlock_read_paths.is_empty() {
+                if isolation_full && !landlock_read_paths.is_empty() {
                     env_map.insert(
                         WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string(),
                         landlock_read_paths.join("\n"),
                     );
                 }
-                if cage_full && !landlock_write_paths.is_empty() {
+                if isolation_full && !landlock_write_paths.is_empty() {
                     env_map.insert(
                         WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV.to_string(),
                         landlock_write_paths.join("\n"),
                     );
+                }
+                if let Ok(exe) = std::env::current_exe() {
+                    env_map
+                        .entry(LANDLOCK_HELPER_SRC_ENV.to_string())
+                        .or_insert_with(|| exe.display().to_string());
                 }
                 env_map
             },
@@ -518,7 +529,7 @@ pub(crate) fn resolve_project_dir(
     Ok(base_dir)
 }
 
-pub(crate) fn is_full_cage(env: Option<&HashMap<String, String>>) -> bool {
+pub(crate) fn is_full_isolation(env: Option<&HashMap<String, String>>) -> bool {
     if let Some(env) = env {
         if let Some(raw) = env.get(WORLD_FS_ISOLATION_ENV) {
             return raw.trim().eq_ignore_ascii_case("full");
@@ -601,7 +612,7 @@ pub(crate) fn resolve_landlock_allowlist_paths(
 
         let pattern = pattern.trim_start_matches("./");
 
-        // Landlock allowlists are enforced relative to the project root (mirrors the full-cage
+        // Landlock allowlists are enforced relative to the project root (mirrors the full-isolation
         // mount semantics). Absolute patterns are only honored when they refer to the project dir.
         let rel = if pattern.starts_with('/') {
             if pattern == project_dir_str {

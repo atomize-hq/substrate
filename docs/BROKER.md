@@ -37,24 +37,32 @@ Create `.substrate-profile` in your project root:
 id: my-project
 name: Project Security Policy
 
-# Filesystem permissions
-fs_read: ["*"]                    # Allow all reads
-fs_write: ["/tmp/*", "./dist/*"]  # Restrict writes
+world_fs:
+  mode: writable            # writable | read_only
+  isolation: full           # workspace | full
+  require_world: true       # fail closed if world unavailable
+  read_allowlist: ["*"]     # required, must be non-empty
+  write_allowlist:          # only used in full isolation
+    - "dist/**"
 
-# Network permissions  
 net_allowed: ["github.com", "*.npmjs.org"]
 
-# Command policies
-cmd_denied:                       # Always block these
+cmd_denied:
   - "rm -rf /"
   - "curl * | bash"
-  
-cmd_isolated:                      # Run in ephemeral world
+
+cmd_isolated:
   - "npm install"
   - "pip install"
 
-require_approval: false            # Interactive approval
-allow_shell_operators: true        # Pipes, redirects, etc.
+require_approval: false
+allow_shell_operators: true
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+metadata: {}
 ```
 
 ### 3. Integration Points

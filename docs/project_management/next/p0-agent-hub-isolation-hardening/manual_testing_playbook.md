@@ -55,7 +55,7 @@ name: IH Test Policy
 world_fs:
   require_world: false
   mode: writable
-  cage: project
+  isolation: workspace
   read_allowlist:
     - "*"
   write_allowlist: []
@@ -80,7 +80,7 @@ name: IH Test Policy
 world_fs:
   require_world: false
   mode: writable
-  cage: project
+  isolation: workspace
   read_allowlist:
     - "*"
   write_allowlist: []
@@ -103,7 +103,7 @@ name: IH Test Policy
 world_fs:
   require_world: true
   mode: writable
-  cage: project
+  isolation: workspace
   read_allowlist:
     - "*"
   write_allowlist: []
@@ -130,7 +130,7 @@ name: IH Test Policy
 world_fs:
   require_world: true
   mode: writable
-  cage: full
+  isolation: full
   read_allowlist:
     - "*"
   write_allowlist: []
@@ -223,7 +223,7 @@ name: IH Test Policy
 world_fs:
   require_world: false
   mode: writable
-  cage: project
+  isolation: workspace
   read_allowlist:
     - "*"
   write_allowlist: []
@@ -247,7 +247,7 @@ name: IH Test Policy
 world_fs:
   require_world: true
   mode: writable
-  cage: project
+  isolation: workspace
   read_allowlist:
     - "*"
   write_allowlist: []

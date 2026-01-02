@@ -63,7 +63,7 @@ name: "PCM2 Test Policy"
 
 world_fs:
   mode: writable
-  isolation: project
+  isolation: workspace
   require_world: {require_world}
   read_allowlist: ["*"]
   write_allowlist: []

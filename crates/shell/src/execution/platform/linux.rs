@@ -5,7 +5,7 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
-use substrate_broker::world_fs_mode;
+use substrate_broker::{detect_profile, world_fs_mode};
 use which::which;
 
 pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
@@ -95,6 +95,12 @@ pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
     }
 
     let activation_report = socket_activation::socket_activation_report();
+    // Align doctor output with the effective workspace policy when invoked from a workspace.
+    //
+    // This mirrors the execution path, which refreshes profile/policy per-cwd before reading world_fs.
+    if let Ok(cwd) = std::env::current_dir() {
+        let _ = detect_profile(&cwd);
+    }
     let fs_mode = world_fs_mode();
     let landlock = world::landlock::detect_support();
 

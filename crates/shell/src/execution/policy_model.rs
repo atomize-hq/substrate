@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use substrate_broker::{Policy, WorldFsCage};
+use substrate_broker::{Policy, WorldFsIsolation};
 use substrate_common::WorldFsMode;
 
 #[derive(Debug, Clone)]
@@ -82,7 +82,7 @@ fn validate_policy(policy: &Policy) -> Result<()> {
             "world_fs.mode=read_only requires world_fs.require_world=true",
         ));
     }
-    if policy.world_fs_cage == WorldFsCage::Full && !policy.world_fs_require_world {
+    if policy.world_fs_isolation == WorldFsIsolation::Full && !policy.world_fs_require_world {
         return Err(config_model::user_error(
             "world_fs.isolation=full requires world_fs.require_world=true",
         ));
@@ -98,7 +98,7 @@ fn apply_update(policy: &mut Policy, update: &ConfigUpdate) -> Result<bool> {
             apply_enum_world_fs_mode(&mut policy.world_fs_mode, &update.op, &update.value)
         }
         "world_fs.isolation" => {
-            apply_enum_world_fs_isolation(&mut policy.world_fs_cage, &update.op, &update.value)
+            apply_enum_world_fs_isolation(&mut policy.world_fs_isolation, &update.op, &update.value)
         }
         "world_fs.require_world" => apply_bool(
             &mut policy.world_fs_require_world,
@@ -237,7 +237,7 @@ fn apply_enum_world_fs_mode(target: &mut WorldFsMode, op: &UpdateOp, raw: &str) 
 }
 
 fn apply_enum_world_fs_isolation(
-    target: &mut WorldFsCage,
+    target: &mut WorldFsIsolation,
     op: &UpdateOp,
     raw: &str,
 ) -> Result<bool> {
@@ -247,11 +247,11 @@ fn apply_enum_world_fs_isolation(
         ));
     };
     let next = match raw.trim().to_ascii_lowercase().as_str() {
-        "project" => WorldFsCage::Project,
-        "full" => WorldFsCage::Full,
+        "workspace" | "project" => WorldFsIsolation::Workspace,
+        "full" => WorldFsIsolation::Full,
         _ => {
             return Err(config_model::user_error(format!(
-                "invalid world_fs.isolation '{}' (expected project or full)",
+                "invalid world_fs.isolation '{}' (expected workspace or full)",
                 raw.trim()
             )));
         }

@@ -15,7 +15,7 @@ name: "string"
 
 world_fs:
   mode: writable
-  isolation: project
+  isolation: workspace
   require_world: false
   read_allowlist: ["*"]
   write_allowlist: []
@@ -117,4 +117,3 @@ Value parsing rules:
 - Policy YAML strict parsing and invariants match this spec and ADR-0003 exactly.
 - Policy discovery selection order matches this spec and ADR-0003 exactly.
 - Policy CLI init/show/set/global init/show/set semantics match this spec and ADR-0003 exactly.
-

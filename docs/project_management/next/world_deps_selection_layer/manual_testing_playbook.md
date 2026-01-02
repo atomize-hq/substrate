@@ -277,19 +277,19 @@ Expected:
 
 ---
 
-## 4) Full-cage compatibility spot check (Linux only)
+## 4) Full-isolation compatibility spot check (Linux only)
 
 Preconditions:
 - Linux host with I2/I3 implemented and enabled.
 - A world backend is available (`substrate world doctor --json` reports the backend as available).
 
-1) Request full cage via a per-workspace policy file (`.substrate-profile`):
+1) Request full isolation via a per-workspace policy file (`.substrate-profile`):
 ```bash
 cat > .substrate-profile <<'YAML'
 world_fs:
   require_world: true
   mode: writable
-  cage: full
+  isolation: full
   read_allowlist:
     - "**"
   write_allowlist:
@@ -304,8 +304,8 @@ echo "exit=$?"
 ```
 
 Expected:
-- If the full cage is created successfully and `/var/lib/substrate/world-deps` is writable inside the cage, user-space installs succeed and exit code is `0`.
-- If full cage cannot be created, `sync` exits non-zero and prints an actionable error.
+- If the full isolation rootfs is created successfully and `/var/lib/substrate/world-deps` is writable inside it, user-space installs succeed and exit code is `0`.
+- If full isolation cannot be created, `sync` exits non-zero and prints an actionable error.
 
 ---
 
@@ -319,4 +319,4 @@ Expected:
   - `--all` ignoring selection
   - `system_packages` runtime block + provisioning route
   - provisioning success (Lima/WSL) or explicit unsupported error (Linux)
-  - full-cage spot check (if applicable)
+  - full-isolation spot check (if applicable)

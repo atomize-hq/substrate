@@ -123,7 +123,7 @@ Substrate on macOS uses a Lima VM (“substrate”) to host the world-agent. The
 
 - Validation
   - `scripts/mac/smoke.sh` exercises non‑PTY, PTY, and replay flows on macOS and asserts that the replay `fs_diff` contains project paths.
-  - `scripts/linux/agent-hub-isolation-verify.sh` verifies `world_fs.mode=read_only` and `world_fs.cage=full` enforcement (on macOS it drives the Lima-backed world; on Windows, use WSL-specific tooling instead).
+  - `scripts/linux/agent-hub-isolation-verify.sh` verifies `world_fs.mode=read_only` and `world_fs.isolation=full` enforcement (on macOS it drives the Lima-backed world; on Windows, use WSL-specific tooling instead).
 
 ## 4) Isolation Details (Linux)
 
@@ -139,9 +139,9 @@ Per session world (identified by `WORLD_ID`, e.g., `wld_01994…`):
 - Filesystem isolation
   - Overlay: non‑PTY and PTY runs execute against a per-session overlay so changes are contained to the world (and can be diffed for non‑PTY runs).
   - `world_fs.mode=read_only`: the project mount is remounted read-only so both relative and absolute project writes fail (and if mount namespaces are unavailable, Substrate fails closed rather than risking an absolute-path escape).
-  - `world_fs.cage=project`: bind-mounts the overlay root onto the project path inside a private mount namespace to prevent absolute-path escapes back into the host project; this does **not** hide other host paths.
-  - `world_fs.cage=full`: builds a minimal rootfs and `pivot_root`s so host paths are no longer nameable; only a small set of mounts exist (system dirs read-only, `/project` + the project absolute path, fresh `/tmp` tmpfs, `/proc`, `/dev` read-only, plus `/var/lib/substrate/world-deps` read-write).
-  - `world_fs.write_allowlist` is used in full-cage writable mode to remount specific project prefixes read-write; everything else under the project remains read-only.
+  - `world_fs.isolation=workspace`: bind-mounts the overlay root onto the project path inside a private mount namespace to prevent absolute-path escapes back into the host project; other host paths are still nameable. On Linux, Substrate applies best-effort host write protection (Landlock) so paths outside the project are not writable, but reads are not restricted.
+  - `world_fs.isolation=full`: builds a minimal rootfs and `pivot_root`s so host paths are no longer nameable; only a small set of mounts exist (system dirs read-only, `/project` + the project absolute path, fresh `/tmp` tmpfs, `/proc`, `/dev` read-only, plus `/var/lib/substrate/world-deps` read-write).
+  - `world_fs.write_allowlist` is used in full isolation + `world_fs.mode=writable` to remount specific project prefixes read-write; everything else under the project remains read-only.
   - `fs_diff` is returned for non‑PTY `/v1/execute`; the PTY streaming API does not include `fs_diff` today.
 
 ---

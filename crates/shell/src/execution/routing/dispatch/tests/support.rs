@@ -27,7 +27,7 @@ id: shell-tests
 name: Shell Tests
 world_fs:
   mode: writable
-  isolation: project
+  isolation: workspace
   require_world: false
   read_allowlist: ["*"]
   write_allowlist: []

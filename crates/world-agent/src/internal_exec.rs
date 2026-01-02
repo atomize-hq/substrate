@@ -7,6 +7,7 @@ const INNER_LOGIN_SHELL_ENV: &str = "SUBSTRATE_INNER_LOGIN_SHELL";
 const MOUNT_CWD_ENV: &str = "SUBSTRATE_MOUNT_CWD";
 #[cfg(target_os = "linux")]
 const MOUNT_PROJECT_DIR_ENV: &str = "SUBSTRATE_MOUNT_PROJECT_DIR";
+const WORLD_FS_ISOLATION_ENV: &str = "SUBSTRATE_WORLD_FS_ISOLATION";
 
 const LANDLOCK_READ_ENV: &str = "SUBSTRATE_WORLD_FS_LANDLOCK_READ_ALLOWLIST";
 const LANDLOCK_WRITE_ENV: &str = "SUBSTRATE_WORLD_FS_LANDLOCK_WRITE_ALLOWLIST";
@@ -17,40 +18,70 @@ pub fn run_landlock_exec() -> Result<()> {
 
     #[cfg(target_os = "linux")]
     {
-        let mut read_paths = read_paths;
-        let mut write_paths = write_paths;
-        if !read_paths.is_empty() || !write_paths.is_empty() {
-            let mut policy = world::landlock::LandlockFilesystemPolicy {
-                exec_paths: vec!["/".to_string(), "/project".to_string()],
-                read_paths: vec![
-                    "/usr".to_string(),
-                    "/bin".to_string(),
-                    "/lib".to_string(),
-                    "/lib64".to_string(),
-                    "/etc".to_string(),
-                    "/proc".to_string(),
-                ],
-                write_paths: vec![
-                    "/tmp".to_string(),
-                    "/dev".to_string(),
-                    "/var/lib/substrate/world-deps".to_string(),
-                ],
-            };
+        let isolation_full = std::env::var(WORLD_FS_ISOLATION_ENV)
+            .ok()
+            .is_some_and(|raw| raw.trim().eq_ignore_ascii_case("full"));
+
+        if isolation_full {
+            let mut read_paths = read_paths;
+            let mut write_paths = write_paths;
+            if read_paths.is_empty() && write_paths.is_empty() {
+                // Nothing to enforce.
+            } else {
+                let mut policy = world::landlock::LandlockFilesystemPolicy {
+                    exec_paths: vec!["/".to_string(), "/project".to_string()],
+                    read_paths: vec![
+                        "/usr".to_string(),
+                        "/bin".to_string(),
+                        "/lib".to_string(),
+                        "/lib64".to_string(),
+                        "/etc".to_string(),
+                        "/proc".to_string(),
+                    ],
+                    write_paths: vec![
+                        "/tmp".to_string(),
+                        "/dev".to_string(),
+                        "/var/lib/substrate/world-deps".to_string(),
+                    ],
+                };
+
+                if let Ok(project_dir) = std::env::var(MOUNT_PROJECT_DIR_ENV) {
+                    if !project_dir.trim().is_empty() {
+                        policy.exec_paths.push(project_dir);
+                    }
+                }
+
+                policy.read_paths.append(&mut read_paths);
+                policy.write_paths.append(&mut write_paths);
+                policy.read_paths.sort();
+                policy.read_paths.dedup();
+                policy.write_paths.sort();
+                policy.write_paths.dedup();
+
+                let _report = world::landlock::apply_filesystem_policy(&policy);
+                let _ = _report;
+            }
+        } else {
+            // Workspace isolation keeps host paths readable, but should prevent writes outside the
+            // project and a few scratch locations.
+            let mut write_paths = vec![
+                "/tmp".to_string(),
+                "/var/tmp".to_string(),
+                "/dev".to_string(),
+                "/var/lib/substrate/world-deps".to_string(),
+            ];
 
             if let Ok(project_dir) = std::env::var(MOUNT_PROJECT_DIR_ENV) {
-                if !project_dir.trim().is_empty() {
-                    policy.exec_paths.push(project_dir);
+                let trimmed = project_dir.trim();
+                if !trimmed.is_empty() {
+                    write_paths.push(trimmed.to_string());
                 }
             }
 
-            policy.read_paths.append(&mut read_paths);
-            policy.write_paths.append(&mut write_paths);
-            policy.read_paths.sort();
-            policy.read_paths.dedup();
-            policy.write_paths.sort();
-            policy.write_paths.dedup();
+            write_paths.sort();
+            write_paths.dedup();
 
-            let _report = world::landlock::apply_filesystem_policy(&policy);
+            let _report = world::landlock::apply_write_only_allowlist(&write_paths);
             let _ = _report;
         }
     }

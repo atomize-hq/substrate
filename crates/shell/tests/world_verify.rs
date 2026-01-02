@@ -122,7 +122,7 @@ fn assert_verify_json_schema(payload: &Value) {
         "world_backend",
         "read_only_relative_write",
         "read_only_absolute_write",
-        "full_cage_host_isolation",
+        "full_isolation_host_isolation",
     ] {
         assert!(
             ids.iter().any(|id| id == expected),

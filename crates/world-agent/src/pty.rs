@@ -3,7 +3,7 @@
 use crate::service::WorldAgentService;
 #[cfg(target_os = "linux")]
 use crate::service::{
-    is_full_cage, resolve_landlock_allowlist_paths, resolve_project_dir,
+    is_full_isolation, resolve_landlock_allowlist_paths, resolve_project_dir,
     resolve_project_write_allowlist_prefixes, WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV,
     WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV, WORLD_FS_MODE_ENV, WORLD_FS_WRITE_ALLOWLIST_ENV,
 };
@@ -252,13 +252,13 @@ pub async fn handle_ws_pty(
                 return;
             }
         };
-        let cage_full = is_full_cage(Some(&env));
+        let isolation_full = is_full_isolation(Some(&env));
         let fs_mode = env
             .get(WORLD_FS_MODE_ENV)
             .and_then(|value| WorldFsMode::parse(value))
             .unwrap_or(WorldFsMode::Writable);
 
-        if cage_full {
+        if isolation_full {
             if let Err(e) = substrate_broker::detect_profile(&cwd) {
                 warn!(
                     error = %e,
@@ -291,11 +291,11 @@ pub async fn handle_ws_pty(
                     landlock_write_paths.join("\n"),
                 );
             }
+        }
 
-            if let Ok(exe) = std::env::current_exe() {
-                env.entry("SUBSTRATE_LANDLOCK_HELPER_SRC".to_string())
-                    .or_insert_with(|| exe.display().to_string());
-            }
+        if let Ok(exe) = std::env::current_exe() {
+            env.entry("SUBSTRATE_LANDLOCK_HELPER_SRC".to_string())
+                .or_insert_with(|| exe.display().to_string());
         }
 
         let spec = WorldSpec {
@@ -367,21 +367,19 @@ pub async fn handle_ws_pty(
         env.insert("SUBSTRATE_INNER_CMD".to_string(), inner_cmd);
         env.insert("SUBSTRATE_INNER_LOGIN_SHELL".to_string(), "1".to_string());
 
-        if cage_full {
-            env.insert("HOME".to_string(), "/tmp/substrate-home".to_string());
-            env.insert(
-                "XDG_CACHE_HOME".to_string(),
-                "/tmp/substrate-xdg/cache".to_string(),
-            );
-            env.insert(
-                "XDG_CONFIG_HOME".to_string(),
-                "/tmp/substrate-xdg/config".to_string(),
-            );
-            env.insert(
-                "XDG_DATA_HOME".to_string(),
-                "/tmp/substrate-xdg/data".to_string(),
-            );
-        }
+        env.insert("HOME".to_string(), "/tmp/substrate-home".to_string());
+        env.insert(
+            "XDG_CACHE_HOME".to_string(),
+            "/tmp/substrate-xdg/cache".to_string(),
+        );
+        env.insert(
+            "XDG_CONFIG_HOME".to_string(),
+            "/tmp/substrate-xdg/config".to_string(),
+        );
+        env.insert(
+            "XDG_DATA_HOME".to_string(),
+            "/tmp/substrate-xdg/data".to_string(),
+        );
 
         command_to_run = PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT.to_string();
     }

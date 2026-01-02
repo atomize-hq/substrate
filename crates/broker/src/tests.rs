@@ -49,7 +49,7 @@ id: test-policy
 name: Test Policy
 world_fs:
   mode: writable
-  isolation: project
+  isolation: workspace
   require_world: false
   read_allowlist:
     - /tmp/*
@@ -99,7 +99,7 @@ id: minimal
 name: Minimal Profile
 world_fs:
   mode: read_only
-  isolation: project
+  isolation: workspace
   require_world: true
   read_allowlist: ["*"]
   write_allowlist: []
@@ -186,7 +186,7 @@ id: alpha
 name: Alpha Policy
 world_fs:
   mode: writable
-  isolation: project
+  isolation: workspace
   require_world: false
   read_allowlist: ["*"]
   write_allowlist: []
@@ -214,7 +214,7 @@ id: beta
 name: Beta Policy
 world_fs:
   mode: writable
-  isolation: project
+  isolation: workspace
   require_world: false
   read_allowlist: ["*"]
   write_allowlist: []
@@ -298,7 +298,7 @@ id: bad-fs-mode
 name: Invalid fs mode
 world_fs:
   mode: invalid
-  isolation: project
+  isolation: workspace
   require_world: false
   read_allowlist: ["*"]
   write_allowlist: []
@@ -334,7 +334,7 @@ id: p
 name: Policy
 world_fs:
   mode: writable
-  isolation: project
+  isolation: workspace
   require_world: false
   read_allowlist: ["*"]
   write_allowlist: []
@@ -385,13 +385,14 @@ name: Policy
     }
 
     #[test]
-    fn invalid_world_fs_cage_fails_with_allowed_values() {
-        let err = parse_err(&BASE_POLICY_YAML.replace("isolation: project", "isolation: invalid"));
+    fn invalid_world_fs_isolation_fails_with_allowed_values() {
+        let err =
+            parse_err(&BASE_POLICY_YAML.replace("isolation: workspace", "isolation: invalid"));
         assert!(
             err.contains("invalid world_fs.isolation"),
             "unexpected error: {err}"
         );
-        assert!(err.contains("project"), "unexpected error: {err}");
+        assert!(err.contains("workspace"), "unexpected error: {err}");
         assert!(err.contains("full"), "unexpected error: {err}");
     }
 
@@ -405,8 +406,8 @@ name: Policy
     }
 
     #[test]
-    fn full_cage_requires_require_world_true() {
-        let err = parse_err(&BASE_POLICY_YAML.replace("isolation: project", "isolation: full"));
+    fn full_isolation_requires_require_world_true() {
+        let err = parse_err(&BASE_POLICY_YAML.replace("isolation: workspace", "isolation: full"));
         assert!(
             err.contains("isolation=full") && err.contains("require_world=true"),
             "unexpected error: {err}"
@@ -422,7 +423,7 @@ id: p
 name: Policy
 world_fs:
   mode: writable
-  isolation: project
+  isolation: workspace
   require_world: false
   read_allowlist: ["*"]
 net_allowed: []
@@ -463,7 +464,16 @@ metadata: {}
             serde_yaml::from_str(&BASE_POLICY_YAML.replace("[\"*\"]", "[\"./*\"]"))
                 .expect("minimal world_fs policy should parse");
         assert_eq!(policy.world_fs_mode, WorldFsMode::Writable);
-        assert_eq!(policy.world_fs_cage, WorldFsCage::Project);
+        assert_eq!(policy.world_fs_isolation, WorldFsIsolation::Workspace);
         assert!(!policy.world_fs_require_world);
+    }
+
+    #[test]
+    fn legacy_isolation_project_is_accepted() {
+        let policy: Policy = serde_yaml::from_str(
+            &BASE_POLICY_YAML.replace("isolation: workspace", "isolation: project"),
+        )
+        .expect("legacy isolation=project should still parse");
+        assert_eq!(policy.world_fs_isolation, WorldFsIsolation::Workspace);
     }
 }

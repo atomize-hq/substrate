@@ -15,7 +15,7 @@
    - A relative write in the project
    - An absolute-path write targeting a file under the project’s absolute path
 
-2) **Full cage host-path isolation**: when `world_fs.cage=full` is enabled, prove:
+2) **Full isolation host-path isolation**: when `world_fs.isolation=full` is enabled, prove:
    - Writing to an allowlisted project prefix succeeds (e.g., `./writable/*`)
    - Writing to a non-allowlisted project path fails
    - Reading a host path outside the project fails
@@ -33,7 +33,7 @@
 - Human output:
   - Prints the individual checks and a final `PASS`/`FAIL` line.
   - On failure, prints the minimal next-action hint (e.g., “run `substrate world doctor --json`” or
-    “full cage requires CAP_SYS_ADMIN or unprivileged user namespaces”).
+    “full isolation requires CAP_SYS_ADMIN or unprivileged user namespaces”).
 - Machine output (recommended):
   - Add `--json` to emit a structured report (per-check status + error strings + artifact paths).
 - Exit codes:
@@ -47,7 +47,7 @@
 - The command can be run from any directory and does not require a repo checkout.
 - On a correctly provisioned Linux host, it can demonstrate:
   - `world_fs.mode=read_only` blocks relative + absolute project writes.
-  - `world_fs.cage=full` blocks host paths outside the project and enforces project allowlists.
+  - `world_fs.isolation=full` blocks host paths outside the project and enforces project allowlists.
 - On a correctly provisioned macOS host (Lima backend), it demonstrates the same outcomes (parity), or
   clearly reports any missing capability and how to fix it.
 - Failures are actionable (clear reasons + next steps).

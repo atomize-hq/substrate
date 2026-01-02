@@ -143,17 +143,16 @@ pub fn create_sample_profile(path: &Path) -> Result<()> {
 id: project-policy
 name: My Project Security Policy
 
-# Filesystem permissions + caging
+# Filesystem permissions + isolation
 world_fs:
   mode: writable            # writable | read_only
-  isolation: project        # project | full
-  require_world: false      # true = world required (no host fallback)
+  isolation: full           # workspace | full
+  require_world: true       # true = world required (no host fallback)
   read_allowlist:
     - "*"                   # Allow reading all files
   write_allowlist:
-    - "./dist/*"            # Only allow writing to dist directory
-    - "./build/*"           # And build directory
-    - "/tmp/*"              # And temp files
+    - "dist/**"             # Allow writing to dist directory
+    - "build/**"            # And build directory (prefix globs)
 
 # Network permissions
 net_allowed:

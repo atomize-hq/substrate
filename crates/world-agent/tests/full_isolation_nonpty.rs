@@ -33,7 +33,7 @@ fn make_service() -> Option<WorldAgentService> {
     match WorldAgentService::new() {
         Ok(svc) => Some(svc),
         Err(err) => {
-            eprintln!("skipping full-cage test: service init failed: {err}");
+            eprintln!("skipping full-isolation test: service init failed: {err}");
             None
         }
     }
@@ -52,7 +52,7 @@ fn execute_non_pty(
         cwd: Some(cwd.display().to_string()),
         env: Some(env),
         pty: false,
-        agent_id: "full-cage-nonpty-test".to_string(),
+        agent_id: "full-isolation-nonpty-test".to_string(),
         budget: None,
         world_fs_mode: Some(world_fs_mode),
     };
@@ -61,7 +61,7 @@ fn execute_non_pty(
     match rt.block_on(service.execute(req)) {
         Ok(resp) => Some(resp),
         Err(err) => {
-            eprintln!("skipping full-cage test: execute failed: {err}");
+            eprintln!("skipping full-isolation test: execute failed: {err}");
             None
         }
     }
@@ -88,7 +88,7 @@ fn write_profile_policy(project_dir: &Path, write_allowlist: &[&str]) {
     };
 
     let policy = format!(
-        r#"id: full-cage-test
+        r#"id: full-isolation-test
 name: Full Cage Test Policy
 world_fs:
   mode: writable
@@ -114,9 +114,9 @@ metadata: {{}}
 }
 
 #[test]
-fn non_pty_full_cage_prevents_host_tmp_writes() {
+fn non_pty_full_isolation_prevents_host_tmp_writes() {
     if !overlay_available() {
-        eprintln!("skipping full-cage non-PTY test: overlay support or privileges missing");
+        eprintln!("skipping full-isolation non-PTY test: overlay support or privileges missing");
         return;
     }
     let service = match make_service() {
@@ -128,7 +128,7 @@ fn non_pty_full_cage_prevents_host_tmp_writes() {
     let cwd = tmp.path().to_path_buf();
 
     let host_path = PathBuf::from("/tmp").join(format!(
-        "substrate-full-cage-host-marker-{}",
+        "substrate-full-isolation-host-marker-{}",
         uuid::Uuid::now_v7()
     ));
     let _ = fs::remove_file(&host_path);
@@ -153,7 +153,7 @@ fn non_pty_full_cage_prevents_host_tmp_writes() {
     assert_eq!(
         resp.exit,
         0,
-        "full-cage execution failed unexpectedly: exit={} stderr={}",
+        "full-isolation execution failed unexpectedly: exit={} stderr={}",
         resp.exit,
         decode(&resp.stderr_b64)
     );
@@ -161,7 +161,7 @@ fn non_pty_full_cage_prevents_host_tmp_writes() {
     if host_path.exists() {
         let stderr = decode(&resp.stderr_b64);
         panic!(
-            "full-cage execution wrote to host /tmp (unexpected file: {}), stderr: {}",
+            "full-isolation execution wrote to host /tmp (unexpected file: {}), stderr: {}",
             host_path.display(),
             stderr
         );
@@ -169,9 +169,9 @@ fn non_pty_full_cage_prevents_host_tmp_writes() {
 }
 
 #[test]
-fn non_pty_full_cage_prevents_host_tmp_reads() {
+fn non_pty_full_isolation_prevents_host_tmp_reads() {
     if !overlay_available() {
-        eprintln!("skipping full-cage non-PTY test: overlay support or privileges missing");
+        eprintln!("skipping full-isolation non-PTY test: overlay support or privileges missing");
         return;
     }
     let service = match make_service() {
@@ -183,7 +183,7 @@ fn non_pty_full_cage_prevents_host_tmp_reads() {
     let cwd = tmp.path().to_path_buf();
 
     let host_path = PathBuf::from("/tmp").join(format!(
-        "substrate-full-cage-host-secret-{}",
+        "substrate-full-isolation-host-secret-{}",
         uuid::Uuid::now_v7()
     ));
     let secret = format!("host-secret-{}\n", uuid::Uuid::now_v7());
@@ -210,12 +210,12 @@ fn non_pty_full_cage_prevents_host_tmp_reads() {
     let stdout = decode(&resp.stdout_b64);
     assert!(
         !stdout.contains(&secret),
-        "full-cage execution was able to read host /tmp secret (path: {})",
+        "full-isolation execution was able to read host /tmp secret (path: {})",
         host_path.display()
     );
     assert_ne!(
         resp.exit, 0,
-        "expected host /tmp read attempt to fail inside full cage, but exit=0 (stdout={stdout:?} stderr={})",
+        "expected host /tmp read attempt to fail inside full isolation, but exit=0 (stdout={stdout:?} stderr={})",
         decode(&resp.stderr_b64)
     );
 
@@ -223,9 +223,9 @@ fn non_pty_full_cage_prevents_host_tmp_reads() {
 }
 
 #[test]
-fn non_pty_full_cage_runs_from_tmp_rooted_project() {
+fn non_pty_full_isolation_runs_from_tmp_rooted_project() {
     if !overlay_available() {
-        eprintln!("skipping full-cage non-PTY test: overlay support or privileges missing");
+        eprintln!("skipping full-isolation non-PTY test: overlay support or privileges missing");
         return;
     }
     let service = match make_service() {
@@ -250,7 +250,7 @@ fn non_pty_full_cage_runs_from_tmp_rooted_project() {
     assert_eq!(
         resp.exit,
         0,
-        "full-cage execution failed unexpectedly: exit={} stderr={}",
+        "full-isolation execution failed unexpectedly: exit={} stderr={}",
         resp.exit,
         decode(&resp.stderr_b64)
     );
@@ -258,14 +258,14 @@ fn non_pty_full_cage_runs_from_tmp_rooted_project() {
     let pwd = decode(&resp.stdout_b64);
     assert!(
         pwd.trim_start().starts_with("/project"),
-        "expected full-cage cwd to use stable /project mount for /tmp-rooted projects, got: {pwd:?}"
+        "expected full-isolation cwd to use stable /project mount for /tmp-rooted projects, got: {pwd:?}"
     );
 }
 
 #[test]
-fn non_pty_full_cage_honors_write_allowlist_prefix_globs() {
+fn non_pty_full_isolation_honors_write_allowlist_prefix_globs() {
     if !overlay_available() {
-        eprintln!("skipping full-cage non-PTY test: overlay support or privileges missing");
+        eprintln!("skipping full-isolation non-PTY test: overlay support or privileges missing");
         return;
     }
     let service = match make_service() {
@@ -303,7 +303,7 @@ fi
     let stderr = decode(&resp.stderr_b64);
     assert_eq!(
         resp.exit, 0,
-        "full-cage allowlist test failed unexpectedly: exit={} stdout={stdout:?} stderr={stderr:?}",
+        "full-isolation allowlist test failed unexpectedly: exit={} stdout={stdout:?} stderr={stderr:?}",
         resp.exit
     );
     assert!(
@@ -326,9 +326,9 @@ fi
 }
 
 #[test]
-fn non_pty_full_cage_blocks_outside_host_reads_and_writes() {
+fn non_pty_full_isolation_blocks_outside_host_reads_and_writes() {
     if !overlay_available() {
-        eprintln!("skipping full-cage non-PTY test: overlay support or privileges missing");
+        eprintln!("skipping full-isolation non-PTY test: overlay support or privileges missing");
         return;
     }
     let service = match make_service() {
@@ -340,11 +340,11 @@ fn non_pty_full_cage_blocks_outside_host_reads_and_writes() {
     let cwd = tmp.path().to_path_buf();
 
     let host_secret = PathBuf::from("/var/tmp").join(format!(
-        "substrate-full-cage-host-secret-{}",
+        "substrate-full-isolation-host-secret-{}",
         uuid::Uuid::now_v7()
     ));
     let host_marker = PathBuf::from("/var/tmp").join(format!(
-        "substrate-full-cage-host-marker-{}",
+        "substrate-full-isolation-host-marker-{}",
         uuid::Uuid::now_v7()
     ));
     let secret = format!("host-secret-{}\n", uuid::Uuid::now_v7());
@@ -391,7 +391,7 @@ fi
     let stderr = decode(&resp.stderr_b64);
     assert_eq!(
         resp.exit, 0,
-        "full-cage outside-host test failed unexpectedly: exit={} stdout={stdout:?} stderr={stderr:?}",
+        "full-isolation outside-host test failed unexpectedly: exit={} stdout={stdout:?} stderr={stderr:?}",
         resp.exit
     );
     assert!(
@@ -405,7 +405,7 @@ fi
 
     assert!(
         !host_marker.exists(),
-        "full-cage execution wrote to host path outside project (unexpected file: {})",
+        "full-isolation execution wrote to host path outside project (unexpected file: {})",
         host_marker.display()
     );
 

@@ -337,7 +337,7 @@ name: "string"
 
 world_fs:
   mode: writable            # writable | read_only
-  isolation: project        # project | full
+  isolation: workspace      # workspace | full
   require_world: false      # bool
   read_allowlist: ["*"]     # list[string] (glob patterns)
   write_allowlist: []       # list[string] (glob patterns)
@@ -563,7 +563,7 @@ Rules:
 The anchor root MUST be used consistently as the “project boundary” for:
 
 - The roaming guard (`--caged/--uncaged`)
-- World filesystem isolation in `project` mode
+- World filesystem isolation in `workspace` mode
 
 Roaming guard (`--caged/--uncaged`):
 
@@ -576,7 +576,7 @@ Filesystem isolation rename (policy-only):
 
 The filesystem isolation concept MUST use only the “isolation” naming:
 
-- Policy key: `world_fs.isolation` (`project|full`)
+- Policy key: `world_fs.isolation` (`workspace|full`)
 - Env export (host → world): `SUBSTRATE_WORLD_FS_ISOLATION`
 
 All filesystem-isolation “cage” naming MUST be removed:

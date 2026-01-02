@@ -271,7 +271,7 @@ name: "string"
 
 world_fs:
   mode: writable            # writable | read_only
-  isolation: project        # project | full
+  isolation: workspace      # workspace | full
   require_world: false      # bool
   read_allowlist: ["*"]     # list[string] (glob patterns)
   write_allowlist: []       # list[string] (glob patterns)

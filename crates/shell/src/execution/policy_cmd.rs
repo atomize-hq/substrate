@@ -85,12 +85,34 @@ fn run_global_init(args: &PolicyInitArgs) -> Result<()> {
 }
 
 fn run_global_show(args: &PolicyShowArgs) -> Result<()> {
+    if let Ok(cwd) = std::env::current_dir() {
+        if let Some(workspace_root) = crate::execution::workspace::find_workspace_root(&cwd) {
+            let workspace_policy = policy_model::workspace_policy_path(&workspace_root);
+            if workspace_policy.exists() {
+                eprintln!(
+                    "substrate: note: workspace policy {} overrides global policy here; use `substrate policy show` to view the effective policy",
+                    workspace_policy.display()
+                );
+            }
+        }
+    }
     let (policy, _) = policy_model::load_global_policy_or_defaults()?;
     print_policy(&policy, args.json)?;
     Ok(())
 }
 
 fn run_global_set(args: &PolicySetArgs) -> Result<()> {
+    if let Ok(cwd) = std::env::current_dir() {
+        if let Some(workspace_root) = crate::execution::workspace::find_workspace_root(&cwd) {
+            let workspace_policy = policy_model::workspace_policy_path(&workspace_root);
+            if workspace_policy.exists() {
+                eprintln!(
+                    "substrate: note: workspace policy {} overrides global policy here; use `substrate policy set ...` to modify the effective policy",
+                    workspace_policy.display()
+                );
+            }
+        }
+    }
     let path = policy_model::global_policy_path()?;
     let (mut policy, existed) = policy_model::load_global_policy_or_defaults()
         .with_context(|| format!("failed to load global policy at {}", path.display()))?;

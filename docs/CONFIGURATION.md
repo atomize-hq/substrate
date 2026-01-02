@@ -164,7 +164,7 @@ id: default
 name: Default Policy
 world_fs:
   mode: writable            # writable | read_only
-  cage: project             # project | full
+  isolation: workspace      # workspace | full
   require_world: false      # true = no host fallback when world is unavailable
   read_allowlist:
     - "*"                   # required, must be non-empty
@@ -176,13 +176,13 @@ Notes:
 - `world_fs.require_world` is the single “fail closed” knob for world availability. If `true` and
   the world backend is unavailable (or disabled via `--no-world`/`SUBSTRATE_WORLD=disabled`),
   Substrate errors instead of falling back to host execution.
-- `world_fs.cage=full` is the strong host-path isolation mode (Linux mount namespace + `pivot_root`)
+- `world_fs.isolation=full` is the strong host-path isolation mode (Linux mount namespace + `pivot_root`)
   and requires `world_fs.require_world=true` (validated by the broker).
 - `world_fs.mode=read_only` requires `world_fs.require_world=true` (validated by the broker).
-- `world_fs.write_allowlist` entries are only honored when they target paths under the project root;
-  patterns for other host paths are ignored for safety.
+- `world_fs.write_allowlist` is only used in `world_fs.isolation=full` and `world_fs.mode=writable` to
+  remount project *prefixes* read-write inside the cage; patterns outside the project root are ignored.
 - `world.caged` / `SUBSTRATE_CAGED` is a *shell cwd guard* (prevents `cd` escapes). It is independent
-  of `world_fs.cage`, which controls filesystem isolation in the world backend.
+  of `world_fs.isolation`, which controls filesystem isolation in the world backend.
 
 For a minimal end-to-end verification run, see `scripts/linux/agent-hub-isolation-verify.sh`.
 

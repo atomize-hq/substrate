@@ -124,7 +124,7 @@ pub(crate) fn execute_command(
     let world_fs = world_fs_policy();
     let fs_mode = world_fs.mode;
     std::env::set_var("SUBSTRATE_WORLD_FS_MODE", fs_mode.as_str());
-    std::env::set_var("SUBSTRATE_WORLD_FS_ISOLATION", world_fs.cage.as_str());
+    std::env::set_var("SUBSTRATE_WORLD_FS_ISOLATION", world_fs.isolation.as_str());
     std::env::set_var(
         "SUBSTRATE_WORLD_REQUIRE_WORLD",
         if world_fs.require_world { "1" } else { "0" },
@@ -217,7 +217,7 @@ pub(crate) fn execute_command(
         matches!(policy_mode, PolicyMode::Observe | PolicyMode::Enforce)
             && (world_fs.require_world
                 || world_fs.mode == substrate_common::WorldFsMode::ReadOnly
-                || world_fs.cage == substrate_broker::WorldFsCage::Full
+                || world_fs.isolation == substrate_broker::WorldFsIsolation::Full
                 || cmd_isolated_match);
 
     let world_disabled = config.no_world;
@@ -240,7 +240,7 @@ pub(crate) fn execute_command(
             if world_fs.mode == substrate_common::WorldFsMode::ReadOnly {
                 details.push("world_fs.mode=read_only");
             }
-            if world_fs.cage == substrate_broker::WorldFsCage::Full {
+            if world_fs.isolation == substrate_broker::WorldFsIsolation::Full {
                 details.push("world_fs.isolation=full");
             }
             if cmd_isolated_match {

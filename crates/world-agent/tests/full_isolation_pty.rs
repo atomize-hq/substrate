@@ -75,7 +75,7 @@ async fn run_pty(
     let (mut client_ws, _) = match connect_async(format!("ws://{}/pty", addr)).await {
         Ok(pair) => pair,
         Err(err) => {
-            eprintln!("skipping full-cage PTY test: connect failed: {err}");
+            eprintln!("skipping full-isolation PTY test: connect failed: {err}");
             server.abort();
             return None;
         }
@@ -91,7 +91,7 @@ async fn run_pty(
         "rows": 24
     });
     if let Err(err) = client_ws.send(Message::Text(start.to_string())).await {
-        eprintln!("skipping full-cage PTY test: send start failed: {err}");
+        eprintln!("skipping full-isolation PTY test: send start failed: {err}");
         let _ = client_ws.close(None).await;
         server.abort();
         return None;
@@ -128,7 +128,7 @@ async fn run_pty(
     };
 
     if timeout(Duration::from_secs(15), recv).await.is_err() {
-        eprintln!("skipping full-cage PTY test: timeout waiting for exit frame");
+        eprintln!("skipping full-isolation PTY test: timeout waiting for exit frame");
         let _ = client_ws.close(None).await;
         server.abort();
         return None;
@@ -141,16 +141,16 @@ async fn run_pty(
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn pty_full_cage_prevents_host_tmp_writes() {
+async fn pty_full_isolation_prevents_host_tmp_writes() {
     if !overlay_available() {
-        eprintln!("skipping full-cage PTY test: overlay support or privileges missing");
+        eprintln!("skipping full-isolation PTY test: overlay support or privileges missing");
         return;
     }
 
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
         Err(err) => {
-            eprintln!("skipping full-cage PTY test: service init failed: {err}");
+            eprintln!("skipping full-isolation PTY test: service init failed: {err}");
             return;
         }
     };
@@ -159,7 +159,7 @@ async fn pty_full_cage_prevents_host_tmp_writes() {
     let cwd = tmp.path().to_path_buf();
 
     let host_path = PathBuf::from("/tmp").join(format!(
-        "substrate-full-cage-pty-host-marker-{}",
+        "substrate-full-isolation-pty-host-marker-{}",
         uuid::Uuid::now_v7()
     ));
     let _ = std::fs::remove_file(&host_path);
@@ -185,17 +185,17 @@ async fn pty_full_cage_prevents_host_tmp_writes() {
     let (exit, error, output) = &outcome;
     assert!(
         error.is_none() && exit == &Some(0),
-        "full-cage PTY execution failed unexpectedly: {outcome:?}"
+        "full-isolation PTY execution failed unexpectedly: {outcome:?}"
     );
     assert!(
         !output.contains("cd:"),
-        "full-cage PTY execution failed to enter cwd: {output:?}"
+        "full-isolation PTY execution failed to enter cwd: {output:?}"
     );
 
     if host_path.exists() {
         let _ = std::fs::remove_file(&host_path);
         panic!(
-            "full-cage PTY execution wrote to host /tmp (unexpected file: {}), outcome: {:?}",
+            "full-isolation PTY execution wrote to host /tmp (unexpected file: {}), outcome: {:?}",
             host_path.display(),
             outcome
         );
@@ -203,16 +203,16 @@ async fn pty_full_cage_prevents_host_tmp_writes() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn pty_full_cage_prevents_host_tmp_reads() {
+async fn pty_full_isolation_prevents_host_tmp_reads() {
     if !overlay_available() {
-        eprintln!("skipping full-cage PTY test: overlay support or privileges missing");
+        eprintln!("skipping full-isolation PTY test: overlay support or privileges missing");
         return;
     }
 
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
         Err(err) => {
-            eprintln!("skipping full-cage PTY test: service init failed: {err}");
+            eprintln!("skipping full-isolation PTY test: service init failed: {err}");
             return;
         }
     };
@@ -221,7 +221,7 @@ async fn pty_full_cage_prevents_host_tmp_reads() {
     let cwd = tmp.path().to_path_buf();
 
     let host_path = PathBuf::from("/tmp").join(format!(
-        "substrate-full-cage-pty-host-secret-{}",
+        "substrate-full-isolation-pty-host-secret-{}",
         uuid::Uuid::now_v7()
     ));
     let secret = format!("host-secret-{}\n", uuid::Uuid::now_v7());
@@ -250,26 +250,28 @@ async fn pty_full_cage_prevents_host_tmp_reads() {
 
     assert!(
         !output.contains(&secret),
-        "full-cage PTY execution was able to read host /tmp secret (path: {})",
+        "full-isolation PTY execution was able to read host /tmp secret (path: {})",
         host_path.display()
     );
     assert!(
         !output.contains("cd:"),
-        "full-cage PTY execution failed to enter cwd (masked by /tmp read assertion): {output:?}"
+        "full-isolation PTY execution failed to enter cwd (masked by /tmp read assertion): {output:?}"
     );
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn pty_full_cage_read_only_blocks_project_writes() {
+async fn pty_full_isolation_read_only_blocks_project_writes() {
     if !overlay_available() {
-        eprintln!("skipping full-cage PTY read-only test: overlay support or privileges missing");
+        eprintln!(
+            "skipping full-isolation PTY read-only test: overlay support or privileges missing"
+        );
         return;
     }
 
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
         Err(err) => {
-            eprintln!("skipping full-cage PTY read-only test: service init failed: {err}");
+            eprintln!("skipping full-isolation PTY read-only test: service init failed: {err}");
             return;
         }
     };
@@ -286,7 +288,7 @@ async fn pty_full_cage_read_only_blocks_project_writes() {
     let (exit, error, _output) = match run_pty(
         service,
         &cwd,
-        "sh -lc 'echo denied > ro-full-cage-pty.txt'",
+        "sh -lc 'echo denied > ro-full-isolation-pty.txt'",
         env,
     )
     .await
@@ -309,21 +311,21 @@ async fn pty_full_cage_read_only_blocks_project_writes() {
     assert_ne!(
         exit.unwrap_or(0),
         0,
-        "full-cage PTY read-only write unexpectedly succeeded"
+        "full-isolation PTY read-only write unexpectedly succeeded"
     );
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn pty_full_cage_runs_from_tmp_rooted_project() {
+async fn pty_full_isolation_runs_from_tmp_rooted_project() {
     if !overlay_available() {
-        eprintln!("skipping full-cage PTY test: overlay support or privileges missing");
+        eprintln!("skipping full-isolation PTY test: overlay support or privileges missing");
         return;
     }
 
     let service = match WorldAgentService::new() {
         Ok(svc) => svc,
         Err(err) => {
-            eprintln!("skipping full-cage PTY test: service init failed: {err}");
+            eprintln!("skipping full-isolation PTY test: service init failed: {err}");
             return;
         }
     };
@@ -339,10 +341,10 @@ async fn pty_full_cage_runs_from_tmp_rooted_project() {
 
     assert!(
         error.is_none() && exit == Some(0),
-        "full-cage PTY execution failed unexpectedly: exit={exit:?} error={error:?} output={output:?}"
+        "full-isolation PTY execution failed unexpectedly: exit={exit:?} error={error:?} output={output:?}"
     );
     assert!(
         output.trim_start().starts_with("/project"),
-        "expected full-cage PTY cwd to use stable /project mount for /tmp-rooted projects, got: {output:?}"
+        "expected full-isolation PTY cwd to use stable /project mount for /tmp-rooted projects, got: {output:?}"
     );
 }

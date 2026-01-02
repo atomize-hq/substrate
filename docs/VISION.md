@@ -29,7 +29,7 @@ substrate -c 'echo hello from world'
 **Features**:
 
 - Filesystem isolation with overlayfs + mount namespaces (Linux)
-- Optional full cage mode (`world_fs.cage=full`) for strong host-path isolation (Linux)
+- Optional full isolation mode (`world_fs.isolation=full`) for strong host-path isolation (Linux)
 - Network filtering via nftables (best-effort)
 - Resource limits via cgroups (best-effort)
 - Process isolation via namespaces (Linux)
@@ -63,12 +63,12 @@ name: Development Policy
 
 world_fs:
   mode: writable            # writable | read_only
-  cage: project             # project | full
-  require_world: false      # true = no host fallback when world is unavailable
+  isolation: full           # workspace | full
+  require_world: true       # true = no host fallback when world is unavailable
   read_allowlist:
     - "*"                   # required, must be non-empty
   write_allowlist:
-    - "./dist/*"            # allow project writes under dist
+    - "dist/**"             # full isolation uses prefix globs under the project
 
 cmd_allowed: []
 cmd_denied:

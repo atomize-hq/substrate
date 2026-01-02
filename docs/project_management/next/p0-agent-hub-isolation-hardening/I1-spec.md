@@ -9,7 +9,7 @@
 - Required isolation derivation (fixed):
   - Required isolation is controlled by `world_fs.require_world`.
   - `world_fs.mode=read_only` requires `world_fs.require_world=true` (validated by I0).
-  - `world_fs.cage=full` requires `world_fs.require_world=true` (validated by I0).
+- `world_fs.isolation=full` requires `world_fs.require_world=true` (validated by I0).
 - Ensure enforcement covers:
   - Non-PTY command routing (`substrate -c`, non-interactive execution)
   - PTY/REPL command routing

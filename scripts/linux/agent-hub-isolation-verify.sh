@@ -136,7 +136,7 @@ id: i5-verify-readonly
 name: I5 verify (read_only)
 world_fs:
   mode: read_only
-  isolation: project
+  isolation: workspace
   require_world: true
   read_allowlist:
     - "*"

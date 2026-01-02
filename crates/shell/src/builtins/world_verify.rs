@@ -13,12 +13,12 @@ const REPORT_SCHEMA_VERSION: u32 = 1;
 const CHECK_ID_WORLD_BACKEND: &str = "world_backend";
 const CHECK_ID_READONLY_REL: &str = "read_only_relative_write";
 const CHECK_ID_READONLY_ABS: &str = "read_only_absolute_write";
-const CHECK_ID_FULL_CAGE: &str = "full_cage_host_isolation";
+const CHECK_ID_FULL_ISOLATION: &str = "full_isolation_host_isolation";
 
 const CHECK_DESC_WORLD_BACKEND: &str = "World backend is available (doctor ok=true)";
 const CHECK_DESC_READONLY_REL: &str = "world_fs.mode=read_only blocks relative project writes";
 const CHECK_DESC_READONLY_ABS: &str = "world_fs.mode=read_only blocks absolute-path project writes";
-const CHECK_DESC_FULL_CAGE: &str =
+const CHECK_DESC_FULL_ISOLATION: &str =
     "world_fs.isolation=full enforces allowlists and blocks host paths outside the project";
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
@@ -134,8 +134,9 @@ pub fn run(args: &WorldVerifyArgs) -> Result<i32> {
     let readonly_result = check_read_only(&root, &log_dir).context("read_only verification")?;
     checks.extend(readonly_result.checks);
 
-    let fullcage_check = check_full_cage(&root, &log_dir).context("full cage verification")?;
-    checks.push(fullcage_check);
+    let full_isolation_check =
+        check_full_isolation(&root, &log_dir).context("full isolation verification")?;
+    checks.push(full_isolation_check);
 
     let enforcement_checks_ran = checks
         .iter()
@@ -158,7 +159,7 @@ pub fn run(args: &WorldVerifyArgs) -> Result<i32> {
 fn is_enforcement_check(id: &str) -> bool {
     matches!(
         id,
-        CHECK_ID_READONLY_REL | CHECK_ID_READONLY_ABS | CHECK_ID_FULL_CAGE
+        CHECK_ID_READONLY_REL | CHECK_ID_READONLY_ABS | CHECK_ID_FULL_ISOLATION
     )
 }
 
@@ -167,7 +168,7 @@ fn skipped_enforcement_checks(error: &str, hint: Option<String>) -> Vec<CheckRep
     for (id, description) in [
         (CHECK_ID_READONLY_REL, CHECK_DESC_READONLY_REL),
         (CHECK_ID_READONLY_ABS, CHECK_DESC_READONLY_ABS),
-        (CHECK_ID_FULL_CAGE, CHECK_DESC_FULL_CAGE),
+        (CHECK_ID_FULL_ISOLATION, CHECK_DESC_FULL_ISOLATION),
     ] {
         checks.push(CheckReport {
             id,
@@ -197,7 +198,7 @@ fn cleanup_temp_projects(args: &WorldVerifyArgs, root: &Path) {
     if args.keep_temp {
         return;
     }
-    for dir in ["readonly-project", "fullcage-project", "outside-host"] {
+    for dir in ["readonly-project", "full-isolation-project", "outside-host"] {
         let path = root.join(dir);
         let _ = fs::remove_dir_all(path);
     }
@@ -407,7 +408,7 @@ fn check_read_only(root: &Path, log_dir: &Path) -> Result<ReadOnlyResult> {
 name: I6 verify (read_only)
 world_fs:
   mode: read_only
-  isolation: project
+  isolation: workspace
   require_world: true
   read_allowlist:
     - "*"
@@ -469,13 +470,13 @@ metadata: {}
     Ok(ReadOnlyResult { checks })
 }
 
-fn check_full_cage(root: &Path, log_dir: &Path) -> Result<CheckReport> {
-    let project_dir = root.join("fullcage-project");
-    fs::create_dir_all(&project_dir).context("create full cage project dir")?;
+fn check_full_isolation(root: &Path, log_dir: &Path) -> Result<CheckReport> {
+    let project_dir = root.join("full-isolation-project");
+    fs::create_dir_all(&project_dir).context("create full isolation project dir")?;
     write_workspace_policy(
         &project_dir,
-        r#"id: i6-verify-full-cage
-name: I6 verify (full cage)
+        r#"id: i6-verify-full-isolation
+name: I6 verify (full isolation)
 world_fs:
   mode: writable
   isolation: full
@@ -539,8 +540,8 @@ fi
             ("VERIFY_OUTSIDE_READ", outside_read_env.as_str()),
             ("VERIFY_OUTSIDE_WRITE", outside_write_env.as_str()),
         ],
-        log_dir.join("fullcage.stdout"),
-        log_dir.join("fullcage.stderr"),
+        log_dir.join("full-isolation.stdout"),
+        log_dir.join("full-isolation.stderr"),
     )?;
 
     let mut artifacts = BTreeMap::new();
@@ -580,7 +581,7 @@ fi
         {
             (
                 CheckStatus::Skip,
-                Some("full cage requires mount namespaces; unshare failed".to_string()),
+                Some("full isolation requires mount namespaces; unshare failed".to_string()),
                 Some(
                     "Run with CAP_SYS_ADMIN (root) or enable unprivileged user namespaces (kernel.unprivileged_userns_clone=1).".to_string(),
                 ),
@@ -589,12 +590,12 @@ fi
             (
                 CheckStatus::Fail,
                 Some(format!(
-                    "full cage check failed (exit_code={}); see {}",
+                    "full isolation check failed (exit_code={}); see {}",
                     run.exit_code,
                     run.stderr_path.display()
                 )),
                 Some(
-                    "Re-run with `substrate world doctor --json` and inspect the full cage logs."
+                    "Re-run with `substrate world doctor --json` and inspect the full isolation logs."
                         .to_string(),
                 ),
             )
@@ -602,8 +603,8 @@ fi
     };
 
     Ok(CheckReport {
-        id: CHECK_ID_FULL_CAGE,
-        description: CHECK_DESC_FULL_CAGE,
+        id: CHECK_ID_FULL_ISOLATION,
+        description: CHECK_DESC_FULL_ISOLATION,
         status,
         error,
         hint,

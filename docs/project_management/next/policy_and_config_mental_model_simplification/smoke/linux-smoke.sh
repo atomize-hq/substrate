@@ -150,7 +150,7 @@ id: "p"
 name: "p"
 world_fs:
   mode: read_only
-  isolation: project
+  isolation: workspace
   require_world: false
   read_allowlist: ["*"]
   write_allowlist: []
@@ -176,7 +176,7 @@ id: "p"
 name: "p"
 world_fs:
   mode: writable
-  isolation: project
+  isolation: workspace
   require_world: false
   read_allowlist: ["*"]
   write_allowlist: []
@@ -218,7 +218,7 @@ id: "p"
 name: "p"
 world_fs:
   mode: writable
-  isolation: project
+  isolation: workspace
   require_world: false
   read_allowlist: ["*"]
   write_allowlist: []
@@ -250,7 +250,7 @@ id: "p"
 name: "p"
 world_fs:
   mode: writable
-  isolation: project
+  isolation: workspace
   require_world: true
   read_allowlist: ["*"]
   write_allowlist: []
@@ -341,7 +341,7 @@ name: "p"
 bogus: 1
 world_fs:
   mode: writable
-  isolation: project
+  isolation: workspace
   require_world: false
   read_allowlist: ["*"]
   write_allowlist: []
@@ -365,7 +365,7 @@ id: "p"
 name: "p"
 world_fs:
   mode: writable
-  isolation: project
+  isolation: workspace
   require_world: "no"
   read_allowlist: ["*"]
   write_allowlist: []
@@ -409,9 +409,8 @@ cat > "$TMP_WS2/.substrate/policy.yaml" <<'YAML'
 id: "p"
 name: "p"
 world_fs:
-  cage: true
   mode: writable
-  isolation: project
+  isolation: workspace
   require_world: false
   read_allowlist: ["*"]
   write_allowlist: []

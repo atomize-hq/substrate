@@ -6,7 +6,7 @@ name: "Test Policy"
 
 world_fs:
   mode: writable
-  isolation: project
+  isolation: workspace
   require_world: false
   read_allowlist: ["*"]
   write_allowlist: []
@@ -120,7 +120,7 @@ fn pcm1_policy_yaml_rejects_type_mismatches() {
 
 #[test]
 fn pcm1_policy_invariant_full_isolation_requires_world() {
-    let raw = PCM1_BASE_POLICY_YAML.replace("isolation: project", "isolation: full");
+    let raw = PCM1_BASE_POLICY_YAML.replace("isolation: workspace", "isolation: full");
     assert!(
         serde_yaml::from_str::<Policy>(&raw).is_err(),
         "full isolation with require_world=false must fail to load"
@@ -138,7 +138,7 @@ fn pcm1_policy_invariant_read_only_requires_world() {
 
 #[test]
 fn pcm1_policy_rejects_legacy_world_fs_cage_key() {
-    let raw = PCM1_BASE_POLICY_YAML.replace("isolation: project", "cage: project");
+    let raw = PCM1_BASE_POLICY_YAML.replace("isolation: workspace", "cage: workspace");
     let err = serde_yaml::from_str::<Policy>(&raw).expect_err("legacy key should be rejected");
     let msg = err.to_string();
     assert!(

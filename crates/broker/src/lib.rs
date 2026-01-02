@@ -22,7 +22,7 @@ pub use approval::{ApprovalCache, ApprovalContext, ApprovalStatus};
 pub use broker::Broker;
 pub use handle::BrokerHandle;
 pub use mode::PolicyMode;
-pub use policy::{Decision, Policy, Restriction, RestrictionType, WorldFsCage, WorldFsPolicy};
+pub use policy::{Decision, Policy, Restriction, RestrictionType, WorldFsIsolation, WorldFsPolicy};
 pub use profile::ProfileDetector;
 #[cfg(any(test, feature = "policy-watcher"))]
 pub use watcher::{spawn_policy_watcher, MultiPolicyWatcher, PolicyWatcher};

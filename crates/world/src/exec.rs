@@ -73,8 +73,8 @@ set -f
 
 mount --make-rprivate / 2>/dev/null || mount --make-private / 2>/dev/null || true
 
-if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-project}" = "full" ]; then
-  new_root="$(mktemp -d /tmp/substrate-full-cage.XXXXXX)"
+if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-workspace}" = "full" ]; then
+  new_root="$(mktemp -d /tmp/substrate-full-isolation.XXXXXX)"
 
   # Ensure new_root is a mountpoint (required by pivot_root).
   mount --bind "$new_root" "$new_root"
@@ -109,7 +109,7 @@ if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-project}" = "full" ]; then
 
   # Fresh /proc and writable /tmp.
   #
-  # Note: /tmp is a tmpfs in full-cage mode. This must be mounted before binding the project
+  # Note: /tmp is a tmpfs in full-isolation mode. This must be mounted before binding the project
   # into its host-absolute path. Otherwise, when the host project lives under /tmp, the tmpfs
   # mount would cover that project bind mount and `cd $SUBSTRATE_MOUNT_CWD` would fail.
   mkdir -p "$new_root/proc"
@@ -175,7 +175,7 @@ if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-project}" = "full" ]; then
     IFS=$oldIFS
   fi
 
-  # Optional: bind-mount the host world-agent binary into the cage so it can apply Landlock
+  # Optional: bind-mount the host world-agent binary into the isolated rootfs so it can apply Landlock
   # restrictions before executing the command.
   if [ -n "${SUBSTRATE_LANDLOCK_HELPER_SRC:-}" ] && [ -e "${SUBSTRATE_LANDLOCK_HELPER_SRC:-}" ]; then
     touch "$new_root/substrate-landlock-helper" 2>/dev/null || true
@@ -196,6 +196,13 @@ else
   if [ "${SUBSTRATE_MOUNT_FS_MODE:-writable}" = "read_only" ]; then
     mount -o remount,bind,ro "$SUBSTRATE_MOUNT_PROJECT_DIR"
   fi
+  if [ -n "${SUBSTRATE_LANDLOCK_HELPER_SRC:-}" ] && [ -x "${SUBSTRATE_LANDLOCK_HELPER_SRC:-}" ]; then
+    export SUBSTRATE_LANDLOCK_HELPER_PATH="${SUBSTRATE_LANDLOCK_HELPER_SRC}"
+  fi
+  mkdir -p "${HOME:-/tmp/substrate-home}" 2>/dev/null || true
+  mkdir -p "${XDG_CACHE_HOME:-/tmp/substrate-xdg/cache}" 2>/dev/null || true
+  mkdir -p "${XDG_CONFIG_HOME:-/tmp/substrate-xdg/config}" 2>/dev/null || true
+  mkdir -p "${XDG_DATA_HOME:-/tmp/substrate-xdg/data}" 2>/dev/null || true
 fi
 
 cd "$SUBSTRATE_MOUNT_CWD"
@@ -233,9 +240,9 @@ pub fn execute_shell_command_with_project_bind_mount(
         use std::os::unix::process::ExitStatusExt;
 
         // Outer script: establish a private mount namespace, then either:
-        // - cage=project: bind the overlay merged root onto the host project path to prevent
+        // - isolation=workspace: bind the overlay merged root onto the host project path to prevent
         //   absolute-path escapes back into the host project, or
-        // - cage=full: build a minimal rootfs, bind-mount only the allowed paths, then pivot_root
+        // - isolation=full: build a minimal rootfs, bind-mount only the allowed paths, then pivot_root
         //   so host paths are no longer nameable.
         //
         // We avoid setting the child's cwd via Command::current_dir() because holding an inode
@@ -269,23 +276,25 @@ pub fn execute_shell_command_with_project_bind_mount(
             },
         );
 
-        let cage_full = env_map
+        let isolation = env_map
             .get("SUBSTRATE_WORLD_FS_ISOLATION")
-            .is_some_and(|raw| raw.trim().eq_ignore_ascii_case("full"));
-        if cage_full {
-            env_map.insert("HOME".to_string(), "/tmp/substrate-home".to_string());
-            env_map.insert(
-                "XDG_CACHE_HOME".to_string(),
-                "/tmp/substrate-xdg/cache".to_string(),
-            );
-            env_map.insert(
-                "XDG_CONFIG_HOME".to_string(),
-                "/tmp/substrate-xdg/config".to_string(),
-            );
-            env_map.insert(
-                "XDG_DATA_HOME".to_string(),
-                "/tmp/substrate-xdg/data".to_string(),
-            );
+            .map(|raw| raw.trim().to_ascii_lowercase())
+            .unwrap_or_else(|| "workspace".to_string());
+        let isolation_full = isolation == "full";
+        let isolation_enabled = matches!(isolation.as_str(), "full" | "workspace" | "project");
+        if isolation_enabled {
+            env_map
+                .entry("HOME".to_string())
+                .or_insert_with(|| "/tmp/substrate-home".to_string());
+            env_map
+                .entry("XDG_CACHE_HOME".to_string())
+                .or_insert_with(|| "/tmp/substrate-xdg/cache".to_string());
+            env_map
+                .entry("XDG_CONFIG_HOME".to_string())
+                .or_insert_with(|| "/tmp/substrate-xdg/config".to_string());
+            env_map
+                .entry("XDG_DATA_HOME".to_string())
+                .or_insert_with(|| "/tmp/substrate-xdg/data".to_string());
         }
 
         let mut command = Command::new("unshare");
@@ -310,7 +319,7 @@ pub fn execute_shell_command_with_project_bind_mount(
         let mut child = match command.spawn() {
             Ok(child) => child,
             Err(err) => {
-                if cage_full {
+                if isolation_full {
                     let message = format!(
                         "substrate: error: world_fs.isolation=full requested but failed to spawn unshare wrapper: {err}\n"
                     );
@@ -343,7 +352,7 @@ pub fn execute_shell_command_with_project_bind_mount(
         let stdout_buf = join_reader(stdout_handle, "stdout");
         let mut stderr_buf = join_reader(stderr_handle, "stderr");
 
-        if cage_full && !status.success() {
+        if isolation_full && !status.success() {
             if let Ok(stderr_str) = std::str::from_utf8(&stderr_buf) {
                 if stderr_str.starts_with("unshare:") {
                     let mut wrapped = Vec::new();

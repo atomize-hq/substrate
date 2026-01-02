@@ -328,7 +328,7 @@ pub enum WorldAction {
     Enable(WorldEnableArgs),
     Deps(WorldDepsCmd),
     Cleanup(WorldCleanupArgs),
-    /// Run end-to-end world_fs enforcement verification (read_only + full cage).
+    /// Run end-to-end world_fs enforcement verification (read_only + full isolation).
     Verify(WorldVerifyArgs),
 }
 
