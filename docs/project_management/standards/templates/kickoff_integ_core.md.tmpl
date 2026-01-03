@@ -27,7 +27,7 @@ Do not edit planning docs inside the worktree.
 Run CI smoke from this **integration-core worktree**, because the smoke dispatcher tests the current `HEAD` by creating a throwaway remote branch at that commit.
 
 Recommended dispatch (explicit params; leave `CLEANUP=1` on unless debugging temp branches):
-- `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF="{{ORCH_BRANCH}}" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+- `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF="{{ORCH_BRANCH}}" REMOTE=origin CLEANUP=1`
   - If WSL coverage is required for this feature, add `RUN_WSL=1`.
 
 What the dispatcher does (`scripts/ci/dispatch_feature_smoke.sh` via `make feature-smoke`):

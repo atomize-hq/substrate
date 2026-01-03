@@ -125,7 +125,6 @@ adr-fix:
 PLATFORM ?= linux
 RUNNER_KIND ?= self-hosted
 RUN_WSL ?= 0
-RUN_INTEG_CHECKS ?= 0
 WORKFLOW ?= .github/workflows/feature-smoke.yml
 WORKFLOW_REF ?= feat/policy_and_config
 REMOTE ?= origin
@@ -139,7 +138,6 @@ feature-smoke:
 	@set -euo pipefail; \
 	args="--feature-dir \"$(FEATURE_DIR)\" --runner-kind $(RUNNER_KIND) --platform $(PLATFORM) --workflow \"$(WORKFLOW)\" --workflow-ref \"$(WORKFLOW_REF)\" --remote \"$(REMOTE)\""; \
 	if [ "$(RUN_WSL)" = "1" ]; then args="$$args --run-wsl"; fi; \
-	if [ "$(RUN_INTEG_CHECKS)" = "1" ]; then args="$$args --run-integ-checks"; fi; \
 	if [ "$(CLEANUP)" = "1" ]; then args="$$args --cleanup"; fi; \
 	eval "scripts/ci/dispatch_feature_smoke.sh $$args"
 

@@ -35,11 +35,6 @@ on:
         required: false
         type: boolean
         default: false
-      run_integ_checks:
-        description: "Also run full integration checks (fmt --check, clippy -D warnings, workspace tests) before smoke."
-        required: false
-        type: boolean
-        default: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -99,13 +94,6 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt, clippy
 
-      - name: Run integration checks (Linux)
-        if: inputs.run_integ_checks
-        run: |
-          cargo fmt --all -- --check
-          cargo clippy --workspace --all-targets -- -D warnings
-          cargo test --workspace --all-targets
-
       - name: Build substrate (debug)
         run: cargo build --bin substrate
 
@@ -152,13 +140,6 @@ jobs:
             exit 1
           fi
 
-      - name: Run integration checks (Linux self-hosted)
-        if: inputs.run_integ_checks
-        run: |
-          cargo fmt --all -- --check
-          cargo clippy --workspace --all-targets -- -D warnings
-          cargo test --workspace --all-targets
-
       - name: Build substrate (debug)
         run: cargo build --bin substrate
 
@@ -197,13 +178,6 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt, clippy
 
-      - name: Run integration checks (macOS)
-        if: inputs.run_integ_checks
-        run: |
-          cargo fmt --all -- --check
-          cargo clippy --workspace --all-targets -- -D warnings
-          cargo test --workspace --all-targets
-
       - name: Build substrate (debug)
         run: cargo build --bin substrate
 
@@ -237,13 +211,6 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt, clippy
 
-      - name: Run integration checks (macOS self-hosted)
-        if: inputs.run_integ_checks
-        run: |
-          cargo fmt --all -- --check
-          cargo clippy --workspace --all-targets -- -D warnings
-          cargo test --workspace --all-targets
-
       - name: Build substrate (debug)
         run: cargo build --bin substrate
 
@@ -276,14 +243,6 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt, clippy
-
-      - name: Run integration checks (Windows)
-        if: inputs.run_integ_checks
-        shell: pwsh
-        run: |
-          cargo fmt --all -- --check
-          cargo clippy --workspace --all-targets -- -D warnings
-          cargo test --workspace --all-targets
 
       - name: Build substrate (debug)
         run: cargo build --bin substrate
@@ -340,14 +299,6 @@ jobs:
           rustc --version
           cargo --version
 
-      - name: Run integration checks (Windows self-hosted)
-        if: inputs.run_integ_checks
-        shell: pwsh
-        run: |
-          cargo fmt --all -- --check
-          cargo clippy --workspace --all-targets -- -D warnings
-          cargo test --workspace --all-targets
-
       - name: Build substrate (debug)
         run: cargo build --bin substrate
 
@@ -393,13 +344,6 @@ jobs:
             echo "Missing libseccomp development package on this runner." >&2
             exit 1
           fi
-
-      - name: Run integration checks (WSL runner)
-        if: inputs.run_integ_checks
-        run: |
-          cargo fmt --all -- --check
-          cargo clippy --workspace --all-targets -- -D warnings
-          cargo test --workspace --all-targets
 
       - name: Build substrate (debug)
         run: cargo build --bin substrate

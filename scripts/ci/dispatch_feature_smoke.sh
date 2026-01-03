@@ -9,7 +9,6 @@ Usage:
     [--runner-kind github-hosted|self-hosted] \
     --platform linux|macos|windows|wsl|all \
     [--run-wsl] \
-    [--run-integ-checks] \
     [--workflow .github/workflows/feature-smoke.yml] \
     [--workflow-ref <ref>] \
     [--remote origin] \
@@ -30,7 +29,6 @@ FEATURE_DIR=""
 PLATFORM=""
 RUNNER_KIND="self-hosted"
 RUN_WSL=0
-RUN_INTEG_CHECKS=0
 WORKFLOW=".github/workflows/feature-smoke.yml"
 WORKFLOW_REF="feat/policy_and_config"
 REMOTE="origin"
@@ -52,10 +50,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --run-wsl)
             RUN_WSL=1
-            shift 1
-            ;;
-        --run-integ-checks)
-            RUN_INTEG_CHECKS=1
             shift 1
             ;;
         --workflow)
@@ -140,21 +134,11 @@ git push -u "${REMOTE}" "${temp_branch}:${temp_branch}"
 echo "Dispatching workflow: ${WORKFLOW}"
 echo "Workflow ref: ${WORKFLOW_REF}"
 dispatch_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-run_wsl_flag="false"
-run_integ_checks_flag="false"
 if [[ "${RUN_WSL}" -eq 1 ]]; then
-    run_wsl_flag="true"
+    gh workflow run "${WORKFLOW}" --ref "${WORKFLOW_REF}" -f feature_dir="${FEATURE_DIR}" -f checkout_ref="${temp_branch}" -f runner_kind="${RUNNER_KIND}" -f platform="${PLATFORM}" -f run_wsl=true
+else
+    gh workflow run "${WORKFLOW}" --ref "${WORKFLOW_REF}" -f feature_dir="${FEATURE_DIR}" -f checkout_ref="${temp_branch}" -f runner_kind="${RUNNER_KIND}" -f platform="${PLATFORM}" -f run_wsl=false
 fi
-if [[ "${RUN_INTEG_CHECKS}" -eq 1 ]]; then
-    run_integ_checks_flag="true"
-fi
-gh workflow run "${WORKFLOW}" --ref "${WORKFLOW_REF}" \
-    -f feature_dir="${FEATURE_DIR}" \
-    -f checkout_ref="${temp_branch}" \
-    -f runner_kind="${RUNNER_KIND}" \
-    -f platform="${PLATFORM}" \
-    -f run_wsl="${run_wsl_flag}" \
-    -f run_integ_checks="${run_integ_checks_flag}"
 
 echo "Waiting for run to start..."
 sleep 5

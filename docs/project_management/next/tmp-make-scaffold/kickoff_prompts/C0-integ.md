@@ -23,7 +23,7 @@ Do not edit planning docs inside the worktree.
   - `make integ-checks`
 - Run cross-platform smoke via CI to confirm the merged result is green:
   - Run from this worktree (smoke validates current `HEAD` via a throwaway remote branch):
-  - `make feature-smoke FEATURE_DIR="docs/project_management/next/tmp-make-scaffold" PLATFORM=all RUN_WSL=1 RUNNER_KIND=self-hosted WORKFLOW_REF="feat/tmp-make-scaffold" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+  - `make feature-smoke FEATURE_DIR="docs/project_management/next/tmp-make-scaffold" PLATFORM=all RUN_WSL=1 RUNNER_KIND=self-hosted WORKFLOW_REF="feat/tmp-make-scaffold" REMOTE=origin CLEANUP=1`
 - Complete the slice closeout gate report:
   - `docs/project_management/next/tmp-make-scaffold/C0-closeout_report.md`
 

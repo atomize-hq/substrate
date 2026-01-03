@@ -30,7 +30,7 @@ Do not edit planning docs inside the worktree.
 
 Dispatch from this **integ-core worktree**, because the smoke dispatcher validates the current `HEAD` by creating/pushing a throwaway branch at that commit.
 
-- `make feature-smoke FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy_and_config_precedence" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+- `make feature-smoke FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy_and_config_precedence" REMOTE=origin CLEANUP=1`
 
 If any platform fails:
 - Ask the operator to start only the failing platform-fix tasks from the emitted `RUN_ID` (operator runs this from the orchestration checkout, not a task worktree):

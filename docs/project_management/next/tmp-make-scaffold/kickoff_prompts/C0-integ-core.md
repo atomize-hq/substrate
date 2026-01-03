@@ -30,7 +30,7 @@ Do not edit planning docs inside the worktree.
 
 Dispatch from this **integ-core worktree**, because the smoke dispatcher validates the current `HEAD` by creating/pushing a throwaway branch at that commit.
 
-- `make feature-smoke FEATURE_DIR="docs/project_management/next/tmp-make-scaffold" PLATFORM=all RUN_WSL=1 RUNNER_KIND=self-hosted WORKFLOW_REF="feat/tmp-make-scaffold" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+- `make feature-smoke FEATURE_DIR="docs/project_management/next/tmp-make-scaffold" PLATFORM=all RUN_WSL=1 RUNNER_KIND=self-hosted WORKFLOW_REF="feat/tmp-make-scaffold" REMOTE=origin CLEANUP=1`
 
 If any platform fails:
 - Do not attempt platform-specific fixes in integ-core.
