@@ -40,17 +40,20 @@ SLICE_ID="<SET_ME>"      # e.g. PCP0
    - (if present) `CODEX_CODE_STDERR_PATH`, `CODEX_TEST_STDERR_PATH`
    - `CODE_WORKTREE`, `TEST_WORKTREE` (for navigation)
 
-3) Read and include the full contents of:
+3) Capture commit SHAs (for the produced task branches):
+   - `CODE_HEAD_SHA=$(git -C "$CODE_WORKTREE" rev-parse HEAD)`
+   - `TEST_HEAD_SHA=$(git -C "$TEST_WORKTREE" rev-parse HEAD)`
+
+4) Read and include the full contents of:
    - `CODEX_CODE_LAST_MESSAGE_PATH`
    - `CODEX_TEST_LAST_MESSAGE_PATH`
    If a file is missing, report that clearly (do not guess).
 
 ## Output to operator
 Return a concise summary that includes:
-- Code task: exit code + final message + artifact paths
-- Test task: exit code + final message + artifact paths
+- Code task: exit code + `CODE_HEAD_SHA` + final message + artifact paths
+- Test task: exit code + `TEST_HEAD_SHA` + final message + artifact paths
 - Links/paths to the full artifacts (last_message/events/stderr) for both tasks
 
 Do NOT inline huge logs (events/stderr). Paths + short summary only.
 ```
-

@@ -37,9 +37,9 @@ If any platform fails:
   - `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" SLICE_ID="PCP0" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
 
 If `PLATFORM=all` smoke is green:
-- Mark `PCP0-integ-linux|macos|windows` as `completed` as no-ops on the orchestration branch so `PCP0-integ` can start (its `depends_on` includes these tasks).
-  - Preferred helper:
-    - `scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir "docs/project_management/next/policy_and_config_precedence" --slice-id "PCP0" --from-smoke-run "<run-id>"`
+- Platform-fix tasks may still be required for CI-only failures (e.g., clippy warnings on macOS/Windows), so do not mark them no-op yet.
+- The wrapper/final gate should run CI Testing; if CI Testing is green, then mark `PCP0-integ-linux|macos|windows` as `completed` no-ops to unblock `PCP0-integ`:
+  - `scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir "docs/project_management/next/policy_and_config_precedence" --slice-id "PCP0" --from-smoke-run "<run-id>"`
 
 After all required platforms are green (and platform-fix tasks are completed), ask the operator to start `PCP0-integ` (integration final):
 - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" SLICE_ID="PCP0" LAUNCH_CODEX=1`

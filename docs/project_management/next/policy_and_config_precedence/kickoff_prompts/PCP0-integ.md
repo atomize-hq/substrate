@@ -35,4 +35,7 @@ Do not edit planning docs inside the worktree.
 ## End Checklist
 1. Ensure all required platforms are green (capture run ids/URLs).
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="PCP0-integ"`.
-3. Hand off run ids/URLs and closeout report completion to the operator (do not edit planning docs inside the worktree).
+3. Run CI Testing on this final integration commit before merging to `testing` (even if CI Testing was run earlier on integ-core):
+   - From inside this worktree: `scripts/ci/dispatch_ci_testing.sh --workflow-ref feat/policy_and_config_precedence --remote origin --cleanup`
+   - You may skip this only if the operator already has a CI Testing run for this exact `HEAD` commit SHA.
+4. Hand off run ids/URLs (smoke + CI Testing) and closeout report completion to the operator (do not edit planning docs inside the worktree).

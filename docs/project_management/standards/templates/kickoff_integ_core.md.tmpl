@@ -44,8 +44,9 @@ If any platform smoke fails:
   - `<run-id>` is the `RUN_ID` from the failing `PLATFORM=all` smoke run.
 
 If `PLATFORM=all` smoke is green:
-- Platform-fix tasks (if present in the pack) should be marked `completed` as no-ops on the orchestration branch so the final aggregator’s `depends_on` can proceed.
-  - Preferred helper: `scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir "{{FEATURE_DIR}}" --slice-id "<slice>" --from-smoke-run "<run-id>"`
+- Platform-fix tasks (if present in the pack) may still be required for CI-only failures (e.g., clippy warnings on macOS/Windows), so do not mark them no-op yet.
+- The wrapper/final gate should run CI Testing; if CI Testing is green, then mark platform-fix tasks `completed` as no-ops to unblock the final aggregator’s `depends_on`:
+  - `scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir "{{FEATURE_DIR}}" --slice-id "<slice>" --from-smoke-run "<run-id>"`
 
 Once all required platform-fix tasks are completed, ask the operator to start the final aggregator from the orchestration checkout:
 - `make triad-task-start-integ-final FEATURE_DIR="{{FEATURE_DIR}}" SLICE_ID="<slice>" LAUNCH_CODEX=1`

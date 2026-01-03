@@ -19,6 +19,9 @@ Do not edit planning docs inside the worktree.
 ## Requirements
 - Before validating smoke or making fixes, merge the slice’s core integration branch into this worktree:
   - Merge `tmp-make-scaffold-c0-integ-core` into `tmp-make-scaffold-c0-integ-windows`.
+- Run platform-local Rust quality gates before finishing (CI Testing parity on Windows):
+  - `cargo fmt`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
 - Validate platform smoke via CI for this platform (repeat until green if you make fixes):
   - `make feature-smoke FEATURE_DIR="docs/project_management/next/tmp-make-scaffold" PLATFORM=windows RUNNER_KIND=self-hosted WORKFLOW_REF="feat/tmp-make-scaffold" REMOTE=origin CLEANUP=1`
 - If smoke passes: record run id/URL in the END entry and do not change code.

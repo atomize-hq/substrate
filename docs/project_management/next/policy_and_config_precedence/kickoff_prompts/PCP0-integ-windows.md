@@ -18,6 +18,9 @@ Do not edit planning docs inside the worktree.
 ## Requirements
 - Before validating smoke or making fixes, merge the slice’s core integration branch into this worktree:
   - Merge `pcp-pcp0-precedence-integ-core` into `pcp-pcp0-precedence-integ-windows`.
+- Run platform-local Rust quality gates before finishing (CI Testing parity on Windows):
+  - `cargo fmt`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
 - Validate Windows smoke via CI (repeat until green if you make fixes):
   - `make feature-smoke FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" PLATFORM=windows RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy_and_config_precedence" REMOTE=origin CLEANUP=1`
 - If smoke passes: record the run id/URL for the operator and do not change code.
