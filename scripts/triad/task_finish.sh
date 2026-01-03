@@ -179,7 +179,7 @@ fi
 TASK_TYPE="$(jq -r '.type' <<<"${TASK_JSON}")"
 REQUIRED_TARGETS="$(jq -r '.required_make_targets // [] | join(" ")' <<<"${TASK_JSON}")"
 TASK_PLATFORM="$(jq -r '.platform // empty' <<<"${TASK_JSON}")"
-MERGE_TO_ORCH="$(jq -r '.merge_to_orchestration // empty' <<<"${TASK_JSON}")"
+    MERGE_TO_ORCH="$(jq -r 'if has("merge_to_orchestration") then .merge_to_orchestration else empty end' <<<"${TASK_JSON}")"
 FEATURE_NAME="$(jq -r '.meta.feature // empty' "${TASKS_JSON}")"
 if [[ -z "${FEATURE_NAME}" ]]; then
     die "tasks.json meta.feature is required for automation packs"

@@ -29,6 +29,10 @@ Stdout contract (machine-parseable):
   WORKTREE=<path>
   TASK_BRANCH=<branch>
   CODEX_EXIT=<code or empty>
+  CODEX_OUT_DIR=<path>
+  CODEX_LAST_MESSAGE_PATH=<path>
+  CODEX_EVENTS_PATH=<path>
+  CODEX_STDERR_PATH=<path>
 
 Notes:
   - Requires an automation-enabled planning pack (tasks.json meta.schema_version>=3 and meta.automation.enabled=true).
@@ -298,6 +302,10 @@ parse_kv() {
 declare -A task_worktree=()
 declare -A task_branch=()
 declare -A task_kickoff=()
+declare -A task_codex_out_dir=()
+declare -A task_codex_last_message=()
+declare -A task_codex_events=()
+declare -A task_codex_stderr=()
 
 selected_task_ids=()
 for p in "${PLATFORMS[@]}"; do
@@ -333,6 +341,12 @@ for task_id in "${selected_task_ids[@]}"; do
     task_worktree["${task_id}"]="${worktree}"
     task_branch["${task_id}"]="${branch}"
     task_kickoff["${task_id}"]="${kickoff}"
+
+    out_dir="${REPO_ROOT}/target/triad/${FEATURE_NAME}/codex/${task_id}"
+    task_codex_out_dir["${task_id}"]="${out_dir}"
+    task_codex_last_message["${task_id}"]="${out_dir}/last_message.md"
+    task_codex_events["${task_id}"]="${out_dir}/events.jsonl"
+    task_codex_stderr["${task_id}"]="${out_dir}/stderr.log"
 done
 
 declare -A codex_exit=()
@@ -344,10 +358,10 @@ launch_codex_one() {
     local task_id="$1"
     local worktree="$2"
     local kickoff="$3"
-    local out_dir="${REPO_ROOT}/target/triad/${FEATURE_NAME}/codex/${task_id}"
-    local last_message="${out_dir}/last_message.md"
-    local events="${out_dir}/events.jsonl"
-    local stderr="${out_dir}/stderr.log"
+    local out_dir="${task_codex_out_dir[${task_id}]}"
+    local last_message="${task_codex_last_message[${task_id}]}"
+    local events="${task_codex_events[${task_id}]}"
+    local stderr="${task_codex_stderr[${task_id}]}"
 
     mkdir -p "${out_dir}"
 
@@ -399,4 +413,8 @@ for p in "${PLATFORMS[@]}"; do
     printf 'WORKTREE=%s\n' "${task_worktree[${task_id}]}"
     printf 'TASK_BRANCH=%s\n' "${task_branch[${task_id}]}"
     printf 'CODEX_EXIT=%s\n' "${codex_exit[${task_id}]}"
+    printf 'CODEX_OUT_DIR=%s\n' "${task_codex_out_dir[${task_id}]}"
+    printf 'CODEX_LAST_MESSAGE_PATH=%s\n' "${task_codex_last_message[${task_id}]}"
+    printf 'CODEX_EVENTS_PATH=%s\n' "${task_codex_events[${task_id}]}"
+    printf 'CODEX_STDERR_PATH=%s\n' "${task_codex_stderr[${task_id}]}"
 done

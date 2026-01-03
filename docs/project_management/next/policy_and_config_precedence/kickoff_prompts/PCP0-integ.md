@@ -1,54 +1,41 @@
-# PCP0-integ Kickoff — Workspace Config Precedence Over Env (integration)
+# Kickoff: PCP0-integ (integration final — cross-platform merge)
 
-You are the integration agent for `PCP0-integ`.
+## Scope
+- Merge platform-fix branches (if any) and finalize PCP0 with a clean, auditable cross-platform green state.
+- Spec: `docs/project_management/next/policy_and_config_precedence/PCP0-spec.md`
+- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+- This task is responsible for the fast-forward merge back to the orchestration branch after all required platforms are green.
 
-Scope:
-- Merge `PCP0-code` + `PCP0-test`, reconcile to `docs/project_management/next/policy_and_config_precedence/PCP0-spec.md`, and validate behavior.
+## Start Checklist
+Do not edit planning docs inside the worktree.
 
-Non-negotiable rule:
-- Do not edit planning docs inside the worktree.
+1. Verify you are in the task worktree `wt/pcp0-precedence-integ` on branch `pcp-pcp0-precedence-integ` and that `.taskmeta.json` exists at the worktree root.
+2. Read (end-to-end): `plan.md`, `tasks.json`, `session_log.md`, `PCP0-spec.md`, `PCP0-closeout_report.md`, and this prompt.
+3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
+   - `make triad-task-start FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" TASK_ID="PCP0-integ" LAUNCH_CODEX=1`
 
-Required reading (end-to-end):
-- `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
-- `docs/project_management/next/policy_and_config_precedence/PCP0-spec.md`
-- `docs/project_management/next/policy_and_config_precedence/PCP0-closeout_report.md`
-- `docs/project_management/next/policy_and_config_precedence/manual_testing_playbook.md`
-- `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
-- `docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md`
+## Requirements
+- Merge the relevant integration branches for this slice:
+  - `pcp-pcp0-precedence-integ-core`
+  - any platform-fix branches that produced commits:
+    - `pcp-pcp0-precedence-integ-linux`
+    - `pcp-pcp0-precedence-integ-macos`
+    - `pcp-pcp0-precedence-integ-windows`
+- Run:
+  - `cargo fmt`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+  - relevant tests
+  - `make integ-checks`
+- Re-run cross-platform smoke via CI to confirm the merged result is green:
+  - Run from this worktree (smoke validates current `HEAD` via a throwaway remote branch):
+  - `make feature-smoke FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy_and_config_precedence" REMOTE=origin CLEANUP=1`
+- Complete the slice closeout gate report:
+  - `docs/project_management/next/policy_and_config_precedence/PCP0-closeout_report.md`
 
-Start checklist:
-1. On the orchestration branch: `git checkout feat/policy_and_config_precedence && git pull --ff-only`
-2. Confirm `F0-exec-preflight` is completed (execution gates are enabled for this feature).
-3. Confirm `PCP0-code` and `PCP0-test` are completed and merged to the orchestration branch.
-4. Update `docs/project_management/next/policy_and_config_precedence/tasks.json`:
-   - set `PCP0-integ.status` to `in_progress`
-5. Append a START entry to `docs/project_management/next/policy_and_config_precedence/session_log.md`; commit docs (`docs: start PCP0-integ`)
-6. Create a task branch and worktree:
-   - `git checkout -b pcp-pcp0-precedence-integ`
-   - `git worktree add wt/pcp0-precedence-integ -b pcp-pcp0-precedence-integ`
-7. Enter the worktree: `cd wt/pcp0-precedence-integ`
-8. Do not edit planning docs inside the worktree.
-
-Required commands:
-- `cargo fmt`
-- `cargo clippy --workspace --all-targets -- -D warnings`
-- Run the relevant `cargo test` suites for affected areas
-- `make integ-checks`
-
-Validation requirements:
-- Run the platform-local smoke script:
-  - Linux: `bash docs/project_management/next/policy_and_config_precedence/smoke/linux-smoke.sh`
-  - macOS: `bash docs/project_management/next/policy_and_config_precedence/smoke/macos-smoke.sh`
-  - Windows: `pwsh -File docs/project_management/next/policy_and_config_precedence/smoke/windows-smoke.ps1`
-- Dispatch cross-platform smoke via GitHub Actions:
-  - `make feature-smoke FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" PLATFORM=all WORKFLOW_REF="feat/policy_and_config_precedence"`
-- Record results (including run URLs/ids) in the END entry for `docs/project_management/next/policy_and_config_precedence/session_log.md`.
-
-End checklist:
-1. Reconcile code+tests to `PCP0-spec.md` and ensure the contract matches ADR-0005.
-2. Run required commands and ensure they pass.
-3. Run smoke validation and record results.
-4. Fill `docs/project_management/next/policy_and_config_precedence/PCP0-closeout_report.md` with evidence (required end gate for PCP0).
-5. Commit changes in the worktree to `pcp-pcp0-precedence-integ`.
-6. On the orchestration branch, merge/fast-forward the task branch.
-7. Update `docs/project_management/next/policy_and_config_precedence/tasks.json` to `completed` and append an END entry to `docs/project_management/next/policy_and_config_precedence/session_log.md` (include the closeout report status); commit docs (`docs: finish PCP0-integ`).
+## End Checklist
+1. Ensure all required platforms are green (capture run ids/URLs).
+2. From inside the worktree, run: `make triad-task-finish TASK_ID="PCP0-integ"`.
+3. Run CI Testing on this final integration commit before merging to `testing` (even if CI Testing was run earlier on integ-core):
+   - From inside this worktree: `scripts/ci/dispatch_ci_testing.sh --workflow-ref feat/policy_and_config_precedence --remote origin --cleanup`
+   - You may skip this only if the operator already has a CI Testing run for this exact `HEAD` commit SHA.
+4. Hand off run ids/URLs (smoke + CI Testing) and closeout report completion to the operator (do not edit planning docs inside the worktree).

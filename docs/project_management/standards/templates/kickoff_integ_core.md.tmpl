@@ -3,6 +3,7 @@
 ## Scope
 - Merge code + tests, resolve drift to spec, and make the slice green on the primary dev platform.
 - Spec: `{{FEATURE_DIR}}/{{SPEC_FILE}}`
+- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist
 Do not edit planning docs inside the worktree.
@@ -14,28 +15,49 @@ Do not edit planning docs inside the worktree.
 
 ## Requirements
 - Reconcile code/tests to spec (spec wins).
-- Run required integration gates (must be green before any CI smoke dispatch):
+- Merge code+test branches into this worktree, then run required integration gates (must be green before any CI smoke dispatch):
   - `cargo fmt`
   - `cargo clippy --workspace --all-targets -- -D warnings`
   - relevant tests
   - `make integ-checks`
 - Optional (once per feature, when you want a clean-cache assurance): `make preflight`
-- If the feature directory contains `smoke/`, run cross-platform smoke via CI (validation-only):
-  - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=all WORKFLOW_REF="{{ORCH_BRANCH}}"`
+
+### Cross-platform smoke (CI dispatch; validation-only)
+
+Run CI smoke from this **integration-core worktree**, because the smoke dispatcher tests the current `HEAD` by creating a throwaway remote branch at that commit.
+
+Recommended dispatch (explicit params; leave `CLEANUP=1` on unless debugging temp branches):
+- `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF="{{ORCH_BRANCH}}" REMOTE=origin CLEANUP=1`
   - If WSL coverage is required for this feature, add `RUN_WSL=1`.
-  - Record the emitted `RUN_ID=<id>` (and URL).
-- If any platform smoke fails, start only the failing platform-fix tasks (do not attempt platform-specific fixes here):
-  - Ask the operator to run from the orchestration worktree:
-    - `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="{{FEATURE_DIR}}" SLICE_ID="<slice>" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
+
+What the dispatcher does (`scripts/ci/dispatch_feature_smoke.sh` via `make feature-smoke`):
+- Creates/pushes a throwaway branch like `tmp/feature-smoke/<feature>/<platform>/<ts>` at current `HEAD`.
+- Dispatches the workflow from `WORKFLOW_REF` while checking out that throwaway branch.
+- Prints `RUN_ID=<id>`, `RUN_URL=<url>`, `SMOKE_PASSED_PLATFORMS=<csv>`, and `SMOKE_FAILED_PLATFORMS=<csv>`.
+- Deletes the throwaway remote branch when `CLEANUP=1`.
+
+If any platform smoke fails:
+- Do not attempt platform-specific fixes in integ-core.
+- Ask the operator to start only the failing platform-fix tasks **from the orchestration checkout** (not from a task worktree):
+  - `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="{{FEATURE_DIR}}" SLICE_ID="<slice>" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
   - `<slice>` is the triad id prefix (e.g., `C0`, `C3`).
   - `<run-id>` is the `RUN_ID` from the failing `PLATFORM=all` smoke run.
-  - Platform-fix tasks commit to their own branches and iterate CI smoke until green; the final aggregator task merges fixes.
-- Once all failing platform-fix tasks report green smoke, start the final aggregator:
-  - Ask the operator to run from the orchestration worktree:
-    - `make triad-task-start-integ-final FEATURE_DIR="{{FEATURE_DIR}}" SLICE_ID="<slice>" LAUNCH_CODEX=1`
+
+If `PLATFORM=all` smoke is green:
+- Platform-fix tasks (if present in the pack) may still be required for CI-only failures (e.g., clippy warnings on macOS/Windows), so do not mark them no-op yet.
+- The wrapper/final gate should run CI Testing; if CI Testing is green, then mark platform-fix tasks `completed` as no-ops to unblock the final aggregator’s `depends_on`:
+  - `scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir "{{FEATURE_DIR}}" --slice-id "<slice>" --from-smoke-run "<run-id>"`
+
+Once all required platform-fix tasks are completed, ask the operator to start the final aggregator from the orchestration checkout:
+- `make triad-task-start-integ-final FEATURE_DIR="{{FEATURE_DIR}}" SLICE_ID="<slice>" LAUNCH_CODEX=1`
 
 ## End Checklist
-1. Run required commands; capture outputs (including any smoke run ids/URLs).
-2. From inside the worktree, run: `make triad-task-finish TASK_ID="{{TASK_ID}}"`
-3. On the orchestration branch, update tasks.json + session_log.md END entry; commit docs (`docs: finish {{TASK_ID}}`).
+1. Ensure your merged state is committed and local integration gates are green:
+   - From inside the worktree, run: `make triad-task-finish TASK_ID="{{TASK_ID}}"`
+2. Dispatch cross-platform smoke from this worktree and include these exact key/value lines in your handoff (wrapper agents parse them):
+   - `RUN_ID=<id>`
+   - `RUN_URL=<url>` (if printed)
+   - `SMOKE_PASSED_PLATFORMS=<csv>`
+   - `SMOKE_FAILED_PLATFORMS=<csv>` (empty means success)
+3. Hand off run ids/URLs and next-step instructions to the operator (do not edit planning docs inside the worktree).
 4. Do not delete the worktree (feature cleanup removes worktrees at feature end).

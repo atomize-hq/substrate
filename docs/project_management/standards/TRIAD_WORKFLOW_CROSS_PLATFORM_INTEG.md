@@ -10,6 +10,11 @@ It shows:
 - a final cross-platform integration aggregator (`X-integ`) that merges platform fixes and re-validates.
 - worktrees retained through the feature and removed only by the feature cleanup task (`FZ-feature-cleanup`).
 
+Operational notes (important for correct orchestration):
+- CI smoke dispatch (`make feature-smoke ...`) validates the **current `HEAD`** by creating/pushing a throwaway branch at that commit; run it from the worktree that contains the code you intend to validate (e.g., the `X-integ-core` or `X-integ` worktree).
+- Platform-fix tasks should begin by merging the `X-integ-core` task branch into their own branch before running smoke or making fixes.
+- CI Testing is a separate, stricter gate than Feature Smoke; run it (via `scripts/ci/dispatch_ci_testing.sh`) before marking platform-fix tasks as no-ops when smoke is green, and again on the final `X-integ` commit before merging to `testing`.
+
 This file includes two diagrams:
 - **Diagram A:** The overall cross-platform platform-fix triad flow.
 - **Diagram B:** The same flow with explicit emphasis on **WSL bundled-by-default** behavior.
@@ -51,7 +56,8 @@ flowchart TD
     CORE_CHECKS["Required checks: cargo fmt; cargo clippy ... -- -D warnings; relevant tests; make integ-checks"]
     CORE_DISPATCH["Dispatch cross-platform smoke via make feature-smoke (PLATFORM=all; optional RUN_WSL=1; WORKFLOW_REF=ORCH_BRANCH)"]
     CORE_RESULTS["Wait for smoke results (self-hosted runners)"]
-    CORE_IDENTIFY["Identify failing platforms from runner results"]
+    CORE_CI_TEST["Dispatch CI Testing via scripts/ci/dispatch_ci_testing.sh (throwaway branch at HEAD)"]
+    CORE_IDENTIFY["Identify failing platforms from smoke + CI Testing results"]
     CORE_START_PF["Start failing platform-fix tasks (make triad-task-start-platform-fixes-from-smoke SMOKE_RUN_ID=...)"]
     CORE_START_FINAL["After fixes are green: start final aggregator (make triad-task-start-integ-final SLICE_ID=X)"]
   end
@@ -65,7 +71,7 @@ flowchart TD
     SMOKE_ALL["Feature Smoke workflow (self-hosted runners; linux + macos + windows; optional WSL)"]
   end
 
-  CORE_DISPATCH --> SMOKE_ALL --> CORE_RESULTS --> CORE_IDENTIFY --> CORE_START_PF
+  CORE_DISPATCH --> SMOKE_ALL --> CORE_RESULTS --> CORE_CI_TEST --> CORE_IDENTIFY --> CORE_START_PF
 
   %% ======== Platform-fix tasks (parallel, only if needed) ========
   subgraph PF["Platform-fix Integration Tasks (worktrees on platform machines)"]
@@ -83,6 +89,7 @@ flowchart TD
   %% ======== Final aggregator ========
   subgraph INTEG_FINAL["Final Cross-Platform Integration"]
     AGG["X-integ (final; merge platform fixes; run integ checks; re-run cross-platform smoke)"]
+    AGG_CI_TEST["Dispatch CI Testing (throwaway branch at HEAD)"]
     MERGE_BACK["Fast-forward merge to orchestration branch; update tasks.json/session_log.md (worktrees retained; cleanup at feature end)"]
   end
 
@@ -92,7 +99,7 @@ flowchart TD
   WSL --> AGG
   CORE_DISPATCH --> AGG
   CORE_START_FINAL --> AGG
-  AGG --> MERGE_BACK --> TASKS
+  AGG --> AGG_CI_TEST --> MERGE_BACK --> TASKS
 
   %% ======== Feature end cleanup ========
   CLEANUP["FZ-feature-cleanup (make triad-feature-cleanup; remove worktrees; optional prune branches)"]
@@ -139,7 +146,8 @@ flowchart TD
     CORE_CHECKS["Core checks: cargo fmt; cargo clippy ... -- -D warnings; relevant tests; make integ-checks"]
     CORE_DISPATCH["Dispatch smoke via CI (platform=all; optional WSL; WORKFLOW_REF=ORCH_BRANCH)"]
     CORE_RESULTS["Wait for smoke results (self-hosted runners)"]
-    CORE_IDENTIFY["Identify failing platforms from runner results"]
+    CORE_CI_TEST["Dispatch CI Testing via scripts/ci/dispatch_ci_testing.sh (throwaway branch at HEAD)"]
+    CORE_IDENTIFY["Identify failing platforms from smoke + CI Testing results"]
     CORE_START_PF["Start failing platform-fix tasks (make triad-task-start-platform-fixes-from-smoke SMOKE_RUN_ID=...)"]
     CORE_START_FINAL["After fixes are green: start final aggregator (make triad-task-start-integ-final SLICE_ID=X)"]
   end
@@ -153,7 +161,7 @@ flowchart TD
     SMOKE["Feature Smoke workflow (self-hosted runners; linux + macos + windows; optional WSL)"]
   end
 
-  CORE_DISPATCH --> SMOKE --> CORE_RESULTS --> CORE_IDENTIFY --> CORE_START_PF
+  CORE_DISPATCH --> SMOKE --> CORE_RESULTS --> CORE_CI_TEST --> CORE_IDENTIFY --> CORE_START_PF
 
   %% ======== Platform-fix tasks (parallel, only if needed) ========
   subgraph PF["Platform-fix Integration Tasks (only make changes if a platform fails)"]
@@ -171,6 +179,7 @@ flowchart TD
   %% ======== Final aggregator ========
   subgraph INTEG_FINAL["Final Cross-Platform Integration"]
     FINAL["X-integ (final; merge platform fixes; run integ checks; re-run smoke (all; optional WSL))"]
+    FINAL_CI_TEST["Dispatch CI Testing (throwaway branch at HEAD)"]
     MERGE_BACK["Fast-forward merge to orchestration branch; update tasks.json/session_log.md (worktrees retained; cleanup at feature end)"]
   end
 
@@ -180,7 +189,7 @@ flowchart TD
   WSL --> FINAL
   CORE_DISPATCH --> FINAL
   CORE_START_FINAL --> FINAL
-  FINAL --> MERGE_BACK --> TASKS
+  FINAL --> FINAL_CI_TEST --> MERGE_BACK --> TASKS
 
   %% ======== Feature end cleanup ========
   CLEANUP["FZ-feature-cleanup (make triad-feature-cleanup; remove worktrees; optional prune branches)"]

@@ -1,6 +1,8 @@
 # Planning / Research / Documentation Standard (Docs-First)
 
-This document is the sister standard to `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`.
+This document is the sister standard to:
+- `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+- `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 
 Use this standard when the next unit of work is **planning/research/documentation** (ADRs/specs/tasks/UX contracts),
 not execution (production code/tests/integration). The goal is to produce an implementation-ready plan with **zero
@@ -20,6 +22,7 @@ Use a docs-first planning pass when one or more are true:
 
 If you already have crisp specs and only need to implement them, use the execution standard:
 - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+- `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (preferred when using triad automation)
 
 ---
 
@@ -31,7 +34,9 @@ If you already have crisp specs and only need to implement them, use the executi
 - **Exactly two options per decision.** Every decision must compare two viable solutions and pick one.
 - **Cross-sprint alignment is required.** Plans must reconcile with adjacent queued work and the repository’s sequencing spine.
 - **Greenfield by default.** Do not plan migrations/backwards-compat unless an ADR explicitly mandates it.
-- **Execution workflow stays strict.** This standard must never weaken or contradict `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`.
+- **Execution workflow stays strict.** This standard must never weaken or contradict:
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ---
 

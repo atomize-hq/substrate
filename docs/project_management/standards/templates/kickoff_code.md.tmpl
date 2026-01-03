@@ -1,8 +1,9 @@
 # Kickoff: {{TASK_ID}} (code)
 
 ## Scope
-- Production code only; no tests.
+- Production code only; no new tests.
 - Spec: `{{FEATURE_DIR}}/{{SPEC_FILE}}`
+- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist
 Do not edit planning docs inside the worktree.
@@ -16,9 +17,14 @@ Do not edit planning docs inside the worktree.
 ## Requirements
 - Implement exactly the behaviors and error handling in the spec.
 - Run: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`
+- Tests boundary:
+  - Do not add new tests or new test files.
+  - Only update existing tests if required to restore baseline expectations after the spec’s behavior change (still no new test cases).
+- Baseline testing (required):
+  - Run a targeted baseline test set before making changes, then re-run the same test set after your changes and ensure results are unchanged (or improved).
 
 ## End Checklist
 1. Run required commands; capture outputs.
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="{{TASK_ID}}"`
-3. On the orchestration branch, update tasks.json + session_log.md END entry; commit docs (`docs: finish {{TASK_ID}}`).
+3. Hand off the baseline test command(s) and outcomes to the operator (do not edit planning docs inside the worktree).
 4. Do not delete the worktree (feature cleanup removes worktrees at feature end).

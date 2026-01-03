@@ -23,6 +23,11 @@ Stdout contract (machine-parseable):
   TASK_BRANCH=<branch>
   ORCH_BRANCH=<branch>
   KICKOFF_PROMPT=<path>
+  CODEX_OUT_DIR=<path>
+  CODEX_LAST_MESSAGE_PATH=<path>
+  CODEX_EVENTS_PATH=<path>
+  CODEX_STDERR_PATH=<path>
+  CODEX_EXIT=<code or empty>
   NEXT=<recommended next command>
 
 Notes:
@@ -461,6 +466,7 @@ codex_out_dir="${REPO_ROOT}/target/triad/${FEATURE_NAME}/codex/${TASK_ID}"
 codex_last_message="${codex_out_dir}/last_message.md"
 codex_events="${codex_out_dir}/events.jsonl"
 codex_stderr="${codex_out_dir}/stderr.log"
+codex_exit=""
 
 if [[ "${CODEX_JSONL}" -eq 1 ]]; then
     codex_cmd="${codex_cmd} --json"
@@ -476,6 +482,10 @@ printf 'WORKTREE=%s\n' "${WORKTREE_ABS}"
 printf 'TASK_BRANCH=%s\n' "${TASK_BRANCH}"
 printf 'ORCH_BRANCH=%s\n' "${ORCH_BRANCH}"
 printf 'KICKOFF_PROMPT=%s\n' "${KICKOFF_ABS}"
+printf 'CODEX_OUT_DIR=%s\n' "${codex_out_dir}"
+printf 'CODEX_LAST_MESSAGE_PATH=%s\n' "${codex_last_message}"
+printf 'CODEX_EVENTS_PATH=%s\n' "${codex_events}"
+printf 'CODEX_STDERR_PATH=%s\n' "${codex_stderr}"
 if [[ "${LAUNCH_CODEX}" -ne 1 ]]; then
     # Make NEXT copy/pasteable by ensuring the output dir exists.
     next_cmd="mkdir -p $(shell_escape "${codex_out_dir}") && ${next_cmd}"
@@ -486,6 +496,7 @@ if [[ "${LAUNCH_CODEX}" -eq 1 ]]; then
     require_cmd codex
     log "Launching Codex headless (output captured under target/triad/${FEATURE_NAME}/codex/${TASK_ID}/)"
     if [[ "${DRY_RUN}" -eq 1 ]]; then
+        printf 'CODEX_EXIT=%s\n' "dry-run"
         exit 0
     fi
     mkdir -p "${codex_out_dir}"
@@ -494,6 +505,12 @@ if [[ "${LAUNCH_CODEX}" -eq 1 ]]; then
     if [[ -n "${CODEX_MODEL}" ]]; then codex_args+=(--model "${CODEX_MODEL}"); fi
     if [[ "${CODEX_JSONL}" -eq 1 ]]; then codex_args+=(--json); fi
     codex_args+=(--output-last-message "${codex_last_message}" -)
+    set +e
     "${codex_args[@]}" < "${KICKOFF_ABS}" >"${codex_events}" 2>"${codex_stderr}"
-    exit $?
+    codex_exit="$?"
+    set -e
+    printf 'CODEX_EXIT=%s\n' "${codex_exit}"
+    exit "${codex_exit}"
 fi
+
+printf 'CODEX_EXIT=%s\n' "${codex_exit}"

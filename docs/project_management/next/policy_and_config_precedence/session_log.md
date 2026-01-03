@@ -90,3 +90,84 @@
   - `NONE`
 - Next steps:
   - Run `F0-exec-preflight` and fill `execution_preflight_report.md` before starting `PCP0-code` / `PCP0-test`.
+
+## START — 2026-01-02T01:18:48Z — docs — F0-exec-preflight (execution preflight gate)
+- Feature: `docs/project_management/next/policy_and_config_precedence/`
+- Branch: `feat/policy_and_config_precedence`
+- Goal: Run the execution preflight start gate and produce an ACCEPT/REVISE recommendation.
+- Notes:
+  - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/policy_and_config_precedence"` initially failed because this Planning Pack is not yet automation-enabled (`tasks.json` meta.schema_version=1 / no meta.automation); preflight will upgrade the pack to schema v3 + automation and re-run `triad-orch-ensure`.
+
+## END — 2026-01-02T01:31:48Z — docs — F0-exec-preflight (execution preflight gate)
+- Recommendation: `ACCEPT`
+- Summary of changes (exhaustive):
+  - Created and pushed the orchestration branch: `feat/policy_and_config_precedence`.
+  - Upgraded the Planning Pack to the current automation + cross-platform integration model:
+    - `tasks.json` schema v3 + `meta.automation.*`
+    - `PCP0-integ-core` + `PCP0-integ-{linux,macos,windows}` + `PCP0-integ` (final)
+    - `FZ-feature-cleanup` task + kickoff prompt
+  - Hardened smoke scripts to match the manual playbook and validate exit codes:
+    - Asserts workspace-over-env precedence for `world.caged` (and prints the observed value on failure)
+    - Asserts `substrate config show --json` exits `2` when no workspace exists
+    - Missing prerequisites (e.g., `substrate`, `jq`) exit `3` per smoke/playbook convention
+  - Updated `plan.md` to reflect the schema v2/v3 integration model.
+- Evidence (commands):
+  - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/policy_and_config_precedence"` → success
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/policy_and_config_precedence"` → success
+  - `bash docs/project_management/next/policy_and_config_precedence/smoke/linux-smoke.sh` (with `substrate` on PATH) → fails on baseline as expected (feature not implemented yet)
+- CI readiness:
+  - Self-hosted runner inventory verified via GitHub API: `linux-manjaro-runner`, `macOS-runner`, `windows11-runner` (WSL runner present but not required).
+- Required fixes before starting `PCP0-code` / `PCP0-test`: none.
+
+## START — 2026-01-02T01:42:48Z — docs — PCP0-test (workspace config precedence over env — tests)
+- Feature: `docs/project_management/next/policy_and_config_precedence/`
+- Branch: `feat/policy_and_config_precedence` (orchestration), `pcp-pcp0-precedence-test` (task)
+- Goal: Update `crates/shell/tests/config_show.rs` precedence assertions to match ADR-0005 while preserving protected excludes assertions.
+- Notes:
+  - Worktree: `wt/pcp0-precedence-test`
+
+## START — 2026-01-02T01:42:27Z — code — PCP0-code (workspace config precedence over env)
+- Feature: `docs/project_management/next/policy_and_config_precedence/`
+- Branch: `feat/policy_and_config_precedence`
+- Task branch: `pcp-pcp0-precedence-code`
+- Worktree: `wt/pcp0-precedence-code`
+- Goal: Implement the precedence change in the effective-config resolver: when a workspace exists, workspace config overrides `SUBSTRATE_*` env vars (production code only).
+
+## END — 2026-01-02T01:46:52Z — code — PCP0-code (workspace config precedence over env)
+- Summary of changes:
+  - Updated effective-config precedence so that, when a workspace exists, `<workspace_root>/.substrate/workspace.yaml` wins over `SUBSTRATE_*` env vars.
+- Files changed:
+  - `crates/shell/src/execution/config_model.rs`
+- Evidence (commands):
+  - `cargo fmt` → success
+  - `cargo clippy --workspace --all-targets -- -D warnings` → success
+
+## END — 2026-01-02T01:48:42Z — test — PCP0-test (workspace config precedence over env — tests)
+- Summary of changes:
+  - Updated `config_show_resolves_effective_config_with_precedence` to assert ADR-0005 precedence: workspace config overrides `SUBSTRATE_*` env vars (workspace present), while CLI flags still override for CLI-covered `world.*` keys.
+  - Preserved protected excludes assertions for `sync.exclude`.
+- Files changed:
+  - `crates/shell/tests/config_show.rs`
+- Evidence (commands):
+  - `cargo fmt` → success
+  - `cargo test -p substrate-shell --test config_show -- --nocapture` → success
+
+## START — 2026-01-02T23:47:37Z — docs — FZ-feature-cleanup (feature cleanup: worktree retention)
+- Feature: `docs/project_management/next/policy_and_config_precedence/`
+- Branch: `feat/policy_and_config_precedence`
+- Goal: Remove retained task worktrees and prune merged task branches for this feature.
+- Notes:
+  - Expected retained worktrees: `wt/pcp0-precedence-code`, `wt/pcp0-precedence-test`, `wt/pcp0-precedence-integ-core`, `wt/pcp0-precedence-integ`
+
+## END — 2026-01-02T23:49:55Z — docs — FZ-feature-cleanup (feature cleanup: worktree retention)
+- Summary of changes:
+  - Removed retained task worktrees: `wt/pcp0-precedence-code`, `wt/pcp0-precedence-test`, `wt/pcp0-precedence-integ-core`, `wt/pcp0-precedence-integ`
+  - Pruned merged local task branches: `pcp-pcp0-precedence-code`, `pcp-pcp0-precedence-test`, `pcp-pcp0-precedence-integ-core`, `pcp-pcp0-precedence-integ`
+- Evidence (commands):
+  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1` → non-zero (dry-run cannot prune branches while worktrees are still present)
+  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" REMOVE_WORKTREES=1 PRUNE_LOCAL=1` → non-zero (branches had no upstream configured); worktrees removed before the error
+  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/next/policy_and_config_precedence" REMOVE_WORKTREES=1 PRUNE_LOCAL=1 FORCE=1` → success
+- Cleanup summary (stdout contract):
+    REMOVED_WORKTREES=0
+    PRUNED_LOCAL_BRANCHES=4
+    PRUNED_REMOTE_BRANCHES=0

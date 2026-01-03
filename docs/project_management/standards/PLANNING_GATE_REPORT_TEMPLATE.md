@@ -79,6 +79,7 @@ Mark `YES` only if read end-to-end.
 - `docs/project_management/next/sequencing.json`: `YES|NO`
 - Standards:
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES|NO`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES|NO`
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`: `YES|NO`
 
 ## Gate Results (PASS/FAIL with evidence)

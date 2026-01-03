@@ -150,7 +150,7 @@ fi
 if [[ "$(jq -r '.type' <<<"${final_json}")" != "integration" ]]; then
     die "Final integration task ${FINAL_TASK_ID} must have type=integration"
 fi
-merge_to_orch="$(jq -r '.merge_to_orchestration // empty' <<<"${final_json}")"
+merge_to_orch="$(jq -r 'if has("merge_to_orchestration") then .merge_to_orchestration else empty end' <<<"${final_json}")"
 if [[ "${merge_to_orch}" != "true" ]]; then
     die "Final integration task ${FINAL_TASK_ID} must set merge_to_orchestration=true"
 fi

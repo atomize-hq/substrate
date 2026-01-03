@@ -7,19 +7,32 @@ if (-not $IsWindows) {
 
 if (-not (Get-Command substrate -ErrorAction SilentlyContinue)) {
   Write-Error "FAIL: substrate not found on PATH"
-  exit 1
+  exit 3
 }
 
 $tmpRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("substrate-pcp0-" + [System.Guid]::NewGuid().ToString("N"))
 $tmpHome = Join-Path $tmpRoot "home"
 $tmpWs = Join-Path $tmpRoot "ws"
+$tmpNoWs = Join-Path $tmpRoot "no-ws"
 New-Item -ItemType Directory -Force -Path $tmpHome | Out-Null
 New-Item -ItemType Directory -Force -Path $tmpWs | Out-Null
+New-Item -ItemType Directory -Force -Path $tmpNoWs | Out-Null
 
 try {
   $env:SUBSTRATE_HOME = $tmpHome
   $env:HOME = $tmpHome
   $env:USERPROFILE = $tmpHome
+
+  Push-Location $tmpNoWs
+  try {
+    $null = & substrate config show --json 2>$null
+    if ($LASTEXITCODE -ne 2) {
+      Write-Error ("FAIL: expected exit code 2 for workspace-scoped config show without a workspace, got: " + $LASTEXITCODE)
+      exit 1
+    }
+  } finally {
+    Pop-Location
+  }
 
   & substrate workspace init $tmpWs | Out-Null
 
@@ -43,4 +56,3 @@ try {
 
 Write-Host "OK: policy/config precedence Windows smoke"
 exit 0
-

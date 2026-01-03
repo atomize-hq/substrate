@@ -22,13 +22,16 @@ Do not edit planning docs inside the worktree.
   - relevant tests
   - `make integ-checks`
 - Run cross-platform smoke via CI to confirm the merged result is green:
-  - `make feature-smoke FEATURE_DIR="docs/project_management/next/tmp-make-scaffold" PLATFORM=all WORKFLOW_REF="feat/tmp-make-scaffold"`
-  - This feature requires WSL coverage, so add `RUN_WSL=1`.
+  - Run from this worktree (smoke validates current `HEAD` via a throwaway remote branch):
+  - `make feature-smoke FEATURE_DIR="docs/project_management/next/tmp-make-scaffold" PLATFORM=all RUN_WSL=1 RUNNER_KIND=self-hosted WORKFLOW_REF="feat/tmp-make-scaffold" REMOTE=origin CLEANUP=1`
 - Complete the slice closeout gate report:
   - `docs/project_management/next/tmp-make-scaffold/C0-closeout_report.md`
 
 ## End Checklist
 1. Ensure all required platforms are green (include run ids/URLs).
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="C0-integ"`
-3. On the orchestration branch, update tasks.json + session_log.md END entry; commit docs (`docs: finish C0-integ`).
-4. Do not delete the worktree (feature cleanup removes worktrees at feature end).
+3. Run CI Testing on this final integration commit before merging to `testing` (even if CI Testing was run earlier on integ-core):
+   - From inside this worktree: `scripts/ci/dispatch_ci_testing.sh --workflow-ref feat/tmp-make-scaffold --remote origin --cleanup`
+   - You may skip this only if the operator already has a CI Testing run for this exact `HEAD` commit SHA.
+4. Hand off run ids/URLs (smoke + CI Testing) and closeout report completion to the operator (do not edit planning docs inside the worktree).
+5. Do not delete the worktree (feature cleanup removes worktrees at feature end).

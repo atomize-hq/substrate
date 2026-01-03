@@ -20,6 +20,7 @@ Inputs (must read end-to-end):
 - All specs in the track
 - `docs/project_management/next/sequencing.json`
 - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+- `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
 - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`

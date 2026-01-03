@@ -53,3 +53,5 @@ Smoke scripts must be a runnable, minimal version of how a careful human would v
   - Recommendation (`ACCEPT` or `REVISE`).
   - Any required fixes before starting C0.
   - If `REVISE`: do not start triads until the issues are fixed and the preflight is re-run.
+
+If the recommendation is `ACCEPT`, prefer starting the first slice via `docs/project_management/standards/TRIAD_WRAPPER_PROMPT.md` (runs `make triad-task-start-pair ... LAUNCH_CODEX=1` and reports Codex artifacts deterministically).

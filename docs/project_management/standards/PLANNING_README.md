@@ -4,6 +4,7 @@ This file explains how to run a docs-first planning pass that produces an execut
 
 This is the entrypoint for planning/research/documentation work. Execution work uses:
 - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+- `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (preferred when using triad automation; agents start inside worktrees)
 
 ## When to use planning
 
@@ -72,6 +73,7 @@ Planning agents must read end-to-end:
 - `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`
 - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
 - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+- `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 - `docs/project_management/next/sequencing.json`
 
 ## Quality gate (required)
@@ -103,6 +105,7 @@ Constraints (non-negotiable):
 Required reading (end-to-end):
 - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
 - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+- `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md` (when cross-platform / smoke scripts exist)
 - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
 - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`

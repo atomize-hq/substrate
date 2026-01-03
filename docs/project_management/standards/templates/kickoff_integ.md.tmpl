@@ -3,6 +3,7 @@
 ## Scope
 - Merge code + tests, resolve drift to spec, and make the slice green.
 - Spec: `{{FEATURE_DIR}}/{{SPEC_FILE}}`
+- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist
 Do not edit planning docs inside the worktree.
@@ -21,5 +22,5 @@ Do not edit planning docs inside the worktree.
 ## End Checklist
 1. Run required commands; capture outputs.
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="{{TASK_ID}}"`
-3. On the orchestration branch, update tasks.json + session_log.md END entry; commit docs (`docs: finish {{TASK_ID}}`).
+3. Hand off closeout report completion and any key outputs to the operator (do not edit planning docs inside the worktree).
 4. Do not delete the worktree (feature cleanup removes worktrees at feature end).

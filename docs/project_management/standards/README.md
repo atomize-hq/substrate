@@ -95,6 +95,7 @@ Orchestration branch bootstrap (used by the opening gate):
 #### Code + test (always parallel)
 
 Start both worktrees:
+- Preferred (post-preflight): use `docs/project_management/standards/TRIAD_WRAPPER_PROMPT.md` (runs start-pair with `LAUNCH_CODEX=1` and reports exit codes + last messages + artifact paths).
 - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="C0" LAUNCH_CODEX=1`
 
 Finish each task from inside its worktree (commits to the task branch; does not merge to orchestration):
@@ -109,6 +110,9 @@ Integration tasks should set `merge_to_orchestration` in `tasks.json`:
 
 Start integration worktree:
 - `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="C0-integ-core"`
+
+Optional: run an end-to-end integration orchestration wrapper (integ-core -> smoke -> platform-fix -> final) with artifact reporting:
+- `docs/project_management/standards/TRIAD_INTEGRATION_WRAPPER_PROMPT.md`
 
 Dispatch cross-platform smoke:
 - `make feature-smoke FEATURE_DIR="docs/project_management/next/<feature>" PLATFORM=all WORKFLOW_REF="feat/<feature>"`
