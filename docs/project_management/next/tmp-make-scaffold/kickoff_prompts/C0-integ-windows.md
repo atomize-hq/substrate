@@ -23,7 +23,7 @@ Do not edit planning docs inside the worktree.
   - `cargo fmt`
   - `cargo clippy --workspace --all-targets -- -D warnings`
 - Validate platform smoke via CI for this platform (repeat until green if you make fixes):
-  - `make feature-smoke FEATURE_DIR="docs/project_management/next/tmp-make-scaffold" PLATFORM=windows RUNNER_KIND=self-hosted WORKFLOW_REF="feat/tmp-make-scaffold" REMOTE=origin CLEANUP=1`
+  - `make feature-smoke FEATURE_DIR="docs/project_management/next/tmp-make-scaffold" PLATFORM=windows RUNNER_KIND=self-hosted WORKFLOW_REF="feat/tmp-make-scaffold" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
 - If smoke passes: record run id/URL in the END entry and do not change code.
 - If smoke fails:
   1) Fix the issue in this worktree (platform-specific guards, path handling, deps) while keeping the spec contract intact.
