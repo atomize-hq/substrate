@@ -1,0 +1,80 @@
+# env_var_taxonomy_and_override_split — session log
+
+## START — 2026-01-04T13:46:56Z — planning — planning pack completion
+- Feature: `docs/project_management/next/env_var_taxonomy_and_override_split/`
+- Branch: `testing`
+- Goal: Produce an execution-ready Planning Pack for ADR-0006 with zero ambiguity.
+- Inputs to read end-to-end:
+  - `docs/project_management/standards/PLANNING_README.md`
+  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
+  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
+  - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
+  - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
+  - `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`
+  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/plan.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/decision_register.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/integration_map.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/manual_testing_playbook.md`
+- Commands planned (if any):
+  - `python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md --fix`
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/env_var_taxonomy_and_override_split"`
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/env_var_taxonomy_and_override_split"`
+
+## END — 2026-01-04T13:56:08Z — planning — planning pack completion
+- Summary of changes (exhaustive):
+  - Expanded the feature plan to an execution-ready runbook with cross-platform integration model and checklists.
+  - Formalized the decision register entries per the planning standard (A/B options, selections, follow-up tasks).
+  - Added EV0 spec defining the override split contract and validation expectations.
+  - Added `tasks.json` (schema v3 automation + cross-platform integration task model).
+  - Added kickoff prompts for all tasks (code/test/core/platform/final + gates).
+  - Added manual testing playbook with explicit commands, outputs, and exit codes.
+  - Added cross-platform smoke scripts (Linux/macOS/Windows).
+  - Added execution gates artifacts (execution preflight report + EV0 closeout report).
+  - Updated ADR-0006 to remove placeholders, align to sequencing, and refreshed ADR_BODY_SHA256.
+  - Updated sequencing spine to include this sprint entry.
+- Files created/modified:
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/plan.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/decision_register.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/integration_map.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/manual_testing_playbook.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/EV0-spec.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/tasks.json`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/session_log.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/execution_preflight_report.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/EV0-closeout_report.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/quality_gate_report.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/kickoff_prompts/F0-exec-preflight.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/kickoff_prompts/EV0-code.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/kickoff_prompts/EV0-test.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/kickoff_prompts/EV0-integ-core.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/kickoff_prompts/EV0-integ-linux.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/kickoff_prompts/EV0-integ-macos.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/kickoff_prompts/EV0-integ-windows.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/kickoff_prompts/EV0-integ.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/kickoff_prompts/FZ-feature-cleanup.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/smoke/linux-smoke.sh`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/smoke/macos-smoke.sh`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/smoke/windows-smoke.ps1`
+  - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
+  - `docs/project_management/next/sequencing.json`
+- Rubric checks run (with results):
+  - `python3 scripts/planning/check_adr_exec_summary.py --adr docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md --fix` → `0` → updated hash
+  - `jq -e . docs/project_management/next/env_var_taxonomy_and_override_split/tasks.json >/dev/null` → `0` → pass
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → pass
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/env_var_taxonomy_and_override_split"` → `0` → pass
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/env_var_taxonomy_and_override_split"` → `0` → pass
+- Sequencing alignment:
+  - `sequencing.json` reviewed: `YES`
+  - Changes required: added `env_var_taxonomy_and_override_split` sprint entry (order `26.5`) with `EV0` slice
+- Blockers:
+  - Third-party quality gate review must update `quality_gate_report.md` with evidence and `RECOMMENDATION: ACCEPT` before execution triads begin.
+- Next steps:
+  - Quality gate reviewer: run `make planning-lint` and fill `quality_gate_report.md`.
+  - Operator: run `F0-exec-preflight`, then start EV0 via `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/env_var_taxonomy_and_override_split" SLICE_ID="EV0" LAUNCH_CODEX=1`.

@@ -133,6 +133,25 @@
       ]
     },
     {
+      "order": 26.5,
+      "id": "env_var_taxonomy_and_override_split",
+      "title": "Env var taxonomy + override split",
+      "branch": "feat/env_var_taxonomy_and_override_split",
+      "directory": "docs/project_management/next/env_var_taxonomy_and_override_split",
+      "plan": "docs/project_management/next/env_var_taxonomy_and_override_split/plan.md",
+      "status": "not_started",
+      "sequence": [
+        {
+          "id": "EV0",
+          "spec": "docs/project_management/next/env_var_taxonomy_and_override_split/EV0-spec.md"
+        }
+      ],
+      "notes": [
+        "Implements ADR-0006 by splitting config override inputs (SUBSTRATE_OVERRIDE_*) from exported state (SUBSTRATE_*).",
+        "Sequenced after policy_and_config_precedence (PCP0) to avoid simultaneous churn in the effective-config resolver."
+      ]
+    },
+    {
       "order": 27,
       "id": "world_overlayfs_enumeration",
       "title": "Linux world overlayfs enumeration reliability",
