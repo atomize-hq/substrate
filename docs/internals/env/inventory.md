@@ -1,4 +1,6 @@
-# Environment Variables
+# Environment Variables Inventory (Internal)
+
+Scaffold note: this file is the exhaustive inventory view (developer-focused). It intentionally includes internal/test and standard environment variables referenced by the repo, and is not a stability promise for operators.
 
 Canonical catalog and taxonomy for environment variables referenced by Substrate code, scripts, and docs (excluding `docs/project_management/**`).
 
@@ -155,10 +157,10 @@ Primary references are “first hit” anchors; use repo search for deeper conte
 | `SUBSTRATE_DISABLE_PTY` | `SUBSTRATE` | override-only / internal | `crates/shell/src/execution/routing/dispatch/registry.rs:719` |
 | `SUBSTRATE_ENABLE_PREEXEC` | `SUBSTRATE` | override-only / internal | `crates/shell/src/scripts/bash_preexec.rs:16` |
 | `SUBSTRATE_ENOSPC_PREFIX` | `SUBSTRATE` | override-only / internal | `crates/shell/tests/replay_world.rs:1322` |
-| `SUBSTRATE_EXE` | `SUBSTRATE` | override-only / internal | `docs/ENVIRONMENT_VARIABLES.md:55` |
+| `SUBSTRATE_EXE` | `SUBSTRATE` | override-only / internal | `docs/internals/env/inventory.md` |
 | `SUBSTRATE_FORCE_PTY` | `SUBSTRATE` | override-only / internal | `crates/shell/src/execution/routing/dispatch/registry.rs:714` |
 | `SUBSTRATE_FORWARDER_PIPE` | `SUBSTRATE` | override-only / internal | `crates/world-windows-wsl/src/backend.rs:64` |
-| `SUBSTRATE_FORWARDER_TARGET` | `SUBSTRATE` | override-only / internal | `docs/ENVIRONMENT_VARIABLES.md:58` |
+| `SUBSTRATE_FORWARDER_TARGET` | `SUBSTRATE` | override-only / internal | `docs/internals/env/inventory.md` |
 | `SUBSTRATE_FORWARDER_TARGET_ENDPOINT` | `SUBSTRATE` | override-only / internal | `crates/forwarder/src/wsl.rs:159` |
 | `SUBSTRATE_FORWARDER_TARGET_HOST` | `SUBSTRATE` | override-only / internal | `crates/forwarder/src/wsl.rs:163` |
 | `SUBSTRATE_FORWARDER_TARGET_MODE` | `SUBSTRATE` | override-only / internal | `crates/forwarder/src/wsl.rs:158` |
@@ -167,7 +169,7 @@ Primary references are “first hit” anchors; use repo search for deeper conte
 | `SUBSTRATE_FORWARDER_TCP_ADDR` | `SUBSTRATE` | override-only / internal | `crates/world-windows-wsl/src/transport.rs:10` |
 | `SUBSTRATE_FORWARDER_TCP_HOST` | `SUBSTRATE` | override-only / internal | `crates/world-windows-wsl/src/transport.rs:25` |
 | `SUBSTRATE_FORWARDER_TCP_PORT` | `SUBSTRATE` | override-only / internal | `crates/world-windows-wsl/src/transport.rs:27` |
-| `SUBSTRATE_GRAPH` | `SUBSTRATE` | override-only / internal | `docs/ENVIRONMENT_VARIABLES.md:67` |
+| `SUBSTRATE_GRAPH` | `SUBSTRATE` | override-only / internal | `docs/internals/env/inventory.md` |
 | `SUBSTRATE_GROUP` | `SUBSTRATE` | override-only / internal | `scripts/linux/world-provision.sh:57` |
 | `SUBSTRATE_HOME` | `SUBSTRATE` | state (exported) | `crates/broker/src/profile/tests.rs:21` |
 | `SUBSTRATE_INNER_LOGIN_SHELL` | `SUBSTRATE` | override-only / internal | `crates/world/src/exec.rs:212` |
@@ -175,8 +177,8 @@ Primary references are “first hit” anchors; use repo search for deeper conte
 | `SUBSTRATE_INSTALL_ARCHIVE` | `SUBSTRATE` | override-only / internal | `scripts/substrate/install-substrate.sh:23` |
 | `SUBSTRATE_INSTALL_ARTIFACT_DIR` | `SUBSTRATE` | override-only / internal | `scripts/substrate/install-substrate.sh:23` |
 | `SUBSTRATE_INSTALL_BASE_URL` | `SUBSTRATE` | override-only / internal | `scripts/substrate/install-substrate.sh:24` |
-| `SUBSTRATE_INSTALL_GITHUB_TOKEN` | `SUBSTRATE` | override-only / internal | `docs/ENVIRONMENT_VARIABLES.md:69` |
-| `SUBSTRATE_INSTALL_LATEST_API` | `SUBSTRATE` | override-only / internal | `docs/ENVIRONMENT_VARIABLES.md:70` |
+| `SUBSTRATE_INSTALL_GITHUB_TOKEN` | `SUBSTRATE` | override-only / internal | `docs/internals/env/inventory.md` |
+| `SUBSTRATE_INSTALL_LATEST_API` | `SUBSTRATE` | override-only / internal | `docs/internals/env/inventory.md` |
 | `SUBSTRATE_INSTALL_NO_PATH` | `SUBSTRATE` | override-only / internal | `scripts/substrate/install-substrate.sh:1643` |
 | `SUBSTRATE_INSTALL_PRIMARY_USER` | `SUBSTRATE` | override-only / internal | `scripts/substrate/install-substrate.sh:118` |
 | `SUBSTRATE_INSTALL_REF` | `SUBSTRATE` | override-only / internal | `docs/INSTALLATION.md:33` |
@@ -198,15 +200,15 @@ Primary references are “first hit” anchors; use repo search for deeper conte
 | `SUBSTRATE_NET_BUDGET` | `SUBSTRATE` | override-only / internal | `docs/CONFIGURATION.md:461` |
 | `SUBSTRATE_NO_SHIMS` | `SUBSTRATE` | override-only / internal | `crates/shell/src/execution/invocation/plan.rs:138` |
 | `SUBSTRATE_ORIGINAL_BASH_ENV` | `SUBSTRATE` | override-only / internal | `crates/shell/src/builtins/world_deps/guest.rs:270` |
-| `SUBSTRATE_OVERRIDE_ANCHOR_MODE` | `SUBSTRATE_OVERRIDE` | override input (planned) | `docs/ENVIRONMENT_VARIABLES.md:29` |
-| `SUBSTRATE_OVERRIDE_ANCHOR_PATH` | `SUBSTRATE_OVERRIDE` | override input (planned) | `docs/ENVIRONMENT_VARIABLES.md:30` |
-| `SUBSTRATE_OVERRIDE_CAGED` | `SUBSTRATE_OVERRIDE` | override input (planned) | `docs/ENVIRONMENT_VARIABLES.md:31` |
-| `SUBSTRATE_OVERRIDE_POLICY_MODE` | `SUBSTRATE_OVERRIDE` | override input (planned) | `docs/ENVIRONMENT_VARIABLES.md:32` |
-| `SUBSTRATE_OVERRIDE_SYNC_AUTO_SYNC` | `SUBSTRATE_OVERRIDE` | override input (planned) | `docs/ENVIRONMENT_VARIABLES.md:33` |
-| `SUBSTRATE_OVERRIDE_SYNC_CONFLICT_POLICY` | `SUBSTRATE_OVERRIDE` | override input (planned) | `docs/ENVIRONMENT_VARIABLES.md:35` |
-| `SUBSTRATE_OVERRIDE_SYNC_DIRECTION` | `SUBSTRATE_OVERRIDE` | override input (planned) | `docs/ENVIRONMENT_VARIABLES.md:34` |
-| `SUBSTRATE_OVERRIDE_SYNC_EXCLUDE` | `SUBSTRATE_OVERRIDE` | override input (planned) | `docs/ENVIRONMENT_VARIABLES.md:36` |
-| `SUBSTRATE_OVERRIDE_WORLD` | `SUBSTRATE_OVERRIDE` | override input (planned) | `docs/ENVIRONMENT_VARIABLES.md:28` |
+| `SUBSTRATE_OVERRIDE_ANCHOR_MODE` | `SUBSTRATE_OVERRIDE` | override input (planned) | `docs/internals/env/inventory.md` |
+| `SUBSTRATE_OVERRIDE_ANCHOR_PATH` | `SUBSTRATE_OVERRIDE` | override input (planned) | `docs/internals/env/inventory.md` |
+| `SUBSTRATE_OVERRIDE_CAGED` | `SUBSTRATE_OVERRIDE` | override input (planned) | `docs/internals/env/inventory.md` |
+| `SUBSTRATE_OVERRIDE_POLICY_MODE` | `SUBSTRATE_OVERRIDE` | override input (planned) | `docs/internals/env/inventory.md` |
+| `SUBSTRATE_OVERRIDE_SYNC_AUTO_SYNC` | `SUBSTRATE_OVERRIDE` | override input (planned) | `docs/internals/env/inventory.md` |
+| `SUBSTRATE_OVERRIDE_SYNC_CONFLICT_POLICY` | `SUBSTRATE_OVERRIDE` | override input (planned) | `docs/internals/env/inventory.md` |
+| `SUBSTRATE_OVERRIDE_SYNC_DIRECTION` | `SUBSTRATE_OVERRIDE` | override input (planned) | `docs/internals/env/inventory.md` |
+| `SUBSTRATE_OVERRIDE_SYNC_EXCLUDE` | `SUBSTRATE_OVERRIDE` | override input (planned) | `docs/internals/env/inventory.md` |
+| `SUBSTRATE_OVERRIDE_WORLD` | `SUBSTRATE_OVERRIDE` | override input (planned) | `docs/internals/env/inventory.md` |
 | `SUBSTRATE_PARENT_SPAN` | `SUBSTRATE` | override-only / internal | `crates/telemetry-lib/src/correlation.rs:26` |
 | `SUBSTRATE_POLICY_GIT_CACHE` | `SUBSTRATE` | override-only / internal | `crates/trace/src/util.rs:52` |
 | `SUBSTRATE_POLICY_ID` | `SUBSTRATE` | override-only / internal | `crates/telemetry-lib/src/correlation.rs:29` |
@@ -218,7 +220,7 @@ Primary references are “first hit” anchors; use repo search for deeper conte
 | `SUBSTRATE_REPLAY` | `SUBSTRATE` | override-only / internal | `crates/replay/src/replay/executor.rs:71` |
 | `SUBSTRATE_REPLAY_USE_WORLD` | `SUBSTRATE` | override-only / internal | `crates/shell/src/execution/routing/replay.rs:67` |
 | `SUBSTRATE_REPLAY_VERBOSE` | `SUBSTRATE` | override-only / internal | `crates/replay/src/replay/helpers.rs:35` |
-| `SUBSTRATE_ROOT` | `SUBSTRATE` | state (exported) | `docs/ENVIRONMENT_VARIABLES.md:93` |
+| `SUBSTRATE_ROOT` | `SUBSTRATE` | state (exported) | `docs/internals/env/inventory.md` |
 | `SUBSTRATE_SESSION_ID` | `SUBSTRATE` | override-only / internal | `crates/telemetry-lib/src/correlation.rs:24` |
 | `SUBSTRATE_SHELL` | `SUBSTRATE` | override-only / internal | `crates/trace/src/span.rs:145` |
 | `SUBSTRATE_SHIM_DEPLOY_DIR` | `SUBSTRATE` | override-only / internal | `crates/shell/tests/support/mod.rs:81` |
@@ -287,7 +289,7 @@ Primary references are “first hit” anchors; use repo search for deeper conte
 | `TEST_MODE` | `standard` | standard | `crates/shell/src/execution/routing/dispatch/registry.rs:406` |
 | `TIER2_HOME` | `standard` | standard | `crates/common/src/manager_manifest/tests.rs:324` |
 | `TMPDIR` | `standard` | standard | `crates/shell/tests/common.rs:20` |
-| `TRACE_LOG_FILE` | `TRACE` | internal/trace | `docs/ENVIRONMENT_VARIABLES.md:150` |
+| `TRACE_LOG_FILE` | `TRACE` | internal/trace | `docs/internals/env/inventory.md` |
 | `TRACE_LOG_KEEP` | `TRACE` | internal/trace | `crates/trace/src/output.rs:41` |
 | `TRACE_LOG_MAX_MB` | `TRACE` | internal/trace | `crates/shell/tests/logging.rs:173` |
 | `TRACE_LOG_PATH` | `TRACE` | internal/trace | `scripts/substrate/dev-uninstall-substrate.sh:478` |
