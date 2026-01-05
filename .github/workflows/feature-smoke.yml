@@ -217,6 +217,9 @@ jobs:
     needs: validate_inputs
     if: (inputs.platform == 'macos' || inputs.platform == 'all') && inputs.runner_kind == 'self-hosted'
     runs-on: [self-hosted, macOS]
+    env:
+      CARGO_BUILD_JOBS: 2
+      RUST_TEST_THREADS: 1
     steps:
       - name: Checkout repository (override ref)
         if: inputs.checkout_ref != ''
