@@ -159,12 +159,12 @@
         "EV0-code"
       ]
     },
-    {
-      "id": "EV0-integ-core",
+  {
+    "id": "EV0-integ-core",
       "name": "Override split for effective config (integration core)",
       "type": "integration",
       "phase": "Env Var Override Split",
-      "status": "pending",
+    "status": "completed",
       "description": "Merge EV0 code+tests, make the slice green on the primary dev platform, and dispatch cross-platform smoke via CI.",
       "references": [
         "docs/project_management/next/env_var_taxonomy_and_override_split/EV0-spec.md",
@@ -212,12 +212,12 @@
       ],
       "concurrent_with": []
     },
-    {
-      "id": "EV0-integ-linux",
+  {
+    "id": "EV0-integ-linux",
       "name": "Override split for effective config (integration Linux)",
       "type": "integration",
       "phase": "Env Var Override Split",
-      "status": "pending",
+    "status": "completed",
       "description": "Linux platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/env_var_taxonomy_and_override_split/EV0-spec.md",
@@ -258,12 +258,12 @@
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml"
     },
-    {
-      "id": "EV0-integ-macos",
+  {
+    "id": "EV0-integ-macos",
       "name": "Override split for effective config (integration macOS)",
       "type": "integration",
       "phase": "Env Var Override Split",
-      "status": "pending",
+    "status": "completed",
       "description": "macOS platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/env_var_taxonomy_and_override_split/EV0-spec.md",
@@ -304,12 +304,12 @@
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml"
     },
-    {
-      "id": "EV0-integ-windows",
+  {
+    "id": "EV0-integ-windows",
       "name": "Override split for effective config (integration Windows)",
       "type": "integration",
       "phase": "Env Var Override Split",
-      "status": "pending",
+    "status": "completed",
       "description": "Windows platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/env_var_taxonomy_and_override_split/EV0-spec.md",
