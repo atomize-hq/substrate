@@ -171,7 +171,31 @@ run_url="$(gh run view "${run_id}" --json url -q '.url' 2>/dev/null || true)"
 if [[ -n "${run_url}" ]]; then
     echo "RUN_URL=${run_url}"
 fi
-gh run watch "${run_id}"
+watch_interval_secs="${FEATURE_SMOKE_WATCH_INTERVAL_SECS:-15}"
+watch_timeout_secs="${FEATURE_SMOKE_WATCH_TIMEOUT_SECS:-21600}" # 6h
+started_watch_at="$(date +%s)"
+
+echo "Watching run status (interval=${watch_interval_secs}s timeout=${watch_timeout_secs}s)..."
+while true; do
+    status="$(gh run view "${run_id}" --json status -q '.status' 2>/dev/null || true)"
+    if [[ -z "${status}" ]]; then
+        # Transient gh/API failures are common; keep polling.
+        sleep "${watch_interval_secs}"
+        continue
+    fi
+    if [[ "${status}" == "completed" ]]; then
+        break
+    fi
+
+    now="$(date +%s)"
+    elapsed="$((now - started_watch_at))"
+    if [[ "${elapsed}" -ge "${watch_timeout_secs}" ]]; then
+        echo "ERROR: Timed out waiting for smoke run ${run_id} to complete after ${elapsed}s" >&2
+        exit 5
+    fi
+
+    sleep "${watch_interval_secs}"
+done
 conclusion="$(gh run view "${run_id}" --json conclusion -q '.conclusion')"
 echo "Conclusion: ${conclusion}"
 
