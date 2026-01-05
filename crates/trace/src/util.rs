@@ -5,7 +5,13 @@ use std::fs;
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
 
+static ENV_HASH_CACHE: OnceLock<String> = OnceLock::new();
+
 pub fn hash_env_vars() -> Result<String> {
+    if let Some(cached) = ENV_HASH_CACHE.get() {
+        return Ok(cached.clone());
+    }
+
     let mut hasher = Sha256::new();
 
     let mut vars = env::vars()
@@ -22,7 +28,9 @@ pub fn hash_env_vars() -> Result<String> {
         hasher.update(b"\n");
     }
 
-    Ok(format!("{:x}", hasher.finalize()))
+    let digest = format!("{:x}", hasher.finalize());
+    let _ = ENV_HASH_CACHE.set(digest.clone());
+    Ok(digest)
 }
 
 pub fn get_umask() -> Result<u32> {
