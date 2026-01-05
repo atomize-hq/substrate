@@ -1,6 +1,6 @@
 # Slice Closeout Gate Report — env_var_taxonomy_and_override_split / EV0
 
-Date (UTC): 2026-01-05T13:52:25Z
+Date (UTC): 2026-01-05T14:20:44Z
 
 Standards:
 - `docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md`
@@ -31,8 +31,8 @@ Slice spec:
 - `make integ-checks`: pass
   - Includes: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo check --workspace --all-targets`, `cargo test --workspace --all-targets`
   - Worktree: `wt/ev0-override-split-integ`
-  - Final merge commit: `25a57a49de3eac8adaa4c412d45e65b98d4ef403`
-- `make feature-smoke FEATURE_DIR="docs/project_management/next/env_var_taxonomy_and_override_split" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF="feat/env_var_taxonomy_and_override_split" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`: pass (run id `20717222461`)
+  - Final merge commit: `79274ecc98957cb6cc4d28aa93caa618185b2052`
+- `make feature-smoke FEATURE_DIR="docs/project_management/next/env_var_taxonomy_and_override_split" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF="feat/env_var_taxonomy_and_override_split" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`: pass (run id `20718111891`)
 
 ## Repo-Wide Grep/Audit (Required Evidence)
 
@@ -124,9 +124,9 @@ Findings (must be exhaustive; list each hit and disposition):
 ## Cross-Platform Smoke
 
 Record run ids/URLs for required platforms:
-- Linux: `https://github.com/atomize-hq/substrate/actions/runs/20717222461` (run id `20717222461`)
-- macOS: `https://github.com/atomize-hq/substrate/actions/runs/20717222461` (run id `20717222461`)
-- Windows: `https://github.com/atomize-hq/substrate/actions/runs/20717222461` (run id `20717222461`)
+- Linux: `https://github.com/atomize-hq/substrate/actions/runs/20718111891` (run id `20718111891`)
+- macOS: `https://github.com/atomize-hq/substrate/actions/runs/20718111891` (run id `20718111891`)
+- Windows: `https://github.com/atomize-hq/substrate/actions/runs/20718111891` (run id `20718111891`)
 
 Key coverage (must be validated by smoke):
 - `policy.mode` (via `SUBSTRATE_POLICY_MODE`)
@@ -135,7 +135,7 @@ Key coverage (must be validated by smoke):
 
 If any platform-fix work was required:
 - What failed: cross-platform smoke required follow-up fixes across runner/OS variants (Windows manager detection, deterministic env hashing for trace, CI smoke stability).
-- What was changed: merged EV0 core + platform-fix integration branches into `ev-ev0-override-split-integ`, then FF merged into `feat/env_var_taxonomy_and_override_split` (final head `25a57a49de3eac8adaa4c412d45e65b98d4ef403`).
+- What was changed: merged EV0 core + platform-fix integration branches into `ev-ev0-override-split-integ`, then FF merged into `feat/env_var_taxonomy_and_override_split` (final head `79274ecc98957cb6cc4d28aa93caa618185b2052`).
 - Why the change is safe (guards, cfg, feature flags): fixes are platform-scoped or behavior-preserving (cfg-gated where applicable) and are covered by all-platform feature smoke run `20717222461`.
 
 ## Smoke ↔ Manual Parity
