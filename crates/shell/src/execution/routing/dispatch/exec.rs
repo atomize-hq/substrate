@@ -262,7 +262,7 @@ pub(crate) fn execute_command(
 
     if world_required && world_disabled {
         anyhow::bail!(
-            "world execution required ({}) but world is disabled (SUBSTRATE_WORLD=disabled, --no-world, or world.enabled=false)",
+            "world execution required ({}) but world is disabled (SUBSTRATE_OVERRIDE_WORLD=disabled, --no-world, or world.enabled=false)",
             world_required_reason
         );
     }
@@ -873,7 +873,11 @@ fn execute_external(
         }
     } else if is_cmd {
         // Windows CMD
-        cmd.arg("/C").arg(command_for_shell);
+        let mut cmd_command = command_for_shell;
+        if cmd_command.contains("%SUBSTRATE_") && cmd_command.contains('|') {
+            cmd_command = cmd_command.replace('|', "^|");
+        }
+        cmd.arg("/C").arg(cmd_command);
     } else {
         // Unix shells (bash, sh, zsh, etc.)
         if config.ci_mode && !config.no_exit_on_error && is_bash {

@@ -3,19 +3,15 @@
 #[cfg(all(test, any(target_os = "windows", target_os = "macos")))]
 use crate::execution::world_env_guard;
 use crate::execution::ShellConfig;
-use std::env;
 
 #[cfg(target_os = "linux")]
 use super::dispatch::init_linux_world;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use crate::execution::pw;
 
-/// Check whether world support should be disabled based on environment or CLI flags.
+/// Check whether world support should be disabled based on resolved config.
 pub(crate) fn world_disabled(config: &ShellConfig) -> bool {
-    env::var("SUBSTRATE_WORLD")
-        .map(|v| v == "disabled")
-        .unwrap_or(false)
-        || config.no_world
+    config.no_world
 }
 
 /// Initialize world support for the current platform when enabled.
@@ -42,9 +38,9 @@ fn init_windows_world(config: &ShellConfig) {
     match pw::detect() {
         Ok(ctx) => {
             if (ctx.ensure_ready)().is_ok() {
-                env::set_var("SUBSTRATE_WORLD", "enabled");
+                std::env::set_var("SUBSTRATE_WORLD", "enabled");
                 if let Ok(handle) = ctx.backend.ensure_session(&pw::windows::world_spec()) {
-                    env::set_var("SUBSTRATE_WORLD_ID", handle.id);
+                    std::env::set_var("SUBSTRATE_WORLD_ID", handle.id);
                 }
             }
             pw::store_context_globally(ctx);
@@ -69,7 +65,7 @@ fn init_macos_world(config: &ShellConfig) {
         Ok(ctx) => {
             if (ctx.ensure_ready)().is_ok() {
                 // Set parity with Linux: world enabled + ID only
-                env::set_var("SUBSTRATE_WORLD", "enabled");
+                std::env::set_var("SUBSTRATE_WORLD", "enabled");
 
                 // Attempt to retrieve world id
                 let spec = WorldSpec {
@@ -83,7 +79,7 @@ fn init_macos_world(config: &ShellConfig) {
                     fs_mode: world_fs_mode(),
                 };
                 if let Ok(handle) = ctx.backend.ensure_session(&spec) {
-                    env::set_var("SUBSTRATE_WORLD_ID", handle.id);
+                    std::env::set_var("SUBSTRATE_WORLD_ID", handle.id);
                 }
             }
             pw::store_context_globally(ctx);

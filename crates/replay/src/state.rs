@@ -162,14 +162,29 @@ pub fn reconstruct_state(
         }
     }
 
-    // Preserve world root/caging hints from the current environment when not captured in the trace
-    for key in [
-        "SUBSTRATE_ANCHOR_MODE",
-        "SUBSTRATE_ANCHOR_PATH",
-        "SUBSTRATE_CAGED",
-    ] {
-        if let Ok(value) = std::env::var(key) {
-            env.entry(key.to_string()).or_insert(value);
+    // Preserve override inputs from the current environment when not captured in the trace.
+    // This avoids treating exported-state `SUBSTRATE_*` values as operator override inputs.
+    if let Ok(value) = std::env::var("SUBSTRATE_OVERRIDE_ANCHOR_MODE") {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            env.entry("SUBSTRATE_ANCHOR_MODE".to_string())
+                .or_insert_with(|| trimmed.to_string());
+        }
+    }
+    if let Ok(value) = std::env::var("SUBSTRATE_OVERRIDE_ANCHOR_PATH") {
+        env.entry("SUBSTRATE_ANCHOR_PATH".to_string())
+            .or_insert(value);
+    }
+    if let Ok(value) = std::env::var("SUBSTRATE_OVERRIDE_CAGED") {
+        let normalized = match value.trim().to_ascii_lowercase().as_str() {
+            "" => None,
+            "1" | "true" | "yes" | "on" => Some("1"),
+            "0" | "false" | "no" | "off" => Some("0"),
+            _ => Some(value.trim()),
+        };
+        if let Some(normalized) = normalized {
+            env.entry("SUBSTRATE_CAGED".to_string())
+                .or_insert_with(|| normalized.to_string());
         }
     }
 

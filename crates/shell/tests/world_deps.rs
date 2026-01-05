@@ -156,8 +156,9 @@ impl WorldDepsFixture {
             .env("USERPROFILE", &self.home)
             .env("SUBSTRATE_HOME", &self.substrate_home)
             // Keep world enabled but avoid real host sockets; force manual mode and point to a temp socket.
-            .env("SUBSTRATE_WORLD", "enabled")
-            .env("SUBSTRATE_WORLD_ENABLED", "1")
+            .env_remove("SUBSTRATE_WORLD")
+            .env_remove("SUBSTRATE_WORLD_ENABLED")
+            .env("SUBSTRATE_OVERRIDE_WORLD", "enabled")
             .env("SUBSTRATE_WORLD_SOCKET", &self.fake_socket_path)
             .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
             .env("SUBSTRATE_MANAGER_MANIFEST", &self.manager_manifest_path)
@@ -524,8 +525,7 @@ fn world_deps_status_warns_when_world_disabled_but_reports_host_info() {
 
     let assert = fixture
         .command()
-        .env("SUBSTRATE_WORLD", "disabled")
-        .env("SUBSTRATE_WORLD_ENABLED", "0")
+        .env("SUBSTRATE_OVERRIDE_WORLD", "disabled")
         .arg("status")
         .assert()
         .success();
@@ -703,8 +703,7 @@ fn world_deps_install_fails_when_world_disabled() {
 
     let assert = fixture
         .command()
-        .env("SUBSTRATE_WORLD", "disabled")
-        .env("SUBSTRATE_WORLD_ENABLED", "0")
+        .env("SUBSTRATE_OVERRIDE_WORLD", "disabled")
         .arg("install")
         .arg("git")
         .assert()

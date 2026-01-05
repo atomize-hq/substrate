@@ -208,12 +208,12 @@ fn resolve_world_root_respects_env_when_no_configs() {
 
     let _env = EnvGuard::new(vec![
         ("SUBSTRATE_HOME", Some(substrate_home.display().to_string())),
-        ("SUBSTRATE_ANCHOR_MODE", Some("custom".into())),
+        ("SUBSTRATE_OVERRIDE_ANCHOR_MODE", Some("custom".into())),
         (
-            "SUBSTRATE_ANCHOR_PATH",
+            "SUBSTRATE_OVERRIDE_ANCHOR_PATH",
             Some(anchor_dir.display().to_string()),
         ),
-        ("SUBSTRATE_CAGED", Some("false".into())),
+        ("SUBSTRATE_OVERRIDE_CAGED", Some("false".into())),
     ]);
 
     let settings = resolve_world_root(None, None, None, &launch_dir).expect("env settings");
@@ -239,12 +239,12 @@ fn resolve_world_root_env_overrides_global_config() {
 
     let _env = EnvGuard::new(vec![
         ("SUBSTRATE_HOME", Some(substrate_home.display().to_string())),
-        ("SUBSTRATE_ANCHOR_MODE", Some("custom".into())),
+        ("SUBSTRATE_OVERRIDE_ANCHOR_MODE", Some("custom".into())),
         (
-            "SUBSTRATE_ANCHOR_PATH",
+            "SUBSTRATE_OVERRIDE_ANCHOR_PATH",
             Some(anchor_dir.display().to_string()),
         ),
-        ("SUBSTRATE_CAGED", Some("0".into())),
+        ("SUBSTRATE_OVERRIDE_CAGED", Some("0".into())),
     ]);
 
     let settings = resolve_world_root(None, None, None, &launch_dir).expect("resolved settings");

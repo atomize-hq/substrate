@@ -424,7 +424,6 @@ impl ShellConfig {
 
         // Handle --replay flag
         if let Some(span_id) = cli.replay.clone() {
-            let _ = set_global_broker(BrokerHandle::new());
             let _ = set_global_trace_context(TraceContext::default());
             if let Err(e) = init_trace(None) {
                 eprintln!("substrate: warning: failed to initialize trace: {}", e);
@@ -432,6 +431,39 @@ impl ShellConfig {
             if cli.replay_verbose {
                 env::set_var("SUBSTRATE_REPLAY_VERBOSE", "1");
             }
+            let launch_cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            let cli_caged = if cli.caged {
+                Some(true)
+            } else if cli.uncaged {
+                Some(false)
+            } else {
+                None
+            };
+            let world_root_settings = resolve_world_root(
+                cli.anchor_mode.map(WorldRootMode::from),
+                cli.anchor_path.clone(),
+                cli_caged,
+                &launch_cwd,
+            )?;
+            apply_world_root_env(&world_root_settings);
+
+            let cli_world_enabled = if cli.world {
+                Some(true)
+            } else if cli.no_world {
+                Some(false)
+            } else {
+                None
+            };
+            let effective = crate::execution::config_model::resolve_effective_config(
+                &launch_cwd,
+                &crate::execution::config_model::CliConfigOverrides {
+                    world_enabled: cli_world_enabled,
+                    ..Default::default()
+                },
+            )?;
+            env::set_var("SUBSTRATE_POLICY_MODE", effective.policy.mode.as_str());
+            let _ = set_global_broker(BrokerHandle::new());
+            update_world_env(!effective.world.enabled);
             handle_replay_command(&span_id, &cli)?;
             std::process::exit(0);
         }
@@ -544,7 +576,7 @@ impl ShellConfig {
         {
             use crate::execution::platform_world::windows;
 
-            let _ = windows::ensure_world_ready(&cli);
+            let _ = windows::ensure_world_ready_with_state(&cli, final_no_world);
         }
         let shell_path = if let Some(shell) = cli.shell {
             shell

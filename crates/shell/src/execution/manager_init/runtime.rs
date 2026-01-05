@@ -9,6 +9,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::process::Stdio;
 use tempfile::NamedTempFile;
 use tracing::debug;
 use which::which;
@@ -235,8 +236,17 @@ pub(crate) fn detect_script(script: &str, platform: Platform) -> Result<Option<S
 fn run_detect_script(script: &str, platform: Platform) -> Result<bool> {
     let mut cmd = match platform {
         Platform::Windows => {
-            let mut command = Command::new("powershell");
-            command.arg("-NoProfile").arg("-Command").arg(script);
+            let shell = if which("pwsh").is_ok() {
+                "pwsh"
+            } else {
+                "powershell"
+            };
+            let mut command = Command::new(shell);
+            command
+                .arg("-NoProfile")
+                .arg("-NonInteractive")
+                .arg("-Command")
+                .arg(script);
             command
         }
         Platform::Linux | Platform::MacOs => {
@@ -247,6 +257,7 @@ fn run_detect_script(script: &str, platform: Platform) -> Result<bool> {
         }
     };
 
+    cmd.stdin(Stdio::null());
     let status = cmd.status()?;
     Ok(status.success())
 }

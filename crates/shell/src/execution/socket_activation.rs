@@ -3,6 +3,7 @@
 use std::env;
 use std::path::Path;
 use std::process::Command;
+use std::process::Stdio;
 use std::sync::{Mutex, OnceLock};
 
 const SOCKET_PATH: &str = "/run/substrate.sock";
@@ -158,11 +159,13 @@ fn is_socket_active(unit: &SystemdUnitStatus) -> bool {
 
 fn read_unit(unit: &'static str) -> Result<Option<SystemdUnitStatus>, String> {
     let output = Command::new("systemctl")
+        .arg("--no-pager")
         .arg("show")
         .arg(unit)
         .arg("--property=ActiveState")
         .arg("--property=UnitFileState")
         .arg("--property=Listen")
+        .stdin(Stdio::null())
         .output()
         .map_err(|err| format!("failed to invoke systemctl: {err}"))?;
 

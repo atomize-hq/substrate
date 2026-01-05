@@ -142,8 +142,9 @@ impl LayeringFixture {
             .env("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR", &self.guest_bin_dir)
             .env("SUBSTRATE_WORLD_DEPS_EXECUTOR_LOG", &self.executor_log_path)
             // Force the backend unavailable so non-mac platforms fall back to host execution.
-            .env("SUBSTRATE_WORLD", "enabled")
-            .env("SUBSTRATE_WORLD_ENABLED", "1")
+            .env_remove("SUBSTRATE_WORLD")
+            .env_remove("SUBSTRATE_WORLD_ENABLED")
+            .env("SUBSTRATE_OVERRIDE_WORLD", "enabled")
             .env("SUBSTRATE_WORLD_SOCKET", &self.fake_socket_path)
             .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
             .env_remove("SHIM_ORIGINAL_PATH");

@@ -122,22 +122,27 @@ fn assert_json_bool(json: &JsonValue, pointer: &str, expected: bool) {
 }
 
 #[test]
-fn config_show_requires_workspace() {
+fn config_show_resolves_without_workspace() {
     let fixture = ConfigShowFixture::new();
     let cwd = fixture._temp.path().join("not-a-workspace");
     fs::create_dir_all(&cwd).expect("create cwd");
 
-    let output = fixture.show_json(&cwd, &[], &[]);
+    let output = fixture.show_json(
+        &cwd,
+        &[],
+        &[
+            ("SUBSTRATE_OVERRIDE_POLICY_MODE", "disabled"),
+            ("SUBSTRATE_OVERRIDE_CAGED", "0"),
+        ],
+    );
     assert_eq!(
         output.status.code(),
-        Some(2),
-        "missing workspace should exit 2: {output:?}"
+        Some(0),
+        "config show without a workspace should succeed: {output:?}"
     );
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("not in a workspace") && stderr.contains("substrate workspace init"),
-        "missing-workspace message should direct init\nstderr: {stderr}"
-    );
+    let json: JsonValue = serde_json::from_slice(&output.stdout).expect("config show JSON parse");
+    assert_json_str(&json, "/policy/mode", "disabled");
+    assert_json_bool(&json, "/world/caged", false);
 }
 
 #[test]
@@ -183,15 +188,15 @@ fn config_show_resolves_effective_config_with_precedence() {
             "--uncaged",
         ],
         &[
-            ("SUBSTRATE_WORLD", "disabled"),
-            ("SUBSTRATE_ANCHOR_MODE", "custom"),
-            ("SUBSTRATE_ANCHOR_PATH", "/env/anchor"),
-            ("SUBSTRATE_CAGED", "1"),
-            ("SUBSTRATE_POLICY_MODE", "enforce"),
-            ("SUBSTRATE_SYNC_AUTO_SYNC", "1"),
-            ("SUBSTRATE_SYNC_DIRECTION", "both"),
-            ("SUBSTRATE_SYNC_CONFLICT_POLICY", "abort"),
-            ("SUBSTRATE_SYNC_EXCLUDE", "env-a,env-b"),
+            ("SUBSTRATE_OVERRIDE_WORLD", "disabled"),
+            ("SUBSTRATE_OVERRIDE_ANCHOR_MODE", "custom"),
+            ("SUBSTRATE_OVERRIDE_ANCHOR_PATH", "/env/anchor"),
+            ("SUBSTRATE_OVERRIDE_CAGED", "1"),
+            ("SUBSTRATE_OVERRIDE_POLICY_MODE", "enforce"),
+            ("SUBSTRATE_OVERRIDE_SYNC_AUTO_SYNC", "1"),
+            ("SUBSTRATE_OVERRIDE_SYNC_DIRECTION", "both"),
+            ("SUBSTRATE_OVERRIDE_SYNC_CONFLICT_POLICY", "abort"),
+            ("SUBSTRATE_OVERRIDE_SYNC_EXCLUDE", "env-a,env-b"),
         ],
     );
     assert!(

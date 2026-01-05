@@ -1,30 +1,24 @@
-use crate::builtins::world_enable;
 use anyhow::{bail, Result};
 use std::env;
-use substrate_common::paths as substrate_paths;
+use std::path::PathBuf;
 
 pub(crate) struct WorldState {
     pub(crate) cli_force_world: bool,
     cli_disabled: bool,
-    env_disabled: bool,
     config_disabled: bool,
 }
 
 impl WorldState {
     pub(crate) fn detect(cli_no_world: bool, cli_force_world: bool) -> Result<Self> {
-        let env_disabled = env::var("SUBSTRATE_WORLD")
-            .map(|value| value.eq_ignore_ascii_case("disabled"))
-            .unwrap_or(false)
-            || env::var("SUBSTRATE_WORLD_ENABLED")
-                .map(|value| value == "0")
-                .unwrap_or(false);
-
-        let install_config = world_enable::load_install_config(&substrate_paths::config_file()?)?;
+        let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let cfg = crate::execution::config_model::resolve_effective_config(
+            &cwd,
+            &crate::execution::config_model::CliConfigOverrides::default(),
+        )?;
         Ok(Self {
             cli_force_world,
             cli_disabled: cli_no_world,
-            env_disabled,
-            config_disabled: !install_config.world_enabled,
+            config_disabled: !cfg.world.enabled,
         })
     }
 
@@ -36,7 +30,7 @@ impl WorldState {
         if self.cli_force_world {
             return false;
         }
-        self.cli_disabled || self.env_disabled || self.config_disabled
+        self.cli_disabled || self.config_disabled
     }
 
     pub(crate) fn ensure_enabled(&self) -> Result<()> {
@@ -58,10 +52,8 @@ impl WorldState {
         }
         if self.cli_disabled {
             Some("--no-world flag is active".to_string())
-        } else if self.env_disabled {
-            Some("SUBSTRATE_WORLD=disabled".to_string())
         } else if self.config_disabled {
-            Some("global config reports world disabled".to_string())
+            Some("effective config reports world disabled".to_string())
         } else {
             None
         }
@@ -163,15 +155,16 @@ mod tests {
         let prev_home = set_env("HOME", &home.display().to_string());
         let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
         let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home.display().to_string());
-        let prev_world = set_env("SUBSTRATE_WORLD", "disabled");
-        let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "0");
+        let prev_override = set_env("SUBSTRATE_OVERRIDE_WORLD", "disabled");
 
         let state = WorldState::detect(false, false).expect("detect world state");
         assert!(state.is_disabled());
-        assert_eq!(state.reason().as_deref(), Some("SUBSTRATE_WORLD=disabled"));
+        assert_eq!(
+            state.reason().as_deref(),
+            Some("effective config reports world disabled")
+        );
 
-        restore_env("SUBSTRATE_WORLD", prev_world);
-        restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
+        restore_env("SUBSTRATE_OVERRIDE_WORLD", prev_override);
         restore_env("SUBSTRATE_HOME", prev_substrate_home);
         restore_env("USERPROFILE", prev_userprofile);
         restore_env("HOME", prev_home);
@@ -188,8 +181,10 @@ mod tests {
         let prev_home = set_env("HOME", &home.display().to_string());
         let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
         let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home.display().to_string());
+        let prev_override = env::var("SUBSTRATE_OVERRIDE_WORLD").ok();
         let prev_world = env::var("SUBSTRATE_WORLD").ok();
         let prev_world_enabled = env::var("SUBSTRATE_WORLD_ENABLED").ok();
+        env::remove_var("SUBSTRATE_OVERRIDE_WORLD");
         env::remove_var("SUBSTRATE_WORLD");
         env::remove_var("SUBSTRATE_WORLD_ENABLED");
 
@@ -197,11 +192,12 @@ mod tests {
         assert!(state.is_disabled());
         assert_eq!(
             state.reason().as_deref(),
-            Some("global config reports world disabled")
+            Some("effective config reports world disabled")
         );
 
         restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
         restore_env("SUBSTRATE_WORLD", prev_world);
+        restore_env("SUBSTRATE_OVERRIDE_WORLD", prev_override);
         restore_env("SUBSTRATE_HOME", prev_substrate_home);
         restore_env("USERPROFILE", prev_userprofile);
         restore_env("HOME", prev_home);
