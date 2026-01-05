@@ -83,3 +83,10 @@
 - Feature: `docs/project_management/next/env_var_taxonomy_and_override_split/`
 - Branch: `feat/env_var_taxonomy_and_override_split`
 - Goal: Run the feature-level execution preflight gate and produce a concrete recommendation before starting EV0 triads.
+
+## END — 2026-01-05T01:46:39Z — F0-exec-preflight — execution preflight gate
+- Recommendation: `ACCEPT` (EV0 triads may begin)
+- Report: `docs/project_management/next/env_var_taxonomy_and_override_split/execution_preflight_report.md`
+- Notes:
+  - External prerequisite `PCP0-integ` is marked `completed` in `docs/project_management/next/policy_and_config_precedence/tasks.json`.
+  - CI dispatch uses `make feature-smoke ... RUNNER_KIND=self-hosted`; confirm runner labels exist before dispatching.

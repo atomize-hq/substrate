@@ -1,6 +1,6 @@
 # Execution Preflight Gate Report — env_var_taxonomy_and_override_split
 
-Date (UTC): 2026-01-04T00:00:00Z
+Date (UTC): 2026-01-05T01:44:56Z
 
 Standard:
 - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
@@ -10,16 +10,16 @@ Feature directory:
 
 ## Recommendation
 
-RECOMMENDATION: **ACCEPT** | **REVISE**
+RECOMMENDATION: **ACCEPT**
 
 ## Inputs Reviewed
 
-- [ ] ADR accepted and still matches intent
-- [ ] Planning Pack complete (`plan.md`, `tasks.json`, `session_log.md`, specs, kickoff prompts)
-- [ ] Triad sizing is appropriate (each slice is one behavior delta; no “grab bag” slices)
-- [ ] Cross-platform plan is explicit (`tasks.json` meta: platforms + WSL mode if needed)
-- [ ] `manual_testing_playbook.md` exists and is runnable
-- [ ] Smoke scripts exist and map to the manual playbook
+- [x] ADR accepted and still matches intent
+- [x] Planning Pack complete (`plan.md`, `tasks.json`, `session_log.md`, specs, kickoff prompts)
+- [x] Triad sizing is appropriate (each slice is one behavior delta; no “grab bag” slices)
+- [x] Cross-platform plan is explicit (`tasks.json` meta: platforms + WSL mode if needed)
+- [x] `manual_testing_playbook.md` exists and is runnable
+- [x] Smoke scripts exist and map to the manual playbook
 
 ## Cross-Platform Coverage
 
@@ -33,12 +33,23 @@ RECOMMENDATION: **ACCEPT** | **REVISE**
 - Windows smoke: `docs/project_management/next/env_var_taxonomy_and_override_split/smoke/windows-smoke.ps1`
 
 Notes:
-- 
+- Smoke scripts mirror the playbook’s observable checks:
+  - baseline config propagation (`observe`)
+  - legacy exported-state env var does not override config
+  - `SUBSTRATE_OVERRIDE_*` does override config (no workspace)
+  - workspace config wins over `SUBSTRATE_OVERRIDE_*`
+  - invalid override value yields exit code `2`
 
 ## CI Dispatch Readiness
 
-- [ ] Dispatch commands in integration tasks are correct and runnable
-- [ ] Required self-hosted runners exist and are labeled correctly
+- [x] Dispatch commands in integration tasks are correct and runnable
+  - `make feature-smoke ...` target exists and dispatches `.github/workflows/feature-smoke.yml` via `scripts/ci/dispatch_feature_smoke.sh`.
+- [x] Required self-hosted runners exist and are labeled correctly
+  - Expected labels (from `.github/workflows/feature-smoke.yml`):
+    - Linux: `[self-hosted, Linux, linux-host]`
+    - macOS: `[self-hosted, macOS]`
+    - Windows: `[self-hosted, Windows]`
+  - Note: runner availability cannot be proven from this repo checkout; confirm in GitHub Actions before dispatching.
 
 Run ids/URLs (if executed during preflight):
 - Linux:
@@ -47,5 +58,4 @@ Run ids/URLs (if executed during preflight):
 
 ## Required Fixes Before Starting EV0 (if any)
 
-- 
-
+- None.
