@@ -231,6 +231,9 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Prevent sleep (macOS self-hosted)
+        run: caffeinate -dimsu &
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
