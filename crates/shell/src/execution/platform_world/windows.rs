@@ -160,7 +160,6 @@ pub fn current_dir_wsl() -> Result<String> {
 mod tests {
     use super::*;
     use anyhow::anyhow;
-    use clap::Parser;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use world_api::{ExecRequest, ExecResult, FsDiff, WorldHandle};
