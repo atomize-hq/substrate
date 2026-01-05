@@ -127,7 +127,30 @@ fi
 
 run_url="$(gh run view "${run_id}" --json url -q '.url' 2>/dev/null || true)"
 
-gh run watch "${run_id}" >&2
+watch_interval_secs="${CI_TESTING_WATCH_INTERVAL_SECS:-15}"
+watch_timeout_secs="${CI_TESTING_WATCH_TIMEOUT_SECS:-21600}" # 6h
+started_watch_at="$(date +%s)"
+
+echo "Watching run status (interval=${watch_interval_secs}s timeout=${watch_timeout_secs}s)..." >&2
+while true; do
+    status="$(gh run view "${run_id}" --json status -q '.status' 2>/dev/null || true)"
+    if [[ -z "${status}" ]]; then
+        # Transient gh/API failures are common; keep polling.
+        sleep "${watch_interval_secs}"
+        continue
+    fi
+    if [[ "${status}" == "completed" ]]; then
+        break
+    fi
+
+    now="$(date +%s)"
+    elapsed="$((now - started_watch_at))"
+    if [[ "${elapsed}" -ge "${watch_timeout_secs}" ]]; then
+        die "Timed out waiting for CI Testing run ${run_id} to complete after ${elapsed}s"
+    fi
+
+    sleep "${watch_interval_secs}"
+done
 conclusion="$(gh run view "${run_id}" --json conclusion -q '.conclusion' 2>/dev/null || true)"
 
 jobs_json="$(gh run view "${run_id}" --json jobs 2>/dev/null || true)"
@@ -200,4 +223,3 @@ fi
 if [[ "${conclusion}" != "success" ]]; then
     exit 1
 fi
-
