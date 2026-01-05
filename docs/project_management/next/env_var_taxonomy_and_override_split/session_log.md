@@ -78,3 +78,8 @@
 - Next steps:
   - Quality gate reviewer: run `make planning-lint` and fill `quality_gate_report.md`.
   - Operator: run `F0-exec-preflight`, then start EV0 via `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/env_var_taxonomy_and_override_split" SLICE_ID="EV0" LAUNCH_CODEX=1`.
+
+## START — 2026-01-05T01:44:56Z — F0-exec-preflight — execution preflight gate
+- Feature: `docs/project_management/next/env_var_taxonomy_and_override_split/`
+- Branch: `feat/env_var_taxonomy_and_override_split`
+- Goal: Run the feature-level execution preflight gate and produce a concrete recommendation before starting EV0 triads.
