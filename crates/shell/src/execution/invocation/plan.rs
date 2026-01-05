@@ -576,7 +576,7 @@ impl ShellConfig {
         {
             use crate::execution::platform_world::windows;
 
-            let _ = windows::ensure_world_ready_with_state(&cli, final_no_world);
+            let _ = windows::ensure_world_ready_with_state(final_no_world);
         }
         let shell_path = if let Some(shell) = cli.shell {
             shell

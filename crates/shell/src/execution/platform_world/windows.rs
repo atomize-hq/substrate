@@ -2,7 +2,6 @@ use super::{PlatformWorldContext, WorldTransport};
 use crate::execution::settings;
 #[cfg(test)]
 use crate::execution::world_env_guard;
-use crate::Cli;
 use agent_api_client::{AgentClient, Transport};
 use anyhow::Result;
 use std::path::PathBuf;
@@ -52,19 +51,12 @@ fn socket_path_from_transport(transport: &Transport) -> PathBuf {
         Transport::Tcp { .. } => PathBuf::new(),
     }
 }
-pub fn ensure_world_ready(cli: &Cli) -> Result<Option<String>> {
-    ensure_world_ready_impl(cli, false, get_backend)
+
+pub fn ensure_world_ready_with_state(no_world: bool) -> Result<Option<String>> {
+    ensure_world_ready_impl(no_world, get_backend)
 }
 
-pub fn ensure_world_ready_with_state(cli: &Cli, no_world: bool) -> Result<Option<String>> {
-    ensure_world_ready_impl(cli, no_world, get_backend)
-}
-
-fn ensure_world_ready_impl<F>(
-    cli: &Cli,
-    no_world: bool,
-    backend_provider: F,
-) -> Result<Option<String>>
+fn ensure_world_ready_impl<F>(no_world: bool, backend_provider: F) -> Result<Option<String>>
 where
     F: FnOnce() -> Result<Arc<dyn WorldBackend>>,
 {
@@ -213,11 +205,10 @@ mod tests {
         std::env::remove_var("SUBSTRATE_WORLD");
         std::env::remove_var("SUBSTRATE_WORLD_ID");
 
-        let cli = Cli::parse_from(["substrate"]);
         let calls = Arc::new(AtomicUsize::new(0));
         let backend = Arc::new(StubBackend::new("wld_test", calls.clone()));
 
-        let result = ensure_world_ready_impl(&cli, false, || Ok(backend.clone())).unwrap();
+        let result = ensure_world_ready_impl(false, || Ok(backend.clone())).unwrap();
         assert_eq!(result.as_deref(), Some("wld_test"));
         assert_eq!(std::env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
         assert_eq!(std::env::var("SUBSTRATE_WORLD_ID").unwrap(), "wld_test");
@@ -233,11 +224,10 @@ mod tests {
         std::env::set_var("SUBSTRATE_WORLD", "disabled");
         std::env::remove_var("SUBSTRATE_WORLD_ID");
 
-        let cli = Cli::parse_from(["substrate", "--world"]);
         let calls = Arc::new(AtomicUsize::new(0));
         let backend = Arc::new(StubBackend::new("wld_forced", calls.clone()));
 
-        let result = ensure_world_ready_impl(&cli, false, || Ok(backend.clone())).unwrap();
+        let result = ensure_world_ready_impl(false, || Ok(backend.clone())).unwrap();
         assert_eq!(result.as_deref(), Some("wld_forced"));
         assert_eq!(std::env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
         assert_eq!(std::env::var("SUBSTRATE_WORLD_ID").unwrap(), "wld_forced");
@@ -253,11 +243,10 @@ mod tests {
         std::env::remove_var("SUBSTRATE_WORLD");
         std::env::remove_var("SUBSTRATE_WORLD_ID");
 
-        let cli = Cli::parse_from(["substrate", "--no-world"]);
         let calls = Arc::new(AtomicUsize::new(0));
         let backend = Arc::new(StubBackend::new("wld_test", calls.clone()));
 
-        let result = ensure_world_ready_impl(&cli, true, || Ok(backend.clone())).unwrap();
+        let result = ensure_world_ready_impl(true, || Ok(backend.clone())).unwrap();
         assert!(result.is_none());
         assert_eq!(calls.load(Ordering::SeqCst), 0);
 
