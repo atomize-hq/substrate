@@ -263,6 +263,7 @@ triad-orch-ensure:
 	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
 	@set -euo pipefail; \
 	cmd="scripts/triad/orch_ensure.sh --feature-dir \"$(FEATURE_DIR)\""; \
+	if [ -n "$(FROM_BRANCH)" ]; then cmd="$$cmd --from-branch \"$(FROM_BRANCH)\""; fi; \
 	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
 	eval "$$cmd"
 

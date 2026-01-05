@@ -4,12 +4,12 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  scripts/triad/orch_ensure.sh --feature-dir <path> [--dry-run]
+  scripts/triad/orch_ensure.sh --feature-dir <path> [--from-branch <branch>] [--dry-run]
 
 Behavior:
   - Ensures the feature orchestration branch exists locally and is checked out.
   - If missing locally but present on remote: fetches and sets upstream tracking.
-  - If missing both locally and remote: creates the branch from <remote>/HEAD and pushes (-u).
+  - If missing both locally and remote: creates the branch from <branch> (default: testing) and pushes (-u).
 
 Constraints:
   - Requires an automation-enabled planning pack (tasks.json meta.schema_version >= 3 and meta.automation.enabled=true).
@@ -81,11 +81,16 @@ branch_checked_out_elsewhere() {
 
 FEATURE_DIR=""
 DRY_RUN=0
+FROM_BRANCH="testing"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --feature-dir)
             FEATURE_DIR="${2:-}"
+            shift 2
+            ;;
+        --from-branch)
+            FROM_BRANCH="${2:-}"
             shift 2
             ;;
         --dry-run)
@@ -105,6 +110,10 @@ done
 if [[ -z "${FEATURE_DIR}" ]]; then
     usage >&2
     die "Missing --feature-dir"
+fi
+if [[ -z "${FROM_BRANCH}" ]]; then
+    usage >&2
+    die "Missing --from-branch value"
 fi
 
 require_cmd git
@@ -146,6 +155,21 @@ if [[ -z "${remote}" ]]; then
     die "No git remotes configured; cannot set up orchestration branch ${ORCH_BRANCH}"
 fi
 
+resolve_from_ref() {
+    local remote="$1"
+    local from="$2"
+
+    if git rev-parse --verify --quiet "${remote}/${from}^{commit}" >/dev/null 2>&1; then
+        echo "${remote}/${from}"
+        return 0
+    fi
+    if git rev-parse --verify --quiet "${from}^{commit}" >/dev/null 2>&1; then
+        echo "${from}"
+        return 0
+    fi
+    return 1
+}
+
 action="noop"
 if [[ "$(git rev-parse --abbrev-ref HEAD)" != "${ORCH_BRANCH}" ]]; then
     if git show-ref --verify --quiet "refs/heads/${ORCH_BRANCH}"; then
@@ -163,14 +187,15 @@ if [[ "$(git rev-parse --abbrev-ref HEAD)" != "${ORCH_BRANCH}" ]]; then
             git checkout "${ORCH_BRANCH}" >/dev/null
         fi
     else
-        log "Creating orchestration branch from ${remote}/HEAD and pushing: ${ORCH_BRANCH}"
-        action="create_from_remote_head_push"
+        log "Creating orchestration branch from ${FROM_BRANCH} and pushing: ${ORCH_BRANCH}"
+        action="create_from_branch_push"
         if [[ "${DRY_RUN}" -ne 1 ]]; then
             git fetch "${remote}" --prune >/dev/null
-            if ! git rev-parse --verify --quiet "${remote}/HEAD" >/dev/null 2>&1; then
-                die "Remote HEAD not available for ${remote}; cannot safely create orchestration branch"
+            from_ref="$(resolve_from_ref "${remote}" "${FROM_BRANCH}")" || die "Base branch not found (local or ${remote}): ${FROM_BRANCH}"
+            if [[ "${from_ref}" == "${remote}/"* ]]; then
+                git fetch "${remote}" "${FROM_BRANCH}" >/dev/null
             fi
-            git checkout -b "${ORCH_BRANCH}" "${remote}/HEAD" >/dev/null
+            git checkout -b "${ORCH_BRANCH}" "${from_ref}" >/dev/null
             git push -u "${remote}" "${ORCH_BRANCH}" >/dev/null
         fi
     fi
@@ -185,4 +210,3 @@ fi
 printf 'ORCH_BRANCH=%s\n' "${ORCH_BRANCH}"
 printf 'REMOTE=%s\n' "${remote}"
 printf 'ACTION=%s\n' "${action}"
-
