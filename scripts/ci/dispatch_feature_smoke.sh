@@ -23,7 +23,68 @@ What it does:
 Requirements:
   - `gh` CLI installed and authenticated
   - Push access to the configured remote
+
+Stdout contract (machine-parseable):
+  HEAD=<sha>
+  TEMP_BRANCH=<branch>
+  RUN_ID=<id>
+  RUN_URL=<url or empty>
+  CONCLUSION=<conclusion>
+  SMOKE_PASSED_PLATFORMS=<csv or empty>
+  SMOKE_FAILED_PLATFORMS=<csv or empty>
 USAGE
+}
+
+die() {
+    echo "ERROR: $*" >&2
+    exit 2
+}
+
+require_cmd() {
+    if ! command -v "$1" >/dev/null 2>&1; then
+        die "Missing dependency: $1"
+    fi
+}
+
+run_with_timeout() {
+    local timeout_secs="$1"
+    shift
+
+    if command -v timeout >/dev/null 2>&1; then
+        timeout -k 10s "${timeout_secs}s" "$@"
+        return $?
+    fi
+    if command -v gtimeout >/dev/null 2>&1; then
+        gtimeout -k 10s "${timeout_secs}s" "$@"
+        return $?
+    fi
+
+    python3 - "$timeout_secs" "$@" <<'PY'
+import os
+import signal
+import subprocess
+import sys
+
+timeout_secs = float(sys.argv[1])
+cmd = sys.argv[2:]
+
+proc = subprocess.Popen(cmd, start_new_session=True)
+try:
+    raise SystemExit(proc.wait(timeout=timeout_secs))
+except subprocess.TimeoutExpired:
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        raise SystemExit(124)
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    raise SystemExit(124)
+PY
 }
 
 FEATURE_DIR=""
@@ -87,9 +148,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "${FEATURE_DIR}" || -z "${PLATFORM}" ]]; then
-    echo "Missing required args" >&2
     usage >&2
-    exit 2
+    die "Missing required args: --feature-dir and --platform"
 fi
 
 case "${PLATFORM}" in
@@ -110,35 +170,41 @@ case "${RUNNER_KIND}" in
         ;;
 esac
 
-if ! command -v gh >/dev/null 2>&1; then
-    echo "Missing dependency: gh (GitHub CLI)" >&2
-    exit 3
-fi
+require_cmd git
+require_cmd gh
+require_cmd python3
 
 if ! gh api user >/dev/null 2>&1; then
-    echo "GitHub CLI auth is not usable (token invalid or missing). Fix with: gh auth login -h github.com (or set GH_TOKEN for non-interactive runs)." >&2
-    exit 3
+    die "GitHub CLI auth is not usable (token invalid or missing). Fix with: gh auth login -h github.com (or set GH_TOKEN for non-interactive runs)."
 fi
 
 if [[ -z "${WORKFLOW_REF}" ]]; then
-    echo "Missing --workflow-ref" >&2
     usage >&2
-    exit 2
+    die "Missing --workflow-ref"
 fi
+
+GIT_PUSH_TIMEOUT_SECS="${FEATURE_SMOKE_GIT_PUSH_TIMEOUT_SECS:-300}"
+GH_TIMEOUT_SECS="${FEATURE_SMOKE_GH_TIMEOUT_SECS:-120}"
+WATCH_INTERVAL_SECS="${FEATURE_SMOKE_WATCH_INTERVAL_SECS:-15}"
+WATCH_TIMEOUT_SECS="${FEATURE_SMOKE_WATCH_TIMEOUT_SECS:-21600}" # 6h
+WATCH_MAX_CONSECUTIVE_ERRORS="${FEATURE_SMOKE_WATCH_MAX_CONSECUTIVE_ERRORS:-20}"
+RUN_LOOKUP_TIMEOUT_SECS="${FEATURE_SMOKE_RUN_LOOKUP_TIMEOUT_SECS:-120}"
 
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 safe_feature="$(basename "${FEATURE_DIR}")"
 temp_branch="tmp/feature-smoke/${safe_feature}/${PLATFORM}/${ts}"
 
 head_sha="$(git rev-parse HEAD)"
-echo "HEAD: ${head_sha}"
-echo "Temp branch: ${temp_branch}"
+echo "HEAD: ${head_sha}" >&2
+echo "Temp branch: ${temp_branch}" >&2
 
 git branch -f "${temp_branch}" "${head_sha}"
-git push -u "${REMOTE}" "${temp_branch}:${temp_branch}"
+if ! run_with_timeout "${GIT_PUSH_TIMEOUT_SECS}" git push -u "${REMOTE}" "${temp_branch}:${temp_branch}" >&2; then
+    die "git push timed out or failed (branch=${temp_branch})"
+fi
 
-echo "Dispatching workflow: ${WORKFLOW}"
-echo "Workflow ref: ${WORKFLOW_REF}"
+echo "Dispatching workflow: ${WORKFLOW}" >&2
+echo "Workflow ref: ${WORKFLOW_REF}" >&2
 dispatch_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 run_wsl_flag="false"
 run_integ_checks_flag="false"
@@ -148,60 +214,76 @@ fi
 if [[ "${RUN_INTEG_CHECKS}" -eq 1 ]]; then
     run_integ_checks_flag="true"
 fi
-gh workflow run "${WORKFLOW}" --ref "${WORKFLOW_REF}" \
+if ! run_with_timeout "${GH_TIMEOUT_SECS}" gh workflow run "${WORKFLOW}" --ref "${WORKFLOW_REF}" \
     -f feature_dir="${FEATURE_DIR}" \
     -f checkout_ref="${temp_branch}" \
     -f runner_kind="${RUNNER_KIND}" \
     -f platform="${PLATFORM}" \
     -f run_wsl="${run_wsl_flag}" \
-    -f run_integ_checks="${run_integ_checks_flag}"
+    -f run_integ_checks="${run_integ_checks_flag}"; then
+    die "failed to dispatch workflow via gh (workflow=${WORKFLOW} ref=${WORKFLOW_REF})"
+fi
 
-echo "Waiting for run to start..."
-sleep 5
-
-run_id="$(gh run list --workflow "${WORKFLOW}" --event workflow_dispatch --branch "${WORKFLOW_REF}" --limit 20 --json databaseId,createdAt -q "map(select(.createdAt >= \"${dispatch_started}\")) | .[0].databaseId")"
+echo "Waiting for run to start..." >&2
+started_lookup_at="$(date +%s)"
+run_id=""
+while [[ -z "${run_id}" ]]; do
+    run_id="$(run_with_timeout "${GH_TIMEOUT_SECS}" gh run list --workflow "${WORKFLOW}" --event workflow_dispatch --branch "${WORKFLOW_REF}" --limit 20 --json databaseId,createdAt -q "map(select(.createdAt >= \"${dispatch_started}\")) | .[0].databaseId" 2>/dev/null || true)"
+    if [[ -n "${run_id}" ]]; then
+        break
+    fi
+    now="$(date +%s)"
+    if [[ $((now - started_lookup_at)) -ge "${RUN_LOOKUP_TIMEOUT_SECS}" ]]; then
+        die "Could not find a matching workflow run for ${temp_branch} after ${RUN_LOOKUP_TIMEOUT_SECS}s"
+    fi
+    sleep 5
+done
 if [[ -z "${run_id}" ]]; then
-    echo "Could not find a matching workflow run for ${temp_branch}" >&2
-    exit 4
+    die "Could not find a matching workflow run for ${temp_branch}"
 fi
 
-echo "Run: ${run_id}"
-echo "RUN_ID=${run_id}"
-run_url="$(gh run view "${run_id}" --json url -q '.url' 2>/dev/null || true)"
-if [[ -n "${run_url}" ]]; then
-    echo "RUN_URL=${run_url}"
-fi
-watch_interval_secs="${FEATURE_SMOKE_WATCH_INTERVAL_SECS:-15}"
-watch_timeout_secs="${FEATURE_SMOKE_WATCH_TIMEOUT_SECS:-21600}" # 6h
+echo "Run: ${run_id}" >&2
+run_url="$(run_with_timeout "${GH_TIMEOUT_SECS}" gh run view "${run_id}" --json url -q '.url' 2>/dev/null || true)"
 started_watch_at="$(date +%s)"
+next_heartbeat_at="$((started_watch_at + 60))"
+consecutive_errors=0
 
-echo "Watching run status (interval=${watch_interval_secs}s timeout=${watch_timeout_secs}s)..."
+echo "Watching run status (interval=${WATCH_INTERVAL_SECS}s timeout=${WATCH_TIMEOUT_SECS}s)..." >&2
 while true; do
-    status="$(gh run view "${run_id}" --json status -q '.status' 2>/dev/null || true)"
+    now="$(date +%s)"
+    elapsed="$((now - started_watch_at))"
+    if [[ "${elapsed}" -ge "${WATCH_TIMEOUT_SECS}" ]]; then
+        die "Timed out waiting for smoke run ${run_id} to complete after ${elapsed}s"
+    fi
+
+    status="$(run_with_timeout "${GH_TIMEOUT_SECS}" gh run view "${run_id}" --json status -q '.status' 2>/dev/null || true)"
     if [[ -z "${status}" ]]; then
-        # Transient gh/API failures are common; keep polling.
-        sleep "${watch_interval_secs}"
-        continue
+        consecutive_errors="$((consecutive_errors + 1))"
+        if [[ "${consecutive_errors}" -ge "${WATCH_MAX_CONSECUTIVE_ERRORS}" ]]; then
+            die "Repeated failures querying GitHub run status (run=${run_id})"
+        fi
+        status="unknown"
+    else
+        consecutive_errors=0
     fi
     if [[ "${status}" == "completed" ]]; then
         break
     fi
 
-    now="$(date +%s)"
-    elapsed="$((now - started_watch_at))"
-    if [[ "${elapsed}" -ge "${watch_timeout_secs}" ]]; then
-        echo "ERROR: Timed out waiting for smoke run ${run_id} to complete after ${elapsed}s" >&2
-        exit 5
+    if [[ "${now}" -ge "${next_heartbeat_at}" ]]; then
+        echo "  status=${status} elapsed_s=${elapsed} run=${run_id}" >&2
+        next_heartbeat_at="$((now + 60))"
     fi
 
-    sleep "${watch_interval_secs}"
+    sleep "${WATCH_INTERVAL_SECS}"
 done
-conclusion="$(gh run view "${run_id}" --json conclusion -q '.conclusion')"
-echo "Conclusion: ${conclusion}"
+conclusion="$(run_with_timeout "${GH_TIMEOUT_SECS}" gh run view "${run_id}" --json conclusion -q '.conclusion' 2>/dev/null || true)"
 
-platform_summary="$(gh run view "${run_id}" --json jobs 2>/dev/null || true)"
+platform_summary="$(run_with_timeout "${GH_TIMEOUT_SECS}" gh run view "${run_id}" --json jobs 2>/dev/null || true)"
+passed_csv=""
+failed_csv=""
 if [[ -n "${platform_summary}" ]]; then
-    python3 - "${platform_summary}" <<'PY' || true
+    parsed="$(python3 - "${platform_summary}" <<'PY' || true
 import json
 import sys
 
@@ -247,11 +329,24 @@ def csv(xs):
 print(f"SMOKE_PASSED_PLATFORMS={csv(passed)}")
 print(f"SMOKE_FAILED_PLATFORMS={csv(failed)}")
 PY
+)"
+    passed_csv="$(printf '%s\n' "${parsed}" | awk -F= '$1=="SMOKE_PASSED_PLATFORMS"{sub($1"=","",$0); print $0}')"
+    failed_csv="$(printf '%s\n' "${parsed}" | awk -F= '$1=="SMOKE_FAILED_PLATFORMS"{sub($1"=","",$0); print $0}')"
 fi
 
+printf 'HEAD=%s\n' "${head_sha}"
+printf 'TEMP_BRANCH=%s\n' "${temp_branch}"
+printf 'RUN_ID=%s\n' "${run_id}"
+printf 'RUN_URL=%s\n' "${run_url}"
+printf 'CONCLUSION=%s\n' "${conclusion}"
+printf 'SMOKE_PASSED_PLATFORMS=%s\n' "${passed_csv}"
+printf 'SMOKE_FAILED_PLATFORMS=%s\n' "${failed_csv}"
+
 if [[ "${CLEANUP}" -eq 1 ]]; then
-    echo "Cleaning up remote branch: ${temp_branch}"
-    git push "${REMOTE}" ":${temp_branch}"
+    echo "Cleaning up remote branch: ${temp_branch}" >&2
+    if ! run_with_timeout "${GIT_PUSH_TIMEOUT_SECS}" git push "${REMOTE}" ":${temp_branch}" >&2; then
+        echo "WARN: failed to delete remote branch (continuing): ${temp_branch}" >&2
+    fi
     git branch -D "${temp_branch}" >/dev/null 2>&1 || true
 fi
 
@@ -259,4 +354,4 @@ if [[ "${conclusion}" != "success" ]]; then
     exit 1
 fi
 
-echo "OK: feature smoke passed"
+echo "OK: feature smoke passed" >&2

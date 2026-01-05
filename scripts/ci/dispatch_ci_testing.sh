@@ -47,6 +47,48 @@ require_cmd() {
     fi
 }
 
+run_with_timeout() {
+    local timeout_secs="$1"
+    shift
+
+    if command -v timeout >/dev/null 2>&1; then
+        timeout -k 10s "${timeout_secs}s" "$@"
+        return $?
+    fi
+    if command -v gtimeout >/dev/null 2>&1; then
+        gtimeout -k 10s "${timeout_secs}s" "$@"
+        return $?
+    fi
+
+    # Cross-platform fallback (macOS often lacks `timeout`).
+    python3 - "$timeout_secs" "$@" <<'PY'
+import os
+import signal
+import subprocess
+import sys
+
+timeout_secs = float(sys.argv[1])
+cmd = sys.argv[2:]
+
+proc = subprocess.Popen(cmd, start_new_session=True)
+try:
+    raise SystemExit(proc.wait(timeout=timeout_secs))
+except subprocess.TimeoutExpired:
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        raise SystemExit(124)
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    raise SystemExit(124)
+PY
+}
+
 WORKFLOW=".github/workflows/ci-testing.yml"
 WORKFLOW_REF="testing"
 REMOTE="origin"
@@ -93,6 +135,13 @@ if ! gh api user >/dev/null 2>&1; then
     die "GitHub CLI auth is not usable (token invalid or missing). Fix with: gh auth login -h github.com (or set GH_TOKEN)."
 fi
 
+GIT_PUSH_TIMEOUT_SECS="${CI_TESTING_GIT_PUSH_TIMEOUT_SECS:-300}"
+GH_TIMEOUT_SECS="${CI_TESTING_GH_TIMEOUT_SECS:-120}"
+WATCH_INTERVAL_SECS="${CI_TESTING_WATCH_INTERVAL_SECS:-15}"
+WATCH_TIMEOUT_SECS="${CI_TESTING_WATCH_TIMEOUT_SECS:-21600}" # 6h
+WATCH_MAX_CONSECUTIVE_ERRORS="${CI_TESTING_WATCH_MAX_CONSECUTIVE_ERRORS:-20}"
+RUN_LOOKUP_TIMEOUT_SECS="${CI_TESTING_RUN_LOOKUP_TIMEOUT_SECS:-120}"
+
 if [[ -z "${WORKFLOW_REF}" ]]; then
     die "Missing --workflow-ref"
 fi
@@ -109,51 +158,74 @@ echo "HEAD: ${head_sha}" >&2
 echo "Temp branch: ${temp_branch}" >&2
 
 git branch -f "${temp_branch}" "${head_sha}"
-git push -u "${REMOTE}" "${temp_branch}:${temp_branch}" >&2
+if ! run_with_timeout "${GIT_PUSH_TIMEOUT_SECS}" git push -u "${REMOTE}" "${temp_branch}:${temp_branch}" >&2; then
+    die "git push timed out or failed (branch=${temp_branch})"
+fi
 
 echo "Dispatching workflow: ${WORKFLOW}" >&2
 echo "Workflow ref: ${WORKFLOW_REF}" >&2
 dispatch_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-gh workflow run "${WORKFLOW}" --ref "${WORKFLOW_REF}" -f checkout_ref="${temp_branch}" >&2
+if ! run_with_timeout "${GH_TIMEOUT_SECS}" gh workflow run "${WORKFLOW}" --ref "${WORKFLOW_REF}" -f checkout_ref="${temp_branch}" >&2; then
+    die "failed to dispatch workflow via gh (workflow=${WORKFLOW} ref=${WORKFLOW_REF})"
+fi
 
 echo "Waiting for run to start..." >&2
-sleep 5
-
-run_id="$(gh run list --workflow "${WORKFLOW}" --event workflow_dispatch --branch "${WORKFLOW_REF}" --limit 30 --json databaseId,createdAt -q "map(select(.createdAt >= \"${dispatch_started}\")) | .[0].databaseId")"
+started_lookup_at="$(date +%s)"
+run_id=""
+while [[ -z "${run_id}" ]]; do
+    run_id="$(run_with_timeout "${GH_TIMEOUT_SECS}" gh run list --workflow "${WORKFLOW}" --event workflow_dispatch --branch "${WORKFLOW_REF}" --limit 30 --json databaseId,createdAt -q "map(select(.createdAt >= \"${dispatch_started}\")) | .[0].databaseId" 2>/dev/null || true)"
+    if [[ -n "${run_id}" ]]; then
+        break
+    fi
+    now="$(date +%s)"
+    if [[ $((now - started_lookup_at)) -ge "${RUN_LOOKUP_TIMEOUT_SECS}" ]]; then
+        die "Could not find a matching workflow run for ${temp_branch} after ${RUN_LOOKUP_TIMEOUT_SECS}s"
+    fi
+    sleep 5
+done
 if [[ -z "${run_id}" ]]; then
     die "Could not find a matching workflow run for ${temp_branch}"
 fi
 
-run_url="$(gh run view "${run_id}" --json url -q '.url' 2>/dev/null || true)"
+run_url="$(run_with_timeout "${GH_TIMEOUT_SECS}" gh run view "${run_id}" --json url -q '.url' 2>/dev/null || true)"
 
-watch_interval_secs="${CI_TESTING_WATCH_INTERVAL_SECS:-15}"
-watch_timeout_secs="${CI_TESTING_WATCH_TIMEOUT_SECS:-21600}" # 6h
 started_watch_at="$(date +%s)"
+next_heartbeat_at="$((started_watch_at + 60))"
+consecutive_errors=0
 
-echo "Watching run status (interval=${watch_interval_secs}s timeout=${watch_timeout_secs}s)..." >&2
+echo "Watching run status (interval=${WATCH_INTERVAL_SECS}s timeout=${WATCH_TIMEOUT_SECS}s)..." >&2
 while true; do
-    status="$(gh run view "${run_id}" --json status -q '.status' 2>/dev/null || true)"
+    now="$(date +%s)"
+    elapsed="$((now - started_watch_at))"
+    if [[ "${elapsed}" -ge "${WATCH_TIMEOUT_SECS}" ]]; then
+        die "Timed out waiting for CI Testing run ${run_id} to complete after ${elapsed}s"
+    fi
+
+    status="$(run_with_timeout "${GH_TIMEOUT_SECS}" gh run view "${run_id}" --json status -q '.status' 2>/dev/null || true)"
     if [[ -z "${status}" ]]; then
-        # Transient gh/API failures are common; keep polling.
-        sleep "${watch_interval_secs}"
-        continue
+        consecutive_errors="$((consecutive_errors + 1))"
+        if [[ "${consecutive_errors}" -ge "${WATCH_MAX_CONSECUTIVE_ERRORS}" ]]; then
+            die "Repeated failures querying GitHub run status (run=${run_id})"
+        fi
+        status="unknown"
+    else
+        consecutive_errors=0
     fi
     if [[ "${status}" == "completed" ]]; then
         break
     fi
 
-    now="$(date +%s)"
-    elapsed="$((now - started_watch_at))"
-    if [[ "${elapsed}" -ge "${watch_timeout_secs}" ]]; then
-        die "Timed out waiting for CI Testing run ${run_id} to complete after ${elapsed}s"
+    if [[ "${now}" -ge "${next_heartbeat_at}" ]]; then
+        echo "  status=${status} elapsed_s=${elapsed} run=${run_id}" >&2
+        next_heartbeat_at="$((now + 60))"
     fi
 
-    sleep "${watch_interval_secs}"
+    sleep "${WATCH_INTERVAL_SECS}"
 done
-conclusion="$(gh run view "${run_id}" --json conclusion -q '.conclusion' 2>/dev/null || true)"
+conclusion="$(run_with_timeout "${GH_TIMEOUT_SECS}" gh run view "${run_id}" --json conclusion -q '.conclusion' 2>/dev/null || true)"
 
-jobs_json="$(gh run view "${run_id}" --json jobs 2>/dev/null || true)"
+jobs_json="$(run_with_timeout "${GH_TIMEOUT_SECS}" gh run view "${run_id}" --json jobs 2>/dev/null || true)"
 passed_oses=""
 failed_oses=""
 failed_jobs=""
@@ -216,7 +288,9 @@ printf 'CI_FAILED_JOBS=%s\n' "${failed_jobs}"
 
 if [[ "${CLEANUP}" -eq 1 ]]; then
     echo "Cleaning up remote branch: ${temp_branch}" >&2
-    git push "${REMOTE}" ":${temp_branch}" >&2 || true
+    if ! run_with_timeout "${GIT_PUSH_TIMEOUT_SECS}" git push "${REMOTE}" ":${temp_branch}" >&2; then
+        echo "WARN: failed to delete remote branch (continuing): ${temp_branch}" >&2
+    fi
     git branch -D "${temp_branch}" >/dev/null 2>&1 || true
 fi
 
