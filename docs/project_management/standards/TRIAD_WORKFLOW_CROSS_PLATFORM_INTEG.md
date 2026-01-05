@@ -14,6 +14,7 @@ Operational notes (important for correct orchestration):
 - CI smoke dispatch (`make feature-smoke ...`) validates the **current `HEAD`** by creating/pushing a throwaway branch at that commit; run it from the worktree that contains the code you intend to validate (e.g., the `X-integ-core` or `X-integ` worktree).
 - Platform-fix tasks should begin by merging the `X-integ-core` task branch into their own branch before running smoke or making fixes.
 - CI Testing is a separate, stricter gate than Feature Smoke; run it (via `scripts/ci/dispatch_ci_testing.sh`) before marking platform-fix tasks as no-ops when smoke is green, and again on the final `X-integ` commit before merging to `testing`.
+- The dispatch scripts are hardened with timeouts to avoid indefinite hangs; default max wait is **2 hours**. If you hit infra slowness, you can override via `FEATURE_SMOKE_WATCH_TIMEOUT_SECS` / `CI_TESTING_WATCH_TIMEOUT_SECS` (see `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`).
 
 This file includes two diagrams:
 - **Diagram A:** The overall cross-platform platform-fix triad flow.

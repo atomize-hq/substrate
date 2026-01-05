@@ -107,6 +107,29 @@ Helper script (requires `gh` auth):
   - Defaults to dispatching from a stable workflow ref (`feat/policy_and_config`) and using `RUNNER_KIND=self-hosted`.
   - For triad execution, set `WORKFLOW_REF` to the orchestration branch (typically `feat/<feature>`) so the workflow definition matches the feature branch.
 
+### Dispatcher timeouts (do not tune unless needed)
+
+The dispatchers are hardened to avoid “silent hang” failure modes (e.g., runner outages, `gh` API flakiness, or a stuck remote-branch cleanup).
+
+Defaults are intentionally generous for normal operation:
+- Overall wait for a workflow run to complete is **2 hours**.
+
+You should not need to change these, but if you must (infra incident, runner backlog), both dispatchers accept env var knobs:
+
+- Feature Smoke (`make feature-smoke` → `scripts/ci/dispatch_feature_smoke.sh`)
+  - `FEATURE_SMOKE_WATCH_TIMEOUT_SECS` (default `7200`)
+  - `FEATURE_SMOKE_WATCH_INTERVAL_SECS` (default `15`)
+  - `FEATURE_SMOKE_GH_TIMEOUT_SECS` (default `120`) — per `gh` call
+  - `FEATURE_SMOKE_GIT_PUSH_TIMEOUT_SECS` (default `300`) — push + cleanup
+  - `FEATURE_SMOKE_RUN_LOOKUP_TIMEOUT_SECS` (default `120`) — wait for run id to appear
+
+- CI Testing (`scripts/ci/dispatch_ci_testing.sh`)
+  - `CI_TESTING_WATCH_TIMEOUT_SECS` (default `7200`)
+  - `CI_TESTING_WATCH_INTERVAL_SECS` (default `15`)
+  - `CI_TESTING_GH_TIMEOUT_SECS` (default `120`) — per `gh` call
+  - `CI_TESTING_GIT_PUSH_TIMEOUT_SECS` (default `300`) — push + cleanup
+  - `CI_TESTING_RUN_LOOKUP_TIMEOUT_SECS` (default `120`) — wait for run id to appear
+
 ## Platform-fix note (important)
 
 GitHub Actions workflows in this repo are **validation mechanisms**. They run smoke scripts, but they do not commit fixes back to the repository.

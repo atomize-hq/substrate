@@ -65,6 +65,7 @@ SLICE_ID="<SET_ME>"      # e.g. PCP0
    - Run from the integ-core worktree (validates `INTEG_CORE_HEAD_SHA` via a throwaway branch):
      - `cd "$INTEG_CORE_WORKTREE" && scripts/ci/dispatch_ci_testing.sh --workflow-ref "$ORCH_BRANCH" --remote origin --cleanup`
    - Parse and report the CI Testing stdout contract: `RUN_ID`, `RUN_URL`, `CONCLUSION`, `CI_FAILED_OSES`, `CI_FAILED_JOBS`.
+   - The CI Testing dispatcher enforces a **2 hour** max wait by default; override only if needed via `CI_TESTING_WATCH_TIMEOUT_SECS`.
    - If CI Testing is green: continue to step (6).
    - If CI Testing fails:
      - Derive platforms to fix from `CI_FAILED_OSES`:
