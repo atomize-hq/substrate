@@ -258,8 +258,7 @@ fn pcm2_enforce_fails_closed_when_world_required_and_unavailable() {
 
     let output = fixture
         .command()
-        .env("SUBSTRATE_WORLD", "enabled")
-        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_OVERRIDE_WORLD", "enabled")
         .env("SUBSTRATE_WORLD_SOCKET", &missing_socket)
         .arg("-c")
         .arg(format!("echo {marker}"))

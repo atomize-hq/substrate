@@ -12,7 +12,7 @@ use tempfile::{Builder, TempDir};
 /// Return an `assert_cmd::Command` pre-configured to run `substrate`
 /// in host-only mode. This helper ensures we reuse the already-built binary,
 /// sets a shared TMPDIR for deterministic fixtures, and propagates the
-/// `SUBSTRATE_WORLD`/`SUBSTRATE_WORLD_ENABLED` overrides that bypass world init.
+/// `SUBSTRATE_OVERRIDE_WORLD=disabled` override that bypasses world init.
 pub fn substrate_shell_driver() -> Command {
     ensure_substrate_built();
 
@@ -20,8 +20,9 @@ pub fn substrate_shell_driver() -> Command {
     cmd.env("TMPDIR", shared_tmpdir());
     // Ensure tests are deterministic even when run from inside the shimmed substrate shell.
     cmd.env_remove("SHIM_ORIGINAL_PATH");
-    cmd.env("SUBSTRATE_WORLD", "disabled");
-    cmd.env("SUBSTRATE_WORLD_ENABLED", "0");
+    cmd.env_remove("SUBSTRATE_WORLD");
+    cmd.env_remove("SUBSTRATE_WORLD_ENABLED");
+    cmd.env("SUBSTRATE_OVERRIDE_WORLD", "disabled");
     cmd.env_remove("SUBSTRATE_WORLD_ID");
     cmd
 }

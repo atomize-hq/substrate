@@ -254,11 +254,9 @@ fn reconstruct_state_preserves_caged_anchor_env() {
 
     let _env_lock = ENV_LOCK.lock().unwrap();
     let _guard = EnvGuard::set(&[
-        ("SUBSTRATE_ANCHOR_MODE", "custom"),
-        ("SUBSTRATE_WORLD_ROOT_MODE", "custom"),
-        ("SUBSTRATE_ANCHOR_PATH", "/opt/caged-root"),
-        ("SUBSTRATE_WORLD_ROOT_PATH", "/opt/caged-root"),
-        ("SUBSTRATE_CAGED", "1"),
+        ("SUBSTRATE_OVERRIDE_ANCHOR_MODE", "custom"),
+        ("SUBSTRATE_OVERRIDE_ANCHOR_PATH", "/opt/caged-root"),
+        ("SUBSTRATE_OVERRIDE_CAGED", "1"),
     ]);
 
     let span = TraceSpan {
@@ -288,6 +286,10 @@ fn reconstruct_state_preserves_caged_anchor_env() {
         Some(&"/opt/caged-root".to_string())
     );
     assert_eq!(
+        exec_state.env.get("SUBSTRATE_ANCHOR_MODE"),
+        Some(&"custom".to_string())
+    );
+    assert_eq!(
         exec_state.env.get("SUBSTRATE_CAGED"),
         Some(&"1".to_string())
     );
@@ -301,11 +303,9 @@ fn reconstruct_state_preserves_uncaged_anchor_env() {
 
     let _env_lock = ENV_LOCK.lock().unwrap();
     let _guard = EnvGuard::set(&[
-        ("SUBSTRATE_ANCHOR_MODE", "project"),
-        ("SUBSTRATE_WORLD_ROOT_MODE", "project"),
-        ("SUBSTRATE_ANCHOR_PATH", "/srv/project"),
-        ("SUBSTRATE_WORLD_ROOT_PATH", "/srv/project"),
-        ("SUBSTRATE_CAGED", "0"),
+        ("SUBSTRATE_OVERRIDE_ANCHOR_MODE", "custom"),
+        ("SUBSTRATE_OVERRIDE_ANCHOR_PATH", "/srv/project"),
+        ("SUBSTRATE_OVERRIDE_CAGED", "0"),
     ]);
 
     let span = TraceSpan {
@@ -332,7 +332,11 @@ fn reconstruct_state_preserves_uncaged_anchor_env() {
     let exec_state = reconstruct_state(&span, &HashMap::new()).unwrap();
     assert_eq!(
         exec_state.env.get("SUBSTRATE_ANCHOR_MODE"),
-        Some(&"project".to_string())
+        Some(&"custom".to_string())
+    );
+    assert_eq!(
+        exec_state.env.get("SUBSTRATE_ANCHOR_PATH"),
+        Some(&"/srv/project".to_string())
     );
     assert_eq!(
         exec_state.env.get("SUBSTRATE_CAGED"),

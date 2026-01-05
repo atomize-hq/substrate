@@ -9,6 +9,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::process::Stdio;
 use tempfile::NamedTempFile;
 use tracing::debug;
 use which::which;
@@ -247,6 +248,7 @@ fn run_detect_script(script: &str, platform: Platform) -> Result<bool> {
         }
     };
 
+    cmd.stdin(Stdio::null());
     let status = cmd.status()?;
     Ok(status.success())
 }

@@ -73,8 +73,7 @@ fn base_env_cmd(
         .env("SHIM_TRACE_LOG", trace_path)
         .env("SUBSTRATE_CAGED", "0")
         .arg("--uncaged")
-        .env("SUBSTRATE_WORLD", "enabled")
-        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_OVERRIDE_WORLD", "enabled")
         .env("SUBSTRATE_WORLD_SOCKET", socket_path);
     cmd
 }

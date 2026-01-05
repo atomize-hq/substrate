@@ -222,6 +222,7 @@ pub(crate) fn resolve_effective_config(
     cli: &CliConfigOverrides,
 ) -> Result<SubstrateConfig> {
     let (mut effective, _) = read_global_config_or_defaults()?;
+    let env_overrides = parse_env_overrides()?;
 
     let workspace_root = workspace::find_workspace_root(cwd);
     if let Some(root) = &workspace_root {
@@ -239,7 +240,7 @@ pub(crate) fn resolve_effective_config(
             .with_context(|| format!("failed to read {}", workspace_path.display()))?;
         effective = parse_config_yaml(&workspace_path, &raw)?;
     } else {
-        apply_env_overrides(&mut effective)?;
+        apply_parsed_env_overrides(&mut effective, &env_overrides);
     }
 
     apply_cli_overrides(&mut effective, cli);
@@ -263,11 +264,26 @@ fn apply_cli_overrides(cfg: &mut SubstrateConfig, cli: &CliConfigOverrides) {
     }
 }
 
-fn apply_env_overrides(cfg: &mut SubstrateConfig) -> Result<()> {
+#[derive(Debug, Default)]
+struct EnvOverrides {
+    world_enabled: Option<bool>,
+    anchor_mode: Option<WorldRootMode>,
+    anchor_path: Option<String>,
+    caged: Option<bool>,
+    policy_mode: Option<PolicyMode>,
+    sync_auto_sync: Option<bool>,
+    sync_direction: Option<SyncDirection>,
+    sync_conflict_policy: Option<SyncConflictPolicy>,
+    sync_exclude: Option<Vec<String>>,
+}
+
+fn parse_env_overrides() -> Result<EnvOverrides> {
+    let mut overrides = EnvOverrides::default();
+
     if let Ok(world) = env::var("SUBSTRATE_OVERRIDE_WORLD") {
         let normalized = world.trim().to_ascii_lowercase();
         if !normalized.is_empty() {
-            cfg.world.enabled = match normalized.as_str() {
+            overrides.world_enabled = Some(match normalized.as_str() {
                 "enabled" => true,
                 "disabled" => false,
                 _ => {
@@ -276,86 +292,84 @@ fn apply_env_overrides(cfg: &mut SubstrateConfig) -> Result<()> {
                         world
                     )));
                 }
-            };
+            });
         }
     }
 
     if let Ok(mode) = env::var("SUBSTRATE_OVERRIDE_ANCHOR_MODE") {
         let trimmed = mode.trim();
         if !trimmed.is_empty() {
-            cfg.world.anchor_mode = WorldRootMode::parse(trimmed).ok_or_else(|| {
+            overrides.anchor_mode = Some(WorldRootMode::parse(trimmed).ok_or_else(|| {
                 user_error(format!(
                     "SUBSTRATE_OVERRIDE_ANCHOR_MODE must be one of workspace, follow-cwd, or custom (found '{}')",
                     mode
                 ))
-            })?;
+            })?);
         }
     }
 
     if let Ok(path) = env::var("SUBSTRATE_OVERRIDE_ANCHOR_PATH") {
-        cfg.world.anchor_path = path;
+        overrides.anchor_path = Some(path);
     }
 
     if let Ok(raw) = env::var("SUBSTRATE_OVERRIDE_CAGED") {
         let trimmed = raw.trim();
         if !trimmed.is_empty() {
-            let parsed = parse_bool_flag(trimmed).ok_or_else(|| {
+            overrides.caged = Some(parse_bool_flag(trimmed).ok_or_else(|| {
                 user_error(format!(
                     "SUBSTRATE_OVERRIDE_CAGED must be a boolean (true|false|1|0|yes|no|on|off) (found '{}')",
                     raw
                 ))
-            })?;
-            cfg.world.caged = parsed;
+            })?);
         }
     }
 
     if let Ok(raw) = env::var("SUBSTRATE_OVERRIDE_POLICY_MODE") {
         let trimmed = raw.trim();
         if !trimmed.is_empty() {
-            cfg.policy.mode = PolicyMode::parse_insensitive(trimmed).ok_or_else(|| {
+            overrides.policy_mode = Some(PolicyMode::parse_insensitive(trimmed).ok_or_else(|| {
                 user_error(format!(
                     "SUBSTRATE_OVERRIDE_POLICY_MODE must be one of disabled, observe, or enforce (found '{}')",
                     raw
                 ))
-            })?;
+            })?);
         }
     }
 
     if let Ok(raw) = env::var("SUBSTRATE_OVERRIDE_SYNC_AUTO_SYNC") {
         let trimmed = raw.trim();
         if !trimmed.is_empty() {
-            let parsed = parse_bool_flag(trimmed).ok_or_else(|| {
+            overrides.sync_auto_sync = Some(parse_bool_flag(trimmed).ok_or_else(|| {
                 user_error(format!(
                     "SUBSTRATE_OVERRIDE_SYNC_AUTO_SYNC must be a boolean (true|false|1|0|yes|no|on|off) (found '{}')",
                     raw
                 ))
-            })?;
-            cfg.sync.auto_sync = parsed;
+            })?);
         }
     }
 
     if let Ok(raw) = env::var("SUBSTRATE_OVERRIDE_SYNC_DIRECTION") {
         let trimmed = raw.trim();
         if !trimmed.is_empty() {
-            cfg.sync.direction = SyncDirection::parse_insensitive(trimmed).ok_or_else(|| {
+            overrides.sync_direction = Some(SyncDirection::parse_insensitive(trimmed).ok_or_else(|| {
                 user_error(format!(
                     "SUBSTRATE_OVERRIDE_SYNC_DIRECTION must be one of from_world, from_host, or both (found '{}')",
                     raw
                 ))
-            })?;
+            })?);
         }
     }
 
     if let Ok(raw) = env::var("SUBSTRATE_OVERRIDE_SYNC_CONFLICT_POLICY") {
         let trimmed = raw.trim();
         if !trimmed.is_empty() {
-            cfg.sync.conflict_policy =
-                SyncConflictPolicy::parse_insensitive(trimmed).ok_or_else(|| {
+            overrides.sync_conflict_policy =
+                Some(SyncConflictPolicy::parse_insensitive(trimmed).ok_or_else(|| {
                     user_error(format!(
                         "SUBSTRATE_OVERRIDE_SYNC_CONFLICT_POLICY must be one of prefer_host, prefer_world, or abort (found '{}')",
                         raw
                     ))
-                })?;
+                })?);
         }
     }
 
@@ -366,10 +380,40 @@ fn apply_env_overrides(cfg: &mut SubstrateConfig) -> Result<()> {
             .filter(|item| !item.is_empty())
             .map(|item| item.to_string())
             .collect::<Vec<_>>();
-        cfg.sync.exclude = items;
+        overrides.sync_exclude = Some(items);
     }
 
-    Ok(())
+    Ok(overrides)
+}
+
+fn apply_parsed_env_overrides(cfg: &mut SubstrateConfig, overrides: &EnvOverrides) {
+    if let Some(enabled) = overrides.world_enabled {
+        cfg.world.enabled = enabled;
+    }
+    if let Some(mode) = overrides.anchor_mode {
+        cfg.world.anchor_mode = mode;
+    }
+    if let Some(path) = &overrides.anchor_path {
+        cfg.world.anchor_path = path.clone();
+    }
+    if let Some(caged) = overrides.caged {
+        cfg.world.caged = caged;
+    }
+    if let Some(mode) = overrides.policy_mode {
+        cfg.policy.mode = mode;
+    }
+    if let Some(auto_sync) = overrides.sync_auto_sync {
+        cfg.sync.auto_sync = auto_sync;
+    }
+    if let Some(direction) = overrides.sync_direction {
+        cfg.sync.direction = direction;
+    }
+    if let Some(policy) = overrides.sync_conflict_policy {
+        cfg.sync.conflict_policy = policy;
+    }
+    if let Some(exclude) = &overrides.sync_exclude {
+        cfg.sync.exclude = exclude.clone();
+    }
 }
 
 pub(crate) fn apply_protected_excludes(excludes: &mut Vec<String>) {

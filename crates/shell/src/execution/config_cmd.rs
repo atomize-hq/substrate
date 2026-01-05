@@ -112,8 +112,6 @@ fn run_global_set(args: &ConfigSetArgs) -> Result<()> {
 
 fn run_workspace_show(args: &ConfigShowArgs, cli: &Cli) -> Result<()> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    require_workspace(&cwd)?;
-
     let overrides = cli_overrides(cli);
     let cfg = config_model::resolve_effective_config(&cwd, &overrides)?;
     print_config(&cfg, args.json)?;

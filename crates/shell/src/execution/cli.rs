@@ -196,7 +196,7 @@ pub struct PolicyCmd {
 
 #[derive(Subcommand, Debug)]
 pub enum ConfigAction {
-    /// Print the effective config for the current workspace (YAML by default, JSON with --json)
+    /// Print the effective config for the current directory (YAML by default, JSON with --json)
     Show(ConfigShowArgs),
     /// Update the workspace config via dotted updates (key=value, key+=value, key-=value)
     Set(ConfigSetArgs),

@@ -72,8 +72,9 @@ pub fn substrate_command_for_home(fixture: &ShellEnvFixture) -> Command {
         .current_dir(fixture.home())
         .env("SHELL", "/bin/bash")
         .env("SUBSTRATE_HOME", fixture.home().join(".substrate"))
-        .env("SUBSTRATE_WORLD", "enabled")
-        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env_remove("SUBSTRATE_WORLD")
+        .env_remove("SUBSTRATE_WORLD_ENABLED")
+        .env("SUBSTRATE_OVERRIDE_WORLD", "enabled")
         .env_remove("SUBSTRATE_NO_SHIMS")
         // Ensure host-installed shims do not affect PATH injection in tests.
         .env_remove("SUBSTRATE_SHIM_PATH")
