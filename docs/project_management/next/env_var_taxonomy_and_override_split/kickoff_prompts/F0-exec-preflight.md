@@ -24,10 +24,11 @@ Fill `execution_preflight_report.md` with a concrete recommendation:
 At minimum, verify:
 - The cross-platform plan is explicit and matches the spec/contract (platforms + WSL mode if needed).
 - Smoke scripts mirror the manual testing playbook by running real commands/workflows and validating exit codes + key output.
+- Smoke/manual validation covers policy.mode plus multiple non-policy keys (minimum: world.caged and world.anchor_mode), not just policy mode.
+- EV0 includes an explicit repo-wide grep/audit requirement to detect and eliminate bypass reads of config-shaped legacy `SUBSTRATE_*` inputs outside the resolver.
 - Any CI dispatch commands embedded in integration tasks are runnable with the expected runners.
 
 ## End Checklist
 
 1. Set `F0-exec-preflight` status to `completed` in `tasks.json`; add END entry to `session_log.md` (include the recommendation and any required fixes).
 2. Commit docs (`docs: finish F0-exec-preflight`).
-

@@ -35,7 +35,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 479be584a53d3c985075f1edcc57d76147ee2b47e122fa60b0674745e2c6f5cd
+ADR_BODY_SHA256: eddd1c11e664d6ac18e81d2f897fff24c43e91fa218583edf32e1ea5575d0f07
 ### Changes (operator-facing)
 - Split exported state from override inputs
   - Existing: `SUBSTRATE_*` values can be present in the environment because they are exported by `$SUBSTRATE_HOME/env.sh` (stable exports), but some of those same variables are also treated as operator overrides by config resolution. This creates “stale export” surprises where config edits appear not to take effect without re-sourcing.
@@ -165,6 +165,17 @@ ADR_BODY_SHA256: 479be584a53d3c985075f1edcc57d76147ee2b47e122fa60b0674745e2c6f5c
   - Exported state variables in `env.sh` do not influence effective config resolution.
   - `SUBSTRATE_OVERRIDE_*` values do influence effective config resolution per precedence rules.
   - Workspace config still wins over override env vars where applicable.
+  - At least one non-policy key is covered (ex: `world.caged` and/or `world.anchor_mode`) so partial implementations can’t pass by only wiring policy mode.
+
+### Exhaustive repo audit (required)
+- During EV0 implementation review, perform a repo-wide grep/audit to confirm no commands bypass effective config resolution by reading config-shaped `SUBSTRATE_*` values directly as *inputs*.
+- Audit command baseline (run from repo root):
+  - `rg -n "SUBSTRATE_(WORLD(_ENABLED)?|ANCHOR_MODE|ANCHOR_PATH|CAGED|POLICY_MODE|SYNC_AUTO_SYNC|SYNC_DIRECTION|SYNC_CONFLICT_POLICY|SYNC_EXCLUDE)" -S crates src scripts`
+  - `rg -n "env::var(_os)?\\(\\\"SUBSTRATE_(WORLD(_ENABLED)?|ANCHOR_MODE|ANCHOR_PATH|CAGED|POLICY_MODE|SYNC_AUTO_SYNC|SYNC_DIRECTION|SYNC_CONFLICT_POLICY|SYNC_EXCLUDE)\\\"\\)" -S crates`
+- Required outcome:
+  - Any non-test read of those legacy `SUBSTRATE_*` names that can change behavior MUST be eliminated or rewritten to consult effective config / `SUBSTRATE_OVERRIDE_*` instead.
+  - Remaining reads MUST be justified as derived/exported-state consumption (value set earlier in-process from effective config), not as operator override inputs.
+  - Evidence is recorded in `docs/project_management/next/env_var_taxonomy_and_override_split/EV0-closeout_report.md`.
 
 ### Manual testing
 - Follow `docs/project_management/next/env_var_taxonomy_and_override_split/manual_testing_playbook.md`.
@@ -172,6 +183,7 @@ ADR_BODY_SHA256: 479be584a53d3c985075f1edcc57d76147ee2b47e122fa60b0674745e2c6f5c
 ### Smoke scripts
 - Feature-local smoke scripts live under:
   - `docs/project_management/next/env_var_taxonomy_and_override_split/smoke/`
+  - Smoke must validate policy mode plus multiple non-policy keys (ex: `world.caged`, `world.anchor_mode`) so behavior cannot regress via partial wiring.
 
 ## Rollout / Backwards Compatibility
 - Greenfield breaking is allowed.

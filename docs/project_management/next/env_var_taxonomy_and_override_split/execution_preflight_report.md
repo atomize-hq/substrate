@@ -34,11 +34,13 @@ RECOMMENDATION: **ACCEPT**
 
 Notes:
 - Smoke scripts mirror the playbook’s observable checks:
-  - baseline config propagation (`observe`)
-  - legacy exported-state env var does not override config
+  - baseline config propagation (policy.mode + non-policy keys)
+  - legacy exported-state `SUBSTRATE_*` does not override config
   - `SUBSTRATE_OVERRIDE_*` does override config (no workspace)
   - workspace config wins over `SUBSTRATE_OVERRIDE_*`
-  - invalid override value yields exit code `2`
+  - invalid override values yield exit code `2` (multiple keys)
+  - minimum key coverage: `policy.mode`, `world.caged`, `world.anchor_mode`
+  - EV0 implementation includes a required repo-wide grep/audit to ensure no bypass reads of config-shaped legacy `SUBSTRATE_*` inputs outside the resolver (evidence recorded in EV0 closeout)
 
 ## CI Dispatch Readiness
 

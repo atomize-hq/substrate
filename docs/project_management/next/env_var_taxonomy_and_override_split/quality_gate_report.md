@@ -7,6 +7,14 @@
 - Date (UTC): `2026-01-04`
 - Recommendation: `ACCEPT`
 
+## Addendum (post-gate hardening)
+
+The Planning Pack was later hardened to make two EV0 requirements unmissable:
+- a required repo-wide grep/audit for legacy config-shaped `SUBSTRATE_*` input reads outside the resolver, and
+- expanded smoke/manual validation that covers policy.mode plus multiple non-policy keys (minimum: world.caged and world.anchor_mode).
+
+If the feature pack is modified after the reviewed commit, re-run this gate on the current tip before treating the recommendation as binding.
+
 ## Evidence: Commands Run (verbatim)
 
 ```bash
@@ -108,6 +116,8 @@ Mark `YES` only if read end-to-end.
   - Smoke scripts: `docs/project_management/next/env_var_taxonomy_and_override_split/smoke/linux-smoke.sh`, `docs/project_management/next/env_var_taxonomy_and_override_split/smoke/macos-smoke.sh`, `docs/project_management/next/env_var_taxonomy_and_override_split/smoke/windows-smoke.ps1`
   - Smoke scripts are referenced by the manual playbook “Fast path (preferred): run smoke scripts”
 - Notes: Smoke scripts validate: baseline config propagation, legacy exported-state non-override, override env effect, workspace precedence, and invalid override exit `2`.
+  - Hardened requirement: smoke/manual validation must also cover non-policy keys (minimum: `world.caged` and `world.anchor_mode`).
+  - Hardened requirement: EV0 implementation must include a repo-wide grep/audit to detect bypass reads of config-shaped legacy `SUBSTRATE_*` inputs.
 
 ### 5.1) Cross-platform parity task structure (schema v2+)
 - Result: `PASS`

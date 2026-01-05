@@ -15,6 +15,10 @@ Do not edit planning docs inside the worktree.
 
 ## Requirements
 - Add/modify tests that enforce the acceptance criteria in `EV0-spec.md`.
+- Ensure tests cover policy.mode plus multiple non-policy keys (minimum: `world.caged` and `world.anchor_mode`) across:
+  - legacy exported-state `SUBSTRATE_*` does not override,
+  - `SUBSTRATE_OVERRIDE_*` does override (when no workspace exists),
+  - workspace config wins over overrides.
 - Run:
   - `cargo fmt`
   - the targeted tests you add/touch
@@ -24,4 +28,3 @@ Do not edit planning docs inside the worktree.
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="EV0-test"`
 3. Hand off targeted test command(s) and outcomes to the operator (do not edit planning docs inside the worktree).
 4. Do not delete the worktree (feature cleanup removes worktrees at feature end).
-

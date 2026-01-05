@@ -82,11 +82,13 @@
       "acceptance_criteria": [
         "Effective config reads only SUBSTRATE_OVERRIDE_* for config-shaped env override inputs",
         "Effective config does not read config-shaped SUBSTRATE_* exported-state values as override inputs",
-        "Invalid override values return user errors with messages naming the SUBSTRATE_OVERRIDE_* variable"
+        "Invalid override values return user errors with messages naming the SUBSTRATE_OVERRIDE_* variable",
+        "A repo-wide grep/audit is performed to locate any non-test config-shaped SUBSTRATE_* reads outside the resolver; any behavior-changing input reads are removed or rewired to effective config / SUBSTRATE_OVERRIDE_* (findings handed off to EV0-integ)"
       ],
       "start_checklist": [
         "git checkout feat/env_var_taxonomy_and_override_split && git pull --ff-only",
         "Read plan/spec/decision_register/integration_map for EV0 and this prompt",
+        "Run the required repo-wide grep/audit from EV0-spec.md and identify any non-test config-shaped SUBSTRATE_* input reads outside the resolver (capture hits + disposition for EV0-integ)",
         "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/env_var_taxonomy_and_override_split\" SLICE_ID=\"EV0\" LAUNCH_CODEX=1"
       ],
@@ -94,6 +96,7 @@
         "Run cargo fmt",
         "Run cargo clippy --workspace --all-targets -- -D warnings",
         "Run a targeted baseline test set before and after changes",
+        "Hand off repo audit hits/disposition to the operator (do not edit planning docs inside the worktree)",
         "Commit worktree changes to the task branch",
         "From inside the worktree: make triad-task-finish TASK_ID=\"EV0-code\""
       ],
@@ -126,7 +129,8 @@
       ],
       "acceptance_criteria": [
         "Tests fail deterministically on current code and pass once EV0-code is merged",
-        "Tests cover: exported-state SUBSTRATE_* does not override; SUBSTRATE_OVERRIDE_* does override; workspace config wins over overrides"
+        "Tests cover: exported-state SUBSTRATE_* does not override; SUBSTRATE_OVERRIDE_* does override; workspace config wins over overrides",
+        "Tests cover at least two non-policy keys (minimum: world.caged and world.anchor_mode) in addition to policy.mode"
       ],
       "start_checklist": [
         "git checkout feat/env_var_taxonomy_and_override_split && git pull --ff-only",
@@ -137,6 +141,7 @@
       "end_checklist": [
         "Run cargo fmt",
         "Run the targeted tests you add/modify",
+        "Ensure the test suite covers policy.mode plus at least world.caged and world.anchor_mode per EV0-spec.md",
         "Commit worktree changes to the task branch",
         "From inside the worktree: make triad-task-finish TASK_ID=\"EV0-test\""
       ],
@@ -172,7 +177,9 @@
       ],
       "acceptance_criteria": [
         "Merged EV0 code+tests pass fmt, clippy, relevant tests, and make integ-checks",
-        "Cross-platform smoke is dispatched and run ids/URLs are recorded in session_log.md"
+        "Cross-platform smoke is dispatched and run ids/URLs are recorded in session_log.md",
+        "Smoke/manual validation covers policy.mode plus multiple non-policy keys (minimum: world.caged and world.anchor_mode) so partial implementations cannot pass",
+        "Repo-wide grep/audit results are summarized and prepared for inclusion in EV0-closeout_report.md (fixed / derived-state-only / test-only)"
       ],
       "start_checklist": [
         "make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/env_var_taxonomy_and_override_split\"",
@@ -186,6 +193,7 @@
         "Run cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
         "Run make integ-checks",
+        "Confirm smoke scripts validate policy.mode plus world.caged and world.anchor_mode (and that manual playbook matches the smoke behavior)",
         "Dispatch smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/env_var_taxonomy_and_override_split\" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/env_var_taxonomy_and_override_split\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
         "Record run ids/URLs in session_log.md",
         "From inside the worktree: make triad-task-finish TASK_ID=\"EV0-integ-core\""
@@ -365,7 +373,7 @@
       "acceptance_criteria": [
         "All required platforms are green in smoke runs for this slice",
         "make integ-checks passes on the final merged integration commit",
-        "EV0-closeout_report.md is completed with evidence and run ids/URLs",
+        "EV0-closeout_report.md is completed with evidence (including repo-wide grep/audit summary) and run ids/URLs",
         "docs/CONFIGURATION.md and docs/ENVIRONMENT_VARIABLES.md reflect the SUBSTRATE_OVERRIDE_* override split"
       ],
       "start_checklist": [
@@ -382,7 +390,7 @@
         "Run make integ-checks",
         "Re-run cross-platform smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/env_var_taxonomy_and_override_split\" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/env_var_taxonomy_and_override_split\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
         "Update docs/CONFIGURATION.md and docs/ENVIRONMENT_VARIABLES.md to document SUBSTRATE_OVERRIDE_* as the override-input namespace (and SUBSTRATE_* as exported state)",
-        "Complete EV0-closeout_report.md",
+        "Complete EV0-closeout_report.md including repo-wide grep/audit evidence and the smoke key coverage summary",
         "From inside the worktree: make triad-task-finish TASK_ID=\"EV0-integ\""
       ],
       "git_branch": "ev-ev0-override-split-integ",

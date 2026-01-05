@@ -22,6 +22,7 @@ Do not edit planning docs inside the worktree.
 - Run:
   - `cargo fmt`
   - `cargo clippy --workspace --all-targets -- -D warnings`
+- Ensure macOS smoke validates policy.mode plus non-policy keys (minimum: `world.caged` and `world.anchor_mode`) and that failures are treated as parity bugs.
 - Validate platform smoke via CI (repeat until green if you make fixes):
   - `make feature-smoke FEATURE_DIR="docs/project_management/next/env_var_taxonomy_and_override_split" PLATFORM=macos RUNNER_KIND=self-hosted WORKFLOW_REF="feat/env_var_taxonomy_and_override_split" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
 
@@ -30,4 +31,3 @@ Do not edit planning docs inside the worktree.
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="EV0-integ-macos"`
 3. Hand off run id/URL and any macos notes to the operator (do not edit planning docs inside the worktree).
 4. Do not delete the worktree (feature cleanup removes worktrees at feature end).
-

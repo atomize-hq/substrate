@@ -16,11 +16,13 @@ Do not edit planning docs inside the worktree.
 ## Requirements
 - Reconcile code/tests to spec (spec wins).
 - Merge `EV0-code` and `EV0-test` task branches into this worktree.
+- Confirm the required repo-wide grep/audit from `EV0-spec.md` was performed and that any behavior-changing legacy `SUBSTRATE_*` input reads have been eliminated or rewired (prepare a summary for `EV0-closeout_report.md`).
 - Run required integration gates (must be green before CI smoke dispatch):
   - `cargo fmt`
   - `cargo clippy --workspace --all-targets -- -D warnings`
   - relevant tests
   - `make integ-checks`
+- Ensure smoke + manual playbook validate policy mode plus multiple non-policy keys (minimum: `world.caged` and `world.anchor_mode`).
 - Dispatch cross-platform smoke via CI from this worktree:
   - `make feature-smoke FEATURE_DIR="docs/project_management/next/env_var_taxonomy_and_override_split" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF="feat/env_var_taxonomy_and_override_split" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
 
@@ -29,4 +31,3 @@ Do not edit planning docs inside the worktree.
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="EV0-integ-core"`
 3. Hand off run ids/URLs and any parity notes to the operator (do not edit planning docs inside the worktree).
 4. Do not delete the worktree (feature cleanup removes worktrees at feature end).
-

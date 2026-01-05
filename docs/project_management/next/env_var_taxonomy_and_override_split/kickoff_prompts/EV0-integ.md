@@ -25,12 +25,14 @@ Do not edit planning docs inside the worktree.
   - `make integ-checks`
 - Re-run cross-platform smoke via CI to confirm the merged result is green:
   - `make feature-smoke FEATURE_DIR="docs/project_management/next/env_var_taxonomy_and_override_split" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF="feat/env_var_taxonomy_and_override_split" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+- Confirm smoke/manual parity and key coverage:
+  - Smoke must validate policy.mode plus non-policy keys (minimum: `world.caged` and `world.anchor_mode`).
 - Complete the closeout report:
   - `docs/project_management/next/env_var_taxonomy_and_override_split/EV0-closeout_report.md`
+  - Include the required repo-wide grep/audit evidence summary (hits + disposition).
 
 ## End Checklist
 1. Ensure all required platforms are green (capture run ids/URLs).
 2. From inside this worktree, run: `make triad-task-finish TASK_ID="EV0-integ"`
 3. Hand off run ids/URLs and closeout completion to the operator (do not edit planning docs inside the worktree).
 4. Do not delete the worktree (feature cleanup removes worktrees at feature end).
-

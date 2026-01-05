@@ -23,29 +23,39 @@ try {
 
   & substrate config global init --force | Out-Null
   & substrate config global set policy.mode=observe | Out-Null
+  & substrate config global set world.caged=true | Out-Null
+  & substrate config global set world.anchor_mode=follow-cwd | Out-Null
 
-  $out = & substrate --no-world --shell cmd.exe -c "echo %SUBSTRATE_POLICY_MODE%"
+  $out = & substrate --no-world --shell cmd.exe -c "echo %SUBSTRATE_POLICY_MODE%|%SUBSTRATE_CAGED%|%SUBSTRATE_ANCHOR_MODE%"
   $value = ($out | Select-Object -Last 1).Trim()
-  if ($value -ne "observe") {
-    Write-Error ("FAIL: expected SUBSTRATE_POLICY_MODE=observe from config, got: " + $value)
+  if ($value -ne "observe|1|follow-cwd") {
+    Write-Error ("FAIL: expected observe|1|follow-cwd from config, got: " + $value)
     exit 1
   }
 
   $env:SUBSTRATE_POLICY_MODE = "disabled"
-  $out = & substrate --no-world --shell cmd.exe -c "echo %SUBSTRATE_POLICY_MODE%"
+  $env:SUBSTRATE_CAGED = "0"
+  $env:SUBSTRATE_ANCHOR_MODE = "workspace"
+  $out = & substrate --no-world --shell cmd.exe -c "echo %SUBSTRATE_POLICY_MODE%|%SUBSTRATE_CAGED%|%SUBSTRATE_ANCHOR_MODE%"
   Remove-Item Env:SUBSTRATE_POLICY_MODE -ErrorAction SilentlyContinue
+  Remove-Item Env:SUBSTRATE_CAGED -ErrorAction SilentlyContinue
+  Remove-Item Env:SUBSTRATE_ANCHOR_MODE -ErrorAction SilentlyContinue
   $value = ($out | Select-Object -Last 1).Trim()
-  if ($value -ne "observe") {
-    Write-Error ("FAIL: expected legacy SUBSTRATE_POLICY_MODE to not override, got: " + $value)
+  if ($value -ne "observe|1|follow-cwd") {
+    Write-Error ("FAIL: expected legacy SUBSTRATE_* to not override, got: " + $value)
     exit 1
   }
 
   $env:SUBSTRATE_OVERRIDE_POLICY_MODE = "enforce"
-  $out = & substrate --no-world --shell cmd.exe -c "echo %SUBSTRATE_POLICY_MODE%"
+  $env:SUBSTRATE_OVERRIDE_CAGED = "0"
+  $env:SUBSTRATE_OVERRIDE_ANCHOR_MODE = "workspace"
+  $out = & substrate --no-world --shell cmd.exe -c "echo %SUBSTRATE_POLICY_MODE%|%SUBSTRATE_CAGED%|%SUBSTRATE_ANCHOR_MODE%"
   Remove-Item Env:SUBSTRATE_OVERRIDE_POLICY_MODE -ErrorAction SilentlyContinue
+  Remove-Item Env:SUBSTRATE_OVERRIDE_CAGED -ErrorAction SilentlyContinue
+  Remove-Item Env:SUBSTRATE_OVERRIDE_ANCHOR_MODE -ErrorAction SilentlyContinue
   $value = ($out | Select-Object -Last 1).Trim()
-  if ($value -ne "enforce") {
-    Write-Error ("FAIL: expected SUBSTRATE_OVERRIDE_POLICY_MODE=enforce, got: " + $value)
+  if ($value -ne "enforce|0|workspace") {
+    Write-Error ("FAIL: expected override enforce|0|workspace, got: " + $value)
     exit 1
   }
 
@@ -54,13 +64,19 @@ try {
   Push-Location $tmpWs
   try {
     & substrate config set policy.mode=observe | Out-Null
+    & substrate config set world.caged=true | Out-Null
+    & substrate config set world.anchor_mode=follow-cwd | Out-Null
 
     $env:SUBSTRATE_OVERRIDE_POLICY_MODE = "enforce"
-    $out = & substrate --no-world --shell cmd.exe -c "echo %SUBSTRATE_POLICY_MODE%"
+    $env:SUBSTRATE_OVERRIDE_CAGED = "0"
+    $env:SUBSTRATE_OVERRIDE_ANCHOR_MODE = "workspace"
+    $out = & substrate --no-world --shell cmd.exe -c "echo %SUBSTRATE_POLICY_MODE%|%SUBSTRATE_CAGED%|%SUBSTRATE_ANCHOR_MODE%"
     Remove-Item Env:SUBSTRATE_OVERRIDE_POLICY_MODE -ErrorAction SilentlyContinue
+    Remove-Item Env:SUBSTRATE_OVERRIDE_CAGED -ErrorAction SilentlyContinue
+    Remove-Item Env:SUBSTRATE_OVERRIDE_ANCHOR_MODE -ErrorAction SilentlyContinue
     $value = ($out | Select-Object -Last 1).Trim()
-    if ($value -ne "observe") {
-      Write-Error ("FAIL: expected workspace policy.mode=observe to win over overrides, got: " + $value)
+    if ($value -ne "observe|1|follow-cwd") {
+      Write-Error ("FAIL: expected workspace to win over overrides, got: " + $value)
       exit 1
     }
 
@@ -70,6 +86,15 @@ try {
     Remove-Item Env:SUBSTRATE_OVERRIDE_POLICY_MODE -ErrorAction SilentlyContinue
     if ($code -ne 2) {
       Write-Error ("FAIL: expected exit code 2 for invalid override value, got: " + $code)
+      exit 1
+    }
+
+    $env:SUBSTRATE_OVERRIDE_CAGED = "bogus"
+    & substrate config show --json 2>$null | Out-Null
+    $code = $LASTEXITCODE
+    Remove-Item Env:SUBSTRATE_OVERRIDE_CAGED -ErrorAction SilentlyContinue
+    if ($code -ne 2) {
+      Write-Error ("FAIL: expected exit code 2 for invalid override boolean, got: " + $code)
       exit 1
     }
   } finally {
@@ -84,4 +109,3 @@ try {
 
 Write-Host "OK: env var override split Windows smoke"
 exit 0
-

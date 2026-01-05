@@ -3,6 +3,7 @@
 This playbook validates the EV0 slice contract:
 - `SUBSTRATE_*` exported state values do not act as effective-config override inputs.
 - `SUBSTRATE_OVERRIDE_*` values act as effective-config override inputs.
+ - Smoke/manual validation covers policy mode plus multiple non-policy keys so partial implementations can’t accidentally pass.
 
 Standards:
 - Exit codes: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -29,7 +30,7 @@ All steps run in temp directories and must not modify a real `$SUBSTRATE_HOME`.
 
 ### Linux/macOS steps
 
-1) Create a temp `$SUBSTRATE_HOME` and write a known global config policy mode.
+1) Create a temp `$SUBSTRATE_HOME` and write a known global config for multiple keys.
 
 ```bash
 TMP_HOME="$(mktemp -d)"
@@ -38,39 +39,43 @@ export SUBSTRATE_HOME="$TMP_HOME"
 
 substrate config global init --force
 substrate config global set policy.mode=observe
+substrate config global set world.caged=true
+substrate config global set world.anchor_mode=follow-cwd
 ```
 
 Expected:
-- exit code `0` for both commands.
+- exit code `0` for all commands.
 
-2) Verify baseline value is visible in a host-only invocation.
+2) Verify baseline values are visible in a host-only invocation.
 
 ```bash
-substrate --no-world --shell /bin/bash -c 'printf "%s" "${SUBSTRATE_POLICY_MODE:-}"'
+substrate --no-world --shell /bin/bash -c 'printf "%s|%s|%s" "${SUBSTRATE_POLICY_MODE:-}" "${SUBSTRATE_CAGED:-}" "${SUBSTRATE_ANCHOR_MODE:-}"'
 ```
 
 Expected:
-- stdout: `observe`
+- stdout: `observe|1|follow-cwd`
 - exit code `0`
 
 3) Verify legacy exported-state env vars do not override effective config.
 
 ```bash
-SUBSTRATE_POLICY_MODE=disabled substrate --no-world --shell /bin/bash -c 'printf "%s" "${SUBSTRATE_POLICY_MODE:-}"'
+SUBSTRATE_POLICY_MODE=disabled SUBSTRATE_CAGED=0 SUBSTRATE_ANCHOR_MODE=workspace \
+  substrate --no-world --shell /bin/bash -c 'printf "%s|%s|%s" "${SUBSTRATE_POLICY_MODE:-}" "${SUBSTRATE_CAGED:-}" "${SUBSTRATE_ANCHOR_MODE:-}"'
 ```
 
 Expected:
-- stdout: `observe`
+- stdout: `observe|1|follow-cwd`
 - exit code `0`
 
 4) Verify `SUBSTRATE_OVERRIDE_*` overrides are applied.
 
 ```bash
-SUBSTRATE_OVERRIDE_POLICY_MODE=enforce substrate --no-world --shell /bin/bash -c 'printf "%s" "${SUBSTRATE_POLICY_MODE:-}"'
+SUBSTRATE_OVERRIDE_POLICY_MODE=enforce SUBSTRATE_OVERRIDE_CAGED=0 SUBSTRATE_OVERRIDE_ANCHOR_MODE=workspace \
+  substrate --no-world --shell /bin/bash -c 'printf "%s|%s|%s" "${SUBSTRATE_POLICY_MODE:-}" "${SUBSTRATE_CAGED:-}" "${SUBSTRATE_ANCHOR_MODE:-}"'
 ```
 
 Expected:
-- stdout: `enforce`
+- stdout: `enforce|0|workspace`
 - exit code `0`
 
 5) Verify workspace config overrides override env vars.
@@ -80,12 +85,15 @@ TMP_WS="$(mktemp -d)"
 substrate workspace init "$TMP_WS"
 cd "$TMP_WS"
 substrate config set policy.mode=observe >/dev/null
+substrate config set world.caged=true >/dev/null
+substrate config set world.anchor_mode=follow-cwd >/dev/null
 
-SUBSTRATE_OVERRIDE_POLICY_MODE=enforce substrate --no-world --shell /bin/bash -c 'printf "%s" "${SUBSTRATE_POLICY_MODE:-}"'
+SUBSTRATE_OVERRIDE_POLICY_MODE=enforce SUBSTRATE_OVERRIDE_CAGED=0 SUBSTRATE_OVERRIDE_ANCHOR_MODE=workspace \
+  substrate --no-world --shell /bin/bash -c 'printf "%s|%s|%s" "${SUBSTRATE_POLICY_MODE:-}" "${SUBSTRATE_CAGED:-}" "${SUBSTRATE_ANCHOR_MODE:-}"'
 ```
 
 Expected:
-- stdout: `observe`
+- stdout: `observe|1|follow-cwd`
 - exit code `0`
 
 6) Verify invalid override values fail as user errors for config commands.
@@ -93,13 +101,15 @@ Expected:
 ```bash
 set +e
 SUBSTRATE_OVERRIDE_POLICY_MODE=bogus substrate config show --json >/dev/null 2>&1
-code=$?
+code1=$?
+SUBSTRATE_OVERRIDE_CAGED=bogus substrate config show --json >/dev/null 2>&1
+code2=$?
 set -e
-echo "$code"
+echo "$code1 $code2"
 ```
 
 Expected:
-- exit code `2`
+- stdout: `2 2`
 
 Cleanup:
 ```bash
@@ -108,7 +118,7 @@ rm -rf "$TMP_HOME" "$TMP_WS"
 
 ### Windows steps (PowerShell)
 
-1) Create a temp `$env:SUBSTRATE_HOME` and write a known global config policy mode.
+1) Create a temp `$env:SUBSTRATE_HOME` and write a known global config for multiple keys.
 
 ```powershell
 $tmpRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("substrate-ev0-" + [System.Guid]::NewGuid().ToString("N"))
@@ -120,46 +130,115 @@ $env:USERPROFILE = $tmpHome
 
 substrate config global init --force | Out-Null
 substrate config global set policy.mode=observe | Out-Null
+substrate config global set world.caged=true | Out-Null
+substrate config global set world.anchor_mode=follow-cwd | Out-Null
 ```
 
 2) Verify override behavior via a host-only invocation.
 
 ```powershell
-$out = & substrate --no-world --shell cmd.exe -c "echo %SUBSTRATE_POLICY_MODE%"
+$out = & substrate --no-world --shell cmd.exe -c "echo %SUBSTRATE_POLICY_MODE%|%SUBSTRATE_CAGED%|%SUBSTRATE_ANCHOR_MODE%"
 ($out | Select-Object -Last 1).Trim()
 ```
 
 Expected:
-- stdout: `observe`
+- stdout: `observe|1|follow-cwd`
 - exit code `0`
 
 3) Verify legacy exported-state env vars do not override effective config.
 
 ```powershell
 $env:SUBSTRATE_POLICY_MODE = "disabled"
-$out = & substrate --no-world --shell cmd.exe -c "echo %SUBSTRATE_POLICY_MODE%"
+$env:SUBSTRATE_CAGED = "0"
+$env:SUBSTRATE_ANCHOR_MODE = "workspace"
+$out = & substrate --no-world --shell cmd.exe -c "echo %SUBSTRATE_POLICY_MODE%|%SUBSTRATE_CAGED%|%SUBSTRATE_ANCHOR_MODE%"
 Remove-Item Env:SUBSTRATE_POLICY_MODE -ErrorAction SilentlyContinue
+Remove-Item Env:SUBSTRATE_CAGED -ErrorAction SilentlyContinue
+Remove-Item Env:SUBSTRATE_ANCHOR_MODE -ErrorAction SilentlyContinue
 ($out | Select-Object -Last 1).Trim()
 ```
 
 Expected:
-- stdout: `observe`
+- stdout: `observe|1|follow-cwd`
 - exit code `0`
 
-4) Verify invalid override values fail as user errors for config commands.
+4) Verify `SUBSTRATE_OVERRIDE_*` overrides are applied.
+
+```powershell
+$env:SUBSTRATE_OVERRIDE_POLICY_MODE = "enforce"
+$env:SUBSTRATE_OVERRIDE_CAGED = "0"
+$env:SUBSTRATE_OVERRIDE_ANCHOR_MODE = "workspace"
+$out = & substrate --no-world --shell cmd.exe -c "echo %SUBSTRATE_POLICY_MODE%|%SUBSTRATE_CAGED%|%SUBSTRATE_ANCHOR_MODE%"
+Remove-Item Env:SUBSTRATE_OVERRIDE_POLICY_MODE -ErrorAction SilentlyContinue
+Remove-Item Env:SUBSTRATE_OVERRIDE_CAGED -ErrorAction SilentlyContinue
+Remove-Item Env:SUBSTRATE_OVERRIDE_ANCHOR_MODE -ErrorAction SilentlyContinue
+($out | Select-Object -Last 1).Trim()
+```
+
+Expected:
+- stdout: `enforce|0|workspace`
+- exit code `0`
+
+5) Verify workspace config wins over overrides.
+
+```powershell
+$tmpWs = Join-Path $tmpRoot "ws2"
+New-Item -ItemType Directory -Force -Path $tmpWs | Out-Null
+& substrate workspace init $tmpWs | Out-Null
+
+Push-Location $tmpWs
+try {
+  & substrate config set policy.mode=observe | Out-Null
+  & substrate config set world.caged=true | Out-Null
+  & substrate config set world.anchor_mode=follow-cwd | Out-Null
+
+  $env:SUBSTRATE_OVERRIDE_POLICY_MODE = "enforce"
+  $env:SUBSTRATE_OVERRIDE_CAGED = "0"
+  $env:SUBSTRATE_OVERRIDE_ANCHOR_MODE = "workspace"
+  $out = & substrate --no-world --shell cmd.exe -c "echo %SUBSTRATE_POLICY_MODE%|%SUBSTRATE_CAGED%|%SUBSTRATE_ANCHOR_MODE%"
+  Remove-Item Env:SUBSTRATE_OVERRIDE_POLICY_MODE -ErrorAction SilentlyContinue
+  Remove-Item Env:SUBSTRATE_OVERRIDE_CAGED -ErrorAction SilentlyContinue
+  Remove-Item Env:SUBSTRATE_OVERRIDE_ANCHOR_MODE -ErrorAction SilentlyContinue
+  ($out | Select-Object -Last 1).Trim()
+} finally {
+  Pop-Location
+}
+```
+
+Expected:
+- stdout: `observe|1|follow-cwd`
+- exit code `0`
+
+6) Verify invalid override values fail as user errors for config commands (multiple keys).
 
 ```powershell
 $env:SUBSTRATE_OVERRIDE_POLICY_MODE = "bogus"
 & substrate config show --json 2>$null | Out-Null
-$code = $LASTEXITCODE
+$code1 = $LASTEXITCODE
 Remove-Item Env:SUBSTRATE_OVERRIDE_POLICY_MODE -ErrorAction SilentlyContinue
-$code
+
+$env:SUBSTRATE_OVERRIDE_CAGED = "bogus"
+& substrate config show --json 2>$null | Out-Null
+$code2 = $LASTEXITCODE
+Remove-Item Env:SUBSTRATE_OVERRIDE_CAGED -ErrorAction SilentlyContinue
+
+"$code1 $code2"
 ```
 
 Expected:
-- exit code `2`
+- stdout: `2 2`
 
 Cleanup:
 ```powershell
 Remove-Item -Recurse -Force $tmpRoot -ErrorAction SilentlyContinue
+```
+
+## Required repo audit (implementation review)
+
+Before treating EV0 as complete, run a repo-wide grep/audit to confirm no non-test code bypasses effective config resolution by consuming config-shaped `SUBSTRATE_*` values directly as inputs.
+
+Baseline commands (run from repo root):
+```bash
+rg -n "SUBSTRATE_(WORLD(_ENABLED)?|ANCHOR_MODE|ANCHOR_PATH|CAGED|POLICY_MODE|SYNC_AUTO_SYNC|SYNC_DIRECTION|SYNC_CONFLICT_POLICY|SYNC_EXCLUDE)" -S crates src scripts
+rg -n "env::var(_os)?\\(\"SUBSTRATE_(WORLD(_ENABLED)?|ANCHOR_MODE|ANCHOR_PATH|CAGED|POLICY_MODE|SYNC_AUTO_SYNC|SYNC_DIRECTION|SYNC_CONFLICT_POLICY|SYNC_EXCLUDE)\"\\)" -S crates
 ```

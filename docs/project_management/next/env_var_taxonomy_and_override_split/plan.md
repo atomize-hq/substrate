@@ -26,6 +26,7 @@
 1) **EV0 — Override split for effective config**
 - Implement `SUBSTRATE_OVERRIDE_*` parsing for config-shaped overrides.
 - Ensure `SUBSTRATE_*` exported state values are not consulted as override inputs by the effective-config resolver.
+- Perform an explicit repo-wide grep/audit to confirm no commands bypass effective config resolution by reading config-shaped `SUBSTRATE_*` values directly as inputs (and fix any hits that do).
 - Update docs and the canonical env-var catalog references per ADR-0006.
 
 Specs (single source of truth):

@@ -35,6 +35,7 @@ This decision register captures the A/B decisions referenced by `docs/project_ma
 
 **Follow-up tasks (explicit)**
 - Implement in `EV0-code`: read `SUBSTRATE_OVERRIDE_*` env vars as override inputs; ignore config-shaped `SUBSTRATE_*` (task: `EV0-code`).
+- Implement in `EV0-code`: perform an explicit repo-wide grep/audit to ensure no commands bypass effective config by reading config-shaped `SUBSTRATE_*` values as operator inputs; fix any hits found (task: `EV0-code`).
 - Add tests for the split (task: `EV0-test`).
 - Update operator docs and the canonical env-var catalog references (task: `EV0-integ-core` / `EV0-integ`).
 

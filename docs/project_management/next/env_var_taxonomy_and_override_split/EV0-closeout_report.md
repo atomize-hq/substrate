@@ -31,12 +31,33 @@ Slice spec:
 - Relevant tests: pass/fail (list suites/commands)
 - `make integ-checks`: pass/fail
 
+## Repo-Wide Grep/Audit (Required Evidence)
+
+This slice requires an explicit audit to ensure no commands bypass effective config resolution by treating config-shaped legacy `SUBSTRATE_*` values as behavior-changing inputs.
+
+Commands run (verbatim):
+- `rg -n "SUBSTRATE_(WORLD(_ENABLED)?|ANCHOR_MODE|ANCHOR_PATH|CAGED|POLICY_MODE|SYNC_AUTO_SYNC|SYNC_DIRECTION|SYNC_CONFLICT_POLICY|SYNC_EXCLUDE)" -S crates src scripts`
+- `rg -n "env::var(_os)?\\(\"SUBSTRATE_(WORLD(_ENABLED)?|ANCHOR_MODE|ANCHOR_PATH|CAGED|POLICY_MODE|SYNC_AUTO_SYNC|SYNC_DIRECTION|SYNC_CONFLICT_POLICY|SYNC_EXCLUDE)\"\\)" -S crates`
+
+Findings (must be exhaustive; list each hit and disposition):
+- Fixed (rewired to effective config / `SUBSTRATE_OVERRIDE_*`):
+  -
+- Derived/exported-state consumption only (value set earlier in-process from effective config):
+  -
+- Test-only:
+  -
+
 ## Cross-Platform Smoke
 
 Record run ids/URLs for required platforms:
 - Linux:
 - macOS:
 - Windows:
+
+Key coverage (must be validated by smoke):
+- `policy.mode` (via `SUBSTRATE_POLICY_MODE`)
+- `world.caged` (via `SUBSTRATE_CAGED`)
+- `world.anchor_mode` (via `SUBSTRATE_ANCHOR_MODE`)
 
 If any platform-fix work was required:
 - What failed:
@@ -50,4 +71,3 @@ If any platform-fix work was required:
 
 Notes:
 - 
-

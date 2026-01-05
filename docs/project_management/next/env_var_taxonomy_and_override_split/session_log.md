@@ -90,3 +90,24 @@
 - Notes:
   - External prerequisite `PCP0-integ` is marked `completed` in `docs/project_management/next/policy_and_config_precedence/tasks.json`.
   - CI dispatch uses `make feature-smoke ... RUNNER_KIND=self-hosted`; confirm runner labels exist before dispatching.
+
+## START — 2026-01-05T02:00:40Z — planning — addendum: harden EV0 audit + smoke coverage
+- Goal: Make the EV0 implementation requirements unmissable by explicitly requiring:
+  - a repo-wide grep/audit for config-shaped legacy `SUBSTRATE_*` reads outside the resolver, and
+  - smoke/manual validation that covers policy.mode plus multiple non-policy keys.
+
+## END — 2026-01-05T02:00:40Z — planning — addendum: harden EV0 audit + smoke coverage
+- Summary of changes:
+  - Added a required repo-wide grep/audit section to EV0 spec and wired it into EV0 tasks/prompts/closeout.
+  - Expanded smoke + manual testing to validate policy.mode plus non-policy keys (minimum: world.caged and world.anchor_mode).
+- Files updated:
+  - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/EV0-spec.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/plan.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/integration_map.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/decision_register.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/tasks.json`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/kickoff_prompts/*`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/manual_testing_playbook.md`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/smoke/*`
+  - `docs/project_management/next/env_var_taxonomy_and_override_split/EV0-closeout_report.md`

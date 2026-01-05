@@ -53,6 +53,7 @@ All other env vars are ignored by the effective-config resolver.
 ### Exported state is output-only for config resolution
 The effective-config resolver MUST NOT consult the following config-shaped exported-state env vars as override inputs:
 - `SUBSTRATE_WORLD`
+- `SUBSTRATE_WORLD_ENABLED`
 - `SUBSTRATE_ANCHOR_MODE`
 - `SUBSTRATE_ANCHOR_PATH`
 - `SUBSTRATE_CAGED`
@@ -61,6 +62,31 @@ The effective-config resolver MUST NOT consult the following config-shaped expor
 - `SUBSTRATE_SYNC_DIRECTION`
 - `SUBSTRATE_SYNC_CONFLICT_POLICY`
 - `SUBSTRATE_SYNC_EXCLUDE`
+
+### Exhaustive repo grep/audit (required)
+
+This slice is not considered complete until the implementation has performed an explicit repo-wide audit to ensure no commands bypass effective-config resolution by reading config-shaped `SUBSTRATE_*` values directly as *inputs*.
+
+Audit scope:
+- All Rust crates and scripts that can affect runtime behavior: `crates/`, `src/`, `scripts/`, and test harnesses under `crates/*/tests/` (tests may intentionally set env vars).
+- The audit MUST cover, at minimum, the exported-state variables listed above (including `SUBSTRATE_WORLD_ENABLED`) and any other config-shaped `SUBSTRATE_*` discovered while scanning.
+
+Required audit commands (run from repo root):
+```bash
+# Broad, fast scan (names only)
+rg -n \"SUBSTRATE_(WORLD(_ENABLED)?|ANCHOR_MODE|ANCHOR_PATH|CAGED|POLICY_MODE|SYNC_AUTO_SYNC|SYNC_DIRECTION|SYNC_CONFLICT_POLICY|SYNC_EXCLUDE)\" -S crates src scripts
+
+# Direct env reads in Rust (inputs)
+rg -n \"env::var(_os)?\\(\\\"SUBSTRATE_(WORLD(_ENABLED)?|ANCHOR_MODE|ANCHOR_PATH|CAGED|POLICY_MODE|SYNC_AUTO_SYNC|SYNC_DIRECTION|SYNC_CONFLICT_POLICY|SYNC_EXCLUDE)\\\"\\)\" -S crates
+```
+
+Audit required outcomes (fail the slice if violated):
+- For each non-test hit that can affect behavior, the implementer MUST classify it as exactly one of:
+  1) **Derived/exported state consumption** (allowed): the value is set by Substrate earlier in-process from effective config and is not used as a “user override input” (ex: trace metadata, replay env capture, world guard that consumes already-derived state).
+  2) **Override input (not allowed under legacy names)**: the code is treating `SUBSTRATE_*` as an operator-provided override input. This MUST be fixed by switching to effective config and/or `SUBSTRATE_OVERRIDE_*` (per the ADR) so “stale exports” cannot change behavior.
+  3) **Test-only** (allowed): confined to tests/harnesses and clearly test-scoped.
+- Any pre-config-resolution behavioral gating MUST NOT consult legacy config-shaped `SUBSTRATE_*` values as inputs. If gating is required, it MUST consult CLI flags and/or the resolved effective config.
+- Audit results MUST be recorded as evidence in `EV0-closeout_report.md` (summary + list of hits and classification).
 
 ### Strict parsing
 - If a supported `SUBSTRATE_OVERRIDE_*` variable is present with a non-empty value and parsing fails, the resolver MUST return a user/config error.
@@ -76,6 +102,7 @@ The effective-config resolver MUST NOT consult the following config-shaped expor
 ## Acceptance Criteria (Authoritative)
 - `crates/shell/src/execution/config_model.rs` reads only `SUBSTRATE_OVERRIDE_*` for config-shaped override inputs.
 - `crates/shell/src/execution/config_model.rs` does not read config-shaped `SUBSTRATE_*` exported-state variables as override inputs.
+- Repo-wide grep/audit is completed and any non-test config-shaped `SUBSTRATE_*` input reads are eliminated or explicitly reclassified as derived/exported-state consumption (with evidence recorded in `EV0-closeout_report.md`).
 - Errors for invalid override values mention the `SUBSTRATE_OVERRIDE_*` variable name and allowed values.
 - Feature-local smoke scripts validate the override split on all required platforms:
   - Linux: `docs/project_management/next/env_var_taxonomy_and_override_split/smoke/linux-smoke.sh`
@@ -92,4 +119,3 @@ The effective-config resolver MUST NOT consult the following config-shaped expor
 
 ### Manual testing (required)
 - Follow `docs/project_management/next/env_var_taxonomy_and_override_split/manual_testing_playbook.md`.
-

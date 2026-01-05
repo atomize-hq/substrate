@@ -15,6 +15,11 @@ Do not edit planning docs inside the worktree.
 
 ## Requirements
 - Implement exactly the behaviors and error handling in `EV0-spec.md`.
+- Perform the required repo-wide grep/audit from `EV0-spec.md` to identify any non-test code that reads config-shaped legacy `SUBSTRATE_*` values as behavior-changing inputs outside the effective-config resolver.
+  - Baseline commands (run from repo root):
+    - `rg -n "SUBSTRATE_(WORLD(_ENABLED)?|ANCHOR_MODE|ANCHOR_PATH|CAGED|POLICY_MODE|SYNC_AUTO_SYNC|SYNC_DIRECTION|SYNC_CONFLICT_POLICY|SYNC_EXCLUDE)" -S crates src scripts`
+    - `rg -n "env::var(_os)?\\(\\\"SUBSTRATE_(WORLD(_ENABLED)?|ANCHOR_MODE|ANCHOR_PATH|CAGED|POLICY_MODE|SYNC_AUTO_SYNC|SYNC_DIRECTION|SYNC_CONFLICT_POLICY|SYNC_EXCLUDE)\\\"\\)" -S crates`
+  - If any hit can change behavior and is not test-only, it must be fixed in this slice (switch to effective config and/or `SUBSTRATE_OVERRIDE_*`), or explicitly justified as derived/exported-state consumption (value set earlier in-process from effective config).
 - Run:
   - `cargo fmt`
   - `cargo clippy --workspace --all-targets -- -D warnings`
@@ -27,6 +32,5 @@ Do not edit planning docs inside the worktree.
 ## End Checklist
 1. Run required commands; capture outputs.
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="EV0-code"`
-3. Hand off baseline test command(s) and outcomes to the operator (do not edit planning docs inside the worktree).
+3. Hand off baseline test command(s) and outcomes plus the repo audit hit list/disposition to the operator (do not edit planning docs inside the worktree).
 4. Do not delete the worktree (feature cleanup removes worktrees at feature end).
-

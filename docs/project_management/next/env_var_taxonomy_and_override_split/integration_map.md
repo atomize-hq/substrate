@@ -35,6 +35,22 @@
   - `docs/ENVIRONMENT_VARIABLES.md` remains the canonical catalog.
   - `docs/CONFIGURATION.md` references the catalog and the override split.
 
+## Required implementation audit (no bypass reads)
+
+ADR-0006’s intent is repo-wide: “stable exports” must be safe to have in the environment without silently acting as overrides. EV0 therefore requires an explicit audit to catch bypass reads outside the resolver.
+
+Audit rule:
+- Non-test code MUST NOT treat config-shaped legacy `SUBSTRATE_*` values as operator override inputs. If a component needs config, it MUST consult effective config and/or the dedicated override namespace (`SUBSTRATE_OVERRIDE_*`).
+
+Required audit commands (run from repo root):
+```bash
+rg -n "SUBSTRATE_(WORLD(_ENABLED)?|ANCHOR_MODE|ANCHOR_PATH|CAGED|POLICY_MODE|SYNC_AUTO_SYNC|SYNC_DIRECTION|SYNC_CONFLICT_POLICY|SYNC_EXCLUDE)" -S crates src scripts
+rg -n "env::var(_os)?\\(\"SUBSTRATE_(WORLD(_ENABLED)?|ANCHOR_MODE|ANCHOR_PATH|CAGED|POLICY_MODE|SYNC_AUTO_SYNC|SYNC_DIRECTION|SYNC_CONFLICT_POLICY|SYNC_EXCLUDE)\"\\)" -S crates
+```
+
+Evidence requirement:
+- The final EV0 integration MUST include a summary of hits + disposition (fixed / derived-state-only / test-only) in `EV0-closeout_report.md`.
+
 ## Component map (what changes where)
 
 ### `crates/shell`
