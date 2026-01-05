@@ -54,14 +54,45 @@ Workspace builds fall back to `config/manager_hooks.yaml` and
 
 ## World Configuration
 
+Substrate distinguishes between:
+
+- `SUBSTRATE_OVERRIDE_*`: operator-provided override inputs (read by the effective-config resolver).
+- `SUBSTRATE_*`: exported state (written by Substrate; not consulted as override inputs).
+
+### Override inputs (`SUBSTRATE_OVERRIDE_*`)
+
 | Variable | Purpose | Default | Example |
 |----------|---------|---------|---------|
-| `SUBSTRATE_WORLD` | Force pass-through execution (`disabled`) | `enabled` | `disabled` |
-| `SUBSTRATE_WORLD_ENABLED` | Cached world enablement flag (installer) | `1` | `0` |
-| `SUBSTRATE_ANCHOR_MODE` | Anchor selection (`project`, `follow-cwd`, `custom`) | `project` | `follow-cwd` |
-| `SUBSTRATE_ANCHOR_PATH` | Custom anchor directory (paired with `custom` mode) | shell launch directory | `/workspaces/substrate` |
-| `SUBSTRATE_WORLD_FS_MODE` | Active world filesystem mode (policy-controlled: `writable` or `read_only`) | `writable` | `read_only` |
-| `SUBSTRATE_CAGED` | Enforce staying inside the resolved world root (`1`/`0`) | `1` | `0` |
+| `SUBSTRATE_OVERRIDE_WORLD` | Override `world.enabled` | *unset* | `disabled` |
+| `SUBSTRATE_OVERRIDE_ANCHOR_MODE` | Override `world.anchor_mode` (`workspace`, `follow-cwd`, `custom`) | *unset* | `workspace` |
+| `SUBSTRATE_OVERRIDE_ANCHOR_PATH` | Override `world.anchor_path` (paired with `custom`) | *unset* | `/workspaces/substrate` |
+| `SUBSTRATE_OVERRIDE_CAGED` | Override `world.caged` (boolean) | *unset* | `0` |
+| `SUBSTRATE_OVERRIDE_POLICY_MODE` | Override `policy.mode` (`disabled`, `observe`, `enforce`) | *unset* | `enforce` |
+| `SUBSTRATE_OVERRIDE_SYNC_AUTO_SYNC` | Override `sync.auto_sync` (boolean) | *unset* | `1` |
+| `SUBSTRATE_OVERRIDE_SYNC_DIRECTION` | Override `sync.direction` (`from_world`, `from_host`, `both`) | *unset* | `from_host` |
+| `SUBSTRATE_OVERRIDE_SYNC_CONFLICT_POLICY` | Override `sync.conflict_policy` (`prefer_host`, `prefer_world`, `abort`) | *unset* | `abort` |
+| `SUBSTRATE_OVERRIDE_SYNC_EXCLUDE` | Override `sync.exclude` (comma-separated list) | *unset* | `.git,node_modules` |
+
+Notes:
+- When `<workspace_root>/.substrate/workspace.yaml` exists, `SUBSTRATE_OVERRIDE_*` is ignored for effective config.
+- CLI flags override both config files and env overrides when a flag exists for the setting.
+
+### Exported state (`SUBSTRATE_*`, output-only)
+
+| Variable | Purpose | Default | Example |
+|----------|---------|---------|---------|
+| `SUBSTRATE_WORLD` | Effective `world.enabled` exported as `enabled|disabled` | (derived) | `disabled` |
+| `SUBSTRATE_WORLD_ENABLED` | Effective `world.enabled` exported as `1|0` | (derived) | `0` |
+| `SUBSTRATE_ANCHOR_MODE` | Effective `world.anchor_mode` exported | (derived) | `workspace` |
+| `SUBSTRATE_ANCHOR_PATH` | Effective `world.anchor_path` exported | (derived) | `/workspaces/substrate` |
+| `SUBSTRATE_CAGED` | Effective `world.caged` exported as `1|0` | (derived) | `1` |
+| `SUBSTRATE_POLICY_MODE` | Effective `policy.mode` exported | (derived) | `observe` |
+| `SUBSTRATE_WORLD_FS_MODE` | Active world filesystem mode (policy-controlled: `writable` or `read_only`) | (derived) | `read_only` |
+
+Other world-adjacent variables:
+
+| Variable | Purpose | Default | Example |
+|----------|---------|---------|---------|
 | `SUBSTRATE_WORLD_DEPS_MANIFEST` | Override manifest for `world deps` | `<prefix>/versions/<version>/config/world-deps.yaml` | `/tmp/world_deps.yaml` |
 | `SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE` | Force socket activation mode reporting (`socket_activation`, `manual`, or `unknown`) for diagnostics/tests | auto-detect via systemd | `socket_activation` |
 
@@ -70,47 +101,44 @@ parsed for compatibility.
 
 ### World root settings stack
 
-Substrate resolves the world root from highest to lowest:
+Substrate resolves world settings from highest to lowest:
 
-1. CLI flags: `--anchor-mode` / `--anchor-path` (also accepts `--world-root-mode` / `--world-root-path`)
-2. Directory config: `.substrate/settings.yaml` in the shell launch directory
-3. Global config: `~/.substrate/config.yaml` `world:` mapping
-4. Environment variables: `SUBSTRATE_ANCHOR_MODE` / `SUBSTRATE_ANCHOR_PATH`
-5. Default: `project` mode anchored to the shell launch directory
+1. CLI flags (when a flag exists): `--world` / `--no-world`, `--anchor-mode` / `--anchor-path`, `--caged` / `--uncaged`
+2. Workspace config: `<workspace_root>/.substrate/workspace.yaml`
+3. Environment overrides: `SUBSTRATE_OVERRIDE_*`
+4. Global config: `~/.substrate/config.yaml`
+5. Built-in defaults
 
-The `caged` setting follows the same precedence stack (`--caged/--uncaged` -> dir config -> global
-config -> env var `SUBSTRATE_CAGED` -> default `true`) and prevents leaving the resolved root even
-when isolation is disabled.
+The `caged` setting prevents leaving the resolved root even when isolation is disabled.
 
 Modes:
 
-- `project` – anchor the overlay to the directory where `substrate` started.
+- `workspace` – anchor the overlay to the directory where `substrate` started.
 - `follow-cwd` – recompute the root whenever the working directory changes.
 - `custom` – use an explicit path (set via `anchor_path` or `--anchor-path`).
 
-Both the global config and per-directory settings file use the same schema:
+Both the global config and workspace config use the same schema:
 
 ```yaml
 world:
-  anchor_mode: project
+  anchor_mode: workspace
   anchor_path: ""
   # Legacy keys are still parsed for compatibility:
-  root_mode: project
+  root_mode: workspace
   root_path: ""
   caged: true
 ```
 
 ### Host-only driver helpers
 
-- Use `scripts/dev/substrate_shell_driver` when invoking `target/debug/substrate` from shell scripts or automation. It resolves the workspace binary, exports `SUBSTRATE_WORLD=disabled` and `SUBSTRATE_WORLD_ENABLED=0`, and passes through all CLI arguments.
+- Use `scripts/dev/substrate_shell_driver` when invoking `target/debug/substrate` from shell scripts or automation. It resolves the workspace binary and injects `--no-world` unless `--world/--no-world` is already provided.
 - Rust integration tests rely on `crates/shell/tests/common.rs::substrate_shell_driver()` to obtain an `assert_cmd::Command` with the same environment overrides. Reuse that helper instead of reimplementing binary lookup or TMPDIR wiring.
 
 ## Install Metadata (`~/.substrate/config.yaml`)
 
 The installer and `substrate world enable` command keep a small metadata file at
 `~/.substrate/config.yaml` with install-level fields under `install:`. The same
-file (and optional `.substrate/settings.yaml` in a repo) can carry a `world:`
-mapping when you want a persistent root override:
+file can also carry the `world:` and `policy:` mappings when you want persistent defaults:
 
 ```yaml
 install:
@@ -125,15 +153,10 @@ Unknown keys and extra tables are preserved for future expansion.
 
 - Fresh installs write `world_enabled = true` unless `--no-world` is used.
 - Use `--world` to force isolation for a single run even when install metadata
-  or `SUBSTRATE_WORLD*` env vars disable it; metadata stays unchanged and
-  `--no-world` still wins when provided.
+  or `SUBSTRATE_OVERRIDE_WORLD=disabled` disables it; metadata stays unchanged and `--no-world` still wins when provided.
 - `substrate world enable` overwrites `install:` after provisioning succeeds and repairs malformed metadata.
 - Legacy installs that still have `config.json` are read automatically, but new writes use `config.yaml`.
-- The generated `~/.substrate/manager_env.sh` exports `SUBSTRATE_WORLD`,
-  `SUBSTRATE_WORLD_ENABLED`, and `SUBSTRATE_CAGED` so shims and subprocesses read
-  a consistent view of this metadata even before the CLI runs.
-- Directory configs live at `.substrate/settings.yaml` under the launch
-  directory and only carry the `world:` mapping shown above.
+- The generated `~/.substrate/manager_env.sh` exports derived `SUBSTRATE_*` state so shims and subprocesses observe a consistent view of the effective config.
 
 ### World filesystem mode
 

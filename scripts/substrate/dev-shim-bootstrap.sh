@@ -95,12 +95,12 @@ run_substrate() {
   fi
 
   if [[ -x "${SUBSTRATE_BIN}" ]]; then
-    SHIM_ORIGINAL_PATH="${PATH}" SUBSTRATE_WORLD=disabled SUBSTRATE_WORLD_ENABLED=0 "${SUBSTRATE_BIN}" "$@"
+    SHIM_ORIGINAL_PATH="${PATH}" "${SUBSTRATE_BIN}" --no-world "$@"
     return $?
   fi
 
   if command -v substrate >/dev/null 2>&1; then
-    SHIM_ORIGINAL_PATH="${PATH}" SUBSTRATE_WORLD=disabled SUBSTRATE_WORLD_ENABLED=0 substrate "$@"
+    SHIM_ORIGINAL_PATH="${PATH}" substrate --no-world "$@"
     return $?
   fi
 

@@ -18,8 +18,8 @@ Options:
 
 By default the driver uses SUBSTRATE_BIN if set, otherwise it searches
 <repo>/target/debug/substrate and target/release/substrate. The wrapper exports
-SUBSTRATE_WORLD=disabled and SUBSTRATE_WORLD_ENABLED=0 to prevent world
-provisioning during tests and developer scripts.
+--no-world by default (unless --world/--no-world is already provided) to prevent
+world provisioning during tests and developer scripts.
 USAGE
 }
 
@@ -67,7 +67,16 @@ if [[ ! -x "${SUBSTRATE_BIN}" ]]; then
   exit 2
 fi
 
-export SUBSTRATE_WORLD=disabled
-export SUBSTRATE_WORLD_ENABLED=0
-unset SUBSTRATE_WORLD_ID || true
+needs_no_world=1
+for arg in "${ARGS[@]}"; do
+  if [[ "${arg}" == "--world" || "${arg}" == "--no-world" ]]; then
+    needs_no_world=0
+    break
+  fi
+done
+
+if [[ "${needs_no_world}" -eq 1 ]]; then
+  ARGS=(--no-world "${ARGS[@]}")
+fi
+
 exec "${SUBSTRATE_BIN}" "${ARGS[@]}"

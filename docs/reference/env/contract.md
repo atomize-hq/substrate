@@ -34,7 +34,7 @@ Substrate resolves an “effective config” for each invocation:
 
 1. **Defaults** (built in)
 2. **Global config file** at `$SUBSTRATE_HOME/config.yaml` (or `~/.substrate/config.yaml` if `SUBSTRATE_HOME` is unset)
-3. **Environment overrides** via `SUBSTRATE_*` config variables (listed below)
+3. **Environment overrides** via `SUBSTRATE_OVERRIDE_*` config variables (listed below)
 4. **Workspace config file** at `<workspace_root>/.substrate/workspace.yaml` if a workspace root is detected
    - This workspace config **replaces** the effective config and discards global+env values.
 5. **CLI flags** (when a flag exists for the setting) override the resolved config
@@ -65,62 +65,62 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Examples | `export SUBSTRATE_HOME=/srv/substrate` |
 | Security notes | Value is written into `$SUBSTRATE_HOME/env.sh` when generated; it is not treated as sensitive. |
 
-#### `SUBSTRATE_WORLD`
+#### `SUBSTRATE_OVERRIDE_WORLD`
 | Field | Value |
 | --- | --- |
-| Bucket | Config override input (dual-use export) |
+| Bucket | Config override input |
 | Type / allowed values | Case-insensitive string enum: `enabled` or `disabled` (empty after trim is ignored) |
 | Default if unset | Enabled (subject to config/policy and `--no-world`) |
 | Precedence | `--world` / `--no-world` flags override; workspace config overrides env; env overrides global config when no workspace config exists |
 | Scope | Run-only |
-| Examples | `SUBSTRATE_WORLD=disabled substrate -c 'echo host-only'` |
-| Security notes | The effective value is exported to child processes (`SUBSTRATE_WORLD`) and is recorded in trace metadata when tracing is enabled. |
+| Examples | `SUBSTRATE_OVERRIDE_WORLD=disabled substrate -c 'echo host-only'` |
+| Security notes | Not sensitive. |
 
-#### `SUBSTRATE_ANCHOR_MODE`
+#### `SUBSTRATE_OVERRIDE_ANCHOR_MODE`
 | Field | Value |
 | --- | --- |
-| Bucket | Config override input (dual-use export) |
+| Bucket | Config override input |
 | Type / allowed values | Case-insensitive string enum parsed by `WorldRootMode`: `workspace`, `follow-cwd`, `custom` (empty after trim is ignored) |
 | Default if unset | `workspace` |
 | Precedence | `--anchor-mode` flag overrides; workspace config overrides env; env overrides global config when no workspace config exists |
 | Scope | Run-only |
-| Examples | `SUBSTRATE_ANCHOR_MODE=follow-cwd substrate` |
-| Security notes | The effective value is exported to child processes and is recorded in trace metadata when tracing is enabled. |
+| Examples | `SUBSTRATE_OVERRIDE_ANCHOR_MODE=follow-cwd substrate` |
+| Security notes | Not sensitive. |
 
-#### `SUBSTRATE_ANCHOR_PATH`
+#### `SUBSTRATE_OVERRIDE_ANCHOR_PATH`
 | Field | Value |
 | --- | --- |
-| Bucket | Config override input (dual-use export) |
-| Type / allowed values | String path (no validation at parse time); when `SUBSTRATE_ANCHOR_MODE=custom`, the resolved path must exist and be a directory |
+| Bucket | Config override input |
+| Type / allowed values | String path (no validation at parse time); when `SUBSTRATE_OVERRIDE_ANCHOR_MODE=custom`, the resolved path must exist and be a directory |
 | Default if unset | Empty string in config; runtime resolution uses the launch directory when not in `custom` mode |
 | Precedence | `--anchor-path` flag overrides; workspace config overrides env; env overrides global config when no workspace config exists |
 | Scope | Run-only |
-| Examples | `SUBSTRATE_ANCHOR_MODE=custom SUBSTRATE_ANCHOR_PATH=/srv/project substrate` |
-| Security notes | The value is exported to child processes and is recorded in trace metadata when tracing is enabled. |
+| Examples | `SUBSTRATE_OVERRIDE_ANCHOR_MODE=custom SUBSTRATE_OVERRIDE_ANCHOR_PATH=/srv/project substrate` |
+| Security notes | Not sensitive. |
 
-#### `SUBSTRATE_CAGED`
+#### `SUBSTRATE_OVERRIDE_CAGED`
 | Field | Value |
 | --- | --- |
-| Bucket | Config override input (dual-use export) |
+| Bucket | Config override input |
 | Type / allowed values | Boolean parsed by `parse_bool_flag`: `true|false|1|0|yes|no|on|off` (case-insensitive) |
 | Default if unset | `true` |
 | Precedence | `--caged` / `--uncaged` flags override; workspace config overrides env; env overrides global config when no workspace config exists |
 | Scope | Run-only |
-| Examples | `SUBSTRATE_CAGED=0 substrate` |
-| Security notes | The effective value is exported to child processes and is recorded in trace metadata when tracing is enabled. |
+| Examples | `SUBSTRATE_OVERRIDE_CAGED=0 substrate` |
+| Security notes | Not sensitive. |
 
-#### `SUBSTRATE_POLICY_MODE`
+#### `SUBSTRATE_OVERRIDE_POLICY_MODE`
 | Field | Value |
 | --- | --- |
-| Bucket | Config override input (dual-use export) |
+| Bucket | Config override input |
 | Type / allowed values | Case-insensitive string enum: `disabled`, `observe`, `enforce` (empty after trim is ignored) |
 | Default if unset | `observe` |
 | Precedence | Workspace config overrides env; env overrides global config when no workspace config exists; no CLI flag exists |
 | Scope | Run-only |
-| Examples | `SUBSTRATE_POLICY_MODE=enforce substrate -c 'rm -rf /tmp/deny-me'` |
-| Security notes | The effective value is exported to child processes and is used to configure policy enforcement; it is not secret. |
+| Examples | `SUBSTRATE_OVERRIDE_POLICY_MODE=enforce substrate -c 'rm -rf /tmp/deny-me'` |
+| Security notes | Not sensitive. |
 
-#### `SUBSTRATE_SYNC_AUTO_SYNC`
+#### `SUBSTRATE_OVERRIDE_SYNC_AUTO_SYNC`
 | Field | Value |
 | --- | --- |
 | Bucket | Config override input |
@@ -128,10 +128,10 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Default if unset | `false` |
 | Precedence | Workspace config overrides env; env overrides global config when no workspace config exists; no CLI flag exists |
 | Scope | Run-only |
-| Examples | `SUBSTRATE_SYNC_AUTO_SYNC=1 substrate` |
+| Examples | `SUBSTRATE_OVERRIDE_SYNC_AUTO_SYNC=1 substrate` |
 | Security notes | Not sensitive. |
 
-#### `SUBSTRATE_SYNC_DIRECTION`
+#### `SUBSTRATE_OVERRIDE_SYNC_DIRECTION`
 | Field | Value |
 | --- | --- |
 | Bucket | Config override input |
@@ -139,10 +139,10 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Default if unset | `from_world` |
 | Precedence | Workspace config overrides env; env overrides global config when no workspace config exists; no CLI flag exists |
 | Scope | Run-only |
-| Examples | `SUBSTRATE_SYNC_DIRECTION=both substrate` |
+| Examples | `SUBSTRATE_OVERRIDE_SYNC_DIRECTION=both substrate` |
 | Security notes | Not sensitive. |
 
-#### `SUBSTRATE_SYNC_CONFLICT_POLICY`
+#### `SUBSTRATE_OVERRIDE_SYNC_CONFLICT_POLICY`
 | Field | Value |
 | --- | --- |
 | Bucket | Config override input |
@@ -150,10 +150,10 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Default if unset | `prefer_host` |
 | Precedence | Workspace config overrides env; env overrides global config when no workspace config exists; no CLI flag exists |
 | Scope | Run-only |
-| Examples | `SUBSTRATE_SYNC_CONFLICT_POLICY=abort substrate` |
+| Examples | `SUBSTRATE_OVERRIDE_SYNC_CONFLICT_POLICY=abort substrate` |
 | Security notes | Not sensitive. |
 
-#### `SUBSTRATE_SYNC_EXCLUDE`
+#### `SUBSTRATE_OVERRIDE_SYNC_EXCLUDE`
 | Field | Value |
 | --- | --- |
 | Bucket | Config override input |
@@ -161,8 +161,8 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Default if unset | No user excludes; Substrate always injects protected excludes: `.git/**`, `.substrate/**`, `.substrate-git/**` |
 | Precedence | Workspace config overrides env; env overrides global config when no workspace config exists; no CLI flag exists |
 | Scope | Run-only |
-| Examples | `SUBSTRATE_SYNC_EXCLUDE='node_modules,dist' substrate` |
-| Security notes | Values are stored in config and exported state (`env.sh`) and are recorded in trace metadata when tracing is enabled; access to those files reveals the configured patterns. |
+| Examples | `SUBSTRATE_OVERRIDE_SYNC_EXCLUDE='node_modules,dist' substrate` |
+| Security notes | Values are recorded in trace metadata when tracing is enabled; access to trace logs reveals the configured patterns. |
 
 ### Config Override Inputs (Substrate CLI auxiliary manifests)
 
@@ -897,6 +897,17 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 
 ### Exported State Variables (written by Substrate)
 
+#### `SUBSTRATE_WORLD`
+| Field | Value |
+| --- | --- |
+| Bucket | Exported state variable |
+| Type / allowed values | Case-insensitive string enum: `enabled` or `disabled` |
+| Default if unset | Not relied on; Substrate sets it during invocation planning |
+| Precedence | Written by Substrate; operator-set values are overwritten |
+| Scope | Run-only |
+| Examples | `echo "$SUBSTRATE_WORLD"` |
+| Security notes | Not sensitive; recorded in trace metadata when tracing is enabled. |
+
 #### `SUBSTRATE_WORLD_ENABLED`
 | Field | Value |
 | --- | --- |
@@ -907,6 +918,50 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Scope | Run-only |
 | Examples | `echo "$SUBSTRATE_WORLD_ENABLED"` |
 | Security notes | Not sensitive. |
+
+#### `SUBSTRATE_ANCHOR_MODE`
+| Field | Value |
+| --- | --- |
+| Bucket | Exported state variable |
+| Type / allowed values | Canonical strings: `workspace`, `follow-cwd`, `custom` |
+| Default if unset | Not relied on; Substrate sets it during invocation planning |
+| Precedence | Written by Substrate; operator-set values are overwritten |
+| Scope | Run-only |
+| Examples | `echo "$SUBSTRATE_ANCHOR_MODE"` |
+| Security notes | Not sensitive; recorded in trace metadata when tracing is enabled. |
+
+#### `SUBSTRATE_ANCHOR_PATH`
+| Field | Value |
+| --- | --- |
+| Bucket | Exported state variable |
+| Type / allowed values | String path (may be empty) |
+| Default if unset | Not relied on; Substrate sets it during invocation planning |
+| Precedence | Written by Substrate; operator-set values are overwritten |
+| Scope | Run-only |
+| Examples | `echo "$SUBSTRATE_ANCHOR_PATH"` |
+| Security notes | Not sensitive; recorded in trace metadata when tracing is enabled. |
+
+#### `SUBSTRATE_CAGED`
+| Field | Value |
+| --- | --- |
+| Bucket | Exported state variable |
+| Type / allowed values | String `1` (caged) or `0` (uncaged) |
+| Default if unset | Not relied on; Substrate sets it during invocation planning |
+| Precedence | Written by Substrate; operator-set values are overwritten |
+| Scope | Run-only |
+| Examples | `echo "$SUBSTRATE_CAGED"` |
+| Security notes | Not sensitive; recorded in trace metadata when tracing is enabled. |
+
+#### `SUBSTRATE_POLICY_MODE`
+| Field | Value |
+| --- | --- |
+| Bucket | Exported state variable |
+| Type / allowed values | Canonical strings: `disabled`, `observe`, `enforce` |
+| Default if unset | Not relied on; Substrate sets it during invocation planning |
+| Precedence | Written by Substrate; operator-set values are overwritten |
+| Scope | Run-only |
+| Examples | `echo "$SUBSTRATE_POLICY_MODE"` |
+| Security notes | Not sensitive; recorded in trace metadata when tracing is enabled. |
 
 #### `SUBSTRATE_WORLD_ID`
 | Field | Value |

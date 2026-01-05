@@ -433,7 +433,7 @@ fi
 
 if [[ -n "${SUBSTRATE_BIN}" ]]; then
   log "Removing shims via ${SUBSTRATE_BIN}"
-  if ! SHIM_ORIGINAL_PATH="${PATH}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_WORLD=disabled SUBSTRATE_WORLD_ENABLED=0 "${SUBSTRATE_BIN}" --shim-remove; then
+  if ! SHIM_ORIGINAL_PATH="${PATH}" SUBSTRATE_ROOT="${PREFIX}" "${SUBSTRATE_BIN}" --no-world --shim-remove; then
     warn "substrate --shim-remove returned an error"
   fi
 else

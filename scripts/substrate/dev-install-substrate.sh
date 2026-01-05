@@ -153,11 +153,11 @@ write_env_sh_script() {
   cat > "${ENV_SH_PATH}.tmp" <<EOF
 #!/usr/bin/env bash
 export SUBSTRATE_HOME=${substrate_home_literal}
-export SUBSTRATE_WORLD=${world_literal}
-export SUBSTRATE_CAGED=${caged_literal}
-export SUBSTRATE_ANCHOR_MODE=${anchor_mode_literal}
-export SUBSTRATE_ANCHOR_PATH=${anchor_path_literal}
-export SUBSTRATE_POLICY_MODE=${policy_mode_literal}
+export SUBSTRATE_OVERRIDE_WORLD=${world_literal}
+export SUBSTRATE_OVERRIDE_CAGED=${caged_literal}
+export SUBSTRATE_OVERRIDE_ANCHOR_MODE=${anchor_mode_literal}
+export SUBSTRATE_OVERRIDE_ANCHOR_PATH=${anchor_path_literal}
+export SUBSTRATE_OVERRIDE_POLICY_MODE=${policy_mode_literal}
 EOF
   mv "${ENV_SH_PATH}.tmp" "${ENV_SH_PATH}"
   chmod 0644 "${ENV_SH_PATH}" || true

@@ -22,8 +22,7 @@ invalid_out="${tmpdir}/invalid.out"
 set +e
 (
   cd "${tmpdir}/proj" || exit 1
-  HOME="${tmpdir}/home" USERPROFILE="${tmpdir}/home" SUBSTRATE_WORLD=disabled SUBSTRATE_WORLD_ENABLED=0 \
-    "${substrate_bin}" -c 'true'
+  HOME="${tmpdir}/home" USERPROFILE="${tmpdir}/home" "${substrate_bin}" --no-world -c 'true'
 ) >"${invalid_out}" 2>&1
 status=$?
 set -e
@@ -64,8 +63,7 @@ valid_out="${tmpdir}/valid.out"
 set +e
 (
   cd "${tmpdir}/proj" || exit 1
-  HOME="${tmpdir}/home" USERPROFILE="${tmpdir}/home" SUBSTRATE_WORLD=disabled SUBSTRATE_WORLD_ENABLED=0 \
-    "${substrate_bin}" -c 'true'
+  HOME="${tmpdir}/home" USERPROFILE="${tmpdir}/home" "${substrate_bin}" --no-world -c 'true'
 ) >"${valid_out}" 2>&1
 status=$?
 set -e
