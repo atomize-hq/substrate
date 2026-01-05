@@ -424,7 +424,6 @@ impl ShellConfig {
 
         // Handle --replay flag
         if let Some(span_id) = cli.replay.clone() {
-            let _ = set_global_broker(BrokerHandle::new());
             let _ = set_global_trace_context(TraceContext::default());
             if let Err(e) = init_trace(None) {
                 eprintln!("substrate: warning: failed to initialize trace: {}", e);
@@ -463,6 +462,7 @@ impl ShellConfig {
                 },
             )?;
             env::set_var("SUBSTRATE_POLICY_MODE", effective.policy.mode.as_str());
+            let _ = set_global_broker(BrokerHandle::new());
             update_world_env(!effective.world.enabled);
             handle_replay_command(&span_id, &cli)?;
             std::process::exit(0);
