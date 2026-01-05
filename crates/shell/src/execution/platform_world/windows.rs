@@ -53,19 +53,22 @@ fn socket_path_from_transport(transport: &Transport) -> PathBuf {
     }
 }
 pub fn ensure_world_ready(cli: &Cli) -> Result<Option<String>> {
-    ensure_world_ready_impl(cli, get_backend)
+    ensure_world_ready_impl(cli, false, get_backend)
 }
 
-fn ensure_world_ready_impl<F>(cli: &Cli, backend_provider: F) -> Result<Option<String>>
+pub fn ensure_world_ready_with_state(cli: &Cli, no_world: bool) -> Result<Option<String>> {
+    ensure_world_ready_impl(cli, no_world, get_backend)
+}
+
+fn ensure_world_ready_impl<F>(
+    cli: &Cli,
+    no_world: bool,
+    backend_provider: F,
+) -> Result<Option<String>>
 where
     F: FnOnce() -> Result<Arc<dyn WorldBackend>>,
 {
-    if cli.no_world {
-        return Ok(None);
-    }
-
-    let world_env = std::env::var("SUBSTRATE_WORLD").unwrap_or_default();
-    if world_env == "disabled" && !cli.world {
+    if no_world {
         return Ok(None);
     }
 
@@ -214,7 +217,7 @@ mod tests {
         let calls = Arc::new(AtomicUsize::new(0));
         let backend = Arc::new(StubBackend::new("wld_test", calls.clone()));
 
-        let result = ensure_world_ready_impl(&cli, || Ok(backend.clone())).unwrap();
+        let result = ensure_world_ready_impl(&cli, false, || Ok(backend.clone())).unwrap();
         assert_eq!(result.as_deref(), Some("wld_test"));
         assert_eq!(std::env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
         assert_eq!(std::env::var("SUBSTRATE_WORLD_ID").unwrap(), "wld_test");
@@ -234,7 +237,7 @@ mod tests {
         let calls = Arc::new(AtomicUsize::new(0));
         let backend = Arc::new(StubBackend::new("wld_forced", calls.clone()));
 
-        let result = ensure_world_ready_impl(&cli, || Ok(backend.clone())).unwrap();
+        let result = ensure_world_ready_impl(&cli, false, || Ok(backend.clone())).unwrap();
         assert_eq!(result.as_deref(), Some("wld_forced"));
         assert_eq!(std::env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
         assert_eq!(std::env::var("SUBSTRATE_WORLD_ID").unwrap(), "wld_forced");
@@ -254,7 +257,7 @@ mod tests {
         let calls = Arc::new(AtomicUsize::new(0));
         let backend = Arc::new(StubBackend::new("wld_test", calls.clone()));
 
-        let result = ensure_world_ready_impl(&cli, || Ok(backend.clone())).unwrap();
+        let result = ensure_world_ready_impl(&cli, true, || Ok(backend.clone())).unwrap();
         assert!(result.is_none());
         assert_eq!(calls.load(Ordering::SeqCst), 0);
 

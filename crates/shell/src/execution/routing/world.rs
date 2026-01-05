@@ -3,19 +3,15 @@
 #[cfg(all(test, any(target_os = "windows", target_os = "macos")))]
 use crate::execution::world_env_guard;
 use crate::execution::ShellConfig;
-use std::env;
 
 #[cfg(target_os = "linux")]
 use super::dispatch::init_linux_world;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use crate::execution::pw;
 
-/// Check whether world support should be disabled based on environment or CLI flags.
+/// Check whether world support should be disabled based on resolved config.
 pub(crate) fn world_disabled(config: &ShellConfig) -> bool {
-    env::var("SUBSTRATE_WORLD")
-        .map(|v| v == "disabled")
-        .unwrap_or(false)
-        || config.no_world
+    config.no_world
 }
 
 /// Initialize world support for the current platform when enabled.

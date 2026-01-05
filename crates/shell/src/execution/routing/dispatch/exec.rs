@@ -262,7 +262,7 @@ pub(crate) fn execute_command(
 
     if world_required && world_disabled {
         anyhow::bail!(
-            "world execution required ({}) but world is disabled (SUBSTRATE_WORLD=disabled, --no-world, or world.enabled=false)",
+            "world execution required ({}) but world is disabled (SUBSTRATE_OVERRIDE_WORLD=disabled, --no-world, or world.enabled=false)",
             world_required_reason
         );
     }

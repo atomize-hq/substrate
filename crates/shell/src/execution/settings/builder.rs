@@ -63,7 +63,7 @@ fn resolve_custom_anchor_path(raw: &str, launch_dir: &Path) -> Result<PathBuf> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err(user_error(
-            "anchor_mode=custom requires world.anchor_path to be non-empty (use --anchor-path, SUBSTRATE_ANCHOR_PATH, or config)",
+            "anchor_mode=custom requires world.anchor_path to be non-empty (use --anchor-path, SUBSTRATE_OVERRIDE_ANCHOR_PATH, or config)",
         ));
     }
 

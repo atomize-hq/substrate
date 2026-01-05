@@ -223,8 +223,6 @@ pub(crate) fn resolve_effective_config(
 ) -> Result<SubstrateConfig> {
     let (mut effective, _) = read_global_config_or_defaults()?;
 
-    apply_env_overrides(&mut effective)?;
-
     let workspace_root = workspace::find_workspace_root(cwd);
     if let Some(root) = &workspace_root {
         let legacy = workspace::workspace_legacy_settings_path(root);
@@ -240,6 +238,8 @@ pub(crate) fn resolve_effective_config(
         let raw = fs::read_to_string(&workspace_path)
             .with_context(|| format!("failed to read {}", workspace_path.display()))?;
         effective = parse_config_yaml(&workspace_path, &raw)?;
+    } else {
+        apply_env_overrides(&mut effective)?;
     }
 
     apply_cli_overrides(&mut effective, cli);
@@ -264,7 +264,7 @@ fn apply_cli_overrides(cfg: &mut SubstrateConfig, cli: &CliConfigOverrides) {
 }
 
 fn apply_env_overrides(cfg: &mut SubstrateConfig) -> Result<()> {
-    if let Ok(world) = env::var("SUBSTRATE_WORLD") {
+    if let Ok(world) = env::var("SUBSTRATE_OVERRIDE_WORLD") {
         let normalized = world.trim().to_ascii_lowercase();
         if !normalized.is_empty() {
             cfg.world.enabled = match normalized.as_str() {
@@ -272,7 +272,7 @@ fn apply_env_overrides(cfg: &mut SubstrateConfig) -> Result<()> {
                 "disabled" => false,
                 _ => {
                     return Err(user_error(format!(
-                        "SUBSTRATE_WORLD must be 'enabled' or 'disabled' (found '{}')",
+                        "SUBSTRATE_OVERRIDE_WORLD must be 'enabled' or 'disabled' (found '{}')",
                         world
                     )));
                 }
@@ -280,80 +280,86 @@ fn apply_env_overrides(cfg: &mut SubstrateConfig) -> Result<()> {
         }
     }
 
-    if let Ok(mode) = env::var("SUBSTRATE_ANCHOR_MODE") {
+    if let Ok(mode) = env::var("SUBSTRATE_OVERRIDE_ANCHOR_MODE") {
         let trimmed = mode.trim();
         if !trimmed.is_empty() {
             cfg.world.anchor_mode = WorldRootMode::parse(trimmed).ok_or_else(|| {
                 user_error(format!(
-                    "SUBSTRATE_ANCHOR_MODE must be one of workspace, follow-cwd, or custom (found '{}')",
+                    "SUBSTRATE_OVERRIDE_ANCHOR_MODE must be one of workspace, follow-cwd, or custom (found '{}')",
                     mode
                 ))
             })?;
         }
     }
 
-    if let Ok(path) = env::var("SUBSTRATE_ANCHOR_PATH") {
+    if let Ok(path) = env::var("SUBSTRATE_OVERRIDE_ANCHOR_PATH") {
         cfg.world.anchor_path = path;
     }
 
-    if let Ok(raw) = env::var("SUBSTRATE_CAGED") {
-        let parsed = parse_bool_flag(&raw).ok_or_else(|| {
-            user_error(format!(
-                "SUBSTRATE_CAGED must be a boolean (true|false|1|0|yes|no|on|off) (found '{}')",
-                raw
-            ))
-        })?;
-        cfg.world.caged = parsed;
+    if let Ok(raw) = env::var("SUBSTRATE_OVERRIDE_CAGED") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            let parsed = parse_bool_flag(trimmed).ok_or_else(|| {
+                user_error(format!(
+                    "SUBSTRATE_OVERRIDE_CAGED must be a boolean (true|false|1|0|yes|no|on|off) (found '{}')",
+                    raw
+                ))
+            })?;
+            cfg.world.caged = parsed;
+        }
     }
 
-    if let Ok(raw) = env::var("SUBSTRATE_POLICY_MODE") {
+    if let Ok(raw) = env::var("SUBSTRATE_OVERRIDE_POLICY_MODE") {
         let trimmed = raw.trim();
         if !trimmed.is_empty() {
             cfg.policy.mode = PolicyMode::parse_insensitive(trimmed).ok_or_else(|| {
                 user_error(format!(
-                    "SUBSTRATE_POLICY_MODE must be one of disabled, observe, or enforce (found '{}')",
+                    "SUBSTRATE_OVERRIDE_POLICY_MODE must be one of disabled, observe, or enforce (found '{}')",
                     raw
                 ))
             })?;
         }
     }
 
-    if let Ok(raw) = env::var("SUBSTRATE_SYNC_AUTO_SYNC") {
-        let parsed = parse_bool_flag(&raw).ok_or_else(|| {
-            user_error(format!(
-                "SUBSTRATE_SYNC_AUTO_SYNC must be a boolean (true|false|1|0|yes|no|on|off) (found '{}')",
-                raw
-            ))
-        })?;
-        cfg.sync.auto_sync = parsed;
+    if let Ok(raw) = env::var("SUBSTRATE_OVERRIDE_SYNC_AUTO_SYNC") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            let parsed = parse_bool_flag(trimmed).ok_or_else(|| {
+                user_error(format!(
+                    "SUBSTRATE_OVERRIDE_SYNC_AUTO_SYNC must be a boolean (true|false|1|0|yes|no|on|off) (found '{}')",
+                    raw
+                ))
+            })?;
+            cfg.sync.auto_sync = parsed;
+        }
     }
 
-    if let Ok(raw) = env::var("SUBSTRATE_SYNC_DIRECTION") {
+    if let Ok(raw) = env::var("SUBSTRATE_OVERRIDE_SYNC_DIRECTION") {
         let trimmed = raw.trim();
         if !trimmed.is_empty() {
             cfg.sync.direction = SyncDirection::parse_insensitive(trimmed).ok_or_else(|| {
                 user_error(format!(
-                    "SUBSTRATE_SYNC_DIRECTION must be one of from_world, from_host, or both (found '{}')",
+                    "SUBSTRATE_OVERRIDE_SYNC_DIRECTION must be one of from_world, from_host, or both (found '{}')",
                     raw
                 ))
             })?;
         }
     }
 
-    if let Ok(raw) = env::var("SUBSTRATE_SYNC_CONFLICT_POLICY") {
+    if let Ok(raw) = env::var("SUBSTRATE_OVERRIDE_SYNC_CONFLICT_POLICY") {
         let trimmed = raw.trim();
         if !trimmed.is_empty() {
             cfg.sync.conflict_policy =
                 SyncConflictPolicy::parse_insensitive(trimmed).ok_or_else(|| {
                     user_error(format!(
-                        "SUBSTRATE_SYNC_CONFLICT_POLICY must be one of prefer_host, prefer_world, or abort (found '{}')",
+                        "SUBSTRATE_OVERRIDE_SYNC_CONFLICT_POLICY must be one of prefer_host, prefer_world, or abort (found '{}')",
                         raw
                     ))
                 })?;
         }
     }
 
-    if let Ok(raw) = env::var("SUBSTRATE_SYNC_EXCLUDE") {
+    if let Ok(raw) = env::var("SUBSTRATE_OVERRIDE_SYNC_EXCLUDE") {
         let items = raw
             .split(',')
             .map(|item| item.trim())
