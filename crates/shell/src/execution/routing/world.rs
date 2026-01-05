@@ -38,9 +38,9 @@ fn init_windows_world(config: &ShellConfig) {
     match pw::detect() {
         Ok(ctx) => {
             if (ctx.ensure_ready)().is_ok() {
-                env::set_var("SUBSTRATE_WORLD", "enabled");
+                std::env::set_var("SUBSTRATE_WORLD", "enabled");
                 if let Ok(handle) = ctx.backend.ensure_session(&pw::windows::world_spec()) {
-                    env::set_var("SUBSTRATE_WORLD_ID", handle.id);
+                    std::env::set_var("SUBSTRATE_WORLD_ID", handle.id);
                 }
             }
             pw::store_context_globally(ctx);
@@ -65,7 +65,7 @@ fn init_macos_world(config: &ShellConfig) {
         Ok(ctx) => {
             if (ctx.ensure_ready)().is_ok() {
                 // Set parity with Linux: world enabled + ID only
-                env::set_var("SUBSTRATE_WORLD", "enabled");
+                std::env::set_var("SUBSTRATE_WORLD", "enabled");
 
                 // Attempt to retrieve world id
                 let spec = WorldSpec {
@@ -79,7 +79,7 @@ fn init_macos_world(config: &ShellConfig) {
                     fs_mode: world_fs_mode(),
                 };
                 if let Ok(handle) = ctx.backend.ensure_session(&spec) {
-                    env::set_var("SUBSTRATE_WORLD_ID", handle.id);
+                    std::env::set_var("SUBSTRATE_WORLD_ID", handle.id);
                 }
             }
             pw::store_context_globally(ctx);
