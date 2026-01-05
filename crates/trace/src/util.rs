@@ -8,10 +8,18 @@ use std::time::SystemTime;
 pub fn hash_env_vars() -> Result<String> {
     let mut hasher = Sha256::new();
 
-    for (key, value) in env::vars() {
-        if !key.starts_with("SHIM_") && !key.starts_with("SUBSTRATE_") {
-            hasher.update(format!("{}={}\n", key, value));
-        }
+    let mut vars = env::vars()
+        .filter(|(key, _)| !key.starts_with("SHIM_") && !key.starts_with("SUBSTRATE_"))
+        .collect::<Vec<_>>();
+    vars.sort_by(|(key_a, value_a), (key_b, value_b)| {
+        key_a.cmp(key_b).then_with(|| value_a.cmp(value_b))
+    });
+
+    for (key, value) in vars {
+        hasher.update(key.as_bytes());
+        hasher.update(b"=");
+        hasher.update(value.as_bytes());
+        hasher.update(b"\n");
     }
 
     Ok(format!("{:x}", hasher.finalize()))
