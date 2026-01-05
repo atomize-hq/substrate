@@ -17,7 +17,7 @@ use windows::Win32::Security::{
     GetSecurityDescriptorLength, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES,
 };
 
-const SECURITY_DESCRIPTOR: &str = "D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;IU)";
+const SECURITY_DESCRIPTOR: &str = "D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;OW)(A;;GA;;;IU)";
 const ERROR_PIPE_CONNECTED: i32 = 535;
 
 #[derive(Debug)]
