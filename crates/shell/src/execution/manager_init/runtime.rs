@@ -236,8 +236,17 @@ pub(crate) fn detect_script(script: &str, platform: Platform) -> Result<Option<S
 fn run_detect_script(script: &str, platform: Platform) -> Result<bool> {
     let mut cmd = match platform {
         Platform::Windows => {
-            let mut command = Command::new("powershell");
-            command.arg("-NoProfile").arg("-Command").arg(script);
+            let shell = if which("pwsh").is_ok() {
+                "pwsh"
+            } else {
+                "powershell"
+            };
+            let mut command = Command::new(shell);
+            command
+                .arg("-NoProfile")
+                .arg("-NonInteractive")
+                .arg("-Command")
+                .arg(script);
             command
         }
         Platform::Linux | Platform::MacOs => {

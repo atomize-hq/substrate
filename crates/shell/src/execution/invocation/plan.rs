@@ -562,8 +562,7 @@ impl ShellConfig {
         let bash_preexec_path = PathBuf::from(&home).join(".substrate_preexec");
         let host_bash_env = env::var("BASH_ENV").ok();
 
-        let skip_shims_flag =
-            cfg!(windows) || cli.shim_skip || env::var("SUBSTRATE_NO_SHIMS").is_ok();
+        let skip_shims_flag = cli.shim_skip || env::var("SUBSTRATE_NO_SHIMS").is_ok();
         let shimmed_path = if skip_shims_flag || final_no_world {
             None
         } else {
