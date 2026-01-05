@@ -3,6 +3,8 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::process::Command;
+use std::process::Stdio;
+use std::time::{Duration, Instant};
 
 /// Lima VM manager for substrate.
 pub struct LimaVM {
@@ -23,9 +25,7 @@ impl LimaVM {
 
     /// Get the status of this VM.
     pub fn status(&self) -> Result<VmStatus> {
-        let output = Command::new("limactl")
-            .args(["list", "--json"])
-            .output()
+        let output = run_limactl(["list", "--json"], Duration::from_secs(10))
             .context("Failed to execute limactl list")?;
 
         if !output.status.success() {
@@ -89,12 +89,13 @@ impl LimaVM {
     fn start(&self) -> Result<()> {
         println!("Starting Lima VM '{}'...", self.name);
 
-        let status = Command::new("limactl")
-            .args(["start", &self.name, "--tty=false"])
-            .status()
-            .context("Failed to execute limactl start")?;
+        let output = run_limactl(
+            ["start", &self.name, "--tty=false"],
+            Duration::from_secs(300),
+        )
+        .context("Failed to execute limactl start")?;
 
-        if !status.success() {
+        if !output.status.success() {
             anyhow::bail!("Failed to start Lima VM '{}'", self.name);
         }
 
@@ -122,12 +123,10 @@ impl LimaVM {
 
     /// Stop the VM.
     pub fn stop(&self) -> Result<()> {
-        let status = Command::new("limactl")
-            .args(["stop", &self.name])
-            .status()
+        let output = run_limactl(["stop", &self.name], Duration::from_secs(60))
             .context("Failed to execute limactl stop")?;
 
-        if !status.success() {
+        if !output.status.success() {
             anyhow::bail!("Failed to stop Lima VM '{}'", self.name);
         }
 
@@ -136,19 +135,18 @@ impl LimaVM {
 
     /// Execute a command inside the VM via SSH.
     pub fn exec(&self, cmd: &str) -> Result<std::process::Output> {
-        let output = Command::new("limactl")
-            .args(["shell", &self.name, "sh", "-c", cmd])
-            .output()
-            .context("Failed to execute command in VM")?;
+        let output = run_limactl(
+            ["shell", &self.name, "sh", "-c", cmd],
+            Duration::from_secs(60),
+        )
+        .context("Failed to execute command in VM")?;
 
         Ok(output)
     }
 
     /// Get VM info.
     pub fn info(&self) -> Result<VmInfo> {
-        let output = Command::new("limactl")
-            .args(["list", &self.name, "--json"])
-            .output()
+        let output = run_limactl(["list", &self.name, "--json"], Duration::from_secs(10))
             .context("Failed to get VM info")?;
 
         #[derive(Deserialize)]
@@ -180,6 +178,32 @@ impl LimaVM {
             memory: instance.memory,
         })
     }
+}
+
+fn run_limactl<const N: usize>(args: [&str; N], timeout: Duration) -> Result<std::process::Output> {
+    let mut child = Command::new("limactl")
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("failed to spawn limactl {:?}", args))?;
+
+    let start = Instant::now();
+    loop {
+        if child.try_wait()?.is_some() {
+            break;
+        }
+
+        if start.elapsed() >= timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            anyhow::bail!("limactl {:?} timed out after {:?}", args, timeout);
+        }
+
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    Ok(child.wait_with_output()?)
 }
 
 #[derive(Debug, Clone, PartialEq)]
