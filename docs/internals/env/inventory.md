@@ -20,7 +20,7 @@ Evidence sources searched for concrete read/write usage (excluding `docs/**` as 
 
 ### Namespaces
 - `SUBSTRATE_*`: Substrate runtime surface area (state exports, override-only knobs, internal/test toggles).
-- `SUBSTRATE_OVERRIDE_*` (planned by ADR-0006): operator/test override inputs to effective-config resolution (separate from exported state).
+- `SUBSTRATE_OVERRIDE_*`: operator/test override inputs to effective-config resolution (separate from exported state).
 - `SHIM_*`: Substrate shim internal coordination and logging controls.
 - `TRACE_*`: trace writer controls.
 - `WORLD_*`: world backend controls.
@@ -29,7 +29,7 @@ Evidence sources searched for concrete read/write usage (excluding `docs/**` as 
 ### Variant classes
 - `dual-use (legacy)`: exported by Substrate-owned scripts/runtime *and* treated as config override inputs today (ADR-0006 removes the override role).
 - `state (exported)`: exported state used for propagation; should not be treated as config overrides after ADR-0006.
-- `override input (planned)`: reserved `SUBSTRATE_OVERRIDE_*` names for config-shaped override inputs (ADR-0006).
+- `override input`: `SUBSTRATE_OVERRIDE_*` names for config-shaped override inputs (ADR-0006).
 - `override-only / internal`: non-config-shaped knobs and internal toggles; not exported as stable state by default.
 - `internal/shim`, `internal/trace`, `internal/world`: coordination variables for internal components.
 - `test/example`: fixtures/examples; not a supported interface.
@@ -43,7 +43,7 @@ Evidence sources searched for concrete read/write usage (excluding `docs/**` as 
   - `SUBSTRATE_TEST_LINGER_STATE_OVERRIDE`
   - `SUBSTRATE_TEST_USER_GROUPS_OVERRIDE`
 
-## Planned Override Inputs (ADR-0006)
+## Config Override Inputs (`SUBSTRATE_OVERRIDE_*`, ADR-0006)
 
 These names are reserved for config-shaped override inputs and will be the only supported env override inputs for effective-config resolution once ADR-0006 is executed:
 
@@ -57,7 +57,7 @@ These names are reserved for config-shaped override inputs and will be the only 
 - `SUBSTRATE_OVERRIDE_SYNC_CONFLICT_POLICY`
 - `SUBSTRATE_OVERRIDE_SYNC_EXCLUDE`
 
-Repo usage status (as of this inventory update): no read/write sites found in `crates/`, `src/`, `scripts/`, `tests/`, or `.github/workflows/` for any `SUBSTRATE_OVERRIDE_*` name. These are therefore excluded from the usage catalog below.
+Repo usage status (as of this inventory update): these override inputs are read by the shell effective-config resolver and are set by installers/tests; they are included in the catalog below.
 
 ## Exclusions (Not Read/Written In Code/Scripts/Tests/CI)
 
@@ -111,11 +111,11 @@ Column notes:
 | `SUBSTRATE_AGENT_ID` | `SUBSTRATE` | override-only / internal | read | replay, shell, telemetry-lib, trace, world-backend | — | crates/world-windows-wsl/src/backend.rs:71; crates/trace/src/span.rs:143 | string | internal | no | yes (trace component) |
 | `SUBSTRATE_AGENT_TCP_PORT` | `SUBSTRATE` | state (exported) | both | scripts, world-agent | crates/world-agent/src/lib.rs:547; crates/world-agent/src/lib.rs:561 | crates/world-agent/src/lib.rs:424 | string | internal | no | no direct site |
 | `SUBSTRATE_AGENT_TRANSPORT` | `SUBSTRATE` | override-only / internal | read | host-proxy | — | crates/host-proxy/src/runtime.rs:333 | string | internal | no | no direct site |
-| `SUBSTRATE_ANCHOR_MODE` | `SUBSTRATE` | state (exported) | both | replay, scripts, shell, trace, world-agent, world-backend | crates/shell/src/execution/routing/builtin/tests.rs:128; crates/shell/src/execution/routing/builtin/tests.rs:182 | crates/trace/src/context.rs:169; crates/shell/src/execution/config_model.rs:283 | string | internal | no | yes (trace component) |
-| `SUBSTRATE_ANCHOR_PATH` | `SUBSTRATE` | state (exported) | both | replay, scripts, shell, trace, world-agent | crates/shell/src/execution/routing/builtin/tests.rs:129; crates/shell/src/execution/routing/builtin/tests.rs:183 | crates/trace/src/context.rs:170; crates/shell/src/execution/config_model.rs:295 | string | internal | no | yes (trace component) |
+| `SUBSTRATE_ANCHOR_MODE` | `SUBSTRATE` | state (exported) | both | replay, scripts, shell, trace, world-agent, world-backend | crates/shell/src/execution/env_scripts.rs:58; crates/replay/src/state.rs:138 | crates/trace/src/context.rs:169; crates/world-agent/src/service.rs:511 | string | internal | no | yes (trace component) |
+| `SUBSTRATE_ANCHOR_PATH` | `SUBSTRATE` | state (exported) | both | replay, scripts, shell, trace, world-agent | crates/shell/src/execution/env_scripts.rs:62; crates/replay/src/state.rs:140 | crates/trace/src/context.rs:170; crates/world-agent/src/service.rs:516 | string | internal | no | yes (trace component) |
 | `SUBSTRATE_BASHENV_ACTIVE` | `SUBSTRATE` | state (exported) | both | shell | crates/shell/src/builtins/shim_doctor/repair.rs:21 | crates/shell/src/builtins/shim_doctor/repair.rs:18 | string | internal | no | no direct site |
 | `SUBSTRATE_BIN` | `SUBSTRATE` | override-only / internal | both | scripts | scripts/validate_phase_d.sh:20 | scripts/mac/smoke.sh:11 | string | script-only | no | no direct site |
-| `SUBSTRATE_CAGED` | `SUBSTRATE` | state (exported) | both | replay, scripts, shell, trace, world-backend | crates/shell/src/execution/settings/runtime.rs:15; crates/shell/src/execution/routing/builtin/tests.rs:179 | crates/trace/src/context.rs:174; crates/shell/src/execution/config_model.rs:299 | string | internal | no | yes (trace component) |
+| `SUBSTRATE_CAGED` | `SUBSTRATE` | state (exported) | both | replay, scripts, shell, trace, world-backend | crates/shell/src/execution/settings/runtime.rs:15; crates/shell/src/execution/env_scripts.rs:56 | crates/trace/src/context.rs:174; crates/world/src/guard.rs:13 | string | internal | no | yes (trace component) |
 | `SUBSTRATE_COMMAND_SUCCESS_EVENTS` | `SUBSTRATE` | override-only / internal | read | shell | — | crates/shell/src/execution/agent_events.rs:74 | string | internal | no | no direct site |
 | `SUBSTRATE_COPYDIFF_ROOT` | `SUBSTRATE` | override-only / internal | both | shell, world-backend | crates/shell/tests/replay_world.rs:1674 | crates/world/src/copydiff.rs:130 | string | internal | no | no direct site |
 | `SUBSTRATE_DEV_BIN` | `SUBSTRATE` | override-only / internal | read | scripts | — | scripts/substrate/dev-shim-bootstrap.sh:38 | string | script-only | no | no direct site |
@@ -165,10 +165,19 @@ Column notes:
 | `SUBSTRATE_NETNS_GC_TTL_SECS` | `SUBSTRATE` | override-only / internal | read | world-agent | — | crates/world-agent/src/handlers.rs:119; crates/world-agent/src/lib.rs:95 | u64 (seconds) | internal | no | no direct site |
 | `SUBSTRATE_NO_SHIMS` | `SUBSTRATE` | state (exported) | both | shell | crates/shell/src/execution/invocation/tests.rs:54; crates/shell/tests/shim_deployment.rs:120 | crates/shell/src/execution/shim_deploy.rs:51; crates/shell/src/execution/invocation/tests.rs:50 | string | internal | no | no direct site |
 | `SUBSTRATE_ORIGINAL_BASH_ENV` | `SUBSTRATE` | override-only / internal | both | scripts, shell | crates/shell/src/builtins/world_deps/guest.rs:270; crates/shell/src/builtins/world_deps/guest.rs:272 | crates/shell/src/execution/manager.rs:181; scripts/substrate/install-substrate.sh:882 | string | internal | no | no direct site |
+| `SUBSTRATE_OVERRIDE_ANCHOR_MODE` | `SUBSTRATE_OVERRIDE` | override input | both | replay, scripts, shell, tests | scripts/substrate/install-substrate.sh:925; crates/shell/tests/config_show.rs:192 | crates/shell/src/execution/config_model.rs:299; crates/replay/src/state.rs:167 | enum (string) | internal | no | no direct site |
+| `SUBSTRATE_OVERRIDE_ANCHOR_PATH` | `SUBSTRATE_OVERRIDE` | override input | both | replay, scripts, shell, tests | scripts/substrate/install-substrate.sh:926; crates/shell/tests/config_show.rs:193 | crates/shell/src/execution/config_model.rs:311; crates/replay/src/state.rs:174 | string | internal | no | no direct site |
+| `SUBSTRATE_OVERRIDE_CAGED` | `SUBSTRATE_OVERRIDE` | override input | both | replay, scripts, shell, tests | scripts/substrate/install-substrate.sh:924; crates/shell/tests/config_show.rs:194 | crates/shell/src/execution/config_model.rs:315; crates/replay/src/state.rs:178 | bool (0/1) | internal | no | no direct site |
+| `SUBSTRATE_OVERRIDE_POLICY_MODE` | `SUBSTRATE_OVERRIDE` | override input | both | scripts, shell, tests | scripts/substrate/install-substrate.sh:927; crates/shell/tests/config_show.rs:195 | crates/shell/src/execution/config_model.rs:327 | enum (string) | internal | no | no direct site |
+| `SUBSTRATE_OVERRIDE_SYNC_AUTO_SYNC` | `SUBSTRATE_OVERRIDE` | override input | both | scripts, shell, tests | crates/shell/tests/config_show.rs:196 | crates/shell/src/execution/config_model.rs:339 | bool (0/1) | internal | no | no direct site |
+| `SUBSTRATE_OVERRIDE_SYNC_CONFLICT_POLICY` | `SUBSTRATE_OVERRIDE` | override input | both | scripts, shell, tests | crates/shell/tests/config_show.rs:198 | crates/shell/src/execution/config_model.rs:363 | enum (string) | internal | no | no direct site |
+| `SUBSTRATE_OVERRIDE_SYNC_DIRECTION` | `SUBSTRATE_OVERRIDE` | override input | both | scripts, shell, tests | crates/shell/tests/config_show.rs:197 | crates/shell/src/execution/config_model.rs:351 | enum (string) | internal | no | no direct site |
+| `SUBSTRATE_OVERRIDE_SYNC_EXCLUDE` | `SUBSTRATE_OVERRIDE` | override input | both | scripts, shell, tests | crates/shell/tests/config_show.rs:199 | crates/shell/src/execution/config_model.rs:376 | string | internal | no | no direct site |
+| `SUBSTRATE_OVERRIDE_WORLD` | `SUBSTRATE_OVERRIDE` | override input | both | scripts, shell, tests | scripts/substrate/install-substrate.sh:923; crates/shell/tests/config_show.rs:191 | crates/shell/src/execution/config_model.rs:283; crates/shell/src/builtins/world_deps/state.rs:184 | enum (string) | internal | no | no direct site |
 | `SUBSTRATE_PARENT_SPAN` | `SUBSTRATE` | override-only / internal | read | telemetry-lib | — | crates/telemetry-lib/src/correlation.rs:26 | string | internal | no | yes (telemetry correlation) |
 | `SUBSTRATE_POLICY_GIT_CACHE` | `SUBSTRATE` | override-only / internal | read | trace | — | crates/trace/src/util.rs:52 | string | internal | no | yes (trace component) |
 | `SUBSTRATE_POLICY_ID` | `SUBSTRATE` | override-only / internal | read | telemetry-lib | — | crates/telemetry-lib/src/correlation.rs:29 | string | internal | no | yes (telemetry correlation) |
-| `SUBSTRATE_POLICY_MODE` | `SUBSTRATE` | state (exported) | both | broker, scripts, shell | crates/shell/src/execution/invocation/plan.rs:525; crates/shell/tests/policy_routing_semantics.rs:92 | crates/shell/src/execution/config_model.rs:309; crates/broker/src/mode.rs:29 | enum (string) | internal | no | no direct site |
+| `SUBSTRATE_POLICY_MODE` | `SUBSTRATE` | state (exported) | both | broker, scripts, shell | crates/shell/src/execution/invocation/plan.rs:464; crates/shell/src/execution/env_scripts.rs:66 | crates/broker/src/mode.rs:29 | enum (string) | internal | no | no direct site |
 | `SUBSTRATE_PREFIX` | `SUBSTRATE` | override-only / internal | both | shell | crates/shell/tests/world_enable.rs:134 | crates/shell/tests/world_enable.rs:21 | string | test-only | no | no direct site |
 | `SUBSTRATE_PROJECT_PATH` | `SUBSTRATE` | override-only / internal | read | world-backend | — | crates/world-windows-wsl/src/backend.rs:44 | string | internal | no | no direct site |
 | `SUBSTRATE_PTY_DEBUG` | `SUBSTRATE` | override-only / internal | read | shell | — | crates/shell/src/execution/pty/control.rs:106; crates/shell/src/execution/pty/io/runner.rs:130 | string | internal | no | no direct site |
@@ -186,10 +195,10 @@ Column notes:
 | `SUBSTRATE_SKIP_MANAGER_INIT` | `SUBSTRATE` | state (exported) | both | shell | crates/shell/src/execution/manager_init/tests.rs:113; crates/shell/src/execution/manager_init/tests.rs:124 | crates/shell/src/execution/manager_init/config.rs:25; crates/shell/src/execution/manager_init/tests.rs:109 | string | internal | no | no direct site |
 | `SUBSTRATE_SKIP_MANAGER_INIT_LIST` | `SUBSTRATE` | state (exported) | both | shell | crates/shell/src/execution/manager_init/tests.rs:114; crates/shell/src/execution/manager_init/tests.rs:128 | crates/shell/src/execution/manager_init/config.rs:28; crates/shell/src/execution/manager_init/tests.rs:110 | string | internal | no | no direct site |
 | `SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE` | `SUBSTRATE` | override-only / internal | both | shell | crates/shell/tests/socket_activation.rs:54; crates/shell/tests/shell_env.rs:78 | crates/shell/src/execution/socket_activation.rs:92 | string | internal | no | no direct site |
-| `SUBSTRATE_SYNC_AUTO_SYNC` | `SUBSTRATE` | override-only / internal | both | shell | crates/shell/tests/policy_routing_semantics.rs:96 | crates/shell/src/execution/config_model.rs:321 | string | internal | no | no direct site |
-| `SUBSTRATE_SYNC_CONFLICT_POLICY` | `SUBSTRATE` | override-only / internal | both | shell | crates/shell/tests/policy_routing_semantics.rs:98 | crates/shell/src/execution/config_model.rs:343 | string | internal | no | no direct site |
-| `SUBSTRATE_SYNC_DIRECTION` | `SUBSTRATE` | override-only / internal | both | shell | crates/shell/tests/policy_routing_semantics.rs:97 | crates/shell/src/execution/config_model.rs:331 | string | internal | no | no direct site |
-| `SUBSTRATE_SYNC_EXCLUDE` | `SUBSTRATE` | override-only / internal | both | shell | crates/shell/tests/policy_routing_semantics.rs:99 | crates/shell/src/execution/config_model.rs:356 | string | internal | no | no direct site |
+| `SUBSTRATE_SYNC_AUTO_SYNC` | `SUBSTRATE` | state (exported) | write | shell, tests | crates/shell/tests/policy_routing_semantics.rs:96 | — | string | internal | no | no direct site |
+| `SUBSTRATE_SYNC_CONFLICT_POLICY` | `SUBSTRATE` | state (exported) | write | shell, tests | crates/shell/tests/policy_routing_semantics.rs:98 | — | string | internal | no | no direct site |
+| `SUBSTRATE_SYNC_DIRECTION` | `SUBSTRATE` | state (exported) | write | shell, tests | crates/shell/tests/policy_routing_semantics.rs:97 | — | string | internal | no | no direct site |
+| `SUBSTRATE_SYNC_EXCLUDE` | `SUBSTRATE` | state (exported) | write | shell, tests | crates/shell/tests/policy_routing_semantics.rs:99 | — | string | internal | no | no direct site |
 | `SUBSTRATE_TEST_CARGO_LOG` | `SUBSTRATE` | test/example | both | tests | tests/mac/installer_parity_fixture.sh:93 | tests/mac/installer_parity_fixture.sh:285 | string | test-only | no | no direct site |
 | `SUBSTRATE_TEST_CARGO_TARGET_ROOT` | `SUBSTRATE` | test/example | read | tests | — | tests/installers/install_smoke.sh:438 | string | test-only | no | no direct site |
 | `SUBSTRATE_TEST_FAKE_USER` | `SUBSTRATE` | test/example | read | tests | — | tests/installers/install_smoke.sh:130 | string | test-only | no | no direct site |
