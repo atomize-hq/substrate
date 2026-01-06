@@ -6,9 +6,10 @@ use super::shim_ops::wrap_with_anchor_guard;
 use super::world_ops::execute_world_pty_over_ws;
 #[cfg(target_os = "macos")]
 use super::world_ops::execute_world_pty_over_ws_macos;
+#[cfg(target_os = "linux")]
+use super::world_ops::WorldFsStrategyUnavailableError;
 use super::world_ops::{
     collect_world_telemetry, emit_stream_chunk, stream_non_pty_via_agent, AgentStreamOutcome,
-    WorldFsStrategyUnavailableError,
 };
 use crate::execution::config_model::PolicyMode;
 use crate::execution::pty;
