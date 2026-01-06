@@ -21,6 +21,8 @@ tmp="$("$MKTEMP_BIN" -d)"
 trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"
 
+$SUBSTRATE_BIN workspace init . >/dev/null
+
 $SUBSTRATE_BIN world doctor --json | $JQ_BIN -e '
   .world_fs_strategy_primary == "overlay" and
   .world_fs_strategy_fallback == "fuse" and
