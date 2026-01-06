@@ -1,11 +1,13 @@
 use anyhow::{Context, Result};
 use std::path::Path;
+#[cfg(target_os = "linux")]
 use std::process::{Command, Stdio};
 use substrate_common::{
     WorldFsMode, WorldFsStrategy, WorldFsStrategyFallbackReason, WorldFsStrategyProbe,
     WorldFsStrategyProbeResult,
 };
 
+#[cfg(target_os = "linux")]
 use super::OverlayFs;
 
 pub const ENUMERATION_PROBE_ID: &str = "enumeration_v1";
@@ -33,6 +35,7 @@ pub fn run_enumeration_probe(
     probe_strategy(world_id, strategy, project).probe
 }
 
+#[cfg(target_os = "linux")]
 fn probe_enumeration_in_dir(dir: &Path) -> Result<WorldFsStrategyProbe> {
     let probe_path = dir.join(ENUMERATION_PROBE_FILE);
     let mut failure_reason: Option<String> = None;
@@ -75,6 +78,7 @@ fn probe_enumeration_in_dir(dir: &Path) -> Result<WorldFsStrategyProbe> {
     })
 }
 
+#[cfg(target_os = "linux")]
 fn probe_strategy(world_id: &str, strategy: WorldFsStrategy, project: &Path) -> ProbeOutcome {
     let probe_id = format!(
         "{world_id}-probe-{}-{}",
@@ -128,6 +132,21 @@ fn probe_strategy(world_id: &str, strategy: WorldFsStrategy, project: &Path) -> 
 
     let _ = overlay.cleanup();
     ProbeOutcome { mount_ok, probe }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn probe_strategy(_world_id: &str, _strategy: WorldFsStrategy, _project: &Path) -> ProbeOutcome {
+    ProbeOutcome {
+        mount_ok: false,
+        probe: WorldFsStrategyProbe {
+            id: ENUMERATION_PROBE_ID.to_string(),
+            probe_file: ENUMERATION_PROBE_FILE.to_string(),
+            result: WorldFsStrategyProbeResult::Fail,
+            failure_reason: Some(
+                "overlayfs enumeration probing is only supported on Linux".to_string(),
+            ),
+        },
+    }
 }
 
 #[cfg(target_os = "linux")]
