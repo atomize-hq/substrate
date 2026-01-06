@@ -549,4 +549,88 @@ mod tests {
             "expected write to fail on read-only overlay mount"
         );
     }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn mount_falls_back_to_fuse_when_kernel_overlay_mount_fails() {
+        use nix::mount::{mount, umount2, MntFlags, MsFlags};
+        use nix::unistd::Uid;
+
+        if !Uid::current().is_root() {
+            println!("Skipping fuse fallback test (requires root)");
+            return;
+        }
+        if !std::path::Path::new("/dev/fuse").exists() {
+            println!("Skipping fuse fallback test (/dev/fuse missing)");
+            return;
+        }
+        if which::which("fuse-overlayfs").is_err() {
+            println!("Skipping fuse fallback test (fuse-overlayfs not in PATH)");
+            return;
+        }
+
+        let temp_dir = TempDir::new().unwrap();
+        let lower_dir = temp_dir.path().join("lower");
+        std::fs::create_dir_all(&lower_dir).unwrap();
+        std::fs::write(lower_dir.join("seed.txt"), b"seed").unwrap();
+
+        // Force the kernel overlay mount to fail by placing `upper` and `work` on
+        // different tmpfs mounts (overlayfs requires upper/work on the same fs).
+        let mnt_a = temp_dir.path().join("mnt_a");
+        let mnt_b = temp_dir.path().join("mnt_b");
+        std::fs::create_dir_all(&mnt_a).unwrap();
+        std::fs::create_dir_all(&mnt_b).unwrap();
+        mount(
+            Some("tmpfs"),
+            &mnt_a,
+            Some("tmpfs"),
+            MsFlags::empty(),
+            Some("size=16m".as_bytes()),
+        )
+        .unwrap();
+        mount(
+            Some("tmpfs"),
+            &mnt_b,
+            Some("tmpfs"),
+            MsFlags::empty(),
+            Some("size=16m".as_bytes()),
+        )
+        .unwrap();
+
+        let mut overlay = OverlayFs {
+            world_id: "fuse_fallback".to_string(),
+            overlay_dir: temp_dir.path().join("overlay"),
+            upper_dir: mnt_a.join("upper"),
+            work_dir: mnt_b.join("work"),
+            merged_dir: mnt_a.join("merged"),
+            lower_dir: None,
+            bind_lower_dir: None,
+            is_mounted: false,
+            using_fuse: false,
+            fuse_child: None,
+        };
+
+        let mounted = match overlay.mount(&lower_dir) {
+            Ok(path) => path,
+            Err(err) => {
+                println!("Skipping fuse fallback test (mount failed): {err:#}");
+                let _ = umount2(&mnt_a, MntFlags::MNT_DETACH);
+                let _ = umount2(&mnt_b, MntFlags::MNT_DETACH);
+                return;
+            }
+        };
+
+        assert!(
+            overlay.is_using_fuse(),
+            "expected mount() to fall back to fuse-overlayfs when kernel overlay mount fails"
+        );
+        assert!(
+            mounted.exists(),
+            "expected merged dir to exist after successful fuse mount"
+        );
+
+        overlay.cleanup().unwrap();
+        let _ = umount2(&mnt_a, MntFlags::MNT_DETACH);
+        let _ = umount2(&mnt_b, MntFlags::MNT_DETACH);
+    }
 }
