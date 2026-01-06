@@ -167,6 +167,7 @@ impl SessionWorld {
         let output;
         let scopes_used;
         let mut diff_opt: Option<FsDiff> = None;
+        let mut fs_strategy_meta: Option<crate::overlayfs::WorldFsStrategyMeta> = None;
 
         // When fs_mode is enforced or heuristics request isolation, run against a persistent overlay
         // so state is consistent across commands within this session.
@@ -175,6 +176,7 @@ impl SessionWorld {
             || self.should_isolate_command(cmd)
         {
             let merged_dir = self.ensure_overlay_mounted()?;
+            fs_strategy_meta = crate::overlayfs::world_fs_strategy_meta(&self.id);
             let desired_cwd = if cwd.starts_with(&self.project_dir) {
                 cwd.to_path_buf()
             } else {
@@ -252,6 +254,9 @@ impl SessionWorld {
             stderr: output.stderr,
             scopes_used,
             fs_diff: diff_opt,
+            world_fs_strategy_primary: fs_strategy_meta.as_ref().map(|m| m.primary),
+            world_fs_strategy_final: fs_strategy_meta.as_ref().map(|m| m.final_strategy),
+            world_fs_strategy_fallback_reason: fs_strategy_meta.as_ref().map(|m| m.fallback_reason),
         })
     }
 

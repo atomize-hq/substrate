@@ -12,11 +12,21 @@ use substrate_common::FsDiff;
 use world_api::WorldFsMode;
 
 mod layering;
+mod strategy;
+mod strategy_state;
 mod utils;
 
 const MAX_TRACKED_FILES: usize = 1000;
 const MAX_TRACKED_DIRS: usize = 100;
 const MAX_DIFF_SIZE_BYTES: usize = 10 * 1024 * 1024; // 10MB
+
+pub use strategy::run_enumeration_probe;
+pub use strategy::{ENUMERATION_PROBE_FILE, ENUMERATION_PROBE_ID};
+pub use strategy_state::WorldFsStrategyMeta;
+
+pub fn world_fs_strategy_meta(world_id: &str) -> Option<WorldFsStrategyMeta> {
+    strategy_state::get(world_id)
+}
 
 /// Overlayfs manager for filesystem isolation and diff tracking.
 pub struct OverlayFs {
@@ -79,7 +89,51 @@ impl OverlayFs {
         #[cfg(target_os = "linux")]
         {
             self.lower_dir = Some(lower_dir.to_path_buf());
-            layering::mount_linux(self, lower_dir)?;
+            let mut selection =
+                strategy::select_strategy(&self.world_id, lower_dir, WorldFsMode::Writable)?;
+
+            match selection.final_strategy {
+                substrate_common::WorldFsStrategy::Overlay => {
+                    if let Err(primary_err) = self.mount_kernel_only(lower_dir) {
+                        // Probe may pass but the actual mount can still fail; retry once with fuse-overlayfs.
+                        if std::path::Path::new("/dev/fuse").exists()
+                            && which::which("fuse-overlayfs").is_ok()
+                        {
+                            self.using_fuse = false;
+                            self.fuse_child = None;
+                            self.mount_fuse_only(lower_dir).with_context(|| {
+                                format!(
+                                    "WORLD_FS_STRATEGY_UNAVAILABLE fallback_reason={} primary_mount_error={primary_err:#}",
+                                    substrate_common::WorldFsStrategyFallbackReason::FallbackMountFailed.as_str()
+                                )
+                            })?;
+                            selection.final_strategy = substrate_common::WorldFsStrategy::Fuse;
+                            selection.fallback_reason =
+                                substrate_common::WorldFsStrategyFallbackReason::PrimaryMountFailed;
+                        } else {
+                            anyhow::bail!(
+                                "WORLD_FS_STRATEGY_UNAVAILABLE fallback_reason={} primary_mount_error={primary_err:#}",
+                                substrate_common::WorldFsStrategyFallbackReason::FallbackUnavailable.as_str()
+                            );
+                        }
+                    }
+                }
+                substrate_common::WorldFsStrategy::Fuse => {
+                    self.mount_fuse_only(lower_dir)?;
+                }
+                substrate_common::WorldFsStrategy::Host => {
+                    anyhow::bail!("host strategy is not mountable via overlayfs");
+                }
+            }
+            strategy_state::set(
+                &self.world_id,
+                strategy_state::WorldFsStrategyMeta {
+                    primary: selection.primary,
+                    final_strategy: selection.final_strategy,
+                    fallback_reason: selection.fallback_reason,
+                    probe: Some(selection.probe),
+                },
+            );
             self.is_mounted = true;
             Ok(self.merged_dir.clone())
         }
@@ -108,7 +162,49 @@ impl OverlayFs {
             std::fs::create_dir_all(&self.overlay_dir)?;
             std::fs::create_dir_all(&self.merged_dir)?;
             self.lower_dir = Some(lower_dir.to_path_buf());
-            layering::mount_linux_read_only(self, lower_dir)?;
+            let mut selection =
+                strategy::select_strategy(&self.world_id, lower_dir, WorldFsMode::ReadOnly)?;
+            match selection.final_strategy {
+                substrate_common::WorldFsStrategy::Overlay => {
+                    if let Err(primary_err) = self.mount_read_only_kernel_only(lower_dir) {
+                        if std::path::Path::new("/dev/fuse").exists()
+                            && which::which("fuse-overlayfs").is_ok()
+                        {
+                            self.using_fuse = false;
+                            self.fuse_child = None;
+                            self.mount_fuse_only_read_only(lower_dir).with_context(|| {
+                                format!(
+                                    "WORLD_FS_STRATEGY_UNAVAILABLE fallback_reason={} primary_mount_error={primary_err:#}",
+                                    substrate_common::WorldFsStrategyFallbackReason::FallbackMountFailed.as_str()
+                                )
+                            })?;
+                            selection.final_strategy = substrate_common::WorldFsStrategy::Fuse;
+                            selection.fallback_reason =
+                                substrate_common::WorldFsStrategyFallbackReason::PrimaryMountFailed;
+                        } else {
+                            anyhow::bail!(
+                                "WORLD_FS_STRATEGY_UNAVAILABLE fallback_reason={} primary_mount_error={primary_err:#}",
+                                substrate_common::WorldFsStrategyFallbackReason::FallbackUnavailable.as_str()
+                            );
+                        }
+                    }
+                }
+                substrate_common::WorldFsStrategy::Fuse => {
+                    self.mount_fuse_only_read_only(lower_dir)?;
+                }
+                substrate_common::WorldFsStrategy::Host => {
+                    anyhow::bail!("host strategy is not mountable via overlayfs");
+                }
+            }
+            strategy_state::set(
+                &self.world_id,
+                strategy_state::WorldFsStrategyMeta {
+                    primary: selection.primary,
+                    final_strategy: selection.final_strategy,
+                    fallback_reason: selection.fallback_reason,
+                    probe: Some(selection.probe),
+                },
+            );
             self.is_mounted = true;
             Ok(self.merged_dir.clone())
         }
@@ -170,6 +266,7 @@ impl OverlayFs {
         self.is_mounted = false;
         self.using_fuse = false;
         self.fuse_child = None;
+        strategy_state::clear(&self.world_id);
         Ok(())
     }
 
@@ -234,6 +331,35 @@ impl OverlayFs {
     /// Get upper directory path.
     pub fn upper_dir_path(&self) -> &Path {
         &self.upper_dir
+    }
+
+    /// Mount via kernel overlayfs only (no fuse fallback).
+    #[cfg(target_os = "linux")]
+    pub(crate) fn mount_kernel_only(&mut self, lower_dir: &Path) -> Result<PathBuf> {
+        layering::prepare_overlay_dirs(&self.upper_dir, &self.work_dir, &self.merged_dir)?;
+        layering::mount_linux_kernel_only(self, lower_dir)?;
+        self.is_mounted = true;
+        Ok(self.merged_dir.clone())
+    }
+
+    /// Mount via kernel overlayfs only in read-only mode (no fuse fallback).
+    #[cfg(target_os = "linux")]
+    pub(crate) fn mount_read_only_kernel_only(&mut self, lower_dir: &Path) -> Result<PathBuf> {
+        std::fs::create_dir_all(&self.overlay_dir)?;
+        std::fs::create_dir_all(&self.merged_dir)?;
+        layering::mount_linux_read_only_kernel_only(self, lower_dir)?;
+        self.is_mounted = true;
+        Ok(self.merged_dir.clone())
+    }
+
+    /// Mount only via fuse-overlayfs with a read-only merged view.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn mount_fuse_only_read_only(&mut self, lower_dir: &Path) -> Result<PathBuf> {
+        layering::prepare_overlay_dirs(&self.upper_dir, &self.work_dir, &self.merged_dir)?;
+        layering::mount_fuse_only_read_only(self, lower_dir)?;
+        self.lower_dir = Some(lower_dir.to_path_buf());
+        self.is_mounted = true;
+        Ok(self.merged_dir.clone())
     }
 
     /// Mount only via fuse-overlayfs (no kernel overlay attempt).

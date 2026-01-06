@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
+use substrate_common::{WorldFsStrategy, WorldFsStrategyFallbackReason};
 use tracing::trace;
 use uuid::Uuid;
 
@@ -56,6 +57,12 @@ pub struct Span {
     pub graph_edges: Option<Vec<GraphEdge>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub policy_decision: Option<PolicyDecision>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub world_fs_strategy_primary: Option<WorldFsStrategy>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub world_fs_strategy_final: Option<WorldFsStrategy>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub world_fs_strategy_fallback_reason: Option<WorldFsStrategyFallbackReason>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -174,6 +181,9 @@ impl SpanBuilder {
                 execution_origin: None,
                 graph_edges: None,
                 policy_decision: None,
+                world_fs_strategy_primary: None,
+                world_fs_strategy_final: None,
+                world_fs_strategy_fallback_reason: None,
             },
         }
     }
@@ -223,6 +233,9 @@ impl SpanBuilder {
             transport: None,
             execution_origin: Some(ExecutionOrigin::Host),
             context: self.context,
+            world_fs_strategy_primary: None,
+            world_fs_strategy_final: None,
+            world_fs_strategy_fallback_reason: None,
         })
     }
 }
@@ -234,6 +247,9 @@ pub struct ActiveSpan {
     transport: Option<TransportMeta>,
     execution_origin: Option<ExecutionOrigin>,
     context: TraceContext,
+    world_fs_strategy_primary: Option<WorldFsStrategy>,
+    world_fs_strategy_final: Option<WorldFsStrategy>,
+    world_fs_strategy_fallback_reason: Option<WorldFsStrategyFallbackReason>,
 }
 
 impl ActiveSpan {
@@ -247,6 +263,17 @@ impl ActiveSpan {
 
     pub fn set_execution_origin(&mut self, origin: ExecutionOrigin) {
         self.execution_origin = Some(origin);
+    }
+
+    pub fn set_world_fs_strategy(
+        &mut self,
+        primary: WorldFsStrategy,
+        final_strategy: WorldFsStrategy,
+        fallback_reason: WorldFsStrategyFallbackReason,
+    ) {
+        self.world_fs_strategy_primary = Some(primary);
+        self.world_fs_strategy_final = Some(final_strategy);
+        self.world_fs_strategy_fallback_reason = Some(fallback_reason);
     }
 
     pub fn execution_origin(&self) -> ExecutionOrigin {
@@ -290,6 +317,9 @@ impl ActiveSpan {
             execution_origin: Some(origin),
             graph_edges: None,
             policy_decision: None,
+            world_fs_strategy_primary: self.world_fs_strategy_primary,
+            world_fs_strategy_final: self.world_fs_strategy_final,
+            world_fs_strategy_fallback_reason: self.world_fs_strategy_fallback_reason,
         };
 
         if let Some(ref mut output) = *self.context.output_write() {

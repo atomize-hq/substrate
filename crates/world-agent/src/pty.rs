@@ -237,6 +237,8 @@ pub async fn handle_ws_pty(
     #[cfg(not(target_os = "linux"))]
     let in_world = false;
     #[cfg(target_os = "linux")]
+    let fs_strategy_meta: Option<world::overlayfs::WorldFsStrategyMeta>;
+    #[cfg(target_os = "linux")]
     {
         use world_api::{ResourceLimits, WorldSpec};
         let project_dir = match resolve_project_dir(Some(&env), Some(&cwd)) {
@@ -313,6 +315,7 @@ pub async fn handle_ws_pty(
         match service.ensure_session_overlay_root(&spec) {
             Ok((world, merged)) => {
                 world_id_for_logs = Some(world.id.clone());
+                fs_strategy_meta = world::overlayfs::world_fs_strategy_meta(&world.id);
                 let ns_name = format!("substrate-{}", world.id);
                 let ns_path = format!("/var/run/netns/{}", ns_name);
                 if std::path::Path::new(&ns_path).exists() {
@@ -608,8 +611,30 @@ pub async fn handle_ws_pty(
     // Send exit message
     let exit_code = status.map(|s| s.exit_code() as i32).unwrap_or(1);
     info!(exit_code, "ws_pty: exit");
-    let exit_msg = ServerMessage::Exit { code: exit_code };
-    let _ = send_ws_message(&tx, &exit_msg).await;
+    #[cfg(target_os = "linux")]
+    let (primary, final_strategy, reason) = match fs_strategy_meta.as_ref() {
+        Some(meta) => (
+            Some(meta.primary.as_str().to_string()),
+            Some(meta.final_strategy.as_str().to_string()),
+            Some(meta.fallback_reason.as_str().to_string()),
+        ),
+        None => (None, None, None),
+    };
+    #[cfg(not(target_os = "linux"))]
+    let (primary, final_strategy, reason): (Option<String>, Option<String>, Option<String>) =
+        (None, None, None);
+    let exit_payload = serde_json::json!({
+        "type": "exit",
+        "code": exit_code,
+        "world_fs_strategy_primary": primary,
+        "world_fs_strategy_final": final_strategy,
+        "world_fs_strategy_fallback_reason": reason,
+    });
+    let _ = tx
+        .lock()
+        .await
+        .send(Message::Text(exit_payload.to_string()))
+        .await;
 
     // Clean up tasks
     reader_task.abort();

@@ -106,10 +106,22 @@ pub struct ExecResult {
     /// Filesystem diff (when available, e.g., isolated runs)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fs_diff: Option<FsDiff>,
+    /// Primary filesystem strategy attempted for world execution (ADR-0004).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub world_fs_strategy_primary: Option<WorldFsStrategy>,
+    /// Final filesystem strategy used for world execution (ADR-0004).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub world_fs_strategy_final: Option<WorldFsStrategy>,
+    /// Reason for falling back from the primary strategy (ADR-0004).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub world_fs_strategy_fallback_reason: Option<WorldFsStrategyFallbackReason>,
 }
 
 // Re-export shared types from substrate_common
-pub use substrate_common::{FsDiff, WorldFsMode};
+pub use substrate_common::{
+    FsDiff, WorldFsMode, WorldFsStrategy, WorldFsStrategyFallbackReason, WorldFsStrategyProbe,
+    WorldFsStrategyProbeResult,
+};
 
 /// Backend implementations for different platforms.
 pub enum Backend {

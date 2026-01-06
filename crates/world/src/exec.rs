@@ -120,11 +120,13 @@ if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-workspace}" = "full" ]; then
   chmod 1777 "$new_root/tmp" || true
 
   # Project mount points: stable (/project) and host-absolute ($SUBSTRATE_MOUNT_PROJECT_DIR).
-  mkdir -p "$new_root/project"
-  mount --bind "$SUBSTRATE_MOUNT_MERGED_DIR" "$new_root/project"
-
+  #
+  # ADR-0004: place the overlay mount at the project path via mount --move (not mount --bind).
   mkdir -p "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR"
-  mount --bind "$SUBSTRATE_MOUNT_MERGED_DIR" "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR"
+  mount --move "$SUBSTRATE_MOUNT_MERGED_DIR" "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR"
+
+  mkdir -p "$new_root/project"
+  mount --bind "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR" "$new_root/project"
 
   # Ensure allowlisted writable prefixes exist before we remount the project read-only.
   if [ "${SUBSTRATE_MOUNT_FS_MODE:-writable}" != "read_only" ] && [ -n "${SUBSTRATE_WORLD_FS_WRITE_ALLOWLIST:-}" ]; then
@@ -192,7 +194,8 @@ if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-workspace}" = "full" ]; then
   mkdir -p "${HOME:-/tmp/substrate-home}" 2>/dev/null || true
 
 else
-  mount --bind "$SUBSTRATE_MOUNT_MERGED_DIR" "$SUBSTRATE_MOUNT_PROJECT_DIR"
+  # ADR-0004: place the overlay mount at the project path via mount --move (not mount --bind).
+  mount --move "$SUBSTRATE_MOUNT_MERGED_DIR" "$SUBSTRATE_MOUNT_PROJECT_DIR"
   if [ "${SUBSTRATE_MOUNT_FS_MODE:-writable}" = "read_only" ]; then
     mount -o remount,bind,ro "$SUBSTRATE_MOUNT_PROJECT_DIR"
   fi

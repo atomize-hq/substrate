@@ -262,6 +262,18 @@ pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
         if activation_report.is_socket_activated() && !socket_probe_ok {
             ok = false;
         }
+        let probe_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let probe = world::overlayfs::run_enumeration_probe(
+            "doctor",
+            substrate_common::WorldFsStrategy::Overlay,
+            &probe_root,
+        );
+        let probe_json = json!({
+            "id": probe.id,
+            "probe_file": probe.probe_file,
+            "result": probe.result,
+            "failure_reason": probe.failure_reason,
+        });
         let socket_json = json!({
             "mode": activation_report.mode.as_str(),
             "path": activation_report.socket_path.as_str(),
@@ -298,6 +310,9 @@ pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
             "overlay_root": o_root,
             "copydiff_root": c_root,
             "world_fs_mode": fs_mode.as_str(),
+            "world_fs_strategy_primary": substrate_common::WorldFsStrategy::Overlay.as_str(),
+            "world_fs_strategy_fallback": substrate_common::WorldFsStrategy::Fuse.as_str(),
+            "world_fs_strategy_probe": probe_json,
             "agent_socket": socket_json.clone(),
             "world_socket": socket_json,
             "ok": ok,

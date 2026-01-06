@@ -100,7 +100,16 @@ pub(super) fn collect_world_telemetry(
 }
 
 #[cfg(target_os = "linux")]
-pub(super) fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Result<i32> {
+pub(crate) struct PtyWorldOutcome {
+    pub(crate) exit_code: i32,
+    pub(crate) fs_strategy: Option<WorldFsStrategyTraceMeta>,
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn execute_world_pty_over_ws(
+    cmd: &str,
+    span_id: &str,
+) -> anyhow::Result<PtyWorldOutcome> {
     use base64::engine::general_purpose::STANDARD;
     use base64::Engine;
     use futures::{SinkExt, StreamExt};
@@ -110,7 +119,7 @@ pub(super) fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Res
 
     // Connect UDS and do WS handshake
     let rt = tokio::runtime::Runtime::new()?;
-    let code = rt.block_on(async move {
+    let outcome = rt.block_on(async move {
         let socket_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| std::path::PathBuf::from("/run/substrate.sock"));
@@ -287,6 +296,7 @@ pub(super) fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Res
         };
 
         let mut exit_code: i32 = 0;
+        let mut fs_strategy: Option<WorldFsStrategyTraceMeta> = None;
         while let Some(msg) = stream.next().await {
             let msg = msg.map_err(|e| anyhow::anyhow!("ws recv: {}", e))?;
             if msg.is_text() {
@@ -303,13 +313,41 @@ pub(super) fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Res
                         }
                         Some("exit") => {
                             exit_code = v.get("code").and_then(|c| c.as_i64()).unwrap_or(0) as i32;
+                            if let (Some(primary), Some(final_strategy), Some(reason)) = (
+                                v.get("world_fs_strategy_primary")
+                                    .and_then(serde_json::Value::as_str)
+                                    .and_then(substrate_common::WorldFsStrategy::parse),
+                                v.get("world_fs_strategy_final")
+                                    .and_then(serde_json::Value::as_str)
+                                    .and_then(substrate_common::WorldFsStrategy::parse),
+                                v.get("world_fs_strategy_fallback_reason")
+                                    .and_then(serde_json::Value::as_str)
+                                    .and_then(
+                                        substrate_common::WorldFsStrategyFallbackReason::parse,
+                                    ),
+                            ) {
+                                fs_strategy = Some(WorldFsStrategyTraceMeta {
+                                    primary,
+                                    final_strategy,
+                                    fallback_reason: reason,
+                                });
+                            }
                             break;
                         }
                         Some("error") => {
-                            if let Some(msg) = v.get("message").and_then(|m| m.as_str()) {
-                                eprintln!("world-agent error: {}", msg);
+                            if let Some(message) = v.get("message").and_then(|m| m.as_str()) {
+                                if message.contains("WORLD_FS_STRATEGY_UNAVAILABLE") {
+                                    return Err(anyhow::Error::new(
+                                        WorldFsStrategyUnavailableError {
+                                            raw_message: message.to_string(),
+                                            fallback_reason:
+                                                parse_world_fs_strategy_unavailable_reason(message),
+                                        },
+                                    ));
+                                }
+                                return Err(anyhow::anyhow!("world-agent error: {}", message));
                             }
-                            break;
+                            return Err(anyhow::anyhow!("world-agent error"));
                         }
                         _ => {}
                     }
@@ -328,9 +366,12 @@ pub(super) fn execute_world_pty_over_ws(cmd: &str, span_id: &str) -> anyhow::Res
                 t.abort();
             }
         }
-        Ok::<i32, anyhow::Error>(exit_code)
+        Ok::<PtyWorldOutcome, anyhow::Error>(PtyWorldOutcome {
+            exit_code,
+            fs_strategy,
+        })
     })?;
-    Ok(code)
+    Ok(outcome)
 }
 
 #[cfg(target_os = "linux")]
@@ -698,6 +739,42 @@ pub(crate) struct AgentStreamOutcome {
     pub(crate) exit_code: i32,
     pub(crate) scopes_used: Vec<String>,
     pub(crate) fs_diff: Option<substrate_common::FsDiff>,
+    pub(crate) fs_strategy: Option<WorldFsStrategyTraceMeta>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct WorldFsStrategyTraceMeta {
+    pub(crate) primary: substrate_common::WorldFsStrategy,
+    pub(crate) final_strategy: substrate_common::WorldFsStrategy,
+    pub(crate) fallback_reason: substrate_common::WorldFsStrategyFallbackReason,
+}
+
+#[derive(Debug)]
+pub(crate) struct WorldFsStrategyUnavailableError {
+    pub(crate) raw_message: String,
+    pub(crate) fallback_reason: Option<substrate_common::WorldFsStrategyFallbackReason>,
+}
+
+impl std::fmt::Display for WorldFsStrategyUnavailableError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.raw_message)
+    }
+}
+
+impl std::error::Error for WorldFsStrategyUnavailableError {}
+
+fn parse_world_fs_strategy_unavailable_reason(
+    message: &str,
+) -> Option<substrate_common::WorldFsStrategyFallbackReason> {
+    if !message.contains("WORLD_FS_STRATEGY_UNAVAILABLE") {
+        return None;
+    }
+    for token in message.split_whitespace() {
+        if let Some(value) = token.strip_prefix("fallback_reason=") {
+            return substrate_common::WorldFsStrategyFallbackReason::parse(value);
+        }
+    }
+    None
 }
 
 pub(crate) fn build_agent_client_and_request(
@@ -903,28 +980,31 @@ async fn process_agent_stream(
     let mut exit_code = None;
     let mut scopes_used = Vec::new();
     let mut fs_diff = None;
+    let mut fs_strategy = None;
 
     while let Some(frame) = body.frame().await {
         let frame = frame.map_err(|e| anyhow::anyhow!("stream frame error: {}", e))?;
         if let Some(data) = frame.data_ref() {
             buffer.extend_from_slice(data);
-            consume_agent_stream_buffer(
+            consume_agent_stream_buffer_with_meta(
                 &agent_label,
                 &mut buffer,
                 &mut exit_code,
                 &mut scopes_used,
                 &mut fs_diff,
+                &mut fs_strategy,
             )?;
         }
     }
 
     if !buffer.is_empty() {
-        consume_agent_stream_buffer(
+        consume_agent_stream_buffer_with_meta(
             &agent_label,
             &mut buffer,
             &mut exit_code,
             &mut scopes_used,
             &mut fs_diff,
+            &mut fs_strategy,
         )?;
     }
 
@@ -935,15 +1015,36 @@ async fn process_agent_stream(
         exit_code,
         scopes_used,
         fs_diff,
+        fs_strategy,
     })
 }
 
+#[allow(dead_code)]
 pub(crate) fn consume_agent_stream_buffer(
     agent_label: &str,
     buffer: &mut Vec<u8>,
     exit_code: &mut Option<i32>,
     scopes_used: &mut Vec<String>,
     fs_diff: &mut Option<substrate_common::FsDiff>,
+) -> anyhow::Result<()> {
+    let mut ignored = None;
+    consume_agent_stream_buffer_with_meta(
+        agent_label,
+        buffer,
+        exit_code,
+        scopes_used,
+        fs_diff,
+        &mut ignored,
+    )
+}
+
+fn consume_agent_stream_buffer_with_meta(
+    agent_label: &str,
+    buffer: &mut Vec<u8>,
+    exit_code: &mut Option<i32>,
+    scopes_used: &mut Vec<String>,
+    fs_diff: &mut Option<substrate_common::FsDiff>,
+    fs_strategy: &mut Option<WorldFsStrategyTraceMeta>,
 ) -> anyhow::Result<()> {
     use anyhow::Context as _;
 
@@ -979,6 +1080,29 @@ pub(crate) fn consume_agent_stream_buffer(
                 emit_stream_chunk(agent_label, &bytes, true);
             }
             ExecuteStreamFrame::Event { event } => {
+                if let (Some(primary), Some(final_strategy), Some(reason)) = (
+                    event
+                        .data
+                        .get("world_fs_strategy_primary")
+                        .and_then(serde_json::Value::as_str)
+                        .and_then(substrate_common::WorldFsStrategy::parse),
+                    event
+                        .data
+                        .get("world_fs_strategy_final")
+                        .and_then(serde_json::Value::as_str)
+                        .and_then(substrate_common::WorldFsStrategy::parse),
+                    event
+                        .data
+                        .get("world_fs_strategy_fallback_reason")
+                        .and_then(serde_json::Value::as_str)
+                        .and_then(substrate_common::WorldFsStrategyFallbackReason::parse),
+                ) {
+                    *fs_strategy = Some(WorldFsStrategyTraceMeta {
+                        primary,
+                        final_strategy,
+                        fallback_reason: reason,
+                    });
+                }
                 let _ = publish_agent_event(event);
             }
             ExecuteStreamFrame::Exit {
@@ -992,6 +1116,12 @@ pub(crate) fn consume_agent_stream_buffer(
                 *fs_diff = diff;
             }
             ExecuteStreamFrame::Error { message } => {
+                if message.contains("WORLD_FS_STRATEGY_UNAVAILABLE") {
+                    return Err(anyhow::Error::new(WorldFsStrategyUnavailableError {
+                        raw_message: message.clone(),
+                        fallback_reason: parse_world_fs_strategy_unavailable_reason(&message),
+                    }));
+                }
                 eprintln!("world-agent error: {}", message);
                 anyhow::bail!(message);
             }
