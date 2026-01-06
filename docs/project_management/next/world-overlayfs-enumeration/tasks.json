@@ -52,7 +52,7 @@
       "name": "Stable mount topology + strategy probe + fallback metadata",
       "type": "code",
       "phase": "WO0",
-      "status": "pending",
+      "status": "completed",
       "description": "Implement the Linux project-isolation mount topology fix (mount --move), add an overlayfs enumeration health probe that drives retry-with-fuse behavior, and emit required trace/doctor metadata per ADR-0004 + WO0-spec.",
       "references": [
         "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",

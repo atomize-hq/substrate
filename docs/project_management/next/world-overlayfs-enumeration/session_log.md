@@ -143,7 +143,27 @@
 - Blockers:
   - `NONE`
 
-## END — 2026-01-06T15:25:47Z — test — WO0-test
+## START — 2026-01-06T15:11:16Z — code — WO0-code
+- Feature: `docs/project_management/next/world-overlayfs-enumeration/`
+- Branch: `woe-wo0-code`
+- Worktree: `wt/woe-wo0-code`
+- Goal: Implement ADR-0004 Linux overlayfs strategy selection + enumeration probe + observability, plus mount topology fix.
+- References (authoritative):
+  - `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+  - `docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md`
+  - `docs/project_management/next/world-overlayfs-enumeration/decision_register.md`
+  - `docs/project_management/next/world-overlayfs-enumeration/integration_map.md`
+
+## START — 2026-01-06T15:11:18Z — test — WO0-test
+- Feature: `docs/project_management/next/world-overlayfs-enumeration/`
+- Branch: `woe-wo0-test`
+- Worktree: `wt/woe-wo0-test`
+- Goal: Add tests for enumeration probe contract, fuse fallback selection, and required doctor/trace metadata.
+- References (authoritative):
+  - `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+  - `docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md`
+
+## END — 2026-01-06T15:25:04Z — test — WO0-test
 - Feature: `docs/project_management/next/world-overlayfs-enumeration/`
 - Branch: `feat/world-overlayfs-enumeration`
 - Task branch: `woe-wo0-test` (`HEAD=614cc09f22dcda4160915fb553e47bc9fd8385a2`)
@@ -159,3 +179,64 @@
   - `make triad-task-finish TASK_ID="WO0-test"` → `PASS`
 - Blockers:
   - `WO0-code` is required to implement the ADR-0004 doctor/trace fields for the failing tests to pass.
+
+## END — 2026-01-06T15:45:58Z — code — WO0-code
+- Feature: `docs/project_management/next/world-overlayfs-enumeration/`
+- Branch: `feat/world-overlayfs-enumeration`
+- Task branch: `woe-wo0-code` (`HEAD=000a2eabd3f0c95953321d15876b5b4edfa0bdb3`)
+- Summary of changes (exhaustive):
+  - Implemented overlayfs strategy selection and enumeration probe contract (`enumeration_v1`) with deterministic `overlay → fuse` fallback chain per ADR-0004.
+  - Updated project cage mount choreography to use `mount --move` (topology fix) per DR-0001.
+  - Added doctor + trace metadata fields required by ADR-0004 (`world_fs_strategy_*`).
+- Worktree registry evidence:
+  - `.git/triad/features/world-overlayfs-enumeration/worktrees.json` shows `last_finished_at_utc=2026-01-06T15:45:58Z` and `last_head_sha=000a2eabd3f0c95953321d15876b5b4edfa0bdb3` for `WO0-code`.
+
+## START — 2026-01-06T21:43:42Z — planning — planning-pack-standardization
+- Feature: `docs/project_management/next/world-overlayfs-enumeration/`
+- Branch: `feat/world-overlayfs-enumeration`
+- Goal: Bring the Planning Pack up to the current planning/triad standards and unblock `WO0-integ`.
+- Inputs to read end-to-end:
+  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
+  - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
+  - `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`
+  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+  - `docs/project_management/next/world-overlayfs-enumeration/plan.md`
+  - `docs/project_management/next/world-overlayfs-enumeration/tasks.json`
+  - `docs/project_management/next/world-overlayfs-enumeration/session_log.md`
+  - `docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md`
+  - `docs/project_management/next/world-overlayfs-enumeration/decision_register.md`
+  - `docs/project_management/next/world-overlayfs-enumeration/integration_map.md`
+  - `docs/project_management/next/world-overlayfs-enumeration/manual_testing_playbook.md`
+  - `docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh`
+  - `docs/project_management/next/world-overlayfs-enumeration/smoke/macos-smoke.sh`
+  - `docs/project_management/next/world-overlayfs-enumeration/smoke/windows-smoke.ps1`
+- Commands planned:
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-overlayfs-enumeration"`
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-overlayfs-enumeration"`
+
+## END — 2026-01-06T21:43:50Z — planning — planning-pack-standardization
+- Summary of changes (exhaustive):
+  - Marked `WO0-code` as completed in `tasks.json` to match triad registry evidence.
+  - Added missing `START` entries for `WO0-code` and `WO0-test`, and an `END` entry for `WO0-code`, in `session_log.md` using triad registry timestamps.
+  - Rewrote `quality_gate_report.md` to match the current gate template and include the required `RECOMMENDATION: ACCEPT` line.
+- Files created/modified:
+  - `docs/project_management/next/world-overlayfs-enumeration/tasks.json`
+  - `docs/project_management/next/world-overlayfs-enumeration/session_log.md`
+  - `docs/project_management/next/world-overlayfs-enumeration/quality_gate_report.md`
+- Rubric checks run (with results):
+  - `jq -e . docs/project_management/next/world-overlayfs-enumeration/tasks.json` → `0` → `PASS`
+  - `jq -e . docs/project_management/next/sequencing.json` → `0` → `PASS`
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-overlayfs-enumeration"` → `0` → `PASS`
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-overlayfs-enumeration"` → `0` → `PASS`
+  - `bash -n docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh` → `0` → `PASS`
+- Sequencing alignment:
+  - `sequencing.json` reviewed: `YES`
+  - Changes required: `NONE`
+- Blockers:
+  - `NONE`
+- Next steps:
+  - `WO0-integ`: create `wt/woe-wo0-integ`, merge `woe-wo0-code` + `woe-wo0-test`, reconcile to `WO0-spec.md`, run `make integ-checks`, then fill `WO0-closeout_report.md`.
