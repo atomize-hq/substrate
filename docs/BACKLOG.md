@@ -5,6 +5,18 @@ Keep concise, actionable, and security-focused.
 
 ## Next
 
+- **P0 – Rename `world_fs.require_world` / `SUBSTRATE_WORLD_REQUIRE_WORLD` to semantic “fail closed” naming (no backwards compatibility)**
+  - Problem: the current name reads like “world must be enabled”, but the actual behavior is “allow host fallback when world routing fails vs fail closed”. This causes configuration mistakes and confusion during debugging.
+  - Work:
+    - Rename the policy/config knob from `world_fs.require_world` to a semantic name (`world_fs.fail_closed` or `world_fs.allow_host_fallback`) and rename the exported state env var from `SUBSTRATE_WORLD_REQUIRE_WORLD` to match (`SUBSTRATE_WORLD_FAIL_CLOSED` or `SUBSTRATE_WORLD_ALLOW_HOST_FALLBACK`).
+    - **No backwards compatibility:** do not accept the old config/env names; delete/rename the fields and update schema/validation/tests/docs in lockstep.
+    - Fix documentation to explicitly describe behavior:
+      - what happens when the world backend is unavailable,
+      - what happens when the world is disabled (`--no-world` / `SUBSTRATE_WORLD=disabled`),
+      - which layer owns the knob (policy-driven “fallback vs fail-closed”, not an effective-config override input).
+    - Update references across docs and standards (`docs/WORLD.md`, `docs/CONFIGURATION.md`, `docs/reference/env/contract.md`, `docs/internals/env/inventory.md`, planning pack templates/smoke scripts) and ensure error messages/warnings use the new name.
+  - Acceptance: operators can understand intent from the name alone; docs explain fallback vs fail-closed semantics unambiguously; CI/tests are updated; old names are rejected (hard error) with no aliasing.
+
 - **P1 – Policy-driven world fs mode**
   - Problem: write permissions inside worlds currently depend on systemd hardening + overlay success, not on broker policy. Sensitive repos need a policy bit to force read-only worlds while other projects remain writable, without editing unit files manually.
   - Work: extend broker schema to accept `world.fs_mode = read_only|writable` (global + per-project), plumb into shell/world-agent so PTY + non-PTY sessions honor it, and update docs/doctor to surface the active mode. Systemd units must allow `/home` writes so policy can enforce RO vs writable deterministically.
