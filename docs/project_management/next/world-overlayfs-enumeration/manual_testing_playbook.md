@@ -27,7 +27,7 @@ substrate world doctor --json | jq -e '
   .world_fs_strategy_fallback == "fuse" and
   .world_fs_strategy_probe.id == "enumeration_v1" and
   .world_fs_strategy_probe.probe_file == ".substrate_enum_probe" and
-  (.world_fs_strategy_probe.result | IN("pass"; "fail"))
+  (.world_fs_strategy_probe.result | IN("pass","fail"))
 '
 ```
 
@@ -69,16 +69,16 @@ SHIM_TRACE_LOG="$trace" substrate --world -c 'touch a.txt; ls -a' >/dev/null
 
 jq -e -s '
   ([.[] | select(.event_type == "command_complete")] | last) as $e
-  | ($e.world_fs_strategy_primary | IN("overlay"; "fuse"))
-  and ($e.world_fs_strategy_final | IN("overlay"; "fuse"; "host"))
+  | ($e.world_fs_strategy_primary | IN("overlay","fuse"))
+  and ($e.world_fs_strategy_final | IN("overlay","fuse","host"))
   and ($e.world_fs_strategy_fallback_reason | IN(
-    "none";
-    "primary_unavailable";
-    "primary_mount_failed";
-    "primary_probe_failed";
-    "fallback_unavailable";
-    "fallback_mount_failed";
-    "fallback_probe_failed";
+    "none",
+    "primary_unavailable",
+    "primary_mount_failed",
+    "primary_probe_failed",
+    "fallback_unavailable",
+    "fallback_mount_failed",
+    "fallback_probe_failed",
     "world_optional_fallback_to_host"
   ))
 ' "$trace" >/dev/null
