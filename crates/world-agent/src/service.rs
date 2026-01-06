@@ -21,6 +21,7 @@ use std::collections::HashMap;
 use std::convert::Infallible;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
+use substrate_common::agent_events::{AgentEvent, AgentEventKind};
 use substrate_common::{WorldFsMode, WorldRootMode};
 #[cfg(target_os = "linux")]
 use tokio::task;
@@ -392,6 +393,25 @@ impl WorldAgentService {
 
             match result {
                 Ok(exec_result) => {
+                    if let (Some(primary), Some(final_strategy), Some(reason)) = (
+                        exec_result.world_fs_strategy_primary,
+                        exec_result.world_fs_strategy_final,
+                        exec_result.world_fs_strategy_fallback_reason,
+                    ) {
+                        let _ = tx.send(ExecuteStreamFrame::Event {
+                            event: AgentEvent {
+                                ts: chrono::Utc::now(),
+                                agent_id: agent_id.clone(),
+                                project: None,
+                                kind: AgentEventKind::Status,
+                                data: serde_json::json!({
+                                    "world_fs_strategy_primary": primary.as_str(),
+                                    "world_fs_strategy_final": final_strategy.as_str(),
+                                    "world_fs_strategy_fallback_reason": reason.as_str(),
+                                }),
+                            },
+                        });
+                    }
                     let frame = ExecuteStreamFrame::Exit {
                         exit: exec_result.exit,
                         span_id,

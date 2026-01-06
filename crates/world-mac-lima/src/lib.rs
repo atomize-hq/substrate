@@ -291,6 +291,9 @@ impl MacLimaBackend {
                 .unwrap_or_else(|_| resp.stderr_b64.into_bytes()),
             scopes_used: resp.scopes_used,
             fs_diff: resp.fs_diff,
+            world_fs_strategy_primary: None,
+            world_fs_strategy_final: None,
+            world_fs_strategy_fallback_reason: None,
         }
     }
 

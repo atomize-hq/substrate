@@ -16,6 +16,10 @@ pub use manager_manifest::{
     RegexPattern,
 };
 pub use settings::{WorldFsMode, WorldRootMode};
+pub use settings::{
+    WorldFsStrategy, WorldFsStrategyFallbackReason, WorldFsStrategyProbe,
+    WorldFsStrategyProbeResult,
+};
 pub use world_deps_manifest::{
     WorldDepDetectSpec, WorldDepInstallRecipe, WorldDepTool, WorldDepsManifest,
 };
@@ -45,6 +49,10 @@ pub mod prelude {
     };
     pub use crate::paths;
     pub use crate::settings::{WorldFsMode, WorldRootMode};
+    pub use crate::settings::{
+        WorldFsStrategy, WorldFsStrategyFallbackReason, WorldFsStrategyProbe,
+        WorldFsStrategyProbeResult,
+    };
     pub use crate::world_deps_manifest::{
         WorldDepDetectSpec, WorldDepInstallRecipe, WorldDepTool, WorldDepsManifest,
     };

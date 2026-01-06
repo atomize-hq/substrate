@@ -211,6 +211,9 @@ impl WindowsWslBackend {
             stderr,
             scopes_used: resp.scopes_used,
             fs_diff: resp.fs_diff,
+            world_fs_strategy_primary: None,
+            world_fs_strategy_final: None,
+            world_fs_strategy_fallback_reason: None,
         };
         if let Some(ref mut diff) = result.fs_diff {
             normalize_diff(diff);

@@ -128,6 +128,94 @@ impl Serialize for WorldRootMode {
     }
 }
 
+/// Filesystem strategy used to provide the world project view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorldFsStrategy {
+    Overlay,
+    Fuse,
+    Host,
+}
+
+impl WorldFsStrategy {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Overlay => "overlay",
+            Self::Fuse => "fuse",
+            Self::Host => "host",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "overlay" => Some(Self::Overlay),
+            "fuse" => Some(Self::Fuse),
+            "host" => Some(Self::Host),
+            _ => None,
+        }
+    }
+}
+
+/// Reason for selecting a fallback filesystem strategy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorldFsStrategyFallbackReason {
+    None,
+    PrimaryUnavailable,
+    PrimaryMountFailed,
+    PrimaryProbeFailed,
+    FallbackUnavailable,
+    FallbackMountFailed,
+    FallbackProbeFailed,
+    WorldOptionalFallbackToHost,
+}
+
+impl WorldFsStrategyFallbackReason {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::PrimaryUnavailable => "primary_unavailable",
+            Self::PrimaryMountFailed => "primary_mount_failed",
+            Self::PrimaryProbeFailed => "primary_probe_failed",
+            Self::FallbackUnavailable => "fallback_unavailable",
+            Self::FallbackMountFailed => "fallback_mount_failed",
+            Self::FallbackProbeFailed => "fallback_probe_failed",
+            Self::WorldOptionalFallbackToHost => "world_optional_fallback_to_host",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "none" => Some(Self::None),
+            "primary_unavailable" => Some(Self::PrimaryUnavailable),
+            "primary_mount_failed" => Some(Self::PrimaryMountFailed),
+            "primary_probe_failed" => Some(Self::PrimaryProbeFailed),
+            "fallback_unavailable" => Some(Self::FallbackUnavailable),
+            "fallback_mount_failed" => Some(Self::FallbackMountFailed),
+            "fallback_probe_failed" => Some(Self::FallbackProbeFailed),
+            "world_optional_fallback_to_host" => Some(Self::WorldOptionalFallbackToHost),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorldFsStrategyProbeResult {
+    Pass,
+    Fail,
+}
+
+/// Result of a world filesystem strategy probe.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorldFsStrategyProbe {
+    pub id: String,
+    pub probe_file: String,
+    pub result: WorldFsStrategyProbeResult,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_reason: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -8,6 +8,7 @@ use super::world_ops::execute_world_pty_over_ws;
 use super::world_ops::execute_world_pty_over_ws_macos;
 use super::world_ops::{
     collect_world_telemetry, emit_stream_chunk, stream_non_pty_via_agent, AgentStreamOutcome,
+    WorldFsStrategyUnavailableError,
 };
 use crate::execution::config_model::PolicyMode;
 use crate::execution::pty;
@@ -30,7 +31,9 @@ use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Once};
 use substrate_broker::{detect_profile, evaluate, world_fs_policy, Decision};
-use substrate_common::{log_schema, redact_sensitive, WorldRootMode};
+use substrate_common::{
+    log_schema, redact_sensitive, WorldFsStrategy, WorldFsStrategyFallbackReason, WorldRootMode,
+};
 #[cfg(target_os = "linux")]
 use substrate_trace::TransportMeta;
 use substrate_trace::{create_span_builder, ExecutionOrigin, PolicyDecision};
@@ -385,11 +388,19 @@ pub(crate) fn execute_command(
                     .map(|s| s.get_span_id().to_string())
                     .unwrap_or_else(|| cmd_id.to_string());
                 match execute_world_pty_over_ws(trimmed, &span_id_for_ws) {
-                    Ok(code) => {
+                    Ok(outcome) => {
+                        let code = outcome.exit_code;
                         if let Some(active_span) = span.take() {
                             let mut active_span = active_span;
                             active_span.set_execution_origin(ExecutionOrigin::World);
                             active_span.set_transport(transport_meta);
+                            if let Some(meta) = outcome.fs_strategy {
+                                active_span.set_world_fs_strategy(
+                                    meta.primary,
+                                    meta.final_strategy,
+                                    meta.fallback_reason,
+                                );
+                            }
                             let (scopes_used, fs_diff) =
                                 collect_world_telemetry(active_span.get_span_id());
                             let _ = active_span.finish(code, scopes_used, fs_diff);
@@ -406,16 +417,43 @@ pub(crate) fn execute_command(
                         }
                     }
                     Err(e) => {
-                        if world_required {
-                            anyhow::bail!(
-                                "world execution required ({}); PTY world path failed: {}",
-                                world_required_reason,
-                                e
-                            );
+                        if let Some(unavail) = e.downcast_ref::<WorldFsStrategyUnavailableError>() {
+                            if world_required {
+                                if let Some(mut active_span) = span.take() {
+                                    active_span.set_execution_origin(ExecutionOrigin::World);
+                                    active_span.set_transport(transport_meta);
+                                    active_span.set_world_fs_strategy(
+                                        WorldFsStrategy::Overlay,
+                                        WorldFsStrategy::Fuse,
+                                        unavail.fallback_reason.unwrap_or(
+                                            WorldFsStrategyFallbackReason::FallbackMountFailed,
+                                        ),
+                                    );
+                                    let _ = active_span.finish(3, vec![], None);
+                                }
+                                return Ok(ExitStatus::from_raw(3 << 8));
+                            }
+                            eprintln!("substrate: warn: world unavailable; falling back to host");
+                            if let Some(active_span) = span.as_mut() {
+                                active_span.set_world_fs_strategy(
+                                    WorldFsStrategy::Overlay,
+                                    WorldFsStrategy::Host,
+                                    WorldFsStrategyFallbackReason::WorldOptionalFallbackToHost,
+                                );
+                            }
+                            // fall through to host PTY
+                        } else {
+                            if world_required {
+                                anyhow::bail!(
+                                    "world execution required ({}); PTY world path failed: {}",
+                                    world_required_reason,
+                                    e
+                                );
+                            }
+                            let _ = e;
+                            warn_world_backend_unavailable_once();
+                            // fall through to host PTY
                         }
-                        let _ = e;
-                        warn_world_backend_unavailable_once();
-                        // fall through to host PTY
                     }
                 }
             }
@@ -724,22 +762,56 @@ pub(crate) fn execute_command(
                     agent_result = Some(outcome);
                 }
                 Err(e) => {
-                    if world_required {
-                        anyhow::bail!(
-                            "world execution required ({}); world-agent exec failed: {}",
-                            world_required_reason,
-                            e
-                        );
+                    if let Some(unavail) = e.downcast_ref::<WorldFsStrategyUnavailableError>() {
+                        if world_required {
+                            if let Some(mut active_span) = span.take() {
+                                active_span.set_execution_origin(ExecutionOrigin::World);
+                                active_span.set_transport(transport_meta);
+                                active_span.set_world_fs_strategy(
+                                    WorldFsStrategy::Overlay,
+                                    WorldFsStrategy::Fuse,
+                                    unavail.fallback_reason.unwrap_or(
+                                        WorldFsStrategyFallbackReason::FallbackMountFailed,
+                                    ),
+                                );
+                                let _ = active_span.finish(3, vec![], None);
+                            }
+                            return Ok(ExitStatus::from_raw(3 << 8));
+                        }
+
+                        eprintln!("substrate: warn: world unavailable; falling back to host");
+                        if let Some(active_span) = span.as_mut() {
+                            active_span.set_world_fs_strategy(
+                                WorldFsStrategy::Overlay,
+                                WorldFsStrategy::Host,
+                                WorldFsStrategyFallbackReason::WorldOptionalFallbackToHost,
+                            );
+                        }
+                    } else {
+                        if world_required {
+                            anyhow::bail!(
+                                "world execution required ({}); world-agent exec failed: {}",
+                                world_required_reason,
+                                e
+                            );
+                        }
+                        let _ = e;
+                        warn_world_backend_unavailable_once();
                     }
-                    let _ = e;
-                    warn_world_backend_unavailable_once();
                 }
             }
         }
     }
 
     if let Some(outcome) = agent_result {
-        if let Some(active_span) = span {
+        if let Some(mut active_span) = span {
+            if let Some(meta) = outcome.fs_strategy {
+                active_span.set_world_fs_strategy(
+                    meta.primary,
+                    meta.final_strategy,
+                    meta.fallback_reason,
+                );
+            }
             let _ = active_span.finish(
                 outcome.exit_code,
                 outcome.scopes_used.clone(),
