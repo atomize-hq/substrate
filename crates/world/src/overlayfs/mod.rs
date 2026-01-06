@@ -3,6 +3,11 @@
 //! This module provides overlayfs-based filesystem isolation and diff tracking
 //! for commands that need to be executed in an isolated environment.
 
+#![cfg_attr(
+    not(target_os = "linux"),
+    allow(dead_code, unused_imports, unused_variables)
+)]
+
 use crate::guard::{should_guard_anchor, wrap_with_anchor_guard};
 use std::path::{Path, PathBuf};
 use std::process::Child;
