@@ -6,7 +6,7 @@
 - Owner(s): spenser
 
 ## Scope
-- Feature directory: `docs/project_management/next/policy_and_config_precedence/`
+- Feature directory: `docs/project_management/_archived/policy_and_config_precedence/`
 - Sequencing spine: `docs/project_management/next/sequencing.json`
 - Intended branch: `feat/policy_and_config_precedence`
 - Standards:
@@ -16,15 +16,15 @@
 
 ## Related Docs
 - Prior ADR (baseline semantics): `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`
-- Plan: `docs/project_management/next/policy_and_config_precedence/plan.md`
-- Tasks: `docs/project_management/next/policy_and_config_precedence/tasks.json`
+- Plan: `docs/project_management/_archived/policy_and_config_precedence/plan.md`
+- Tasks: `docs/project_management/_archived/policy_and_config_precedence/tasks.json`
 - Specs:
-  - `docs/project_management/next/policy_and_config_precedence/PCP0-spec.md`
+  - `docs/project_management/_archived/policy_and_config_precedence/PCP0-spec.md`
 - Decision Register:
-  - `docs/project_management/next/policy_and_config_precedence/decision_register.md`
+  - `docs/project_management/_archived/policy_and_config_precedence/decision_register.md`
   - Baseline env scripts split: `docs/project_management/next/policy_and_config_mental_model_simplification/decision_register.md` (DR-0005)
-- Integration Map: `docs/project_management/next/policy_and_config_precedence/integration_map.md`
-- Manual Playbook: `docs/project_management/next/policy_and_config_precedence/manual_testing_playbook.md`
+- Integration Map: `docs/project_management/_archived/policy_and_config_precedence/integration_map.md`
+- Manual Playbook: `docs/project_management/_archived/policy_and_config_precedence/manual_testing_playbook.md`
 
 ## Executive Summary (Operator)
 
@@ -39,7 +39,7 @@ ADR_BODY_SHA256: c67df2c96a14a7c15b622e29729fb3c9cb8a0936792552e4b0c8ef8cc23119a
     - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md#L255` (effective config precedence in ADR-0003)
     - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md#L605` (env scripts and `env.sh` purpose)
     - `crates/shell/src/execution/config_model.rs#L220` (current effective-config merge order)
-    - `docs/project_management/next/policy_and_config_precedence/PCP0-spec.md` (implementation slice; authoritative acceptance criteria)
+    - `docs/project_management/_archived/policy_and_config_precedence/PCP0-spec.md` (implementation slice; authoritative acceptance criteria)
 
 ## Problem / Context
 - `ADR-0003` introduced stable exports via `$SUBSTRATE_HOME/env.sh` (sourced by `$SUBSTRATE_HOME/manager_env.sh`) to stabilize cached state for Substrate-owned shells and tooling.
@@ -151,15 +151,15 @@ Exit codes:
 
 ### Manual validation
 - Manual playbook (required):
-  - `docs/project_management/next/policy_and_config_precedence/manual_testing_playbook.md`
+  - `docs/project_management/_archived/policy_and_config_precedence/manual_testing_playbook.md`
   - Includes a repro that sources `$SUBSTRATE_HOME/env.sh` and confirms `substrate config show` reflects `.substrate/workspace.yaml` values for overlapping keys.
   - Repro: source `$SUBSTRATE_HOME/env.sh`, then verify `substrate config show` reflects `.substrate/workspace.yaml` values for overlapping keys.
 
 ### Smoke scripts
 - Feature-local scripts (required):
-  - `docs/project_management/next/policy_and_config_precedence/smoke/linux-smoke.sh`
-  - `docs/project_management/next/policy_and_config_precedence/smoke/macos-smoke.sh`
-  - `docs/project_management/next/policy_and_config_precedence/smoke/windows-smoke.ps1`
+  - `docs/project_management/_archived/policy_and_config_precedence/smoke/linux-smoke.sh`
+  - `docs/project_management/_archived/policy_and_config_precedence/smoke/macos-smoke.sh`
+  - `docs/project_management/_archived/policy_and_config_precedence/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed, but this ADR is targeted to reduce surprising behavior.
@@ -169,4 +169,4 @@ Exit codes:
 
 ## Decision Summary
 - Decision Register entries:
-  - `docs/project_management/next/policy_and_config_precedence/decision_register.md` (DR-0001)
+  - `docs/project_management/_archived/policy_and_config_precedence/decision_register.md` (DR-0001)

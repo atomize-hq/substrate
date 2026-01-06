@@ -6,7 +6,7 @@
 - Owner(s): spenser
 
 ## Scope
-- Feature directory: `docs/project_management/next/env_var_taxonomy_and_override_split/`
+- Feature directory: `docs/project_management/_archived/env_var_taxonomy_and_override_split/`
 - Sequencing spine: `docs/project_management/next/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
@@ -20,17 +20,17 @@
 - Prior ADRs:
   - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`
   - `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
-- Plan: `docs/project_management/next/env_var_taxonomy_and_override_split/plan.md`
-- Tasks: `docs/project_management/next/env_var_taxonomy_and_override_split/tasks.json`
-- Session log: `docs/project_management/next/env_var_taxonomy_and_override_split/session_log.md`
-- Spec: `docs/project_management/next/env_var_taxonomy_and_override_split/EV0-spec.md`
-- Decision Register: `docs/project_management/next/env_var_taxonomy_and_override_split/decision_register.md`
-- Integration Map: `docs/project_management/next/env_var_taxonomy_and_override_split/integration_map.md`
-- Manual Playbook: `docs/project_management/next/env_var_taxonomy_and_override_split/manual_testing_playbook.md`
+- Plan: `docs/project_management/_archived/env_var_taxonomy_and_override_split/plan.md`
+- Tasks: `docs/project_management/_archived/env_var_taxonomy_and_override_split/tasks.json`
+- Session log: `docs/project_management/_archived/env_var_taxonomy_and_override_split/session_log.md`
+- Spec: `docs/project_management/_archived/env_var_taxonomy_and_override_split/EV0-spec.md`
+- Decision Register: `docs/project_management/_archived/env_var_taxonomy_and_override_split/decision_register.md`
+- Integration Map: `docs/project_management/_archived/env_var_taxonomy_and_override_split/integration_map.md`
+- Manual Playbook: `docs/project_management/_archived/env_var_taxonomy_and_override_split/manual_testing_playbook.md`
 - Smoke:
-  - `docs/project_management/next/env_var_taxonomy_and_override_split/smoke/linux-smoke.sh`
-  - `docs/project_management/next/env_var_taxonomy_and_override_split/smoke/macos-smoke.sh`
-  - `docs/project_management/next/env_var_taxonomy_and_override_split/smoke/windows-smoke.ps1`
+  - `docs/project_management/_archived/env_var_taxonomy_and_override_split/smoke/linux-smoke.sh`
+  - `docs/project_management/_archived/env_var_taxonomy_and_override_split/smoke/macos-smoke.sh`
+  - `docs/project_management/_archived/env_var_taxonomy_and_override_split/smoke/windows-smoke.ps1`
 - Canonical env-var catalog: `docs/ENVIRONMENT_VARIABLES.md`
 
 ## Executive Summary (Operator)
@@ -147,7 +147,7 @@ ADR_BODY_SHA256: eddd1c11e664d6ac18e81d2f897fff24c43e91fa218583edf32e1ea5575d0f0
 ## Sequencing / Dependencies
 - Sequencing entry: `docs/project_management/next/sequencing.json` → `env_var_taxonomy_and_override_split`
 - Prerequisite integration task IDs:
-  - `docs/project_management/next/policy_and_config_precedence/tasks.json` → `PCP0-integ`
+  - `docs/project_management/_archived/policy_and_config_precedence/tasks.json` → `PCP0-integ`
 
 ## Security / Safety Posture
 - Fail-closed rules:
@@ -175,14 +175,14 @@ ADR_BODY_SHA256: eddd1c11e664d6ac18e81d2f897fff24c43e91fa218583edf32e1ea5575d0f0
 - Required outcome:
   - Any non-test read of those legacy `SUBSTRATE_*` names that can change behavior MUST be eliminated or rewritten to consult effective config / `SUBSTRATE_OVERRIDE_*` instead.
   - Remaining reads MUST be justified as derived/exported-state consumption (value set earlier in-process from effective config), not as operator override inputs.
-  - Evidence is recorded in `docs/project_management/next/env_var_taxonomy_and_override_split/EV0-closeout_report.md`.
+  - Evidence is recorded in `docs/project_management/_archived/env_var_taxonomy_and_override_split/EV0-closeout_report.md`.
 
 ### Manual testing
-- Follow `docs/project_management/next/env_var_taxonomy_and_override_split/manual_testing_playbook.md`.
+- Follow `docs/project_management/_archived/env_var_taxonomy_and_override_split/manual_testing_playbook.md`.
 
 ### Smoke scripts
 - Feature-local smoke scripts live under:
-  - `docs/project_management/next/env_var_taxonomy_and_override_split/smoke/`
+  - `docs/project_management/_archived/env_var_taxonomy_and_override_split/smoke/`
   - Smoke must validate policy mode plus multiple non-policy keys (ex: `world.caged`, `world.anchor_mode`) so behavior cannot regress via partial wiring.
 
 ## Rollout / Backwards Compatibility
@@ -191,7 +191,7 @@ ADR_BODY_SHA256: eddd1c11e664d6ac18e81d2f897fff24c43e91fa218583edf32e1ea5575d0f0
 
 ## Decision Summary
 - Decision Register:
-  - `docs/project_management/next/env_var_taxonomy_and_override_split/decision_register.md`
+  - `docs/project_management/_archived/env_var_taxonomy_and_override_split/decision_register.md`
     - DR-0001: Naming scheme for override inputs
     - DR-0002: Scope of override variables
     - DR-0003: Canonical environment variable catalog location

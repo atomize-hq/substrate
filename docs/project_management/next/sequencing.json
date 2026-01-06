@@ -118,13 +118,13 @@
       "id": "policy_and_config_precedence",
       "title": "Policy + config precedence correction (workspace > env)",
       "branch": "feat/policy_and_config_precedence",
-      "directory": "docs/project_management/next/policy_and_config_precedence",
-      "plan": "docs/project_management/next/policy_and_config_precedence/plan.md",
-      "status": "not_started",
+      "directory": "docs/project_management/_archived/policy_and_config_precedence",
+      "plan": "docs/project_management/_archived/policy_and_config_precedence/plan.md",
+      "status": "completed",
       "sequence": [
         {
           "id": "PCP0",
-          "spec": "docs/project_management/next/policy_and_config_precedence/PCP0-spec.md"
+          "spec": "docs/project_management/_archived/policy_and_config_precedence/PCP0-spec.md"
         }
       ],
       "notes": [
@@ -137,13 +137,13 @@
       "id": "env_var_taxonomy_and_override_split",
       "title": "Env var taxonomy + override split",
       "branch": "feat/env_var_taxonomy_and_override_split",
-      "directory": "docs/project_management/next/env_var_taxonomy_and_override_split",
-      "plan": "docs/project_management/next/env_var_taxonomy_and_override_split/plan.md",
-      "status": "not_started",
+      "directory": "docs/project_management/_archived/env_var_taxonomy_and_override_split",
+      "plan": "docs/project_management/_archived/env_var_taxonomy_and_override_split/plan.md",
+      "status": "completed",
       "sequence": [
         {
           "id": "EV0",
-          "spec": "docs/project_management/next/env_var_taxonomy_and_override_split/EV0-spec.md"
+          "spec": "docs/project_management/_archived/env_var_taxonomy_and_override_split/EV0-spec.md"
         }
       ],
       "notes": [

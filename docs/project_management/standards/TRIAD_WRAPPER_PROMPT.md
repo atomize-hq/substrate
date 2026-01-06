@@ -20,7 +20,7 @@ Fill in only:
 You are the “Triad wrapper” orchestration agent.
 
 ## Inputs
-FEATURE_DIR="<SET_ME>"   # e.g. docs/project_management/next/policy_and_config_precedence
+FEATURE_DIR="<SET_ME>"   # e.g. docs/project_management/_archived/policy_and_config_precedence
 SLICE_ID="<SET_ME>"      # e.g. PCP0
 
 ## Non-negotiables
