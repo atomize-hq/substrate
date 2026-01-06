@@ -17,6 +17,11 @@ Keep concise, actionable, and security-focused.
     - Update references across docs and standards (`docs/WORLD.md`, `docs/CONFIGURATION.md`, `docs/reference/env/contract.md`, `docs/internals/env/inventory.md`, planning pack templates/smoke scripts) and ensure error messages/warnings use the new name.
   - Acceptance: operators can understand intent from the name alone; docs explain fallback vs fail-closed semantics unambiguously; CI/tests are updated; old names are rejected (hard error) with no aliasing.
 
+- **P1 – Warn on `config global show` when workspace config overrides**
+  - Problem: `substrate policy global show` emits a clear note when a workspace policy overrides the global policy for the current directory, but `substrate config global show` does not emit an equivalent warning when `.substrate/workspace.yaml` overrides global config. This is confusing and makes it easy to misdiagnose “why does my config not match behavior?”
+  - Work: when a workspace is active for the current directory, have `substrate config global show` print a note that workspace config overrides global config here and point users at the effective view (`substrate config show`).
+  - Acceptance: parity with `policy global show` UX; message is shown only when a workspace override applies; docs/help updated if needed.
+
 - **P1 – Policy-driven world fs mode**
   - Problem: write permissions inside worlds currently depend on systemd hardening + overlay success, not on broker policy. Sensitive repos need a policy bit to force read-only worlds while other projects remain writable, without editing unit files manually.
   - Work: extend broker schema to accept `world.fs_mode = read_only|writable` (global + per-project), plumb into shell/world-agent so PTY + non-PTY sessions honor it, and update docs/doctor to surface the active mode. Systemd units must allow `/home` writes so policy can enforce RO vs writable deterministically.
