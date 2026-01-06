@@ -129,7 +129,7 @@
       "name": "Integration: land WO0 with smoke + playbook validation",
       "type": "integration",
       "phase": "WO0",
-      "status": "pending",
+      "status": "completed",
       "description": "Integrate WO0-code + WO0-test, reconcile to WO0-spec, run required formatting/lint/tests, run Linux smoke script and manual playbook steps, and ensure final behavior matches ADR-0004.",
       "references": [
         "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",

@@ -240,3 +240,24 @@
   - `NONE`
 - Next steps:
   - `WO0-integ`: create `wt/woe-wo0-integ`, merge `woe-wo0-code` + `woe-wo0-test`, reconcile to `WO0-spec.md`, run `make integ-checks`, then fill `WO0-closeout_report.md`.
+
+## END — 2026-01-06T22:19:49Z — integ — WO0-integ
+- Feature: `docs/project_management/next/world-overlayfs-enumeration/`
+- Branch: `feat/world-overlayfs-enumeration`
+- Task branch: `woe-wo0-integ` (`HEAD=1260a60ebf215c377c277d158289acfb75d0fcaa`)
+- Summary of changes (exhaustive):
+  - Merged `WO0-code` + `WO0-test` and reconciled to `WO0-spec.md` (spec wins).
+  - Ensured `command_complete` trace events carry the WO0 `world_fs_strategy_*` contract fields so smoke/playbook validation works end-to-end.
+  - Updated WO0 smoke + manual playbook scripts to be workspace-aware (`substrate workspace init .`) and to use valid `jq IN(...)` predicates.
+- Validation (local run from task worktree):
+  - `cargo fmt` → `PASS`
+  - `cargo clippy --workspace --all-targets -- -D warnings` → `PASS`
+  - `cargo test -p substrate-shell --test world_overlayfs_enumeration_wo0 -- --nocapture` → `PASS`
+  - `cargo test -p world-agent --test overlayfs_enumeration -- --nocapture` → `PASS`
+  - `cargo test -p world --test overlayfs_enumeration_fallback -- --nocapture` → `PASS`
+  - `bash docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh` → `PASS` (`OK: overlayfs enumeration smoke`)
+  - `make integ-checks` → `PASS`
+- Manual playbook (local run):
+  - `docs/project_management/next/world-overlayfs-enumeration/manual_testing_playbook.md` steps `0–4` → `PASS`
+- Blockers:
+  - `NONE`
