@@ -129,3 +129,16 @@
   - `docs/project_management/next/world-overlayfs-enumeration/manual_testing_playbook.md`
   - `docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh`
   - `docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/F0-exec-preflight.md`
+
+## END — 2026-01-06T14:43:21Z — ops — F0-exec-preflight
+- Recommendation: `ACCEPT`
+- Required fixes before starting WO0: `NONE`
+- Summary of changes (exhaustive):
+  - Updated ADR-0004 status to `Accepted` (added orchestration branch to the ADR header; refreshed `ADR_BODY_SHA256`)
+  - Updated `execution_preflight_report.md` with the current preflight run date and evidence commands
+  - Marked `F0-exec-preflight` status as `completed` in `tasks.json`
+- Validation (local run):
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/world-overlayfs-enumeration"` → `PASS`
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/world-overlayfs-enumeration"` → `PASS`
+- Blockers:
+  - `NONE`

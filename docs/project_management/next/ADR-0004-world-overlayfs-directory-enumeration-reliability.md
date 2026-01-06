@@ -1,12 +1,13 @@
 # ADR-0004 — World OverlayFS Directory Enumeration Reliability
 
 ## Status
-- Status: Draft
+- Status: Accepted
 - Date (UTC): 2025-12-29
 - Owner(s): spenser
 
 ## Scope
 - Feature directory: `docs/project_management/next/world-overlayfs-enumeration/`
+- Orchestration branch: `feat/world-overlayfs-enumeration`
 - Sequencing spine: `docs/project_management/next/sequencing.json`
 - Standards:
   - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
@@ -23,7 +24,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 93e79ffae9fac917443fb22f7cac5063cffdb6aff57ac5f560152d2182e4946b
+ADR_BODY_SHA256: 5869e26e0dcaea4e2cd25daf4fe5c1b93fdfba697798993472632b13c8c6c33a
 ### Changes (operator-facing)
 - World overlay directory enumeration reliability (Linux)
   - Existing: On some Linux hosts, a world overlay mount can succeed but directory enumeration in the merged view is broken (e.g., `ls` shows empty even though `stat` works), making worlds unsafe/confusing.
