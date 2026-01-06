@@ -114,3 +114,18 @@
   - `NONE`
 - Next steps:
   - `WO0-code` / `WO0-test` / `WO0-integ` triads may begin after the orchestration branch commits these planning updates.
+
+## START — 2026-01-06T14:41:02Z — ops — F0-exec-preflight
+- Feature: `docs/project_management/next/world-overlayfs-enumeration/`
+- Branch: `feat/world-overlayfs-enumeration`
+- Goal: Run the execution preflight gate and produce a concrete `ACCEPT`/`REVISE` recommendation before starting WO0.
+- Inputs to review end-to-end:
+  - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+  - `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+  - `docs/project_management/next/world-overlayfs-enumeration/plan.md`
+  - `docs/project_management/next/world-overlayfs-enumeration/tasks.json`
+  - `docs/project_management/next/world-overlayfs-enumeration/session_log.md`
+  - `docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md`
+  - `docs/project_management/next/world-overlayfs-enumeration/manual_testing_playbook.md`
+  - `docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh`
+  - `docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/F0-exec-preflight.md`
