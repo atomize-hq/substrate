@@ -39,6 +39,7 @@ Expected:
 set -euo pipefail
 tmp="$(mktemp -d)"
 cd "$tmp"
+substrate workspace init . >/dev/null
 substrate --world -c 'touch a.txt; ls -a' | rg -n -- '^a\\.txt$' >/dev/null
 ```
 
@@ -51,6 +52,7 @@ Expected:
 set -euo pipefail
 tmp="$(mktemp -d)"
 cd "$tmp"
+substrate workspace init . >/dev/null
 substrate --world -c 'touch a.txt; ls -a' >/dev/null
 test ! -e "$tmp/a.txt"
 ```
@@ -64,6 +66,8 @@ Expected:
 set -euo pipefail
 tmp="$(mktemp -d)"
 trace="$tmp/trace.jsonl"
+cd "$tmp"
+substrate workspace init . >/dev/null
 
 SHIM_TRACE_LOG="$trace" substrate --world -c 'touch a.txt; ls -a' >/dev/null
 
