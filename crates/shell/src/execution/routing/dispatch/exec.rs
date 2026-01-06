@@ -356,6 +356,15 @@ pub(crate) fn execute_command(
     let forced = is_force_pty_command(trimmed);
     let should_use_pty = forced || (!disabled && needs_pty(trimmed));
 
+    // WO0/ADR-0004: command_complete events written via `log_command_event` must always include
+    // the world fs strategy contract fields. Host-only execution paths use a conservative default,
+    // with specific fallback cases overriding this.
+    let mut world_fs_strategy_log_override: Option<(
+        WorldFsStrategy,
+        WorldFsStrategy,
+        WorldFsStrategyFallbackReason,
+    )> = None;
+
     if should_use_pty {
         // Attempt world-agent PTY WS route on Linux when world is enabled or agent socket exists
         #[cfg(target_os = "linux")]
@@ -717,10 +726,15 @@ pub(crate) fn execute_command(
             if let Some(active_span) = span {
                 let _ = active_span.finish(status.code().unwrap_or(-1), vec![], None);
             }
-            let completion_extra = json!({
+            let mut completion_extra = json!({
                 log_schema::EXIT_CODE: status.code().unwrap_or(-1),
                 log_schema::DURATION_MS: start_time.elapsed().as_millis()
             });
+            completion_extra["world_fs_strategy_primary"] =
+                json!(WorldFsStrategy::Overlay.as_str());
+            completion_extra["world_fs_strategy_final"] = json!(WorldFsStrategy::Host.as_str());
+            completion_extra["world_fs_strategy_fallback_reason"] =
+                json!(WorldFsStrategyFallbackReason::None.as_str());
             log_command_event(
                 config,
                 "command_complete",
@@ -776,6 +790,23 @@ pub(crate) fn execute_command(
                                 );
                                 let _ = active_span.finish(3, vec![], None);
                             }
+                            let reason = unavail
+                                .fallback_reason
+                                .unwrap_or(WorldFsStrategyFallbackReason::FallbackMountFailed);
+                            let completion_extra = json!({
+                                log_schema::EXIT_CODE: 3,
+                                log_schema::DURATION_MS: start_time.elapsed().as_millis(),
+                                "world_fs_strategy_primary": WorldFsStrategy::Overlay.as_str(),
+                                "world_fs_strategy_final": WorldFsStrategy::Fuse.as_str(),
+                                "world_fs_strategy_fallback_reason": reason.as_str(),
+                            });
+                            log_command_event(
+                                config,
+                                "command_complete",
+                                &redacted_command,
+                                cmd_id,
+                                Some(completion_extra),
+                            )?;
                             return Ok(ExitStatus::from_raw(3 << 8));
                         }
 
@@ -787,6 +818,11 @@ pub(crate) fn execute_command(
                                 WorldFsStrategyFallbackReason::WorldOptionalFallbackToHost,
                             );
                         }
+                        world_fs_strategy_log_override = Some((
+                            WorldFsStrategy::Overlay,
+                            WorldFsStrategy::Host,
+                            WorldFsStrategyFallbackReason::WorldOptionalFallbackToHost,
+                        ));
                     } else {
                         if world_required {
                             anyhow::bail!(
@@ -818,10 +854,22 @@ pub(crate) fn execute_command(
                 outcome.fs_diff.clone(),
             );
         }
-        let completion_extra = json!({
+        let mut completion_extra = json!({
             log_schema::EXIT_CODE: outcome.exit_code,
             log_schema::DURATION_MS: start_time.elapsed().as_millis()
         });
+        if let Some(meta) = outcome.fs_strategy {
+            completion_extra["world_fs_strategy_primary"] = json!(meta.primary.as_str());
+            completion_extra["world_fs_strategy_final"] = json!(meta.final_strategy.as_str());
+            completion_extra["world_fs_strategy_fallback_reason"] =
+                json!(meta.fallback_reason.as_str());
+        } else {
+            completion_extra["world_fs_strategy_primary"] =
+                json!(WorldFsStrategy::Overlay.as_str());
+            completion_extra["world_fs_strategy_final"] = json!(WorldFsStrategy::Host.as_str());
+            completion_extra["world_fs_strategy_fallback_reason"] =
+                json!(WorldFsStrategyFallbackReason::None.as_str());
+        }
         log_command_event(
             config,
             "command_complete",
@@ -860,7 +908,7 @@ pub(crate) fn execute_command(
     });
 
     #[cfg(not(unix))]
-    let extra = json!({
+    let mut extra = json!({
         log_schema::EXIT_CODE: status.code().unwrap_or(-1),
         log_schema::DURATION_MS: duration.as_millis()
     });
@@ -870,6 +918,17 @@ pub(crate) fn execute_command(
         if let Some(sig) = status.signal() {
             extra["term_signal"] = json!(sig);
         }
+    }
+
+    if let Some((primary, final_strategy, reason)) = world_fs_strategy_log_override {
+        extra["world_fs_strategy_primary"] = json!(primary.as_str());
+        extra["world_fs_strategy_final"] = json!(final_strategy.as_str());
+        extra["world_fs_strategy_fallback_reason"] = json!(reason.as_str());
+    } else {
+        extra["world_fs_strategy_primary"] = json!(WorldFsStrategy::Overlay.as_str());
+        extra["world_fs_strategy_final"] = json!(WorldFsStrategy::Host.as_str());
+        extra["world_fs_strategy_fallback_reason"] =
+            json!(WorldFsStrategyFallbackReason::None.as_str());
     }
 
     log_command_event(

@@ -291,6 +291,21 @@ impl ActiveSpan {
             .context
             .build_replay_context(self.transport.clone(), origin)?;
 
+        // ADR-0004/WO0 trace contract: these fields must be present on command_complete events,
+        // even when the caller did not set them explicitly (e.g., host-only execution paths).
+        let world_fs_strategy_primary = Some(
+            self.world_fs_strategy_primary
+                .unwrap_or(WorldFsStrategy::Overlay),
+        );
+        let world_fs_strategy_final = Some(self.world_fs_strategy_final.unwrap_or(match origin {
+            ExecutionOrigin::World => WorldFsStrategy::Overlay,
+            ExecutionOrigin::Host => WorldFsStrategy::Host,
+        }));
+        let world_fs_strategy_fallback_reason = Some(
+            self.world_fs_strategy_fallback_reason
+                .unwrap_or(WorldFsStrategyFallbackReason::None),
+        );
+
         let span = Span {
             ts: Utc::now(),
             event_type: "command_complete".to_string(),
@@ -317,9 +332,9 @@ impl ActiveSpan {
             execution_origin: Some(origin),
             graph_edges: None,
             policy_decision: None,
-            world_fs_strategy_primary: self.world_fs_strategy_primary,
-            world_fs_strategy_final: self.world_fs_strategy_final,
-            world_fs_strategy_fallback_reason: self.world_fs_strategy_fallback_reason,
+            world_fs_strategy_primary,
+            world_fs_strategy_final,
+            world_fs_strategy_fallback_reason,
         };
 
         if let Some(ref mut output) = *self.context.output_write() {
