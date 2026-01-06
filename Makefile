@@ -190,6 +190,15 @@ planning-new-feature-ps:
 	eval "$$cmd"; \
 	$(MAKE) planning-validate FEATURE_DIR="docs/project_management/next/$(FEATURE)"
 
+.PHONY: planning-archive
+planning-archive:
+	@if [ -z "$(SRC)" ]; then echo "ERROR: set SRC=docs/project_management/<bucket>/<name>"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="python3 scripts/planning/archive_project_management_dir.py --src \"$(SRC)\""; \
+	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
+	if [ "$(ALLOW_DIRTY)" = "1" ]; then cmd="$$cmd --allow-dirty"; fi; \
+	eval "$$cmd"
+
 # =========================
 # Triad execution automation
 # =========================
