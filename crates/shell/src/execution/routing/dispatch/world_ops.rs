@@ -752,6 +752,7 @@ pub(crate) struct WorldFsStrategyTraceMeta {
 #[derive(Debug)]
 pub(crate) struct WorldFsStrategyUnavailableError {
     pub(crate) raw_message: String,
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub(crate) fallback_reason: Option<substrate_common::WorldFsStrategyFallbackReason>,
 }
 

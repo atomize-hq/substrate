@@ -359,7 +359,15 @@ pub(crate) fn execute_command(
     // WO0/ADR-0004: command_complete events written via `log_command_event` must always include
     // the world fs strategy contract fields. Host-only execution paths use a conservative default,
     // with specific fallback cases overriding this.
+    #[cfg(target_os = "linux")]
     let mut world_fs_strategy_log_override: Option<(
+        WorldFsStrategy,
+        WorldFsStrategy,
+        WorldFsStrategyFallbackReason,
+    )> = None;
+
+    #[cfg(not(target_os = "linux"))]
+    let world_fs_strategy_log_override: Option<(
         WorldFsStrategy,
         WorldFsStrategy,
         WorldFsStrategyFallbackReason,
