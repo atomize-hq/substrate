@@ -93,7 +93,7 @@
       "name": "Tests: enumeration probe + fallback + metadata",
       "type": "test",
       "phase": "WO0",
-      "status": "pending",
+      "status": "completed",
       "description": "Add unit/integration tests that validate enumeration probe behavior, fallback selection, and trace/doctor metadata for the Linux world filesystem strategies defined by ADR-0004 + WO0-spec.",
       "references": [
         "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",

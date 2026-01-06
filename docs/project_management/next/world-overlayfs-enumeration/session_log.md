@@ -142,3 +142,20 @@
   - `make planning-lint FEATURE_DIR="docs/project_management/next/world-overlayfs-enumeration"` → `PASS`
 - Blockers:
   - `NONE`
+
+## END — 2026-01-06T15:25:47Z — test — WO0-test
+- Feature: `docs/project_management/next/world-overlayfs-enumeration/`
+- Branch: `feat/world-overlayfs-enumeration`
+- Task branch: `woe-wo0-test` (`HEAD=614cc09f22dcda4160915fb553e47bc9fd8385a2`)
+- Summary of changes (exhaustive):
+  - Added Linux integration coverage in `crates/world-agent/tests/overlayfs_enumeration.rs`
+  - Added Linux fallback coverage in `crates/world/tests/overlayfs_enumeration_fallback.rs`
+  - Added Linux metadata/doctor contract tests in `crates/shell/tests/world_overlayfs_enumeration_wo0.rs` (expected to pass once `WO0-code` lands the required fields)
+- Validation (local run from task worktree):
+  - `cargo fmt` → `PASS`
+  - `cargo test -p world --test overlayfs_enumeration_fallback -- --nocapture` → `PASS` (skipped: overlay support/privileges missing)
+  - `cargo test -p world-agent --test overlayfs_enumeration -- --nocapture` → `PASS` (skipped: overlay support/privileges missing)
+  - `cargo test -p substrate-shell --test world_overlayfs_enumeration_wo0 -- --nocapture` → `FAIL` (missing `world_fs_strategy_*` keys in doctor/trace output)
+  - `make triad-task-finish TASK_ID="WO0-test"` → `PASS`
+- Blockers:
+  - `WO0-code` is required to implement the ADR-0004 doctor/trace fields for the failing tests to pass.
