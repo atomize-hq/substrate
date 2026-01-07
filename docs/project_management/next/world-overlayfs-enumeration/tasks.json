@@ -1,14 +1,19 @@
 {
   "meta": {
     "feature": "world-overlayfs-enumeration",
-    "cross_platform": false,
+    "cross_platform": true,
     "schema_version": 3,
     "execution_gates": true,
+    "platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
     "automation": {
       "enabled": true,
       "orchestration_branch": "feat/world-overlayfs-enumeration"
     },
-    "notes": "Linux-only work per ADR-0004; fixes overlayfs directory enumeration reliability and adds fuse-overlayfs fallback and observability."
+    "notes": "WO0 requires cross-platform CI parity; primary implementation targets Linux per ADR-0004."
   },
   "tasks": [
     {
@@ -82,11 +87,17 @@
       ],
       "worktree": "wt/woe-wo0-code",
       "git_branch": "woe-wo0-code",
-      "required_make_targets": ["triad-code-checks"],
-      "integration_task": "WO0-integ",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "integration_task": "WO0-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-code.md",
-      "depends_on": ["F0-exec-preflight"],
-      "concurrent_with": ["WO0-test"]
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
+      "concurrent_with": [
+        "WO0-test"
+      ]
     },
     {
       "id": "WO0-test",
@@ -118,41 +129,223 @@
       ],
       "worktree": "wt/woe-wo0-test",
       "git_branch": "woe-wo0-test",
-      "required_make_targets": ["triad-test-checks"],
-      "integration_task": "WO0-integ",
+      "required_make_targets": [
+        "triad-test-checks"
+      ],
+      "integration_task": "WO0-integ-core",
       "kickoff_prompt": "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-test.md",
-      "depends_on": ["F0-exec-preflight"],
-      "concurrent_with": ["WO0-code"]
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
+      "concurrent_with": [
+        "WO0-code"
+      ]
     },
     {
-      "id": "WO0-integ",
-      "name": "Integration: land WO0 with smoke + playbook validation",
+      "id": "WO0-integ-core",
+      "name": "Integration core: merge WO0 + dispatch cross-platform smoke",
       "type": "integration",
       "phase": "WO0",
-      "status": "pending",
-      "description": "Integrate WO0-code + WO0-test, reconcile to WO0-spec, run required formatting/lint/tests, run Linux smoke script and manual playbook steps, and ensure final behavior matches ADR-0004.",
+      "status": "completed",
+      "description": "Core integration: merge WO0-code + WO0-test, reconcile to spec, run integration gates on primary dev platform, then dispatch cross-platform Feature Smoke and report run ids/URLs for platform selection.",
       "references": [
         "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",
         "docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md",
         "docs/project_management/next/world-overlayfs-enumeration/manual_testing_playbook.md",
-        "docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh"
+        "docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh",
+        "docs/project_management/next/world-overlayfs-enumeration/smoke/macos-smoke.sh",
+        "docs/project_management/next/world-overlayfs-enumeration/smoke/windows-smoke.ps1"
       ],
       "acceptance_criteria": [
-        "WO0-spec contract is met with no drift",
+        "WO0-spec contract is met with no drift on primary dev platform",
         "cargo fmt passes",
         "cargo clippy --workspace --all-targets -- -D warnings passes",
         "All relevant cargo test suites pass (at minimum: tests added/modified by WO0-test and any touched world/shell crates)",
-        "Linux smoke script docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh passes",
-        "Manual playbook docs/project_management/next/world-overlayfs-enumeration/manual_testing_playbook.md steps pass",
-        "make integ-checks passes"
+        "make integ-checks passes",
+        "Feature Smoke PLATFORM=all dispatched and reported with RUN_ID/RUN_URL and passed/failed platforms"
+      ],
+      "start_checklist": [
+        "Set WO0-integ-core status to in_progress in tasks.json; add START entry to session_log.md; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-overlayfs-enumeration\" TASK_ID=\"WO0-integ-core\" LAUNCH_CODEX=1",
+        "Merge woe-wo0-code and woe-wo0-test into wt/woe-wo0-integ-core and resolve drift to spec"
+      ],
+      "end_checklist": [
+        "Run required integration commands and capture outputs",
+        "Dispatch Feature Smoke PLATFORM=all and capture RUN_ID/RUN_URL + SMOKE_PASSED_PLATFORMS/SMOKE_FAILED_PLATFORMS",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WO0-integ-core\"",
+        "On the orchestration branch: set WO0-integ-core status to completed in tasks.json; add END entry to session_log.md; commit docs",
+        "Do not delete the worktree (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/woe-wo0-integ-core",
+      "git_branch": "woe-wo0-integ-core",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false,
+      "integration_task": "WO0-integ-core",
+      "kickoff_prompt": "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-core.md",
+      "depends_on": [
+        "WO0-code",
+        "WO0-test"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "WO0-integ-linux",
+      "name": "Integration Linux: platform-fix (if needed)",
+      "type": "integration",
+      "phase": "WO0",
+      "status": "completed",
+      "description": "Linux platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/world-overlayfs-enumeration/plan.md",
+        "docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md",
+        "docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "linux smoke is green for this slice"
+      ],
+      "start_checklist": [
+        "Run on linux host if possible",
+        "Set WO0-integ-linux status to in_progress in tasks.json; add START entry to session_log.md; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-overlayfs-enumeration\" TASK_ID=\"WO0-integ-linux\" LAUNCH_CODEX=1"
+      ],
+      "end_checklist": [
+        "Ensure linux Feature Smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WO0-integ-linux\"",
+        "On the orchestration branch: set WO0-integ-linux status to completed in tasks.json; add END entry to session_log.md; commit docs",
+        "Do not delete the worktree (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/woe-wo0-integ-linux",
+      "git_branch": "woe-wo0-integ-linux",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false,
+      "integration_task": "WO0-integ-linux",
+      "kickoff_prompt": "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-linux.md",
+      "depends_on": [
+        "WO0-integ-core"
+      ],
+      "concurrent_with": [],
+      "platform": "linux",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml"
+    },
+    {
+      "id": "WO0-integ-macos",
+      "name": "Integration macOS: platform-fix (if needed)",
+      "type": "integration",
+      "phase": "WO0",
+      "status": "completed",
+      "description": "macOS platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/world-overlayfs-enumeration/plan.md",
+        "docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md",
+        "docs/project_management/next/world-overlayfs-enumeration/smoke/macos-smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "macos smoke is green for this slice"
+      ],
+      "start_checklist": [
+        "Run on macos host if possible",
+        "Set WO0-integ-macos status to in_progress in tasks.json; add START entry to session_log.md; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-overlayfs-enumeration\" TASK_ID=\"WO0-integ-macos\" LAUNCH_CODEX=1"
+      ],
+      "end_checklist": [
+        "Ensure macos Feature Smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WO0-integ-macos\"",
+        "On the orchestration branch: set WO0-integ-macos status to completed in tasks.json; add END entry to session_log.md; commit docs",
+        "Do not delete the worktree (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/woe-wo0-integ-macos",
+      "git_branch": "woe-wo0-integ-macos",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false,
+      "integration_task": "WO0-integ-macos",
+      "kickoff_prompt": "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-macos.md",
+      "depends_on": [
+        "WO0-integ-core"
+      ],
+      "concurrent_with": [],
+      "platform": "macos",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml"
+    },
+    {
+      "id": "WO0-integ-windows",
+      "name": "Integration Windows: platform-fix (if needed)",
+      "type": "integration",
+      "phase": "WO0",
+      "status": "completed",
+      "description": "Windows platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/world-overlayfs-enumeration/plan.md",
+        "docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md",
+        "docs/project_management/next/world-overlayfs-enumeration/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "windows smoke is green for this slice"
+      ],
+      "start_checklist": [
+        "Run on windows host if possible",
+        "Set WO0-integ-windows status to in_progress in tasks.json; add START entry to session_log.md; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-overlayfs-enumeration\" TASK_ID=\"WO0-integ-windows\" LAUNCH_CODEX=1"
+      ],
+      "end_checklist": [
+        "Ensure windows Feature Smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WO0-integ-windows\"",
+        "On the orchestration branch: set WO0-integ-windows status to completed in tasks.json; add END entry to session_log.md; commit docs",
+        "Do not delete the worktree (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/woe-wo0-integ-windows",
+      "git_branch": "woe-wo0-integ-windows",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false,
+      "integration_task": "WO0-integ-windows",
+      "kickoff_prompt": "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-windows.md",
+      "depends_on": [
+        "WO0-integ-core"
+      ],
+      "concurrent_with": [],
+      "platform": "windows",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml"
+    },
+    {
+      "id": "WO0-integ",
+      "name": "Integration final: merge platform fixes + confirm cross-platform green",
+      "type": "integration",
+      "phase": "WO0",
+      "status": "pending",
+      "description": "Final cross-platform integration: merge any platform fixes and confirm all required platforms are green.",
+      "references": [
+        "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",
+        "docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md",
+        "docs/project_management/next/world-overlayfs-enumeration/manual_testing_playbook.md",
+        "docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh",
+        "docs/project_management/next/world-overlayfs-enumeration/smoke/macos-smoke.sh",
+        "docs/project_management/next/world-overlayfs-enumeration/smoke/windows-smoke.ps1",
+        "docs/project_management/next/world-overlayfs-enumeration/WO0-closeout_report.md"
+      ],
+      "acceptance_criteria": [
+        "All required platforms are green and the slice matches the spec"
       ],
       "start_checklist": [
         "Set WO0-integ status to in_progress in tasks.json; add START entry to session_log.md; commit docs",
-        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world-overlayfs-enumeration\" TASK_ID=\"WO0-integ\"",
-        "Merge woe-wo0-code and woe-wo0-test into wt/woe-wo0-integ and resolve drift to spec"
+        "Run: make triad-task-start-integ-final FEATURE_DIR=\"docs/project_management/next/world-overlayfs-enumeration\" SLICE_ID=\"WO0\" LAUNCH_CODEX=1"
       ],
       "end_checklist": [
-        "Run required commands and capture outputs",
+        "Merge platform-fix branches (if any) + resolve conflicts",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "Re-run cross-platform Feature Smoke via CI (PLATFORM=all) and capture RUN_ID/RUN_URL",
         "Complete docs/project_management/next/world-overlayfs-enumeration/WO0-closeout_report.md",
         "From inside the worktree: make triad-task-finish TASK_ID=\"WO0-integ\"",
         "On the orchestration branch: set WO0-integ status to completed in tasks.json; add END entry to session_log.md; commit docs",
@@ -160,11 +353,18 @@
       ],
       "worktree": "wt/woe-wo0-integ",
       "git_branch": "woe-wo0-integ",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": true,
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ.md",
-      "depends_on": ["WO0-code", "WO0-test"],
+      "depends_on": [
+        "WO0-integ-core",
+        "WO0-integ-linux",
+        "WO0-integ-macos",
+        "WO0-integ-windows"
+      ],
       "concurrent_with": []
     },
     {
@@ -193,7 +393,9 @@
       "worktree": null,
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/FZ-feature-cleanup.md",
-      "depends_on": ["WO0-integ"],
+      "depends_on": [
+        "WO0-integ"
+      ],
       "concurrent_with": []
     }
   ]
