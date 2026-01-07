@@ -195,7 +195,7 @@
       "name": "Integration Linux: platform-fix (if needed)",
       "type": "integration",
       "phase": "WO0",
-      "status": "pending",
+      "status": "completed",
       "description": "Linux platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/world-overlayfs-enumeration/plan.md",
@@ -237,7 +237,7 @@
       "name": "Integration macOS: platform-fix (if needed)",
       "type": "integration",
       "phase": "WO0",
-      "status": "pending",
+      "status": "completed",
       "description": "macOS platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/world-overlayfs-enumeration/plan.md",
@@ -279,7 +279,7 @@
       "name": "Integration Windows: platform-fix (if needed)",
       "type": "integration",
       "phase": "WO0",
-      "status": "pending",
+      "status": "completed",
       "description": "Windows platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/world-overlayfs-enumeration/plan.md",
