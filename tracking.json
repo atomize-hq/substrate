@@ -1,6 +1,6 @@
 {
     "purpose": "Ad-hoc tracker for planning-system improvements.",
-    "last_updated_utc": "2025-12-30T18:30:45Z",
+    "last_updated_utc": "2026-01-07T20:35:40Z",
     "items": [
         {
             "id": "HF-001",
@@ -431,6 +431,320 @@
                 "docs/project_management/next/world-sync/tasks.json"
             ],
             "notes": "Added missing sprint entries (incl. `p0_platform_stability`, `p0_platform_stability_macos_parity`, `world_deps_selection_layer`) and declared cross-feature task deps via `meta.external_task_ids`."
+        },
+        {
+            "id": "P3-001",
+            "area": "CI / parity preflight",
+            "title": "Catch cross-platform compile breaks before smoke dispatch",
+            "status": "open",
+            "scope": "Triad integration-core workflow (pre-smoke).",
+            "problem": "Cross-platform CI failures were discovered only after dispatching CI runs, costing runner time and creating iterative thrash.",
+            "evidence": {
+                "feature": "world-overlayfs-enumeration",
+                "ci_testing_pre_final": {
+                    "run_id": "20763974819",
+                    "run_url": "https://github.com/atomize-hq/substrate/actions/runs/20763974819",
+                    "summary_file": "target/triad/orch-wrapper/WO0-ci-testing-pre-final.log",
+                    "symptoms": [
+                        "macOS + Windows builds failed while Linux passed",
+                        "Example errors include: error[E0599] (missing mount_kernel_only/mount_fuse_only), error[E0277] ([u8] unsized)"
+                    ],
+                    "log_snippet": [
+                        "error[E0599]: no method named `mount_kernel_only` found for struct `overlayfs::OverlayFs` in the current scope",
+                        "error[E0599]: no method named `mount_fuse_only` found for struct `overlayfs::OverlayFs` in the current scope",
+                        "error[E0277]: the size for values of type `[u8]` cannot be known at compilation time"
+                    ],
+                    "how_to_retrieve_logs": [
+                        "gh run view 20763974819 --repo atomize-hq/substrate --log-failed",
+                        "gh run view 20763974819 --repo atomize-hq/substrate --json conclusion,status,url,jobs"
+                    ]
+                }
+            },
+            "root_cause_hypothesis": [
+                "Linux-only logic was not fully cfg-gated, so non-Linux targets tried to compile Linux-only symbols/methods.",
+                "These errors were only surfaced when CI compiled on macOS/Windows."
+            ],
+            "proposed_fix": {
+                "behavior": "Before dispatching Feature Smoke (or CI testing), run a deterministic cross-platform 'compile parity' preflight and fail fast with actionable output.",
+                "candidates": [
+                    "Add a make target (or script) that runs minimal cross-platform compilation checks (e.g., cargo check/clippy with cfg gates verified) prior to dispatch.",
+                    "If full cross-platform compilation is not possible locally, run the parity preflight in CI-testing workflow earlier and gate downstream steps."
+                ],
+                "acceptance_criteria": [
+                    "Integration-core fails before dispatching platform smoke when macOS/Windows would fail to compile",
+                    "Failure output includes the first 1-3 compiler errors and points to likely cfg-gating surfaces",
+                    "One dispatch attempt is sufficient; no repeat dispatch loops required to surface the same issue"
+                ]
+            },
+            "sources": [
+                "target/triad/orch-wrapper/WO0-ci-testing-pre-final.log",
+                "target/triad/orch-wrapper/WO0-ci-testing-pre-final.from-integ-core.log",
+                "scripts/ci/dispatch_ci_testing.sh"
+            ]
+        },
+        {
+            "id": "P3-002",
+            "area": "CI / self-hosted runner provisioning",
+            "title": "Linux self-hosted smoke fails due to /run/substrate.sock permissions",
+            "status": "open",
+            "problem": "Linux smoke failures were caused by runner environment permissions rather than repo changes; this triggered repeated smoke dispatches and consumed agent time.",
+            "evidence": {
+                "feature": "world-overlayfs-enumeration",
+                "feature_smoke": {
+                    "run_id": "20764936549",
+                    "run_url": "https://github.com/atomize-hq/substrate/actions/runs/20764936549",
+                    "symptom": "substrate world doctor: socket activation probe failed for /run/substrate.sock (Permission denied (os error 13))",
+                    "log_snippet": "linux_self_hosted ... substrate world doctor: socket activation probe failed for /run/substrate.sock (Permission denied (os error 13))",
+                    "how_to_retrieve_logs": [
+                        "gh run view 20764936549 --repo atomize-hq/substrate --log-failed | rg -n 'substrate\\.sock|Permission denied'",
+                        "gh run view 20764936549 --repo atomize-hq/substrate --log-failed | head -n 2500"
+                    ]
+                },
+                "codex_logs": [
+                    {
+                        "file": "target/triad/world-overlayfs-enumeration/codex/WO0-integ-core/stderr.log",
+                        "example_excerpt_lines": "See lines ~430-460 for dispatch output and RUN_ID; see later occurrences of Permission denied for linux_self_hosted job failures."
+                    },
+                    {
+                        "file": "target/triad/world-overlayfs-enumeration/codex/WO0-integ-linux/last_message.md",
+                        "note": "Contains operator handoff guidance pointing to runner group membership + socket perms."
+                    }
+                ]
+            },
+            "root_cause_hypothesis": [
+                "Runner user lacks group membership (expected: `substrate`) or systemd socket permissions for `/run/substrate.sock`.",
+                "Even if group membership is added, the runner service must be restarted to pick up the new group list."
+            ],
+            "proposed_fix": {
+                "behavior": [
+                    "Add a fast runner-side preflight (before running smoke) that checks socket existence and access and fails with a clear 'runner misprovisioned' message.",
+                    "Stop retrying smoke on this class of failure; print a single remediation block."
+                ],
+                "remediation_block_template": [
+                    "Verify runner user is in `substrate` group",
+                    "Restart runner service (or reboot) so new group membership applies",
+                    "Confirm `/run/substrate.sock` is `root:substrate` and `0660` and the runner user is in `substrate`"
+                ],
+                "acceptance_criteria": [
+                    "Linux smoke fails with an explicit provisioning diagnosis rather than a generic command failure",
+                    "Operator action required is unambiguous and single-step (no repeated dispatch guessing)"
+                ]
+            },
+            "sources": [
+                ".github/workflows/feature-smoke.yml",
+                "scripts/ci/dispatch_feature_smoke.sh",
+                "target/triad/orch-wrapper/WO0-platform-fixes-from-smoke.make.log"
+            ]
+        },
+        {
+            "id": "P3-003",
+            "area": "CI dispatch ergonomics",
+            "title": "feature-smoke dispatch returns exit 2 after successful dispatch, causing rerun thrash",
+            "status": "open",
+            "problem": "Operators/agents treated `make feature-smoke` as 'failed to dispatch' because it exited non-zero even though it successfully dispatched and printed RUN_ID/RUN_URL.",
+            "evidence": {
+                "feature": "world-overlayfs-enumeration",
+                "codex_log": {
+                    "file": "target/triad/world-overlayfs-enumeration/codex/WO0-integ-core/stderr.log",
+                    "excerpt": [
+                        "make feature-smoke ... exited 2",
+                        "RUN_ID=20764342990",
+                        "RUN_URL=https://github.com/atomize-hq/substrate/actions/runs/20764342990"
+                    ],
+                    "excerpt_location_hint": "See line-numbered excerpt around 440-460."
+                },
+                "dispatcher": {
+                    "script": "scripts/ci/dispatch_feature_smoke.sh",
+                    "stdout_contract": [
+                        "HEAD=<sha>",
+                        "TEMP_BRANCH=<branch>",
+                        "RUN_ID=<id>",
+                        "RUN_URL=<url or empty>",
+                        "CONCLUSION=<conclusion>",
+                        "SMOKE_PASSED_PLATFORMS=<csv or empty>",
+                        "SMOKE_FAILED_PLATFORMS=<csv or empty>"
+                    ],
+                    "observed_behavior": "Non-zero exit is used for 'run concluded failure' (not only dispatch failures), but this is easy to misinterpret when output still contains a valid RUN_ID."
+                }
+            },
+            "proposed_fix": {
+                "behavior": [
+                    "Make dispatcher output explicitly separate 'dispatch succeeded' from 'run failed'.",
+                    "Return a unique exit code (or print a machine-parseable field) that distinguishes dispatch failure vs run failure (e.g., `DISPATCH_OK=1`).",
+                    "Emit a one-screen 'next step' block (view run URL; classify failure; select platform-fix tasks) to reduce repeated blind reruns."
+                ],
+                "acceptance_criteria": [
+                    "Agents do not rerun feature-smoke repeatedly just to obtain a run id",
+                    "Orchestration wrapper can unambiguously decide whether to launch platform-fix tasks based on machine-parseable fields"
+                ]
+            },
+            "related_friction": {
+                "gh_json_field_drift": {
+                    "symptom": "gh run view JSON field mismatch (`htmlURL` invalid) caused a dead-end command attempt",
+                    "evidence": "target/triad/world-overlayfs-enumeration/codex/WO0-integ-core/stderr.log (Unknown JSON field: \"htmlURL\")",
+                    "idea": "Prefer stable `url` field and/or wrap gh calls in a repo script so agents don't guess field names."
+                }
+            },
+            "sources": [
+                "scripts/ci/dispatch_feature_smoke.sh",
+                "target/triad/world-overlayfs-enumeration/codex/WO0-integ-core/stderr.log"
+            ]
+        },
+        {
+            "id": "P3-004",
+            "area": "Planning pack / kickoff prompts",
+            "title": "Integration-core/platform-fix kickoff prompts existed only in worktrees (not orchestration branch)",
+            "status": "open",
+            "problem": "Some kickoff prompt files used by automation were not present under the orchestration branch Planning Pack directory, reducing auditability and making it harder to reproduce runs from the planning pack alone.",
+            "evidence": {
+                "orchestration_pack_prompts": "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/ (WO0-code, WO0-test, WO0-integ, plus gate/cleanup)",
+                "worktree_only_prompts": [
+                    "wt/woe-wo0-integ-core/docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-core.md",
+                    "wt/woe-wo0-integ-core/docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-linux.md",
+                    "wt/woe-wo0-integ-core/docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-macos.md",
+                    "wt/woe-wo0-integ-core/docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-windows.md"
+                ],
+                "tasks_json_references": "docs/project_management/next/world-overlayfs-enumeration/tasks.json references kickoff_prompt paths for WO0-integ-core/platform-fix tasks."
+            },
+            "proposed_fix": {
+                "behavior": [
+                    "If tasks.json references a kickoff prompt path, it must exist in the orchestration branch planning pack.",
+                    "Planning lint should fail if a referenced kickoff prompt does not exist in `docs/project_management/next/<feature>/kickoff_prompts/`."
+                ],
+                "acceptance_criteria": [
+                    "All automation-started tasks have their kickoff prompts present in the planning pack on the orchestration branch",
+                    "Worktree-local copies are treated as derived, not source-of-truth"
+                ]
+            },
+            "sources": [
+                "docs/project_management/next/world-overlayfs-enumeration/tasks.json",
+                "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/",
+                "wt/woe-wo0-integ-core/docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/"
+            ]
+        },
+        {
+            "id": "P3-005",
+            "area": "Kickoff prompt ergonomics",
+            "title": "Relative-path doc references in prompts caused wasted cycles (missing plan.md/tasks.json/session_log.md)",
+            "status": "open",
+            "problem": "Kickoff prompts used bare filenames (plan.md/tasks.json/session_log.md) which fail when executed from repo root worktrees, causing agents to waste time locating the correct paths.",
+            "evidence": {
+                "codex_log": {
+                    "file": "target/triad/world-overlayfs-enumeration/codex/WO0-integ-linux/stderr.log",
+                    "excerpt": [
+                        "sed: can't read plan.md: No such file or directory",
+                        "cat: tasks.json: No such file or directory",
+                        "sed: can't read session_log.md: No such file or directory"
+                    ],
+                    "excerpt_location_hint": "See line-numbered excerpt around 99-106."
+                },
+                "prompt_text": "WO0-integ-linux prompt says: 'Read: plan.md, tasks.json, session_log.md, spec, and this prompt.'"
+            },
+            "proposed_fix": {
+                "behavior": [
+                    "Kickoff prompt templates must reference planning-pack artifacts via full paths or via a declared `FEATURE_DIR` variable (preferred).",
+                    "Recommend a standard header block in every kickoff prompt: `FEATURE_DIR=\"docs/project_management/next/<feature>\"` and then `$FEATURE_DIR/plan.md`, etc."
+                ],
+                "acceptance_criteria": [
+                    "No kickoff prompt requires guesswork about which directory contains plan/tasks/session log",
+                    "Agents can copy/paste commands without path corrections"
+                ]
+            },
+            "sources": [
+                "target/triad/world-overlayfs-enumeration/codex/WO0-integ-linux/stderr.log",
+                "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/"
+            ]
+        },
+        {
+            "id": "P3-006",
+            "area": "Integration merge safety",
+            "title": "Planning docs merge conflicts (tasks.json) during integration final",
+            "status": "open",
+            "problem": "Integration final hit merge conflicts in planning artifacts (tasks.json), contrary to the expectation that planning docs are edited only on orchestration branch and should be identical across branches.",
+            "evidence": {
+                "codex_log": {
+                    "file": "target/triad/world-overlayfs-enumeration/codex/WO0-integ/stderr.log",
+                    "excerpt": [
+                        "Auto-merging docs/project_management/next/world-overlayfs-enumeration/tasks.json",
+                        "CONFLICT (content): Merge conflict in docs/project_management/next/world-overlayfs-enumeration/tasks.json"
+                    ],
+                    "excerpt_location_hint": "See line-numbered excerpt around 758-760."
+                },
+                "triad_context": "Automation creates/updates planning files (e.g., task statuses) on orchestration branch, while worktrees may carry earlier copies."
+            },
+            "proposed_fix": {
+                "behavior": [
+                    "Ensure task branches never introduce diffs under `docs/project_management/next/<feature>/` (beyond derived copies).",
+                    "In integration merges, automatically take planning-pack files from orchestration branch (or explicitly exclude them from merges) to avoid conflicts."
+                ],
+                "acceptance_criteria": [
+                    "Integration merges are conflict-free for planning-pack files by construction",
+                    "triad-task-finish does not require humans to resolve planning-doc conflicts"
+                ]
+            },
+            "sources": [
+                "target/triad/world-overlayfs-enumeration/codex/WO0-integ/stderr.log",
+                "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+            ]
+        },
+        {
+            "id": "P3-007",
+            "area": "Runner toolchain stability",
+            "title": "Self-hosted Linux runner shows rustup/system Rust conflict noise",
+            "status": "open",
+            "problem": "Runner setup emitted confusing rustup installer errors/warnings (even if ignorable), increasing cognitive load and making it harder to spot real failures.",
+            "evidence": {
+                "feature_smoke_run_id": "20764936549",
+                "log_snippet": "error: cannot install while Rust is installed (followed by 'warn: continuing ...')",
+                "how_to_retrieve_logs": [
+                    "gh run view 20764936549 --repo atomize-hq/substrate --log-failed | rg -n 'cannot install while Rust is installed|rustup'"
+                ]
+            },
+            "proposed_fix": {
+                "behavior": [
+                    "Standardize runner provisioning: either rustup-only or system-Rust-only, but not mixed.",
+                    "Make the workflow's toolchain step detect existing rustup and skip installation cleanly without surfacing an 'error:' line."
+                ],
+                "acceptance_criteria": [
+                    "Runner logs contain no ignorable 'error:' lines from toolchain bootstrap",
+                    "Toolchain step is deterministic across all self-hosted platforms"
+                ]
+            },
+            "sources": [
+                ".github/workflows/feature-smoke.yml"
+            ]
+        },
+        {
+            "id": "P3-008",
+            "area": "Planning schema / platform semantics",
+            "title": "Separate 'behavioral platform contract' from 'CI parity platforms' in planning packs",
+            "status": "open",
+            "problem": "WO0 was Linux-only behaviorally (ADR/spec) but required macOS/Windows CI parity; this mismatch created confusion about why macOS/Windows failures block the feature.",
+            "evidence": {
+                "behavioral_scope": [
+                    "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md (Linux-only changes; macOS/Windows out of scope)",
+                    "docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md (Linux-only contract)"
+                ],
+                "ci_parity_scope": [
+                    "docs/project_management/next/world-overlayfs-enumeration/tasks.json meta.cross_platform=true and meta.platforms_required=[linux,macos,windows]",
+                    "CI testing failure on macOS/Windows blocks completion (e.g., run 20763974819)"
+                ]
+            },
+            "proposed_fix": {
+                "behavior": [
+                    "Introduce explicit fields (or conventions) distinguishing: (a) platforms with behavior guarantees vs (b) platforms required to be green in CI.",
+                    "Ensure kickoff prompts and integration tasks explain this distinction and what 'green' means per platform (compile/test vs smoke behavior)."
+                ],
+                "acceptance_criteria": [
+                    "Operators can tell at a glance whether a platform is required for runtime behavior or only for CI compile/test parity",
+                    "Integration agents do not treat 'skip smoke on macOS/Windows' as 'macOS/Windows are irrelevant' when CI parity is required"
+                ]
+            },
+            "sources": [
+                "docs/project_management/next/world-overlayfs-enumeration/tasks.json",
+                "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",
+                "docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md"
+            ]
         }
     ]
 }

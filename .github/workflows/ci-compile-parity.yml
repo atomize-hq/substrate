@@ -1,0 +1,72 @@
+name: CI Compile Parity
+
+on:
+  workflow_dispatch:
+    inputs:
+      checkout_ref:
+        description: "Git ref to checkout for running CI Compile Parity (defaults to workflow ref HEAD)."
+        required: false
+        type: string
+        default: ""
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_TOOLCHAIN: 1.89.0
+
+jobs:
+  lint-and-test:
+    name: Lint & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-14
+          - windows-2022
+
+    steps:
+      - name: Checkout repository (override ref)
+        if: inputs.checkout_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          submodules: recursive
+
+      - name: Checkout repository
+        if: inputs.checkout_ref == ''
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libseccomp-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      - name: Cache cargo artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-
+
+      - name: cargo fmt (fast fail)
+        run: cargo fmt --all -- --check
+
+      - name: cargo check (compile parity; all targets)
+        run: cargo check --workspace --all-targets
+
+      - name: cargo clippy (warnings parity)
+        run: cargo clippy --workspace --all-targets -- -D warnings

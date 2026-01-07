@@ -121,6 +121,25 @@ adr-fix:
 # Cross-platform smoke (CI)
 # =========================
 
+# CI dispatch defaults (override as needed)
+CI_WORKFLOW ?= .github/workflows/ci-testing.yml
+CI_WORKFLOW_REF ?= testing
+CI_REMOTE ?= origin
+CI_CLEANUP ?= 1
+CI_CHECKOUT_REF ?=
+
+.PHONY: ci-testing
+ci-testing:
+	@set -euo pipefail; \
+	args="--workflow \"$(CI_WORKFLOW)\" --workflow-ref \"$(CI_WORKFLOW_REF)\" --remote \"$(CI_REMOTE)\""; \
+	if [ -n "$(CI_CHECKOUT_REF)" ]; then args="$$args --checkout-ref \"$(CI_CHECKOUT_REF)\""; fi; \
+	if [ "$(CI_CLEANUP)" = "1" ]; then args="$$args --cleanup"; fi; \
+	eval "scripts/ci/dispatch_ci_testing.sh $$args"
+
+.PHONY: ci-compile-parity
+ci-compile-parity:
+	@$(MAKE) ci-testing CI_WORKFLOW=.github/workflows/ci-compile-parity.yml
+
 # Dispatch defaults (override as needed)
 PLATFORM ?= linux
 RUNNER_KIND ?= self-hosted

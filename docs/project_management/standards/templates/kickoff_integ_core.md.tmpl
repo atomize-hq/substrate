@@ -22,6 +22,15 @@ Do not edit planning docs inside the worktree.
   - `make integ-checks`
 - Optional (once per feature, when you want a clean-cache assurance): `make preflight`
 
+### Cross-platform compile parity (CI dispatch; required before smoke)
+
+Before dispatching Feature Smoke (especially when using `RUNNER_KIND=self-hosted`), run a fast cross-platform compile parity preflight on GitHub-hosted runners to catch macOS/Windows compilation breaks early:
+- `make ci-compile-parity CI_WORKFLOW_REF="{{ORCH_BRANCH}}" CI_REMOTE=origin CI_CLEANUP=1`
+
+Notes:
+- This runs `.github/workflows/ci-compile-parity.yml` (fmt --check, check --all-targets, clippy -D warnings) across Linux/macOS/Windows.
+- If it fails, fix compile parity first; do not proceed to Feature Smoke until it is green.
+
 ### Cross-platform smoke (CI dispatch; validation-only)
 
 Run CI smoke from this **integration-core worktree**, because the smoke dispatcher tests the current `HEAD` by creating a throwaway remote branch at that commit.
