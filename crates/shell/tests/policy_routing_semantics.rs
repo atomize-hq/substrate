@@ -90,13 +90,21 @@ metadata: {{}}
     fn command(&self) -> Command {
         let mut cmd = substrate_shell_driver();
         cmd.env_remove("SUBSTRATE_POLICY_MODE");
+        cmd.env_remove("SUBSTRATE_OVERRIDE_POLICY_MODE");
         cmd.env_remove("SUBSTRATE_ANCHOR_MODE");
+        cmd.env_remove("SUBSTRATE_OVERRIDE_ANCHOR_MODE");
         cmd.env_remove("SUBSTRATE_ANCHOR_PATH");
+        cmd.env_remove("SUBSTRATE_OVERRIDE_ANCHOR_PATH");
         cmd.env_remove("SUBSTRATE_CAGED");
+        cmd.env_remove("SUBSTRATE_OVERRIDE_CAGED");
         cmd.env_remove("SUBSTRATE_SYNC_AUTO_SYNC");
+        cmd.env_remove("SUBSTRATE_OVERRIDE_SYNC_AUTO_SYNC");
         cmd.env_remove("SUBSTRATE_SYNC_DIRECTION");
+        cmd.env_remove("SUBSTRATE_OVERRIDE_SYNC_DIRECTION");
         cmd.env_remove("SUBSTRATE_SYNC_CONFLICT_POLICY");
+        cmd.env_remove("SUBSTRATE_OVERRIDE_SYNC_CONFLICT_POLICY");
         cmd.env_remove("SUBSTRATE_SYNC_EXCLUDE");
+        cmd.env_remove("SUBSTRATE_OVERRIDE_SYNC_EXCLUDE");
         cmd.current_dir(&self.project)
             .env("HOME", &self.home)
             .env("USERPROFILE", &self.home)
