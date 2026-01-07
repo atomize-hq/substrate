@@ -68,6 +68,24 @@ mod tests {
     use std::path::Path;
     use tempfile::tempdir;
 
+    struct CwdGuard {
+        previous: PathBuf,
+    }
+
+    impl CwdGuard {
+        fn set(path: &Path) -> Self {
+            let previous = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            env::set_current_dir(path).expect("set current dir");
+            Self { previous }
+        }
+    }
+
+    impl Drop for CwdGuard {
+        fn drop(&mut self) {
+            let _ = env::set_current_dir(&self.previous);
+        }
+    }
+
     fn set_env(key: &str, value: &str) -> Option<String> {
         let previous = env::var(key).ok();
         env::set_var(key, value);
@@ -98,6 +116,7 @@ mod tests {
     #[serial]
     fn force_world_flag_ignores_disabled_sources() {
         let temp = tempdir().unwrap();
+        let _cwd = CwdGuard::set(temp.path());
         let home = temp.path().join("home");
         let substrate_home = home.join(".substrate");
         write_install_config(&substrate_home, false);
@@ -123,6 +142,7 @@ mod tests {
     #[serial]
     fn no_world_flag_disables_even_with_enabled_metadata() {
         let temp = tempdir().unwrap();
+        let _cwd = CwdGuard::set(temp.path());
         let home = temp.path().join("home");
         let substrate_home = home.join(".substrate");
         write_install_config(&substrate_home, true);
@@ -148,6 +168,7 @@ mod tests {
     #[serial]
     fn env_disabled_world_is_honored_without_flags() {
         let temp = tempdir().unwrap();
+        let _cwd = CwdGuard::set(temp.path());
         let home = temp.path().join("home");
         let substrate_home = home.join(".substrate");
         write_install_config(&substrate_home, true);
@@ -174,6 +195,7 @@ mod tests {
     #[serial]
     fn config_disabled_without_env_or_flags_is_reported() {
         let temp = tempdir().unwrap();
+        let _cwd = CwdGuard::set(temp.path());
         let home = temp.path().join("home");
         let substrate_home = home.join(".substrate");
         write_install_config(&substrate_home, false);
