@@ -6,9 +6,10 @@ use super::shim_ops::wrap_with_anchor_guard;
 use super::world_ops::execute_world_pty_over_ws;
 #[cfg(target_os = "macos")]
 use super::world_ops::execute_world_pty_over_ws_macos;
+#[cfg(target_os = "linux")]
+use super::world_ops::WorldFsStrategyUnavailableError;
 use super::world_ops::{
     collect_world_telemetry, emit_stream_chunk, stream_non_pty_via_agent, AgentStreamOutcome,
-    WorldFsStrategyUnavailableError,
 };
 use crate::execution::config_model::PolicyMode;
 use crate::execution::pty;
@@ -359,7 +360,15 @@ pub(crate) fn execute_command(
     // WO0/ADR-0004: command_complete events written via `log_command_event` must always include
     // the world fs strategy contract fields. Host-only execution paths use a conservative default,
     // with specific fallback cases overriding this.
+    #[cfg(target_os = "linux")]
     let mut world_fs_strategy_log_override: Option<(
+        WorldFsStrategy,
+        WorldFsStrategy,
+        WorldFsStrategyFallbackReason,
+    )> = None;
+
+    #[cfg(not(target_os = "linux"))]
+    let world_fs_strategy_log_override: Option<(
         WorldFsStrategy,
         WorldFsStrategy,
         WorldFsStrategyFallbackReason,

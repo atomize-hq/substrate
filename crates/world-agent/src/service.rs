@@ -21,6 +21,7 @@ use std::collections::HashMap;
 use std::convert::Infallible;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
+#[cfg(target_os = "linux")]
 use substrate_common::agent_events::{AgentEvent, AgentEventKind};
 use substrate_common::{WorldFsMode, WorldRootMode};
 #[cfg(target_os = "linux")]
