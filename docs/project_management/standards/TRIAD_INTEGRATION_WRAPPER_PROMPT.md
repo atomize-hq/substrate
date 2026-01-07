@@ -2,6 +2,7 @@
 
 Use this when you want a single orchestration run to:
 - start `<SLICE>-integ-core`, run it with Codex enabled, and capture its final message,
+- run cross-platform compile parity for the integ-core commit (fast fail before relying on smoke),
 - use integ-core’s reported cross-platform smoke outcome to infer failing platforms,
 - start only the failing `<SLICE>-integ-<platform>` tasks (optionally with Codex enabled) and capture their final messages,
 - start `<SLICE>-integ` (final aggregator) and capture its final message,
@@ -10,6 +11,7 @@ Use this when you want a single orchestration run to:
 
 Notes:
 - Run this from the **orchestration checkout** (repo root), not inside any task worktree.
+- This wrapper assumes an automation-enabled Planning Pack (`tasks.json` meta: `schema_version >= 3` and `meta.automation.enabled=true`).
 - This wrapper does not assume you are editing `tasks.json`/`session_log.md`, but **`make triad-task-start-integ-final` requires `depends_on` tasks are `status=completed`**. If CI smoke is green and platform-fix tasks were no-ops, the operator must still mark them `completed` on the orchestration branch to unblock the final aggregator.
 
 ## Copy/Paste Prompt Template
@@ -41,7 +43,21 @@ SLICE_ID="<SET_ME>"      # e.g. PCP0
    Also capture the commit SHA after the run:
    - `INTEG_CORE_HEAD_SHA=$(git -C "$INTEG_CORE_WORKTREE" rev-parse HEAD)`
 
-2) Parse the integ-core agent’s smoke outcome from its final message:
+2) Run cross-platform compile parity for the integ-core commit (fast fail; do this before relying on smoke):
+   - Run from the integ-core worktree (validates `INTEG_CORE_HEAD_SHA` via a throwaway branch):
+     - `cd "$INTEG_CORE_WORKTREE" && make ci-compile-parity CI_WORKFLOW_REF="$ORCH_BRANCH" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="$INTEG_CORE_HEAD_SHA"`
+   - Parse and report the dispatcher stdout contract:
+     - `RUN_ID`, `RUN_URL`, `CONCLUSION`, `CI_FAILED_OSES`, `CI_FAILED_JOBS`
+   - If compile parity is green: continue to step (3).
+   - If compile parity fails:
+     - Treat this as **blocking**: do not proceed to Feature Smoke dispatch or platform-fix selection yet.
+     - Use the run logs (`RUN_URL` / `gh run view "$RUN_ID" --log-failed`) to identify the compile errors.
+     - Fix compile parity on the **integ-core branch/worktree** (these are typically missing `#[cfg]` guards / platform gates, or accidental platform-specific APIs leaking into cross-platform crates).
+     - Commit the fix(es) on the integ-core task branch, update:
+       - `INTEG_CORE_HEAD_SHA=$(git -C "$INTEG_CORE_WORKTREE" rev-parse HEAD)`
+     - Re-run this compile parity step until green, then continue to step (3).
+
+3) Parse the integ-core agent’s smoke outcome from its final message (only after compile parity is green):
    - Extract and report these exact keys if present (one per line):
      - `RUN_ID=<id>`
      - `RUN_URL=<url>`
@@ -49,7 +65,7 @@ SLICE_ID="<SET_ME>"      # e.g. PCP0
      - `SMOKE_FAILED_PLATFORMS=<csv>`
    - If `SMOKE_FAILED_PLATFORMS` is missing, treat this as a failure (integ-core must run and report cross-platform smoke).
 
-3) If smoke failed and `SMOKE_FAILED_PLATFORMS` is non-empty, start only failing platform-fix tasks with Codex enabled (parallel):
+4) If smoke failed and `SMOKE_FAILED_PLATFORMS` is non-empty, start only failing platform-fix tasks with Codex enabled (parallel):
    `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" SMOKE_RUN_ID="$RUN_ID" LAUNCH_CODEX=1`
    For each selected platform block, collect:
    - `PLATFORM`, `TASK_ID`, `WORKTREE`, `TASK_BRANCH`, `CODEX_EXIT`
@@ -58,10 +74,10 @@ SLICE_ID="<SET_ME>"      # e.g. PCP0
    Also capture each platform-fix commit SHA after the run:
    - `HEAD_SHA=$(git -C "$WORKTREE" rev-parse HEAD)`
 
-4) If smoke succeeded (no platform fixes needed for smoke):
+5) If smoke succeeded (no platform fixes needed for smoke):
    - Do not start any platform-fix tasks yet; they may still be needed for CI-only failures on macOS/Windows.
 
-5) Dispatch CI Testing (gate before deciding “no-op platform fixes” when smoke is green):
+6) Dispatch CI Testing (gate before deciding “no-op platform fixes” when smoke is green):
    - Run from the integ-core worktree (validates `INTEG_CORE_HEAD_SHA` via a throwaway branch):
      - `cd "$INTEG_CORE_WORKTREE" && scripts/ci/dispatch_ci_testing.sh --workflow-ref "$ORCH_BRANCH" --remote origin --cleanup`
    - Parse and report the CI Testing stdout contract: `RUN_ID`, `RUN_URL`, `CONCLUSION`, `CI_FAILED_OSES`, `CI_FAILED_JOBS`.
@@ -76,13 +92,13 @@ SLICE_ID="<SET_ME>"      # e.g. PCP0
        - `make triad-task-start-platform-fixes FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" PLATFORMS="<csv>" LAUNCH_CODEX=1`
      - Do not mark no-ops; proceed to the final aggregator after fixes are complete (the final aggregator run + final CI Testing gate must be green).
 
-6) Decide the platform-fix path:
+7) Decide the platform-fix path:
    - If CI Testing is green and `SMOKE_FAILED_PLATFORMS` is empty, then no platform-fix worktrees/branches are expected for this slice.
    - In that case, mark platform-fix tasks as `completed` no-ops to unblock the final aggregator’s `depends_on`:
    - `scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir "$FEATURE_DIR" --slice-id "$SLICE_ID" --from-smoke-run "$RUN_ID"`
    - Otherwise (smoke failed or CI Testing failed), do not mark no-ops; platform-fix tasks must run and reach green.
 
-7) After platform fixes are complete (or marked no-op), start the final aggregator:
+8) After platform fixes are complete (or marked no-op), start the final aggregator:
    - Confirm `${SLICE_ID}-integ-core` and all required `${SLICE_ID}-integ-<platform>` tasks are `status=completed` in `$FEATURE_DIR/tasks.json` (the starter enforces this).
    - Run:
      `make triad-task-start-integ-final FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" LAUNCH_CODEX=1`
@@ -94,14 +110,14 @@ SLICE_ID="<SET_ME>"      # e.g. PCP0
    Also capture the commit SHA after the run:
    - `FINAL_HEAD_SHA=$(git -C "$FINAL_WORKTREE" rev-parse HEAD)`
 
-8) Dispatch CI Testing for the final integration commit (gate before merging to `testing`):
+9) Dispatch CI Testing for the final integration commit (gate before merging to `testing`):
    - Run from the final aggregator worktree (validates `FINAL_HEAD_SHA` via a throwaway branch):
      - `cd "$FINAL_WORKTREE" && scripts/ci/dispatch_ci_testing.sh --workflow-ref "$ORCH_BRANCH" --remote origin --cleanup`
    - If CI Testing fails here:
      - Treat this as blocking (even if smoke is green).
      - Derive platforms to fix from `CI_FAILED_OSES`, start platform-fix tasks, then re-run the final aggregator and this final CI Testing gate.
 
-9) After the final CI Testing gate is green, merge to `testing`.
+10) After the final CI Testing gate is green, merge to `testing`.
 
 ## Output to operator
 Return a concise summary that includes:

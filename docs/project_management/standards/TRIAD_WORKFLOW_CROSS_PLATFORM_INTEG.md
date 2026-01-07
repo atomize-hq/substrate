@@ -13,6 +13,9 @@ It shows:
 Operational notes (important for correct orchestration):
 - CI smoke dispatch (`make feature-smoke ...`) validates the **current `HEAD`** by creating/pushing a throwaway branch at that commit; run it from the worktree that contains the code you intend to validate (e.g., the `X-integ-core` or `X-integ` worktree).
 - Platform-fix tasks should begin by merging the `X-integ-core` task branch into their own branch before running smoke or making fixes.
+- Cross-platform compile parity should be validated before Feature Smoke dispatch to avoid discovering macOS/Windows compilation breaks only after creating temp branches and consuming runner time:
+  - `make ci-compile-parity CI_WORKFLOW_REF="$ORCH_BRANCH" CI_REMOTE=origin CI_CLEANUP=1` (runs `.github/workflows/ci-compile-parity.yml` via `scripts/ci/dispatch_ci_testing.sh`).
+  - If compile parity fails: treat it as **blocking** and fix it on the `X-integ-core` branch/worktree (cfg/platform guards), then re-run compile parity until green; do not dispatch Feature Smoke until it is green.
 - CI Testing is a separate, stricter gate than Feature Smoke; run it (via `scripts/ci/dispatch_ci_testing.sh`) before marking platform-fix tasks as no-ops when smoke is green, and again on the final `X-integ` commit before merging to `testing`.
 - The dispatch scripts are hardened with timeouts to avoid indefinite hangs; default max wait is **2 hours**. If you hit infra slowness, you can override via `FEATURE_SMOKE_WATCH_TIMEOUT_SECS` / `CI_TESTING_WATCH_TIMEOUT_SECS` (see `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`).
 
@@ -55,6 +58,8 @@ flowchart TD
   subgraph INTEG_CORE["Core Integration (primary dev platform)"]
     MERGE["X-integ-core (merge X-code + X-test; resolve spec drift)"]
     CORE_CHECKS["Required checks: cargo fmt; cargo clippy ... -- -D warnings; relevant tests; make integ-checks"]
+    CORE_PARITY["Dispatch cross-platform compile parity via make ci-compile-parity (GitHub-hosted; linux + macos + windows)"]
+    CORE_FIX["If parity fails: fix compile parity on X-integ-core branch (cfg/platform guards), commit, and re-run parity"]
     CORE_DISPATCH["Dispatch cross-platform smoke via make feature-smoke (PLATFORM=all; optional RUN_WSL=1; WORKFLOW_REF=ORCH_BRANCH)"]
     CORE_RESULTS["Wait for smoke results (self-hosted runners)"]
     CORE_CI_TEST["Dispatch CI Testing via scripts/ci/dispatch_ci_testing.sh (throwaway branch at HEAD)"]
@@ -65,7 +70,9 @@ flowchart TD
 
   CODE --> MERGE
   TEST --> MERGE
-  MERGE --> CORE_CHECKS --> CORE_DISPATCH
+  MERGE --> CORE_CHECKS --> CORE_PARITY
+  CORE_PARITY -->|pass| CORE_DISPATCH
+  CORE_PARITY -->|fail| CORE_FIX --> CORE_PARITY
 
   %% ======== Smoke validation (CI) ========
   subgraph CI["GitHub Actions (validation only)"]
@@ -145,6 +152,8 @@ flowchart TD
   subgraph INTEG_CORE["Core Integration (primary dev platform)"]
     CORE["X-integ-core (merge X-code + X-test; resolve spec drift)"]
     CORE_CHECKS["Core checks: cargo fmt; cargo clippy ... -- -D warnings; relevant tests; make integ-checks"]
+    CORE_PARITY["Dispatch cross-platform compile parity via make ci-compile-parity (GitHub-hosted; linux + macos + windows)"]
+    CORE_FIX["If parity fails: fix compile parity on X-integ-core branch (cfg/platform guards), commit, and re-run parity"]
     CORE_DISPATCH["Dispatch smoke via CI (platform=all; optional WSL; WORKFLOW_REF=ORCH_BRANCH)"]
     CORE_RESULTS["Wait for smoke results (self-hosted runners)"]
     CORE_CI_TEST["Dispatch CI Testing via scripts/ci/dispatch_ci_testing.sh (throwaway branch at HEAD)"]
@@ -155,7 +164,9 @@ flowchart TD
 
   CODE --> CORE
   TEST --> CORE
-  CORE --> CORE_CHECKS --> CORE_DISPATCH
+  CORE --> CORE_CHECKS --> CORE_PARITY
+  CORE_PARITY -->|pass| CORE_DISPATCH
+  CORE_PARITY -->|fail| CORE_FIX --> CORE_PARITY
 
   %% ======== Smoke validation (CI) ========
   subgraph CI["GitHub Actions (validation only)"]

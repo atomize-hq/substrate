@@ -1,6 +1,6 @@
 {
     "purpose": "Ad-hoc tracker for planning-system improvements.",
-    "last_updated_utc": "2026-01-07T20:35:40Z",
+    "last_updated_utc": "2026-01-07T21:26:08Z",
     "items": [
         {
             "id": "HF-001",
@@ -744,6 +744,53 @@
                 "docs/project_management/next/world-overlayfs-enumeration/tasks.json",
                 "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",
                 "docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md"
+            ]
+        },
+        {
+            "id": "P3-009",
+            "area": "Cross-platform integration gate",
+            "title": "Catch cross-platform compile breaks before Feature Smoke dispatch",
+            "status": "completed",
+            "problem": "Cross-platform compile errors in `crates/world` were only discovered after dispatching CI work, burning time on throwaway branches and (in other cases) self-hosted smoke runners before the failure signal was clear.",
+            "evidence": {
+                "ci_testing_run_id": "20763974819",
+                "ci_testing_failed_oses": ["macos-14", "windows-2022"],
+                "orchestration_log": "target/triad/orch-wrapper/WO0-ci-testing-pre-final.log",
+                "how_to_retrieve_logs": [
+                    "cat target/triad/orch-wrapper/WO0-ci-testing-pre-final.log",
+                    "gh run view 20763974819 --repo atomize-hq/substrate --log-failed",
+                    "gh run view 20763974819 --repo atomize-hq/substrate --log-failed | rg -n 'error\\[E0599\\]|mount_kernel_only|mount_fuse_only|error\\[E0277\\]|\\[u8\\]'"
+                ],
+                "compile_error_signals": [
+                    "error[E0599]: no method named `mount_kernel_only` found for struct `overlayfs::OverlayFs`",
+                    "error[E0599]: no method named `mount_fuse_only` found for struct `overlayfs::OverlayFs`",
+                    "error[E0277]: the size for values of type `[u8]` cannot be known at compilation time"
+                ]
+            },
+            "result": {
+                "behavior": [
+                    "Add an explicit cross-platform compile parity preflight step in `X-integ-core` before any Feature Smoke dispatch.",
+                    "If compile parity fails, treat it as blocking and fix compile parity on the `X-integ-core` branch/worktree (cfg/platform guards), then re-run until green.",
+                    "Make the wrapper orchestration flow enforce this preflight gate before it relies on smoke outcomes for platform selection."
+                ],
+                "docs_updated": [
+                    "docs/project_management/standards/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md",
+                    "docs/project_management/standards/TRIAD_INTEGRATION_WRAPPER_PROMPT.md",
+                    "docs/project_management/standards/templates/kickoff_integ_core.md.tmpl"
+                ]
+            },
+            "acceptance_criteria": [
+                "For cross-platform features, `X-integ-core` runs cross-platform compile parity before Feature Smoke dispatch.",
+                "If compile parity fails, smoke dispatch is not attempted until compile parity is green.",
+                "Wrapper-driven integration runs stop early (with a clear remediation path) when compile parity fails."
+            ],
+            "sources": [
+                "target/triad/orch-wrapper/WO0-ci-testing-pre-final.log",
+                "docs/project_management/standards/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md",
+                "docs/project_management/standards/TRIAD_INTEGRATION_WRAPPER_PROMPT.md",
+                "docs/project_management/standards/templates/kickoff_integ_core.md.tmpl",
+                "scripts/ci/dispatch_ci_testing.sh",
+                ".github/workflows/ci-compile-parity.yml"
             ]
         }
     ]
