@@ -173,6 +173,24 @@ jobs:
             exit 1
           fi
 
+      - name: Ensure rustup is on PATH (Linux self-hosted)
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.cargo/bin:$PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+          if command -v rustup >/dev/null 2>&1; then
+            rustup --version
+            exit 0
+          fi
+
+          echo "ERROR: rustup is required on self-hosted runners but was not found." >&2
+          echo "Fix runner provisioning so the runner service PATH includes rustup (usually: $HOME/.cargo/bin)." >&2
+          echo "If the runner is installed under /opt/actions-runner, update /opt/actions-runner/.path to prepend $HOME/.cargo/bin and restart the runner service." >&2
+          echo "Current PATH: $PATH" >&2
+          exit 1
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -448,6 +466,24 @@ jobs:
             echo "Diagnostics: id=$(id -a || true)" >&2
             exit 1
           fi
+
+      - name: Ensure rustup is on PATH (WSL runner)
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.cargo/bin:$PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+          if command -v rustup >/dev/null 2>&1; then
+            rustup --version
+            exit 0
+          fi
+
+          echo "ERROR: rustup is required on self-hosted runners but was not found." >&2
+          echo "Fix runner provisioning so the runner service PATH includes rustup (usually: $HOME/.cargo/bin)." >&2
+          echo "If the runner is installed under /opt/actions-runner, update /opt/actions-runner/.path to prepend $HOME/.cargo/bin and restart the runner service." >&2
+          echo "Current PATH: $PATH" >&2
+          exit 1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

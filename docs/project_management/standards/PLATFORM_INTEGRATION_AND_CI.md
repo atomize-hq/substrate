@@ -28,6 +28,19 @@ If you add a new runner, ensure it has a unique, positive label for its environm
 Before relying on self-hosted smoke runs, validate runner availability and labels:
 - `scripts/ci/check_self_hosted_runners.sh`
 
+## Runner toolchain contract (self-hosted)
+
+Self-hosted runners must have a working Rust toolchain bootstrap without emitting ignorable `error:` lines.
+
+Contract:
+- Provision **rustup** for the runner user and ensure the runner service PATH includes `~/.cargo/bin` (so `rustup` is discoverable in non-interactive shells).
+- Avoid “mixed” installs (system Rust + rustup) when possible; if system Rust exists under `/usr/bin`, ensure rustup-managed tools take precedence in PATH.
+
+Common setup (runner installed under `/opt/actions-runner`):
+- The runner service sets PATH from `/opt/actions-runner/.path` (see `/opt/actions-runner/runsvc.sh`).
+- Ensure `/opt/actions-runner/.path` begins with `/home/github-runner/.cargo/bin` (or the runner user’s equivalent).
+- Restart the runner service after changes.
+
 ## Recommended task structuring
 
 For cross-platform work, split integration into:
