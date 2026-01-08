@@ -824,7 +824,7 @@
             "id": "P3-008",
             "area": "Planning schema / platform semantics",
             "title": "Separate 'behavioral platform contract' from 'CI parity platforms' in planning packs",
-            "status": "open",
+            "status": "completed",
             "problem": "WO0 was Linux-only behaviorally (ADR/spec) but required macOS/Windows CI parity; this mismatch created confusion about why macOS/Windows failures block the feature.",
             "implementation_notes": {
                 "goal": "Make Planning Packs explicitly distinguish (a) platforms with behavior guarantees vs (b) platforms that must be green for CI parity (compile/test/lint), so integration agents understand why a platform can block even when behavior is out-of-scope.",
@@ -928,6 +928,42 @@
                     "Operators can tell at a glance whether a platform is required for runtime behavior or only for CI compile/test parity",
                     "Integration agents do not treat 'skip smoke on macOS/Windows' as 'macOS/Windows are irrelevant' when CI parity is required"
                 ]
+            },
+            "result": {
+                "behavior": [
+                    "Planning Packs can now declare separate platform scopes: `meta.behavior_platforms_required` (smoke/behavioral guarantees) vs `meta.ci_parity_platforms_required` (CI compile/test/lint parity gates).",
+                    "Scaffolding supports configuring these scopes independently via `BEHAVIOR_PLATFORMS` / `CI_PARITY_PLATFORMS` (Makefile) or `--behavior-platforms` / `--ci-parity-platforms` (scaffolder scripts).",
+                    "Validation and lint tooling remains backwards-compatible by treating legacy `meta.platforms_required` as an alias for CI parity platforms and defaulting behavior platforms to the CI parity set when absent."
+                ],
+                "files_updated": [
+                    "docs/project_management/standards/tasks.schema.json",
+                    "scripts/planning/validate_tasks_json.py",
+                    "scripts/planning/lint.sh",
+                    "scripts/planning/lint.ps1",
+                    "scripts/planning/new_feature.sh",
+                    "scripts/planning/new_feature.ps1",
+                    "Makefile",
+                    "scripts/triad/mark_noop_platform_fixes_completed.sh",
+                    "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md",
+                    "docs/project_management/standards/TRIAD_INTEGRATION_WRAPPER_PROMPT.md",
+                    "docs/project_management/standards/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md",
+                    "docs/project_management/standards/PLANNING_README.md",
+                    "docs/project_management/standards/README.md",
+                    "docs/project_management/standards/templates/kickoff_integ_core.md.tmpl",
+                    "docs/project_management/standards/templates/kickoff_integ_platform.md.tmpl",
+                    "docs/project_management/standards/templates/kickoff_integ_final.md.tmpl"
+                ],
+                "verification": {
+                    "commands": [
+                        "make planning-lint FEATURE_DIR=\"docs/project_management/next/world-overlayfs-enumeration\"",
+                        "make planning-validate FEATURE_DIR=\"docs/project_management/next/world-overlayfs-enumeration\"",
+                        "make planning-new-feature FEATURE=\"__tmp_p3_008_test\" CROSS_PLATFORM=1 AUTOMATION=1 BEHAVIOR_PLATFORMS=linux CI_PARITY_PLATFORMS=linux,macos,windows",
+                        "python3 scripts/planning/validate_tasks_json.py --feature-dir docs/project_management/next/__tmp_p3_008_test"
+                    ],
+                    "notes": [
+                        "The temporary `__tmp_p3_008_test` Planning Pack was created only to validate scaffolding + validator behavior and then removed; it was not added to sequencing.json (so planning-lint was not run on it)."
+                    ]
+                }
             },
             "sources": [
                 "docs/project_management/next/world-overlayfs-enumeration/tasks.json",
