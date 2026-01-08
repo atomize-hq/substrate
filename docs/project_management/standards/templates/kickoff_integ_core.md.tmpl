@@ -9,7 +9,7 @@
 Do not edit planning docs inside the worktree.
 
 1. Verify you are in the task worktree `{{WORKTREE}}` on branch `{{BRANCH}}` and that `.taskmeta.json` exists at the worktree root.
-2. Read: plan.md, tasks.json, session_log.md, spec, this prompt.
+2. Read: `{{FEATURE_DIR}}/plan.md`, `{{FEATURE_DIR}}/tasks.json`, `{{FEATURE_DIR}}/session_log.md`, spec, this prompt.
 3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
    - `make triad-task-start FEATURE_DIR="{{FEATURE_DIR}}" TASK_ID="{{TASK_ID}}"`
 

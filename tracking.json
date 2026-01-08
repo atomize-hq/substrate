@@ -1,6 +1,6 @@
 {
     "purpose": "Ad-hoc tracker for planning-system improvements.",
-    "last_updated_utc": "2026-01-08T01:40:05Z",
+    "last_updated_utc": "2026-01-08T01:56:34Z",
     "items": [
         {
             "id": "HF-001",
@@ -661,7 +661,7 @@
             "id": "P3-005",
             "area": "Kickoff prompt ergonomics",
             "title": "Relative-path doc references in prompts caused wasted cycles (missing plan.md/tasks.json/session_log.md)",
-            "status": "open",
+            "status": "completed",
             "problem": "Kickoff prompts used bare filenames (plan.md/tasks.json/session_log.md) which fail when executed from repo root worktrees, causing agents to waste time locating the correct paths.",
             "evidence": {
                 "codex_log": {
@@ -683,6 +683,19 @@
                 "acceptance_criteria": [
                     "No kickoff prompt requires guesswork about which directory contains plan/tasks/session log",
                     "Agents can copy/paste commands without path corrections"
+                ]
+            },
+            "result": {
+                "behavior": [
+                    "Kickoff prompt templates now reference `plan.md`, `tasks.json`, and `session_log.md` via `{{FEATURE_DIR}}/...` so agents can execute read commands from any worktree CWD without path hunting."
+                ],
+                "files_updated": [
+                    "docs/project_management/standards/templates/kickoff_code.md.tmpl",
+                    "docs/project_management/standards/templates/kickoff_test.md.tmpl",
+                    "docs/project_management/standards/templates/kickoff_integ.md.tmpl",
+                    "docs/project_management/standards/templates/kickoff_integ_core.md.tmpl",
+                    "docs/project_management/standards/templates/kickoff_integ_platform.md.tmpl",
+                    "docs/project_management/standards/templates/kickoff_integ_final.md.tmpl"
                 ]
             },
             "sources": [

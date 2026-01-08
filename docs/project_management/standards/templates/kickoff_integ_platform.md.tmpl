@@ -13,7 +13,7 @@ Do not edit planning docs inside the worktree.
 1. Run this task on a machine that matches the required platform: **{{PLATFORM}}**.
 2. Verify you are in the task worktree `{{WORKTREE}}` on branch `{{BRANCH}}` and that `.taskmeta.json` exists at the worktree root.
    - Do all work (edits, builds/tests, commits, and `make triad-task-finish`) from inside this worktree.
-3. Read: plan.md, tasks.json, session_log.md, spec, this prompt.
+3. Read: `{{FEATURE_DIR}}/plan.md`, `{{FEATURE_DIR}}/tasks.json`, `{{FEATURE_DIR}}/session_log.md`, spec, this prompt.
 4. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
    - `make triad-task-start FEATURE_DIR="{{FEATURE_DIR}}" TASK_ID="{{TASK_ID}}" TASK_PLATFORM={{PLATFORM}}`
 
