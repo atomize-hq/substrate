@@ -151,22 +151,36 @@
         "Sequenced after policy_and_config_precedence (PCP0) to avoid simultaneous churn in the effective-config resolver."
       ]
     },
-    {
-      "order": 27,
-      "id": "world_overlayfs_enumeration",
-      "title": "Linux world overlayfs enumeration reliability",
-      "branch": "feat/world-overlayfs-enumeration",
-      "directory": "docs/project_management/next/world-overlayfs-enumeration",
-      "plan": "docs/project_management/next/world-overlayfs-enumeration/plan.md",
-      "status": "completed",
-      "sequence": [
-        { "id": "WO0", "spec": "docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md" }
-      ],
-      "notes": [
-        "Land before world_sync to ensure world execution is usable for interactive workflows and reliable for integration testing.",
-        "Includes a strict correctness fix (mount topology) plus a fallback safety net (strategy retry) for host/kernel variance."
-      ]
-    },
+	    {
+	      "order": 27,
+	      "id": "world_overlayfs_enumeration",
+	      "title": "Linux world overlayfs enumeration reliability",
+	      "branch": "feat/world-overlayfs-enumeration",
+	      "directory": "docs/project_management/next/world-overlayfs-enumeration",
+	      "plan": "docs/project_management/next/world-overlayfs-enumeration/plan.md",
+	      "status": "completed",
+	      "sequence": [
+	        { "id": "WO0", "spec": "docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md" }
+	      ],
+	      "notes": [
+	        "Land before world_sync to ensure world execution is usable for interactive workflows and reliable for integration testing.",
+	        "Includes a strict correctness fix (mount topology) plus a fallback safety net (strategy retry) for host/kernel variance."
+	      ]
+	    },
+	    {
+	      "order": 27.5,
+	      "id": "doctor_scopes",
+	      "title": "Doctor scopes (host vs world)",
+	      "branch": "feat/doctor-scopes",
+	      "directory": "docs/project_management/next/doctor_scopes",
+	      "plan": "docs/project_management/next/doctor_scopes/plan.md",
+	      "status": "not_started",
+	      "sequence": [{ "id": "DS0", "name": "Split doctor into host vs world scopes" }],
+	      "notes": [
+	        "Clarifies what is host readiness vs in-world enforcement readiness, especially on macOS (Lima guest kernel facts).",
+	        "Introduces a world-agent doctor endpoint to avoid requiring a guest-installed substrate CLI for world diagnostics."
+	      ]
+	    },
 	    {
 	      "order": 28,
 	      "id": "world_deps_selection_layer",
