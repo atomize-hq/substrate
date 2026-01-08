@@ -1,6 +1,6 @@
 {
     "purpose": "Ad-hoc tracker for planning-system improvements.",
-    "last_updated_utc": "2026-01-08T02:05:27Z",
+    "last_updated_utc": "2026-01-08T04:21:18Z",
     "items": [
         {
             "id": "HF-001",
@@ -964,6 +964,124 @@
                         "The temporary `__tmp_p3_008_test` Planning Pack was created only to validate scaffolding + validator behavior and then removed; it was not added to sequencing.json (so planning-lint was not run on it)."
                     ]
                 }
+            },
+            "operator_checklist": {
+                "purpose": "Quick operator checklist to confirm P3-008 behavior on the next feature; each item includes the file(s) to reference if something breaks or drifts.",
+                "scaffold_inputs": [
+                    {
+                        "check": "Cross-platform features explicitly set platform scopes at scaffold time when behavior != CI parity.",
+                        "how": [
+                            "Use `CROSS_PLATFORM=1` for cross-platform packs.",
+                            "If behavior != CI parity, set `BEHAVIOR_PLATFORMS=<csv>` and `CI_PARITY_PLATFORMS=<csv>` (e.g., `BEHAVIOR_PLATFORMS=linux CI_PARITY_PLATFORMS=linux,macos,windows`)."
+                        ],
+                        "context_files": [
+                            "Makefile",
+                            "scripts/planning/new_feature.sh",
+                            "scripts/planning/new_feature.ps1",
+                            "docs/project_management/standards/README.md"
+                        ]
+                    },
+                    {
+                        "check": "`tasks.json` declares both scopes for schema v2+ cross-platform packs.",
+                        "how": [
+                            "Confirm `meta.behavior_platforms_required` and `meta.ci_parity_platforms_required` exist (and `meta.platforms_required` is not relied on for new packs)."
+                        ],
+                        "context_files": [
+                            "docs/project_management/standards/tasks.schema.json",
+                            "scripts/planning/validate_tasks_json.py"
+                        ]
+                    }
+                ],
+                "planning_lint_validate": [
+                    {
+                        "check": "Planning lint/validate pass for the new pack.",
+                        "how": [
+                            "Run `make planning-lint FEATURE_DIR=\"docs/project_management/next/<feature>\"`.",
+                            "Run `make planning-validate FEATURE_DIR=\"docs/project_management/next/<feature>\"`."
+                        ],
+                        "context_files": [
+                            "scripts/planning/lint.sh",
+                            "scripts/planning/lint.ps1",
+                            "scripts/planning/validate_tasks_json.py"
+                        ]
+                    }
+                ],
+                "smoke_scripts_and_playbook": [
+                    {
+                        "check": "Smoke scripts exist only for behavior platforms when `smoke/` exists.",
+                        "how": [
+                            "If `docs/project_management/next/<feature>/smoke/` exists, verify it contains only the scripts for platforms listed in `meta.behavior_platforms_required`.",
+                            "Verify `manual_testing_playbook.md` references each required behavior smoke script path (e.g., `smoke/linux-smoke.sh`)."
+                        ],
+                        "context_files": [
+                            "scripts/planning/lint.sh",
+                            "scripts/planning/lint.ps1",
+                            "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
+                        ]
+                    }
+                ],
+                "integration_execution": [
+                    {
+                        "check": "Integ-core runs CI compile parity before any Feature Smoke dispatch.",
+                        "how": [
+                            "In the `X-integ-core` worktree, run `make ci-compile-parity CI_WORKFLOW_REF=\"$ORCH_BRANCH\" CI_REMOTE=origin CI_CLEANUP=1` before `make feature-smoke ...`."
+                        ],
+                        "context_files": [
+                            "docs/project_management/standards/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md",
+                            "docs/project_management/standards/templates/kickoff_integ_core.md.tmpl",
+                            "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md"
+                        ]
+                    },
+                    {
+                        "check": "Smoke dispatch uses `PLATFORM=all` only when behavior platforms are exactly linux+macos+windows; otherwise dispatch per platform.",
+                        "how": [
+                            "Determine behavior platform set from `tasks.json` meta and dispatch smoke accordingly.",
+                            "If behavior platforms are a subset (e.g., linux-only), dispatch only those platforms and rely on CI parity gates for the broader CI parity scope."
+                        ],
+                        "context_files": [
+                            "docs/project_management/standards/templates/kickoff_integ_core.md.tmpl",
+                            "docs/project_management/standards/templates/kickoff_integ_final.md.tmpl",
+                            "docs/project_management/standards/TRIAD_INTEGRATION_WRAPPER_PROMPT.md"
+                        ]
+                    },
+                    {
+                        "check": "Platform-fix task start command matches how smoke was dispatched (single run id vs per-platform runs).",
+                        "how": [
+                            "If you have one smoke run id covering multiple platforms (typical `PLATFORM=all`): use `make triad-task-start-platform-fixes-from-smoke ... SMOKE_RUN_ID=<id>`.",
+                            "If you dispatched per-platform smoke (multiple run ids): use `make triad-task-start-platform-fixes ... PLATFORMS=<csv>`."
+                        ],
+                        "context_files": [
+                            "Makefile",
+                            "docs/project_management/standards/templates/kickoff_integ_core.md.tmpl"
+                        ]
+                    },
+                    {
+                        "check": "No-op completion helper enumerates CI parity platforms (not just behavior platforms).",
+                        "how": [
+                            "When using `scripts/triad/mark_noop_platform_fixes_completed.sh`, confirm it updates `<slice>-integ-<platform>` tasks for the CI parity scope."
+                        ],
+                        "context_files": [
+                            "scripts/triad/mark_noop_platform_fixes_completed.sh"
+                        ]
+                    }
+                ],
+                "debug_entrypoints": [
+                    {
+                        "check": "If something feels off, identify whether the drift is in scaffolding, lint/validate, or integration templates.",
+                        "how": [
+                            "Scaffolding issues: regenerate a temp pack and inspect `tasks.json` meta and generated kickoff prompts.",
+                            "Lint/validate issues: run `make planning-lint` / `make planning-validate` and follow the specific failing rule.",
+                            "Integration confusion: open the relevant kickoff template and confirm the behavior vs CI parity language matches the pack."
+                        ],
+                        "context_files": [
+                            "tracking.json",
+                            "scripts/planning/new_feature.sh",
+                            "scripts/planning/validate_tasks_json.py",
+                            "docs/project_management/standards/templates/kickoff_integ_core.md.tmpl",
+                            "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md"
+                        ]
+                    }
+                ]
             },
             "sources": [
                 "docs/project_management/next/world-overlayfs-enumeration/tasks.json",
