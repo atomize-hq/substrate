@@ -826,6 +826,89 @@
             "title": "Separate 'behavioral platform contract' from 'CI parity platforms' in planning packs",
             "status": "open",
             "problem": "WO0 was Linux-only behaviorally (ADR/spec) but required macOS/Windows CI parity; this mismatch created confusion about why macOS/Windows failures block the feature.",
+            "implementation_notes": {
+                "goal": "Make Planning Packs explicitly distinguish (a) platforms with behavior guarantees vs (b) platforms that must be green for CI parity (compile/test/lint), so integration agents understand why a platform can block even when behavior is out-of-scope.",
+                "non_goals": [
+                    "Do not retroactively migrate or modify completed/archived Planning Packs unless they are used as living templates.",
+                    "Do not change Feature Smoke semantics beyond selecting which platforms to run based on the declared behavior-platform set."
+                ],
+                "backwards_compat_strategy": {
+                    "why": "Not all non-archived Planning Packs (or long-lived branches) will be updated in lockstep; validators/lint should remain tolerant so execution tooling does not break unexpectedly.",
+                    "approach": [
+                        "Treat existing `meta.platforms_required` as legacy alias for `meta.ci_parity_platforms_required`.",
+                        "If `meta.behavior_platforms_required` is absent, default behavior platforms to the CI parity set (legacy behavior).",
+                        "WSL fields remain behavior-scoped: `meta.wsl_required`/`meta.wsl_task_mode` apply only when behavior platforms include linux."
+                    ]
+                },
+                "new_meta_fields": {
+                    "behavior_platforms_required": "Array of platforms with behavioral guarantees (drives required smoke scripts and 'behavioral' platform-fix tasks). Allowed: [linux, macos, windows].",
+                    "ci_parity_platforms_required": "Array of platforms that must be green for CI parity (drives required platform integration tasks and CI compile/test parity expectations). Allowed: [linux, macos, windows].",
+                    "legacy_alias": "`platforms_required` continues to be accepted as an alias for `ci_parity_platforms_required`."
+                },
+                "required_tooling_updates": [
+                    {
+                        "path": "docs/project_management/standards/tasks.schema.json",
+                        "change": "Add `meta.behavior_platforms_required` and `meta.ci_parity_platforms_required`; keep `meta.platforms_required` as legacy."
+                    },
+                    {
+                        "path": "scripts/planning/validate_tasks_json.py",
+                        "change": [
+                            "Validate both new meta arrays; infer effective behavior platforms and CI parity platforms using the backwards-compat rules.",
+                            "Cross-platform integration model enforcement uses CI parity platforms (plus optional WSL task when `wsl_required` + `wsl_task_mode=separate`).",
+                            "Smoke linkage checks must not require every integration task to mention smoke; instead require smoke script references only for behavior platforms (or accept CI-only references for non-behavior platforms)."
+                        ]
+                    },
+                    {
+                        "path": "scripts/planning/lint.sh",
+                        "change": [
+                            "When `FEATURE_DIR/smoke` exists, require smoke scripts only for `behavior_platforms_required` (or inferred legacy behavior platforms).",
+                            "Manual playbook must reference only the required smoke scripts (one reference per required platform)."
+                        ]
+                    },
+                    {
+                        "path": "scripts/planning/lint.ps1",
+                        "change": "Mirror `lint.sh` behavior for Windows."
+                    },
+                    {
+                        "path": "scripts/planning/new_feature.sh",
+                        "change": [
+                            "Scaffold both new meta fields when `--cross-platform` is used.",
+                            "Add an input mechanism (args or Makefile vars) to set behavior platforms separately from CI parity platforms.",
+                            "Generate smoke scripts and playbook entries only for behavior platforms."
+                        ]
+                    },
+                    {
+                        "path": "scripts/planning/new_feature.ps1",
+                        "change": "Mirror `new_feature.sh` behavior for Windows scaffolding."
+                    },
+                    {
+                        "path": "Makefile",
+                        "change": "Expose behavior/CI parity platform set knobs for `make planning-new-feature` and `make planning-new-feature-ps` (so new packs can encode the distinction without manual edits)."
+                    },
+                    {
+                        "path": "scripts/triad/mark_noop_platform_fixes_completed.sh",
+                        "change": "Prefer `meta.ci_parity_platforms_required` (or legacy `platforms_required`) when enumerating platform-fix task ids; behavior platforms should not accidentally shrink the platform-fix task set when CI parity requires more."
+                    }
+                ],
+                "required_standards_template_updates": [
+                    "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md",
+                    "docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md",
+                    "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md",
+                    "docs/project_management/standards/PLANNING_LINT_CHECKLIST.md",
+                    "docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md",
+                    "docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md",
+                    "docs/project_management/standards/PLANNING_WORKFLOW_OVERVIEW.md",
+                    "docs/project_management/standards/README.md",
+                    "docs/project_management/standards/templates/kickoff_integ_core.md.tmpl",
+                    "docs/project_management/standards/templates/kickoff_integ_platform.md.tmpl",
+                    "docs/project_management/standards/templates/kickoff_integ_final.md.tmpl"
+                ],
+                "verification_plan": [
+                    "Create a throwaway Planning Pack via scaffolding with behavior platforms subset (e.g., linux-only) and CI parity across linux/macos/windows; ensure `make planning-validate` and `make planning-lint` both pass.",
+                    "Ensure the integration templates clearly state: smoke runs only for behavior platforms, but CI parity gates are still blocking for CI parity platforms.",
+                    "Run `make feature-smoke` dispatch from an integration-core worktree following the updated guidance (platform selection based on behavior platforms)."
+                ]
+            },
             "evidence": {
                 "behavioral_scope": [
                     "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md (Linux-only changes; macOS/Windows out of scope)",
