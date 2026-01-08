@@ -1,6 +1,6 @@
 {
     "purpose": "Ad-hoc tracker for planning-system improvements.",
-    "last_updated_utc": "2026-01-07T21:26:08Z",
+    "last_updated_utc": "2026-01-07T23:55:05Z",
     "items": [
         {
             "id": "HF-001",
@@ -540,7 +540,7 @@
             "id": "P3-003",
             "area": "CI dispatch ergonomics",
             "title": "feature-smoke dispatch returns exit 2 after successful dispatch, causing rerun thrash",
-            "status": "open",
+            "status": "completed",
             "problem": "Operators/agents treated `make feature-smoke` as 'failed to dispatch' because it exited non-zero even though it successfully dispatched and printed RUN_ID/RUN_URL.",
             "evidence": {
                 "feature": "world-overlayfs-enumeration",
@@ -556,6 +556,7 @@
                 "dispatcher": {
                     "script": "scripts/ci/dispatch_feature_smoke.sh",
                     "stdout_contract": [
+                        "DISPATCH_OK=0|1",
                         "HEAD=<sha>",
                         "TEMP_BRANCH=<branch>",
                         "RUN_ID=<id>",
@@ -578,6 +579,18 @@
                     "Orchestration wrapper can unambiguously decide whether to launch platform-fix tasks based on machine-parseable fields"
                 ]
             },
+            "result": {
+                "behavior": [
+                    "The dispatcher always emits a full machine-parseable summary (even on timeouts/query failures) via an EXIT trap, including `DISPATCH_OK`, `RUN_ID`, `RUN_URL`, `CONCLUSION`, and `ERROR_KIND`/`ERROR_MESSAGE`.",
+                    "When invoked via `make feature-smoke`, GNU make still exits 2 on any recipe failure; docs now explicitly instruct relying on `DISPATCH_OK=1` + `RUN_URL` to confirm dispatch succeeded and avoid reruns.",
+                    "Kickoff prompt template now calls out the make exit-code behavior to reduce agent/operator confusion."
+                ],
+                "files_updated": [
+                    "scripts/ci/dispatch_feature_smoke.sh",
+                    "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md",
+                    "docs/project_management/standards/templates/kickoff_integ_core.md.tmpl"
+                ]
+            },
             "related_friction": {
                 "gh_json_field_drift": {
                     "symptom": "gh run view JSON field mismatch (`htmlURL` invalid) caused a dead-end command attempt",
@@ -587,6 +600,8 @@
             },
             "sources": [
                 "scripts/ci/dispatch_feature_smoke.sh",
+                "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md",
+                "docs/project_management/standards/templates/kickoff_integ_core.md.tmpl",
                 "target/triad/world-overlayfs-enumeration/codex/WO0-integ-core/stderr.log"
             ]
         },

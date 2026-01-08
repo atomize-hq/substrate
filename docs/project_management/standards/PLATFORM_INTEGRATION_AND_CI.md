@@ -107,6 +107,10 @@ Helper script (requires `gh` auth):
   - Defaults to dispatching from a stable workflow ref (`feat/policy_and_config`) and using `RUNNER_KIND=self-hosted`.
   - For triad execution, set `WORKFLOW_REF` to the orchestration branch (typically `feat/<feature>`) so the workflow definition matches the feature branch.
 
+Smoke result interpretation (important):
+- The smoke dispatcher always prints machine-parseable fields including `DISPATCH_OK`, `RUN_ID`, `RUN_URL`, `CONCLUSION`, and `SMOKE_FAILED_PLATFORMS`.
+- If the smoke workflow concludes failure, the underlying script exits non-zero. When invoked via `make feature-smoke`, GNU make typically exits with code **2** on any recipe failure; treat `DISPATCH_OK=1` + `RUN_URL` as “dispatch succeeded” and use `RUN_URL` to inspect logs (do not rerun just to obtain a run id).
+
 ### Dispatcher timeouts (do not tune unless needed)
 
 The dispatchers are hardened to avoid “silent hang” failure modes (e.g., runner outages, `gh` API flakiness, or a stuck remote-branch cleanup).

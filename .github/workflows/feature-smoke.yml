@@ -133,6 +133,46 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Preflight substrate world socket (Linux self-hosted)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sock="/run/substrate.sock"
+
+          if [[ ! -S "${sock}" ]]; then
+            echo "SUBSTRATE_RUNNER_MISPROVISIONED=1"
+            echo "SUBSTRATE_RUNNER_MISPROVISIONED_REASON=substrate_sock_missing"
+            echo "Runner is missing required world-agent socket: ${sock}" >&2
+            echo "" >&2
+            echo "Remediation (runner provisioning):" >&2
+            echo "  1) Provision the world agent + socket units on this machine:" >&2
+            echo "     - Linux: scripts/linux/world-provision.sh --profile release" >&2
+            echo "  2) Ensure the socket is root:substrate 0660 (like provisioning script does)." >&2
+            echo "  3) Ensure the runner user is in the substrate group and restart the runner service so group membership applies." >&2
+            echo "" >&2
+            echo "Diagnostics:" >&2
+            echo "  id: $(id -a || true)" >&2
+            echo "  ls -l /run: $(ls -la /run | head -n 50 || true)" >&2
+            exit 1
+          fi
+
+          if [[ ! -w "${sock}" ]]; then
+            echo "SUBSTRATE_RUNNER_MISPROVISIONED=1"
+            echo "SUBSTRATE_RUNNER_MISPROVISIONED_REASON=substrate_sock_permission_denied"
+            echo "Runner cannot access required world-agent socket: ${sock} (need write permission to connect)" >&2
+            echo "" >&2
+            echo "Remediation (runner provisioning):" >&2
+            echo "  1) Ensure the runner user is in the substrate group: id -nG \"$USER\" | rg -n '\\\\bsubstrate\\\\b'" >&2
+            echo "  2) Restart the runner service (or reboot) so the new group list applies." >&2
+            echo "  3) Confirm socket perms: ls -l ${sock} (expected root:substrate 0660)" >&2
+            echo "" >&2
+            echo "Diagnostics:" >&2
+            ls -l "${sock}" >&2 || true
+            stat "${sock}" >&2 || true
+            echo "  id: $(id -a || true)" >&2
+            exit 1
+          fi
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -382,6 +422,32 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Preflight substrate world socket (WSL runner)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sock="/run/substrate.sock"
+
+          if [[ ! -S "${sock}" ]]; then
+            echo "SUBSTRATE_RUNNER_MISPROVISIONED=1"
+            echo "SUBSTRATE_RUNNER_MISPROVISIONED_REASON=substrate_sock_missing"
+            echo "WSL runner is missing required world-agent socket: ${sock}" >&2
+            echo "Remediation: provision the world agent + ensure the runner user can access ${sock} (root:substrate 0660)." >&2
+            echo "Diagnostics: id=$(id -a || true)" >&2
+            exit 1
+          fi
+
+          if [[ ! -w "${sock}" ]]; then
+            echo "SUBSTRATE_RUNNER_MISPROVISIONED=1"
+            echo "SUBSTRATE_RUNNER_MISPROVISIONED_REASON=substrate_sock_permission_denied"
+            echo "WSL runner cannot access required world-agent socket: ${sock} (need write permission to connect)" >&2
+            echo "Remediation: ensure runner user is in substrate group + restart runner service; confirm ${sock} is root:substrate 0660." >&2
+            ls -l "${sock}" >&2 || true
+            stat "${sock}" >&2 || true
+            echo "Diagnostics: id=$(id -a || true)" >&2
+            exit 1
+          fi
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

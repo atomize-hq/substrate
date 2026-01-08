@@ -42,8 +42,11 @@ Recommended dispatch (explicit params; leave `CLEANUP=1` on unless debugging tem
 What the dispatcher does (`scripts/ci/dispatch_feature_smoke.sh` via `make feature-smoke`):
 - Creates/pushes a throwaway branch like `tmp/feature-smoke/<feature>/<platform>/<ts>` at current `HEAD`.
 - Dispatches the workflow from `WORKFLOW_REF` while checking out that throwaway branch.
-- Prints `RUN_ID=<id>`, `RUN_URL=<url>`, `SMOKE_PASSED_PLATFORMS=<csv>`, and `SMOKE_FAILED_PLATFORMS=<csv>`.
+- Prints `DISPATCH_OK=0|1`, `RUN_ID=<id>`, `RUN_URL=<url>`, `SMOKE_PASSED_PLATFORMS=<csv>`, and `SMOKE_FAILED_PLATFORMS=<csv>` (plus `ERROR_KIND`/`ERROR_MESSAGE` on failures).
 - Deletes the throwaway remote branch when `CLEANUP=1`.
+
+Note:
+- If smoke fails, `make feature-smoke` will still print `DISPATCH_OK=1` + `RUN_ID`/`RUN_URL`, but will exit non-zero (GNU make typically reports this as exit code 2). Do not re-run just to “get a run id”; use `RUN_URL` to inspect failures and start platform-fix tasks as needed.
 
 If any platform smoke fails:
 - Do not attempt platform-specific fixes in integ-core.
