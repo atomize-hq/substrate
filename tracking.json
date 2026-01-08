@@ -1,6 +1,6 @@
 {
     "purpose": "Ad-hoc tracker for planning-system improvements.",
-    "last_updated_utc": "2026-01-08T01:33:44Z",
+    "last_updated_utc": "2026-01-08T01:40:05Z",
     "items": [
         {
             "id": "HF-001",
@@ -694,7 +694,7 @@
             "id": "P3-006",
             "area": "Integration merge safety",
             "title": "Planning docs merge conflicts (tasks.json) during integration final",
-            "status": "open",
+            "status": "completed",
             "problem": "Integration final hit merge conflicts in planning artifacts (tasks.json), contrary to the expectation that planning docs are edited only on orchestration branch and should be identical across branches.",
             "evidence": {
                 "codex_log": {
@@ -705,7 +705,7 @@
                     ],
                     "excerpt_location_hint": "See line-numbered excerpt around 758-760."
                 },
-                "triad_context": "Automation creates/updates planning files (e.g., task statuses) on orchestration branch, while worktrees may carry earlier copies."
+                "triad_context": "Root cause was workflow drift between (a) 'operator commits docs/status updates on orchestration while tasks run' and (b) 'integration merge-back is FF-only'. This pushed agents to merge the orchestration branch into task branches, which can conflict in tasks.json."
             },
             "proposed_fix": {
                 "behavior": [
@@ -716,6 +716,24 @@
                     "Integration merges are conflict-free for planning-pack files by construction",
                     "triad-task-finish does not require humans to resolve planning-doc conflicts"
                 ]
+            },
+            "result": {
+                "behavior": [
+                    "`scripts/triad/task_finish.sh` no longer hard-fails on non-FF merge-back for integration tasks; it creates a merge commit when orchestration advanced with docs/status commits.",
+                    "During non-FF merge-back, the finisher preserves the orchestration branch’s Planning Pack files under the feature dir (e.g., `tasks.json`, `session_log.md`) to prevent conflicts and prevent task branches from overwriting orchestration docs.",
+                    "Integration final kickoff prompt explicitly warns not to merge the orchestration branch into task branches just to pick up docs/status updates."
+                ],
+                "files_updated": [
+                    "scripts/triad/task_finish.sh",
+                    "docs/project_management/standards/templates/kickoff_integ_final.md.tmpl",
+                    "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
+                    "docs/project_management/standards/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md",
+                    "docs/project_management/standards/README.md",
+                    "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md"
+                ],
+                "verification": {
+                    "note": "Validated merge-back behavior locally with a temporary automation-enabled pack: orchestration advanced with a docs commit, then the integration finisher created a merge commit while preserving the planning-pack file state from orchestration."
+                }
             },
             "sources": [
                 "target/triad/world-overlayfs-enumeration/codex/WO0-integ/stderr.log",
