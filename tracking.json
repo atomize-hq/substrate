@@ -775,8 +775,8 @@
             "evidence": {
                 "feature_smoke_run_id_before": "20764936549",
                 "log_snippet_before": "error: cannot install while Rust is installed (followed by 'warn: continuing ...')",
-                "feature_smoke_run_id_after": "20803386774",
-                "log_validation_after": "gh run view 20803386774 --repo atomize-hq/substrate --log | rg -n 'cannot install while Rust is installed'  # expects no matches",
+                "feature_smoke_run_id_after": "20804003516",
+                "log_validation_after": "gh run view 20804003516 --repo atomize-hq/substrate --log | rg -n 'cannot install while Rust is installed'  # expects no matches",
                 "runner_service_path_file": "/opt/actions-runner/.path",
                 "runner_service_entrypoint": "/opt/actions-runner/runsvc.sh",
                 "how_to_retrieve_logs": [
@@ -802,9 +802,17 @@
                     "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md"
                 ],
                 "verification": {
-                    "feature_smoke_run_id": "20803386774",
+                    "feature_smoke_run_id": "20804003516",
                     "how_to_check": [
-                        "gh run view 20803386774 --repo atomize-hq/substrate --log | rg -n 'cannot install while Rust is installed'  # expects no matches"
+                        "gh run view 20804003516 --repo atomize-hq/substrate --log | rg -n 'cannot install while Rust is installed'  # expects no matches",
+                        "cat /opt/actions-runner/.path  # should include /home/github-runner/.cargo/bin early in PATH",
+                        "journalctl -u actions.runner.atomize-hq-substrate.linux-manjaro-runner.service --no-pager -n 200 | rg -n '\\\\.path=' | tail -n 5"
+                    ]
+                },
+                "runner_hygiene_applied": {
+                    "note": "Updated the self-hosted Linux runner service PATH to include rustup-managed tools by prepending /home/github-runner/.cargo/bin in /opt/actions-runner/.path and restarting the runner service.",
+                    "commands": [
+                        "sudo bash -lc 'f=/opt/actions-runner/.path; prefix=/home/github-runner/.cargo/bin; cp -a \"$f\" \"$f.bak.$(date -u +%Y%m%dT%H%M%SZ)\"; old=$(cat \"$f\"); case \":$old:\" in *\":$prefix:\"*) echo \"Already contains $prefix\" ;; *) echo \"$prefix:$old\" > \"$f\" ;; esac; systemctl restart actions.runner.atomize-hq-substrate.linux-manjaro-runner.service'"
                     ]
                 }
             },
