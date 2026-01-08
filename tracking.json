@@ -1,6 +1,6 @@
 {
     "purpose": "Ad-hoc tracker for planning-system improvements.",
-    "last_updated_utc": "2026-01-08T01:56:34Z",
+    "last_updated_utc": "2026-01-08T02:05:27Z",
     "items": [
         {
             "id": "HF-001",
@@ -629,7 +629,7 @@
             "id": "P3-004",
             "area": "Planning pack / kickoff prompts",
             "title": "Integration-core/platform-fix kickoff prompts existed only in worktrees (not orchestration branch)",
-            "status": "open",
+            "status": "completed",
             "problem": "Some kickoff prompt files used by automation were not present under the orchestration branch Planning Pack directory, reducing auditability and making it harder to reproduce runs from the planning pack alone.",
             "evidence": {
                 "orchestration_pack_prompts": "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/ (WO0-code, WO0-test, WO0-integ, plus gate/cleanup)",
@@ -649,6 +649,19 @@
                 "acceptance_criteria": [
                     "All automation-started tasks have their kickoff prompts present in the planning pack on the orchestration branch",
                     "Worktree-local copies are treated as derived, not source-of-truth"
+                ]
+            },
+            "result": {
+                "behavior": [
+                    "Made `scripts/planning/validate_tasks_json.py` enforce kickoff prompt file existence for integration tasks (not just code/test), and require kickoff prompts to live under `feature_dir/kickoff_prompts/`.",
+                    "Backfilled the missing WO0 integration-core and platform-fix kickoff prompt files into the orchestration planning pack directory so the pack is self-contained and auditable."
+                ],
+                "files_updated": [
+                    "scripts/planning/validate_tasks_json.py",
+                    "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-core.md",
+                    "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-linux.md",
+                    "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-macos.md",
+                    "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-windows.md"
                 ]
             },
             "sources": [

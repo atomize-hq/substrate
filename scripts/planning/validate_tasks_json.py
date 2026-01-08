@@ -392,9 +392,19 @@ def _validate_references(
 ) -> None:
     all_task_ids: Set[str] = {task.get("id") for task in tasks if isinstance(task.get("id"), str)}
     tasks_by_id: Dict[str, Dict[str, Any]] = {task["id"]: task for task in tasks if isinstance(task.get("id"), str)}
+    kickoff_dir = os.path.abspath(os.path.join(feature_dir, "kickoff_prompts"))
 
     for index, task in enumerate(tasks):
         prefix = f"{path}:tasks[{index}]({task.get('id', '<missing id>')})"
+
+        kickoff_prompt = task.get("kickoff_prompt")
+        if isinstance(kickoff_prompt, str):
+            if not os.path.exists(kickoff_prompt):
+                _error(errors, f"{prefix}.kickoff_prompt: file does not exist: {kickoff_prompt!r}")
+            else:
+                kickoff_prompt_abs = os.path.abspath(kickoff_prompt)
+                if os.path.commonpath([kickoff_prompt_abs, kickoff_dir]) != kickoff_dir:
+                    _error(errors, f"{prefix}.kickoff_prompt: must live under feature_dir/kickoff_prompts: {kickoff_prompt!r}")
 
         for dep in task.get("depends_on", []):
             if dep in all_task_ids or dep in external_task_ids:
@@ -431,15 +441,6 @@ def _validate_references(
                 _error(errors, f"{prefix}.integration_task: {integration_task!r} must reference a task with type=integration")
         else:
             _error(errors, f"{prefix}.integration_task: unknown task id {integration_task!r}")
-
-        kickoff_prompt = task.get("kickoff_prompt")
-        if isinstance(kickoff_prompt, str):
-            if not os.path.exists(kickoff_prompt):
-                _error(errors, f"{prefix}.kickoff_prompt: file does not exist: {kickoff_prompt!r}")
-            elif os.path.commonpath([os.path.abspath(kickoff_prompt), os.path.abspath(feature_dir)]) != os.path.abspath(
-                feature_dir
-            ):
-                _error(errors, f"{prefix}.kickoff_prompt: must live under feature dir: {kickoff_prompt!r}")
 
 
 def _validate_smoke_linkage(feature_dir: str, tasks: List[Dict[str, Any]], errors: List[ValidationError], path: str) -> None:
