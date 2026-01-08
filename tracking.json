@@ -1,6 +1,6 @@
 {
     "purpose": "Ad-hoc tracker for planning-system improvements.",
-    "last_updated_utc": "2026-01-08T01:01:59Z",
+    "last_updated_utc": "2026-01-08T01:33:44Z",
     "items": [
         {
             "id": "HF-001",
@@ -436,9 +436,13 @@
             "id": "P3-001",
             "area": "CI / parity preflight",
             "title": "Catch cross-platform compile breaks before smoke dispatch",
-            "status": "open",
+            "status": "completed",
             "scope": "Triad integration-core workflow (pre-smoke).",
             "problem": "Cross-platform CI failures were discovered only after dispatching CI runs, costing runner time and creating iterative thrash.",
+            "result": {
+                "covered_by": "P3-009",
+                "note": "This tracker item was superseded by P3-009 (same evidence run and same remediation: explicit compile parity preflight before smoke dispatch)."
+            },
             "evidence": {
                 "feature": "world-overlayfs-enumeration",
                 "ci_testing_pre_final": {

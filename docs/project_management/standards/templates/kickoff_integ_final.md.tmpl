@@ -4,7 +4,7 @@
 - Merge platform-fix branches (if any) and finalize the slice with a clean, auditable cross-platform green state.
 - Spec: `{{FEATURE_DIR}}/{{SPEC_FILE}}`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
-- This task is responsible for the fast-forward merge back to the orchestration branch after all platforms are green.
+- This task is responsible for merging back to the orchestration branch after all platforms are green (fast-forward when possible; otherwise a merge commit, preserving the orchestration branch’s Planning Pack files under the feature dir).
 
 ## Start Checklist
 Do not edit planning docs inside the worktree.
@@ -17,6 +17,7 @@ Do not edit planning docs inside the worktree.
 ## Requirements
 - Merge the relevant integration branches for this slice:
   - The core integration branch (e.g., `*-integ-core`) and any platform-fix integration branches (`*-integ-linux|macos|windows|wsl`) that produced commits.
+- Do not merge the orchestration branch into this worktree to “pick up task status/docs updates”; the finisher merges back while preserving the orchestration branch’s Planning Pack files.
 - Run:
   - `cargo fmt`
   - `cargo clippy --workspace --all-targets -- -D warnings`

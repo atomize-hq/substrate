@@ -144,7 +144,7 @@ Platform-fix work happens on the corresponding platform machine:
 - apply the fix,
 - commit,
 - re-run smoke via `make feature-smoke`,
-- do not merge to the orchestration branch (the final aggregator integration task merges platform-fix branches, re-runs smoke, and is the only FF-merge back).
+- do not merge to the orchestration branch (the final aggregator integration task merges platform-fix branches, re-runs smoke, and is the only merge-back point to orchestration).
 
 ## WSL testing note
 

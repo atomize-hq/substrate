@@ -52,7 +52,7 @@ When tasks are started via triad automation (preferred) and agents run inside an
 - Optional (required when triad automation is enabled; schema v3):
   - `git_branch` (deterministic task branch name)
   - `required_make_targets` (array of make targets for `task_finish`)
-  - `merge_to_orchestration` (integration tasks only; boolean; only `true` for the integration task that should FF-merge back to orchestration)
+  - `merge_to_orchestration` (integration tasks only; boolean; only `true` for the single integration task that is allowed to merge back to orchestration)
 - Example entry:
 ```json
 {
@@ -170,8 +170,10 @@ End (code/test):
 End (integration):
 1. Merge code+test task branches into the integration worktree; resolve drift to spec.
 2. Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make integ-checks`. Capture outputs.
-3. From inside the worktree, run the task finisher (commits to the task branch; fast-forward merge back to orchestration happens only when `merge_to_orchestration=true` for that task; non-FF hard-fails):
+3. From inside the worktree, run the task finisher (commits to the task branch; merge-back to orchestration happens only when `merge_to_orchestration=true` for that task):
    - `make triad-task-finish TASK_ID="<task-id>"`
+   Notes:
+   - Prefer not to merge the orchestration branch into task branches. The finisher merges the task branch back to orchestration even if orchestration advanced with docs/status commits; it preserves the orchestration branch’s Planning Pack files under the feature dir.
 4. On the orchestration branch, update tasks.json/session_log.md with END entry; commit docs (`docs: finish <task-id>`).
 5. Do not remove the worktree (worktrees are retained until feature cleanup).
 

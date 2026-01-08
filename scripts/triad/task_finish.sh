@@ -27,7 +27,9 @@ Stdout contract (machine-parseable):
 Notes:
   - Run this script from inside the task worktree.
   - This script does NOT delete the worktree (feature_cleanup removes worktrees at feature end).
-  - Integration tasks fast-forward merge back to orchestration only when tasks.json sets `merge_to_orchestration=true` (FF-only); non-FF hard-fails.
+  - Integration tasks merge back to orchestration only when tasks.json sets `merge_to_orchestration=true`.
+    - If the orchestration branch is behind the integration branch, this will fast-forward.
+    - If the orchestration branch has advanced (typically due to docs/status commits), this will create a merge commit while preserving the orchestration branch’s Planning Pack files under the feature dir.
 USAGE
 }
 
@@ -281,7 +283,7 @@ merge_to_orchestration_ff_only() {
     fi
     orch_wt="${orch_matches[0]}"
 
-    log "Fast-forward merging ${TASK_BRANCH} -> ${ORCH_BRANCH} in orchestration worktree: ${orch_wt}"
+    log "Merging ${TASK_BRANCH} -> ${ORCH_BRANCH} in orchestration worktree: ${orch_wt}"
     if [[ "${DRY_RUN}" -eq 1 ]]; then
         return 0
     fi
@@ -298,9 +300,41 @@ merge_to_orchestration_ff_only() {
         git -C "${orch_wt}" pull --ff-only >/dev/null
     fi
 
-    if ! git -C "${orch_wt}" merge --ff-only "${TASK_BRANCH}" 1>&2; then
-        die "Non-FF merge required for ${TASK_BRANCH} -> ${ORCH_BRANCH}. Resolve in the integration worktree and re-run task_finish."
+    # Fast path: allow a clean FF when possible.
+    if git -C "${orch_wt}" merge --ff-only "${TASK_BRANCH}" 1>&2; then
+        return 0
     fi
+
+    # Non-FF path: create a merge commit, but always preserve the orchestration branch's Planning Pack
+    # files under FEATURE_DIR_RELPATH to avoid conflicts/accidental drift. This is intentionally narrow:
+    # code conflicts are not auto-resolved.
+    log "Non-FF merge required; creating merge commit while preserving Planning Pack files from ${ORCH_BRANCH}: ${FEATURE_DIR_RELPATH}"
+    set +e
+    git -C "${orch_wt}" merge --no-ff --no-commit "${TASK_BRANCH}" 1>&2
+    merge_rc="$?"
+    set -e
+
+    # Always restore feature-dir planning pack files from the orchestration branch (HEAD in orch_wt).
+    # This resolves tasks.json/session_log.md conflicts and prevents task branches from overwriting them.
+    git -C "${orch_wt}" checkout -q HEAD -- "${FEATURE_DIR_RELPATH}" >/dev/null 2>&1 || true
+    git -C "${orch_wt}" add -A -- "${FEATURE_DIR_RELPATH}" >/dev/null 2>&1 || true
+
+    # If conflicts remain, they must be resolved manually (we do not auto-resolve code conflicts).
+    conflicts="$(git -C "${orch_wt}" diff --name-only --diff-filter=U || true)"
+    if [[ -n "${conflicts}" ]]; then
+        git -C "${orch_wt}" merge --abort >/dev/null 2>&1 || true
+        echo "Merge back to ${ORCH_BRANCH} has non-planning conflicts and requires human resolution. Conflicts:" >&2
+        printf '%s\n' "${conflicts}" >&2
+        die "Resolve conflicts on ${ORCH_BRANCH} and re-run task_finish."
+    fi
+
+    # If the initial merge failed only due to planning-pack conflicts, we should now be in a clean
+    # merge state ready to commit. If it failed for other reasons, committing will fail and surface
+    # the underlying problem.
+    if [[ "${merge_rc}" -ne 0 ]]; then
+        log "Merge had conflicts; Planning Pack restored from ${ORCH_BRANCH}, proceeding to commit merge"
+    fi
+    git -C "${orch_wt}" commit -m "merge: ${TASK_ID} (${TASK_BRANCH}) -> ${ORCH_BRANCH}" 1>&2
 }
 
 update_registry() {

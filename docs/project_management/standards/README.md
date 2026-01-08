@@ -107,7 +107,7 @@ Finish each task from inside its worktree (commits to the task branch; does not 
 
 Integration tasks should set `merge_to_orchestration` in `tasks.json`:
 - platform-fix integration tasks: `false` (never merge back to orchestration)
-- final aggregator integration task: `true` (the only task that fast-forward merges back)
+- final aggregator integration task: `true` (the only task that merges back to orchestration)
 
 Start integration worktree:
 - `make triad-task-start FEATURE_DIR="docs/project_management/next/<feature>" TASK_ID="C0-integ-core"`
@@ -128,7 +128,7 @@ After all failing platform-fix tasks are green, start the final aggregator:
 Finish integration from inside the worktree:
 - `make triad-task-finish TASK_ID="C0-integ"`
 
-Guardrail: the finisher will only FF-merge back to orchestration when the task has `merge_to_orchestration=true`.
+Guardrail: the finisher will only merge back to orchestration when the task has `merge_to_orchestration=true`.
 
 ### 5) Feature end cleanup (worktree retention model)
 
@@ -148,7 +148,9 @@ At feature end, remove retained worktrees and optionally prune branches:
 
 - Do not edit planning docs inside task worktrees.
 - Code/test tasks commit to their own branches; they do not merge back to orchestration.
-- Integration merge-back is FF-only and only from the designated final aggregator.
+- Integration merge-back is allowed only from the designated final aggregator (`merge_to_orchestration=true`).
+  - If orchestration is behind, the finisher fast-forwards.
+  - If orchestration advanced with docs/status commits, the finisher creates a merge commit while preserving the orchestration branch’s Planning Pack files under the feature dir.
 - Do not delete per-task worktrees; cleanup removes worktrees at feature end.
 - Headless Codex launch (when used) runs via `codex exec --dangerously-bypass-approvals-and-sandbox` and captures output artifacts.
 

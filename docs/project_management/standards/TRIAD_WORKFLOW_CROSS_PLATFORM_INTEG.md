@@ -98,7 +98,7 @@ flowchart TD
   subgraph INTEG_FINAL["Final Cross-Platform Integration"]
     AGG["X-integ (final; merge platform fixes; run integ checks; re-run cross-platform smoke)"]
     AGG_CI_TEST["Dispatch CI Testing (throwaway branch at HEAD)"]
-    MERGE_BACK["Fast-forward merge to orchestration branch; update tasks.json/session_log.md (worktrees retained; cleanup at feature end)"]
+    MERGE_BACK["Merge back to orchestration branch; update tasks.json/session_log.md (worktrees retained; cleanup at feature end)"]
   end
 
   LNX --> AGG
@@ -192,7 +192,7 @@ flowchart TD
   subgraph INTEG_FINAL["Final Cross-Platform Integration"]
     FINAL["X-integ (final; merge platform fixes; run integ checks; re-run smoke (all; optional WSL))"]
     FINAL_CI_TEST["Dispatch CI Testing (throwaway branch at HEAD)"]
-    MERGE_BACK["Fast-forward merge to orchestration branch; update tasks.json/session_log.md (worktrees retained; cleanup at feature end)"]
+    MERGE_BACK["Merge back to orchestration branch; update tasks.json/session_log.md (worktrees retained; cleanup at feature end)"]
   end
 
   LNX --> FINAL
@@ -277,10 +277,10 @@ flowchart TD
   %% ======== task_finish internals ========
   subgraph FINISH_INT["scripts/triad/task_finish.sh (automation)"]
     FINISH_META["require .taskmeta.json and task_id match"]
-    FINISH_GUARDS["guardrails: refuse planning doc edits; integration merge is FF-only"]
+    FINISH_GUARDS["guardrails: refuse planning doc edits; integration merge-back preserves orchestration Planning Pack files"]
     FINISH_CHECKS["run required_make_targets (or verify-only)"]
     FINISH_COMMIT["commit changes to task branch (unless --no-commit)"]
-    FINISH_MERGE["if integration task: fast-forward merge task branch -> orchestration branch"]
+    FINISH_MERGE["if integration task: merge task branch -> orchestration branch (preserve orchestration Planning Pack files)"]
     FINISH_STDOUT["stdout contract: TASK_BRANCH=..., WORKTREE=..., HEAD=..., COMMITS=..., CHECKS=..., SMOKE_RUN=..."]
   end
 
