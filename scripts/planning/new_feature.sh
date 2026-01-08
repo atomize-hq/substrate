@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  scripts/planning/new_feature.sh --feature <feature_dir_name> [--decision-heavy] [--cross-platform] [--wsl-required] [--wsl-separate] [--automation]
+  scripts/planning/new_feature.sh --feature <feature_dir_name> [--decision-heavy] [--cross-platform] [--behavior-platforms <csv>] [--ci-parity-platforms <csv>] [--wsl-required] [--wsl-separate] [--automation]
 
 Example:
   scripts/planning/new_feature.sh --feature world-sync --decision-heavy --cross-platform
@@ -25,6 +25,8 @@ CROSS_PLATFORM=0
 WSL_REQUIRED=0
 WSL_SEPARATE=0
 AUTOMATION=0
+BEHAVIOR_PLATFORMS=""
+CI_PARITY_PLATFORMS=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -39,6 +41,14 @@ while [[ $# -gt 0 ]]; do
         --cross-platform)
             CROSS_PLATFORM=1
             shift 1
+            ;;
+        --behavior-platforms)
+            BEHAVIOR_PLATFORMS="${2:-}"
+            shift 2
+            ;;
+        --ci-parity-platforms)
+            CI_PARITY_PLATFORMS="${2:-}"
+            shift 2
             ;;
         --wsl-required)
             WSL_REQUIRED=1
@@ -78,6 +88,20 @@ fi
 if [[ "${CROSS_PLATFORM}" -eq 0 && ( "${WSL_REQUIRED}" -eq 1 || "${WSL_SEPARATE}" -eq 1 ) ]]; then
     echo "--wsl-required/--wsl-separate require --cross-platform" >&2
     exit 2
+fi
+
+if [[ "${CROSS_PLATFORM}" -eq 0 && ( -n "${BEHAVIOR_PLATFORMS}" || -n "${CI_PARITY_PLATFORMS}" ) ]]; then
+    echo "--behavior-platforms/--ci-parity-platforms require --cross-platform" >&2
+    exit 2
+fi
+
+if [[ "${CROSS_PLATFORM}" -eq 1 ]]; then
+    if [[ -z "${CI_PARITY_PLATFORMS}" ]]; then
+        CI_PARITY_PLATFORMS="linux,macos,windows"
+    fi
+    if [[ -z "${BEHAVIOR_PLATFORMS}" ]]; then
+        BEHAVIOR_PLATFORMS="${CI_PARITY_PLATFORMS}"
+    fi
 fi
 
 FEATURE_DIR="docs/project_management/next/${FEATURE}"
@@ -145,7 +169,7 @@ if [[ "${AUTOMATION}" -eq 1 ]]; then
     render "${TEMPLATES_DIR}/kickoff_feature_cleanup.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/FZ-feature-cleanup.md" "FZ-feature-cleanup"
 fi
 
-FEATURE="${FEATURE}" FEATURE_DIR="${FEATURE_DIR}" CROSS_PLATFORM="${CROSS_PLATFORM}" WSL_REQUIRED="${WSL_REQUIRED}" WSL_SEPARATE="${WSL_SEPARATE}" AUTOMATION="${AUTOMATION}" \
+FEATURE="${FEATURE}" FEATURE_DIR="${FEATURE_DIR}" CROSS_PLATFORM="${CROSS_PLATFORM}" BEHAVIOR_PLATFORMS="${BEHAVIOR_PLATFORMS}" CI_PARITY_PLATFORMS="${CI_PARITY_PLATFORMS}" WSL_REQUIRED="${WSL_REQUIRED}" WSL_SEPARATE="${WSL_SEPARATE}" AUTOMATION="${AUTOMATION}" \
 python3 - <<'PY'
 import json
 import os
@@ -153,11 +177,44 @@ import os
 feature = os.environ["FEATURE"]
 feature_dir = os.environ["FEATURE_DIR"]
 cross_platform = os.environ["CROSS_PLATFORM"] == "1"
+behavior_platforms_csv = os.environ.get("BEHAVIOR_PLATFORMS", "")
+ci_parity_platforms_csv = os.environ.get("CI_PARITY_PLATFORMS", "")
 wsl_required = os.environ["WSL_REQUIRED"] == "1"
 wsl_separate = os.environ["WSL_SEPARATE"] == "1"
 automation = os.environ.get("AUTOMATION", "0") == "1"
 
 tasks_path = os.path.join(feature_dir, "tasks.json")
+
+ALLOWED_REQUIRED = {"linux", "macos", "windows"}
+
+
+def parse_platform_csv(raw: str, field: str) -> list:
+    if not raw:
+        return []
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    unknown = sorted({p for p in parts if p not in ALLOWED_REQUIRED})
+    if unknown:
+        raise SystemExit(f"ERROR: invalid {field} platform(s): {', '.join(unknown)} (allowed: {sorted(ALLOWED_REQUIRED)})")
+    duplicates = sorted({p for p in parts if parts.count(p) > 1})
+    if duplicates:
+        raise SystemExit(f"ERROR: duplicate {field} platform(s): {', '.join(duplicates)}")
+    return parts
+
+
+ci_parity_platforms = parse_platform_csv(ci_parity_platforms_csv, "ci_parity_platforms_required")
+behavior_platforms = parse_platform_csv(behavior_platforms_csv, "behavior_platforms_required")
+
+if cross_platform:
+    if not ci_parity_platforms:
+        ci_parity_platforms = ["linux", "macos", "windows"]
+    if not behavior_platforms:
+        behavior_platforms = list(ci_parity_platforms)
+else:
+    if ci_parity_platforms or behavior_platforms:
+        raise SystemExit("ERROR: behavior/CI parity platforms require cross_platform mode")
+
+if wsl_required and "linux" not in behavior_platforms:
+    raise SystemExit("ERROR: --wsl-required requires linux in behavior_platforms_required")
 
 
 def kickoff(task_id: str) -> str:
@@ -267,36 +324,32 @@ def test_task(task_id: str, other_id: str) -> dict:
 
 def integ_core_task() -> dict:
     task: dict
-    dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform all --workflow-ref "feat/{feature}"'
-    if wsl_required:
-        dispatch += " --run-wsl"
-    dispatch += " --cleanup"
 
-    task = {
-        "id": "C0-integ-core",
-        "name": "C0 slice (integration core)",
-        "type": "integration",
-        "phase": "C0",
-        "status": "pending",
-        "description": "Merge C0 code+tests and make the slice green on the primary dev platform.",
-        "references": refs("smoke/linux-smoke.sh", "smoke/macos-smoke.sh", "smoke/windows-smoke.ps1"),
-        "acceptance_criteria": ["Core slice is green under make integ-checks and matches the spec"],
-        "start_checklist": [
-            f"git checkout feat/{feature} && git pull --ff-only",
-            "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
-            "Set status to in_progress; add START entry; commit docs",
-            (
-                f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"C0-integ-core\""
-                if automation
-                else f"Run: git worktree add -b c0-integ-core wt/{feature}-c0-integ-core feat/{feature}"
-            ),
-        ],
-        "end_checklist": [
-            "cargo fmt",
-            "cargo clippy --workspace --all-targets -- -D warnings",
-            "Run relevant tests",
-            "make integ-checks",
-            f"Dispatch cross-platform smoke via CI: {dispatch} (record run ids/URLs)",
+    platform_to_smoke = {
+        "linux": "smoke/linux-smoke.sh",
+        "macos": "smoke/macos-smoke.sh",
+        "windows": "smoke/windows-smoke.ps1",
+    }
+    smoke_refs = [platform_to_smoke[p] for p in behavior_platforms if p in platform_to_smoke]
+
+    dispatch_base = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --workflow-ref "feat/{feature}"'
+    dispatches = []
+    if set(behavior_platforms) == {"linux", "macos", "windows"}:
+        dispatches.append(dispatch_base + " --platform all" + (" --run-wsl" if wsl_required else "") + " --cleanup")
+    else:
+        for p in behavior_platforms:
+            dispatches.append(dispatch_base + f" --platform {p}" + (" --run-wsl" if (p == "linux" and wsl_required) else "") + " --cleanup")
+
+    end_checklist = [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+    ]
+    for dispatch in dispatches:
+        end_checklist.append(f"Dispatch behavioral smoke via CI: {dispatch} (record run ids/URLs)")
+    end_checklist.extend(
+        [
             f"If any platform smoke fails: start only failing platform-fix tasks via: make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"C0\" SMOKE_RUN_ID=\"<run-id>\"",
             f"After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=\"{feature_dir}\" SLICE_ID=\"C0\"",
             (
@@ -309,7 +362,29 @@ def integ_core_task() -> dict:
                 if automation
                 else f"Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/{feature}-c0-integ-core (per plan.md)"
             ),
+        ]
+    )
+
+    task = {
+        "id": "C0-integ-core",
+        "name": "C0 slice (integration core)",
+        "type": "integration",
+        "phase": "C0",
+        "status": "pending",
+        "description": "Merge C0 code+tests and make the slice green on the primary dev platform.",
+        "references": refs(*smoke_refs),
+        "acceptance_criteria": ["Core slice is green under make integ-checks and matches the spec"],
+        "start_checklist": [
+            f"git checkout feat/{feature} && git pull --ff-only",
+            "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+            "Set status to in_progress; add START entry; commit docs",
+            (
+                f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"C0-integ-core\""
+                if automation
+                else f"Run: git worktree add -b c0-integ-core wt/{feature}-c0-integ-core feat/{feature}"
+            ),
         ],
+        "end_checklist": end_checklist,
         "worktree": f"wt/{feature}-c0-integ-core",
         "integration_task": "C0-integ-core",
         "kickoff_prompt": kickoff("C0-integ-core"),
@@ -324,6 +399,7 @@ def integ_core_task() -> dict:
 
 
 def integ_platform_task(platform: str) -> dict:
+    smoke_required = platform in behavior_platforms or platform == "wsl"
     if platform == "linux":
         smoke_refs = ("smoke/linux-smoke.sh",)
         name = "C0 slice (integration Linux)"
@@ -350,6 +426,12 @@ def integ_platform_task(platform: str) -> dict:
     else:
         raise SystemExit(f"unexpected platform: {platform}")
 
+    if not smoke_required:
+        smoke_refs = ()
+        name = f"C0 slice (integration CI parity: {platform})"
+        desc = f"{platform} CI parity fix task (compile/test/lint only; no behavioral smoke required for this platform)."
+        dispatch = f"make ci-compile-parity CI_WORKFLOW_REF=\"feat/{feature}\" CI_REMOTE=origin CI_CLEANUP=1"
+
     task_id = f"C0-integ-{platform}"
     task = {
         "id": task_id,
@@ -359,7 +441,9 @@ def integ_platform_task(platform: str) -> dict:
         "status": "pending",
         "description": desc,
         "references": refs(*smoke_refs),
-        "acceptance_criteria": [f"{platform} smoke is green for this slice"],
+        "acceptance_criteria": [
+            (f"{platform} smoke is green for this slice" if smoke_required else f"{platform} CI parity is green for this slice (no behavioral smoke required)")
+        ],
         "start_checklist": [
             f"Run on {platform} host if possible",
             f"git checkout feat/{feature} && git pull --ff-only",
@@ -372,9 +456,9 @@ def integ_platform_task(platform: str) -> dict:
             ),
         ],
         "end_checklist": [
-            f"Dispatch platform smoke via CI: {dispatch}",
+            (f"Dispatch platform smoke via CI: {dispatch}" if smoke_required else f"Dispatch CI parity via: {dispatch}"),
             "If needed: fix + fmt/clippy + targeted tests",
-            "Ensure smoke is green; record run id/URL",
+            ("Ensure smoke is green; record run id/URL" if smoke_required else "Ensure CI parity is green; record run id/URL"),
             (
                 f"From inside the worktree: make triad-task-finish TASK_ID=\"{task_id}\""
                 if automation
@@ -393,7 +477,7 @@ def integ_platform_task(platform: str) -> dict:
         "concurrent_with": [],
         "platform": platform,
         "runner": "github-actions",
-        "workflow": ".github/workflows/feature-smoke.yml",
+        "workflow": (".github/workflows/feature-smoke.yml" if smoke_required else ".github/workflows/ci-compile-parity.yml"),
     }
     if automation:
         task["git_branch"] = _branch(f"c0-integ-{platform}")
@@ -404,37 +488,32 @@ def integ_platform_task(platform: str) -> dict:
 
 def integ_final_task(platform_tasks: list) -> dict:
     task: dict
-    dispatch = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --platform all --workflow-ref "feat/{feature}"'
-    if wsl_required:
-        dispatch += " --run-wsl"
-    dispatch += " --cleanup"
+    platform_to_smoke = {
+        "linux": "smoke/linux-smoke.sh",
+        "macos": "smoke/macos-smoke.sh",
+        "windows": "smoke/windows-smoke.ps1",
+    }
+    smoke_refs = [platform_to_smoke[p] for p in behavior_platforms if p in platform_to_smoke]
 
-    task = {
-        "id": "C0-integ",
-        "name": "C0 slice (integration final)",
-        "type": "integration",
-        "phase": "C0",
-        "status": "pending",
-        "description": "Final cross-platform integration: merge any platform fixes and confirm all platforms are green.",
-        "references": refs("smoke/linux-smoke.sh", "smoke/macos-smoke.sh", "smoke/windows-smoke.ps1", "C0-closeout_report.md"),
-        "acceptance_criteria": ["All required platforms are green and the slice matches the spec"],
-        "start_checklist": [
-            f"git checkout feat/{feature} && git pull --ff-only",
-            "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
-            "Set status to in_progress; add START entry; commit docs",
-            (
-                f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"C0-integ\""
-                if automation
-                else f"Run: git worktree add -b c0-integ wt/{feature}-c0-integ feat/{feature}"
-            ),
-        ],
-        "end_checklist": [
-            "Merge platform-fix branches (if any) + resolve conflicts",
-            "cargo fmt",
-            "cargo clippy --workspace --all-targets -- -D warnings",
-            "Run relevant tests",
-            "make integ-checks",
-            f"Re-run cross-platform smoke via CI: {dispatch}",
+    dispatch_base = f'scripts/ci/dispatch_feature_smoke.sh --feature-dir "{feature_dir}" --runner-kind self-hosted --workflow-ref "feat/{feature}"'
+    dispatches = []
+    if set(behavior_platforms) == {"linux", "macos", "windows"}:
+        dispatches.append(dispatch_base + " --platform all" + (" --run-wsl" if wsl_required else "") + " --cleanup")
+    else:
+        for p in behavior_platforms:
+            dispatches.append(dispatch_base + f" --platform {p}" + (" --run-wsl" if (p == "linux" and wsl_required) else "") + " --cleanup")
+
+    end_checklist = [
+        "Merge platform-fix branches (if any) + resolve conflicts",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+    ]
+    for dispatch in dispatches:
+        end_checklist.append(f"Re-run behavioral smoke via CI: {dispatch}")
+    end_checklist.extend(
+        [
             f"Complete slice closeout gate report: {os.path.join(feature_dir, 'C0-closeout_report.md')}",
             (
                 "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ\""
@@ -446,7 +525,29 @@ def integ_final_task(platform_tasks: list) -> dict:
                 if automation
                 else f"Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/{feature}-c0-integ (per plan.md)"
             ),
+        ]
+    )
+
+    task = {
+        "id": "C0-integ",
+        "name": "C0 slice (integration final)",
+        "type": "integration",
+        "phase": "C0",
+        "status": "pending",
+        "description": "Final integration: merge any platform fixes and confirm behavioral smoke + CI parity are green.",
+        "references": refs(*smoke_refs, "C0-closeout_report.md"),
+        "acceptance_criteria": ["All required platforms are green and the slice matches the spec"],
+        "start_checklist": [
+            f"git checkout feat/{feature} && git pull --ff-only",
+            "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
+            "Set status to in_progress; add START entry; commit docs",
+            (
+                f"Run: make triad-task-start FEATURE_DIR=\"{feature_dir}\" TASK_ID=\"C0-integ\""
+                if automation
+                else f"Run: git worktree add -b c0-integ wt/{feature}-c0-integ feat/{feature}"
+            ),
         ],
+        "end_checklist": end_checklist,
         "worktree": f"wt/{feature}-c0-integ",
         "integration_task": "C0-integ",
         "kickoff_prompt": kickoff("C0-integ"),
@@ -556,14 +657,15 @@ tasks.append(code_task("C0-code", "C0-test"))
 tasks.append(test_task("C0-test", "C0-code"))
 
 if cross_platform:
-    meta["platforms_required"] = ["linux", "macos", "windows"]
+    meta["behavior_platforms_required"] = behavior_platforms
+    meta["ci_parity_platforms_required"] = ci_parity_platforms
     if wsl_required:
         meta["wsl_required"] = True
         meta["wsl_task_mode"] = "separate" if wsl_separate else "bundled"
 
     tasks.append(integ_core_task())
 
-    platforms = ["linux", "macos", "windows"]
+    platforms = list(ci_parity_platforms)
     if wsl_required and wsl_separate:
         platforms.append("wsl")
 
@@ -981,9 +1083,12 @@ render "${TEMPLATES_DIR}/kickoff_code.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C
 render "${TEMPLATES_DIR}/kickoff_test.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-test.md" "C0-test" "C0-spec.md" "${C0_TEST_BRANCH}" "wt/${FEATURE}-c0-test"
 if [[ "${CROSS_PLATFORM}" -eq 1 ]]; then
     render "${TEMPLATES_DIR}/kickoff_integ_core.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ-core.md" "C0-integ-core" "C0-spec.md" "${C0_INTEG_CORE_BRANCH}" "wt/${FEATURE}-c0-integ-core"
-    render "${TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ-linux.md" "C0-integ-linux" "C0-spec.md" "${FEATURE}-c0-integ-linux" "wt/${FEATURE}-c0-integ-linux" "linux"
-    render "${TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ-macos.md" "C0-integ-macos" "C0-spec.md" "${FEATURE}-c0-integ-macos" "wt/${FEATURE}-c0-integ-macos" "macos"
-    render "${TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ-windows.md" "C0-integ-windows" "C0-spec.md" "${FEATURE}-c0-integ-windows" "wt/${FEATURE}-c0-integ-windows" "windows"
+    IFS=',' read -r -a ci_platforms <<<"${CI_PARITY_PLATFORMS}"
+    for p in "${ci_platforms[@]}"; do
+        p="$(echo "${p}" | xargs)"
+        [[ -z "${p}" ]] && continue
+        render "${TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ-${p}.md" "C0-integ-${p}" "C0-spec.md" "${FEATURE}-c0-integ-${p}" "wt/${FEATURE}-c0-integ-${p}" "${p}"
+    done
     if [[ "${WSL_REQUIRED}" -eq 1 && "${WSL_SEPARATE}" -eq 1 ]]; then
         render "${TEMPLATES_DIR}/kickoff_integ_platform.md.tmpl" "${FEATURE_DIR}/kickoff_prompts/C0-integ-wsl.md" "C0-integ-wsl" "C0-spec.md" "${FEATURE}-c0-integ-wsl" "wt/${FEATURE}-c0-integ-wsl" "wsl"
     fi
@@ -1007,41 +1112,85 @@ Use the standard in:
 - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
 MD
 
-    cat >"${FEATURE_DIR}/manual_testing_playbook.md" <<'MD'
+    if [[ "${CROSS_PLATFORM}" -eq 1 ]]; then
+        {
+            cat <<'MD'
 # Manual Testing Playbook
 
 This playbook must contain runnable commands and expected exit codes/output.
 
-## CI Smoke Scripts
+## Behavioral Smoke Scripts
 
-These are invoked by the Feature Smoke workflow. Keep them deterministic and fast.
-
-- Linux: `bash smoke/linux-smoke.sh` (expected exit: 0)
-- macOS: `bash smoke/macos-smoke.sh` (expected exit: 0)
-- Windows: `pwsh -File smoke/windows-smoke.ps1` (expected exit: 0)
+These scripts define the behavioral platform contract for this feature. Keep them deterministic and fast.
 MD
+            IFS=',' read -r -a behavior_platforms <<<"${BEHAVIOR_PLATFORMS}"
+            for p in "${behavior_platforms[@]}"; do
+                p="$(echo "${p}" | xargs)"
+                [[ -z "${p}" ]] && continue
+                case "${p}" in
+                    linux) echo "- Linux: \`bash smoke/linux-smoke.sh\` (expected exit: 0)" ;;
+                    macos) echo "- macOS: \`bash smoke/macos-smoke.sh\` (expected exit: 0)" ;;
+                    windows) echo "- Windows: \`pwsh -File smoke/windows-smoke.ps1\` (expected exit: 0)" ;;
+                    *) echo "ERROR: invalid behavior platform: ${p}" >&2; exit 2 ;;
+                esac
+            done
+            cat <<MD
+
+## CI Parity (compile/test)
+
+CI parity platforms (may be broader than behavioral scope): \`${CI_PARITY_PLATFORMS}\`
+
+Recommended gates:
+- \`make ci-compile-parity CI_WORKFLOW_REF="feat/${FEATURE}" CI_REMOTE=origin CI_CLEANUP=1\`
+- \`scripts/ci/dispatch_ci_testing.sh --workflow-ref "feat/${FEATURE}" --remote origin --cleanup\`
+MD
+        } >"${FEATURE_DIR}/manual_testing_playbook.md"
+    else
+        cat >"${FEATURE_DIR}/manual_testing_playbook.md" <<'MD'
+# Manual Testing Playbook
+
+This playbook must contain runnable commands and expected exit codes/output.
+MD
+    fi
 fi
 
 if [[ "${CROSS_PLATFORM}" -eq 1 ]]; then
     mkdir -p "${FEATURE_DIR}/smoke"
-    cat >"${FEATURE_DIR}/smoke/linux-smoke.sh" <<'SH'
+    IFS=',' read -r -a behavior_platforms <<<"${BEHAVIOR_PLATFORMS}"
+    for p in "${behavior_platforms[@]}"; do
+        p="$(echo "${p}" | xargs)"
+        [[ -z "${p}" ]] && continue
+        case "${p}" in
+            linux)
+                cat >"${FEATURE_DIR}/smoke/linux-smoke.sh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 echo "Smoke script scaffold (linux) - replace with feature checks"
 exit 1
 SH
-    cat >"${FEATURE_DIR}/smoke/macos-smoke.sh" <<'SH'
+                ;;
+            macos)
+                cat >"${FEATURE_DIR}/smoke/macos-smoke.sh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 echo "Smoke script scaffold (macos) - replace with feature checks"
 exit 1
 SH
-    cat >"${FEATURE_DIR}/smoke/windows-smoke.ps1" <<'PS1'
+                ;;
+            windows)
+                cat >"${FEATURE_DIR}/smoke/windows-smoke.ps1" <<'PS1'
 param()
 $ErrorActionPreference = "Stop"
 Write-Host "Smoke script scaffold (windows) - replace with feature checks"
 exit 1
 PS1
+                ;;
+            *)
+                echo "ERROR: invalid behavior platform: ${p}" >&2
+                exit 2
+                ;;
+        esac
+    done
 fi
 
 echo "OK: created ${FEATURE_DIR}"

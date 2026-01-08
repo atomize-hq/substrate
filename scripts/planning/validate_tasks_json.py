@@ -68,22 +68,43 @@ def _validate_meta(data: Any, errors: List[ValidationError], path: str) -> Dict[
     if not isinstance(schema_version, int) or schema_version < 1:
         _error(errors, f"{path}: meta.schema_version must be an integer >= 1")
 
-    platforms_required = meta.get("platforms_required")
-    if platforms_required is not None:
-        if not isinstance(platforms_required, list) or not all(isinstance(p, str) for p in platforms_required):
-            _error(errors, f"{path}: meta.platforms_required must be an array of strings")
-        else:
-            unknown = sorted({p for p in platforms_required if p not in ALLOWED_PLATFORMS_REQUIRED})
-            if unknown:
-                _error(errors, f"{path}: meta.platforms_required contains unknown platform(s): {', '.join(unknown)}")
-                if "wsl" in unknown:
-                    _error(
-                        errors,
-                        f"{path}: do not include 'wsl' in meta.platforms_required; use meta.wsl_required=true and meta.wsl_task_mode='bundled'|'separate'",
-                    )
-            duplicates = sorted({p for p in platforms_required if platforms_required.count(p) > 1})
-            if duplicates:
-                _error(errors, f"{path}: meta.platforms_required contains duplicate platform(s): {', '.join(duplicates)}")
+    def _validate_platform_list(field: str, allow_wsl: bool = False) -> Optional[List[str]]:
+        value = meta.get(field)
+        if value is None:
+            return None
+        if not isinstance(value, list) or not all(isinstance(p, str) for p in value):
+            _error(errors, f"{path}: meta.{field} must be an array of strings")
+            return None
+        allowed = set(ALLOWED_PLATFORMS_REQUIRED)
+        if allow_wsl:
+            allowed = set(ALLOWED_PLATFORMS)
+        unknown = sorted({p for p in value if p not in allowed})
+        if unknown:
+            _error(errors, f"{path}: meta.{field} contains unknown platform(s): {', '.join(unknown)}")
+            if not allow_wsl and "wsl" in unknown:
+                _error(
+                    errors,
+                    f"{path}: do not include 'wsl' in meta.{field}; use meta.wsl_required=true and meta.wsl_task_mode='bundled'|'separate'",
+                )
+        duplicates = sorted({p for p in value if value.count(p) > 1})
+        if duplicates:
+            _error(errors, f"{path}: meta.{field} contains duplicate platform(s): {', '.join(duplicates)}")
+        return value
+
+    # Legacy alias: meta.platforms_required historically implied "cross-platform parity required". As of P3-008,
+    # we split behavior platforms from CI parity platforms. We keep legacy fields working to avoid breaking
+    # existing (non-archived) Planning Packs.
+    legacy_platforms_required = _validate_platform_list("platforms_required")
+    ci_parity_platforms_required = _validate_platform_list("ci_parity_platforms_required")
+    behavior_platforms_required = _validate_platform_list("behavior_platforms_required")
+
+    if ci_parity_platforms_required is None and legacy_platforms_required is not None:
+        ci_parity_platforms_required = legacy_platforms_required
+        meta["ci_parity_platforms_required"] = legacy_platforms_required
+
+    if behavior_platforms_required is None and ci_parity_platforms_required is not None:
+        behavior_platforms_required = ci_parity_platforms_required
+        meta["behavior_platforms_required"] = ci_parity_platforms_required
 
     wsl_required = meta.get("wsl_required")
     if wsl_required is not None and not isinstance(wsl_required, bool):
@@ -101,8 +122,8 @@ def _validate_meta(data: Any, errors: List[ValidationError], path: str) -> Dict[
         meta["wsl_task_mode"] = "bundled"
 
     if wsl_required is True:
-        if not isinstance(platforms_required, list) or "linux" not in platforms_required:
-            _error(errors, f"{path}: meta.wsl_required=true requires meta.platforms_required to include 'linux'")
+        if not isinstance(behavior_platforms_required, list) or "linux" not in behavior_platforms_required:
+            _error(errors, f"{path}: meta.wsl_required=true requires meta.behavior_platforms_required (or legacy) to include 'linux'")
 
     execution_gates = meta.get("execution_gates")
     if execution_gates is not None and not isinstance(execution_gates, bool):
@@ -448,14 +469,33 @@ def _validate_smoke_linkage(feature_dir: str, tasks: List[Dict[str, Any]], error
     if not os.path.isdir(smoke_dir):
         return
 
-    for index, task in enumerate(tasks):
-        if task.get("type") != "integration":
-            continue
-        txt = "\n".join(task.get("references", []) + task.get("end_checklist", []))
-        if "smoke/" not in txt:
+    # Smoke scripts are required only for behavior platforms (P3-008).
+    tasks_json = os.path.join(feature_dir, "tasks.json")
+    data = _read_json(tasks_json)
+    meta = _validate_meta(data, [], tasks_json)
+    behavior_platforms = meta.get("behavior_platforms_required") or meta.get("ci_parity_platforms_required") or meta.get("platforms_required") or []
+
+    platform_to_smoke = {
+        "linux": "smoke/linux-smoke.sh",
+        "macos": "smoke/macos-smoke.sh",
+        "windows": "smoke/windows-smoke.ps1",
+    }
+
+    required_smoke_paths = [platform_to_smoke[p] for p in behavior_platforms if p in platform_to_smoke]
+    if not required_smoke_paths:
+        return
+
+    integration_text = "\n".join(
+        "\n".join((t.get("id") or "",) + tuple(t.get("references", []) + t.get("end_checklist", [])))
+        for t in tasks
+        if t.get("type") == "integration"
+    )
+
+    for smoke_path in required_smoke_paths:
+        if smoke_path not in integration_text:
             _error(
                 errors,
-                f"{path}:tasks[{index}]({task.get('id')}): integration task must reference smoke scripts in references/end_checklist",
+                f"{path}: missing integration references to required smoke script {smoke_path!r} (behavior platforms={behavior_platforms})",
             )
 
 def _validate_platform_integ_model(
@@ -464,7 +504,7 @@ def _validate_platform_integ_model(
     """
     Enforce the cross-platform integration structure only when the planning pack opts in via:
       - meta.schema_version >= 2, and
-      - meta.platforms_required is present.
+      - meta.ci_parity_platforms_required is present (legacy: meta.platforms_required).
 
     Model (per slice X):
       - X-integ-core (integration): merges code+tests and gets primary-platform green
@@ -475,14 +515,15 @@ def _validate_platform_integ_model(
     if not isinstance(schema_version, int) or schema_version < 2:
         return
 
-    platforms_required = meta.get("platforms_required")
-    if not isinstance(platforms_required, list) or not platforms_required:
+    # Platform-fix integration model is keyed off CI parity platforms (not behavioral scope).
+    ci_parity_platforms = meta.get("ci_parity_platforms_required") or meta.get("platforms_required")
+    if not isinstance(ci_parity_platforms, list) or not ci_parity_platforms:
         return
 
     wsl_required = meta.get("wsl_required") is True
     wsl_task_mode = meta.get("wsl_task_mode", "bundled") if wsl_required else None
 
-    effective_platform_tasks = list(platforms_required)
+    effective_platform_tasks = list(ci_parity_platforms)
     if wsl_required and wsl_task_mode == "separate":
         effective_platform_tasks.append("wsl")
 
@@ -505,7 +546,7 @@ def _validate_platform_integ_model(
     if not slices:
         _error(
             errors,
-            f"{path}: meta.schema_version>=2 and meta.platforms_required set, but no '*-integ-<platform>' integration tasks found",
+            f"{path}: meta.schema_version>=2 and CI parity platforms set, but no '*-integ-<platform>' integration tasks found",
         )
         return
 

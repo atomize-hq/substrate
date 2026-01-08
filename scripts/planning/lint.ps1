@@ -20,9 +20,26 @@ Require-Path (Join-Path $FeatureDir "session_log.md")
 Require-Path (Join-Path $FeatureDir "kickoff_prompts")
 
 if (Test-Path -LiteralPath (Join-Path $FeatureDir "smoke")) {
-    Require-Path (Join-Path $FeatureDir "smoke/linux-smoke.sh")
-    Require-Path (Join-Path $FeatureDir "smoke/macos-smoke.sh")
-    Require-Path (Join-Path $FeatureDir "smoke/windows-smoke.ps1")
+    $behaviorPlatforms = @()
+    try {
+        $behaviorPlatforms = @(& jq -r '[.meta.behavior_platforms_required // .meta.ci_parity_platforms_required // .meta.platforms_required // []] | flatten | .[]' (Join-Path $FeatureDir "tasks.json"))
+    } catch {
+        throw "FAIL: could not parse behavior platforms from tasks.json (requires jq): $_"
+    }
+    if (-not $behaviorPlatforms -or $behaviorPlatforms.Count -eq 0) {
+        throw "FAIL: smoke/ exists but tasks.json meta is missing behavior platform declaration (expected meta.behavior_platforms_required, or legacy meta.platforms_required)"
+    }
+
+    foreach ($p in $behaviorPlatforms) {
+        $p = $p.Trim()
+        if (-not $p) { continue }
+        switch ($p) {
+            "linux"   { Require-Path (Join-Path $FeatureDir "smoke/linux-smoke.sh") }
+            "macos"   { Require-Path (Join-Path $FeatureDir "smoke/macos-smoke.sh") }
+            "windows" { Require-Path (Join-Path $FeatureDir "smoke/windows-smoke.ps1") }
+            default   { throw "FAIL: invalid platform in behavior platforms: $p" }
+        }
+    }
 }
 
 Write-Host "-- Hard-ban scan"
@@ -90,8 +107,23 @@ Write-Host "-- Manual playbook smoke linkage (if present)"
 $playbook = Join-Path $FeatureDir "manual_testing_playbook.md"
 if (Test-Path -LiteralPath $playbook) {
     if (Test-Path -LiteralPath (Join-Path $FeatureDir "smoke")) {
-        & rg -n 'smoke/(linux-smoke\.sh|macos-smoke\.sh|windows-smoke\.ps1)' $playbook *> $null
-        if ($LASTEXITCODE -ne 0) { throw "FAIL: manual_testing_playbook.md must reference smoke scripts" }
+        $behaviorPlatforms = @(& jq -r '[.meta.behavior_platforms_required // .meta.ci_parity_platforms_required // .meta.platforms_required // []] | flatten | .[]' (Join-Path $FeatureDir "tasks.json"))
+        if (-not $behaviorPlatforms -or $behaviorPlatforms.Count -eq 0) {
+            throw "FAIL: smoke/ exists but tasks.json meta is missing behavior platform declaration (expected meta.behavior_platforms_required, or legacy meta.platforms_required)"
+        }
+
+        foreach ($p in $behaviorPlatforms) {
+            $p = $p.Trim()
+            if (-not $p) { continue }
+            switch ($p) {
+                "linux"   { $smokeRef = "smoke/linux-smoke.sh" }
+                "macos"   { $smokeRef = "smoke/macos-smoke.sh" }
+                "windows" { $smokeRef = "smoke/windows-smoke.ps1" }
+                default   { throw "FAIL: invalid platform in behavior platforms: $p" }
+            }
+            & rg -nF $smokeRef $playbook *> $null
+            if ($LASTEXITCODE -ne 0) { throw "FAIL: manual_testing_playbook.md must reference required smoke script: $smokeRef" }
+        }
     }
 }
 

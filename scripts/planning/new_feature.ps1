@@ -3,6 +3,8 @@ param(
     [string]$Feature,
     [switch]$DecisionHeavy,
     [switch]$CrossPlatform,
+    [string]$BehaviorPlatforms = "",
+    [string]$CiParityPlatforms = "",
     [switch]$WslRequired,
     [switch]$WslSeparate,
     [switch]$Automation
@@ -23,6 +25,12 @@ if ($WslSeparate.IsPresent -and -not $WslRequired.IsPresent) {
 
 if (($WslRequired.IsPresent -or $WslSeparate.IsPresent) -and -not $CrossPlatform.IsPresent) {
     throw "-WslRequired/-WslSeparate require -CrossPlatform"
+}
+
+$hasBehaviorPlatforms = -not [string]::IsNullOrWhiteSpace($BehaviorPlatforms)
+$hasCiParityPlatforms = -not [string]::IsNullOrWhiteSpace($CiParityPlatforms)
+if (($hasBehaviorPlatforms -or $hasCiParityPlatforms) -and -not $CrossPlatform.IsPresent) {
+    throw "-BehaviorPlatforms/-CiParityPlatforms require -CrossPlatform"
 }
 
 $nowUtc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
@@ -87,6 +95,38 @@ function New-TaskBase([string]$Id, [string]$Name, [string]$Type, [string]$Descri
     }
 }
 
+$allowedRequiredPlatforms = @("linux", "macos", "windows")
+
+function Parse-PlatformCsv([string]$Raw, [string]$FieldName) {
+    if ([string]::IsNullOrWhiteSpace($Raw)) {
+        return @()
+    }
+    $parts = $Raw.Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
+
+    $unknown = $parts | Where-Object { $allowedRequiredPlatforms -notcontains $_ } | Sort-Object -Unique
+    if ($unknown.Count -gt 0) {
+        throw "Invalid $FieldName platform(s): $($unknown -join ', ') (allowed: $($allowedRequiredPlatforms -join ', '))"
+    }
+
+    $duplicates = $parts | Group-Object | Where-Object { $_.Count -gt 1 } | ForEach-Object { $_.Name } | Sort-Object -Unique
+    if ($duplicates.Count -gt 0) {
+        throw "Duplicate $FieldName platform(s): $($duplicates -join ', ')"
+    }
+
+    return @($parts)
+}
+
+$ciParityPlatformsList = @()
+$behaviorPlatformsList = @()
+if ($CrossPlatform.IsPresent) {
+    $ciParityPlatformsList = if ($hasCiParityPlatforms) { Parse-PlatformCsv $CiParityPlatforms "ci_parity_platforms_required" } else { @("linux", "macos", "windows") }
+    $behaviorPlatformsList = if ($hasBehaviorPlatforms) { Parse-PlatformCsv $BehaviorPlatforms "behavior_platforms_required" } else { @($ciParityPlatformsList) }
+}
+
+if ($WslRequired.IsPresent -and -not ($behaviorPlatformsList -contains "linux")) {
+    throw "-WslRequired requires linux in -BehaviorPlatforms (behavior platform set)"
+}
+
 $schemaVersion = if ($Automation.IsPresent) { 3 } elseif ($CrossPlatform.IsPresent) { 2 } else { 1 }
 $meta = @{
     schema_version = $schemaVersion
@@ -103,7 +143,8 @@ if ($Automation.IsPresent) {
 }
 
 if ($CrossPlatform.IsPresent) {
-    $meta.platforms_required = @("linux", "macos", "windows")
+    $meta.behavior_platforms_required = @($behaviorPlatformsList)
+    $meta.ci_parity_platforms_required = @($ciParityPlatformsList)
     if ($WslRequired.IsPresent) {
         $meta.wsl_required = $true
         $meta.wsl_task_mode = if ($WslSeparate.IsPresent) { "separate" } else { "bundled" }
@@ -192,22 +233,42 @@ if ($CrossPlatform.IsPresent) {
     $core = New-TaskBase "C0-integ-core" "C0 slice (integration core)" "integration" "Merge C0 code+tests and make the slice green on the primary dev platform."
     $core.integration_task = "C0-integ-core"
     $core.acceptance_criteria = @("Core slice is green under make integ-checks and matches the spec")
-    $core.references += @("$featureDir/smoke/linux-smoke.sh", "$featureDir/smoke/macos-smoke.sh", "$featureDir/smoke/windows-smoke.ps1")
+    foreach ($p in $behaviorPlatformsList) {
+        switch ($p) {
+            "linux" { $core.references += @("$featureDir/smoke/linux-smoke.sh") }
+            "macos" { $core.references += @("$featureDir/smoke/macos-smoke.sh") }
+            "windows" { $core.references += @("$featureDir/smoke/windows-smoke.ps1") }
+        }
+    }
     $core.start_checklist = @(
         "git checkout feat/$Feature && git pull --ff-only",
         "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
         "Set status to in_progress; add START entry; commit docs",
         $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"C0-integ-core`"" } else { "Run: git worktree add -b c0-integ-core wt/$Feature-c0-integ-core feat/$Feature" })
     )
-    $dispatchAll = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform all --workflow-ref `\"feat/$Feature`\""
-    if ($WslRequired.IsPresent) { $dispatchAll += " --run-wsl" }
-    $dispatchAll += " --cleanup"
+    $dispatchBase = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --workflow-ref `\"feat/$Feature`\""
+    $dispatches = @()
+    $behaviorKey = ($behaviorPlatformsList | Sort-Object) -join ","
+    if ($behaviorKey -eq "linux,macos,windows") {
+        $cmd = "$dispatchBase --platform all"
+        if ($WslRequired.IsPresent) { $cmd += " --run-wsl" }
+        $cmd += " --cleanup"
+        $dispatches += $cmd
+    } else {
+        foreach ($p in $behaviorPlatformsList) {
+            $cmd = "$dispatchBase --platform $p"
+            if ($p -eq "linux" -and $WslRequired.IsPresent) { $cmd += " --run-wsl" }
+            $cmd += " --cleanup"
+            $dispatches += $cmd
+        }
+    }
+    $dispatchLines = $dispatches | ForEach-Object { "Dispatch behavioral smoke via CI: $_ (record run ids/URLs)" }
     $core.end_checklist = @(
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
-        "make integ-checks",
-        "Dispatch cross-platform smoke via CI: $dispatchAll (record run ids/URLs)",
+        "make integ-checks"
+    ) + $dispatchLines + @(
         "If any platform smoke fails: start only failing platform-fix tasks via: make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=`"$featureDir`" SLICE_ID=`"C0`" SMOKE_RUN_ID=`"<run-id>`"",
         "After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=`"$featureDir`" SLICE_ID=`"C0`"",
         $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"C0-integ-core`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature C0-integ-core`"" }),
@@ -221,11 +282,12 @@ if ($CrossPlatform.IsPresent) {
     $core.depends_on = @("C0-code", "C0-test")
     $tasks += $core
 
-    $platforms = @("linux", "macos", "windows")
+    $platforms = @($ciParityPlatformsList)
     if ($WslRequired.IsPresent -and $WslSeparate.IsPresent) { $platforms += "wsl" }
 
     foreach ($platform in $platforms) {
         $id = "C0-integ-$platform"
+        $smokeRequired = ($behaviorPlatformsList -contains $platform) -or ($platform -eq "wsl")
         switch ($platform) {
             "linux" {
                 $name = "C0 slice (integration Linux)"
@@ -255,9 +317,17 @@ if ($CrossPlatform.IsPresent) {
             }
         }
 
+        if (-not $smokeRequired) {
+            $name = "C0 slice (integration CI parity: $platform)"
+            $desc = "$platform CI parity fix task (compile/test/lint only; no behavioral smoke required for this platform)."
+            $refs = @()
+            $dispatch = "make ci-compile-parity CI_WORKFLOW_REF=`\"feat/$Feature`\" CI_REMOTE=origin CI_CLEANUP=1"
+        }
+        $workflow = if ($smokeRequired) { ".github/workflows/feature-smoke.yml" } else { ".github/workflows/ci-compile-parity.yml" }
+
         $t = New-TaskBase $id $name "integration" $desc
         $t.integration_task = $id
-        $t.acceptance_criteria = @("$platform smoke is green for this slice")
+        $t.acceptance_criteria = @($(if ($smokeRequired) { "$platform smoke is green for this slice" } else { "$platform CI parity is green for this slice (no behavioral smoke required)" }))
         $t.references += $refs
         $t.start_checklist = @(
             "Run on $platform host if possible",
@@ -267,9 +337,9 @@ if ($CrossPlatform.IsPresent) {
             $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"$id`"" } else { "Run: git worktree add -b c0-integ-$platform wt/$Feature-c0-integ-$platform feat/$Feature" })
         )
         $t.end_checklist = @(
-            "Dispatch platform smoke via CI: $dispatch",
+            $(if ($smokeRequired) { "Dispatch platform smoke via CI: $dispatch" } else { "Dispatch CI parity via: $dispatch" }),
             "If needed: fix + fmt/clippy + targeted tests",
-            "Ensure smoke is green; record run id/URL",
+            $(if ($smokeRequired) { "Ensure smoke is green; record run id/URL" } else { "Ensure CI parity is green; record run id/URL" }),
             $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"$id`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature $id`"" }),
             $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-c0-integ-$platform (per plan.md)" })
         )
@@ -281,30 +351,50 @@ if ($CrossPlatform.IsPresent) {
         $t.depends_on = @("C0-integ-core")
         $t.platform = $platform
         $t.runner = "github-actions"
-        $t.workflow = ".github/workflows/feature-smoke.yml"
+        $t.workflow = $workflow
         $tasks += $t
     }
 
-    $final = New-TaskBase "C0-integ" "C0 slice (integration final)" "integration" "Final cross-platform integration: merge any platform fixes and confirm all platforms are green."
+    $final = New-TaskBase "C0-integ" "C0 slice (integration final)" "integration" "Final integration: merge any platform fixes and confirm behavioral smoke + CI parity are green."
     $final.integration_task = "C0-integ"
     $final.acceptance_criteria = @("All required platforms are green and the slice matches the spec")
-    $final.references += @("$featureDir/smoke/linux-smoke.sh", "$featureDir/smoke/macos-smoke.sh", "$featureDir/smoke/windows-smoke.ps1", "$featureDir/C0-closeout_report.md")
+    foreach ($p in $behaviorPlatformsList) {
+        switch ($p) {
+            "linux" { $final.references += @("$featureDir/smoke/linux-smoke.sh") }
+            "macos" { $final.references += @("$featureDir/smoke/macos-smoke.sh") }
+            "windows" { $final.references += @("$featureDir/smoke/windows-smoke.ps1") }
+        }
+    }
+    $final.references += @("$featureDir/C0-closeout_report.md")
     $final.start_checklist = @(
         "git checkout feat/$Feature && git pull --ff-only",
         "Read plan.md, tasks.json, session_log.md, C0-spec.md, kickoff prompt",
         "Set status to in_progress; add START entry; commit docs",
         $(if ($Automation.IsPresent) { "Run: make triad-task-start FEATURE_DIR=`"$featureDir`" TASK_ID=`"C0-integ`"" } else { "Run: git worktree add -b c0-integ wt/$Feature-c0-integ feat/$Feature" })
     )
-    $dispatchFinal = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --platform all --workflow-ref `\"feat/$Feature`\""
-    if ($WslRequired.IsPresent) { $dispatchFinal += " --run-wsl" }
-    $dispatchFinal += " --cleanup"
+    $dispatchBaseFinal = "scripts/ci/dispatch_feature_smoke.sh --feature-dir `"$featureDir`" --runner-kind self-hosted --workflow-ref `\"feat/$Feature`\""
+    $dispatchesFinal = @()
+    if ($behaviorKey -eq "linux,macos,windows") {
+        $cmd = "$dispatchBaseFinal --platform all"
+        if ($WslRequired.IsPresent) { $cmd += " --run-wsl" }
+        $cmd += " --cleanup"
+        $dispatchesFinal += $cmd
+    } else {
+        foreach ($p in $behaviorPlatformsList) {
+            $cmd = "$dispatchBaseFinal --platform $p"
+            if ($p -eq "linux" -and $WslRequired.IsPresent) { $cmd += " --run-wsl" }
+            $cmd += " --cleanup"
+            $dispatchesFinal += $cmd
+        }
+    }
+    $dispatchLinesFinal = $dispatchesFinal | ForEach-Object { "Re-run behavioral smoke via CI: $_" }
     $final.end_checklist = @(
         "Merge platform-fix branches (if any) + resolve conflicts",
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
-        "make integ-checks",
-        "Re-run cross-platform smoke via CI: $dispatchFinal",
+        "make integ-checks"
+    ) + $dispatchLinesFinal + @(
         "Complete slice closeout gate report: $featureDir/C0-closeout_report.md",
         $(if ($Automation.IsPresent) { "From inside the worktree: make triad-task-finish TASK_ID=`"C0-integ`"" } else { "From inside the worktree: git add -A && git commit -m `"integ: $Feature C0-integ`"" }),
         $(if ($Automation.IsPresent) { "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)" } else { "Update tasks/session_log on the orchestration branch; optionally remove the worktree when done: git worktree remove wt/$Feature-c0-integ (per plan.md)" })
@@ -725,9 +815,12 @@ if ($Automation.IsPresent) {
 }
 if ($CrossPlatform.IsPresent) {
     Render-Kickoff "kickoff_integ_core.md.tmpl" "C0-integ-core.md" "C0-integ-core" $c0IntegCoreBranch "wt/$Feature-c0-integ-core"
-    Render-Kickoff "kickoff_integ_platform.md.tmpl" "C0-integ-linux.md" "C0-integ-linux" $(if ($Automation.IsPresent) { "$Feature-c0-integ-linux" } else { "c0-integ-linux" }) "wt/$Feature-c0-integ-linux" "linux"
-    Render-Kickoff "kickoff_integ_platform.md.tmpl" "C0-integ-macos.md" "C0-integ-macos" $(if ($Automation.IsPresent) { "$Feature-c0-integ-macos" } else { "c0-integ-macos" }) "wt/$Feature-c0-integ-macos" "macos"
-    Render-Kickoff "kickoff_integ_platform.md.tmpl" "C0-integ-windows.md" "C0-integ-windows" $(if ($Automation.IsPresent) { "$Feature-c0-integ-windows" } else { "c0-integ-windows" }) "wt/$Feature-c0-integ-windows" "windows"
+    foreach ($p in $ciParityPlatformsList) {
+        $p = $p.Trim()
+        if (-not $p) { continue }
+        $branch = if ($Automation.IsPresent) { "$Feature-c0-integ-$p" } else { "c0-integ-$p" }
+        Render-Kickoff "kickoff_integ_platform.md.tmpl" "C0-integ-$p.md" "C0-integ-$p" $branch "wt/$Feature-c0-integ-$p" $p
+    }
     if ($WslRequired.IsPresent -and $WslSeparate.IsPresent) {
         Render-Kickoff "kickoff_integ_platform.md.tmpl" "C0-integ-wsl.md" "C0-integ-wsl" $(if ($Automation.IsPresent) { "$Feature-c0-integ-wsl" } else { "c0-integ-wsl" }) "wt/$Feature-c0-integ-wsl" "wsl"
     }
@@ -736,37 +829,73 @@ if ($CrossPlatform.IsPresent) {
     Render-Kickoff "kickoff_integ.md.tmpl" "C0-integ.md" "C0-integ" $c0IntegBranch "wt/$Feature-c0-integ"
 }
 
-	if ($DecisionHeavy.IsPresent -or $CrossPlatform.IsPresent) {
-	    "# Decision Register`n`nUse the template in:`n- `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`" |
-	        Set-Content -LiteralPath (Join-Path $featureDir "decision_register.md")
-	    "# Integration Map`n`nUse the standard in:`n- `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`" |
-	        Set-Content -LiteralPath (Join-Path $featureDir "integration_map.md")
-	    "# Manual Testing Playbook`n`nThis playbook must contain runnable commands and expected exit codes/output.`n`n## CI Smoke Scripts`n`nThese are invoked by the Feature Smoke workflow. Keep them deterministic and fast.`n`n- Linux: `bash smoke/linux-smoke.sh` (expected exit: 0)`n- macOS: `bash smoke/macos-smoke.sh` (expected exit: 0)`n- Windows: `pwsh -File smoke/windows-smoke.ps1` (expected exit: 0)" |
-	        Set-Content -LiteralPath (Join-Path $featureDir "manual_testing_playbook.md")
-	}
+		if ($DecisionHeavy.IsPresent -or $CrossPlatform.IsPresent) {
+		    "# Decision Register`n`nUse the template in:`n- `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`" |
+		        Set-Content -LiteralPath (Join-Path $featureDir "decision_register.md")
+		    "# Integration Map`n`nUse the standard in:`n- `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`" |
+		        Set-Content -LiteralPath (Join-Path $featureDir "integration_map.md")
+
+		    if ($CrossPlatform.IsPresent) {
+		        $lines = @()
+		        $lines += "# Manual Testing Playbook"
+		        $lines += ""
+		        $lines += "This playbook must contain runnable commands and expected exit codes/output."
+		        $lines += ""
+		        $lines += "## Behavioral Smoke Scripts"
+		        $lines += ""
+		        $lines += "These scripts define the behavioral platform contract for this feature. Keep them deterministic and fast."
+		        foreach ($p in $behaviorPlatformsList) {
+		            switch ($p) {
+		                "linux" { $lines += "- Linux: ``bash smoke/linux-smoke.sh`` (expected exit: 0)" }
+		                "macos" { $lines += "- macOS: ``bash smoke/macos-smoke.sh`` (expected exit: 0)" }
+		                "windows" { $lines += "- Windows: ``pwsh -File smoke/windows-smoke.ps1`` (expected exit: 0)" }
+		            }
+		        }
+		        $lines += ""
+		        $lines += "## CI Parity (compile/test)"
+		        $lines += ""
+		        $lines += ("CI parity platforms (may be broader than behavioral scope): ``" + (($ciParityPlatformsList -join ",") ) + "``")
+		        $lines += ""
+		        $lines += "Recommended gates:"
+		        $lines += "- ``make ci-compile-parity CI_WORKFLOW_REF=`"feat/$Feature`" CI_REMOTE=origin CI_CLEANUP=1``"
+		        $lines += "- ``scripts/ci/dispatch_ci_testing.sh --workflow-ref `"feat/$Feature`" --remote origin --cleanup``"
+		        ($lines -join "`n") | Set-Content -LiteralPath (Join-Path $featureDir "manual_testing_playbook.md")
+		    } else {
+		        "# Manual Testing Playbook`n`nThis playbook must contain runnable commands and expected exit codes/output." |
+		            Set-Content -LiteralPath (Join-Path $featureDir "manual_testing_playbook.md")
+		    }
+		}
 
 if ($CrossPlatform.IsPresent) {
     New-Item -ItemType Directory -Force -Path (Join-Path $featureDir "smoke") | Out-Null
-    @"
+    foreach ($p in $behaviorPlatformsList) {
+        switch ($p) {
+            "linux" {
+                @"
 #!/usr/bin/env bash
 set -euo pipefail
 echo `"Smoke script scaffold (linux) - replace with feature checks`"
 exit 1
 "@ | Set-Content -LiteralPath (Join-Path $featureDir "smoke/linux-smoke.sh") -NoNewline
-
-    @"
+            }
+            "macos" {
+                @"
 #!/usr/bin/env bash
 set -euo pipefail
 echo `"Smoke script scaffold (macos) - replace with feature checks`"
 exit 1
 "@ | Set-Content -LiteralPath (Join-Path $featureDir "smoke/macos-smoke.sh") -NoNewline
-
-    @"
+            }
+            "windows" {
+                @"
 param()
 \$ErrorActionPreference = `"Stop`"
 Write-Host `"Smoke script scaffold (windows) - replace with feature checks`"
 exit 1
 "@ | Set-Content -LiteralPath (Join-Path $featureDir "smoke/windows-smoke.ps1") -NoNewline
+            }
+        }
+    }
 }
 
 Write-Host "OK: created $featureDir"

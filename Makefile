@@ -181,6 +181,8 @@ CROSS_PLATFORM ?= 0
 WSL_REQUIRED ?= 0
 WSL_SEPARATE ?= 0
 AUTOMATION ?= 0
+BEHAVIOR_PLATFORMS ?=
+CI_PARITY_PLATFORMS ?=
 
 .PHONY: planning-new-feature
 planning-new-feature:
@@ -189,6 +191,8 @@ planning-new-feature:
 	cmd="scripts/planning/new_feature.sh --feature \"$(FEATURE)\""; \
 	if [ "$(DECISION_HEAVY)" = "1" ]; then cmd="$$cmd --decision-heavy"; fi; \
 	if [ "$(CROSS_PLATFORM)" = "1" ]; then cmd="$$cmd --cross-platform"; fi; \
+	if [ -n "$(BEHAVIOR_PLATFORMS)" ]; then cmd="$$cmd --behavior-platforms \"$(BEHAVIOR_PLATFORMS)\""; fi; \
+	if [ -n "$(CI_PARITY_PLATFORMS)" ]; then cmd="$$cmd --ci-parity-platforms \"$(CI_PARITY_PLATFORMS)\""; fi; \
 	if [ "$(WSL_REQUIRED)" = "1" ]; then cmd="$$cmd --wsl-required"; fi; \
 	if [ "$(WSL_SEPARATE)" = "1" ]; then cmd="$$cmd --wsl-separate"; fi; \
 	if [ "$(AUTOMATION)" = "1" ]; then cmd="$$cmd --automation"; fi; \
@@ -203,6 +207,8 @@ planning-new-feature-ps:
 	cmd="pwsh -File scripts/planning/new_feature.ps1 -Feature \"$(FEATURE)\""; \
 	if [ "$(DECISION_HEAVY)" = "1" ]; then cmd="$$cmd -DecisionHeavy"; fi; \
 	if [ "$(CROSS_PLATFORM)" = "1" ]; then cmd="$$cmd -CrossPlatform"; fi; \
+	if [ -n "$(BEHAVIOR_PLATFORMS)" ]; then cmd="$$cmd -BehaviorPlatforms \"$(BEHAVIOR_PLATFORMS)\""; fi; \
+	if [ -n "$(CI_PARITY_PLATFORMS)" ]; then cmd="$$cmd -CiParityPlatforms \"$(CI_PARITY_PLATFORMS)\""; fi; \
 	if [ "$(WSL_REQUIRED)" = "1" ]; then cmd="$$cmd -WslRequired"; fi; \
 	if [ "$(WSL_SEPARATE)" = "1" ]; then cmd="$$cmd -WslSeparate"; fi; \
 	if [ "$(AUTOMATION)" = "1" ]; then cmd="$$cmd -Automation"; fi; \

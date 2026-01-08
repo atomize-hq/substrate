@@ -59,9 +59,23 @@ require_path "${FEATURE_DIR}/session_log.md"
 require_path "${FEATURE_DIR}/kickoff_prompts"
 
 if [[ -d "${FEATURE_DIR}/smoke" ]]; then
-    require_path "${FEATURE_DIR}/smoke/linux-smoke.sh"
-    require_path "${FEATURE_DIR}/smoke/macos-smoke.sh"
-    require_path "${FEATURE_DIR}/smoke/windows-smoke.ps1"
+    behavior_platforms_csv="$(jq -r '[.meta.behavior_platforms_required // .meta.ci_parity_platforms_required // .meta.platforms_required // []] | flatten | join(",")' "${FEATURE_DIR}/tasks.json")"
+    if [[ -z "${behavior_platforms_csv}" ]]; then
+        echo "FAIL: smoke/ exists but tasks.json meta is missing behavior platform declaration (expected meta.behavior_platforms_required, or legacy meta.platforms_required)" >&2
+        exit 1
+    fi
+
+    IFS=',' read -r -a behavior_platforms <<<"${behavior_platforms_csv}"
+    for p in "${behavior_platforms[@]}"; do
+        p="$(echo "${p}" | xargs)"
+        [[ -z "${p}" ]] && continue
+        case "${p}" in
+            linux) require_path "${FEATURE_DIR}/smoke/linux-smoke.sh" ;;
+            macos) require_path "${FEATURE_DIR}/smoke/macos-smoke.sh" ;;
+            windows) require_path "${FEATURE_DIR}/smoke/windows-smoke.ps1" ;;
+            *) echo "FAIL: invalid platform in behavior platforms: ${p}" >&2; exit 1 ;;
+        esac
+    done
 fi
 
 echo "-- Hard-ban scan"
@@ -132,10 +146,27 @@ fi
 echo "-- Manual playbook smoke linkage (if present)"
 if [[ -f "${FEATURE_DIR}/manual_testing_playbook.md" ]]; then
     if [[ -d "${FEATURE_DIR}/smoke" ]]; then
-        if ! rg -n 'smoke/(linux-smoke\.sh|macos-smoke\.sh|windows-smoke\.ps1)' "${FEATURE_DIR}/manual_testing_playbook.md" >/dev/null; then
-            echo "FAIL: manual_testing_playbook.md must reference smoke scripts under smoke/" >&2
+        behavior_platforms_csv="$(jq -r '[.meta.behavior_platforms_required // .meta.ci_parity_platforms_required // .meta.platforms_required // []] | flatten | join(",")' "${FEATURE_DIR}/tasks.json")"
+        if [[ -z "${behavior_platforms_csv}" ]]; then
+            echo "FAIL: smoke/ exists but tasks.json meta is missing behavior platform declaration (expected meta.behavior_platforms_required, or legacy meta.platforms_required)" >&2
             exit 1
         fi
+
+        IFS=',' read -r -a behavior_platforms <<<"${behavior_platforms_csv}"
+        for p in "${behavior_platforms[@]}"; do
+            p="$(echo "${p}" | xargs)"
+            [[ -z "${p}" ]] && continue
+            case "${p}" in
+                linux) smoke_ref="smoke/linux-smoke.sh" ;;
+                macos) smoke_ref="smoke/macos-smoke.sh" ;;
+                windows) smoke_ref="smoke/windows-smoke.ps1" ;;
+                *) echo "FAIL: invalid platform in behavior platforms: ${p}" >&2; exit 1 ;;
+            esac
+            if ! rg -nF "${smoke_ref}" "${FEATURE_DIR}/manual_testing_playbook.md" >/dev/null; then
+                echo "FAIL: manual_testing_playbook.md must reference required smoke script: ${smoke_ref}" >&2
+                exit 1
+            fi
+        done
     fi
 fi
 

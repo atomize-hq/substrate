@@ -12,6 +12,8 @@
                 "feature": { "type": "string" },
                 "cross_platform": { "type": "boolean" },
                 "platforms_required": { "type": "array", "items": { "type": "string", "enum": ["linux", "macos", "windows"] } },
+                "behavior_platforms_required": { "type": "array", "items": { "type": "string", "enum": ["linux", "macos", "windows"] } },
+                "ci_parity_platforms_required": { "type": "array", "items": { "type": "string", "enum": ["linux", "macos", "windows"] } },
                 "wsl_required": { "type": "boolean" },
                 "wsl_task_mode": { "type": "string", "enum": ["bundled", "separate"] },
                 "execution_gates": { "type": "boolean" },

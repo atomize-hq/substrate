@@ -125,9 +125,15 @@ else
     scripts/triad/orch_ensure.sh --feature-dir "${FEATURE_DIR_ABS}" >/dev/null
 fi
 
-platforms_required="$(jq -r '.meta.platforms_required // [] | join(",")' "${TASKS_JSON}")"
+platforms_required="$(jq -r '.meta.ci_parity_platforms_required // .meta.platforms_required // [] | join(",")' "${TASKS_JSON}")"
+wsl_required="$(jq -r '.meta.wsl_required // false' "${TASKS_JSON}")"
+wsl_task_mode="$(jq -r '.meta.wsl_task_mode // "bundled"' "${TASKS_JSON}")"
+
 if [[ -z "${platforms_required}" ]]; then
-    die "tasks.json meta.platforms_required is empty; cannot infer platform-fix task ids"
+    die "tasks.json meta.ci_parity_platforms_required (or legacy meta.platforms_required) is empty; cannot infer platform-fix task ids"
+fi
+if [[ "${wsl_required}" == "true" && "${wsl_task_mode}" == "separate" ]]; then
+    platforms_required="${platforms_required},wsl"
 fi
 
 printf 'ORCH_BRANCH=%s\n' "${ORCH_BRANCH}"
@@ -141,7 +147,7 @@ for p in "${platforms[@]}"; do
     [[ -z "${p}" ]] && continue
     case "${p}" in
         linux|macos|windows|wsl) ;;
-        *) die "Invalid platform in meta.platforms_required: ${p}" ;;
+        *) die "Invalid platform in meta.ci_parity_platforms_required (or legacy meta.platforms_required): ${p}" ;;
     esac
 
     task_id="${SLICE_ID}-integ-${p}"
@@ -192,4 +198,3 @@ os.replace(tmp, tasks_path)
 PY
     printf 'UPDATED_TASK_ID=%s\n' "${task_id}"
 done
-
