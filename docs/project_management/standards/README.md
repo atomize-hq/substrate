@@ -52,6 +52,11 @@ Scaffold (bash):
 Scaffold (PowerShell):
 - `make planning-new-feature-ps FEATURE="<feature>" AUTOMATION=1`
 
+Cross-platform scaffolding (P3-008; optional knobs):
+- Default cross-platform: `make planning-new-feature FEATURE="<feature>" CROSS_PLATFORM=1 AUTOMATION=1`
+- Override scopes explicitly:
+  - `make planning-new-feature FEATURE="<feature>" CROSS_PLATFORM=1 AUTOMATION=1 BEHAVIOR_PLATFORMS=linux CI_PARITY_PLATFORMS=linux,macos,windows`
+
 This creates:
 - `docs/project_management/next/<feature>/plan.md`
 - `docs/project_management/next/<feature>/tasks.json`
@@ -116,11 +121,13 @@ Optional: run an end-to-end integration orchestration wrapper (integ-core -> smo
 - `docs/project_management/standards/TRIAD_INTEGRATION_WRAPPER_PROMPT.md`
 
 Dispatch cross-platform smoke:
-- `make feature-smoke FEATURE_DIR="docs/project_management/next/<feature>" PLATFORM=all WORKFLOW_REF="feat/<feature>"`
-- Add WSL coverage when required: `RUN_WSL=1`
+- If behavior platforms are exactly `linux,macos,windows`: `make feature-smoke FEATURE_DIR="docs/project_management/next/<feature>" PLATFORM=all WORKFLOW_REF="feat/<feature>"`
+- Otherwise, dispatch per platform (repeat): `make feature-smoke FEATURE_DIR="docs/project_management/next/<feature>" PLATFORM=<platform> WORKFLOW_REF="feat/<feature>"`
+- Add WSL coverage when required: `RUN_WSL=1` (Linux smoke, or `PLATFORM=wsl` when `wsl_task_mode="separate"`)
 
 If smoke fails, start only the failing platform-fix tasks:
-- `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="C0" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
+- Single smoke run id case (`PLATFORM=all`): `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="C0" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
+- Multi-run case (per-platform smoke): `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="C0" PLATFORMS="<csv>" LAUNCH_CODEX=1`
 
 After all failing platform-fix tasks are green, start the final aggregator:
 - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="C0" LAUNCH_CODEX=1`
@@ -139,7 +146,10 @@ At feature end, remove retained worktrees and optionally prune branches:
 ## tasks.json Versions and Opt-Ins (Mental Model)
 
 - **v1** (`meta.schema_version: 1`): basic task structure (no cross-platform model; no automation).
-- **v2** (`meta.schema_version: 2`): cross-platform integration model is available via `meta.platforms_required` (+ optional WSL via `meta.wsl_required`/`meta.wsl_task_mode`).
+ - **v2** (`meta.schema_version: 2`): cross-platform integration model splits scope (P3-008):
+   - `meta.behavior_platforms_required`: platforms with behavioral guarantees (smoke scripts required here)
+   - `meta.ci_parity_platforms_required`: platforms that must be green in CI parity gates (platform-fix tasks required here; legacy: `meta.platforms_required`)
+   - optional WSL via `meta.wsl_required`/`meta.wsl_task_mode` (behavior-scoped; do not include `"wsl"` in the platform arrays)
 - **v3** (`meta.schema_version: 3` + `meta.automation.enabled=true`): execution automation is enabled.
   - Required structured fields are enforced by `scripts/planning/validate_tasks_json.py`.
   - Integration tasks must include `merge_to_orchestration` to make merge-back behavior explicit.

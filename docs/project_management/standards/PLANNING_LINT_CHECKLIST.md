@@ -27,8 +27,9 @@ This runner checks (at minimum):
 - Hard-ban scan (no `TBD/TODO/WIP/TBA`, no “open question”, no “etc.”/“and so on”)
 - Ambiguity scan (no `should|could|might|maybe` in behavior/contracts)
 - `tasks.json` invariants (`make planning-validate`)
-  - If `tasks.json` opts into schema v2 cross-platform parity (`meta.schema_version >= 2` and `meta.platforms_required`), it must include the required `X-integ-core`, `X-integ-<platform>`, and `X-integ` tasks per slice.
-  - If WSL coverage is required, use `meta.wsl_required: true` + `meta.wsl_task_mode: "bundled"|"separate"` (do not include `"wsl"` in `meta.platforms_required`).
+  - If `tasks.json` opts into schema v2 cross-platform parity (`meta.schema_version >= 2` and `meta.ci_parity_platforms_required` or legacy `meta.platforms_required`), it must include the required `X-integ-core`, `X-integ-<platform>`, and `X-integ` tasks per slice (where `<platform>` ranges over CI parity platforms, plus optional `wsl` when `wsl_task_mode="separate"`).
+  - If WSL coverage is required, use `meta.wsl_required: true` + `meta.wsl_task_mode: "bundled"|"separate"` (do not include `"wsl"` in `meta.behavior_platforms_required` or `meta.ci_parity_platforms_required`).
+  - If `FEATURE_DIR/smoke/` exists, smoke scripts are required only for `meta.behavior_platforms_required` (or inferred legacy behavior platforms); `manual_testing_playbook.md` must reference each required smoke script.
   - If `meta.execution_gates: true`, it must include the execution preflight task/report and per-slice closeout report linkage.
 - ADR Executive Summary drift checks for any ADRs found/referenced (`make adr-check`)
 - Kickoff prompt sentinel coverage (must contain `Do not edit planning docs inside the worktree.`)

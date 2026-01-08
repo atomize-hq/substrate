@@ -89,9 +89,12 @@ If the work requires cross-platform parity (Linux/macOS/Windows and optionally W
   - platform-fix when needed (recommended for any feature that could plausibly diverge by platform).
 - If using platform-fix when needed, encode it mechanically in `tasks.json`:
   - `meta.schema_version: 2`
-  - `meta.platforms_required: ["linux","macos","windows"]`
-  - If WSL coverage is required, do not add `"wsl"` to `meta.platforms_required`; instead use `meta.wsl_required: true` and `meta.wsl_task_mode: "bundled"|"separate"`.
-  - per slice: `X-integ-core`, `X-integ-<platform>`, and `X-integ` (final)
+  - Declare **both** platform sets (P3-008):
+    - `meta.behavior_platforms_required: [...]` (platforms with behavior guarantees; smoke scripts required here)
+    - `meta.ci_parity_platforms_required: [...]` (platforms that must be green in CI parity gates; platform-fix tasks required here)
+    - Legacy compatibility: `meta.platforms_required` is accepted as an alias for `meta.ci_parity_platforms_required`.
+  - If WSL coverage is required (behavioral), do not add `"wsl"` to either list; instead use `meta.wsl_required: true` and `meta.wsl_task_mode: "bundled"|"separate"`.
+  - Per slice: `X-integ-core`, `X-integ-<platform>`, and `X-integ` (final), where `<platform>` ranges over **CI parity platforms** (plus optional `wsl` task when `wsl_task_mode="separate"`).
   - include platform smoke scripts under `smoke/` and reference them in integration tasks/end checklists.
 
 ### 3.2 Required for “decision-heavy” or “cross-platform” work
@@ -242,7 +245,8 @@ To make validation repeatable and auditable:
   - what success looks like (exit code and key expected output),
   - how to run sections manually for debugging.
   - if cross-platform validation is required, how to run smoke scripts via GitHub Actions on self-hosted runners (preferred):
-    - `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=all RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
+    - When behavior platforms are exactly `linux,macos,windows`: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=all RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
+    - Otherwise, dispatch per platform (repeat): `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
 
 Prohibited:
 - “Verify it works”

@@ -44,31 +44,37 @@ Common setup (runner installed under `/opt/actions-runner`):
 ## Recommended task structuring
 
 For cross-platform work, split integration into:
-- **Option A (validation-only):** one integration task runs the smoke workflow with `platform=all` (and optionally `run_wsl=true`) and records the run id/URL in `session_log.md`.
+- **Option A (validation-only):** one integration task runs the smoke workflow for the feature’s **behavior platforms** (P3-008) and records the run id/URL in `session_log.md`.
+  - Use `platform=all` only when behavior platforms are exactly Linux+macOS+Windows; otherwise dispatch per behavior platform.
 - **Option B (platform-fix when needed):** split integration into core + platform-fix tasks:
   - `X-integ-core` (core integration): merges code+tests and gets primary-platform green.
-  - `X-integ-linux` (platform-fix): runs Linux smoke; if WSL is required, also runs WSL smoke; if it fails, applies fixes on a Linux machine/worktree and re-runs smoke.
-  - `X-integ-macos` (platform-fix): same for macOS.
-  - `X-integ-windows` (platform-fix): same for Windows.
+  - `X-integ-linux` (platform-fix): if Linux is a behavior platform, runs Linux smoke (and bundled WSL smoke if required); otherwise treats Linux as CI parity-only.
+  - `X-integ-macos` (platform-fix): if macOS is a behavior platform, runs macOS smoke; otherwise treats macOS as CI parity-only.
+  - `X-integ-windows` (platform-fix): if Windows is a behavior platform, runs Windows smoke; otherwise treats Windows as CI parity-only.
   - optional: `X-integ-wsl` (platform-fix): only create when WSL divergence is likely/expected and you want independent ownership/retry loops.
-  - `X-integ` (final aggregator): merges any platform-fix branches, re-runs `make integ-checks` on the primary dev platform, and confirms cross-platform smoke is green.
+  - `X-integ` (final aggregator): merges any platform-fix branches, re-runs `make integ-checks` on the primary dev platform, and confirms behavioral smoke + CI parity gates are green.
 
 This preserves parallelism and makes it explicit which validations happened where.
 
-Only include platform-specific integration tasks for platforms that are actually required by the feature’s platform guarantees (as defined in ADR/spec/contract). If a feature is Linux-only, do not add macOS/Windows integration tasks.
+Platform task inclusion rules (P3-008):
+- Include platform-fix integration tasks for **CI parity platforms** (`meta.ci_parity_platforms_required` / legacy `meta.platforms_required`), because CI failures on those platforms are blocking.
+- Smoke scripts are required only for **behavior platforms** (`meta.behavior_platforms_required`); do not force smoke scripts for CI parity-only platforms.
 
 ## Planning Pack requirement (schema v2)
 
 If a planning pack opts into the platform-fix model, encode it in `tasks.json`:
 - `meta.schema_version: 2`
-- `meta.platforms_required: ["linux","macos","windows"]`
+- Declare both scopes (P3-008):
+  - `meta.behavior_platforms_required: [...]` (platforms with behavior guarantees; smoke scripts required here)
+  - `meta.ci_parity_platforms_required: ["linux","macos","windows"]` (platforms that must be green in CI parity gates; platform-fix tasks required here)
+  - Legacy compatibility: `meta.platforms_required` is accepted as an alias for `meta.ci_parity_platforms_required`.
 - If WSL coverage is required:
   - `meta.wsl_required: true`
   - `meta.wsl_task_mode: "bundled" | "separate"`
     - `"bundled"` (default/recommended): run WSL as part of `X-integ-linux` by dispatching with `--run-wsl`
     - `"separate"`: add `X-integ-wsl` as its own platform-fix task
 
-The mechanical tasks validator enforces the required task shape when `meta.schema_version >= 2` and `meta.platforms_required` is present:
+The mechanical tasks validator enforces the required task shape when `meta.schema_version >= 2` and `meta.ci_parity_platforms_required` (or legacy `meta.platforms_required`) is present:
 - `make planning-validate FEATURE_DIR="docs/project_management/next/<feature>"`
 
 ## WSL task rubric (bundled vs separate)

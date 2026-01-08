@@ -117,7 +117,7 @@ Mark `YES` only if read end-to-end.
 ### 5.1) Cross-platform parity task structure (schema v2)
 - Result: `PASS|FAIL|N/A`
 - Evidence:
-  - `tasks.json` meta: `schema_version` and `platforms_required` (if applicable)
+  - `tasks.json` meta: `schema_version`, `behavior_platforms_required`, and `ci_parity_platforms_required` (legacy: `platforms_required`) (if applicable)
   - Per slice: `X-integ-core`, `X-integ-<platform>`, `X-integ` tasks and deps
 - Notes:
 

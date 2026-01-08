@@ -58,13 +58,13 @@ flowchart TD
   subgraph INTEG_CORE["Core Integration (primary dev platform)"]
     MERGE["X-integ-core (merge X-code + X-test; resolve spec drift)"]
     CORE_CHECKS["Required checks: cargo fmt; cargo clippy ... -- -D warnings; relevant tests; make integ-checks"]
-    CORE_PARITY["Dispatch cross-platform compile parity via make ci-compile-parity (GitHub-hosted; linux + macos + windows)"]
+    CORE_PARITY["Dispatch cross-platform compile parity via make ci-compile-parity (GitHub-hosted; CI parity platforms)"]
     CORE_FIX["If parity fails: fix compile parity on X-integ-core branch (cfg/platform guards), commit, and re-run parity"]
-    CORE_DISPATCH["Dispatch cross-platform smoke via make feature-smoke (PLATFORM=all; optional RUN_WSL=1; WORKFLOW_REF=ORCH_BRANCH)"]
+    CORE_DISPATCH["Dispatch behavioral smoke via make feature-smoke (PLATFORM=all iff linux+macos+windows; else per-platform; optional RUN_WSL=1; WORKFLOW_REF=ORCH_BRANCH)"]
     CORE_RESULTS["Wait for smoke results (self-hosted runners)"]
     CORE_CI_TEST["Dispatch CI Testing via scripts/ci/dispatch_ci_testing.sh (throwaway branch at HEAD)"]
     CORE_IDENTIFY["Identify failing platforms from smoke + CI Testing results"]
-    CORE_START_PF["Start failing platform-fix tasks (make triad-task-start-platform-fixes-from-smoke SMOKE_RUN_ID=...)"]
+    CORE_START_PF["Start failing platform-fix tasks (from-smoke-run iff PLATFORM=all; else explicit PLATFORMS=...)"]
     CORE_START_FINAL["After fixes are green: start final aggregator (make triad-task-start-integ-final SLICE_ID=X)"]
   end
 
@@ -76,7 +76,7 @@ flowchart TD
 
   %% ======== Smoke validation (CI) ========
   subgraph CI["GitHub Actions (validation only)"]
-    SMOKE_ALL["Feature Smoke workflow (self-hosted runners; linux + macos + windows; optional WSL)"]
+    SMOKE_ALL["Feature Smoke workflow (self-hosted runners; behavior platforms; optional WSL)"]
   end
 
   CORE_DISPATCH --> SMOKE_ALL --> CORE_RESULTS --> CORE_CI_TEST --> CORE_IDENTIFY --> CORE_START_PF
@@ -152,13 +152,13 @@ flowchart TD
   subgraph INTEG_CORE["Core Integration (primary dev platform)"]
     CORE["X-integ-core (merge X-code + X-test; resolve spec drift)"]
     CORE_CHECKS["Core checks: cargo fmt; cargo clippy ... -- -D warnings; relevant tests; make integ-checks"]
-    CORE_PARITY["Dispatch cross-platform compile parity via make ci-compile-parity (GitHub-hosted; linux + macos + windows)"]
+    CORE_PARITY["Dispatch cross-platform compile parity via make ci-compile-parity (GitHub-hosted; CI parity platforms)"]
     CORE_FIX["If parity fails: fix compile parity on X-integ-core branch (cfg/platform guards), commit, and re-run parity"]
-    CORE_DISPATCH["Dispatch smoke via CI (platform=all; optional WSL; WORKFLOW_REF=ORCH_BRANCH)"]
+    CORE_DISPATCH["Dispatch behavioral smoke via CI (PLATFORM=all iff linux+macos+windows; else per-platform; optional WSL; WORKFLOW_REF=ORCH_BRANCH)"]
     CORE_RESULTS["Wait for smoke results (self-hosted runners)"]
     CORE_CI_TEST["Dispatch CI Testing via scripts/ci/dispatch_ci_testing.sh (throwaway branch at HEAD)"]
     CORE_IDENTIFY["Identify failing platforms from smoke + CI Testing results"]
-    CORE_START_PF["Start failing platform-fix tasks (make triad-task-start-platform-fixes-from-smoke SMOKE_RUN_ID=...)"]
+    CORE_START_PF["Start failing platform-fix tasks (from-smoke-run iff PLATFORM=all; else explicit PLATFORMS=...)"]
     CORE_START_FINAL["After fixes are green: start final aggregator (make triad-task-start-integ-final SLICE_ID=X)"]
   end
 
@@ -170,7 +170,7 @@ flowchart TD
 
   %% ======== Smoke validation (CI) ========
   subgraph CI["GitHub Actions (validation only)"]
-    SMOKE["Feature Smoke workflow (self-hosted runners; linux + macos + windows; optional WSL)"]
+    SMOKE["Feature Smoke workflow (self-hosted runners; behavior platforms; optional WSL)"]
   end
 
   CORE_DISPATCH --> SMOKE --> CORE_RESULTS --> CORE_CI_TEST --> CORE_IDENTIFY --> CORE_START_PF

@@ -3,7 +3,7 @@
 Use this when you want a single orchestration run to:
 - start `<SLICE>-integ-core`, run it with Codex enabled, and capture its final message,
 - run cross-platform compile parity for the integ-core commit (fast fail before relying on smoke),
-- use integ-core’s reported cross-platform smoke outcome to infer failing platforms,
+- use integ-core’s reported **behavioral** smoke outcome to infer failing platforms (P3-008: behavior platforms may be a subset of CI parity platforms),
 - start only the failing `<SLICE>-integ-<platform>` tasks (optionally with Codex enabled) and capture their final messages,
 - start `<SLICE>-integ` (final aggregator) and capture its final message,
 - dispatch CI Testing for the final integration commit (gate before merging to `testing`),
@@ -58,15 +58,22 @@ SLICE_ID="<SET_ME>"      # e.g. PCP0
      - Re-run this compile parity step until green, then continue to step (3).
 
 3) Parse the integ-core agent’s smoke outcome from its final message (only after compile parity is green):
-   - Extract and report these exact keys if present (one per line):
+   - Smoke is required only for the feature’s **behavior platforms** (P3-008; see `tasks.json` meta: `behavior_platforms_required`).
+   - The integ-core agent may have dispatched smoke as:
+     - a single run with `PLATFORM=all` (only valid when behavior platforms are exactly linux+macos+windows), or
+     - multiple runs (one per behavior platform).
+   - Extract and report these exact keys for each smoke run reported (grouped per run):
      - `RUN_ID=<id>`
      - `RUN_URL=<url>`
      - `SMOKE_PASSED_PLATFORMS=<csv>`
      - `SMOKE_FAILED_PLATFORMS=<csv>`
-   - If `SMOKE_FAILED_PLATFORMS` is missing, treat this as a failure (integ-core must run and report cross-platform smoke).
+   - If no smoke keys are present at all, treat this as a failure (integ-core must run and report behavioral smoke).
 
-4) If smoke failed and `SMOKE_FAILED_PLATFORMS` is non-empty, start only failing platform-fix tasks with Codex enabled (parallel):
-   `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" SMOKE_RUN_ID="$RUN_ID" LAUNCH_CODEX=1`
+4) If smoke failed on any run, start only failing platform-fix tasks with Codex enabled (parallel):
+   - If you have a single smoke run id that includes all failing platforms (typical `PLATFORM=all` case), use:
+     `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" SMOKE_RUN_ID="$RUN_ID" LAUNCH_CODEX=1`
+   - If smoke was dispatched per-platform (multiple runs), derive `PLATFORMS=<csv>` from the union of failures and use:
+     `make triad-task-start-platform-fixes FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" PLATFORMS="<csv>" LAUNCH_CODEX=1`
    For each selected platform block, collect:
    - `PLATFORM`, `TASK_ID`, `WORKTREE`, `TASK_BRANCH`, `CODEX_EXIT`
    - `CODEX_LAST_MESSAGE_PATH`, `CODEX_EVENTS_PATH`, `CODEX_STDERR_PATH`

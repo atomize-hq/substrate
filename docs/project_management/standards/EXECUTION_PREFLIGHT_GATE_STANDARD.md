@@ -31,10 +31,14 @@ For features that opt in (`tasks.json` meta: `execution_gates: true`):
 
 ### 2) Cross-platform implications are explicitly covered
 - `tasks.json` declares platform requirements:
-  - `meta.platforms_required: ["linux","macos","windows"]` (subset allowed).
+  - Behavioral scope (P3-008):
+    - `meta.behavior_platforms_required: [...]` (subset allowed).
+  - CI parity scope (P3-008):
+    - `meta.ci_parity_platforms_required: [...]` (subset allowed).
+    - Legacy compatibility: `meta.platforms_required` is accepted as an alias for `meta.ci_parity_platforms_required`.
   - If WSL coverage is required: `meta.wsl_required: true` and `meta.wsl_task_mode: "bundled"|"separate"`.
 - Platform-fix integration structure is present if using schema v2 parity model:
-  - `X-integ-core`, `X-integ-<platform>`, `X-integ` per slice.
+  - `X-integ-core`, `X-integ-<platform>`, `X-integ` per slice, where `<platform>` ranges over CI parity platforms (plus optional WSL task when `wsl_task_mode="separate"`).
 
 ### 3) Smoke scripts are not “toy” checks
 Smoke scripts must be a runnable, minimal version of how a careful human would validate the feature:

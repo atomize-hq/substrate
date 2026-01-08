@@ -35,9 +35,22 @@ Notes:
 
 Run CI smoke from this **integration-core worktree**, because the smoke dispatcher tests the current `HEAD` by creating a throwaway remote branch at that commit.
 
+Important (P3-008):
+- Smoke is required only for the feature’s **behavior platforms** (`tasks.json` meta: `behavior_platforms_required`).
+- CI parity may be required for a broader set of platforms (`tasks.json` meta: `ci_parity_platforms_required` / legacy `platforms_required`).
+
 Recommended dispatch (explicit params; leave `CLEANUP=1` on unless debugging temp branches):
-- `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF="{{ORCH_BRANCH}}" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
-  - If WSL coverage is required for this feature, add `RUN_WSL=1`.
+
+1) Determine the behavior platform set:
+   - `jq -r '.meta.behavior_platforms_required // .meta.ci_parity_platforms_required // .meta.platforms_required // [] | join(",")' "{{FEATURE_DIR}}/tasks.json"`
+
+2) Dispatch smoke for behavior platforms only:
+   - If the behavior set is exactly `linux,macos,windows`:
+     - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF="{{ORCH_BRANCH}}" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+       - If WSL coverage is required for this feature, add `RUN_WSL=1`.
+   - Otherwise, dispatch per platform (repeat for each platform in the behavior set):
+     - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=<platform> RUNNER_KIND=self-hosted WORKFLOW_REF="{{ORCH_BRANCH}}" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+       - If `<platform>=linux` and WSL coverage is required, add `RUN_WSL=1`.
 
 What the dispatcher does (`scripts/ci/dispatch_feature_smoke.sh` via `make feature-smoke`):
 - Creates/pushes a throwaway branch like `tmp/feature-smoke/<feature>/<platform>/<ts>` at current `HEAD`.
@@ -51,14 +64,18 @@ Note:
 If any platform smoke fails:
 - Do not attempt platform-specific fixes in integ-core.
 - Ask the operator to start only the failing platform-fix tasks **from the orchestration checkout** (not from a task worktree):
-  - `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="{{FEATURE_DIR}}" SLICE_ID="<slice>" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
+  - If you have a single smoke run that covers multiple platforms (typical `PLATFORM=all` case):
+    - `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="{{FEATURE_DIR}}" SLICE_ID="<slice>" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
+  - If you dispatched per-platform smoke (multiple run ids):
+    - `make triad-task-start-platform-fixes FEATURE_DIR="{{FEATURE_DIR}}" SLICE_ID="<slice>" PLATFORMS="<csv>" LAUNCH_CODEX=1`
   - `<slice>` is the triad id prefix (e.g., `C0`, `C3`).
-  - `<run-id>` is the `RUN_ID` from the failing `PLATFORM=all` smoke run.
+  - `<run-id>` is the `RUN_ID` from the failing smoke run (only used for `triad-task-start-platform-fixes-from-smoke`).
+  - `<csv>` is the comma-separated list of platforms you need platform-fix tasks for (typically the failing behavior platforms, plus `wsl` if `wsl_task_mode="separate"`).
 
-If `PLATFORM=all` smoke is green:
+If behavioral smoke is green for all behavior platforms:
 - Platform-fix tasks (if present in the pack) may still be required for CI-only failures (e.g., clippy warnings on macOS/Windows), so do not mark them no-op yet.
 - The wrapper/final gate should run CI Testing; if CI Testing is green, then mark platform-fix tasks `completed` as no-ops to unblock the final aggregator’s `depends_on`:
-  - `scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir "{{FEATURE_DIR}}" --slice-id "<slice>" --from-smoke-run "<run-id>"`
+  - `scripts/triad/mark_noop_platform_fixes_completed.sh --feature-dir "{{FEATURE_DIR}}" --slice-id "<slice>"` (optional: add `--from-smoke-run "<run-id>"` for logging)
 
 Once all required platform-fix tasks are completed, ask the operator to start the final aggregator from the orchestration checkout:
 - `make triad-task-start-integ-final FEATURE_DIR="{{FEATURE_DIR}}" SLICE_ID="<slice>" LAUNCH_CODEX=1`

@@ -123,24 +123,32 @@ Required deliverables (must create or update):
    - Execution gates (recommended; scaffolded by `make planning-new-feature` / `make planning-new-feature-ps`):
      - `docs/project_management/next/<feature>/execution_preflight_report.md`
      - `docs/project_management/next/<feature>/<slice>-closeout_report.md` (e.g., `C0-closeout_report.md`)
-   - If you want to use triad execution automation (task runner/finisher + feature cleanup), scaffold with `AUTOMATION=1`:
-     - `make planning-new-feature FEATURE=<feature> AUTOMATION=1`
-     - `make planning-new-feature-ps FEATURE=<feature> AUTOMATION=1`
-2) If decision-heavy or cross-platform:
-   - `docs/project_management/next/<feature>/decision_register.md`
-   - `docs/project_management/next/<feature>/integration_map.md`
-   - `docs/project_management/next/<feature>/manual_testing_playbook.md`
+	   - If you want to use triad execution automation (task runner/finisher + feature cleanup), scaffold with `AUTOMATION=1`:
+	     - `make planning-new-feature FEATURE=<feature> AUTOMATION=1`
+	     - `make planning-new-feature-ps FEATURE=<feature> AUTOMATION=1`
+	   - For cross-platform packs, set `CROSS_PLATFORM=1` and optionally split scopes (P3-008):
+	     - `make planning-new-feature FEATURE=<feature> CROSS_PLATFORM=1 AUTOMATION=1 BEHAVIOR_PLATFORMS=linux CI_PARITY_PLATFORMS=linux,macos,windows`
+	2) If decision-heavy or cross-platform:
+	   - `docs/project_management/next/<feature>/decision_register.md`
+	   - `docs/project_management/next/<feature>/integration_map.md`
+	   - `docs/project_management/next/<feature>/manual_testing_playbook.md`
    - `docs/project_management/next/<feature>/smoke/{linux-smoke.sh,macos-smoke.sh,windows-smoke.ps1}`
 
 Required interoperability rules:
 - `tasks.json` must match the required fields and workflow described in `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`.
 - Every task must have a kickoff prompt file and must include the exact rule: `Do not edit planning docs inside the worktree.`
-- Integration tasks must include running the feature-local smoke script (if present) and recording results in `session_log.md`.
+- Integration tasks must include the required validation gates and record results in `session_log.md`:
+  - **Behavior platforms**: run the feature-local smoke script via CI (`make feature-smoke`) when `FEATURE_DIR/smoke/` exists.
+  - **CI parity platforms**: run cross-platform compile parity (and CI Testing when required by the slice/workflow); smoke is not required for CI parity-only platforms.
   - For cross-platform smoke, prefer GitHub Actions + self-hosted runners via `make feature-smoke` (see `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`).
-  - If you opt into the platform-fix integration model, set `meta.schema_version: 2` and `meta.platforms_required: [...]` in `tasks.json` and create `X-integ-core`, `X-integ-<platform>`, and `X-integ` tasks per slice (see `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`).
-  - If WSL coverage is required, use `meta.wsl_required: true` and `meta.wsl_task_mode: "bundled"|"separate"` (do not add `"wsl"` to `meta.platforms_required`).
+  - If you opt into the platform-fix integration model, set `meta.schema_version: 2` and declare both scopes in `tasks.json` (P3-008):
+    - `meta.behavior_platforms_required: [...]` (smoke scripts required here)
+    - `meta.ci_parity_platforms_required: [...]` (platform-fix tasks required here; legacy: `meta.platforms_required`)
+    - Create `X-integ-core`, `X-integ-<platform>`, and `X-integ` tasks per slice (see `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`).
+  - If WSL coverage is required, use `meta.wsl_required: true` and `meta.wsl_task_mode: "bundled"|"separate"` (do not add `"wsl"` to `meta.behavior_platforms_required` or `meta.ci_parity_platforms_required`).
   - Preferred smoke dispatch examples:
-    - All platforms: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=all WORKFLOW_REF="feat/<feature>"`
+    - All platforms (only when behavior platforms are exactly `linux,macos,windows`): `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=all WORKFLOW_REF="feat/<feature>"`
+    - Single platform (repeat for each behavior platform): `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux WORKFLOW_REF="feat/<feature>"`
     - Linux + WSL bundled: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
     - WSL-only (separate WSL task): `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=wsl WORKFLOW_REF="feat/<feature>"`
 

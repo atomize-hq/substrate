@@ -1,8 +1,10 @@
 # Kickoff: {{TASK_ID}} (integration platform-fix — {{PLATFORM}})
 
 ## Scope
-- Ensure the slice behaves correctly on **{{PLATFORM}}**.
-- This task is allowed to make production-code and/or test changes as needed to achieve cross-platform parity, but must not edit planning docs inside the worktree.
+- Ensure the slice is green for **{{PLATFORM}}** in the way required by the Planning Pack:
+  - If `{{PLATFORM}}` is in `tasks.json` meta `behavior_platforms_required`: this is a **behavioral** platform-fix task (smoke required).
+  - Otherwise: this is a **CI parity** platform-fix task (compile/test/lint parity required; smoke not required).
+- This task is allowed to make production-code and/or test changes as needed to achieve the required platform green state, but must not edit planning docs inside the worktree.
 - Spec: `{{FEATURE_DIR}}/{{SPEC_FILE}}`
 - Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 - This task must not merge back to the orchestration branch; the final aggregator integration task performs the merge once all platforms are green.
@@ -24,19 +26,20 @@ Do not edit planning docs inside the worktree.
 - Run the platform-local Rust quality gates before finishing (CI Testing parity on this OS):
   - `cargo fmt`
   - `cargo clippy --workspace --all-targets -- -D warnings`
-- Validate platform smoke via CI for this platform (repeat until green if you make fixes):
-  - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM={{PLATFORM}} RUNNER_KIND=self-hosted WORKFLOW_REF="{{ORCH_BRANCH}}" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
-- If this is the Linux task and WSL coverage is required (see `tasks.json` meta: `wsl_required` + `wsl_task_mode`):
-  - Bundled (default): dispatch with `RUN_WSL=1`:
-    - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=linux RUN_WSL=1 RUNNER_KIND=self-hosted WORKFLOW_REF="{{ORCH_BRANCH}}" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
-- If smoke passes: record run id/URL in the END entry and do not change code.
-- If smoke fails:
-  1) Fix the issue in this worktree (platform-specific guards, path handling, deps) while keeping the spec contract intact.
-  2) Run the appropriate local checks for your change (fmt/clippy and targeted tests).
-  3) Re-run the CI smoke for this platform until green.
+- Decide whether smoke is required for this platform (P3-008):
+  - `jq -r '.meta.behavior_platforms_required // .meta.ci_parity_platforms_required // .meta.platforms_required // [] | join(",")' "{{FEATURE_DIR}}/tasks.json"`
+  - If `{{PLATFORM}}` is in that list, run Feature Smoke for this platform (repeat until green if you make fixes):
+    - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM={{PLATFORM}} RUNNER_KIND=self-hosted WORKFLOW_REF="{{ORCH_BRANCH}}" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+    - If this is the Linux task and WSL coverage is required (see `tasks.json` meta: `wsl_required` + `wsl_task_mode`):
+      - Bundled (default): dispatch with `RUN_WSL=1`:
+        - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=linux RUN_WSL=1 RUNNER_KIND=self-hosted WORKFLOW_REF="{{ORCH_BRANCH}}" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+  - Otherwise, do **not** run Feature Smoke for this platform. Instead, treat this task as CI parity-only:
+    - `make ci-compile-parity CI_WORKFLOW_REF="{{ORCH_BRANCH}}" CI_REMOTE=origin CI_CLEANUP=1`
+    - If CI Testing is required by the slice/workflow, run: `scripts/ci/dispatch_ci_testing.sh --workflow-ref "{{ORCH_BRANCH}}" --remote origin --cleanup`
+    - Fix compile/test/lint parity failures for this platform and re-run until green.
 
 ## End Checklist
-1. Ensure smoke is green for {{PLATFORM}} and capture the run id/URL.
+1. Ensure the required gate is green for {{PLATFORM}} (smoke for behavior platforms; CI parity gates otherwise) and capture the run id/URL.
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="{{TASK_ID}}"`
 3. Hand off run id/URL and any platform-specific notes to the operator (do not edit planning docs inside the worktree).
 4. Do not delete the worktree (feature cleanup removes worktrees at feature end).
