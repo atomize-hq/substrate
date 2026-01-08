@@ -110,6 +110,7 @@ Helper script (requires `gh` auth):
 Smoke result interpretation (important):
 - The smoke dispatcher always prints machine-parseable fields including `DISPATCH_OK`, `RUN_ID`, `RUN_URL`, `CONCLUSION`, and `SMOKE_FAILED_PLATFORMS`.
 - If the smoke workflow concludes failure, the underlying script exits non-zero. When invoked via `make feature-smoke`, GNU make typically exits with code **2** on any recipe failure; treat `DISPATCH_OK=1` + `RUN_URL` as “dispatch succeeded” and use `RUN_URL` to inspect logs (do not rerun just to obtain a run id).
+- If the failure is due to self-hosted runner provisioning (e.g., missing/permission-denied `/run/substrate.sock`), the dispatcher will set `RUNNER_MISPROVISIONED=1` and provide `RUNNER_MISPROVISIONED_REASON`; treat this as “fix runner, then retry” (do not thrash reruns).
 
 ### Dispatcher timeouts (do not tune unless needed)
 

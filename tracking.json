@@ -1,6 +1,6 @@
 {
     "purpose": "Ad-hoc tracker for planning-system improvements.",
-    "last_updated_utc": "2026-01-07T23:55:05Z",
+    "last_updated_utc": "2026-01-08T01:01:59Z",
     "items": [
         {
             "id": "HF-001",
@@ -486,7 +486,7 @@
             "id": "P3-002",
             "area": "CI / self-hosted runner provisioning",
             "title": "Linux self-hosted smoke fails due to /run/substrate.sock permissions",
-            "status": "open",
+            "status": "completed",
             "problem": "Linux smoke failures were caused by runner environment permissions rather than repo changes; this triggered repeated smoke dispatches and consumed agent time.",
             "evidence": {
                 "feature": "world-overlayfs-enumeration",
@@ -499,6 +499,11 @@
                         "gh run view 20764936549 --repo atomize-hq/substrate --log-failed | rg -n 'substrate\\.sock|Permission denied'",
                         "gh run view 20764936549 --repo atomize-hq/substrate --log-failed | head -n 2500"
                     ]
+                },
+                "verification_run": {
+                    "run_id": "20801781677",
+                    "run_url": "https://github.com/atomize-hq/substrate/actions/runs/20801781677",
+                    "note": "Smoke dispatched from the updated workflow ref; `linux_self_hosted` job ran the new preflight step successfully and the dispatcher printed `RUNNER_MISPROVISIONED=0`."
                 },
                 "codex_logs": [
                     {
@@ -528,6 +533,17 @@
                 "acceptance_criteria": [
                     "Linux smoke fails with an explicit provisioning diagnosis rather than a generic command failure",
                     "Operator action required is unambiguous and single-step (no repeated dispatch guessing)"
+                ]
+            },
+            "result": {
+                "behavior": [
+                    "Self-hosted Linux and WSL Feature Smoke jobs run an early `/run/substrate.sock` preflight and, on failure, emit a stable sentinel (`SUBSTRATE_RUNNER_MISPROVISIONED=1` + `SUBSTRATE_RUNNER_MISPROVISIONED_REASON=...`) plus a remediation block.",
+                    "The smoke dispatcher scans failed logs for the sentinel and classifies the outcome with `RUNNER_MISPROVISIONED=1` and `ERROR_KIND=runner_misprovisioned`, so wrapper agents/operators do not thrash reruns when the runner is misprovisioned."
+                ],
+                "files_updated": [
+                    ".github/workflows/feature-smoke.yml",
+                    "scripts/ci/dispatch_feature_smoke.sh",
+                    "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md"
                 ]
             },
             "sources": [
