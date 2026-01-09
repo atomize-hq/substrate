@@ -95,7 +95,7 @@ During installation the script:
 - Deploys fresh shims and appends a small PATH snippet (between `# >>> substrate >>>`
   markers) so `substrate` is callable from your terminal.
 - Installs `substrate-world-agent` as a systemd service plus socket and runs
-  `substrate world doctor --json` (inspect the `world_socket` block) without
+  `substrate world doctor --json` (inspect the `host.world_socket` block) without
   adding the shim directory to PATH to avoid self-referential lookups.
 - Ensures the Linux `substrate` group exists, adds the invoking user when
   possible (printing manual steps otherwise), and restarts the socket/service
@@ -160,7 +160,8 @@ substrate --version
 substrate --shim-status
 substrate shim doctor --json | jq '{path: .path, states: .states}'
 substrate health --json | jq '.summary'
-substrate world doctor --json | jq '.summary'
+substrate host doctor --json | jq '{ok, world_enabled, host_ok: .host.ok}'
+substrate world doctor --json | jq '{ok, world_enabled, host_ok: .host.ok, world: {status: .world.status, ok: .world.ok}}'
 ```
 
 (The installer already ran the doctor without the shim directory in PATH, so
@@ -173,7 +174,7 @@ substrate.exe --version
 substrate.exe --shim-status
 substrate.exe shim doctor --json | ConvertFrom-Json | Select-Object path
 substrate.exe health --json | ConvertFrom-Json | Select-Object summary
-substrate.exe world doctor --json | ConvertFrom-Json | Select-Object status,message
+substrate.exe world doctor --json | ConvertFrom-Json | Select-Object schema_version,platform,world_enabled,ok
 ```
 
 If you installed with `--no-world`, run `substrate world enable` once you are
@@ -283,7 +284,7 @@ whether `loginctl enable-linger <user>` still needs to be run.
   shows another group, rerun the installer to refresh the units. Permission issues
   usually mean your user is missing from the `substrate` group—check with
   `id -nG "$USER"`—or lingering is still disabled (`loginctl enable-linger "$USER"`).
-  `substrate world doctor --json | jq '.world_socket'` and `substrate --shim-status`
+  `substrate world doctor --json | jq '.host.world_socket'` and `substrate --shim-status`
   both spell out whether socket activation is healthy.
 - **WSL systemd disabled**: edit `/etc/wsl.conf`, set `[boot]
 systemd=true`, run

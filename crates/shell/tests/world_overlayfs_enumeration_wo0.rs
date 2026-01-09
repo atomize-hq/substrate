@@ -52,6 +52,7 @@ fn world_doctor_json_includes_strategy_keys_per_adr_0004() {
         .env("HOME", &home)
         .env("USERPROFILE", &home)
         .env("SUBSTRATE_HOME", home.join(".substrate"))
+        .env("SUBSTRATE_OVERRIDE_WORLD", "enabled")
         .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
         .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
         .arg("world")

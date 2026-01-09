@@ -47,6 +47,12 @@ These flags apply before any subcommand and can appear anywhere before the first
 
 Once you type `graph`, `world`, `shim`, or `health`, the parser stops accepting additional root flags. Everything that follows must be ordered according to the subcommand’s own definition (subcommand-level flags can be interleaved before any positional data).
 
+### `host` Subcommand
+
+| Invocation | Positional Arguments | Subcommand Flags | Notes |
+| --- | --- | --- | --- |
+| `substrate host doctor` | — | `--json` | Host-scoped readiness report (transport + host prerequisites). |
+
 ### `shim` Subcommand
 
 | Invocation | Required Positionals | Subcommand Flags | Notes |
@@ -72,7 +78,7 @@ Once you type `graph`, `world`, `shim`, or `health`, the parser stops accepting 
 
 | Invocation | Positional Arguments | Subcommand Flags | Notes |
 | --- | --- | --- | --- |
-| `substrate world doctor` | — | `--json` | Host readiness report (`cli.rs:187`). |
+| `substrate world doctor` | — | `--json` | World-scoped readiness report (host + world-agent facts). |
 | `substrate world enable` | — | `--prefix`, `--profile`, `--dry-run`, `--verbose`, `--force`, `--timeout` | Provisioning control per `cli.rs:197`. |
 | `substrate world deps status [--all] [TOOL...]` | Optional `tools` list (order matters) | `--all`, `--json` | Defaults to host-present tools; `--all` includes host-missing inventory entries. |
 | `substrate world deps install <TOOL...>` | One or more tool names | `--dry-run`, `--verbose` | Ensure installers respect permutations. |

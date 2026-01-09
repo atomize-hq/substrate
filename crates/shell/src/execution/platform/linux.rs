@@ -423,6 +423,16 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
     } else if !activation_report.socket_exists {
         json!({"status": "not_provisioned", "ok": false})
     } else if !socket_probe_ok {
+        if json_mode {
+            let detail = socket_probe_error
+                .as_deref()
+                .unwrap_or("world-agent socket probe failed");
+            if activation_report.is_socket_activated() {
+                eprintln!("world-agent readiness (socket activation) probe failed: {detail}");
+            } else {
+                eprintln!("world-agent readiness probe failed: {detail}");
+            }
+        }
         exit_code = 3;
         json!({"status": "unreachable", "ok": false})
     } else {
@@ -450,6 +460,13 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
                 value
             }
             Err(_) => {
+                if json_mode {
+                    if activation_report.is_socket_activated() {
+                        eprintln!("world-agent readiness (socket activation) request failed");
+                    } else {
+                        eprintln!("world-agent readiness request failed");
+                    }
+                }
                 exit_code = 3;
                 json!({"status": "unreachable", "ok": false})
             }
@@ -526,10 +543,11 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
         ));
 
         if activation_report.socket_exists {
-            if socket_probe_ok {
-                pass("world-agent socket: reachable");
-            } else {
-                fail("world-agent socket: present but unreachable");
+            match (activation_report.is_socket_activated(), socket_probe_ok) {
+                (true, true) => pass("world-agent socket: systemd-managed and reachable"),
+                (true, false) => fail("world-agent socket: systemd-managed but unreachable"),
+                (false, true) => pass("world-agent socket: reachable"),
+                (false, false) => fail("world-agent socket: present but unreachable"),
             }
         } else {
             fail(&format!(
