@@ -132,3 +132,16 @@
     - macOS: runner labeled `macOS`
 - Required fixes before starting DS0:
   - Update `docs/project_management/next/doctor_scopes/quality_gate_report.md` to `RECOMMENDATION: ACCEPT` (must not be “FLAG FOR HUMAN REVIEW”).
+
+## END — 2026-01-09T03:05:41Z — test — DS0-test
+- Worktree: `wt/dsc-ds0-test`
+- Branch: `dsc-ds0-test`
+- HEAD: `59358f57331b153a669b186378fa175a0b7b16e6`
+- Summary:
+  - Added DS0 contract tests for `substrate host doctor` and the DS0 host/world doctor envelopes.
+  - Updated shell integration fixtures and the world-agent socket stub to support `/v1/doctor/world`.
+- Commands run (with exit codes):
+  - `cargo fmt` → exit `0`
+  - `cargo test -p agent-api-types` → exit `0`
+  - `cargo test -p substrate-shell --test doctor_scopes_ds0 --test shim_health --test shim_doctor --test world_verify --test socket_activation --test world_overlayfs_enumeration_wo0` → exit `0`
+  - `make triad-task-finish TASK_ID="DS0-test"` → exit `0`

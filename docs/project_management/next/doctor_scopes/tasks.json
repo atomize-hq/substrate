@@ -106,7 +106,7 @@
       "name": "Doctor scope split (test)",
       "type": "test",
       "phase": "DS0",
-      "status": "pending",
+      "status": "completed",
       "description": "Implement DS0 spec tests only: JSON schema tests, CLI wiring tests, and agent-api-types schema round-trip tests.",
       "references": [
         "docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md",
