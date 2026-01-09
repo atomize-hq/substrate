@@ -103,3 +103,21 @@
   - `make planning-validate FEATURE_DIR="docs/project_management/next/doctor_scopes"` → exit `0`
   - `jq -e . "docs/project_management/next/doctor_scopes/tasks.json" >/dev/null` → exit `0`
   - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit `0`
+
+## START — 2026-01-09T02:30:36Z — ops — F0-exec-preflight
+- Feature: `docs/project_management/next/doctor_scopes/`
+- Branch: `feat/doctor-scopes`
+- Goal: Run the execution preflight gate and produce a concrete ACCEPT/REVISE recommendation before any DS0 triad work begins.
+- Inputs reviewed (required set):
+  - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+  - `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`
+  - `docs/project_management/next/doctor_scopes/plan.md`
+  - `docs/project_management/next/doctor_scopes/tasks.json`
+  - `docs/project_management/next/doctor_scopes/session_log.md`
+  - `docs/project_management/next/doctor_scopes/DS0-spec.md`
+  - `docs/project_management/next/doctor_scopes/manual_testing_playbook.md`
+  - `docs/project_management/next/doctor_scopes/smoke/linux-smoke.sh`
+  - `docs/project_management/next/doctor_scopes/smoke/macos-smoke.sh`
+  - `docs/project_management/next/doctor_scopes/smoke/windows-smoke.ps1`
+- Commands run:
+  - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/doctor_scopes"` → exit `0`

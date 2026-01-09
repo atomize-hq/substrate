@@ -25,7 +25,7 @@
       "name": "Execution preflight gate",
       "type": "ops",
       "phase": "Feature Gates",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Run the execution preflight gate and fill execution_preflight_report.md before starting DS0.",
       "references": [
         "docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md",
