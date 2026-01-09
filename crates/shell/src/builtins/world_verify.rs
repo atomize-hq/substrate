@@ -306,32 +306,22 @@ fn run_doctor(root: &Path, log_dir: &Path) -> Result<DoctorResult> {
     let (ok, parse_error, doctor_issue) = match parsed {
         Ok(value) => {
             let doctor_ok = value.get("ok").and_then(Value::as_bool).unwrap_or(false);
-            let socket_exists = value
-                .get("world_socket")
-                .and_then(|socket| socket.get("socket_exists"))
-                .and_then(Value::as_bool)
-                .or_else(|| {
-                    value
-                        .get("agent_socket")
-                        .and_then(|socket| socket.get("socket_exists"))
-                        .and_then(Value::as_bool)
-                })
-                .unwrap_or(false);
+            let world_status = value
+                .get("world")
+                .and_then(|world| world.get("status"))
+                .and_then(Value::as_str)
+                .unwrap_or("unknown");
 
-            if !doctor_ok {
-                (
-                    false,
-                    None,
-                    Some("world doctor reported ok=false".to_string()),
-                )
-            } else if !socket_exists {
-                (
-                    false,
-                    None,
-                    Some("world socket missing or unreachable (socket_exists=false)".to_string()),
-                )
-            } else {
+            if doctor_ok {
                 (true, None, None)
+            } else {
+                (
+                    false,
+                    None,
+                    Some(format!(
+                        "world doctor reported ok=false (world.status={world_status})"
+                    )),
+                )
             }
         }
         Err(err) => (false, Some(err.to_string()), None),

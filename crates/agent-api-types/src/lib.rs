@@ -78,6 +78,54 @@ pub struct ErrorResponse {
     pub message: String,
 }
 
+/// Agent-reported world enforcement readiness (world scope).
+///
+/// This response is produced by `GET /v1/doctor/world`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorldDoctorReportV1 {
+    pub schema_version: u32,
+    pub ok: bool,
+    pub collected_at_utc: String,
+    pub landlock: WorldDoctorLandlockV1,
+    pub world_fs_strategy: WorldDoctorWorldFsStrategyV1,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorldDoctorLandlockV1 {
+    pub supported: bool,
+    pub abi: Option<u32>,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorldDoctorWorldFsStrategyV1 {
+    pub primary: WorldDoctorWorldFsStrategyKindV1,
+    pub fallback: WorldDoctorWorldFsStrategyKindV1,
+    pub probe: WorldDoctorWorldFsStrategyProbeV1,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorldDoctorWorldFsStrategyKindV1 {
+    Overlay,
+    Fuse,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorldDoctorWorldFsStrategyProbeV1 {
+    pub id: String,
+    pub probe_file: String,
+    pub result: WorldDoctorWorldFsStrategyProbeResultV1,
+    pub failure_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorldDoctorWorldFsStrategyProbeResultV1 {
+    Pass,
+    Fail,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

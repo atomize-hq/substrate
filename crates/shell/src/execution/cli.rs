@@ -149,6 +149,7 @@ pub struct Cli {
 #[derive(Subcommand, Debug)]
 pub enum SubCommands {
     Graph(GraphCmd),
+    Host(HostCmd),
     World(WorldCmd),
     Config(ConfigCmd),
     Policy(PolicyCmd),
@@ -180,6 +181,12 @@ pub enum GraphAction {
 pub struct WorldCmd {
     #[command(subcommand)]
     pub action: WorldAction,
+}
+
+#[derive(Args, Debug)]
+pub struct HostCmd {
+    #[command(subcommand)]
+    pub action: HostAction,
 }
 
 #[derive(Args, Debug)]
@@ -330,6 +337,15 @@ pub enum WorldAction {
     Cleanup(WorldCleanupArgs),
     /// Run end-to-end world_fs enforcement verification (read_only + full isolation).
     Verify(WorldVerifyArgs),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum HostAction {
+    Doctor {
+        /// Output machine-readable JSON for CI
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Args, Debug, Clone)]
