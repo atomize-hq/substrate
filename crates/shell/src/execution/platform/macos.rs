@@ -631,6 +631,7 @@ mod world_doctor_macos {
                 let listener = UnixListener::bind(path).expect("bind stub socket");
 
                 let socket_path = path.to_path_buf();
+                let cleanup_path = socket_path.clone();
                 let shutdown = Arc::new(AtomicBool::new(false));
                 let shutdown_flag = shutdown.clone();
 
@@ -659,7 +660,7 @@ mod world_doctor_macos {
                         }
                     }
 
-                    let _ = std::fs::remove_file(&socket_path);
+                    let _ = std::fs::remove_file(&cleanup_path);
                 });
 
                 Self {
