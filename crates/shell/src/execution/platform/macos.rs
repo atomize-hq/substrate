@@ -128,8 +128,16 @@ mod world_doctor_macos {
                 "substrate",
                 "sudo",
                 "-n",
-                "cat",
-                "/sys/kernel/security/landlock/abi_version",
+                "sh",
+                "-c",
+                r#"
+set -euo pipefail
+exec 2>&1
+if ! grep -qs ' /sys/kernel/security ' /proc/mounts; then
+  mount -t securityfs securityfs /sys/kernel/security || true
+fi
+cat /sys/kernel/security/landlock/abi_version
+"#,
             ],
         );
 
@@ -150,7 +158,11 @@ mod world_doctor_macos {
             (
                 false,
                 None,
-                Value::String("landlock abi_version unavailable".to_string()),
+                Value::String(if landlock_output.stdout.trim().is_empty() {
+                    "landlock abi_version unavailable".to_string()
+                } else {
+                    landlock_output.stdout.trim().to_string()
+                }),
             )
         };
 
@@ -167,28 +179,34 @@ mod world_doctor_macos {
                 "-c",
                 r#"
 set -euo pipefail
+exec 2>&1
+modprobe overlay >/dev/null 2>&1 || true
 dir="$(mktemp -d)"
-lower="$dir/lower"
-upper="$dir/upper"
-work="$dir/work"
-merged="$dir/merged"
-mkdir -p "$lower" "$upper" "$work" "$merged"
-mount -t overlay overlay -o "lowerdir=$lower,upperdir=$upper,workdir=$work" "$merged"
-touch "$merged/.substrate_enum_probe"
-ls -a "$merged" | grep -q '\.substrate_enum_probe'
-umount "$merged"
-rm -rf "$dir"
+cleanup() {
+  umount "$dir/merged" >/dev/null 2>&1 || true
+  rm -rf "$dir"
+}
+trap cleanup EXIT
+mkdir -p "$dir/lower" "$dir/upper" "$dir/work" "$dir/merged"
+mount -t overlay overlay -o "lowerdir=$dir/lower,upperdir=$dir/upper,workdir=$dir/work" "$dir/merged"
+touch "$dir/merged/.substrate_enum_probe"
+ls -a "$dir/merged" | grep -q '\.substrate_enum_probe'
 echo pass
 "#,
             ],
         );
 
-        let probe_pass = probe_output.success && probe_output.stdout.contains("pass");
+        let probe_pass = probe_output.success && probe_output.stdout.trim().ends_with("pass");
         let probe_result = if probe_pass { "pass" } else { "fail" };
         let probe_failure_reason = if probe_pass {
             Value::Null
         } else {
-            Value::String("overlay enumeration probe failed".to_string())
+            let details = probe_output.stdout.trim();
+            Value::String(if details.is_empty() {
+                "overlay enumeration probe failed".to_string()
+            } else {
+                details.to_string()
+            })
         };
 
         let ok = landlock_supported && probe_pass;
