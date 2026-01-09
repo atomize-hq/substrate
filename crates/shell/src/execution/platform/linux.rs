@@ -1,6 +1,14 @@
 use crate::execution::socket_activation;
 use agent_api_client::AgentClient;
+use agent_api_types::{
+    ExecuteRequest, WorldDoctorLandlockV1, WorldDoctorReportV1, WorldDoctorWorldFsStrategyKindV1,
+    WorldDoctorWorldFsStrategyProbeResultV1, WorldDoctorWorldFsStrategyProbeV1,
+    WorldDoctorWorldFsStrategyV1, WorldFsMode,
+};
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
 use serde_json::json;
+use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
@@ -438,7 +446,17 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
         let report = match tokio::runtime::Runtime::new() {
             Ok(rt) => Some(rt.block_on(async {
                 let client = AgentClient::unix_socket(activation_report.socket_path.as_str())?;
-                client.doctor_world().await
+                match client.doctor_world().await {
+                    Ok(report) => Ok(report),
+                    Err(err) => {
+                        let message = err.to_string();
+                        if message.contains("HTTP 404") {
+                            legacy_world_doctor_report_v1_via_execute(&client).await
+                        } else {
+                            Err(err)
+                        }
+                    }
+                }
             })),
             Err(err) => {
                 if json_mode {
@@ -626,6 +644,72 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
     exit_code
 }
 
+async fn legacy_world_doctor_report_v1_via_execute(
+    client: &AgentClient,
+) -> anyhow::Result<WorldDoctorReportV1> {
+    let landlock = world::landlock::detect_support();
+
+    let req = ExecuteRequest {
+        profile: None,
+        cmd: "sh -lc 'set -e; d=\".substrate_doctor_probe.$$\"; rm -rf \"$d\"; mkdir \"$d\"; cd \"$d\"; rm -f .substrate_enum_probe; touch .substrate_enum_probe; ls -a1; rm -f .substrate_enum_probe; cd ..; rmdir \"$d\"'".to_string(),
+        cwd: Some("/tmp".to_string()),
+        env: Some(HashMap::new()),
+        pty: false,
+        agent_id: "doctor-world-probe".to_string(),
+        budget: None,
+        world_fs_mode: Some(WorldFsMode::Writable),
+    };
+
+    let resp = client.execute(req).await?;
+    let stdout = String::from_utf8_lossy(&BASE64.decode(resp.stdout_b64.as_bytes()).unwrap_or_default())
+        .into_owned();
+    let stderr = String::from_utf8_lossy(&BASE64.decode(resp.stderr_b64.as_bytes()).unwrap_or_default())
+        .into_owned();
+
+    let (result, failure_reason) = if resp.exit == 0 && stdout.lines().any(|l| l == ".substrate_enum_probe") {
+        (WorldDoctorWorldFsStrategyProbeResultV1::Pass, None)
+    } else if resp.exit == 0 {
+        (
+            WorldDoctorWorldFsStrategyProbeResultV1::Fail,
+            Some("probe file missing from directory enumeration".to_string()),
+        )
+    } else {
+        (
+            WorldDoctorWorldFsStrategyProbeResultV1::Fail,
+            Some(format!(
+                "probe execute failed (exit={}): {}",
+                resp.exit,
+                stderr.trim()
+            )),
+        )
+    };
+
+    let landlock = WorldDoctorLandlockV1 {
+        supported: landlock.supported,
+        abi: landlock.abi,
+        reason: landlock.reason,
+    };
+    let probe = WorldDoctorWorldFsStrategyProbeV1 {
+        id: "enumeration_v1".to_string(),
+        probe_file: ".substrate_enum_probe".to_string(),
+        result,
+        failure_reason,
+    };
+    let ok = landlock.supported && matches!(probe.result, WorldDoctorWorldFsStrategyProbeResultV1::Pass);
+
+    Ok(WorldDoctorReportV1 {
+        schema_version: 1,
+        ok,
+        collected_at_utc: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        landlock,
+        world_fs_strategy: WorldDoctorWorldFsStrategyV1 {
+            primary: WorldDoctorWorldFsStrategyKindV1::Overlay,
+            fallback: WorldDoctorWorldFsStrategyKindV1::Fuse,
+            probe,
+        },
+    })
+}
+
 fn probe_world_socket(path: &str) -> io::Result<()> {
     let mut stream = UnixStream::connect(path)?;
     stream.set_read_timeout(Some(Duration::from_secs(2)))?;
@@ -646,7 +730,6 @@ fn probe_world_socket(path: &str) -> io::Result<()> {
             "unexpected response: {}",
             response.lines().next().unwrap_or("")
         )));
-    }
     }
     Ok(())
 }
