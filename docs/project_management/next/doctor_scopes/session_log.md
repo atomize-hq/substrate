@@ -121,3 +121,14 @@
   - `docs/project_management/next/doctor_scopes/smoke/windows-smoke.ps1`
 - Commands run:
   - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/doctor_scopes"` → exit `0`
+
+## END — 2026-01-09T02:34:58Z — ops — F0-exec-preflight
+- Recommendation: `ACCEPT` (triads may begin once the planning quality gate is also `ACCEPT`)
+- Evidence captured:
+  - `docs/project_management/next/doctor_scopes/execution_preflight_report.md` updated with platform validation, smoke/manual parity notes, and CI dispatch readiness checks.
+  - `feat/doctor-scopes` pushed to `origin` (required for CI dispatch): `origin/feat/doctor-scopes`.
+  - GitHub Actions runners confirmed online (via `gh api repos/atomize-hq/substrate/actions/runners`):
+    - Linux: runner labeled `linux-host`
+    - macOS: runner labeled `macOS`
+- Required fixes before starting DS0:
+  - Update `docs/project_management/next/doctor_scopes/quality_gate_report.md` to `RECOMMENDATION: ACCEPT` (must not be “FLAG FOR HUMAN REVIEW”).
