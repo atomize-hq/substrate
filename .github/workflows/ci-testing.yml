@@ -14,7 +14,6 @@ on:
       checkout_ref:
         description: "Git ref to checkout for running CI Testing (defaults to workflow ref HEAD)."
         required: false
-        type: string
         default: ""
 
 env:
