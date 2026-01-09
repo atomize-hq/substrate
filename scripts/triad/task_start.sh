@@ -174,6 +174,121 @@ if [[ -z "${ORCH_BRANCH}" || -z "${FEATURE_NAME}" ]]; then
     die "tasks.json meta.automation must include orchestration_branch, and meta.feature must be set"
 fi
 
+report_recommends_accept() {
+    local report_path="$1"
+    local report_label="$2"
+    python3 - "${report_path}" "${report_label}" <<'PY'
+import pathlib
+import re
+import sys
+
+path = pathlib.Path(sys.argv[1])
+label = sys.argv[2]
+
+try:
+    text = path.read_text(encoding="utf-8")
+except FileNotFoundError:
+    print(f"ERROR: missing {label}: {path}", file=sys.stderr)
+    raise SystemExit(2)
+
+def clean(value: str) -> str:
+    value = value.strip()
+    value = value.replace("`", "")
+    value = value.replace("*", "")
+    return value.strip()
+
+def is_accept(raw_value: str) -> bool:
+    # Refuse template placeholders like "ACCEPT | REVISE".
+    if "|" in raw_value:
+        return False
+    cleaned = clean(raw_value)
+    upper = cleaned.upper()
+    if "REVISE" in upper or "FLAG" in upper:
+        return False
+    return upper.startswith("ACCEPT")
+
+recommendations = []
+for line in text.splitlines():
+    m = re.match(r"^\s*RECOMMENDATION:\s*(.+?)\s*$", line, flags=re.IGNORECASE)
+    if m:
+        recommendations.append(m.group(1))
+        continue
+    m = re.match(r"^\s*-?\s*Recommendation:\s*(.+?)\s*$", line, flags=re.IGNORECASE)
+    if m:
+        recommendations.append(m.group(1))
+        continue
+
+if not recommendations:
+    print(f"ERROR: {label} does not contain a recommendation line: {path}", file=sys.stderr)
+    raise SystemExit(2)
+
+last = recommendations[-1]
+if is_accept(last):
+    raise SystemExit(0)
+
+print(f"ERROR: {label} does not contain RECOMMENDATION: ACCEPT: {path}", file=sys.stderr)
+raise SystemExit(2)
+PY
+}
+
+require_feature_start_gates() {
+    local tasks_json="$1"
+    local feature_dir="$2"
+
+    local quality_gate_report="${feature_dir}/quality_gate_report.md"
+    report_recommends_accept "${quality_gate_report}" "quality gate report (quality_gate_report.md)"
+
+    local execution_gates
+    execution_gates="$(jq -r '.meta.execution_gates // false' "${tasks_json}")"
+    if [[ "${execution_gates}" == "true" ]]; then
+        local preflight_report="${feature_dir}/execution_preflight_report.md"
+        report_recommends_accept "${preflight_report}" "execution preflight report (execution_preflight_report.md)"
+    fi
+}
+
+require_task_deps_completed() {
+    local tasks_json="$1"
+    local task_id="$2"
+    python3 - "${tasks_json}" "${task_id}" <<'PY'
+import json
+import sys
+
+tasks_path = sys.argv[1]
+task_id = sys.argv[2]
+
+with open(tasks_path, "r", encoding="utf-8") as f:
+    data = json.load(f)
+
+tasks = {
+    t.get("id"): t
+    for t in data.get("tasks", [])
+    if isinstance(t, dict) and isinstance(t.get("id"), str)
+}
+task = tasks.get(task_id)
+if not task:
+    print(f"ERROR: task not found: {task_id}", file=sys.stderr)
+    raise SystemExit(2)
+
+deps = task.get("depends_on") or []
+if not isinstance(deps, list):
+    print(f"ERROR: {task_id}.depends_on must be an array", file=sys.stderr)
+    raise SystemExit(2)
+
+for dep in deps:
+    dep_task = tasks.get(dep)
+    if dep_task is None:
+        # External deps are allowed via meta.external_task_ids; task_start can't validate them.
+        continue
+    status = dep_task.get("status")
+    if status != "completed":
+        print(
+            f"ERROR: cannot start {task_id}: depends_on {dep} is not completed (status={status!r})",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+PY
+}
+
 TASK_JSON="$(jq -c --arg id "${TASK_ID}" '.tasks[] | select(.id==$id)' "${TASKS_JSON}")" || true
 if [[ -z "${TASK_JSON}" ]]; then
     die "Task not found in tasks.json: ${TASK_ID}"
@@ -190,6 +305,14 @@ case "${TASK_TYPE}" in
         die "task_start only supports code/test/integration tasks; got type=${TASK_TYPE}"
         ;;
 esac
+
+# Feature-level start gates are execution-time guardrails: refuse to start worktrees unless the
+# Planning Pack is approved and (when enabled) the execution preflight gate recommends ACCEPT.
+require_feature_start_gates "${TASKS_JSON}" "${FEATURE_DIR_ABS}"
+
+# Task-level gating: refuse to start unless depends_on tasks are completed.
+require_task_deps_completed "${TASKS_JSON}" "${TASK_ID}"
+
 if [[ -z "${WORKTREE_RELPATH}" || "${WORKTREE_RELPATH}" == "null" ]]; then
     die "tasks.json task.worktree must be set for ${TASK_ID}"
 fi

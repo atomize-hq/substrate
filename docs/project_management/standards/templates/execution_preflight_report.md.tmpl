@@ -14,41 +14,67 @@ RECOMMENDATION: **ACCEPT** | **REVISE**
 
 ## Inputs Reviewed
 
+- [ ] Planning quality gate is `ACCEPT` (`{{FEATURE_DIR}}/quality_gate_report.md`)
 - [ ] ADR accepted and still matches intent
 - [ ] Planning Pack complete (`plan.md`, `tasks.json`, `session_log.md`, specs, kickoff prompts)
 - [ ] Triad sizing is appropriate (each slice is one behavior delta; no “grab bag” slices)
-- [ ] Cross-platform plan is explicit (`tasks.json` meta: platforms + WSL mode if needed)
-- [ ] `manual_testing_playbook.md` exists when required and is runnable
-- [ ] Smoke scripts exist where required and map to the manual playbook
+- [ ] Required planning artifacts exist (when required by planning standards): `integration_map.md`, `manual_testing_playbook.md`
+- [ ] Cross-platform plan is explicit (tasks.json meta: behavior + CI parity platforms, plus WSL mode if needed)
 
-## Cross-Platform Coverage (if applicable)
+## 0) Slice Sizing (one behavior delta each)
 
-- Declared platforms: (from `tasks.json` meta)
-- WSL required: yes/no
-- WSL task mode: bundled/separate (if required)
+- Slices reviewed:
+- Any required splits before starting execution:
 
-## Smoke ↔ Manual Parity Check
+## 1) Cross-Platform Coverage (explicit and correct)
 
-Smoke scripts should mimic the manual playbook by running the same commands/workflows and validating exit codes + key output.
+From `{{FEATURE_DIR}}/tasks.json` meta:
+- Declared behavior platforms (smoke required): `[...]`
+- Declared CI parity platforms (parity required): `[...]` (legacy alias: `platforms_required`)
+- WSL required: `true|false`
+- WSL task mode: `bundled|separate` (when WSL required)
 
+Notes:
+- If WSL coverage is required, confirm `meta.wsl_required=true` and `meta.wsl_task_mode` is set correctly.
+- If using the platform-fix integration model, confirm tasks exist per slice:
+  - `X-integ-core`, optional `X-integ-<platform>` (CI parity platforms + optional WSL task when `wsl_task_mode="separate"`), and `X-integ` final.
+
+## 2) Smoke Scripts Are Not “Toy” Checks
+
+Smoke scripts must be a runnable, minimal version of how a careful human would validate the feature.
+
+Manual playbook (when required):
+- `{{FEATURE_DIR}}/manual_testing_playbook.md`
+
+Smoke scripts to validate (only required for behavior platforms; parity-only platforms may be explicit no-ops):
 - Linux smoke: `{{FEATURE_DIR}}/smoke/linux-smoke.sh`
 - macOS smoke: `{{FEATURE_DIR}}/smoke/macos-smoke.sh`
 - Windows smoke: `{{FEATURE_DIR}}/smoke/windows-smoke.ps1`
 
-Notes:
-- (Record any gaps between smoke and manual coverage, and what must change before starting C0.)
+Parity notes (map smoke ↔ manual; include concrete assertions):
+- Manual step(s):
+  - Smoke command(s):
+  - Expected output/assertion(s):
 
-## CI Dispatch Readiness (if applicable)
+Gaps (must fix before execution begins):
+- 
 
-- [ ] Dispatch commands in integration tasks are correct and runnable
-- [ ] Required self-hosted runners exist and are labeled correctly
+## 3) CI Dispatch Path Is Runnable (if applicable)
+
+Integration task dispatch commands (copy verbatim from `tasks.json` integration checklists):
+- CI compile parity:
+- Feature Smoke dispatch:
+
+Runner readiness:
+- Required self-hosted runners exist and are labeled correctly:
 
 Run ids/URLs (if executed during preflight):
-- Linux:
-- macOS:
-- Windows:
-- WSL:
+- CI compile parity:
+- Linux smoke:
+- macOS smoke:
+- Windows smoke:
+- WSL smoke:
 
-## Required Fixes Before Starting C0 (if any)
+## 4) Required Fixes Before Starting C0 (if any)
 
 - 
