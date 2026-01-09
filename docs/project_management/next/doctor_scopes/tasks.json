@@ -202,7 +202,7 @@
       "name": "Integration platform-fix: linux (behavior + CI parity)",
       "type": "integration",
       "phase": "DS0",
-      "status": "pending",
+      "status": "completed",
       "description": "Linux platform-fix integration task. Runs the feature-local Linux smoke script via CI and fixes any Linux-only issues surfaced by smoke.",
       "references": [
         "docs/project_management/next/doctor_scopes/DS0-spec.md",
@@ -246,7 +246,7 @@
       "name": "Integration platform-fix: macos (behavior + CI parity)",
       "type": "integration",
       "phase": "DS0",
-      "status": "pending",
+      "status": "completed",
       "description": "macOS platform-fix integration task. Runs the feature-local macOS smoke script via CI and fixes any macOS-only issues surfaced by smoke.",
       "references": [
         "docs/project_management/next/doctor_scopes/DS0-spec.md",
@@ -290,7 +290,7 @@
       "name": "Integration platform-fix: windows (CI parity only)",
       "type": "integration",
       "phase": "DS0",
-      "status": "pending",
+      "status": "completed",
       "description": "Windows CI parity fix task (compile/test/lint only; no behavioral smoke required for this feature on Windows).",
       "references": [
         "docs/project_management/next/doctor_scopes/DS0-spec.md"
