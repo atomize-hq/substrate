@@ -611,7 +611,6 @@ echo pass
                             "substrate world doctor: internal error: failed to create tokio runtime: {err}"
                         );
                     }
-                    exit_code = 1;
                     None
                 }
             }
