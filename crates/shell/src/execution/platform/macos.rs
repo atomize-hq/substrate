@@ -105,6 +105,7 @@ mod world_doctor_macos {
                 "limactl",
                 &[
                     "shell",
+                    "--workdir=/",
                     "substrate",
                     "sudo",
                     "-n",
@@ -128,13 +129,14 @@ mod world_doctor_macos {
             "limactl",
             &[
                 "shell",
+                "--workdir=/",
                 "substrate",
                 "sudo",
                 "-n",
                 "sh",
                 "-c",
                 r#"
-set -euo pipefail
+set -eu
 exec 2>&1
 if ! grep -qs ' /sys/kernel/security ' /proc/mounts; then
   mount -t securityfs securityfs /sys/kernel/security || true
@@ -171,18 +173,19 @@ cat /sys/kernel/security/landlock/abi_version
         };
 
         let probe_output = runner.run(
-            "limactl",
-            &[
-                "shell",
-                "substrate",
-                "sudo",
-                "-n",
-                "timeout",
-                "10",
-                "sh",
-                "-c",
-                r#"
-set -euo pipefail
+                "limactl",
+                &[
+                    "shell",
+                    "--workdir=/",
+                    "substrate",
+                    "sudo",
+                    "-n",
+                    "timeout",
+                    "10",
+                    "sh",
+                    "-c",
+                    r#"
+set -eu
 exec 2>&1
 modprobe overlay >/dev/null 2>&1 || true
 dir="$(mktemp -d)"
@@ -332,6 +335,7 @@ echo pass
                     "limactl",
                     &[
                         "shell",
+                        "--workdir=/",
                         "substrate",
                         "systemctl",
                         "is-active",
@@ -512,6 +516,7 @@ echo pass
                     "limactl",
                     &[
                         "shell",
+                        "--workdir=/",
                         "substrate",
                         "systemctl",
                         "is-active",
@@ -607,6 +612,7 @@ echo pass
                             "limactl",
                             &[
                                 "shell",
+                                "--workdir=/",
                                 "substrate",
                                 "sudo",
                                 "-n",
@@ -896,6 +902,7 @@ echo pass
                     "limactl".into(),
                     vec![
                         "shell".into(),
+                        "--workdir=/".into(),
                         "substrate".into(),
                         "systemctl".into(),
                         "is-active".into(),
