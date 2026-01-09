@@ -152,7 +152,11 @@ fi
 
 head_sha="$(git rev-parse "${CHECKOUT_REF}")"
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
-temp_branch="tmp/ci-testing/${ts}"
+temp_branch_prefix="tmp/ci-testing"
+if [[ "${WORKFLOW}" == ".github/workflows/ci-compile-parity.yml" ]]; then
+    temp_branch_prefix="tmp/ci-compile-parity"
+fi
+temp_branch="${temp_branch_prefix}/${ts}"
 
 echo "HEAD: ${head_sha}" >&2
 echo "Temp branch: ${temp_branch}" >&2
@@ -164,17 +168,37 @@ fi
 
 echo "Dispatching workflow: ${WORKFLOW}" >&2
 echo "Workflow ref: ${WORKFLOW_REF}" >&2
-dispatch_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+effective_workflow="${WORKFLOW}"
+effective_ref="${WORKFLOW_REF}"
 
-if ! run_with_timeout "${GH_TIMEOUT_SECS}" gh workflow run "${WORKFLOW}" --ref "${WORKFLOW_REF}" -f checkout_ref="${temp_branch}" >&2; then
-    die "failed to dispatch workflow via gh (workflow=${WORKFLOW} ref=${WORKFLOW_REF})"
+if [[ "${WORKFLOW}" == ".github/workflows/ci-compile-parity.yml" ]]; then
+    # GitHub only registers workflow_dispatch-capable workflows that exist on the default branch.
+    # When a feature branch introduces a new workflow (like ci-compile-parity), dispatching by path
+    # can 404. In that case, fall back to CI Testing, and use the tmp branch prefix to activate
+    # the compile-parity mode inside ci-testing.yml.
+    repo="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)"
+    workflow_file="$(basename "${WORKFLOW}")"
+    if [[ -z "${repo}" ]] || ! gh api "repos/${repo}/actions/workflows/${workflow_file}" >/dev/null 2>&1; then
+        echo "WARN: ${WORKFLOW} not registered on default branch; falling back to .github/workflows/ci-testing.yml (compile-parity via checkout_ref prefix)" >&2
+        effective_workflow=".github/workflows/ci-testing.yml"
+    fi
 fi
+
+dispatch_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+dispatch_err="$(mktemp)"
+if ! run_with_timeout "${GH_TIMEOUT_SECS}" gh workflow run "${effective_workflow}" --ref "${effective_ref}" -f checkout_ref="${temp_branch}" >/dev/null 2>"${dispatch_err}"; then
+    err_msg="$(cat "${dispatch_err}" || true)"
+    echo "${err_msg}" >&2
+    rm -f "${dispatch_err}" >/dev/null 2>&1 || true
+    die "failed to dispatch workflow via gh (workflow=${effective_workflow} ref=${effective_ref})"
+fi
+rm -f "${dispatch_err}" >/dev/null 2>&1 || true
 
 echo "Waiting for run to start..." >&2
 started_lookup_at="$(date +%s)"
 run_id=""
 while [[ -z "${run_id}" ]]; do
-    run_id="$(run_with_timeout "${GH_TIMEOUT_SECS}" gh run list --workflow "${WORKFLOW}" --event workflow_dispatch --branch "${WORKFLOW_REF}" --limit 30 --json databaseId,createdAt -q "map(select(.createdAt >= \"${dispatch_started}\")) | .[0].databaseId" 2>/dev/null || true)"
+    run_id="$(run_with_timeout "${GH_TIMEOUT_SECS}" gh run list --workflow "${effective_workflow}" --event workflow_dispatch --branch "${effective_ref}" --limit 30 --json databaseId,createdAt -q "map(select(.createdAt >= \"${dispatch_started}\")) | .[0].databaseId" 2>/dev/null || true)"
     if [[ -n "${run_id}" ]]; then
         break
     fi
@@ -230,7 +254,8 @@ passed_oses=""
 failed_oses=""
 failed_jobs=""
 if [[ -n "${jobs_json}" ]]; then
-    parsed="$(python3 - "${jobs_json}" <<'PY' || true
+    parsed="$(
+        python3 - "${jobs_json}" <<'PY'
 import json
 import sys
 
@@ -271,7 +296,7 @@ print(f"CI_PASSED_OSES={csv(passed_oses)}")
 print(f"CI_FAILED_OSES={csv(failed_oses)}")
 print(f"CI_FAILED_JOBS={csv(failed_jobs)}")
 PY
-)"
+    )" || true
     passed_oses="$(printf '%s\n' "${parsed}" | awk -F= '$1=="CI_PASSED_OSES"{sub($1"=","",$0); print $0}')"
     failed_oses="$(printf '%s\n' "${parsed}" | awk -F= '$1=="CI_FAILED_OSES"{sub($1"=","",$0); print $0}')"
     failed_jobs="$(printf '%s\n' "${parsed}" | awk -F= '$1=="CI_FAILED_JOBS"{sub($1"=","",$0); print $0}')"

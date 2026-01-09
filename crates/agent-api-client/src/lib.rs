@@ -6,7 +6,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use agent_api_types::{ApiError, ExecuteRequest, ExecuteResponse};
+use agent_api_types::{ApiError, ExecuteRequest, ExecuteResponse, WorldDoctorReportV1};
 use anyhow::{anyhow, Context, Result};
 use http_body_util::{BodyExt, Full};
 use hyper::{body::Bytes, Method, Request, Response, StatusCode};
@@ -130,6 +130,16 @@ impl AgentClient {
             .get("/v1/capabilities")
             .await
             .context("Failed to get capabilities")?;
+
+        self.parse_response(response).await
+    }
+
+    /// Get the agent-reported world doctor report (`GET /v1/doctor/world`).
+    pub async fn doctor_world(&self) -> Result<WorldDoctorReportV1> {
+        let response = self
+            .get("/v1/doctor/world")
+            .await
+            .context("Failed to get world doctor report")?;
 
         self.parse_response(response).await
     }

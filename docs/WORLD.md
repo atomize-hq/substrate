@@ -66,16 +66,20 @@ Windows (WSL backend) is functional but experimental. When the world backend is 
   systemctl status substrate-world-agent.service --no-pager
   sudo ls -l /run/substrate.sock
   sudo curl --unix-socket /run/substrate.sock http://localhost/v1/capabilities | jq .
-  substrate world doctor --json | jq '.world_socket'
+  substrate host doctor --json | jq '.host.world_socket'
   substrate --shim-status | grep 'World socket'
   ```
   The socket listing should show `root substrate 0660`. If it does not, rerun the provisioning
   helper or the installer to refresh the socket unit and group membership.
-  The doctor JSON now surfaces a `world_socket` block:
+  The host-scoped doctor JSON surfaces `host.world_socket`:
   ```json
   {
     "mode": "socket_activation",
     "socket_path": "/run/substrate.sock",
+    "socket_exists": true,
+    "probe_ok": true,
+    "probe_error": null,
+    "systemd_error": null,
     "systemd_socket": {
       "name": "substrate-world-agent.socket",
       "active_state": "listening",

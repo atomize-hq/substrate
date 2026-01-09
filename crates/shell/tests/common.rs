@@ -126,9 +126,38 @@ pub mod doctor_fixture {
 
         fn write_default_world_fixtures(&self) {
             self.write_world_doctor_fixture(json!({
-                "platform": "test-fixture",
+                "schema_version": 1,
+                "platform": std::env::consts::OS,
+                "world_enabled": true,
                 "ok": true,
-                "message": "fixture"
+                "host": {
+                    "platform": std::env::consts::OS,
+                    "ok": true,
+                    "world_fs_mode": "writable",
+                    "world_fs_isolation": "workspace",
+                    "world_fs_require_world": true
+                },
+                "world": {
+                    "status": "ok",
+                    "schema_version": 1,
+                    "ok": true,
+                    "collected_at_utc": "2026-01-08T00:00:00Z",
+                    "landlock": {
+                        "supported": true,
+                        "abi": 3,
+                        "reason": null
+                    },
+                    "world_fs_strategy": {
+                        "primary": "overlay",
+                        "fallback": "fuse",
+                        "probe": {
+                            "id": "enumeration_v1",
+                            "probe_file": ".substrate_enum_probe",
+                            "result": "pass",
+                            "failure_reason": null
+                        }
+                    }
+                }
             }));
             self.write_world_deps_fixture(json!({
                 "manifest": {

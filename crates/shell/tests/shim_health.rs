@@ -689,44 +689,45 @@ fn health_human_summary_respects_manager_parity_states() {
 fn health_json_surfaces_world_fs_mode_details() {
     let fixture = DoctorFixture::new(sample_manifest());
     fixture.write_world_doctor_fixture(json!({
-        "platform": "fixture-macos",
+        "schema_version": 1,
+        "platform": "macos",
+        "world_enabled": true,
         "ok": true,
-        "world_fs_mode": "read_only"
-    }));
-
-    let output = fixture
-        .command()
-        .arg("health")
-        .arg("--json")
-        .output()
-        .expect("failed to run substrate health --json");
-    assert!(output.status.success(), "health --json should succeed");
-
-    let payload: Value = serde_json::from_slice(&output.stdout).expect("valid JSON payload");
-    assert_eq!(
-        payload["shim"]["world"]["details"]["world_fs_mode"],
-        json!("read_only"),
-        "health JSON should preserve world_fs_mode from shim/world doctor snapshot"
-    );
-}
-
-#[test]
-fn health_json_surfaces_world_socket_and_landlock_details() {
-    let fixture = DoctorFixture::new(sample_manifest());
-    fixture.write_world_doctor_fixture(json!({
-        "platform": "fixture-linux",
-        "ok": true,
-        "world_fs_mode": "read_only",
-        "world_socket": {
-            "mode": "socket_activation",
-            "path": "/run/substrate.sock",
-            "socket_exists": true,
-            "probe_ok": true
+        "host": {
+            "platform": "macos",
+            "ok": true,
+            "world_fs_mode": "read_only",
+            "world_fs_isolation": "workspace",
+            "world_fs_require_world": true,
+            "lima": {
+                "installed": true,
+                "virtualization": true,
+                "vm_status": "Running",
+                "service_active": true,
+                "agent_caps_ok": true,
+                "vsock_proxy": true
+            }
         },
-        "landlock": {
-            "supported": true,
-            "abi": 1,
-            "reason": null
+        "world": {
+            "status": "ok",
+            "schema_version": 1,
+            "ok": true,
+            "collected_at_utc": "2026-01-08T00:00:00Z",
+            "landlock": {
+                "supported": true,
+                "abi": 3,
+                "reason": null
+            },
+            "world_fs_strategy": {
+                "primary": "overlay",
+                "fallback": "fuse",
+                "probe": {
+                    "id": "enumeration_v1",
+                    "probe_file": ".substrate_enum_probe",
+                    "result": "pass",
+                    "failure_reason": null
+                }
+            }
         }
     }));
 
@@ -740,19 +741,83 @@ fn health_json_surfaces_world_socket_and_landlock_details() {
 
     let payload: Value = serde_json::from_slice(&output.stdout).expect("valid JSON payload");
     assert_eq!(
-        payload["shim"]["world"]["details"]["world_socket"]["path"],
+        payload["shim"]["world"]["details"]["host"]["world_fs_mode"],
+        json!("read_only"),
+        "health JSON should preserve world_fs_mode from shim/world doctor snapshot"
+    );
+}
+
+#[test]
+fn health_json_surfaces_world_socket_and_landlock_details() {
+    let fixture = DoctorFixture::new(sample_manifest());
+    fixture.write_world_doctor_fixture(json!({
+        "schema_version": 1,
+        "platform": "linux",
+        "world_enabled": true,
+        "ok": true,
+        "host": {
+            "platform": "linux",
+            "ok": true,
+            "world_fs_mode": "read_only",
+            "world_fs_isolation": "workspace",
+            "world_fs_require_world": true,
+            "world_socket": {
+                "mode": "socket_activation",
+                "socket_path": "/run/substrate.sock",
+                "socket_exists": true,
+                "probe_ok": true,
+                "probe_error": null,
+                "systemd_error": null,
+                "systemd_socket": null,
+                "systemd_service": null
+            }
+        },
+        "world": {
+            "status": "ok",
+            "schema_version": 1,
+            "ok": true,
+            "collected_at_utc": "2026-01-08T00:00:00Z",
+            "landlock": {
+                "supported": true,
+                "abi": 1,
+                "reason": null
+            },
+            "world_fs_strategy": {
+                "primary": "overlay",
+                "fallback": "fuse",
+                "probe": {
+                    "id": "enumeration_v1",
+                    "probe_file": ".substrate_enum_probe",
+                    "result": "pass",
+                    "failure_reason": null
+                }
+            }
+        }
+    }));
+
+    let output = fixture
+        .command()
+        .arg("health")
+        .arg("--json")
+        .output()
+        .expect("failed to run substrate health --json");
+    assert!(output.status.success(), "health --json should succeed");
+
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("valid JSON payload");
+    assert_eq!(
+        payload["shim"]["world"]["details"]["host"]["world_socket"]["socket_path"],
         json!("/run/substrate.sock")
     );
     assert_eq!(
-        payload["shim"]["world"]["details"]["world_socket"]["probe_ok"],
+        payload["shim"]["world"]["details"]["host"]["world_socket"]["probe_ok"],
         json!(true)
     );
     assert_eq!(
-        payload["shim"]["world"]["details"]["landlock"]["supported"],
+        payload["shim"]["world"]["details"]["world"]["landlock"]["supported"],
         json!(true)
     );
     assert_eq!(
-        payload["shim"]["world"]["details"]["landlock"]["abi"],
+        payload["shim"]["world"]["details"]["world"]["landlock"]["abi"],
         json!(1)
     );
 }
