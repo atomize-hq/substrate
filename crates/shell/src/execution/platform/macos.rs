@@ -550,6 +550,14 @@ mod world_doctor_macos {
         use std::collections::VecDeque;
 
         use std::cell::RefCell;
+        use std::io::{Read, Write};
+        use std::os::unix::net::{UnixListener, UnixStream};
+        use std::path::{Path, PathBuf};
+        use std::sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        };
+        use std::thread;
 
         struct MockRunner {
             responses: RefCell<VecDeque<(String, Vec<String>, CommandOutput)>>,
@@ -594,9 +602,92 @@ mod world_doctor_macos {
             }
         }
 
+        struct AgentSocketGuard {
+            path: PathBuf,
+            shutdown: Arc<AtomicBool>,
+            handle: Option<thread::JoinHandle<()>>,
+        }
+
+        impl AgentSocketGuard {
+            fn start(path: &Path) -> Self {
+                if let Some(parent) = path.parent() {
+                    std::fs::create_dir_all(parent).expect("create socket parent");
+                }
+                let _ = std::fs::remove_file(path);
+                let listener = UnixListener::bind(path).expect("bind stub socket");
+
+                let socket_path = path.to_path_buf();
+                let shutdown = Arc::new(AtomicBool::new(false));
+                let shutdown_flag = shutdown.clone();
+
+                let handle = thread::spawn(move || {
+                    while !shutdown_flag.load(Ordering::SeqCst) {
+                        let (mut stream, _) = match listener.accept() {
+                            Ok(pair) => pair,
+                            Err(_) => continue,
+                        };
+                        let mut buf = [0u8; 4096];
+                        let read = stream.read(&mut buf).unwrap_or(0);
+                        let request = String::from_utf8_lossy(&buf[..read]);
+                        let first_line = request.lines().next().unwrap_or("");
+                        if first_line.starts_with("GET /v1/capabilities") {
+                            write_response(
+                                &mut stream,
+                                r#"{"version":"v1","features":["execute"],"backend":"world-agent","platform":"linux"}"#,
+                            );
+                        } else if first_line.starts_with("GET /v1/doctor/world") {
+                            write_response(
+                                &mut stream,
+                                r#"{"schema_version":1,"ok":true,"collected_at_utc":"2026-01-08T00:00:00Z","landlock":{"supported":true,"abi":3,"reason":null},"world_fs_strategy":{"primary":"overlay","fallback":"fuse","probe":{"id":"enumeration_v1","probe_file":".substrate_enum_probe","result":"pass","failure_reason":null}}}"#,
+                            );
+                        } else {
+                            let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n");
+                        }
+                    }
+
+                    let _ = std::fs::remove_file(&socket_path);
+                });
+
+                Self {
+                    path: socket_path,
+                    shutdown,
+                    handle: Some(handle),
+                }
+            }
+        }
+
+        impl Drop for AgentSocketGuard {
+            fn drop(&mut self) {
+                self.shutdown.store(true, Ordering::SeqCst);
+                let _ = UnixStream::connect(&self.path);
+                if let Some(handle) = self.handle.take() {
+                    let _ = handle.join();
+                }
+            }
+        }
+
+        fn write_response(stream: &mut UnixStream, body: &str) {
+            let reply = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = stream.write_all(reply.as_bytes());
+        }
+
         #[test]
         fn doctor_ok_json() {
             let vm_json = r#"{"status":"Running"}"#;
+            let temp = tempfile::tempdir().expect("tempdir");
+            let home = temp.path();
+            let sock = home.join(".substrate/sock/agent.sock");
+            let _sock_guard = AgentSocketGuard::start(&sock);
+
+            let prev_home = std::env::var_os("HOME");
+            std::env::set_var("HOME", home);
+            let prev_enabled = std::env::var_os("SUBSTRATE_WORLD_ENABLED");
+            std::env::set_var("SUBSTRATE_WORLD_ENABLED", "1");
+
             let responses = vec![
                 (
                     "limactl".into(),
@@ -618,79 +709,25 @@ mod world_doctor_macos {
                     vec![
                         "shell".into(),
                         "substrate".into(),
-                        "uname".into(),
-                        "-a".into(),
-                    ],
-                    success_out("Linux"),
-                ),
-                (
-                    "limactl".into(),
-                    vec![
-                        "shell".into(),
-                        "substrate".into(),
                         "systemctl".into(),
                         "is-active".into(),
                         "substrate-world-agent".into(),
                     ],
                     success_out("active\n"),
                 ),
-                (
-                    "limactl".into(),
-                    vec![
-                        "shell".into(),
-                        "substrate".into(),
-                        "sudo".into(),
-                        "-n".into(),
-                        "test".into(),
-                        "-S".into(),
-                        "/run/substrate.sock".into(),
-                    ],
-                    success_out(""),
-                ),
-                (
-                    "limactl".into(),
-                    vec![
-                        "shell".into(),
-                        "substrate".into(),
-                        "sudo".into(),
-                        "-n".into(),
-                        "timeout".into(),
-                        "5".into(),
-                        "curl".into(),
-                        "--fail".into(),
-                        "--unix-socket".into(),
-                        "/run/substrate.sock".into(),
-                        "http://localhost/v1/capabilities".into(),
-                    ],
-                    success_out("{}"),
-                ),
-                (
-                    "limactl".into(),
-                    vec![
-                        "shell".into(),
-                        "substrate".into(),
-                        "which".into(),
-                        "nft".into(),
-                    ],
-                    success_out("/usr/sbin/nft\n"),
-                ),
-                (
-                    "limactl".into(),
-                    vec![
-                        "shell".into(),
-                        "substrate".into(),
-                        "df".into(),
-                        "-h".into(),
-                        "/".into(),
-                    ],
-                    success_out(
-                        "Filesystem size used avail use% mounted\n/dev/root 10G 5G 5G 50% /\n",
-                    ),
-                ),
             ];
             let runner = MockRunner::new(responses);
             let exit = run(true, &runner);
             assert_eq!(exit, 0);
+
+            match prev_home {
+                Some(value) => std::env::set_var("HOME", value),
+                None => std::env::remove_var("HOME"),
+            }
+            match prev_enabled {
+                Some(value) => std::env::set_var("SUBSTRATE_WORLD_ENABLED", value),
+                None => std::env::remove_var("SUBSTRATE_WORLD_ENABLED"),
+            }
         }
 
         #[test]
@@ -705,7 +742,7 @@ mod world_doctor_macos {
             ];
             let runner = MockRunner::new(responses);
             let exit = run(false, &runner);
-            assert_eq!(exit, 2);
+            assert_eq!(exit, 4);
         }
     }
 }
