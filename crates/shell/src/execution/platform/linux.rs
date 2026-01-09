@@ -1,6 +1,5 @@
 use crate::execution::socket_activation;
 use agent_api_client::AgentClient;
-use anyhow::anyhow;
 use serde_json::json;
 use std::io::{self, Read, Write};
 use std::os::unix::net::UnixStream;
@@ -436,40 +435,49 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
         exit_code = 3;
         json!({"status": "unreachable", "ok": false})
     } else {
-        let report = tokio::runtime::Runtime::new()
-            .map(|rt| {
-                rt.block_on(async {
-                    let client = AgentClient::unix_socket(activation_report.socket_path.as_str())?;
-                    client.doctor_world().await
-                })
-            })
-            .unwrap_or_else(|err| Err(anyhow!("failed to create tokio runtime: {err}")));
+        let report = match tokio::runtime::Runtime::new() {
+            Ok(rt) => Some(rt.block_on(async {
+                let client = AgentClient::unix_socket(activation_report.socket_path.as_str())?;
+                client.doctor_world().await
+            })),
+            Err(err) => {
+                if json_mode {
+                    eprintln!("substrate world doctor: internal error: failed to create tokio runtime: {err}");
+                }
+                exit_code = 1;
+                None
+            }
+        };
 
         match report {
-            Ok(report) => {
-                let status = if report.ok { "ok" } else { "missing_prereqs" };
-                let mut value = serde_json::to_value(report).unwrap_or_else(|_| json!({}));
-                if let Some(obj) = value.as_object_mut() {
-                    obj.insert("status".to_string(), json!(status));
-                }
-                if host_ok && value.get("ok").and_then(serde_json::Value::as_bool) == Some(true) {
-                    exit_code = 0;
-                } else {
-                    exit_code = 4;
-                }
-                value
-            }
-            Err(_) => {
-                if json_mode {
-                    if activation_report.is_socket_activated() {
-                        eprintln!("world-agent readiness (socket activation) request failed");
-                    } else {
-                        eprintln!("world-agent readiness request failed");
+            None => json!({"status": "unreachable", "ok": false}),
+            Some(report) => match report {
+                Ok(report) => {
+                    let status = if report.ok { "ok" } else { "missing_prereqs" };
+                    let mut value = serde_json::to_value(report).unwrap_or_else(|_| json!({}));
+                    if let Some(obj) = value.as_object_mut() {
+                        obj.insert("status".to_string(), json!(status));
                     }
+                    if host_ok && value.get("ok").and_then(serde_json::Value::as_bool) == Some(true)
+                    {
+                        exit_code = 0;
+                    } else {
+                        exit_code = 4;
+                    }
+                    value
                 }
-                exit_code = 3;
-                json!({"status": "unreachable", "ok": false})
-            }
+                Err(_) => {
+                    if json_mode {
+                        if activation_report.is_socket_activated() {
+                            eprintln!("world-agent readiness (socket activation) request failed");
+                        } else {
+                            eprintln!("world-agent readiness request failed");
+                        }
+                    }
+                    exit_code = 3;
+                    json!({"status": "unreachable", "ok": false})
+                }
+            },
         }
     };
 

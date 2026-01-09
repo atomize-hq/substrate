@@ -440,24 +440,36 @@ mod world_doctor_macos {
             let sock = dirs::home_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
                 .join(".substrate/sock/agent.sock");
-            let report = tokio::runtime::Runtime::new().ok().and_then(|rt| {
-                let sock_clone = sock.clone();
-                rt.block_on(async {
-                    if sock_clone.exists() {
-                        if let Ok(client) = AgentClient::unix_socket(&sock_clone) {
+            let report = match tokio::runtime::Runtime::new() {
+                Ok(rt) => {
+                    let sock_clone = sock.clone();
+                    Some(rt.block_on(async {
+                        if sock_clone.exists() {
+                            if let Ok(client) = AgentClient::unix_socket(&sock_clone) {
+                                if let Ok(report) = client.doctor_world().await {
+                                    return Some(report);
+                                }
+                            }
+                        }
+                        if let Ok(client) = AgentClient::tcp("127.0.0.1", 17788) {
                             if let Ok(report) = client.doctor_world().await {
                                 return Some(report);
                             }
                         }
+                        None
+                    }))
+                }
+                Err(err) => {
+                    if json_mode {
+                        eprintln!(
+                            "substrate world doctor: internal error: failed to create tokio runtime: {err}"
+                        );
                     }
-                    if let Ok(client) = AgentClient::tcp("127.0.0.1", 17788) {
-                        if let Ok(report) = client.doctor_world().await {
-                            return Some(report);
-                        }
-                    }
+                    exit_code = 1;
                     None
-                })
-            });
+                }
+            }
+            .flatten();
 
             match report {
                 Some(report) => {
@@ -474,7 +486,9 @@ mod world_doctor_macos {
                     value
                 }
                 None => {
-                    exit_code = 3;
+                    if exit_code != 1 {
+                        exit_code = 3;
+                    }
                     json!({"status": "unreachable", "ok": false})
                 }
             }
