@@ -661,28 +661,37 @@ async fn legacy_world_doctor_report_v1_via_execute(
     };
 
     let resp = client.execute(req).await?;
-    let stdout = String::from_utf8_lossy(&BASE64.decode(resp.stdout_b64.as_bytes()).unwrap_or_default())
-        .into_owned();
-    let stderr = String::from_utf8_lossy(&BASE64.decode(resp.stderr_b64.as_bytes()).unwrap_or_default())
-        .into_owned();
+    let stdout = String::from_utf8_lossy(
+        &BASE64
+            .decode(resp.stdout_b64.as_bytes())
+            .unwrap_or_default(),
+    )
+    .into_owned();
+    let stderr = String::from_utf8_lossy(
+        &BASE64
+            .decode(resp.stderr_b64.as_bytes())
+            .unwrap_or_default(),
+    )
+    .into_owned();
 
-    let (result, failure_reason) = if resp.exit == 0 && stdout.lines().any(|l| l == ".substrate_enum_probe") {
-        (WorldDoctorWorldFsStrategyProbeResultV1::Pass, None)
-    } else if resp.exit == 0 {
-        (
-            WorldDoctorWorldFsStrategyProbeResultV1::Fail,
-            Some("probe file missing from directory enumeration".to_string()),
-        )
-    } else {
-        (
-            WorldDoctorWorldFsStrategyProbeResultV1::Fail,
-            Some(format!(
-                "probe execute failed (exit={}): {}",
-                resp.exit,
-                stderr.trim()
-            )),
-        )
-    };
+    let (result, failure_reason) =
+        if resp.exit == 0 && stdout.lines().any(|l| l == ".substrate_enum_probe") {
+            (WorldDoctorWorldFsStrategyProbeResultV1::Pass, None)
+        } else if resp.exit == 0 {
+            (
+                WorldDoctorWorldFsStrategyProbeResultV1::Fail,
+                Some("probe file missing from directory enumeration".to_string()),
+            )
+        } else {
+            (
+                WorldDoctorWorldFsStrategyProbeResultV1::Fail,
+                Some(format!(
+                    "probe execute failed (exit={}): {}",
+                    resp.exit,
+                    stderr.trim()
+                )),
+            )
+        };
 
     let landlock = WorldDoctorLandlockV1 {
         supported: landlock.supported,
@@ -695,7 +704,8 @@ async fn legacy_world_doctor_report_v1_via_execute(
         result,
         failure_reason,
     };
-    let ok = landlock.supported && matches!(probe.result, WorldDoctorWorldFsStrategyProbeResultV1::Pass);
+    let ok =
+        landlock.supported && matches!(probe.result, WorldDoctorWorldFsStrategyProbeResultV1::Pass);
 
     Ok(WorldDoctorReportV1 {
         schema_version: 1,
