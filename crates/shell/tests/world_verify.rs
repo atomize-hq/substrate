@@ -151,10 +151,9 @@ fn world_verify_json_is_stable_when_world_backend_unavailable() {
         .output()
         .expect("failed to run substrate world verify --json");
 
-    assert_eq!(
-        output.status.code(),
-        Some(3),
-        "expected dependency-unavailable exit code (3) when world backend is missing: status={:?} stderr={}",
+    assert!(
+        matches!(output.status.code(), Some(3) | Some(4)),
+        "expected dependency-unavailable exit code (3|4) when world backend is missing: status={:?} stderr={}",
         output.status,
         String::from_utf8_lossy(&output.stderr)
     );

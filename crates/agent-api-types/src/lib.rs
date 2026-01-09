@@ -129,6 +129,7 @@ pub enum WorldDoctorWorldFsStrategyProbeResultV1 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde::{Deserialize, Serialize};
 
     #[test]
     fn serialize_stream_frame_roundtrip() {
@@ -178,5 +179,64 @@ mod tests {
         );
         let back: ExecuteRequest = serde_json::from_str(&json).expect("deserialize request");
         assert_eq!(back.world_fs_mode, Some(WorldFsMode::ReadOnly));
+    }
+
+    #[test]
+    fn world_doctor_report_v1_schema_round_trip() {
+        #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+        struct WorldDoctorReportV1 {
+            schema_version: u32,
+            ok: bool,
+            collected_at_utc: String,
+            landlock: LandlockReportV1,
+            world_fs_strategy: WorldFsStrategyReportV1,
+        }
+
+        #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+        struct LandlockReportV1 {
+            supported: bool,
+            abi: Option<u32>,
+            reason: Option<String>,
+        }
+
+        #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+        struct WorldFsStrategyReportV1 {
+            primary: String,
+            fallback: String,
+            probe: WorldFsStrategyProbeV1,
+        }
+
+        #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+        struct WorldFsStrategyProbeV1 {
+            id: String,
+            probe_file: String,
+            result: String,
+            failure_reason: Option<String>,
+        }
+
+        let report = WorldDoctorReportV1 {
+            schema_version: 1,
+            ok: true,
+            collected_at_utc: "2026-01-08T00:00:00Z".to_string(),
+            landlock: LandlockReportV1 {
+                supported: true,
+                abi: Some(3),
+                reason: None,
+            },
+            world_fs_strategy: WorldFsStrategyReportV1 {
+                primary: "overlay".to_string(),
+                fallback: "fuse".to_string(),
+                probe: WorldFsStrategyProbeV1 {
+                    id: "enumeration_v1".to_string(),
+                    probe_file: ".substrate_enum_probe".to_string(),
+                    result: "pass".to_string(),
+                    failure_reason: None,
+                },
+            },
+        };
+
+        let json = serde_json::to_string(&report).expect("serialize report");
+        let back: WorldDoctorReportV1 = serde_json::from_str(&json).expect("deserialize report");
+        assert_eq!(back, report);
     }
 }
