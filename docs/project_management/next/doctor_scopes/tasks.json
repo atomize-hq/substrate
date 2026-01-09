@@ -150,7 +150,7 @@
       "name": "Integration core: merge + local gates + dispatch smoke/parity",
       "type": "integration",
       "phase": "DS0",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge DS0 code+test branches, make local integration gates green, run CI compile parity preflight, then dispatch cross-platform Feature Smoke for behavior platforms to determine required platform-fix tasks.",
       "references": [
         "docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md",
