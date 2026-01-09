@@ -640,13 +640,13 @@ fn probe_world_socket(path: &str) -> io::Result<()> {
             "socket returned no data",
         ));
     }
-    if !std::str::from_utf8(&buf[..read])
-        .unwrap_or("")
-        .contains(" 200 ")
-    {
-        return Err(io::Error::other(
-            "capabilities probe returned non-200 response",
-        ));
+    let response = std::str::from_utf8(&buf[..read]).unwrap_or("");
+    if !response.contains(" 200 ") {
+        return Err(io::Error::other(format!(
+            "unexpected response: {}",
+            response.lines().next().unwrap_or("")
+        )));
+    }
     }
     Ok(())
 }
