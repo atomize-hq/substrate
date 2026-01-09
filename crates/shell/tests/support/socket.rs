@@ -66,7 +66,15 @@ impl AgentSocket {
                         let request = String::from_utf8_lossy(&buf[..read]);
                         let first_line = request.lines().next().unwrap_or("");
                         match response {
-                            SocketResponse::Capabilities => write_capabilities(&mut stream),
+                            SocketResponse::Capabilities => {
+                                if first_line.starts_with("GET /v1/capabilities") {
+                                    write_capabilities(&mut stream);
+                                } else if first_line.starts_with("GET /v1/doctor/world") {
+                                    write_world_doctor_report(&mut stream);
+                                } else {
+                                    let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n");
+                                }
+                            }
                             SocketResponse::CapabilitiesAndExecute {
                                 ref stdout,
                                 ref stderr,
@@ -75,6 +83,8 @@ impl AgentSocket {
                             } => {
                                 if first_line.starts_with("GET /v1/capabilities") {
                                     write_capabilities(&mut stream);
+                                } else if first_line.starts_with("GET /v1/doctor/world") {
+                                    write_world_doctor_report(&mut stream);
                                 } else if first_line.starts_with("POST /v1/execute") {
                                     let payload = json!({
                                         "exit": exit,
@@ -139,6 +149,31 @@ fn write_capabilities(stream: &mut UnixStream) {
         "backend": "world-agent",
         "platform": "linux",
         "listener_mode": "socket_activation"
+    })
+    .to_string();
+    write_response(stream, &body);
+}
+
+fn write_world_doctor_report(stream: &mut UnixStream) {
+    let body = json!({
+        "schema_version": 1,
+        "ok": true,
+        "collected_at_utc": "2026-01-08T00:00:00Z",
+        "landlock": {
+            "supported": true,
+            "abi": 3,
+            "reason": null
+        },
+        "world_fs_strategy": {
+            "primary": "overlay",
+            "fallback": "fuse",
+            "probe": {
+                "id": "enumeration_v1",
+                "probe_file": ".substrate_enum_probe",
+                "result": "pass",
+                "failure_reason": null
+            }
+        }
     })
     .to_string();
     write_response(stream, &body);

@@ -84,22 +84,24 @@ impl ActivationFixture {
 
 fn socket_field(payload: &Value) -> &Value {
     payload
-        .get("world_socket")
+        .get("host")
+        .and_then(|host| host.get("world_socket"))
+        .or_else(|| payload.get("world_socket"))
         .or_else(|| payload.get("agent_socket"))
         .expect("socket activation field missing in payload")
 }
 
 fn assert_socket_metadata(socket: &Value, expected_path: &Path) {
     let expected = expected_path.to_string_lossy();
+    let actual_socket_path = socket
+        .get("socket_path")
+        .and_then(Value::as_str)
+        .or_else(|| socket.get("path").and_then(Value::as_str))
+        .expect("socket JSON missing socket_path/path");
     assert_eq!(
-        socket.get("path").and_then(Value::as_str),
-        Some(expected.as_ref()),
-        "socket JSON missing path"
-    );
-    assert_eq!(
-        socket.get("socket_path").and_then(Value::as_str),
-        Some(expected.as_ref()),
-        "socket JSON missing socket_path"
+        actual_socket_path,
+        expected.as_ref(),
+        "socket JSON missing expected socket path"
     );
     assert_eq!(
         socket.get("socket_exists").and_then(Value::as_bool),

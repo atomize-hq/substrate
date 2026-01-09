@@ -1,12 +1,17 @@
 //! HTTP handlers for the world agent API.
 
 use crate::service::WorldAgentService;
-use agent_api_types::{ApiError, ExecuteRequest, ExecuteResponse};
+use agent_api_types::{
+    ApiError, ExecuteRequest, ExecuteResponse, WorldDoctorLandlockV1, WorldDoctorReportV1,
+    WorldDoctorWorldFsStrategyKindV1, WorldDoctorWorldFsStrategyProbeResultV1,
+    WorldDoctorWorldFsStrategyProbeV1, WorldDoctorWorldFsStrategyV1,
+};
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
     response::{IntoResponse, Json as ResponseJson, Response},
 };
+use chrono::SecondsFormat;
 use serde_json::{json, Value};
 
 /// Wrapper type to implement IntoResponse for ApiError
@@ -49,6 +54,79 @@ pub async fn capabilities() -> Result<ResponseJson<Value>, ApiErrorResponse> {
         "backend": "world-agent",
         "platform": std::env::consts::OS
     })))
+}
+
+/// Get agent-reported world enforcement readiness.
+pub async fn doctor_world() -> Result<ResponseJson<WorldDoctorReportV1>, ApiErrorResponse> {
+    let collected_at_utc = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+
+    #[cfg(target_os = "linux")]
+    let (landlock, probe) = {
+        let support = world::landlock::detect_support();
+
+        let probe_root = std::env::temp_dir();
+        let probe_raw = world::overlayfs::run_enumeration_probe(
+            "doctor_world",
+            substrate_common::WorldFsStrategy::Overlay,
+            &probe_root,
+        );
+
+        let probe_result = match probe_raw.result {
+            substrate_common::WorldFsStrategyProbeResult::Pass => {
+                WorldDoctorWorldFsStrategyProbeResultV1::Pass
+            }
+            substrate_common::WorldFsStrategyProbeResult::Fail => {
+                WorldDoctorWorldFsStrategyProbeResultV1::Fail
+            }
+        };
+
+        (
+            WorldDoctorLandlockV1 {
+                supported: support.supported,
+                abi: support.abi,
+                reason: support.reason,
+            },
+            WorldDoctorWorldFsStrategyProbeV1 {
+                id: probe_raw.id,
+                probe_file: probe_raw.probe_file,
+                result: probe_result,
+                failure_reason: probe_raw.failure_reason,
+            },
+        )
+    };
+
+    #[cfg(not(target_os = "linux"))]
+    let (landlock, probe) = {
+        (
+            WorldDoctorLandlockV1 {
+                supported: false,
+                abi: None,
+                reason: Some("landlock only supported on Linux".to_string()),
+            },
+            WorldDoctorWorldFsStrategyProbeV1 {
+                id: "enumeration_v1".to_string(),
+                probe_file: ".substrate_enum_probe".to_string(),
+                result: WorldDoctorWorldFsStrategyProbeResultV1::Fail,
+                failure_reason: Some("world fs probe unsupported on this platform".to_string()),
+            },
+        )
+    };
+
+    let ok =
+        landlock.supported && matches!(probe.result, WorldDoctorWorldFsStrategyProbeResultV1::Pass);
+    let report = WorldDoctorReportV1 {
+        schema_version: 1,
+        ok,
+        collected_at_utc,
+        landlock,
+        world_fs_strategy: WorldDoctorWorldFsStrategyV1 {
+            primary: WorldDoctorWorldFsStrategyKindV1::Overlay,
+            fallback: WorldDoctorWorldFsStrategyKindV1::Fuse,
+            probe,
+        },
+    };
+
+    Ok(ResponseJson(report))
 }
 
 /// Execute a command in the world.

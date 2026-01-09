@@ -138,7 +138,7 @@ ci-testing:
 
 .PHONY: ci-compile-parity
 ci-compile-parity:
-	@$(MAKE) ci-testing CI_WORKFLOW=.github/workflows/ci-compile-parity.yml
+	@$(MAKE) ci-testing CI_WORKFLOW=.github/workflows/ci-testing.yml
 
 # Dispatch defaults (override as needed)
 PLATFORM ?= linux

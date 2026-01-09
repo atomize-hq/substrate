@@ -246,8 +246,8 @@ manager and point `BASH_ENV` at `~/.substrate_bashenv` explicitly.
 
 ### World Commands
 
-- `substrate world doctor [--json]` – host readiness report (Linux namespaces,
-  macOS Lima, Windows WSL)
+- `substrate host doctor [--json]` – host readiness for world routing (host prerequisites + transport readiness)
+- `substrate world doctor [--json]` – world readiness report (includes host doctor + world-agent facts)
 - `substrate --no-world ...` – run commands directly on the host (no isolation)
 - `substrate --world ...` – force world isolation for a single invocation even
   when install/config/env disables it (metadata remains unchanged)

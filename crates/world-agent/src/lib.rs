@@ -244,6 +244,7 @@ fn prepare_socket_path(path: &Path) -> Result<()> {
 fn build_router(service: WorldAgentService) -> Router {
     Router::new()
         .route("/v1/capabilities", get(handlers::capabilities))
+        .route("/v1/doctor/world", get(handlers::doctor_world))
         .route("/v1/execute", post(handlers::execute))
         .route("/v1/execute/stream", post(handlers::execute_stream))
         .route("/v1/stream", get(handlers::stream))
