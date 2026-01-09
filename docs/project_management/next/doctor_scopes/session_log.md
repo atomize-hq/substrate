@@ -170,3 +170,23 @@
   - Updated `substrate world doctor` to emit the DS0 v1 envelope and query the world-agent endpoint; updated `world_verify` to parse the new envelope.
 - Commands run (with exit codes):
   - `make triad-task-finish TASK_ID="DS0-code"` (runs `cargo fmt` + `cargo clippy --workspace --all-targets -- -D warnings`) → exit `0`
+
+## START — 2026-01-09T17:27:54Z — integration — DS0-integ-windows
+- Worktree: `wt/dsc-ds0-integ-windows`
+- Branch: `dsc-ds0-integ-windows`
+- Orchestration branch: `feat/doctor-scopes`
+- Scope: Windows CI parity only (compile/lint/test parity; no behavioral smoke required).
+
+## END — 2026-01-09T18:11:22Z — integration — DS0-integ-windows
+- Worktree: `wt/dsc-ds0-integ-windows`
+- Branch: `dsc-ds0-integ-windows`
+- HEAD: `2493a81bc6cb2da172a7b6359480a435482e9341`
+- Summary:
+  - Ensured `make ci-compile-parity` works even when `.github/workflows/ci-compile-parity.yml` is not registered on the default branch by falling back to `.github/workflows/ci-testing.yml` and using a `checkout_ref` prefix convention to run compile-parity-only steps.
+- CI compile parity:
+  - RUN_ID: `20860950714`
+  - RUN_URL: `https://github.com/atomize-hq/substrate/actions/runs/20860950714`
+  - Result: `success` (`ubuntu-24.04`, `macos-14`, `windows-2022`)
+- Commands run (with exit codes):
+  - `make ci-compile-parity CI_WORKFLOW_REF="feat/doctor-scopes" CI_REMOTE=origin CI_CLEANUP=1` → exit `0`
+  - `make triad-task-finish TASK_ID="DS0-integ-windows"` → exit `0`
