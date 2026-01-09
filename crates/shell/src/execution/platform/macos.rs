@@ -280,7 +280,11 @@ mod world_doctor_macos {
                     }
                 }
             });
-            println!("{}", serde_json::to_string_pretty(&out).unwrap());
+            let payload = serde_json::to_string_pretty(&out).unwrap();
+            println!("{payload}");
+            if std::env::var_os("GITHUB_ACTIONS").is_some() {
+                eprintln!("SUBSTRATE_HOST_DOCTOR_JSON:\n{payload}");
+            }
         }
 
         if !world_enabled {
@@ -549,7 +553,11 @@ mod world_doctor_macos {
                 "host": host_value,
                 "world": world_value,
             });
-            println!("{}", serde_json::to_string_pretty(&out).unwrap());
+            let payload = serde_json::to_string_pretty(&out).unwrap();
+            println!("{payload}");
+            if std::env::var_os("GITHUB_ACTIONS").is_some() {
+                eprintln!("SUBSTRATE_WORLD_DOCTOR_JSON:\n{payload}");
+            }
         } else {
             println!("== World ==");
             match world_value.get("status").and_then(Value::as_str) {
