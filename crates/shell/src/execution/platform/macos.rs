@@ -111,10 +111,8 @@ mod world_doctor_macos {
             println!("== substrate host doctor ==");
         }
 
-        if !world_enabled {
-            if !json_mode {
-                fail("world isolation disabled by effective config (--no-world)");
-            }
+        if !world_enabled && !json_mode {
+            fail("world isolation disabled by effective config (--no-world)");
             // Continue gathering best-effort host facts.
         }
 
@@ -202,13 +200,11 @@ mod world_doctor_macos {
             false
         };
 
-        if !json_mode {
-            if can_probe_vm {
-                if service_active {
-                    pass("substrate-world-agent service active");
-                } else {
-                    fail("substrate-world-agent service not active");
-                }
+        if !json_mode && can_probe_vm {
+            if service_active {
+                pass("substrate-world-agent service active");
+            } else {
+                fail("substrate-world-agent service not active");
             }
         }
 
@@ -225,13 +221,11 @@ mod world_doctor_macos {
             }
         };
 
-        if !json_mode {
-            if can_probe_vm && service_active {
-                if agent_caps_ok {
-                    pass("world-agent reachable (capabilities probe)");
-                } else {
-                    fail("world-agent unreachable (capabilities probe)");
-                }
+        if !json_mode && can_probe_vm && service_active {
+            if agent_caps_ok {
+                pass("world-agent reachable (capabilities probe)");
+            } else {
+                fail("world-agent unreachable (capabilities probe)");
             }
         }
 
