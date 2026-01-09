@@ -95,6 +95,28 @@ mod world_doctor_macos {
         }
     }
 
+    fn probe_caps_in_vm(runner: &dyn CommandRunner) -> bool {
+        runner
+            .run(
+                "limactl",
+                &[
+                    "shell",
+                    "substrate",
+                    "sudo",
+                    "-n",
+                    "timeout",
+                    "5",
+                    "curl",
+                    "-sS",
+                    "--fail",
+                    "--unix-socket",
+                    "/run/substrate.sock",
+                    "http://localhost/v1/capabilities",
+                ],
+            )
+            .success
+    }
+
     pub(super) fn run_host(
         json_mode: bool,
         world_enabled: bool,
@@ -217,7 +239,7 @@ mod world_doctor_macos {
             if sock.exists() && probe_caps_uds(&sock) {
                 true
             } else {
-                probe_caps_tcp("127.0.0.1", 17788)
+                probe_caps_tcp("127.0.0.1", 17788) || probe_caps_in_vm(runner)
             }
         };
 
@@ -393,7 +415,7 @@ mod world_doctor_macos {
             if sock.exists() && probe_caps_uds(&sock) {
                 true
             } else {
-                probe_caps_tcp("127.0.0.1", 17788)
+                probe_caps_tcp("127.0.0.1", 17788) || probe_caps_in_vm(runner)
             }
         };
 
@@ -453,6 +475,28 @@ mod world_doctor_macos {
                         }
                         if let Ok(client) = AgentClient::tcp("127.0.0.1", 17788) {
                             if let Ok(report) = client.doctor_world().await {
+                                return Some(report);
+                            }
+                        }
+                        let output = runner.run(
+                            "limactl",
+                            &[
+                                "shell",
+                                "substrate",
+                                "sudo",
+                                "-n",
+                                "timeout",
+                                "5",
+                                "curl",
+                                "-sS",
+                                "--fail",
+                                "--unix-socket",
+                                "/run/substrate.sock",
+                                "http://localhost/v1/doctor/world",
+                            ],
+                        );
+                        if output.success {
+                            if let Ok(report) = serde_json::from_str(&output.stdout) {
                                 return Some(report);
                             }
                         }
