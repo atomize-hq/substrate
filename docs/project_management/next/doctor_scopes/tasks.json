@@ -332,7 +332,7 @@
       "name": "Integration final: merge platform fixes + confirm cross-platform green",
       "type": "integration",
       "phase": "DS0",
-      "status": "pending",
+      "status": "completed",
       "description": "Final integration: merge any platform-fix branches, ensure local gates are green, re-run behavioral smoke (linux+macos) and CI parity, then fill the DS0 closeout report.",
       "references": [
         "docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md",

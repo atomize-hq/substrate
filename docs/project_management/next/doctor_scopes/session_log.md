@@ -190,3 +190,24 @@
 - Commands run (with exit codes):
   - `make ci-compile-parity CI_WORKFLOW_REF="feat/doctor-scopes" CI_REMOTE=origin CI_CLEANUP=1` → exit `0`
   - `make triad-task-finish TASK_ID="DS0-integ-windows"` → exit `0`
+
+## START — 2026-01-09T18:04:55Z — integration — DS0-integ
+- Worktree: `wt/dsc-ds0-integ`
+- Branch: `dsc-ds0-integ`
+- Orchestration branch: `feat/doctor-scopes`
+- Scope: merge DS0 platform-fix branches, confirm local gates, re-run CI compile parity + linux/macos behavior smoke, and complete the DS0 closeout gate report.
+
+## END — 2026-01-09T18:34:04Z — integration — DS0-integ
+- Worktree: `wt/dsc-ds0-integ`
+- Branch: `dsc-ds0-integ`
+- HEAD: `ef90a5b0527c85310229ca4ec1fda580671ee039`
+- Summary:
+  - Merged `DS0-integ-core` plus platform fixes into `dsc-ds0-integ`; added Linux + macOS compatibility fallbacks for legacy world-agents missing `GET /v1/doctor/world`.
+  - Confirmed local gates: `make integ-checks` → exit `0`.
+  - Re-ran CI compile parity: RUN_ID `20861321448` (`success`) — `https://github.com/atomize-hq/substrate/actions/runs/20861321448`.
+  - Re-ran behavior smoke:
+    - Linux: RUN_ID `20861533380` (`success`) — `https://github.com/atomize-hq/substrate/actions/runs/20861533380`
+    - macOS: RUN_ID `20861578627` (`success`) — `https://github.com/atomize-hq/substrate/actions/runs/20861578627`
+  - Finished integration task and merged back to orchestration:
+    - `make triad-task-finish TASK_ID="DS0-integ"` → exit `0`
+    - Merge commit on `feat/doctor-scopes`: `7cc874f`
