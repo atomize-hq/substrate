@@ -69,3 +69,37 @@
 - Next steps:
   - Run the planning lint and quality gate review and update `docs/project_management/next/doctor_scopes/quality_gate_report.md`.
   - Run `F0-exec-preflight` and update `docs/project_management/next/doctor_scopes/execution_preflight_report.md`.
+
+## START — 2026-01-09T02:00:15Z — remediation — Planning Quality Gate remediation
+- Scope: remediate Planning Pack defects from `docs/project_management/next/doctor_scopes/quality_gate_report.md` without writing production code.
+- Findings addressed:
+  - Finding 003 (Decision register template)
+  - Finding 004 (Decision ↔ task traceability in `tasks.json`)
+  - Finding 005 (World doctor exit code discriminator)
+  - Finding 006 (Windows playbook world doctor assertions)
+- Files targeted:
+  - `docs/project_management/next/doctor_scopes/decision_register.md`
+  - `docs/project_management/next/doctor_scopes/tasks.json`
+  - `docs/project_management/next/doctor_scopes/DS0-spec.md`
+  - `docs/project_management/next/doctor_scopes/manual_testing_playbook.md`
+  - `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`
+
+## END — 2026-01-09T02:00:23Z — remediation — Planning Quality Gate remediation
+- Summary:
+  - Updated the decision register to the required template and added explicit follow-up task mappings.
+  - Added DR id traceability in `tasks.json` references for `DS0-code` and `DS0-test`.
+  - Defined the exit `3` vs `4` discriminator for `substrate world doctor` and aligned ADR/spec JSON status contracts.
+  - Strengthened the Windows manual playbook world doctor command to assert `unsupported` contract fields and exit code `4`.
+- Files changed:
+  - `docs/project_management/next/doctor_scopes/decision_register.md`
+  - `docs/project_management/next/doctor_scopes/tasks.json`
+  - `docs/project_management/next/doctor_scopes/DS0-spec.md`
+  - `docs/project_management/next/doctor_scopes/manual_testing_playbook.md`
+  - `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`
+- Commands run (with exit codes):
+  - `git checkout -b feat/doctor-scopes` → exit `0`
+  - `make adr-fix ADR=docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md` → exit `0`
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/doctor_scopes"` → exit `0`
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/doctor_scopes"` → exit `0`
+  - `jq -e . "docs/project_management/next/doctor_scopes/tasks.json" >/dev/null` → exit `0`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit `0`

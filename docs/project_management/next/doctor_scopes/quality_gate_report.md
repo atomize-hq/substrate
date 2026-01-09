@@ -187,3 +187,117 @@ make planning-validate FEATURE_DIR="$FEATURE_DIR"
   - Bring `docs/project_management/next/doctor_scopes/decision_register.md` up to the required decision template (including follow-up tasks).
   - Add DR id references in `docs/project_management/next/doctor_scopes/tasks.json` (or equivalent traceability mechanism that meets the standard).
   - Clarify and align the exit code + JSON status contracts for `substrate world doctor`.
+
+---
+
+# Planning Quality Gate Report — doctor_scopes (Pass 2 / remediation re-review)
+
+## Metadata
+- Feature directory: `docs/project_management/next/doctor_scopes/`
+- Reviewed commit: `852bc1d36f86c6f3a353a59ad9ece7d1816e2d94`
+- Reviewer: `remediation agent (Codex CLI)`
+- Date (UTC): `2026-01-09`
+- Recommendation: `ACCEPT`
+
+## Evidence: Commands Run (verbatim)
+
+```bash
+export FEATURE_DIR="docs/project_management/next/doctor_scopes"
+
+make planning-lint FEATURE_DIR="$FEATURE_DIR"
+# exit 0
+
+make planning-validate FEATURE_DIR="$FEATURE_DIR"
+# exit 0
+
+jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
+# exit 0
+
+jq -e . docs/project_management/next/sequencing.json >/dev/null
+# exit 0
+```
+
+## Gate Results (PASS/FAIL with evidence)
+
+### 1) Zero-ambiguity contracts
+- Result: `PASS`
+- Evidence:
+  - `docs/project_management/next/doctor_scopes/DS0-spec.md` defines an explicit discriminator for world-doctor exit `3` vs `4` and adds `world.status=="not_provisioned"` (`DS0-spec.md` lines 52–70 and 161–170).
+- Notes: Exit code and JSON status semantics are implementable without platform-divergent interpretation.
+
+### 2) Decision quality (2 options, explicit tradeoffs, explicit selection)
+- Result: `PASS`
+- Evidence:
+  - `docs/project_management/next/doctor_scopes/decision_register.md` entries follow the required template, including explicit follow-up task mapping (example: `DR-0001` at line 10, `DR-0008` at line 256).
+- Notes: Each decision has exactly two viable options and a single selected recommendation.
+
+### 3) Cross-doc consistency (CLI/config/exit codes/paths)
+- Result: `PASS`
+- Evidence:
+  - Exit code discriminator is aligned between:
+    - `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md` (Exit codes section)
+    - `docs/project_management/next/doctor_scopes/DS0-spec.md` (Exit codes + JSON contracts)
+- Notes: ADR and spec describe the same exit code semantics and detection rules.
+
+### 4) Sequencing and dependency alignment
+- Result: `PASS`
+- Evidence:
+  - `docs/project_management/next/sequencing.json` contains sprint `doctor_scopes` with `DS0` spec.
+  - `docs/project_management/next/doctor_scopes/tasks.json` maintains the DS0 dependency graph (F0 → code/test → integ-core → platform-fix → integ).
+- Notes: No task starts before declared prerequisites.
+
+### 5) Testability and validation readiness
+- Result: `PASS`
+- Evidence:
+  - Windows manual playbook validates `unsupported` contract fields for world doctor and asserts exit code `4` (`docs/project_management/next/doctor_scopes/manual_testing_playbook.md` lines 84–90).
+  - Linux/macOS smoke scripts and manual playbook commands assert stable JSON keys/values and exit code expectations.
+- Notes: Manual and smoke validation are runnable and assert required contract fields.
+
+## Findings (must be exhaustive)
+
+### Finding 001 — Mechanical lint passes (required gate)
+- Status: `VERIFIED`
+- Evidence: `make planning-lint FEATURE_DIR="docs/project_management/next/doctor_scopes"` → exit `0`
+- Impact: Confirms the Planning Pack meets mechanical requirements (presence, hard bans, schema checks).
+- Fix required (exact): `none`
+
+### Finding 002 — Cross-platform parity task structure is present and wired
+- Status: `VERIFIED`
+- Evidence: `docs/project_management/next/doctor_scopes/tasks.json` meta `schema_version: 3` and required integration tasks exist and are dependency-wired.
+- Impact: Execution can proceed through core integration, platform-fix, then final aggregation without workflow drift.
+- Fix required (exact): `none`
+
+### Finding 003 — Decision register is audit-ready per repo standard
+- Status: `VERIFIED`
+- Evidence:
+  - `docs/project_management/next/doctor_scopes/decision_register.md` entries follow the required template and include follow-up tasks mapped to `tasks.json` IDs.
+- Impact: Decisions are auditable and actionable during triad execution.
+- Fix required (exact): `none`
+
+### Finding 004 — Decision ↔ task traceability is present in `tasks.json`
+- Status: `VERIFIED`
+- Evidence:
+  - `docs/project_management/next/doctor_scopes/tasks.json` references include DR ids for tasks that implement decisions (`DS0-code` and `DS0-test`).
+- Impact: Auditing can answer “which task implemented which decision.”
+- Fix required (exact): `none`
+
+### Finding 005 — `substrate world doctor` exit code contract is unambiguous
+- Status: `VERIFIED`
+- Evidence:
+  - `docs/project_management/next/doctor_scopes/DS0-spec.md` defines the `3` vs `4` discriminator and adds `world.status=="not_provisioned"`.
+  - `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md` aligns to the same discriminator.
+- Impact: Automation and scripts can rely on stable exit codes and statuses.
+- Fix required (exact): `none`
+
+### Finding 006 — Windows manual playbook validates the DS0 “unsupported” world doctor contract
+- Status: `VERIFIED`
+- Evidence:
+  - `docs/project_management/next/doctor_scopes/manual_testing_playbook.md` asserts `ok==false`, `host.status=="unsupported"`, `world.status=="unsupported"`, and exit code `4`.
+- Impact: Manual validation catches regressions in Windows unsupported semantics.
+- Fix required (exact): `none`
+
+## Decision: ACCEPT or FLAG
+
+### ACCEPT
+- Summary: Blocking defects from the prior pass are resolved; contracts are unambiguous, decisions are audit-ready, and validation steps are runnable.
+- Next step: Execution triads may begin.

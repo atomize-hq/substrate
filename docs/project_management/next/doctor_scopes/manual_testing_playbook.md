@@ -81,10 +81,10 @@ Commands:
 Expected:
 - Exit code `4`.
 
-### 2) World doctor explicit unsupported (or disabled)
+### 2) World doctor explicit unsupported
 
 Commands:
-- `substrate.exe world doctor --json | ConvertFrom-Json | % { if ($_.platform -ne \"windows\") { throw \"platform mismatch\" } }`
+- `$out = & substrate.exe world doctor --json; $code = $LASTEXITCODE; $obj = $out | ConvertFrom-Json; if ($obj.platform -ne \"windows\") { throw \"platform mismatch\" }; if ($obj.ok -ne $false) { throw \"ok must be false\" }; if ($obj.host.status -ne \"unsupported\") { throw \"expected host unsupported\" }; if ($obj.world.status -ne \"unsupported\") { throw \"expected world unsupported\" }; if ($code -ne 4) { throw \"expected exit code 4\" }`
 
 Expected:
 - Exit code `4`.

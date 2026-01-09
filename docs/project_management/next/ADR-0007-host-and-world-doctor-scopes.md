@@ -23,7 +23,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: cc61ffb769364aae542c1fca15f7abb407c2ae3dc7012462c74985b651c69399
+ADR_BODY_SHA256: 17f608b37d863a3ca196b75e164be79f4dce294cdc1e37f693984f8687aa926f
 ### Changes (operator-facing)
 - Split doctor into host vs world scopes (without requiring a guest-installed `substrate` CLI)
   - Existing: `substrate world doctor` is host-oriented on macOS (Lima/transport/service checks) and kernel-oriented on Linux (overlay/nft/cgroup + Landlock probe). On macOS it cannot report guest-kernel facts like Landlock ABI/support without manually running commands inside the VM.
@@ -81,8 +81,14 @@ Exit codes:
 - `0`: doctor report `ok=true` (all required checks passed)
 - `1`: unexpected internal error (bug, panic, unhandled I/O)
 - `2`: CLI usage/config error (invalid flags/args)
-- `3`: required dependency unavailable (world-agent unreachable when world is enabled)
-- `4`: not supported / missing prerequisites (platform unsupported; world disabled/not provisioned; agent reachable but cannot enforce required primitives)
+- `3`: required dependency unavailable (world enabled, transport prerequisites present, but world-agent unreachable)
+- `4`: not supported / missing prerequisites (platform unsupported; world disabled; world not provisioned; or agent reachable but cannot enforce required primitives)
+
+Discriminator for exit `3` vs `4` when world is enabled:
+- Exit `4` when transport prerequisites are not satisfied (not provisioned):
+  - Linux: agent socket path does not exist (`host.world_socket.socket_exists==false`)
+  - macOS: Lima prerequisites are not satisfied (`host.lima.installed==false`, `host.lima.virtualization==false`, `host.lima.vm_status!="Running"`, or `host.lima.service_active==false`)
+- Exit `3` when transport prerequisites above are satisfied but the world-agent request fails (connect/probe/HTTP failure).
 
 ### Config
 - No new configuration keys are introduced by default.

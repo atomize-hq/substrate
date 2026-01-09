@@ -51,10 +51,22 @@ Driven by:
 
 #### `substrate world doctor`
 - `0`: `ok=true` (both `host.ok=true` and `world.ok=true`)
-- `3`: world enabled but world-agent is unreachable (transport connect/probe/HTTP failure)
-- `4`: world disabled/not provisioned, or world-agent reachable but cannot enforce required primitives (`world.ok=false` due to missing prerequisites)
+- `3`: world enabled, transport prerequisites present, but world-agent is unreachable (transport connect/probe/HTTP failure)
+- `4`: not supported / missing prerequisites (world disabled; world not provisioned; or world-agent reachable but cannot enforce required primitives)
 - `2`: CLI usage/config error (invalid flags/args; invalid config/policy read)
 - `1`: unexpected internal error (I/O error, panic, bug)
+
+Discriminator for `3` (unreachable) vs `4` (not provisioned / missing prerequisites) when `world_enabled==true`:
+- Linux:
+  - Not provisioned (`4`): `host.world_socket.socket_exists==false`
+  - Unreachable (`3`): `host.world_socket.socket_exists==true` and either `host.world_socket.probe_ok==false` or the world-agent HTTP request fails
+- macOS:
+  - Not provisioned (`4`): one of:
+    - `host.lima.installed==false`
+    - `host.lima.virtualization==false`
+    - `host.lima.vm_status!="Running"`
+    - `host.lima.service_active==false`
+  - Unreachable (`3`): transport prerequisites above are present and the world-agent request fails (including `host.lima.agent_caps_ok==false`)
 
 ### Configuration
 - No new configuration keys are introduced by DS0.
@@ -147,9 +159,15 @@ Driven by:
   - world doctor: equals `host.ok && world.ok`.
 - `host`: `HostDoctorReportV1` (below).
 - `world`: present only for world doctor:
+  - when `platform=="windows"`: `world.status == "unsupported"` and `world.ok==false`;
   - when `world_enabled==false`: `world.status == "disabled"` and `world.ok==false`;
-  - when `world_enabled==true` but agent unreachable: `world.status == "unreachable"` and `world.ok==false`;
+  - when `world_enabled==true` and transport prerequisites are not satisfied: `world.status == "not_provisioned"` and `world.ok==false`;
+  - when `world_enabled==true` and transport prerequisites are satisfied but the world-agent is unreachable: `world.status == "unreachable"` and `world.ok==false`;
   - otherwise: `world` equals the agent’s `WorldDoctorReportV1` response plus `status == "ok"` when `ok==true` and `status == "missing_prereqs"` when `ok==false`.
+
+For `world.status` in `"unsupported"|"disabled"|"not_provisioned"|"unreachable"`, required stable fields are:
+- `status` (string enum)
+- `ok` (boolean)
 
 ### `HostDoctorReportV1` (platform-specific; stable per platform)
 
