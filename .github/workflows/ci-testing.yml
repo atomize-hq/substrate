@@ -47,11 +47,17 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install system dependencies (Linux)
-        if: runner.os == 'Linux'
+      - name: Install system dependencies (Linux, full)
+        if: runner.os == 'Linux' && !startsWith(inputs.checkout_ref, 'tmp/ci-compile-parity/')
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libseccomp-dev shellcheck shfmt
+
+      - name: Install system dependencies (Linux, compile parity)
+        if: runner.os == 'Linux' && startsWith(inputs.checkout_ref, 'tmp/ci-compile-parity/')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libseccomp-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -73,42 +79,49 @@ jobs:
       - name: cargo fmt
         run: cargo fmt --all -- --check
 
+      - name: cargo check (compile parity; all targets)
+        if: startsWith(inputs.checkout_ref, 'tmp/ci-compile-parity/')
+        run: cargo check --workspace --all-targets
+
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Cargo build (debug)
+        if: !startsWith(inputs.checkout_ref, 'tmp/ci-compile-parity/')
         run: cargo build --workspace
 
       - name: Build telemetry cdylib (Unix)
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && !startsWith(inputs.checkout_ref, 'tmp/ci-compile-parity/')
         run: cargo rustc -p substrate-telemetry --profile dist --crate-type=rlib,cdylib
 
       - name: Build telemetry cdylib (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && !startsWith(inputs.checkout_ref, 'tmp/ci-compile-parity/')
         shell: pwsh
         run: cargo rustc -p substrate-telemetry --profile dist --crate-type=rlib,cdylib
 
       - name: cargo test
+        if: !startsWith(inputs.checkout_ref, 'tmp/ci-compile-parity/')
         run: cargo test --workspace --all-targets
         env:
           RUST_TEST_THREADS: 1
 
       - name: Shell lint (Linux)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && !startsWith(inputs.checkout_ref, 'tmp/ci-compile-parity/')
         run: |
           git ls-files '*.sh' | xargs -r shellcheck -x -S warning
 
       - name: Substrate CLI smoke test (Linux/macOS)
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && !startsWith(inputs.checkout_ref, 'tmp/ci-compile-parity/')
         run: cargo run --bin substrate -- --version
 
       - name: Substrate CLI smoke test (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && !startsWith(inputs.checkout_ref, 'tmp/ci-compile-parity/')
         shell: pwsh
         run: cargo run --bin substrate -- --version
 
   docs-and-packaging:
     name: Docs & Packaging Checks
+    if: ${{ !startsWith(inputs.checkout_ref, 'tmp/ci-compile-parity/') }}
     needs: lint-and-test
     runs-on: ubuntu-24.04
 
@@ -153,6 +166,7 @@ jobs:
 
   cross-build:
     name: Cross Build (${{ matrix.target }})
+    if: ${{ !startsWith(inputs.checkout_ref, 'tmp/ci-compile-parity/') }}
     needs: lint-and-test
     runs-on: ubuntu-24.04
     strategy:
