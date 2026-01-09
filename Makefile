@@ -122,8 +122,9 @@ adr-fix:
 # =========================
 
 # CI dispatch defaults (override as needed)
-CI_WORKFLOW ?= .github/workflows/ci-testing-v2.yml
-CI_WORKFLOW_REF ?= testing
+CURRENT_REF := $(shell git branch --show-current 2>/dev/null)
+CI_WORKFLOW ?= .github/workflows/ci-testing.yml
+CI_WORKFLOW_REF ?= $(CURRENT_REF)
 CI_REMOTE ?= origin
 CI_CLEANUP ?= 1
 CI_CHECKOUT_REF ?=
@@ -131,6 +132,7 @@ CI_MODE ?=
 
 .PHONY: ci-testing
 ci-testing:
+	@if [ -z "$(CI_WORKFLOW_REF)" ]; then echo "ERROR: set CI_WORKFLOW_REF=<ref> (ref must not be main/testing; use the orchestration/task ref)"; exit 2; fi
 	@set -euo pipefail; \
 	args="--workflow \"$(CI_WORKFLOW)\" --workflow-ref \"$(CI_WORKFLOW_REF)\" --remote \"$(CI_REMOTE)\""; \
 	if [ -n "$(CI_CHECKOUT_REF)" ]; then args="$$args --checkout-ref \"$(CI_CHECKOUT_REF)\""; fi; \
@@ -140,7 +142,7 @@ ci-testing:
 
 .PHONY: ci-compile-parity
 ci-compile-parity:
-	@$(MAKE) ci-testing CI_WORKFLOW=.github/workflows/ci-testing-v2.yml CI_MODE=compile-parity
+	@$(MAKE) ci-testing CI_WORKFLOW=.github/workflows/ci-testing.yml CI_MODE=compile-parity
 
 # Dispatch defaults (override as needed)
 PLATFORM ?= linux
@@ -148,13 +150,14 @@ RUNNER_KIND ?= self-hosted
 RUN_WSL ?= 0
 RUN_INTEG_CHECKS ?= 0
 WORKFLOW ?= .github/workflows/feature-smoke.yml
-WORKFLOW_REF ?= testing
+WORKFLOW_REF ?= $(CURRENT_REF)
 REMOTE ?= origin
 CLEANUP ?= 1
 
 .PHONY: feature-smoke
 feature-smoke:
 	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/next/<feature>"; exit 2; fi
+	@if [ -z "$(WORKFLOW_REF)" ]; then echo "ERROR: set WORKFLOW_REF=<ref> (ref must not be main/testing; use the orchestration/task ref)"; exit 2; fi
 	@if [ "$(PLATFORM)" = "wsl" ] && [ "$(RUNNER_KIND)" != "self-hosted" ]; then echo "ERROR: PLATFORM=wsl requires RUNNER_KIND=self-hosted"; exit 2; fi
 	@if [ "$(RUN_WSL)" = "1" ] && [ "$(RUNNER_KIND)" != "self-hosted" ]; then echo "ERROR: RUN_WSL=1 requires RUNNER_KIND=self-hosted"; exit 2; fi
 	@set -euo pipefail; \

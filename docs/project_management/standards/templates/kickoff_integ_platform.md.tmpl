@@ -30,15 +30,15 @@ Do not edit planning docs inside the worktree.
 - Decide whether smoke is required for this platform (P3-008):
   - `jq -r '.meta.behavior_platforms_required // [] | join(",")' "{{FEATURE_DIR}}/tasks.json"`
   - If `{{PLATFORM}}` is in `behavior_platforms_required`, run Feature Smoke for this platform (repeat until green if you make fixes):
-    - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM={{PLATFORM}} RUNNER_KIND=self-hosted WORKFLOW_REF="testing" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+    - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM={{PLATFORM}} RUNNER_KIND=self-hosted WORKFLOW_REF="{{ORCH_BRANCH}}" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
     - If this is the Linux task and WSL coverage is required (see `tasks.json` meta: `wsl_required` + `wsl_task_mode`):
       - Bundled (default): dispatch with `RUN_WSL=1`:
-        - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=linux RUN_WSL=1 RUNNER_KIND=self-hosted WORKFLOW_REF="testing" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+        - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=linux RUN_WSL=1 RUNNER_KIND=self-hosted WORKFLOW_REF="{{ORCH_BRANCH}}" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
   - Otherwise, do **not** run Feature Smoke for this platform. Instead, treat this task as CI parity-only:
     - Prefer local parity fixes first (fmt/clippy/tests on this OS), then ask the operator to re-run CI parity gates from integ-core/final.
     - If you need an immediate cross-platform signal, run:
-      - `make ci-compile-parity CI_WORKFLOW_REF="testing" CI_REMOTE=origin CI_CLEANUP=1`
-      - `scripts/ci/dispatch_ci_testing.sh --workflow-ref "testing" --remote origin --cleanup --mode quick`
+      - `make ci-compile-parity CI_WORKFLOW_REF="{{ORCH_BRANCH}}" CI_REMOTE=origin CI_CLEANUP=1`
+      - `scripts/ci/dispatch_ci_testing.sh --workflow-ref "{{ORCH_BRANCH}}" --remote origin --cleanup --mode quick`
     - Fix compile/test/lint parity failures for this platform and re-run until green.
 
 ## End Checklist

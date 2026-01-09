@@ -17,7 +17,7 @@ Usage:
 
 What it does:
   - Creates a throwaway remote branch at HEAD
-  - Dispatches the workflow against the workflow ref (default: feat/policy_and_config), checking out the throwaway branch
+  - Dispatches the workflow against the workflow ref (default: current git branch), checking out the throwaway branch
   - Optionally waits and deletes the throwaway branch
 
 Requirements:
@@ -106,7 +106,7 @@ RUNNER_KIND="self-hosted"
 RUN_WSL=0
 RUN_INTEG_CHECKS=0
 WORKFLOW=".github/workflows/feature-smoke.yml"
-WORKFLOW_REF="testing"
+WORKFLOW_REF=""
 REMOTE="origin"
 CLEANUP=0
 
@@ -240,6 +240,14 @@ esac
 require_cmd git
 require_cmd gh
 require_cmd python3
+
+if [[ -z "${WORKFLOW_REF}" ]]; then
+    WORKFLOW_REF="$(git branch --show-current 2>/dev/null || true)"
+    if [[ -z "${WORKFLOW_REF}" ]]; then
+        ERROR_KIND="usage"
+        die "Missing --workflow-ref (ref must not be main/testing; use the orchestration/task ref)"
+    fi
+fi
 
 if ! gh api user >/dev/null 2>&1; then
     ERROR_KIND="auth"

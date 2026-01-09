@@ -7,7 +7,7 @@ Usage:
   scripts/ci/dispatch_ci_testing.sh \
     [--checkout-ref <git-ref>] \
     [--mode <mode>] \
-    [--workflow .github/workflows/ci-testing-v2.yml] \
+    [--workflow .github/workflows/ci-testing.yml] \
     [--workflow-ref <ref>] \
     [--remote origin] \
     [--cleanup]
@@ -20,8 +20,8 @@ What it does:
 Notes:
   - This is meant to catch issues that Feature Smoke won't (fmt/clippy -D warnings/full workspace tests).
   - Requires the workflow to support workflow_dispatch input: checkout_ref.
-  - For reliability, prefer dispatching from a stable ref that already has the workflow registered
-    (typically `testing` or `main`), not a short-lived feature branch.
+  - Default workflow ref is the current git branch. Do not dispatch from `main` or `testing`;
+    dispatch from the feature orchestration/task ref and rely on `checkout_ref` to run on the exact commit.
 
 Requirements:
   - `gh` CLI installed and authenticated
@@ -92,8 +92,8 @@ except subprocess.TimeoutExpired:
 PY
 }
 
-WORKFLOW=".github/workflows/ci-testing-v2.yml"
-WORKFLOW_REF="testing"
+WORKFLOW=".github/workflows/ci-testing.yml"
+WORKFLOW_REF=""
 REMOTE="origin"
 CLEANUP=0
 CHECKOUT_REF=""
@@ -151,7 +151,10 @@ WATCH_MAX_CONSECUTIVE_ERRORS="${CI_TESTING_WATCH_MAX_CONSECUTIVE_ERRORS:-20}"
 RUN_LOOKUP_TIMEOUT_SECS="${CI_TESTING_RUN_LOOKUP_TIMEOUT_SECS:-120}"
 
 if [[ -z "${WORKFLOW_REF}" ]]; then
-    die "Missing --workflow-ref"
+    WORKFLOW_REF="$(git branch --show-current 2>/dev/null || true)"
+    if [[ -z "${WORKFLOW_REF}" ]]; then
+        die "Missing --workflow-ref (ref must not be main/testing; use the orchestration/task ref)"
+    fi
 fi
 
 if [[ -z "${CHECKOUT_REF}" ]]; then

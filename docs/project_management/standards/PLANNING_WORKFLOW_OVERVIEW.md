@@ -11,7 +11,8 @@ This diagram shows the intended handoff flow:
 - Cross-platform smoke via `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
 - Operational defaults:
   - Prefer smaller triads/slices (avoid “grab bag” slices).
-  - Prefer stable GitHub Actions dispatch refs (`testing`/`main`) + `PLATFORM=behavior` for smoke.
+  - Prefer `PLATFORM=behavior` for smoke (one dispatch runs only required behavior platforms).
+  - Dispatch from the orchestration/task ref (not `main`/`testing`); workflows must be registered on `main` to be dispatchable.
 
 ```mermaid
 flowchart TD

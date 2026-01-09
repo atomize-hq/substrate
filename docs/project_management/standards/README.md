@@ -121,7 +121,7 @@ Optional: run an end-to-end integration orchestration wrapper (integ-core -> smo
 - `docs/project_management/standards/TRIAD_INTEGRATION_WRAPPER_PROMPT.md`
 
 Dispatch cross-platform smoke:
-- Preferred: `make feature-smoke FEATURE_DIR="docs/project_management/next/<feature>" PLATFORM=behavior WORKFLOW_REF="testing"`
+- Preferred: `make feature-smoke FEATURE_DIR="docs/project_management/next/<feature>" PLATFORM=behavior WORKFLOW_REF="feat/<feature>"`
 - Add WSL coverage when required: `RUN_WSL=1` (Linux smoke, or `PLATFORM=wsl` when `wsl_task_mode="separate"`)
 
 If smoke fails, start only the failing platform-fix tasks:

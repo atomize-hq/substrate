@@ -116,20 +116,25 @@ WSL support:
 
 GitHub Actions must run on a ref that exists on the remote. The repeatable pattern is:
 1) Create a throwaway remote branch from the integration worktree commit (the code under test)
-2) Dispatch the workflow from a stable workflow ref, checking out the throwaway branch (`checkout_ref`)
+2) Dispatch the workflow from the orchestration/task ref (not `main`/`testing`), checking out the throwaway branch (`checkout_ref`)
 3) Wait for success/failure
 4) Merge if green
 5) Delete the throwaway branch
 
 Helper script (requires `gh` auth):
 - `make feature-smoke`
-  - Defaults to dispatching from a stable workflow ref (`testing`) and using `RUNNER_KIND=self-hosted`.
-  - For triad execution, prefer `WORKFLOW_REF=testing` or `WORKFLOW_REF=main` (stable refs with registered workflows). The workflow checks out the throwaway `checkout_ref` branch, so the code under test is still the integration `HEAD`.
+  - Defaults to using `RUNNER_KIND=self-hosted` and dispatching from the current branch ref.
+  - For triad execution, dispatch from the orchestration/task ref (never from `main`/`testing`). The workflow checks out the throwaway `checkout_ref` branch, so the code under test is still the integration `HEAD`.
+  - When workflow files change, land workflow-file-only changes on `main` to register them before relying on dispatch from your feature refs.
 
 Smoke result interpretation (important):
 - The smoke dispatcher always prints machine-parseable fields including `DISPATCH_OK`, `RUN_ID`, `RUN_URL`, `CONCLUSION`, and `SMOKE_FAILED_PLATFORMS`.
 - If the smoke workflow concludes failure, the underlying script exits non-zero. When invoked via `make feature-smoke`, GNU make typically exits with code **2** on any recipe failure; treat `DISPATCH_OK=1` + `RUN_URL` as “dispatch succeeded” and use `RUN_URL` to inspect logs (do not rerun just to obtain a run id).
 - If the failure is due to self-hosted runner provisioning (e.g., missing/permission-denied `/run/substrate.sock`), the dispatcher will set `RUNNER_MISPROVISIONED=1` and provide `RUNNER_MISPROVISIONED_REASON`; treat this as “fix runner, then retry” (do not thrash reruns).
+
+Operational default (avoid remote temp-branch buildup):
+- Keep cleanup enabled (`CLEANUP=1` / `--cleanup`) so temp branches are deleted automatically.
+- If a dispatch is interrupted before cleanup, manually delete `tmp/feature-smoke/...` or `tmp/ci-testing/...` branches on the remote to avoid buildup.
 
 ### Dispatcher timeouts (do not tune unless needed)
 

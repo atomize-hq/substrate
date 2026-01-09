@@ -207,8 +207,8 @@ Automation wrapper:
     - **Behavior platforms** (P3-008): smoke scripts are required here; dispatch via `make feature-smoke`.
     - **CI parity platforms** (P3-008): smoke is not required for CI parity-only platforms; use compile parity/CI Testing gates instead.
     - Preferred cross-platform mechanism: `make feature-smoke` (self-hosted runners), e.g.:
-      - Behavior platforms (preferred): `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior RUN_WSL=1 WORKFLOW_REF="testing"`
-      - Debugging single platform: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux RUN_WSL=1 WORKFLOW_REF="testing"`
+      - Behavior platforms (preferred): `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
+      - Debugging single platform: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
     - Use direct local execution only when the platform matches the current machine (e.g., `bash "$FEATURE_DIR/smoke/linux-smoke.sh"` on Linux).
 
 ## Cross-platform integration task model (platform-fix when needed)
@@ -216,7 +216,7 @@ Automation wrapper:
 When a slice requires cross-platform parity, use this integration task structure (see also `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`):
 - `X-integ-core`: merges `X-code` + `X-test`, gets primary-platform green, runs compile parity gating, then dispatches smoke for behavior platforms.
 - `X-integ-linux|macos|windows` (and optional `X-integ-wsl`): platform-fix tasks that:
-  - validate via `make feature-smoke` for the platform when it is a behavior platform (prefer `WORKFLOW_REF="testing"`/`main`),
+  - validate via `make feature-smoke` for the platform when it is a behavior platform (dispatch from the orchestration/task ref; never from `main`/`testing`),
   - otherwise validate via CI parity gates (compile parity / CI Testing),
   - apply fixes on the corresponding platform machine/worktree only if smoke fails,
   - re-run smoke until green.

@@ -16,7 +16,9 @@ Operational notes (important for correct orchestration):
 - Cross-platform compile parity should be validated before Feature Smoke dispatch to avoid discovering macOS/Windows compilation breaks only after creating temp branches and consuming runner time:
   - `make ci-compile-parity CI_WORKFLOW_REF="$ORCH_BRANCH" CI_REMOTE=origin CI_CLEANUP=1` (dispatches CI Testing in `mode=compile-parity` via `scripts/ci/dispatch_ci_testing.sh`).
   - If compile parity fails: treat it as **blocking** and fix it on the `X-integ-core` branch/worktree (cfg/platform guards), then re-run compile parity until green; do not dispatch Feature Smoke until it is green.
-- Workflow dispatch reliability note: GitHub only allows `workflow_dispatch` by workflow file if that workflow is registered on the default branch (`main`). Prefer `WORKFLOW_REF=testing` or `WORKFLOW_REF=main` for dispatch, and expect the dispatcher to fall back to the legacy CI workflow when a new one isn’t promoted yet.
+- Workflow dispatch reliability note: GitHub only allows `workflow_dispatch` by workflow file if that workflow is registered on the default branch (`main`). Operationally, this means:
+  - You may need to land *workflow-file-only* changes on `main` so the workflow is registered.
+  - Do not dispatch runs from `main` (or `testing`) during triad execution; dispatch from the feature’s orchestration/task ref and rely on the dispatcher’s throwaway `checkout_ref` branch to test the exact commit you care about.
 - Feature Smoke should be dispatched for **behavior platforms only** (read from `tasks.json` via `PLATFORM=behavior`) unless the feature explicitly requires behavior smoke on all three OSes.
 - CI Testing is a separate, stricter gate than Feature Smoke:
   - Use `mode=quick` for automation selection (skip docs/cross-build) before deciding “no-op platform fixes”.
@@ -76,7 +78,7 @@ flowchart TD
     CORE_CHECKS["Required checks: cargo fmt; cargo clippy ... -- -D warnings; relevant tests; make integ-checks"]
     CORE_PARITY["Dispatch cross-platform compile parity via make ci-compile-parity (GitHub-hosted; CI parity platforms)"]
     CORE_FIX["If parity fails: fix compile parity on X-integ-core branch (cfg/platform guards), commit, and re-run parity"]
-    CORE_DISPATCH["Dispatch behavioral smoke via CI (prefer PLATFORM=behavior; optional RUN_WSL=1; WORKFLOW_REF should be a stable ref like testing/main)"]
+    CORE_DISPATCH["Dispatch behavioral smoke via CI (prefer PLATFORM=behavior; optional RUN_WSL=1; WORKFLOW_REF should be the orchestration/task ref, not main/testing)"]
     CORE_RESULTS["Wait for smoke results (self-hosted runners)"]
     CORE_CI_TEST["Dispatch CI Testing (mode=quick) via scripts/ci/dispatch_ci_testing.sh (throwaway branch at HEAD)"]
     CORE_IDENTIFY["Identify failing platforms from smoke + CI Testing results"]
@@ -170,7 +172,7 @@ flowchart TD
     CORE_CHECKS["Core checks: cargo fmt; cargo clippy ... -- -D warnings; relevant tests; make integ-checks"]
     CORE_PARITY["Dispatch cross-platform compile parity via make ci-compile-parity (GitHub-hosted; CI parity platforms)"]
     CORE_FIX["If parity fails: fix compile parity on X-integ-core branch (cfg/platform guards), commit, and re-run parity"]
-    CORE_DISPATCH["Dispatch behavioral smoke via CI (prefer PLATFORM=behavior; optional WSL; WORKFLOW_REF should be a stable ref like testing/main)"]
+    CORE_DISPATCH["Dispatch behavioral smoke via CI (prefer PLATFORM=behavior; optional WSL; WORKFLOW_REF should be the orchestration/task ref, not main/testing)"]
     CORE_RESULTS["Wait for smoke results (self-hosted runners)"]
     CORE_CI_TEST["Dispatch CI Testing (mode=quick) via scripts/ci/dispatch_ci_testing.sh (throwaway branch at HEAD)"]
     CORE_IDENTIFY["Identify failing platforms from smoke + CI Testing results"]

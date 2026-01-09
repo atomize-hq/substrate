@@ -243,10 +243,10 @@ To make validation repeatable and auditable:
 - The manual playbook must state:
   - the exact command(s) to run the script(s),
   - what success looks like (exit code and key expected output),
-  - how to run sections manually for debugging.
-  - if cross-platform validation is required, how to run smoke scripts via GitHub Actions on self-hosted runners (preferred):
-    - Preferred: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior RUN_WSL=1 WORKFLOW_REF="testing"`
-    - Debugging single-platform: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux RUN_WSL=1 WORKFLOW_REF="testing"`
+	  - how to run sections manually for debugging.
+	  - if cross-platform validation is required, how to run smoke scripts via GitHub Actions on self-hosted runners (preferred):
+	    - Preferred: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
+	    - Debugging single-platform: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
 
 Prohibited:
 - “Verify it works”
