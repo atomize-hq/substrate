@@ -18,6 +18,7 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
 mod world_doctor_macos {
     use super::*;
     use agent_api_client::AgentClient;
+    use chrono::SecondsFormat;
     use serde_json::Value;
     use std::io::{Read, Write};
     use std::net::TcpStream;
@@ -115,6 +116,103 @@ mod world_doctor_macos {
                 ],
             )
             .success
+    }
+
+    fn fallback_world_report_v1_via_vm(runner: &dyn CommandRunner) -> Value {
+        let collected_at_utc = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+
+        let landlock_output = runner.run(
+            "limactl",
+            &[
+                "shell",
+                "substrate",
+                "sudo",
+                "-n",
+                "cat",
+                "/sys/kernel/security/landlock/abi_version",
+            ],
+        );
+
+        let (landlock_supported, landlock_abi, landlock_reason) = if landlock_output.success {
+            let abi = landlock_output.stdout.trim().parse::<u64>().ok();
+            match abi {
+                Some(abi) => (true, Some(abi), Value::Null),
+                None => (
+                    false,
+                    None,
+                    Value::String(format!(
+                        "invalid landlock abi_version: {}",
+                        landlock_output.stdout.trim()
+                    )),
+                ),
+            }
+        } else {
+            (
+                false,
+                None,
+                Value::String("landlock abi_version unavailable".to_string()),
+            )
+        };
+
+        let probe_output = runner.run(
+            "limactl",
+            &[
+                "shell",
+                "substrate",
+                "sudo",
+                "-n",
+                "timeout",
+                "10",
+                "sh",
+                "-c",
+                r#"
+set -euo pipefail
+dir="$(mktemp -d)"
+lower="$dir/lower"
+upper="$dir/upper"
+work="$dir/work"
+merged="$dir/merged"
+mkdir -p "$lower" "$upper" "$work" "$merged"
+mount -t overlay overlay -o "lowerdir=$lower,upperdir=$upper,workdir=$work" "$merged"
+touch "$merged/.substrate_enum_probe"
+ls -a "$merged" | grep -q '\.substrate_enum_probe'
+umount "$merged"
+rm -rf "$dir"
+echo pass
+"#,
+            ],
+        );
+
+        let probe_pass = probe_output.success && probe_output.stdout.contains("pass");
+        let probe_result = if probe_pass { "pass" } else { "fail" };
+        let probe_failure_reason = if probe_pass {
+            Value::Null
+        } else {
+            Value::String("overlay enumeration probe failed".to_string())
+        };
+
+        let ok = landlock_supported && probe_pass;
+
+        json!({
+            "schema_version": 1,
+            "ok": ok,
+            "collected_at_utc": collected_at_utc,
+            "landlock": {
+                "supported": landlock_supported,
+                "abi": landlock_abi,
+                "reason": landlock_reason,
+            },
+            "world_fs_strategy": {
+                "primary": "overlay",
+                "fallback": "fuse",
+                "probe": {
+                    "id": "enumeration_v1",
+                    "probe_file": ".substrate_enum_probe",
+                    "result": probe_result,
+                    "failure_reason": probe_failure_reason,
+                }
+            }
+        })
     }
 
     pub(super) fn run_host(
@@ -519,27 +617,26 @@ mod world_doctor_macos {
             }
             .flatten();
 
-            match report {
-                Some(report) => {
-                    let status = if report.ok { "ok" } else { "missing_prereqs" };
-                    let mut value = serde_json::to_value(report).unwrap_or_else(|_| json!({}));
-                    if let Some(obj) = value.as_object_mut() {
-                        obj.insert("status".to_string(), json!(status));
-                    }
-                    if host_ok && value.get("ok").and_then(Value::as_bool) == Some(true) {
-                        exit_code = 0;
-                    } else {
-                        exit_code = 4;
-                    }
-                    value
-                }
-                None => {
-                    if exit_code != 1 {
-                        exit_code = 3;
-                    }
-                    json!({"status": "unreachable", "ok": false})
-                }
+            let mut value = match report {
+                Some(report) => serde_json::to_value(report).unwrap_or_else(|_| json!({})),
+                None => fallback_world_report_v1_via_vm(runner),
+            };
+
+            let status = if value.get("ok").and_then(Value::as_bool) == Some(true) {
+                "ok"
+            } else {
+                "missing_prereqs"
+            };
+            if let Some(obj) = value.as_object_mut() {
+                obj.insert("status".to_string(), json!(status));
             }
+
+            if host_ok && value.get("ok").and_then(Value::as_bool) == Some(true) {
+                exit_code = 0;
+            } else {
+                exit_code = 4;
+            }
+            value
         };
 
         let ok = host_ok && world_value.get("ok").and_then(Value::as_bool) == Some(true);
