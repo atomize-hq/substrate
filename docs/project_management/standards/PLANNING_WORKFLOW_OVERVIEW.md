@@ -6,6 +6,7 @@ This diagram shows the intended handoff flow:
 - Planning Pack creation (execution-ready specs/tasks/prompts)
 - Platform parity plan (required when cross-platform)
 - Third-party Planning Quality Gate (accept/flag)
+- If flagged: planning-doc remediation (docs-only) and re-review
 - Execution triads (code/test/integ)
 - Cross-platform smoke via `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
 
@@ -26,7 +27,7 @@ flowchart TD
   LINT["Run mechanical checks: docs/project_management/standards/PLANNING_LINT_CHECKLIST.md"]
   REPORT["Write: docs/project_management/next/<feature>/quality_gate_report.md using docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md"]
   GATE{RECOMMENDATION ACCEPT}
-  GATE_NO[Fix Planning Pack]
+  REMEDIATE["Remediation agent reads: docs/project_management/standards/PLANNING_QUALITY_GATE_REMEDIATION_PROMPT.md\nFix Planning Pack docs only"]
   PREFLIGHT["Execution preflight gate (feature start)\n- docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md\n- execution_preflight_report.md"]
   GATE_YES["Execution triads start: docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"]
 
@@ -44,7 +45,7 @@ flowchart TD
   Q --> LINT
   LINT --> REPORT
   REPORT --> GATE
-  GATE --> GATE_NO
-  GATE --> PREFLIGHT --> GATE_YES
-  GATE_NO --> P
+  GATE -- "NO" --> REMEDIATE
+  GATE -- "YES" --> PREFLIGHT --> GATE_YES
+  REMEDIATE --> P
 ```

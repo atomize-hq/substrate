@@ -1,0 +1,71 @@
+# doctor_scopes — session log
+
+## START — 2026-01-08T23:11:46Z — planning — Planning Pack authoring
+- Feature: `docs/project_management/next/doctor_scopes/`
+- Branch: `feat/doctor-scopes`
+- Goal: Produce an execution-ready Planning Pack (no production code changes).
+- Inputs read end-to-end:
+  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
+  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
+  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`
+  - `docs/project_management/next/doctor_scopes/plan.md` (pre-existing stub)
+  - `docs/project_management/next/doctor_scopes/decision_register.md` (pre-existing stub)
+- Additional repo context read (non-exhaustive, but all referenced by the spec/plan):
+  - `crates/shell/src/execution/platform/linux.rs`
+  - `crates/shell/src/execution/platform/macos.rs`
+  - `crates/shell/src/execution/platform/windows.rs`
+  - `crates/shell/src/execution/cli.rs`
+  - `crates/shell/src/execution/invocation/plan.rs`
+  - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
+  - `crates/world-agent/src/lib.rs`
+  - `crates/agent-api-client/src/lib.rs`
+  - `crates/agent-api-types/src/lib.rs`
+  - `docs/COMMANDS.md`
+  - `docs/WORLD.md`
+  - `docs/USAGE.md`
+- Commands run (planning/research):
+  - `rg -n "doctor_scopes" -S .`
+  - `rg -n "substrate world doctor" docs/WORLD.md`
+  - `git rev-parse HEAD`
+  - `make adr-fix ADR=docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/doctor_scopes"`
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/doctor_scopes"`
+
+## END — 2026-01-08T23:18:17Z — planning — Planning Pack authoring
+- Summary of changes (exhaustive):
+  - Expanded the `doctor_scopes` Planning Pack into a full triad-executable plan (DS0) with cross-platform integration structure.
+  - Finalized and extended the decision register with explicit A/B decisions, including API endpoint shape, exit codes, and no-side-effects posture.
+  - Updated ADR-0007 status and aligned its contract text to the decision register and exit code taxonomy.
+  - Added unambiguous specs, tasks, kickoff prompts, integration map, manual testing playbook, and smoke scripts.
+- Files created/modified:
+  - `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`
+  - `docs/project_management/next/doctor_scopes/plan.md`
+  - `docs/project_management/next/doctor_scopes/tasks.json`
+  - `docs/project_management/next/doctor_scopes/session_log.md`
+  - `docs/project_management/next/doctor_scopes/decision_register.md`
+  - `docs/project_management/next/doctor_scopes/DS0-spec.md`
+  - `docs/project_management/next/doctor_scopes/integration_map.md`
+  - `docs/project_management/next/doctor_scopes/manual_testing_playbook.md`
+  - `docs/project_management/next/doctor_scopes/execution_preflight_report.md`
+  - `docs/project_management/next/doctor_scopes/quality_gate_report.md`
+  - `docs/project_management/next/doctor_scopes/DS0-closeout_report.md`
+  - `docs/project_management/next/doctor_scopes/kickoff_prompts/`
+  - `docs/project_management/next/doctor_scopes/smoke/`
+- Rubric checks run (with results):
+  - `make adr-fix ADR=docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md` → `PASS`
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/doctor_scopes"` → `PASS`
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/doctor_scopes"` → `PASS`
+- Sequencing alignment:
+  - `docs/project_management/next/sequencing.json` reviewed: `YES`
+  - Changes required: `NO` (sequencing updated to reference `DS0-spec.md`)
+- Blockers:
+  - `NONE`
+- Next steps:
+  - Run the planning lint and quality gate review and update `docs/project_management/next/doctor_scopes/quality_gate_report.md`.
+  - Run `F0-exec-preflight` and update `docs/project_management/next/doctor_scopes/execution_preflight_report.md`.

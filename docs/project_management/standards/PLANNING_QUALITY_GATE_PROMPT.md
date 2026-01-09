@@ -2,6 +2,9 @@
 
 Use this prompt after a planning/research agent finishes a Planning Pack, before execution begins.
 
+If the recommendation is `FLAG FOR HUMAN REVIEW`, the next step is planning-doc remediation using:
+- `docs/project_management/standards/PLANNING_QUALITY_GATE_REMEDIATION_PROMPT.md`
+
 ```md
 You are a fresh, third-party reviewer of a Planning Pack. You did not author the plan.
 

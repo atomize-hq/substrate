@@ -85,6 +85,9 @@ Planning is not “done” until a third-party reviewer:
 
 Execution triads must not begin until the recommendation is `ACCEPT`.
 
+If the recommendation is `FLAG FOR HUMAN REVIEW`, remediate the Planning Pack (docs-only) using:
+- `docs/project_management/standards/PLANNING_QUALITY_GATE_REMEDIATION_PROMPT.md`
+
 ## Kickoff prompt (planning agent)
 
 Copy/paste the following prompt to start a planning pass:

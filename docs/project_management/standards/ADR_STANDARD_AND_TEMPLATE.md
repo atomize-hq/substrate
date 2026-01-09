@@ -31,6 +31,8 @@ If the work has more than one meaningful decision, the Planning Pack must includ
 
 The ADR must link to that decision register and must not duplicate decision entries.
 
+If the Planning Pack uses `contract.md` (see `docs/project_management/standards/CONTRACT_SURFACE_STANDARD.md`), ADR/specs/playbooks must link to it and must not contradict it.
+
 ## Accepted ADR requirements (non-negotiable)
 
 If an ADR status is `Accepted`, it must include:
@@ -142,6 +144,7 @@ Every ADR must include all sections below. Every behavior statement must be sing
 - Plan: `docs/project_management/next/<feature>/plan.md`
 - Tasks: `docs/project_management/next/<feature>/tasks.json`
 - Specs: <list spec paths>
+- Contract (if present): `docs/project_management/next/<feature>/contract.md`
 - Decision Register: `docs/project_management/next/<feature>/decision_register.md` (if required)
 - Integration Map: `docs/project_management/next/<feature>/integration_map.md` (if required)
 - Manual Playbook: `docs/project_management/next/<feature>/manual_testing_playbook.md` (if required)

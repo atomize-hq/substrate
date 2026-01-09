@@ -84,6 +84,53 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0008-wo
 - **Workspace root**: the nearest ancestor directory containing `<dir>/.substrate/workspace.yaml` such that `<dir>/.substrate/workspace.disabled` does not exist.
 - **Workspace disabled**: a workspace root that has `<workspace_root>/.substrate/workspace.disabled` present; it is treated as non-existent for discovery and effective resolution.
 - **Patch file**: a YAML mapping that may omit any keys; omitted keys mean “inherit from the next lower precedence layer”.
+- **Patch view**: a CLI output that prints *exactly the patch file contents* at a scope (global/workspace), without merging defaults or other layers.
+
+### Patch file comment headers (authoritative)
+Patch files created by Substrate MUST include a short comment header explaining patch semantics and pointing to the relevant CLI commands. This applies to:
+- Global config patch: `$SUBSTRATE_HOME/config.yaml`
+- Global policy patch: `$SUBSTRATE_HOME/policy.yaml`
+- Workspace config patch: `<workspace_root>/.substrate/workspace.yaml`
+- Workspace policy patch: `<workspace_root>/.substrate/policy.yaml`
+
+When these files are created (by `workspace init`, `global init`, `set` creating a missing file, or “save approval to policy”), they MUST:
+- Be valid YAML mappings.
+- Default to an empty mapping (`{}`) plus a trailing newline.
+- Include a comment header with equivalent content to the templates below.
+
+Config patch header template (global/workspace):
+```yaml
+# Substrate config patch (sparse overrides).
+# - This file is a patch: omit keys to inherit from lower-precedence layers.
+# - Edit via:
+#   - Global:    `substrate config global set ...` / `substrate config global reset ...`
+#   - Workspace: `substrate config workspace set ...` / `substrate config workspace reset ...`
+# - View the effective config for the current directory:
+#   `substrate config current show --explain`
+# Examples:
+# world:
+#   enabled: true
+# sync:
+#   exclude:
+#     - "node_modules/**"
+{}
+```
+
+Policy patch header template (global/workspace):
+```yaml
+# Substrate policy patch (sparse overrides).
+# - This file is a patch: omit keys to inherit from lower-precedence layers.
+# - Edit via:
+#   - Global:    `substrate policy global set ...` / `substrate policy global reset ...`
+#   - Workspace: `substrate policy workspace set ...` / `substrate policy workspace reset ...`
+# - View the effective policy for the current directory:
+#   `substrate policy current show --explain`
+# Examples:
+# world_fs:
+#   mode: writable
+# require_approval: true
+{}
+```
 
 ### CLI
 
@@ -105,14 +152,25 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0008-wo
 
 #### `substrate config global show [--json]`
 - Prints the **global config patch** at `$SUBSTRATE_HOME/config.yaml`.
-- If the file does not exist, it prints an empty mapping:
+- If the file does not exist, it treats it as an empty patch and prints an empty mapping:
   - YAML: `{}` (plus newline)
   - JSON: `{}` (pretty-printed)
+- It MUST NOT create the file as a side effect.
 - It MUST NOT incorporate workspace patches, override env vars, protected-exclude injection, or CLI flag overrides.
+- It MUST NOT print built-in defaults; use `substrate config current show` for the effective (merged) view.
 - Exit codes: `0` on success; `2` on invalid YAML; `1` on unexpected failure.
+
+#### `substrate config global init [--force]`
+- Ensures the global config patch exists at `$SUBSTRATE_HOME/config.yaml`.
+- If the file does not exist, creates it as an empty patch (`{}`) with a comment header (see “Patch file comment headers”).
+- If the file exists:
+  - Without `--force`: no-op (exit `0`).
+  - With `--force`: rewrites it to the header + `{}` (i.e., clears global overrides).
+- Exit codes: `0` on success; `2` on invalid YAML at the existing file path (unless `--force`); `1` on unexpected failure.
 
 #### `substrate config global set [--json] UPDATE...`
 - Applies updates to the global config patch at `$SUBSTRATE_HOME/config.yaml`, creating the file if missing.
+- If the patch file does not exist, it MUST be created with the standard comment header (see “Patch file comment headers”).
 - `UPDATE` syntax:
   - `key=value`
   - `key+=value` (list append)
@@ -129,6 +187,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0008-wo
 - If one or more `KEY` arguments are provided:
   - Removes those keys from the global patch (so they inherit from defaults).
 - It MUST NOT modify any workspace patch.
+- If the global patch file exists and contains a comment header, reset MUST preserve the comment header.
 - Exit codes: `0` success (including no-op); `2` invalid key; `1` unexpected.
 
 #### `substrate config workspace show [--json]`
@@ -136,6 +195,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0008-wo
 - Prints the **workspace config patch** at `<workspace_root>/.substrate/workspace.yaml`.
 - If the file does not exist, it prints `{}` (the workspace has no overrides).
 - It MUST NOT incorporate global patch, override env vars, protected-exclude injection, or CLI flag overrides.
+- It MUST NOT print built-in defaults; use `substrate config current show` for the effective (merged) view.
 - Exit codes:
   - `0`: success
   - `2`: no workspace root found
@@ -144,6 +204,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0008-wo
 #### `substrate config workspace set [--json] UPDATE...`
 - Requires a workspace root for current `cwd`.
 - Applies updates to `<workspace_root>/.substrate/workspace.yaml`, creating the file if missing.
+- If the patch file does not exist, it MUST be created with the standard comment header (see “Patch file comment headers”).
 - `UPDATE` syntax matches `config global set`.
 - On success:
   - Prints the **effective config for `cwd`** after applying the update (same output contract as `config current show` but without the merged notice line).
@@ -156,6 +217,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0008-wo
   - Resets the workspace config patch to `{}` (meaning “inherit all config from global/default layers”).
 - If one or more `KEY` arguments are provided:
   - Removes those keys from the workspace patch (so they inherit from global/default).
+- If the workspace patch file exists and contains a comment header, reset MUST preserve the comment header.
 - Exit codes: `0` success (including no-op); `2` actionable user error; `1` unexpected.
 
 ---
@@ -170,12 +232,57 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0008-wo
   - Emits a per-key provenance breakdown to stderr (`workspace_patch`, `global_patch`, `default`).
 - Exit codes: `0` success; `2` invalid YAML / invalid policy; `1` unexpected.
 
-#### `substrate policy global show|set|reset` and `substrate policy workspace show|set|reset`
-- These commands mirror the config commands at the corresponding scope, with the policy schema described below.
-- `global show` prints `$SUBSTRATE_HOME/policy.yaml` as a patch; missing file prints `{}`.
-- `workspace show` prints `<workspace_root>/.substrate/policy.yaml` as a patch; missing file prints `{}`.
-- `set` applies dotted updates to the patch file and prints the effective policy after update.
-- `reset` removes keys from the patch file (or clears it to `{}`) so the effective policy inherits from lower layers.
+#### `substrate policy global show [--json]`
+- Prints the **global policy patch** at `$SUBSTRATE_HOME/policy.yaml`.
+- If the file does not exist, it treats it as an empty patch and prints `{}`.
+- It MUST NOT create the file as a side effect.
+- It MUST NOT incorporate workspace patches.
+- It MUST NOT print built-in defaults; use `substrate policy current show` for the effective (merged) view.
+- Exit codes: `0` on success; `2` on invalid YAML / invalid policy; `1` on unexpected failure.
+
+#### `substrate policy global init [--force]`
+- Ensures the global policy patch exists at `$SUBSTRATE_HOME/policy.yaml`.
+- If the file does not exist, creates it as an empty patch (`{}`) with a comment header (see “Patch file comment headers”).
+- If the file exists:
+  - Without `--force`: no-op (exit `0`).
+  - With `--force`: rewrites it to the header + `{}` (i.e., clears global overrides).
+- Exit codes: `0` on success; `2` on invalid YAML / invalid policy at the existing file path (unless `--force`); `1` on unexpected failure.
+
+#### `substrate policy global set [--json] UPDATE...`
+- Applies dotted updates to the global policy patch at `$SUBSTRATE_HOME/policy.yaml`, creating the file if missing.
+- If the patch file does not exist, it MUST be created with the standard comment header (see “Patch file comment headers”).
+- On success:
+  - Prints the **effective policy for `cwd`** after applying the update (same output contract as `policy current show` but without the merged notice line).
+- Exit codes: `0` success; `2` invalid update/value/YAML/policy; `1` unexpected.
+
+#### `substrate policy global reset [KEY ...]`
+- If no `KEY` arguments are provided: resets the global policy patch to `{}` (inherit defaults).
+- If one or more `KEY` arguments are provided: removes those keys from the global patch (inherit defaults).
+- If the global patch file exists and contains a comment header, reset MUST preserve the comment header.
+- Exit codes: `0` success (including no-op); `2` invalid key / invalid policy; `1` unexpected.
+
+#### `substrate policy workspace show [--json]`
+- Requires a workspace root for current `cwd`.
+- Prints the **workspace policy patch** at `<workspace_root>/.substrate/policy.yaml`.
+- If the file does not exist, it prints `{}` (the workspace has no overrides).
+- It MUST NOT incorporate the global policy patch or any config env/CLI layers.
+- It MUST NOT print built-in defaults; use `substrate policy current show` for the effective (merged) view.
+- Exit codes: `0` success; `2` no workspace root found; `1` unexpected.
+
+#### `substrate policy workspace set [--json] UPDATE...`
+- Requires a workspace root for current `cwd`.
+- Applies dotted updates to the workspace policy patch, creating the file if missing.
+- If the patch file does not exist, it MUST be created with the standard comment header (see “Patch file comment headers”).
+- On success:
+  - Prints the **effective policy for `cwd`** after applying the update (same output contract as `policy current show` but without the merged notice line).
+- Exit codes: `0` success; `2` invalid update/value/YAML/policy; `1` unexpected.
+
+#### `substrate policy workspace reset [KEY ...]`
+- Requires a workspace root for current `cwd`.
+- If no `KEY` arguments are provided: resets the workspace policy patch to `{}` (inherit global/default).
+- If one or more `KEY` arguments are provided: removes those keys from the workspace patch (inherit global/default).
+- If the workspace patch file exists and contains a comment header, reset MUST preserve the comment header.
+- Exit codes: `0` success (including no-op); `2` invalid key / invalid policy; `1` unexpected.
 
 ---
 
@@ -183,8 +290,8 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0008-wo
 - Initializes a workspace at `PATH` (default `.`).
 - It MUST ensure these paths exist (create if missing):
   - `<workspace_root>/.substrate/`
-  - `<workspace_root>/.substrate/workspace.yaml` (patch file; must be valid YAML mapping; default `{}` plus comment header)
-  - `<workspace_root>/.substrate/policy.yaml` (patch file; must be valid YAML mapping; default `{}` plus comment header)
+  - `<workspace_root>/.substrate/workspace.yaml` (patch file; must be valid YAML mapping; default `{}` plus a comment header; see “Patch file comment headers”)
+  - `<workspace_root>/.substrate/policy.yaml` (patch file; must be valid YAML mapping; default `{}` plus a comment header; see “Patch file comment headers”)
   - `<workspace_root>/.substrate/git/repo.git/` (internal git directory)
 - It MUST ensure the workspace `.gitignore` at `<workspace_root>/.gitignore` contains these exact ignore rules (order does not matter; duplicates allowed):
   - `.substrate/`
@@ -301,8 +408,9 @@ Policy validation invariants are enforced on the effective merged policy:
   - Add patch parsing and patch merge for policy.
   - Keep validation invariants on the effective merged policy.
 - `crates/shell/src/execution/config_cmd.rs` and `crates/shell/src/execution/policy_cmd.rs`:
-  - Implement explicit `current|global|workspace` CLI surfaces for show/set/reset.
+  - Implement explicit `current|global|workspace` CLI surfaces for show/set/reset/init.
   - Ensure `current show` emits the merged notice line and `--explain` provenance to stderr.
+  - Ensure new/rewritten patch files include the standard comment headers and that reset operations preserve those headers.
 - `crates/shell/src/execution/workspace_cmd.rs` and `crates/shell/src/execution/workspace.rs`:
   - Unify workspace directory layout under `.substrate/`.
   - Move internal git to `.substrate/git/repo.git/`.
@@ -312,6 +420,12 @@ Policy validation invariants are enforced on the effective merged policy:
   - Remove any `.substrate-profile*` behavior if present.
 - Install/dev scripts:
   - `scripts/substrate/install-substrate.sh` and `scripts/substrate/dev-install-substrate.sh` must not export `SUBSTRATE_OVERRIDE_*` by default.
+  - Research note (current behavior as of this ADR draft): both installer scripts write `$SUBSTRATE_HOME/config.yaml` directly with a full config document and write `$SUBSTRATE_HOME/env.sh` exporting `SUBSTRATE_OVERRIDE_*`.
+    - Under this ADR, `config.yaml` is a patch file and install/dev scripts must stop exporting override inputs by default, so installers should be updated to write either:
+      - an empty config patch (`{}`) with the standard comment header, or
+      - only non-default overrides (as a sparse patch), relying on built-in defaults + `config current show` for the full effective view.
+  - Research note (current behavior as of this ADR draft): installer scripts do not create `$SUBSTRATE_HOME/policy.yaml` today; policy is created by explicit policy commands or “save approval to policy”. New policy files should use the standard comment header + `{}` baseline.
+  - Research note (behavioral): Substrate MUST NOT auto-create patch files as a side effect of `current show` / `global show` / `workspace show`; patch files are created only by explicit mutating operations (`init`, `set`, `reset`, `workspace init`, “save approval to policy”).
 - Docs:
   - Update `docs/CONFIGURATION.md` to reflect `current/global/workspace` semantics and patch-file behavior.
   - Update `docs/reference/paths/layout.md` and any `world-sync` specs that reference `.substrate-git`.

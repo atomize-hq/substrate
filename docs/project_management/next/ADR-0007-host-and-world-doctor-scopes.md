@@ -1,7 +1,7 @@
 # ADR-0007 — Host vs World Doctor Scopes
 
 ## Status
-- Status: Draft
+- Status: Accepted
 - Date (UTC): 2026-01-07
 - Owner(s): spenser
 
@@ -19,14 +19,11 @@
 - Decision Register: `docs/project_management/next/doctor_scopes/decision_register.md`
 - Existing docs that MUST be updated as part of this ADR:
   - `docs/COMMANDS.md`
-  - `docs/ISOLATION_SUPPORT_MATRIX.md` (currently marked WIP)
+  - `docs/ISOLATION_SUPPORT_MATRIX.md` (currently marked incomplete)
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: cbe3038604482c9d68384d364a8e8b05ed05f4931f815c9940cc0300d4a05c7e
-
-ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md` after drafting>
-
+ADR_BODY_SHA256: cc61ffb769364aae542c1fca15f7abb407c2ae3dc7012462c74985b651c69399
 ### Changes (operator-facing)
 - Split doctor into host vs world scopes (without requiring a guest-installed `substrate` CLI)
   - Existing: `substrate world doctor` is host-oriented on macOS (Lima/transport/service checks) and kernel-oriented on Linux (overlay/nft/cgroup + Landlock probe). On macOS it cannot report guest-kernel facts like Landlock ABI/support without manually running commands inside the VM.
@@ -74,7 +71,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0007-ho
   - Behavior:
     - MUST query the world-agent for a structured “world doctor” report over the active transport.
     - MUST NOT depend on `substrate` being installed in the guest.
-    - MAY include a minimal host connectivity summary, but the authoritative facts must come from the agent report.
+    - MUST include the `host` doctor summary (host/transport readiness) and the `world` doctor summary (agent-reported readiness) as separate JSON blocks.
   - Output:
     - Text output is human-first: short PASS/WARN/FAIL lines grouped into `Host` and `World` sections.
     - JSON output includes separate `host` and `world` objects (stable field names), plus top-level `ok`.
@@ -82,8 +79,10 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0007-ho
 Exit codes:
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 - `0`: doctor report `ok=true` (all required checks passed)
-- `2`: actionable readiness failure (`ok=false`) or world backend unavailable for `substrate world doctor`
-- `1`: unexpected failure (bug, parse error, internal exception)
+- `1`: unexpected internal error (bug, panic, unhandled I/O)
+- `2`: CLI usage/config error (invalid flags/args)
+- `3`: required dependency unavailable (world-agent unreachable when world is enabled)
+- `4`: not supported / missing prerequisites (platform unsupported; world disabled/not provisioned; agent reachable but cannot enforce required primitives)
 
 ### Config
 - No new configuration keys are introduced by default.
@@ -131,13 +130,13 @@ Exit codes:
   - JSON doctor output with stable `host`/`world` blocks and top-level `ok`
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/next/sequencing.json` → new sprint entry `doctor_scopes` (to be added when this ADR is Accepted).
+- Sequencing entry: `docs/project_management/next/sequencing.json` → sprint `doctor_scopes` (already present).
 - Prerequisite integration task IDs:
   - None; this work is an isolated CLI/API contract change. (It must still pass cross-platform smoke + CI.)
 
 ## Security / Safety Posture
 - `substrate world doctor` MUST avoid “false green”:
-  - If the world backend is unreachable, it must exit `2` with a clear hint to run `substrate host doctor` for transport/provisioning diagnostics.
+  - If the world backend is unreachable, it must exit `3` with a clear hint to run `substrate host doctor` for transport/provisioning diagnostics.
   - If the agent is reachable but cannot enforce required primitives (e.g., Landlock unsupported in the guest), it must report `ok=false` with actionable fields.
 - `substrate host doctor` is advisory and must not attempt to “fix” the system (no writes, no provisioning side effects).
 
@@ -162,15 +161,12 @@ Exit codes:
   - Linux world doctor JSON includes the same Landlock field (host == world kernel).
 
 ## Rollout / Backwards Compatibility
-- This change is a CLI contract update:
-  - `substrate world doctor` output and semantics expand to include world-agent facts; any automation consuming the existing JSON shape must be updated to use the new scoped blocks.
-  - `substrate host doctor` is new and provides a stable replacement for “host-only doctor” usage.
-- Backwards compatibility approach:
-  - Keep existing top-level fields where feasible, but treat `host`/`world` blocks as the authoritative stable interface going forward.
+- This change is greenfield by default:
+  - The stable JSON contract is the new `schema_version` + scoped `host`/`world` blocks; legacy flat top-level keys are not part of the stable interface.
+  - Internal consumers in this repo (e.g., health/shim snapshots) MUST be updated in the same change set.
 
 ## Decision Summary
 - Decision register: `docs/project_management/next/doctor_scopes/decision_register.md`
   - DR-0001: CLI naming (`substrate host doctor` vs alternatives)
   - DR-0002: `substrate world doctor` scope (combined vs world-only output)
   - DR-0003: Guest probing mechanism (agent endpoint vs guest-installed CLI)
-
