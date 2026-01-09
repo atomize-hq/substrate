@@ -1,9 +1,10 @@
-use super::cli::{Cli, HealthCmd, WorldAction, WorldCmd};
+use super::cli::{Cli, HealthCmd, HostAction, HostCmd, WorldAction, WorldCmd};
 use crate::builtins as commands;
 #[cfg(test)]
 use crate::execution::world_env_guard;
 use anyhow::Result;
 use std::env;
+use std::path::PathBuf;
 use substrate_broker::world_fs_policy;
 
 #[cfg(target_os = "linux")]
@@ -31,36 +32,73 @@ use windows::world_doctor_main;
     not(target_os = "macos"),
     not(target_os = "windows")
 ))]
+use self::fallback::host_doctor_main;
+#[cfg(target_os = "linux")]
+use linux::host_doctor_main;
+#[cfg(target_os = "macos")]
+use macos::host_doctor_main;
+#[cfg(target_os = "windows")]
+use windows::host_doctor_main;
+
+#[cfg(all(
+    not(target_os = "linux"),
+    not(target_os = "macos"),
+    not(target_os = "windows")
+))]
 mod fallback {
     use serde_json::json;
     use substrate_broker::world_fs_policy;
 
-    pub(crate) fn world_doctor_main(json_mode: bool) -> i32 {
+    pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
         let world_fs = world_fs_policy();
         if json_mode {
             let out = json!({
+                "schema_version": 1,
                 "platform": std::env::consts::OS,
-                "overlay_present": serde_json::Value::Null,
-                "fuse": {"dev": serde_json::Value::Null, "bin": serde_json::Value::Null},
-                "cgroup_v2": serde_json::Value::Null,
-                "nft_present": serde_json::Value::Null,
-                "dmesg_restrict": serde_json::Value::Null,
-                "overlay_root": serde_json::Value::Null,
-                "copydiff_root": serde_json::Value::Null,
-                "world_fs_mode": world_fs.mode.as_str(),
-                "ok": true
+                "world_enabled": world_enabled,
+                "ok": false,
+                "host": {
+                    "platform": std::env::consts::OS,
+                    "ok": false,
+                    "world_fs_mode": world_fs.mode.as_str(),
+                    "world_fs_isolation": world_fs.isolation.as_str(),
+                    "world_fs_require_world": world_fs.require_world,
+                },
+                "world": {"status": "unsupported", "ok": false}
             });
             println!("{}", serde_json::to_string_pretty(&out).unwrap());
         } else {
-            eprintln!("substrate world doctor currently supports Linux and macOS");
-            println!("overlay: N/A");
-            println!("fuse-overlayfs: N/A");
-            println!("cgroup v2: N/A");
-            println!("nft: N/A");
-            println!("dmesg_restrict: N/A");
-            println!("world_fs_mode: {}", world_fs.mode.as_str());
+            println!("== substrate world doctor ==");
+            println!("== Host ==");
+            println!("WARN  | unsupported platform: {}", std::env::consts::OS);
+            println!("== World ==");
+            println!("FAIL  | unsupported platform: {}", std::env::consts::OS);
         }
-        0
+        4
+    }
+
+    pub(crate) fn host_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
+        let world_fs = world_fs_policy();
+        if json_mode {
+            let out = json!({
+                "schema_version": 1,
+                "platform": std::env::consts::OS,
+                "world_enabled": world_enabled,
+                "ok": false,
+                "host": {
+                    "platform": std::env::consts::OS,
+                    "ok": false,
+                    "world_fs_mode": world_fs.mode.as_str(),
+                    "world_fs_isolation": world_fs.isolation.as_str(),
+                    "world_fs_require_world": world_fs.require_world,
+                },
+            });
+            println!("{}", serde_json::to_string_pretty(&out).unwrap());
+        } else {
+            println!("== substrate host doctor ==");
+            println!("WARN  | unsupported platform: {}", std::env::consts::OS);
+        }
+        4
     }
 }
 
@@ -87,7 +125,31 @@ pub(crate) fn update_world_env(no_world: bool) {
 pub(crate) fn handle_world_command(cmd: &WorldCmd, cli: &Cli) -> Result<()> {
     match &cmd.action {
         WorldAction::Doctor { json } => {
-            let code = world_doctor_main(*json);
+            let launch_cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            let cli_world_enabled = if cli.world {
+                Some(true)
+            } else if cli.no_world {
+                Some(false)
+            } else {
+                None
+            };
+            let effective = match crate::execution::config_model::resolve_effective_config(
+                &launch_cwd,
+                &crate::execution::config_model::CliConfigOverrides {
+                    world_enabled: cli_world_enabled,
+                    ..Default::default()
+                },
+            ) {
+                Ok(cfg) => cfg,
+                Err(err) => {
+                    eprintln!("substrate world doctor: {:#}", err);
+                    std::process::exit(2);
+                }
+            };
+            env::set_var("SUBSTRATE_POLICY_MODE", effective.policy.mode.as_str());
+            let _ = substrate_broker::set_global_broker(substrate_broker::BrokerHandle::new());
+            let _ = substrate_broker::detect_profile(&launch_cwd);
+            let code = world_doctor_main(*json, effective.world.enabled);
             std::process::exit(code);
         }
         WorldAction::Enable(opts) => {
@@ -105,6 +167,39 @@ pub(crate) fn handle_world_command(cmd: &WorldCmd, cli: &Cli) -> Result<()> {
         }
     }
     Ok(())
+}
+
+pub(crate) fn handle_host_command(cmd: &HostCmd, cli: &Cli) -> Result<()> {
+    match &cmd.action {
+        HostAction::Doctor { json } => {
+            let launch_cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            let cli_world_enabled = if cli.world {
+                Some(true)
+            } else if cli.no_world {
+                Some(false)
+            } else {
+                None
+            };
+            let effective = match crate::execution::config_model::resolve_effective_config(
+                &launch_cwd,
+                &crate::execution::config_model::CliConfigOverrides {
+                    world_enabled: cli_world_enabled,
+                    ..Default::default()
+                },
+            ) {
+                Ok(cfg) => cfg,
+                Err(err) => {
+                    eprintln!("substrate host doctor: {:#}", err);
+                    std::process::exit(2);
+                }
+            };
+            env::set_var("SUBSTRATE_POLICY_MODE", effective.policy.mode.as_str());
+            let _ = substrate_broker::set_global_broker(substrate_broker::BrokerHandle::new());
+            let _ = substrate_broker::detect_profile(&launch_cwd);
+            let code = host_doctor_main(*json, effective.world.enabled);
+            std::process::exit(code);
+        }
+    }
 }
 
 pub(crate) fn handle_health_command(cmd: &HealthCmd, cli: &Cli) -> Result<()> {
