@@ -36,6 +36,7 @@ mod world_doctor_macos {
     pub(super) struct CommandOutput {
         pub success: bool,
         pub stdout: String,
+        pub stderr: String,
     }
 
     pub(super) struct SystemRunner;
@@ -46,10 +47,12 @@ mod world_doctor_macos {
                 Ok(output) => CommandOutput {
                     success: output.status.success(),
                     stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+                    stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
                 },
                 Err(_) => CommandOutput {
                     success: false,
                     stdout: String::new(),
+                    stderr: String::new(),
                 },
             }
         }
@@ -155,13 +158,14 @@ cat /sys/kernel/security/landlock/abi_version
                 ),
             }
         } else {
+            let combined = format!("{}{}", landlock_output.stdout, landlock_output.stderr);
             (
                 false,
                 None,
-                Value::String(if landlock_output.stdout.trim().is_empty() {
+                Value::String(if combined.trim().is_empty() {
                     "landlock abi_version unavailable".to_string()
                 } else {
-                    landlock_output.stdout.trim().to_string()
+                    combined.trim().to_string()
                 }),
             )
         };
@@ -201,7 +205,8 @@ echo pass
         let probe_failure_reason = if probe_pass {
             Value::Null
         } else {
-            let details = probe_output.stdout.trim();
+            let combined = format!("{}{}", probe_output.stdout, probe_output.stderr);
+            let details = combined.trim();
             Value::String(if details.is_empty() {
                 "overlay enumeration probe failed".to_string()
             } else {
@@ -772,6 +777,7 @@ echo pass
             CommandOutput {
                 success: true,
                 stdout: stdout.into(),
+                stderr: String::new(),
             }
         }
 
@@ -779,6 +785,7 @@ echo pass
             CommandOutput {
                 success: false,
                 stdout: String::new(),
+                stderr: String::new(),
             }
         }
 
