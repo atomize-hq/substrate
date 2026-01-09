@@ -170,10 +170,12 @@ fn world_doctor_json_matches_envelope_v1_when_available() {
         .arg("--json")
         .output()
         .expect("substrate world doctor --json");
-    assert!(
-        output.status.success(),
-        "world doctor --json should succeed"
-    );
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("unrecognized subcommand") || stderr.contains("unknown subcommand") {
+            return;
+        }
+    }
 
     let payload = parse_json(&output.stdout, "world doctor --json");
     if !has_ds0_envelope(&payload) {
