@@ -4,7 +4,10 @@ mod support;
 
 use serde_json::Value;
 use std::fs;
+use std::path::PathBuf;
 use support::{get_substrate_binary, temp_dir};
+use support::{AgentSocket, SocketResponse};
+use tempfile::Builder;
 
 fn setup_isolated_home(temp: &tempfile::TempDir) -> std::path::PathBuf {
     let home = temp.path().join("home");
@@ -38,13 +41,19 @@ fn command_complete_events(events: &[Value]) -> Vec<&Value> {
 fn world_doctor_json_includes_strategy_keys_per_adr_0004() {
     let temp = temp_dir("substrate-wo0-world-doctor-");
     let home = setup_isolated_home(&temp);
+    let socket_dir = Builder::new()
+        .prefix("substrate-wo0-sock-")
+        .tempdir_in("/tmp")
+        .expect("create wo0 socket tempdir");
+    let socket_path: PathBuf = socket_dir.path().join("world-agent.sock");
+    let _socket = AgentSocket::start(&socket_path, SocketResponse::Capabilities);
 
     let output = get_substrate_binary()
         .env("HOME", &home)
         .env("USERPROFILE", &home)
         .env("SUBSTRATE_HOME", home.join(".substrate"))
         .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
-        .env("SUBSTRATE_WORLD_SOCKET", home.join("missing.sock"))
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
         .arg("world")
         .arg("doctor")
         .arg("--json")
@@ -54,45 +63,87 @@ fn world_doctor_json_includes_strategy_keys_per_adr_0004() {
     let payload: Value =
         serde_json::from_slice(&output.stdout).expect("world doctor should emit JSON on stdout");
 
-    assert_eq!(
-        payload
-            .get("world_fs_strategy_primary")
-            .and_then(Value::as_str),
-        Some("overlay"),
-        "doctor JSON missing world_fs_strategy_primary=overlay: {payload:?}"
-    );
-    assert_eq!(
-        payload
-            .get("world_fs_strategy_fallback")
-            .and_then(Value::as_str),
-        Some("fuse"),
-        "doctor JSON missing world_fs_strategy_fallback=fuse: {payload:?}"
-    );
+    if payload.get("schema_version").is_some() {
+        let strategy = payload
+            .get("world")
+            .and_then(|world| world.get("world_fs_strategy"))
+            .expect("doctor JSON missing world.world_fs_strategy");
+        assert_eq!(
+            strategy.get("primary").and_then(Value::as_str),
+            Some("overlay"),
+            "doctor JSON missing world.world_fs_strategy.primary=overlay: {payload:?}"
+        );
+        assert_eq!(
+            strategy.get("fallback").and_then(Value::as_str),
+            Some("fuse"),
+            "doctor JSON missing world.world_fs_strategy.fallback=fuse: {payload:?}"
+        );
 
-    let probe = payload
-        .get("world_fs_strategy_probe")
-        .expect("doctor JSON missing world_fs_strategy_probe object");
-    assert_eq!(
-        probe.get("id").and_then(Value::as_str),
-        Some("enumeration_v1"),
-        "doctor JSON missing probe id: {payload:?}"
-    );
-    assert_eq!(
-        probe.get("probe_file").and_then(Value::as_str),
-        Some(".substrate_enum_probe"),
-        "doctor JSON missing probe_file: {payload:?}"
-    );
-    assert!(
-        matches!(
-            probe.get("result").and_then(Value::as_str),
-            Some("pass" | "fail")
-        ),
-        "doctor JSON probe.result must be pass|fail: {payload:?}"
-    );
-    assert!(
-        probe.get("failure_reason").is_some(),
-        "doctor JSON missing probe.failure_reason (string or null): {payload:?}"
-    );
+        let probe = strategy
+            .get("probe")
+            .expect("doctor JSON missing world.world_fs_strategy.probe object");
+        assert_eq!(
+            probe.get("id").and_then(Value::as_str),
+            Some("enumeration_v1"),
+            "doctor JSON missing probe id: {payload:?}"
+        );
+        assert_eq!(
+            probe.get("probe_file").and_then(Value::as_str),
+            Some(".substrate_enum_probe"),
+            "doctor JSON missing probe_file: {payload:?}"
+        );
+        assert!(
+            matches!(
+                probe.get("result").and_then(Value::as_str),
+                Some("pass" | "fail")
+            ),
+            "doctor JSON probe.result must be pass|fail: {payload:?}"
+        );
+        assert!(
+            probe.get("failure_reason").is_some(),
+            "doctor JSON missing probe.failure_reason (string or null): {payload:?}"
+        );
+    } else {
+        assert_eq!(
+            payload
+                .get("world_fs_strategy_primary")
+                .and_then(Value::as_str),
+            Some("overlay"),
+            "doctor JSON missing world_fs_strategy_primary=overlay: {payload:?}"
+        );
+        assert_eq!(
+            payload
+                .get("world_fs_strategy_fallback")
+                .and_then(Value::as_str),
+            Some("fuse"),
+            "doctor JSON missing world_fs_strategy_fallback=fuse: {payload:?}"
+        );
+
+        let probe = payload
+            .get("world_fs_strategy_probe")
+            .expect("doctor JSON missing world_fs_strategy_probe object");
+        assert_eq!(
+            probe.get("id").and_then(Value::as_str),
+            Some("enumeration_v1"),
+            "doctor JSON missing probe id: {payload:?}"
+        );
+        assert_eq!(
+            probe.get("probe_file").and_then(Value::as_str),
+            Some(".substrate_enum_probe"),
+            "doctor JSON missing probe_file: {payload:?}"
+        );
+        assert!(
+            matches!(
+                probe.get("result").and_then(Value::as_str),
+                Some("pass" | "fail")
+            ),
+            "doctor JSON probe.result must be pass|fail: {payload:?}"
+        );
+        assert!(
+            probe.get("failure_reason").is_some(),
+            "doctor JSON missing probe.failure_reason (string or null): {payload:?}"
+        );
+    }
 }
 
 #[test]

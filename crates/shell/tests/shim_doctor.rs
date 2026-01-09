@@ -195,7 +195,7 @@ managers:
         hints.iter().any(|hint| hint["name"] == "Bun"),
         "expected Bun hint in report"
     );
-    assert_eq!(report["world"]["platform"], json!("test-fixture"));
+    assert_eq!(report["world"]["platform"], json!(std::env::consts::OS));
     assert_eq!(report["world"]["ok"], json!(true));
     let deps_report = report["world_deps"]["report"].clone();
     assert!(deps_report.is_object(), "world deps report missing");
@@ -617,9 +617,46 @@ managers:
 "#;
     let fixture = DoctorFixture::new(manifest);
     fixture.write_world_doctor_fixture(json!({
-        "platform": "fixture-macos",
+        "schema_version": 1,
+        "platform": "macos",
+        "world_enabled": true,
         "ok": true,
-        "world_fs_mode": "read_only"
+        "host": {
+            "platform": "macos",
+            "ok": true,
+            "world_fs_mode": "read_only",
+            "world_fs_isolation": "workspace",
+            "world_fs_require_world": true,
+            "lima": {
+                "installed": true,
+                "virtualization": true,
+                "vm_status": "Running",
+                "service_active": true,
+                "agent_caps_ok": true,
+                "vsock_proxy": true
+            }
+        },
+        "world": {
+            "status": "ok",
+            "schema_version": 1,
+            "ok": true,
+            "collected_at_utc": "2026-01-08T00:00:00Z",
+            "landlock": {
+                "supported": true,
+                "abi": 3,
+                "reason": null
+            },
+            "world_fs_strategy": {
+                "primary": "overlay",
+                "fallback": "fuse",
+                "probe": {
+                    "id": "enumeration_v1",
+                    "probe_file": ".substrate_enum_probe",
+                    "result": "pass",
+                    "failure_reason": null
+                }
+            }
+        }
     }));
 
     let output = fixture
@@ -633,7 +670,7 @@ managers:
 
     let report: Value = serde_json::from_slice(&output.stdout).expect("doctor output JSON");
     assert_eq!(
-        report["world"]["details"]["world_fs_mode"],
+        report["world"]["details"]["host"]["world_fs_mode"],
         json!("read_only"),
         "shim doctor should surface world_fs_mode from world doctor details"
     );
@@ -653,19 +690,47 @@ managers:
 "#;
     let fixture = DoctorFixture::new(manifest);
     fixture.write_world_doctor_fixture(json!({
-        "platform": "fixture-linux",
+        "schema_version": 1,
+        "platform": "linux",
+        "world_enabled": true,
         "ok": true,
-        "world_fs_mode": "read_only",
-        "world_socket": {
-            "mode": "socket_activation",
-            "path": "/run/substrate.sock",
-            "socket_exists": true,
-            "probe_ok": true
+        "host": {
+            "platform": "linux",
+            "ok": true,
+            "world_fs_mode": "read_only",
+            "world_fs_isolation": "workspace",
+            "world_fs_require_world": true,
+            "world_socket": {
+                "mode": "socket_activation",
+                "socket_path": "/run/substrate.sock",
+                "socket_exists": true,
+                "probe_ok": true,
+                "probe_error": null,
+                "systemd_error": null,
+                "systemd_socket": null,
+                "systemd_service": null
+            }
         },
-        "landlock": {
-            "supported": true,
-            "abi": 1,
-            "reason": null
+        "world": {
+            "status": "ok",
+            "schema_version": 1,
+            "ok": true,
+            "collected_at_utc": "2026-01-08T00:00:00Z",
+            "landlock": {
+                "supported": true,
+                "abi": 1,
+                "reason": null
+            },
+            "world_fs_strategy": {
+                "primary": "overlay",
+                "fallback": "fuse",
+                "probe": {
+                    "id": "enumeration_v1",
+                    "probe_file": ".substrate_enum_probe",
+                    "result": "pass",
+                    "failure_reason": null
+                }
+            }
         }
     }));
 
@@ -680,16 +745,19 @@ managers:
 
     let report: Value = serde_json::from_slice(&output.stdout).expect("doctor output JSON");
     assert_eq!(
-        report["world"]["details"]["world_socket"]["path"],
+        report["world"]["details"]["host"]["world_socket"]["socket_path"],
         json!("/run/substrate.sock")
     );
     assert_eq!(
-        report["world"]["details"]["world_socket"]["probe_ok"],
+        report["world"]["details"]["host"]["world_socket"]["probe_ok"],
         json!(true)
     );
     assert_eq!(
-        report["world"]["details"]["landlock"]["supported"],
+        report["world"]["details"]["world"]["landlock"]["supported"],
         json!(true)
     );
-    assert_eq!(report["world"]["details"]["landlock"]["abi"], json!(1));
+    assert_eq!(
+        report["world"]["details"]["world"]["landlock"]["abi"],
+        json!(1)
+    );
 }
