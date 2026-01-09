@@ -279,7 +279,7 @@ Column notes:
 | `CARGO_MANIFEST_DIR` | `standard` | standard | read | shell, shim | — | crates/shell/src/execution/manager.rs:87; crates/shell/src/execution/routing/path_env.rs:93 | string | external | no | no direct site |
 | `CARGO_PKG_VERSION` | `standard` | standard | read | shell, shim, trace | — | crates/trace/src/context.rs:14; crates/shell/src/execution/shim_deploy.rs:114 | string | external | no | yes (trace component) |
 | `CARGO_TARGET_DIR` | `standard` | standard | write | scripts | scripts/mac/lima-warm.sh:404; scripts/mac/lima-warm.sh:413 | — | string | script-only | no | no direct site |
-| `CARGO_TERM_COLOR` | `standard` | standard | write | CI | .github/workflows/feature-smoke.yml; .github/workflows/ci-testing.yml | — | string | CI-only | no | no direct site |
+| `CARGO_TERM_COLOR` | `standard` | standard | write | CI | .github/workflows/feature-smoke.yml; .github/workflows/ci-testing-v2.yml | — | string | CI-only | no | no direct site |
 | `CARGO_WORKSPACE_DIR` | `standard` | standard | read | shell, shim | — | crates/shell/tests/common.rs:66; crates/shim/tests/integration.rs:29 | string | test-only | no | no direct site |
 | `CHECKS` | `standard` | standard | write | scripts | scripts/triad/task_finish.sh:24 | — | string | script-only | no | no direct site |
 | `CI_FAILED_JOBS` | `standard` | standard | write | scripts | scripts/ci/dispatch_ci_testing.sh:35 | — | string | script-only | no | no direct site |
@@ -389,8 +389,8 @@ Column notes:
 | `RUNTIME` | `standard` | standard | write | scripts | scripts/check-host-prereqs.sh:40 | — | string | script-only | no | no direct site |
 | `RUN_URL` | `standard` | standard | write | CI, scripts | scripts/ci/dispatch_ci_testing.sh:31; .github/workflows/promote.yml | — | string | script-only | no | no direct site |
 | `RUST_LOG` | `standard` | standard | both | scripts | scripts/dev-entrypoint.sh:14 | scripts/dev-entrypoint.sh:14 | string | script-only | no | no direct site |
-| `RUST_TEST_THREADS` | `standard` | standard | write | CI | .github/workflows/ci-testing.yml; .github/workflows/nightly.yml | — | string | CI-only | no | no direct site |
-| `RUST_TOOLCHAIN` | `standard` | standard | both | CI | .github/workflows/feature-smoke.yml; .github/workflows/ci-testing.yml | .github/workflows/feature-smoke.yml:324; .github/workflows/feature-smoke.yml:338 | string | CI-only | no | no direct site |
+| `RUST_TEST_THREADS` | `standard` | standard | write | CI | .github/workflows/ci-testing-v2.yml; .github/workflows/nightly.yml | — | string | CI-only | no | no direct site |
+| `RUST_TOOLCHAIN` | `standard` | standard | both | CI | .github/workflows/feature-smoke.yml; .github/workflows/ci-testing-v2.yml | .github/workflows/feature-smoke.yml:324; .github/workflows/feature-smoke.yml:338 | string | CI-only | no | no direct site |
 | `SAMPLE` | `standard` | standard | write | shell | crates/shell/src/execution/manager_init/tests.rs:147 | — | string | test-only | no | no direct site |
 | `SAMPLE_MANAGER` | `standard` | standard | write | shell | crates/shell/tests/shim_doctor.rs:367; crates/shell/tests/shim_doctor.rs:369 | — | string | test-only | no | no direct site |
 | `SCRIPTS_ROOT` | `standard` | standard | write | scripts | scripts/mac/smoke.sh:9 | — | string | script-only | no | no direct site |

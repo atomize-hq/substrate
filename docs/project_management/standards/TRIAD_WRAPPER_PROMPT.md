@@ -13,6 +13,7 @@ Notes:
   - Mark `tasks.json` START/END status updates.
   - Append START/END entries to `session_log.md`.
   - Never edit planning docs inside any task worktree.
+- If a slice feels “big” (many unrelated acceptance bullets, multiple subsystems, or a broad refactor + new behavior), stop and ask the operator to split it into smaller triads before dispatching.
 
 ## Copy/Paste Prompt Template
 
@@ -38,6 +39,8 @@ SLICE_ID="<SET_ME>"      # e.g. PCP0
    - Ensure you are on the orchestration branch and clean:
      - `make triad-orch-ensure FEATURE_DIR="$FEATURE_DIR"`
      - `git status --porcelain=v1` must be empty (if not, stop; do not start triads from a dirty orchestration checkout).
+   - Ensure no other headless Codex run is still active (avoid overlapping runs mutating state):
+     - `find target/triad -name codex.pid -print -exec cat {} \\;` should print nothing (or only stale PIDs you’ve verified are not running).
 
 1) START bookkeeping (orchestration branch)
    - Compute task ids:

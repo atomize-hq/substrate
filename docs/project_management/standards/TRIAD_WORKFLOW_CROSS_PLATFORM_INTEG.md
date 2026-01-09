@@ -14,10 +14,26 @@ Operational notes (important for correct orchestration):
 - CI smoke dispatch (`make feature-smoke ...`) validates the **current `HEAD`** by creating/pushing a throwaway branch at that commit; run it from the worktree that contains the code you intend to validate (e.g., the `X-integ-core` or `X-integ` worktree).
 - Platform-fix tasks should begin by merging the `X-integ-core` task branch into their own branch before running smoke or making fixes.
 - Cross-platform compile parity should be validated before Feature Smoke dispatch to avoid discovering macOS/Windows compilation breaks only after creating temp branches and consuming runner time:
-  - `make ci-compile-parity CI_WORKFLOW_REF="$ORCH_BRANCH" CI_REMOTE=origin CI_CLEANUP=1` (runs `.github/workflows/ci-compile-parity.yml` via `scripts/ci/dispatch_ci_testing.sh`).
+  - `make ci-compile-parity CI_WORKFLOW_REF="$ORCH_BRANCH" CI_REMOTE=origin CI_CLEANUP=1` (dispatches CI Testing in `mode=compile-parity` via `scripts/ci/dispatch_ci_testing.sh`).
   - If compile parity fails: treat it as **blocking** and fix it on the `X-integ-core` branch/worktree (cfg/platform guards), then re-run compile parity until green; do not dispatch Feature Smoke until it is green.
-- CI Testing is a separate, stricter gate than Feature Smoke; run it (via `scripts/ci/dispatch_ci_testing.sh`) before marking platform-fix tasks as no-ops when smoke is green, and again on the final `X-integ` commit before merging to `testing`.
+- Workflow dispatch reliability note: GitHub only allows `workflow_dispatch` by workflow file if that workflow is registered on the default branch (`main`). Prefer `WORKFLOW_REF=testing` or `WORKFLOW_REF=main` for dispatch, and expect the dispatcher to fall back to the legacy CI workflow when a new one isn’t promoted yet.
+- Feature Smoke should be dispatched for **behavior platforms only** (read from `tasks.json` via `PLATFORM=behavior`) unless the feature explicitly requires behavior smoke on all three OSes.
+- CI Testing is a separate, stricter gate than Feature Smoke:
+  - Use `mode=quick` for automation selection (skip docs/cross-build) before deciding “no-op platform fixes”.
+  - Use `mode=full` (default) as the final CI gate on the final `X-integ` commit before merging to `testing`.
 - The dispatch scripts are hardened with timeouts to avoid indefinite hangs; default max wait is **2 hours**. If you hit infra slowness, you can override via `FEATURE_SMOKE_WATCH_TIMEOUT_SECS` / `CI_TESTING_WATCH_TIMEOUT_SECS` (see `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`).
+- Headless Codex runs write a PID file while running: `target/triad/<feature>/codex/<task>/codex.pid`. If an orchestration session is interrupted, check for stale PID files before starting new runs.
+- Orchestration wrappers should always emit their stdout contract (including `CODEX_EXIT`) even when Codex fails; if you see missing keys, treat it as an automation bug and capture the command output + `target/triad/...` artifact paths for follow-up.
+
+## Task Granularity (Keep Triad Slices Small)
+
+Cross-platform integration goes off the rails fastest when slices are too large to reason about. Prefer more (smaller) tasks/slices over fewer (larger) ones:
+- Split along natural seams (CLI wiring vs. backend API vs. schema/tests vs. docs).
+- Keep each Codex run focused on a single acceptance criterion cluster.
+- Use the older “feature sprint” patterns as references for how small to go:
+  - `docs/project_management/_archived/p0-platform-stability/kickoff_prompts/`
+  - `docs/project_management/_archived/p0-platform-stability-macOS-parity/kickoff_prompts/`
+  - `docs/project_management/_archived/policy_and_config_mental_model_simplification/kickoff_prompts/`
 
 This file includes two diagrams:
 - **Diagram A:** The overall cross-platform platform-fix triad flow.
@@ -60,11 +76,11 @@ flowchart TD
     CORE_CHECKS["Required checks: cargo fmt; cargo clippy ... -- -D warnings; relevant tests; make integ-checks"]
     CORE_PARITY["Dispatch cross-platform compile parity via make ci-compile-parity (GitHub-hosted; CI parity platforms)"]
     CORE_FIX["If parity fails: fix compile parity on X-integ-core branch (cfg/platform guards), commit, and re-run parity"]
-    CORE_DISPATCH["Dispatch behavioral smoke via make feature-smoke (PLATFORM=all iff linux+macos+windows; else per-platform; optional RUN_WSL=1; WORKFLOW_REF=ORCH_BRANCH)"]
+    CORE_DISPATCH["Dispatch behavioral smoke via CI (prefer PLATFORM=behavior; optional RUN_WSL=1; WORKFLOW_REF should be a stable ref like testing/main)"]
     CORE_RESULTS["Wait for smoke results (self-hosted runners)"]
-    CORE_CI_TEST["Dispatch CI Testing via scripts/ci/dispatch_ci_testing.sh (throwaway branch at HEAD)"]
+    CORE_CI_TEST["Dispatch CI Testing (mode=quick) via scripts/ci/dispatch_ci_testing.sh (throwaway branch at HEAD)"]
     CORE_IDENTIFY["Identify failing platforms from smoke + CI Testing results"]
-    CORE_START_PF["Start failing platform-fix tasks (from-smoke-run iff PLATFORM=all; else explicit PLATFORMS=...)"]
+    CORE_START_PF["Start failing platform-fix tasks (use from-smoke-run when smoke was a single dispatch; else explicit PLATFORMS=...)"]
     CORE_START_FINAL["After fixes are green: start final aggregator (make triad-task-start-integ-final SLICE_ID=X)"]
   end
 
@@ -154,11 +170,11 @@ flowchart TD
     CORE_CHECKS["Core checks: cargo fmt; cargo clippy ... -- -D warnings; relevant tests; make integ-checks"]
     CORE_PARITY["Dispatch cross-platform compile parity via make ci-compile-parity (GitHub-hosted; CI parity platforms)"]
     CORE_FIX["If parity fails: fix compile parity on X-integ-core branch (cfg/platform guards), commit, and re-run parity"]
-    CORE_DISPATCH["Dispatch behavioral smoke via CI (PLATFORM=all iff linux+macos+windows; else per-platform; optional WSL; WORKFLOW_REF=ORCH_BRANCH)"]
+    CORE_DISPATCH["Dispatch behavioral smoke via CI (prefer PLATFORM=behavior; optional WSL; WORKFLOW_REF should be a stable ref like testing/main)"]
     CORE_RESULTS["Wait for smoke results (self-hosted runners)"]
-    CORE_CI_TEST["Dispatch CI Testing via scripts/ci/dispatch_ci_testing.sh (throwaway branch at HEAD)"]
+    CORE_CI_TEST["Dispatch CI Testing (mode=quick) via scripts/ci/dispatch_ci_testing.sh (throwaway branch at HEAD)"]
     CORE_IDENTIFY["Identify failing platforms from smoke + CI Testing results"]
-    CORE_START_PF["Start failing platform-fix tasks (from-smoke-run iff PLATFORM=all; else explicit PLATFORMS=...)"]
+    CORE_START_PF["Start failing platform-fix tasks (use from-smoke-run when smoke was a single dispatch; else explicit PLATFORMS=...)"]
     CORE_START_FINAL["After fixes are green: start final aggregator (make triad-task-start-integ-final SLICE_ID=X)"]
   end
 
@@ -269,7 +285,7 @@ flowchart TD
 
   %% ======== Worktree execution ========
   subgraph WT["Task worktree (no planning doc edits)"]
-    CODEX_OPT["optional: codex exec (headless) from worktree using kickoff prompt via stdin; writes last_message file"]
+    CODEX_OPT["optional: codex exec (headless) from worktree using kickoff prompt via stdin; writes codex.pid + last_message.md"]
     DEV["agent work happens here (code/test/integ)"]
     FINISH_RUN["make triad-task-finish TASK_ID=... (optional: SMOKE=1 TASK_PLATFORM=...; do not also run make feature-smoke)"]
   end

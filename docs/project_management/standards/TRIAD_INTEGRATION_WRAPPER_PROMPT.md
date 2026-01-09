@@ -13,6 +13,7 @@ Notes:
 - Run this from the **orchestration checkout** (repo root), not inside any task worktree.
 - This wrapper assumes an automation-enabled Planning Pack (`tasks.json` meta: `schema_version >= 3` and `meta.automation.enabled=true`).
 - This wrapper does not assume you are editing `tasks.json`/`session_log.md`, but **`make triad-task-start-integ-final` requires `depends_on` tasks are `status=completed`**. If CI smoke is green and platform-fix tasks were no-ops, the operator must still mark them `completed` on the orchestration branch to unblock the final aggregator.
+- Prefer stable workflow refs (`testing` or `main`) for GitHub Actions dispatch. GitHub only allows `workflow_dispatch` for a workflow file if that workflow is registered on the default branch; dispatching from a short-lived feature branch is unreliable.
 
 ## Copy/Paste Prompt Template
 
@@ -45,7 +46,7 @@ SLICE_ID="<SET_ME>"      # e.g. PCP0
 
 2) Run cross-platform compile parity for the integ-core commit (fast fail; do this before relying on smoke):
    - Run from the integ-core worktree (validates `INTEG_CORE_HEAD_SHA` via a throwaway branch):
-     - `cd "$INTEG_CORE_WORKTREE" && make ci-compile-parity CI_WORKFLOW_REF="$ORCH_BRANCH" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="$INTEG_CORE_HEAD_SHA"`
+     - `cd "$INTEG_CORE_WORKTREE" && make ci-compile-parity CI_WORKFLOW_REF="testing" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="$INTEG_CORE_HEAD_SHA"`
    - Parse and report the dispatcher stdout contract:
      - `RUN_ID`, `RUN_URL`, `CONCLUSION`, `CI_FAILED_OSES`, `CI_FAILED_JOBS`
    - If compile parity is green: continue to step (3).
@@ -59,9 +60,8 @@ SLICE_ID="<SET_ME>"      # e.g. PCP0
 
 3) Parse the integ-core agent’s smoke outcome from its final message (only after compile parity is green):
    - Smoke is required only for the feature’s **behavior platforms** (P3-008; see `tasks.json` meta: `behavior_platforms_required`).
-   - The integ-core agent may have dispatched smoke as:
-     - a single run with `PLATFORM=all` (only valid when behavior platforms are exactly linux+macos+windows), or
-     - multiple runs (one per behavior platform).
+   - Preferred dispatch shape is a single run with `PLATFORM=behavior` (the workflow reads `tasks.json` and only runs required behavior platforms).
+   - If the agent dispatched per-platform anyway, treat each run independently.
    - Extract and report these exact keys for each smoke run reported (grouped per run):
      - `RUN_ID=<id>`
      - `RUN_URL=<url>`
@@ -70,7 +70,7 @@ SLICE_ID="<SET_ME>"      # e.g. PCP0
    - If no smoke keys are present at all, treat this as a failure (integ-core must run and report behavioral smoke).
 
 4) If smoke failed on any run, start only failing platform-fix tasks with Codex enabled (parallel):
-   - If you have a single smoke run id that includes all failing platforms (typical `PLATFORM=all` case), use:
+   - If you have a single smoke run id that includes all failing platforms (typical `PLATFORM=behavior` case), use:
      `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" SMOKE_RUN_ID="$RUN_ID" LAUNCH_CODEX=1`
    - If smoke was dispatched per-platform (multiple runs), derive `PLATFORMS=<csv>` from the union of failures and use:
      `make triad-task-start-platform-fixes FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" PLATFORMS="<csv>" LAUNCH_CODEX=1`
@@ -86,10 +86,10 @@ SLICE_ID="<SET_ME>"      # e.g. PCP0
 
 6) Dispatch CI Testing (gate before deciding “no-op platform fixes” when smoke is green):
    - Run from the integ-core worktree (validates `INTEG_CORE_HEAD_SHA` via a throwaway branch):
-     - `cd "$INTEG_CORE_WORKTREE" && scripts/ci/dispatch_ci_testing.sh --workflow-ref "$ORCH_BRANCH" --remote origin --cleanup`
+     - `cd "$INTEG_CORE_WORKTREE" && scripts/ci/dispatch_ci_testing.sh --workflow-ref "testing" --remote origin --cleanup --mode quick`
    - Parse and report the CI Testing stdout contract: `RUN_ID`, `RUN_URL`, `CONCLUSION`, `CI_FAILED_OSES`, `CI_FAILED_JOBS`.
    - The CI Testing dispatcher enforces a **2 hour** max wait by default; override only if needed via `CI_TESTING_WATCH_TIMEOUT_SECS`.
-   - If CI Testing is green: continue to step (6).
+   - If CI Testing is green: continue to step (7).
    - If CI Testing fails:
      - Derive platforms to fix from `CI_FAILED_OSES`:
        - `macos-*` -> `macos`
@@ -119,7 +119,7 @@ SLICE_ID="<SET_ME>"      # e.g. PCP0
 
 9) Dispatch CI Testing for the final integration commit (gate before merging to `testing`):
    - Run from the final aggregator worktree (validates `FINAL_HEAD_SHA` via a throwaway branch):
-     - `cd "$FINAL_WORKTREE" && scripts/ci/dispatch_ci_testing.sh --workflow-ref "$ORCH_BRANCH" --remote origin --cleanup`
+     - `cd "$FINAL_WORKTREE" && scripts/ci/dispatch_ci_testing.sh --workflow-ref "testing" --remote origin --cleanup --mode full`
    - If CI Testing fails here:
      - Treat this as blocking (even if smoke is green).
      - Derive platforms to fix from `CI_FAILED_OSES`, start platform-fix tasks, then re-run the final aggregator and this final CI Testing gate.

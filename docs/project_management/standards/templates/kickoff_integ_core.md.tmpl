@@ -15,6 +15,7 @@ Do not edit planning docs inside the worktree.
 
 ## Requirements
 - Reconcile code/tests to spec (spec wins).
+- If the slice is too large to make green deterministically (multiple subsystems, many unrelated acceptance bullets), stop and ask the operator to split the slice before continuing.
 - Merge code+test branches into this worktree, then run required integration gates (must be green before any CI smoke dispatch):
   - `cargo fmt`
   - `cargo clippy --workspace --all-targets -- -D warnings`
@@ -25,10 +26,10 @@ Do not edit planning docs inside the worktree.
 ### Cross-platform compile parity (CI dispatch; required before smoke)
 
 Before dispatching Feature Smoke (especially when using `RUNNER_KIND=self-hosted`), run a fast cross-platform compile parity preflight on GitHub-hosted runners to catch macOS/Windows compilation breaks early:
-- `make ci-compile-parity CI_WORKFLOW_REF="{{ORCH_BRANCH}}" CI_REMOTE=origin CI_CLEANUP=1`
+- `make ci-compile-parity CI_WORKFLOW_REF="testing" CI_REMOTE=origin CI_CLEANUP=1`
 
 Notes:
-- This runs `.github/workflows/ci-compile-parity.yml` (fmt --check, check --all-targets, clippy -D warnings) across Linux/macOS/Windows.
+- This dispatches CI Testing in `mode=compile-parity` (fmt --check, check --all-targets, clippy -D warnings) across Linux/macOS/Windows.
 - If it fails, fix compile parity **in this integ-core worktree/branch** (cfg/platform guards), commit, and re-run until green; do not proceed to Feature Smoke until it is green.
 
 ### Cross-platform smoke (CI dispatch; validation-only)
@@ -41,16 +42,9 @@ Important (P3-008):
 
 Recommended dispatch (explicit params; leave `CLEANUP=1` on unless debugging temp branches):
 
-1) Determine the behavior platform set:
-   - `jq -r '.meta.behavior_platforms_required // .meta.ci_parity_platforms_required // .meta.platforms_required // [] | join(",")' "{{FEATURE_DIR}}/tasks.json"`
-
-2) Dispatch smoke for behavior platforms only:
-   - If the behavior set is exactly `linux,macos,windows`:
-     - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF="{{ORCH_BRANCH}}" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
-       - If WSL coverage is required for this feature, add `RUN_WSL=1`.
-   - Otherwise, dispatch per platform (repeat for each platform in the behavior set):
-     - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=<platform> RUNNER_KIND=self-hosted WORKFLOW_REF="{{ORCH_BRANCH}}" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
-       - If `<platform>=linux` and WSL coverage is required, add `RUN_WSL=1`.
+1) Dispatch behavioral smoke in a single run (preferred):
+   - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=behavior RUNNER_KIND=self-hosted WORKFLOW_REF="testing" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+   - If WSL coverage is required for this feature, add `RUN_WSL=1`.
 
 What the dispatcher does (`scripts/ci/dispatch_feature_smoke.sh` via `make feature-smoke`):
 - Creates/pushes a throwaway branch like `tmp/feature-smoke/<feature>/<platform>/<ts>` at current `HEAD`.
@@ -64,7 +58,7 @@ Note:
 If any platform smoke fails:
 - Do not attempt platform-specific fixes in integ-core.
 - Ask the operator to start only the failing platform-fix tasks **from the orchestration checkout** (not from a task worktree):
-  - If you have a single smoke run that covers multiple platforms (typical `PLATFORM=all` case):
+  - If you have a single smoke run that covers multiple platforms (typical `PLATFORM=behavior` case):
     - `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="{{FEATURE_DIR}}" SLICE_ID="<slice>" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
   - If you dispatched per-platform smoke (multiple run ids):
     - `make triad-task-start-platform-fixes FEATURE_DIR="{{FEATURE_DIR}}" SLICE_ID="<slice>" PLATFORMS="<csv>" LAUNCH_CODEX=1`

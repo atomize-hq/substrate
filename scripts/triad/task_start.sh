@@ -623,14 +623,19 @@ if [[ "${LAUNCH_CODEX}" -eq 1 ]]; then
         exit 0
     fi
     mkdir -p "${codex_out_dir}"
+    codex_pid_path="${codex_out_dir}/codex.pid"
     codex_args=(codex exec --dangerously-bypass-approvals-and-sandbox --cd "${WORKTREE_ABS}")
     if [[ -n "${CODEX_PROFILE}" ]]; then codex_args+=(--profile "${CODEX_PROFILE}"); fi
     if [[ -n "${CODEX_MODEL}" ]]; then codex_args+=(--model "${CODEX_MODEL}"); fi
     if [[ "${CODEX_JSONL}" -eq 1 ]]; then codex_args+=(--json); fi
     codex_args+=(--output-last-message "${codex_last_message}" -)
     set +e
-    "${codex_args[@]}" < "${KICKOFF_ABS}" >"${codex_events}" 2>"${codex_stderr}"
+    "${codex_args[@]}" < "${KICKOFF_ABS}" >"${codex_events}" 2>"${codex_stderr}" &
+    codex_pid="$!"
+    printf '%s\n' "${codex_pid}" > "${codex_pid_path}"
+    wait "${codex_pid}"
     codex_exit="$?"
+    rm -f "${codex_pid_path}" >/dev/null 2>&1 || true
     set -e
     printf 'CODEX_EXIT=%s\n' "${codex_exit}"
     exit "${codex_exit}"

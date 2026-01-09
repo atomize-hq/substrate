@@ -150,10 +150,9 @@ Required interoperability rules:
     - Create `X-integ-core`, `X-integ-<platform>`, and `X-integ` tasks per slice (see `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`).
   - If WSL coverage is required, use `meta.wsl_required: true` and `meta.wsl_task_mode: "bundled"|"separate"` (do not add `"wsl"` to `meta.behavior_platforms_required` or `meta.ci_parity_platforms_required`).
   - Preferred smoke dispatch examples:
-    - All platforms (only when behavior platforms are exactly `linux,macos,windows`): `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=all WORKFLOW_REF="feat/<feature>"`
-    - Single platform (repeat for each behavior platform): `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux WORKFLOW_REF="feat/<feature>"`
-    - Linux + WSL bundled: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
-    - WSL-only (separate WSL task): `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=wsl WORKFLOW_REF="feat/<feature>"`
+    - Behavior platforms (preferred): `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior WORKFLOW_REF="testing"`
+    - Linux + WSL bundled: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux RUN_WSL=1 WORKFLOW_REF="testing"`
+    - WSL-only (separate WSL task): `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=wsl WORKFLOW_REF="testing"`
 
 Sequencing rules:
 - Align `docs/project_management/next/sequencing.json` with task dependencies.

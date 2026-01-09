@@ -7,7 +7,7 @@ Usage:
   scripts/ci/dispatch_feature_smoke.sh \
     --feature-dir docs/project_management/next/<feature> \
     [--runner-kind github-hosted|self-hosted] \
-    --platform linux|macos|windows|wsl|all \
+    --platform behavior|linux|macos|windows|wsl|all \
     [--run-wsl] \
     [--run-integ-checks] \
     [--workflow .github/workflows/feature-smoke.yml] \
@@ -106,7 +106,7 @@ RUNNER_KIND="self-hosted"
 RUN_WSL=0
 RUN_INTEG_CHECKS=0
 WORKFLOW=".github/workflows/feature-smoke.yml"
-WORKFLOW_REF="feat/policy_and_config"
+WORKFLOW_REF="testing"
 REMOTE="origin"
 CLEANUP=0
 
@@ -218,7 +218,7 @@ if [[ -z "${FEATURE_DIR}" || -z "${PLATFORM}" ]]; then
 fi
 
 case "${PLATFORM}" in
-    linux|macos|windows|wsl|all) ;;
+    behavior|linux|macos|windows|wsl|all) ;;
     *)
         echo "Invalid --platform: ${PLATFORM}" >&2
         usage >&2

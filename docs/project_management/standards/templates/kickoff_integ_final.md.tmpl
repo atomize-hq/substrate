@@ -18,23 +18,19 @@ Do not edit planning docs inside the worktree.
 - Merge the relevant integration branches for this slice:
   - The core integration branch (e.g., `*-integ-core`) and any platform-fix integration branches (`*-integ-linux|macos|windows|wsl`) that produced commits.
 - Do not merge the orchestration branch into this worktree to “pick up task status/docs updates”; the finisher merges back while preserving the orchestration branch’s Planning Pack files.
+- If the integration state has grown too large/unstable (many conflicts, large refactors, multiple unrelated changes), stop and ask the operator to split follow-up triads rather than forcing everything through a single final merge.
 - Run:
   - `cargo fmt`
   - `cargo clippy --workspace --all-targets -- -D warnings`
   - relevant tests
   - `make integ-checks`
 - Ensure cross-platform compile parity is green for this exact `HEAD` (fast fail):
-  - `make ci-compile-parity CI_WORKFLOW_REF="{{ORCH_BRANCH}}" CI_REMOTE=origin CI_CLEANUP=1`
+  - `make ci-compile-parity CI_WORKFLOW_REF="testing" CI_REMOTE=origin CI_CLEANUP=1`
 - Run behavioral smoke via CI to confirm the merged result is green (P3-008):
   - Run from this final integration worktree (smoke validates current `HEAD` via a throwaway remote branch).
-  - Determine the behavior platform set:
-    - `jq -r '.meta.behavior_platforms_required // .meta.ci_parity_platforms_required // .meta.platforms_required // [] | join(",")' "{{FEATURE_DIR}}/tasks.json"`
-  - If the behavior set is exactly `linux,macos,windows`:
-    - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=all RUNNER_KIND=self-hosted WORKFLOW_REF="{{ORCH_BRANCH}}" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+  - Dispatch behavioral smoke in a single run (preferred):
+    - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=behavior RUNNER_KIND=self-hosted WORKFLOW_REF="testing" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
       - If WSL coverage is required for this feature, add `RUN_WSL=1`.
-  - Otherwise, dispatch per platform (repeat for each platform in the behavior set):
-    - `make feature-smoke FEATURE_DIR="{{FEATURE_DIR}}" PLATFORM=<platform> RUNNER_KIND=self-hosted WORKFLOW_REF="{{ORCH_BRANCH}}" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
-      - If `<platform>=linux` and WSL coverage is required, add `RUN_WSL=1`.
 - Complete the slice closeout gate report:
   - `{{FEATURE_DIR}}/<SLICE>-closeout_report.md` (e.g., `{{FEATURE_DIR}}/C0-closeout_report.md`)
 
@@ -42,7 +38,7 @@ Do not edit planning docs inside the worktree.
 1. Ensure all required platforms are green (include run ids/URLs).
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="{{TASK_ID}}"`
 3. Run CI Testing on this final integration commit before merging to `testing` (even if CI Testing was run earlier on integ-core):
-   - From inside this worktree: `scripts/ci/dispatch_ci_testing.sh --workflow-ref "{{ORCH_BRANCH}}" --remote origin --cleanup`
+   - From inside this worktree: `scripts/ci/dispatch_ci_testing.sh --workflow-ref "testing" --remote origin --cleanup --mode full`
    - You may skip this only if the operator already has a CI Testing run for this exact `HEAD` commit SHA.
 4. Hand off run ids/URLs (smoke + CI Testing) and closeout report completion to the operator (do not edit planning docs inside the worktree).
 5. Do not delete the worktree (feature cleanup removes worktrees at feature end).

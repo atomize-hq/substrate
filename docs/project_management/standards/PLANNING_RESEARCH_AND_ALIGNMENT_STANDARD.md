@@ -245,8 +245,8 @@ To make validation repeatable and auditable:
   - what success looks like (exit code and key expected output),
   - how to run sections manually for debugging.
   - if cross-platform validation is required, how to run smoke scripts via GitHub Actions on self-hosted runners (preferred):
-    - When behavior platforms are exactly `linux,macos,windows`: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=all RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
-    - Otherwise, dispatch per platform (repeat): `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
+    - Preferred: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior RUN_WSL=1 WORKFLOW_REF="testing"`
+    - Debugging single-platform: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux RUN_WSL=1 WORKFLOW_REF="testing"`
 
 Prohibited:
 - “Verify it works”

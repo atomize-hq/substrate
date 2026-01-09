@@ -209,9 +209,14 @@ if [[ -n "${CODEX_MODEL}" ]]; then args+=(--codex-model "${CODEX_MODEL}"); fi
 if [[ "${CODEX_JSONL}" -eq 1 ]]; then args+=(--codex-jsonl); fi
 if [[ "${DRY_RUN}" -eq 1 ]]; then args+=(--dry-run); fi
 
+set +e
 out="$("${args[@]}")"
+rc="$?"
+set -e
 
 printf 'ORCH_BRANCH=%s\n' "${ORCH_BRANCH}"
 printf 'SLICE_ID=%s\n' "${SLICE_ID}"
 printf 'FINAL_TASK_ID=%s\n' "${FINAL_TASK_ID}"
 printf '%s\n' "${out}"
+
+exit "${rc}"

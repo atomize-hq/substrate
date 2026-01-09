@@ -121,12 +121,11 @@ Optional: run an end-to-end integration orchestration wrapper (integ-core -> smo
 - `docs/project_management/standards/TRIAD_INTEGRATION_WRAPPER_PROMPT.md`
 
 Dispatch cross-platform smoke:
-- If behavior platforms are exactly `linux,macos,windows`: `make feature-smoke FEATURE_DIR="docs/project_management/next/<feature>" PLATFORM=all WORKFLOW_REF="feat/<feature>"`
-- Otherwise, dispatch per platform (repeat): `make feature-smoke FEATURE_DIR="docs/project_management/next/<feature>" PLATFORM=<platform> WORKFLOW_REF="feat/<feature>"`
+- Preferred: `make feature-smoke FEATURE_DIR="docs/project_management/next/<feature>" PLATFORM=behavior WORKFLOW_REF="testing"`
 - Add WSL coverage when required: `RUN_WSL=1` (Linux smoke, or `PLATFORM=wsl` when `wsl_task_mode="separate"`)
 
 If smoke fails, start only the failing platform-fix tasks:
-- Single smoke run id case (`PLATFORM=all`): `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="C0" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
+- Single smoke run id case (`PLATFORM=behavior`): `make triad-task-start-platform-fixes-from-smoke FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="C0" SMOKE_RUN_ID="<run-id>" LAUNCH_CODEX=1`
 - Multi-run case (per-platform smoke): `make triad-task-start-platform-fixes FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="C0" PLATFORMS="<csv>" LAUNCH_CODEX=1`
 
 After all failing platform-fix tasks are green, start the final aggregator:

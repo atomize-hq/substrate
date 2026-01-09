@@ -362,6 +362,7 @@ launch_codex_one() {
     local last_message="${task_codex_last_message[${task_id}]}"
     local events="${task_codex_events[${task_id}]}"
     local stderr="${task_codex_stderr[${task_id}]}"
+    local pid_path="${out_dir}/codex.pid"
 
     mkdir -p "${out_dir}"
 
@@ -370,7 +371,13 @@ launch_codex_one() {
     if [[ -n "${CODEX_MODEL}" ]]; then codex_args+=(--model "${CODEX_MODEL}"); fi
     if [[ "${CODEX_JSONL}" -eq 1 ]]; then codex_args+=(--json); fi
     codex_args+=(--output-last-message "${last_message}" -)
-    "${codex_args[@]}" < "${kickoff}" >"${events}" 2>"${stderr}"
+    "${codex_args[@]}" < "${kickoff}" >"${events}" 2>"${stderr}" &
+    codex_pid="$!"
+    printf '%s\n' "${codex_pid}" > "${pid_path}"
+    wait "${codex_pid}"
+    rc="$?"
+    rm -f "${pid_path}" >/dev/null 2>&1 || true
+    return "${rc}"
 }
 
 if [[ "${LAUNCH_CODEX}" -eq 1 ]]; then
@@ -393,10 +400,9 @@ if [[ "${LAUNCH_CODEX}" -eq 1 ]]; then
             codex_exit["${task_id}"]="$?"
         done
         set -e
-
         for task_id in "${selected_task_ids[@]}"; do
             if [[ "${codex_exit[${task_id}]}" -ne 0 ]]; then
-                die "codex exec failed for ${task_id} (exit=${codex_exit[${task_id}]})"
+                echo "WARN: codex exec failed for ${task_id} (exit=${codex_exit[${task_id}]})" >&2
             fi
         done
     fi
@@ -418,3 +424,11 @@ for p in "${PLATFORMS[@]}"; do
     printf 'CODEX_EVENTS_PATH=%s\n' "${task_codex_events[${task_id}]}"
     printf 'CODEX_STDERR_PATH=%s\n' "${task_codex_stderr[${task_id}]}"
 done
+
+if [[ "${LAUNCH_CODEX}" -eq 1 && "${DRY_RUN}" -eq 0 ]]; then
+    for task_id in "${selected_task_ids[@]}"; do
+        if [[ "${codex_exit[${task_id}]}" != "dry-run" && "${codex_exit[${task_id}]}" -ne 0 ]]; then
+            exit 1
+        fi
+    done
+fi

@@ -310,6 +310,7 @@ launch_codex_one() {
     local last_message="$4"
     local events="$5"
     local stderr="$6"
+    local pid_path="${out_dir}/codex.pid"
 
     mkdir -p "${out_dir}"
 
@@ -318,7 +319,13 @@ launch_codex_one() {
     if [[ -n "${CODEX_MODEL}" ]]; then codex_args+=(--model "${CODEX_MODEL}"); fi
     if [[ "${CODEX_JSONL}" -eq 1 ]]; then codex_args+=(--json); fi
     codex_args+=(--output-last-message "${last_message}" -)
-    "${codex_args[@]}" < "${kickoff}" >"${events}" 2>"${stderr}"
+    "${codex_args[@]}" < "${kickoff}" >"${events}" 2>"${stderr}" &
+    codex_pid="$!"
+    printf '%s\n' "${codex_pid}" > "${pid_path}"
+    wait "${codex_pid}"
+    rc="$?"
+    rm -f "${pid_path}" >/dev/null 2>&1 || true
+    return "${rc}"
 }
 
 if [[ "${LAUNCH_CODEX}" -eq 1 ]]; then

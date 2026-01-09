@@ -16,6 +16,7 @@ Do not edit planning docs inside the worktree.
 
 ## Requirements
 - Implement exactly the behaviors and error handling in the spec.
+- If the spec requires broad refactors or multiple independent behavior changes, stop and ask the operator to split the slice into smaller triads before proceeding.
 - Run: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`
 - Tests boundary:
   - Do not add new tests or new test files.

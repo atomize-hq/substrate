@@ -25,6 +25,7 @@ on:
         required: true
         type: choice
         options:
+          - behavior
           - linux
           - macos
           - windows
@@ -70,9 +71,84 @@ jobs:
             exit 1
           fi
 
-  linux_hosted:
+  feature_meta:
     needs: validate_inputs
-    if: (inputs.platform == 'linux' || inputs.platform == 'all') && inputs.runner_kind == 'github-hosted'
+    runs-on: ubuntu-24.04
+    outputs:
+      run_linux: ${{ steps.meta.outputs.run_linux }}
+      run_macos: ${{ steps.meta.outputs.run_macos }}
+      run_windows: ${{ steps.meta.outputs.run_windows }}
+    steps:
+      - name: Checkout repository (override ref)
+        if: inputs.checkout_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+          submodules: recursive
+
+      - name: Checkout repository
+        if: inputs.checkout_ref == ''
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Compute selected platforms
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          selection="${{ inputs.platform }}"
+          feature_dir="${{ inputs.feature_dir }}"
+          tasks_json="${feature_dir}/tasks.json"
+
+          run_linux=0
+          run_macos=0
+          run_windows=0
+
+          case "${selection}" in
+            all)
+              run_linux=1
+              run_macos=1
+              run_windows=1
+              ;;
+            linux) run_linux=1 ;;
+            macos) run_macos=1 ;;
+            windows) run_windows=1 ;;
+            wsl) : ;; # WSL handled by dedicated job condition.
+            behavior)
+              if [[ ! -f "${tasks_json}" ]]; then
+                echo "ERROR: missing ${tasks_json} (required for platform=behavior)" >&2
+                exit 1
+              fi
+              if ! command -v jq >/dev/null 2>&1; then
+                sudo apt-get update
+                sudo apt-get install -y jq
+              fi
+              required="$(jq -r '.meta.behavior_platforms_required[]? // empty' "${tasks_json}")"
+              while IFS= read -r p; do
+                case "${p}" in
+                  linux) run_linux=1 ;;
+                  macos) run_macos=1 ;;
+                  windows) run_windows=1 ;;
+                  "" ) ;;
+                  *) echo "WARN: ignoring unknown behavior platform in ${tasks_json}: ${p}" >&2 ;;
+                esac
+              done <<< "${required}"
+              ;;
+            *)
+              echo "ERROR: invalid platform selection: ${selection}" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "run_linux=${run_linux}" >> "$GITHUB_OUTPUT"
+          echo "run_macos=${run_macos}" >> "$GITHUB_OUTPUT"
+          echo "run_windows=${run_windows}" >> "$GITHUB_OUTPUT"
+
+  linux_hosted:
+    needs: feature_meta
+    if: needs.feature_meta.outputs.run_linux == '1' && inputs.runner_kind == 'github-hosted'
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository (override ref)
@@ -116,8 +192,8 @@ jobs:
         run: bash "${{ inputs.feature_dir }}/smoke/linux-smoke.sh"
 
   linux_self_hosted:
-    needs: validate_inputs
-    if: (inputs.platform == 'linux' || inputs.platform == 'all') && inputs.runner_kind == 'self-hosted'
+    needs: feature_meta
+    if: needs.feature_meta.outputs.run_linux == '1' && inputs.runner_kind == 'self-hosted'
     runs-on: [self-hosted, Linux, linux-host]
     steps:
       - name: Checkout repository (override ref)
@@ -227,8 +303,8 @@ jobs:
         run: bash "${{ inputs.feature_dir }}/smoke/linux-smoke.sh"
 
   macos_hosted:
-    needs: validate_inputs
-    if: (inputs.platform == 'macos' || inputs.platform == 'all') && inputs.runner_kind == 'github-hosted'
+    needs: feature_meta
+    if: needs.feature_meta.outputs.run_macos == '1' && inputs.runner_kind == 'github-hosted'
     runs-on: macos-14
     steps:
       - name: Checkout repository (override ref)
@@ -272,8 +348,8 @@ jobs:
         run: bash "${{ inputs.feature_dir }}/smoke/macos-smoke.sh"
 
   macos_self_hosted:
-    needs: validate_inputs
-    if: (inputs.platform == 'macos' || inputs.platform == 'all') && inputs.runner_kind == 'self-hosted'
+    needs: feature_meta
+    if: needs.feature_meta.outputs.run_macos == '1' && inputs.runner_kind == 'self-hosted'
     runs-on: [self-hosted, macOS]
     env:
       CARGO_BUILD_JOBS: 2
@@ -318,8 +394,8 @@ jobs:
         run: bash "${{ inputs.feature_dir }}/smoke/macos-smoke.sh"
 
   windows_hosted:
-    needs: validate_inputs
-    if: (inputs.platform == 'windows' || inputs.platform == 'all') && inputs.runner_kind == 'github-hosted'
+    needs: feature_meta
+    if: needs.feature_meta.outputs.run_windows == '1' && inputs.runner_kind == 'github-hosted'
     runs-on: windows-2022
     steps:
       - name: Checkout repository (override ref)
@@ -361,8 +437,8 @@ jobs:
         run: pwsh -File "${{ inputs.feature_dir }}/smoke/windows-smoke.ps1"
 
   windows_self_hosted:
-    needs: validate_inputs
-    if: (inputs.platform == 'windows' || inputs.platform == 'all') && inputs.runner_kind == 'self-hosted'
+    needs: feature_meta
+    if: needs.feature_meta.outputs.run_windows == '1' && inputs.runner_kind == 'self-hosted'
     runs-on: [self-hosted, Windows]
     steps:
       - name: Checkout repository (override ref)

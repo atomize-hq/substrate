@@ -6,7 +6,8 @@ usage() {
 Usage:
   scripts/ci/dispatch_ci_testing.sh \
     [--checkout-ref <git-ref>] \
-    [--workflow .github/workflows/ci-testing.yml] \
+    [--mode <mode>] \
+    [--workflow .github/workflows/ci-testing-v2.yml] \
     [--workflow-ref <ref>] \
     [--remote origin] \
     [--cleanup]
@@ -19,6 +20,8 @@ What it does:
 Notes:
   - This is meant to catch issues that Feature Smoke won't (fmt/clippy -D warnings/full workspace tests).
   - Requires the workflow to support workflow_dispatch input: checkout_ref.
+  - For reliability, prefer dispatching from a stable ref that already has the workflow registered
+    (typically `testing` or `main`), not a short-lived feature branch.
 
 Requirements:
   - `gh` CLI installed and authenticated
@@ -89,16 +92,21 @@ except subprocess.TimeoutExpired:
 PY
 }
 
-WORKFLOW=".github/workflows/ci-testing.yml"
+WORKFLOW=".github/workflows/ci-testing-v2.yml"
 WORKFLOW_REF="testing"
 REMOTE="origin"
 CLEANUP=0
 CHECKOUT_REF=""
+MODE=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --checkout-ref)
             CHECKOUT_REF="${2:-}"
+            shift 2
+            ;;
+        --mode)
+            MODE="${2:-}"
             shift 2
             ;;
         --workflow)
@@ -150,10 +158,15 @@ if [[ -z "${CHECKOUT_REF}" ]]; then
     CHECKOUT_REF="$(git rev-parse HEAD)"
 fi
 
+case "${MODE}" in
+    ""|full|quick|compile-parity) ;;
+    *) die "Invalid --mode: ${MODE} (expected full|quick|compile-parity)" ;;
+esac
+
 head_sha="$(git rev-parse "${CHECKOUT_REF}")"
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 temp_branch_prefix="tmp/ci-testing"
-if [[ "${WORKFLOW}" == ".github/workflows/ci-compile-parity.yml" ]]; then
+if [[ "${MODE}" == "compile-parity" ]]; then
     temp_branch_prefix="tmp/ci-compile-parity"
 fi
 temp_branch="${temp_branch_prefix}/${ts}"
@@ -171,27 +184,70 @@ echo "Workflow ref: ${WORKFLOW_REF}" >&2
 effective_workflow="${WORKFLOW}"
 effective_ref="${WORKFLOW_REF}"
 
-if [[ "${WORKFLOW}" == ".github/workflows/ci-compile-parity.yml" ]]; then
-    # GitHub only registers workflow_dispatch-capable workflows that exist on the default branch.
-    # When a feature branch introduces a new workflow (like ci-compile-parity), dispatching by path
-    # can 404. In that case, fall back to CI Testing, and use the tmp branch prefix to activate
-    # the compile-parity mode inside ci-testing.yml.
-    repo="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)"
-    workflow_file="$(basename "${WORKFLOW}")"
-    if [[ -z "${repo}" ]] || ! gh api "repos/${repo}/actions/workflows/${workflow_file}" >/dev/null 2>&1; then
-        echo "WARN: ${WORKFLOW} not registered on default branch; falling back to .github/workflows/ci-testing.yml (compile-parity via checkout_ref prefix)" >&2
-        effective_workflow=".github/workflows/ci-testing.yml"
+repo="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)"
+workflow_file="$(basename "${WORKFLOW}")"
+legacy_workflow=".github/workflows/ci-testing.yml"
+if [[ -n "${repo}" ]] && ! gh api "repos/${repo}/actions/workflows/${workflow_file}" >/dev/null 2>&1; then
+    legacy_file="$(basename "${legacy_workflow}")"
+    if gh api "repos/${repo}/actions/workflows/${legacy_file}" >/dev/null 2>&1; then
+        echo "WARN: ${WORKFLOW} not registered on default branch; falling back to ${legacy_workflow}" >&2
+        effective_workflow="${legacy_workflow}"
+    else
+        echo "WARN: ${WORKFLOW} not registered on default branch, and legacy workflow is unavailable; continuing with ${WORKFLOW}" >&2
     fi
 fi
 
 dispatch_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 dispatch_err="$(mktemp)"
-if ! run_with_timeout "${GH_TIMEOUT_SECS}" gh workflow run "${effective_workflow}" --ref "${effective_ref}" -f checkout_ref="${temp_branch}" >/dev/null 2>"${dispatch_err}"; then
-    err_msg="$(cat "${dispatch_err}" || true)"
-    echo "${err_msg}" >&2
-    rm -f "${dispatch_err}" >/dev/null 2>&1 || true
-    die "failed to dispatch workflow via gh (workflow=${effective_workflow} ref=${effective_ref})"
+
+dispatch_args=(gh workflow run "${effective_workflow}" --ref "${effective_ref}" -f checkout_ref="${temp_branch}")
+if [[ -n "${MODE}" ]]; then
+    dispatch_args+=(-f mode="${MODE}")
 fi
+
+set +e
+run_with_timeout "${GH_TIMEOUT_SECS}" "${dispatch_args[@]}" >/dev/null 2>"${dispatch_err}"
+dispatch_rc="$?"
+set -e
+
+if [[ "${dispatch_rc}" -ne 0 ]]; then
+    err_msg="$(cat "${dispatch_err}" || true)"
+
+    # Back-compat: if the workflow doesn't accept `mode`, retry once without it.
+    if [[ -n "${MODE}" ]] && grep -Fq "Unexpected inputs provided" <<<"${err_msg}"; then
+        echo "WARN: workflow does not accept mode input; retrying without mode" >&2
+        : >"${dispatch_err}"
+        set +e
+        run_with_timeout "${GH_TIMEOUT_SECS}" gh workflow run "${effective_workflow}" --ref "${effective_ref}" -f checkout_ref="${temp_branch}" >/dev/null 2>"${dispatch_err}"
+        dispatch_rc="$?"
+        set -e
+        err_msg="$(cat "${dispatch_err}" || true)"
+    fi
+
+    # If dispatching from a non-stable ref fails due to trigger discovery, retry from `testing`.
+    if [[ "${dispatch_rc}" -ne 0 ]] && [[ "${effective_ref}" != "testing" ]] && grep -Fq "does not have 'workflow_dispatch' trigger" <<<"${err_msg}"; then
+        echo "WARN: dispatch failed on ref=${effective_ref}; retrying with workflow ref=testing" >&2
+        effective_ref="testing"
+        dispatch_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        : >"${dispatch_err}"
+        dispatch_args=(gh workflow run "${effective_workflow}" --ref "${effective_ref}" -f checkout_ref="${temp_branch}")
+        if [[ -n "${MODE}" ]]; then
+            dispatch_args+=(-f mode="${MODE}")
+        fi
+        set +e
+        run_with_timeout "${GH_TIMEOUT_SECS}" "${dispatch_args[@]}" >/dev/null 2>"${dispatch_err}"
+        dispatch_rc="$?"
+        set -e
+        err_msg="$(cat "${dispatch_err}" || true)"
+    fi
+
+    if [[ "${dispatch_rc}" -ne 0 ]]; then
+        echo "${err_msg}" >&2
+        rm -f "${dispatch_err}" >/dev/null 2>&1 || true
+        die "failed to dispatch workflow via gh (workflow=${effective_workflow} ref=${effective_ref})"
+    fi
+fi
+
 rm -f "${dispatch_err}" >/dev/null 2>&1 || true
 
 echo "Waiting for run to start..." >&2

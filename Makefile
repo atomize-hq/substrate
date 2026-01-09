@@ -122,23 +122,25 @@ adr-fix:
 # =========================
 
 # CI dispatch defaults (override as needed)
-CI_WORKFLOW ?= .github/workflows/ci-testing.yml
+CI_WORKFLOW ?= .github/workflows/ci-testing-v2.yml
 CI_WORKFLOW_REF ?= testing
 CI_REMOTE ?= origin
 CI_CLEANUP ?= 1
 CI_CHECKOUT_REF ?=
+CI_MODE ?=
 
 .PHONY: ci-testing
 ci-testing:
 	@set -euo pipefail; \
 	args="--workflow \"$(CI_WORKFLOW)\" --workflow-ref \"$(CI_WORKFLOW_REF)\" --remote \"$(CI_REMOTE)\""; \
 	if [ -n "$(CI_CHECKOUT_REF)" ]; then args="$$args --checkout-ref \"$(CI_CHECKOUT_REF)\""; fi; \
+	if [ -n "$(CI_MODE)" ]; then args="$$args --mode \"$(CI_MODE)\""; fi; \
 	if [ "$(CI_CLEANUP)" = "1" ]; then args="$$args --cleanup"; fi; \
 	eval "scripts/ci/dispatch_ci_testing.sh $$args"
 
 .PHONY: ci-compile-parity
 ci-compile-parity:
-	@$(MAKE) ci-testing CI_WORKFLOW=.github/workflows/ci-testing.yml
+	@$(MAKE) ci-testing CI_WORKFLOW=.github/workflows/ci-testing-v2.yml CI_MODE=compile-parity
 
 # Dispatch defaults (override as needed)
 PLATFORM ?= linux
@@ -146,7 +148,7 @@ RUNNER_KIND ?= self-hosted
 RUN_WSL ?= 0
 RUN_INTEG_CHECKS ?= 0
 WORKFLOW ?= .github/workflows/feature-smoke.yml
-WORKFLOW_REF ?= feat/policy_and_config
+WORKFLOW_REF ?= testing
 REMOTE ?= origin
 CLEANUP ?= 1
 
@@ -165,6 +167,10 @@ feature-smoke:
 .PHONY: feature-smoke-all
 feature-smoke-all:
 	@$(MAKE) feature-smoke PLATFORM=all
+
+.PHONY: feature-smoke-behavior
+feature-smoke-behavior:
+	@$(MAKE) feature-smoke PLATFORM=behavior
 
 .PHONY: feature-smoke-wsl
 feature-smoke-wsl:

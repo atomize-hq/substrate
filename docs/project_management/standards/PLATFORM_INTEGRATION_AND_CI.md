@@ -45,7 +45,7 @@ Common setup (runner installed under `/opt/actions-runner`):
 
 For cross-platform work, split integration into:
 - **Option A (validation-only):** one integration task runs the smoke workflow for the feature’s **behavior platforms** (P3-008) and records the run id/URL in `session_log.md`.
-  - Use `platform=all` only when behavior platforms are exactly Linux+macOS+Windows; otherwise dispatch per behavior platform.
+  - Prefer a single dispatch with `platform=behavior` (the workflow reads `tasks.json` and runs only required behavior platforms).
 - **Option B (platform-fix when needed):** split integration into core + platform-fix tasks:
   - `X-integ-core` (core integration): merges code+tests and gets primary-platform green.
   - `X-integ-linux` (platform-fix): if Linux is a behavior platform, runs Linux smoke (and bundled WSL smoke if required); otherwise treats Linux as CI parity-only.
@@ -63,7 +63,7 @@ Platform task inclusion rules (P3-008):
 ## Planning Pack requirement (schema v2)
 
 If a planning pack opts into the platform-fix model, encode it in `tasks.json`:
-- `meta.schema_version: 2`
+- `meta.schema_version: 2` (or `3` when automation is enabled)
 - Declare both scopes (P3-008):
   - `meta.behavior_platforms_required: [...]` (platforms with behavior guarantees; smoke scripts required here)
   - `meta.ci_parity_platforms_required: ["linux","macos","windows"]` (platforms that must be green in CI parity gates; platform-fix tasks required here)
@@ -123,8 +123,8 @@ GitHub Actions must run on a ref that exists on the remote. The repeatable patte
 
 Helper script (requires `gh` auth):
 - `make feature-smoke`
-  - Defaults to dispatching from a stable workflow ref (`feat/policy_and_config`) and using `RUNNER_KIND=self-hosted`.
-  - For triad execution, set `WORKFLOW_REF` to the orchestration branch (typically `feat/<feature>`) so the workflow definition matches the feature branch.
+  - Defaults to dispatching from a stable workflow ref (`testing`) and using `RUNNER_KIND=self-hosted`.
+  - For triad execution, prefer `WORKFLOW_REF=testing` or `WORKFLOW_REF=main` (stable refs with registered workflows). The workflow checks out the throwaway `checkout_ref` branch, so the code under test is still the integration `HEAD`.
 
 Smoke result interpretation (important):
 - The smoke dispatcher always prints machine-parseable fields including `DISPATCH_OK`, `RUN_ID`, `RUN_URL`, `CONCLUSION`, and `SMOKE_FAILED_PLATFORMS`.
@@ -148,6 +148,9 @@ You should not need to change these, but if you must (infra incident, runner bac
   - `FEATURE_SMOKE_RUN_LOOKUP_TIMEOUT_SECS` (default `120`) — wait for run id to appear
 
 - CI Testing (`scripts/ci/dispatch_ci_testing.sh`)
+  - Use `--mode compile-parity` for fast cross-platform parity (fmt/check/clippy only).
+  - Use `--mode quick` for automation selection (skip docs/cross-build).
+  - Use `--mode full` (default) as the final CI gate before merging to `testing`.
   - `CI_TESTING_WATCH_TIMEOUT_SECS` (default `7200`)
   - `CI_TESTING_WATCH_INTERVAL_SECS` (default `15`)
   - `CI_TESTING_GH_TIMEOUT_SECS` (default `120`) — per `gh` call

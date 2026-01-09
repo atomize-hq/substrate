@@ -16,6 +16,7 @@ Do not edit planning docs inside the worktree.
 
 ## Requirements
 - Add/modify tests that enforce the spec’s acceptance criteria.
+- If the spec implies large/sweeping behavior changes, stop and ask the operator to split the slice so the test task can stay focused and reviewable.
 - Run: `cargo fmt`, plus the targeted tests you add/touch.
   - Note: your branch is not expected to be fully green until the code branch lands; tests must compile and fail deterministically for spec-driven reasons.
 
