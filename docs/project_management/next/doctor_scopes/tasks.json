@@ -62,7 +62,7 @@
       "name": "Doctor scope split (code)",
       "type": "code",
       "phase": "DS0",
-      "status": "pending",
+      "status": "completed",
       "description": "Implement DS0 spec (production code only): add `substrate host doctor`, implement world-agent world doctor endpoint, and update `substrate world doctor` to consume it.",
       "references": [
         "docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md",

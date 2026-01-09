@@ -133,6 +133,20 @@
 - Required fixes before starting DS0:
   - Update `docs/project_management/next/doctor_scopes/quality_gate_report.md` to `RECOMMENDATION: ACCEPT` (must not be “FLAG FOR HUMAN REVIEW”).
 
+## START — 2026-01-09T02:45:58Z — code — DS0-code
+- Worktree: `wt/dsc-ds0-code`
+- Branch: `dsc-ds0-code`
+- Orchestration branch: `feat/doctor-scopes`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/doctor_scopes" SLICE_ID="DS0" LAUNCH_CODEX=1`
+
+## START — 2026-01-09T02:45:58Z — test — DS0-test
+- Worktree: `wt/dsc-ds0-test`
+- Branch: `dsc-ds0-test`
+- Orchestration branch: `feat/doctor-scopes`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/doctor_scopes" SLICE_ID="DS0" LAUNCH_CODEX=1`
+
 ## END — 2026-01-09T03:05:41Z — test — DS0-test
 - Worktree: `wt/dsc-ds0-test`
 - Branch: `dsc-ds0-test`
@@ -145,3 +159,14 @@
   - `cargo test -p agent-api-types` → exit `0`
   - `cargo test -p substrate-shell --test doctor_scopes_ds0 --test shim_health --test shim_doctor --test world_verify --test socket_activation --test world_overlayfs_enumeration_wo0` → exit `0`
   - `make triad-task-finish TASK_ID="DS0-test"` → exit `0`
+
+## END — 2026-01-09T03:19:48Z — code — DS0-code
+- Worktree: `wt/dsc-ds0-code`
+- Branch: `dsc-ds0-code`
+- HEAD: `fcc3d0a92e066aaf36bfb94d41aca44b4aa67eff`
+- Summary:
+  - Added `substrate host doctor` CLI surface and routing.
+  - Added world-agent `GET /v1/doctor/world` endpoint and corresponding client/types plumbing.
+  - Updated `substrate world doctor` to emit the DS0 v1 envelope and query the world-agent endpoint; updated `world_verify` to parse the new envelope.
+- Commands run (with exit codes):
+  - `make triad-task-finish TASK_ID="DS0-code"` (runs `cargo fmt` + `cargo clippy --workspace --all-targets -- -D warnings`) → exit `0`
