@@ -174,7 +174,7 @@
 	      "branch": "feat/doctor-scopes",
 	      "directory": "docs/project_management/next/doctor_scopes",
 	      "plan": "docs/project_management/next/doctor_scopes/plan.md",
-	      "status": "not_started",
+	      "status": "completed",
 	      "sequence": [{ "id": "DS0", "spec": "docs/project_management/next/doctor_scopes/DS0-spec.md" }],
 	      "notes": [
 	        "Clarifies what is host readiness vs in-world enforcement readiness, especially on macOS (Lima guest kernel facts).",

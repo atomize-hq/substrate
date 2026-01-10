@@ -157,3 +157,42 @@ Rules:
 - **Cons:**
   - Non-greenfield complexity; requires migration plans and ongoing compat tests.
 
+---
+
+## DR-0009 — Patch file comment headers (clarity) vs bare YAML mappings
+
+### Option A (selected): Add short comment headers to patch files
+- **Decision:** When Substrate creates `config.yaml`, `policy.yaml`, `.substrate/workspace.yaml`, or `.substrate/policy.yaml`, it writes a short comment header explaining:
+  - that the file is a sparse override patch at this scope,
+  - that the file can be edited directly or via CLI (CLI recommended),
+  - and how to inspect the effective merged view via `current show --explain`.
+- **Pros:**
+  - Makes patch semantics self-documenting and reduces “why didn’t this take effect?” confusion.
+  - Encourages safe workflows (`current show --explain` for debugging sources).
+  - Keeps the file minimal while still discoverable for new operators.
+- **Cons:**
+  - Adds non-functional lines to patch files (slightly noisier diffs).
+
+### Option B: No headers; rely on external docs only
+- **Pros:**
+  - Cleanest possible YAML files; minimal diffs.
+- **Cons:**
+  - Patch semantics are easy to forget/misinterpret; higher support burden.
+
+---
+
+## DR-0010 — Patch-view UX when empty: conditional stderr note vs silent output
+
+### Option A (selected): Conditional stderr note when patch is empty
+- **Decision:** `config|policy global show` and `config|policy workspace show` print the patch to stdout and, when the parsed patch is empty, emit a short stderr note pointing to `current show --explain`.
+- **Pros:**
+  - Preserves machine-parseable stdout while improving operator clarity in the common “empty patch” case.
+  - Avoids noise when overrides are present (no note when non-empty).
+- **Cons:**
+  - Slightly more complexity in CLI output contracts and tests.
+
+### Option B: Always silent for patch views
+- **Pros:**
+  - Simplest behavior and cleanest output.
+- **Cons:**
+  - Operators may confuse `{}` with “no config/policy exists” or “Substrate is broken” without a hint.
