@@ -27,6 +27,13 @@ Keep concise, actionable, and security-focused.
   - Work: extend broker schema to accept `world.fs_mode = read_only|writable` (global + per-project), plumb into shell/world-agent so PTY + non-PTY sessions honor it, and update docs/doctor to surface the active mode. Systemd units must allow `/home` writes so policy can enforce RO vs writable deterministically.
   - Acceptance: policy defaults to writable; flipping to read-only blocks writes (clear errors, trace telemetry); installers/docs explain the knob and tests cover both modes (with skip notes for hosts lacking overlay/cgroup permissions).
 
+- **P1 – Add world OS/distro fields to doctor JSON**
+  - Problem: `world doctor --json` reports host platform, but the `world` section does not identify the guest OS/distro/kernel. This is fine today (world is effectively “Linux”), but becomes important if we support multiple guest distros/images (Lima/WSL variants) and need to debug/report parity accurately.
+  - Work:
+    - Collect and report `world.platform` (e.g., `linux`) and a structured `world.os` block (e.g., `/etc/os-release` fields, `uname -r`, arch) from inside the world.
+    - Add fields as optional/backwards-compatible (or bump schema with clear migration rules) and update any schema/fixtures/tests/docs.
+  - Acceptance: `substrate world doctor --json` includes the world OS identity fields when world is enabled; missing data degrades gracefully; docs explain the semantics.
+
 - **P1 fs_diff parity (agent HTTP + PTY)**
   - *Agent HTTP path:* Today only replay/local backends attach `fs_diff`; agent-routed non-PTY commands drop the diff. Extend `agent-api-types::ExecuteResponse` / `world-agent` so `/v1/execute` returns `fs_diff: Option<FsDiff>` and update the shell to record it in completion spans. Acceptance: `fs_diff` shows up in `trace.jsonl` for agent HTTP runs.
   - *PTY sessions:* Interactive runs still lack filesystem diffs. Explore capturing post-exit diffs via overlayfs/copydiff and plumb the result through the PTY telemetry path so REPL + `substrate -i` sessions produce the same audit artifacts as non-PTY commands. Document caveats (long-running PTYs, partial diffs) and add tests to prove PTY diffs land in spans.
