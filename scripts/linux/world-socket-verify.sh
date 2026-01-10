@@ -2,11 +2,11 @@
 set -euo pipefail
 
 usage() {
-  cat <<'USAGE'
+  cat << 'USAGE'
 usage: scripts/linux/world-socket-verify.sh [--profile PROFILE] [--log-dir DIR] [--skip-cleanup]
 
 Provision the systemd-managed substrate world-agent socket via scripts/linux/world-provision.sh,
-run `substrate world doctor --json` to capture the `world_socket` block, run
+run `substrate world doctor --json` to capture the `host.world_socket` block, run
 `substrate --shim-status-json`, and optionally uninstall the units afterward. This script requires
 sudo privileges and will write logs/artifacts under the specified log directory (defaults to
 artifacts/linux/world-socket-verify-<timestamp>).
@@ -38,7 +38,7 @@ while [[ $# -gt 0 ]]; do
       CLEANUP=0
       shift
       ;;
-    -h|--help)
+    -h | --help)
       usage
       exit 0
       ;;
@@ -55,17 +55,17 @@ if [[ $(uname -s) != "Linux" ]]; then
   exit 1
 fi
 
-if ! command -v sudo >/dev/null 2>&1; then
+if ! command -v sudo > /dev/null 2>&1; then
   echo "sudo is required to run provisioning commands." >&2
   exit 1
 fi
 
-if ! command -v jq >/dev/null 2>&1; then
+if ! command -v jq > /dev/null 2>&1; then
   echo "jq is required to inspect doctor output." >&2
   exit 1
 fi
 
-if ! command -v cargo >/dev/null 2>&1; then
+if ! command -v cargo > /dev/null 2>&1; then
   echo "cargo is required to build the substrate CLI." >&2
   exit 1
 fi
@@ -110,8 +110,8 @@ log "Running Linux world provisioner (requires sudo)"
 run "${REPO_ROOT}/scripts/linux/world-provision.sh" --profile "${PROFILE}"
 
 log "Capturing systemctl status for socket/service"
-run sudo systemctl status substrate-world-agent.socket --no-pager --lines=20 >"${SYSTEMCTL_SOCKET_LOG}"
-run sudo systemctl status substrate-world-agent.service --no-pager --lines=20 >"${SYSTEMCTL_SERVICE_LOG}"
+run sudo systemctl status substrate-world-agent.socket --no-pager --lines=20 > "${SYSTEMCTL_SOCKET_LOG}"
+run sudo systemctl status substrate-world-agent.service --no-pager --lines=20 > "${SYSTEMCTL_SERVICE_LOG}"
 
 log "Recording ${SOCKET_FS_PATH} ownership/perms"
 if ! sudo sh -c 'stat -c "path:%n mode:%a user:%U group:%G" "$1" >"$2"' _ "${SOCKET_FS_PATH}" "${SOCKET_STAT_LOG}"; then
@@ -119,31 +119,31 @@ if ! sudo sh -c 'stat -c "path:%n mode:%a user:%U group:%G" "$1" >"$2"' _ "${SOC
   exit 1
 fi
 
-INVOKING_USER="$(id -un 2>/dev/null || true)"
+INVOKING_USER="$(id -un 2> /dev/null || true)"
 if [[ -n "${INVOKING_USER}" ]]; then
   log "Recording ${INVOKING_USER} group memberships"
-  id -nG "${INVOKING_USER}" >"${INVOKING_USER_GROUPS_LOG}" || true
+  id -nG "${INVOKING_USER}" > "${INVOKING_USER_GROUPS_LOG}" || true
 else
-  printf 'Unable to detect invoking user for group membership check.\n' >"${INVOKING_USER_GROUPS_LOG}"
+  printf 'Unable to detect invoking user for group membership check.\n' > "${INVOKING_USER_GROUPS_LOG}"
 fi
 
-if command -v loginctl >/dev/null 2>&1 && [[ -n "${INVOKING_USER}" ]]; then
+if command -v loginctl > /dev/null 2>&1 && [[ -n "${INVOKING_USER}" ]]; then
   log "Recording loginctl lingering status for ${INVOKING_USER}"
-  loginctl show-user "${INVOKING_USER}" -p Linger >"${LINGER_STATUS_LOG}" 2>&1 || true
+  loginctl show-user "${INVOKING_USER}" -p Linger > "${LINGER_STATUS_LOG}" 2>&1 || true
 else
-  printf 'loginctl unavailable or invoking user unknown; run loginctl enable-linger <user> manually if needed.\n' >"${LINGER_STATUS_LOG}"
+  printf 'loginctl unavailable or invoking user unknown; run loginctl enable-linger <user> manually if needed.\n' > "${LINGER_STATUS_LOG}"
 fi
 
 log "Running substrate world doctor --json"
-if ! run "${SUBSTRATE_BIN}" world doctor --json >"${DOCTOR_JSON}"; then
+if ! run "${SUBSTRATE_BIN}" world doctor --json > "${DOCTOR_JSON}"; then
   echo "substrate world doctor failed; see ${DOCTOR_JSON}" >&2
   exit 1
 fi
-log "Extracting world_socket block"
-jq '.host.world_socket // .host.agent_socket // .world_socket // .agent_socket' "${DOCTOR_JSON}" >"${DOCTOR_SOCKET_JSON}"
+log "Extracting host.world_socket block"
+jq '.host.world_socket // .host.agent_socket // .world_socket // .agent_socket' "${DOCTOR_JSON}" > "${DOCTOR_SOCKET_JSON}"
 
 log "Running substrate --shim-status-json"
-run "${SUBSTRATE_BIN}" --shim-status-json >"${SHIM_STATUS_JSON}"
+run "${SUBSTRATE_BIN}" --shim-status-json > "${SHIM_STATUS_JSON}"
 
 if [[ ${CLEANUP} -eq 1 ]]; then
   log "Cleaning up via uninstall-substrate.sh"
@@ -156,13 +156,13 @@ log "Verification complete. Artifacts saved under ${LOG_DIR}:"
 log "- systemctl socket log: ${SYSTEMCTL_SOCKET_LOG}"
 log "- systemctl service log: ${SYSTEMCTL_SERVICE_LOG}"
 log "- world doctor JSON: ${DOCTOR_JSON}"
-log "- extracted world_socket/agent_socket: ${DOCTOR_SOCKET_JSON}"
+log "- extracted host.world_socket: ${DOCTOR_SOCKET_JSON}"
 log "- shim status JSON: ${SHIM_STATUS_JSON}"
 log "- socket stat (mode/user/group): ${SOCKET_STAT_LOG}"
 log "- invoking user groups: ${INVOKING_USER_GROUPS_LOG}"
 log "- loginctl lingering status: ${LINGER_STATUS_LOG}"
 
-cat <<SUMMARY
+cat << SUMMARY
 Next steps:
   * Review ${DOCTOR_SOCKET_JSON} to ensure the expected socket_activation mode/path are recorded.
   * Check ${SOCKET_STAT_LOG}, ${INVOKING_USER_GROUPS_LOG}, and ${LINGER_STATUS_LOG} for ownership/group/linger evidence.

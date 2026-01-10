@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  cat <<'USAGE'
+  cat << 'USAGE'
 usage: scripts/linux/agent-hub-isolation-verify.sh [--log-dir DIR] [--substrate-bin PATH] [--keep-temp]
 
 Verifies the policy-driven filesystem guarantees introduced by the Agent Hub Isolation Hardening track:
@@ -38,7 +38,7 @@ while [[ $# -gt 0 ]]; do
       KEEP_TEMP=1
       shift
       ;;
-    -h|--help)
+    -h | --help)
       usage
       exit 0
       ;;
@@ -50,12 +50,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if ! command -v jq >/dev/null 2>&1; then
+if ! command -v jq > /dev/null 2>&1; then
   echo "jq is required to inspect doctor output." >&2
   exit 1
 fi
 
-if ! command -v cargo >/dev/null 2>&1; then
+if ! command -v cargo > /dev/null 2>&1; then
   echo "cargo is required to build the substrate CLI." >&2
   exit 1
 fi
@@ -90,18 +90,19 @@ fi
 
 DOCTOR_JSON="${LOG_DIR}/world-doctor.json"
 log "Running substrate world doctor --json"
-run "${SUBSTRATE_BIN}" world doctor --json >"${DOCTOR_JSON}"
+run "${SUBSTRATE_BIN}" world doctor --json > "${DOCTOR_JSON}"
 
-if ! jq -e '.ok == true' "${DOCTOR_JSON}" >/dev/null 2>&1; then
+if ! jq -e '.ok == true' "${DOCTOR_JSON}" > /dev/null 2>&1; then
   log "World doctor reported ok=false; isolation verification requires a working world backend."
   log "See: ${DOCTOR_JSON}"
-  jq '{ok, world_fs_mode, world_socket, agent_socket, lima: (.agent_socket.lima // null)}' "${DOCTOR_JSON}" \
-    | tee "${LOG_DIR}/world-doctor-summary.json" >/dev/null || true
-  cat <<'HINT' >&2
+  jq '{ok, platform, world_enabled, host, world}' "${DOCTOR_JSON}" |
+    tee "${LOG_DIR}/world-doctor-summary.json" > /dev/null || true
+  cat << 'HINT' >&2
 Hints:
   - Linux: run scripts/linux/world-provision.sh (installs systemd socket/service)
   - macOS: run scripts/mac/lima-warm.sh (provisions the Lima VM backend)
   - Re-run doctor: substrate world doctor --json
+  - Transport-only check: substrate host doctor --json
 HINT
   exit 1
 fi
@@ -116,7 +117,7 @@ readonly_substrate="${readonly_project}/.substrate"
 fullcage_substrate="${fullcage_project}/.substrate"
 mkdir -p "${readonly_substrate}" "${fullcage_substrate}"
 
-cat >"${readonly_substrate}/workspace.yaml" <<'YAML'
+cat > "${readonly_substrate}/workspace.yaml" << 'YAML'
 world:
   enabled: true
   anchor_mode: workspace
@@ -131,7 +132,7 @@ sync:
   exclude: []
 YAML
 
-cat >"${readonly_substrate}/policy.yaml" <<'YAML'
+cat > "${readonly_substrate}/policy.yaml" << 'YAML'
 id: i5-verify-readonly
 name: I5 verify (read_only)
 world_fs:
@@ -155,7 +156,7 @@ limits:
 metadata: {}
 YAML
 
-cat >"${fullcage_substrate}/workspace.yaml" <<'YAML'
+cat > "${fullcage_substrate}/workspace.yaml" << 'YAML'
 world:
   enabled: true
   anchor_mode: workspace
@@ -170,7 +171,7 @@ sync:
   exclude: []
 YAML
 
-cat >"${fullcage_substrate}/policy.yaml" <<'YAML'
+cat > "${fullcage_substrate}/policy.yaml" << 'YAML'
 id: i5-verify-full-cage
 name: I5 verify (full cage)
 world_fs:
@@ -200,8 +201,8 @@ cleanup() {
     log "Keeping temp projects: ${readonly_project}, ${fullcage_project}"
     return 0
   fi
-  rm -rf "${readonly_project}" "${fullcage_project}" 2>/dev/null || true
-  rm -f "${outside_read:-}" "${outside_write:-}" 2>/dev/null || true
+  rm -rf "${readonly_project}" "${fullcage_project}" 2> /dev/null || true
+  rm -f "${outside_read:-}" "${outside_write:-}" 2> /dev/null || true
 }
 trap cleanup EXIT
 
@@ -210,7 +211,7 @@ expect_failure() {
   local out="$2"
   local err="$3"
   shift 3
-  if "$@" >"${out}" 2>"${err}"; then
+  if "$@" > "${out}" 2> "${err}"; then
     log "FAILED: expected failure (${label}) but command succeeded"
     log "stdout: ${out}"
     log "stderr: ${err}"
@@ -223,7 +224,7 @@ expect_success() {
   local out="$2"
   local err="$3"
   shift 3
-  if ! "$@" >"${out}" 2>"${err}"; then
+  if ! "$@" > "${out}" 2> "${err}"; then
     log "FAILED: expected success (${label}) but command failed"
     log "stdout: ${out}"
     log "stderr: ${err}"
@@ -232,7 +233,7 @@ expect_success() {
 }
 
 log "Test 1: world_fs.mode=read_only blocks project writes (relative + absolute)"
-pushd "${readonly_project}" >/dev/null
+pushd "${readonly_project}" > /dev/null
 expect_failure \
   "read_only relative write" \
   "${LOG_DIR}/readonly-rel.stdout" \
@@ -253,15 +254,15 @@ if [[ -e "${readonly_project}/abs.txt" ]]; then
   log "FAILED: abs.txt was created on host (read_only should prevent absolute-path project writes)"
   exit 1
 fi
-popd >/dev/null
+popd > /dev/null
 log "PASS: read_only blocked relative + absolute project writes"
 
 log "Test 2: world_fs.isolation=full blocks arbitrary host paths outside the project"
 outside_read="${HOST_HOME}/substrate-i5-outside-read.$$.txt"
 outside_write="${HOST_HOME}/substrate-i5-outside-write.$$.txt"
-printf 'host-visible\n' >"${outside_read}"
+printf 'host-visible\n' > "${outside_read}"
 
-pushd "${fullcage_project}" >/dev/null
+pushd "${fullcage_project}" > /dev/null
 expect_success \
   "full_cage host path isolation checks" \
   "${LOG_DIR}/fullcage.stdout" \
@@ -291,13 +292,13 @@ if echo deny > "$I5_OUTSIDE_WRITE" 2>/dev/null; then
   exit 1
 fi
 '
-popd >/dev/null
+popd > /dev/null
 
-rm -f "${outside_read}" "${outside_write}" 2>/dev/null || true
+rm -f "${outside_read}" "${outside_write}" 2> /dev/null || true
 log "PASS: full cage blocked host paths outside the project (and enforced project write allowlist)"
 
 log "Verification complete. Logs saved under: ${LOG_DIR}"
-cat <<'SUMMARY'
+cat << 'SUMMARY'
 Expected failure modes:
   - If full-cage fails with an unshare/mount-namespace error, the host/guest needs CAP_SYS_ADMIN
     (root) or unprivileged user namespaces enabled (kernel.unprivileged_userns_clone=1 on Linux).
