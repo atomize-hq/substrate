@@ -40,6 +40,14 @@ if (Test-Path -LiteralPath (Join-Path $FeatureDir "smoke")) {
             default   { throw "FAIL: invalid platform in behavior platforms: $p" }
         }
     }
+
+    Write-Host "-- Smoke script scaffold scan"
+    $scaffold = "Smoke script scaffold .*replace with feature checks"
+    & rg -n --hidden --glob '!**/.git/**' $scaffold (Join-Path $FeatureDir "smoke")
+    if ($LASTEXITCODE -eq 0) {
+        throw "FAIL: smoke scripts still contain scaffolds; replace them with contract assertions (manual_testing_playbook.md should mirror these checks)"
+    }
+    if ($LASTEXITCODE -ne 1) { throw "rg failed with exit code $LASTEXITCODE" }
 }
 
 Write-Host "-- Hard-ban scan"

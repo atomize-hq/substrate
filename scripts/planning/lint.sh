@@ -76,6 +76,17 @@ if [[ -d "${FEATURE_DIR}/smoke" ]]; then
             *) echo "FAIL: invalid platform in behavior platforms: ${p}" >&2; exit 1 ;;
         esac
     done
+
+    echo "-- Smoke script scaffold scan"
+    if rg -n --hidden --glob '!**/.git/**' 'Smoke script scaffold .*replace with feature checks' "${FEATURE_DIR}/smoke"; then
+        echo "FAIL: smoke scripts still contain scaffolds; replace them with contract assertions (manual_testing_playbook.md should mirror these checks)" >&2
+        exit 1
+    else
+        rc=$?
+        if [[ "${rc}" -ne 1 ]]; then
+            exit "${rc}"
+        fi
+    fi
 fi
 
 echo "-- Hard-ban scan"

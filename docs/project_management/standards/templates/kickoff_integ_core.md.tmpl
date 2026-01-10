@@ -23,6 +23,42 @@ Do not edit planning docs inside the worktree.
   - `make integ-checks`
 - Optional (once per feature, when you want a clean-cache assurance): `make preflight`
 
+### Local behavioral smoke preflight (required when possible; fast fail before CI dispatch)
+
+If `{{FEATURE_DIR}}/smoke/` exists and this machine matches a behavior platform for this feature, run the matching smoke script **locally** before dispatching compile parity or Feature Smoke.
+
+Determine behavior platforms:
+- `jq -r '.meta.behavior_platforms_required // [] | join(\",\")' "{{FEATURE_DIR}}/tasks.json"`
+
+Preflight steps (choose the block matching your current platform):
+
+Linux:
+```bash
+set -euo pipefail
+cargo build --bin substrate
+export PATH="$PWD/target/debug:$PATH"
+bash "{{FEATURE_DIR}}/smoke/linux-smoke.sh"
+```
+
+macOS:
+```bash
+set -euo pipefail
+cargo build --bin substrate
+export PATH="$PWD/target/debug:$PATH"
+bash "{{FEATURE_DIR}}/smoke/macos-smoke.sh"
+```
+
+Windows (PowerShell):
+```powershell
+$ErrorActionPreference = "Stop"
+cargo build --bin substrate
+$env:Path = "$pwd\\target\\debug;$env:Path"
+pwsh -File "{{FEATURE_DIR}}\\smoke\\windows-smoke.ps1"
+```
+
+Expected:
+- Exit `0`.
+
 ### Cross-platform compile parity (CI dispatch; required before smoke)
 
 Before dispatching Feature Smoke (especially when using `RUNNER_KIND=self-hosted`), run a fast cross-platform compile parity preflight on GitHub-hosted runners to catch macOS/Windows compilation breaks early:

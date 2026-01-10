@@ -24,6 +24,11 @@ Do not edit planning docs inside the worktree.
   - `cargo clippy --workspace --all-targets -- -D warnings`
   - relevant tests
   - `make integ-checks`
+- Local behavioral smoke preflight (fast fail before CI dispatch; required when possible):
+  - If `{{FEATURE_DIR}}/smoke/` exists and this machine matches a behavior platform, build `substrate`, add `target/debug` to `PATH`, and run the matching smoke script locally.
+  - Linux: `cargo build --bin substrate && export PATH="$PWD/target/debug:$PATH" && bash "{{FEATURE_DIR}}/smoke/linux-smoke.sh"`
+  - macOS: `cargo build --bin substrate && export PATH="$PWD/target/debug:$PATH" && bash "{{FEATURE_DIR}}/smoke/macos-smoke.sh"`
+  - Windows: `cargo build --bin substrate; $env:Path=\"$pwd\\target\\debug;$env:Path\"; pwsh -File \"{{FEATURE_DIR}}\\smoke\\windows-smoke.ps1\"`
 - Ensure cross-platform compile parity is green for this exact `HEAD` (fast fail):
   - `make ci-compile-parity CI_WORKFLOW_REF="{{ORCH_BRANCH}}" CI_REMOTE=origin CI_CLEANUP=1`
 - Run behavioral smoke via CI to confirm the merged result is green (P3-008):

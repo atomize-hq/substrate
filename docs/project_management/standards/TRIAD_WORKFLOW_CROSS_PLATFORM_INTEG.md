@@ -13,6 +13,9 @@ It shows:
 Operational notes (important for correct orchestration):
 - CI smoke dispatch (`make feature-smoke ...`) validates the **current `HEAD`** by creating/pushing a throwaway branch at that commit; run it from the worktree that contains the code you intend to validate (e.g., the `X-integ-core` or `X-integ` worktree).
 - Platform-fix tasks should begin by merging the `X-integ-core` task branch into their own branch before running smoke or making fixes.
+- Before any CI dispatch, run a **local behavioral smoke preflight** (fast fail) on the current platform when possible:
+  - Build `substrate` in the integration worktree, add `target/debug` to `PATH`, and run the matching feature-local smoke script from `docs/project_management/next/<feature>/smoke/` (or `"$FEATURE_DIR/smoke/"` if you set `FEATURE_DIR`).
+  - This catches obvious smoke-script/behavior drift before burning runner time and creating throwaway branches.
 - Cross-platform compile parity should be validated before Feature Smoke dispatch to avoid discovering macOS/Windows compilation breaks only after creating temp branches and consuming runner time:
   - `make ci-compile-parity CI_WORKFLOW_REF="$ORCH_BRANCH" CI_REMOTE=origin CI_CLEANUP=1` (dispatches CI Testing in `mode=compile-parity` via `scripts/ci/dispatch_ci_testing.sh`).
   - If compile parity fails: treat it as **blocking** and fix it on the `X-integ-core` branch/worktree (cfg/platform guards), then re-run compile parity until green; do not dispatch Feature Smoke until it is green.
@@ -76,6 +79,7 @@ flowchart TD
   subgraph INTEG_CORE["Core Integration (primary dev platform)"]
     MERGE["X-integ-core (merge X-code + X-test; resolve spec drift)"]
     CORE_CHECKS["Required checks: cargo fmt; cargo clippy ... -- -D warnings; relevant tests; make integ-checks"]
+    CORE_LOCAL_SMOKE["Local behavioral smoke preflight (build substrate; run feature-local smoke script for this platform)"]
     CORE_PARITY["Dispatch cross-platform compile parity via make ci-compile-parity (GitHub-hosted; CI parity platforms)"]
     CORE_FIX["If parity fails: fix compile parity on X-integ-core branch (cfg/platform guards), commit, and re-run parity"]
     CORE_DISPATCH["Dispatch behavioral smoke via CI (prefer PLATFORM=behavior; optional RUN_WSL=1; WORKFLOW_REF should be the orchestration/task ref, not main/testing)"]
@@ -88,7 +92,7 @@ flowchart TD
 
   CODE --> MERGE
   TEST --> MERGE
-  MERGE --> CORE_CHECKS --> CORE_PARITY
+  MERGE --> CORE_CHECKS --> CORE_LOCAL_SMOKE --> CORE_PARITY
   CORE_PARITY -->|pass| CORE_DISPATCH
   CORE_PARITY -->|fail| CORE_FIX --> CORE_PARITY
 
@@ -170,6 +174,7 @@ flowchart TD
   subgraph INTEG_CORE["Core Integration (primary dev platform)"]
     CORE["X-integ-core (merge X-code + X-test; resolve spec drift)"]
     CORE_CHECKS["Core checks: cargo fmt; cargo clippy ... -- -D warnings; relevant tests; make integ-checks"]
+    CORE_LOCAL_SMOKE["Local behavioral smoke preflight (build substrate; run feature-local smoke script for this platform)"]
     CORE_PARITY["Dispatch cross-platform compile parity via make ci-compile-parity (GitHub-hosted; CI parity platforms)"]
     CORE_FIX["If parity fails: fix compile parity on X-integ-core branch (cfg/platform guards), commit, and re-run parity"]
     CORE_DISPATCH["Dispatch behavioral smoke via CI (prefer PLATFORM=behavior; optional WSL; WORKFLOW_REF should be the orchestration/task ref, not main/testing)"]
@@ -182,7 +187,7 @@ flowchart TD
 
   CODE --> CORE
   TEST --> CORE
-  CORE --> CORE_CHECKS --> CORE_PARITY
+  CORE --> CORE_CHECKS --> CORE_LOCAL_SMOKE --> CORE_PARITY
   CORE_PARITY -->|pass| CORE_DISPATCH
   CORE_PARITY -->|fail| CORE_FIX --> CORE_PARITY
 

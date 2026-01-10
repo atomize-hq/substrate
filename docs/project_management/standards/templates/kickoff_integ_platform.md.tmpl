@@ -27,6 +27,11 @@ Do not edit planning docs inside the worktree.
 - Run the platform-local Rust quality gates before finishing (CI Testing parity on this OS):
   - `cargo fmt`
   - `cargo clippy --workspace --all-targets -- -D warnings`
+- If this is a behavioral platform (P3-008), run a local behavioral smoke preflight before dispatching CI smoke:
+  - Build `substrate`, add `target/debug` to `PATH`, then run the matching smoke script locally.
+  - Linux: `cargo build --bin substrate && export PATH="$PWD/target/debug:$PATH" && bash "{{FEATURE_DIR}}/smoke/linux-smoke.sh"`
+  - macOS: `cargo build --bin substrate && export PATH="$PWD/target/debug:$PATH" && bash "{{FEATURE_DIR}}/smoke/macos-smoke.sh"`
+  - Windows: `cargo build --bin substrate; $env:Path=\"$pwd\\target\\debug;$env:Path\"; pwsh -File \"{{FEATURE_DIR}}\\smoke\\windows-smoke.ps1\"`
 - Decide whether smoke is required for this platform (P3-008):
   - `jq -r '.meta.behavior_platforms_required // [] | join(",")' "{{FEATURE_DIR}}/tasks.json"`
   - If `{{PLATFORM}}` is in `behavior_platforms_required`, run Feature Smoke for this platform (repeat until green if you make fixes):

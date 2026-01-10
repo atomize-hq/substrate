@@ -44,6 +44,26 @@ SLICE_ID="<SET_ME>"      # e.g. PCP0
    Also capture the commit SHA after the run:
    - `INTEG_CORE_HEAD_SHA=$(git -C "$INTEG_CORE_WORKTREE" rev-parse HEAD)`
 
+1.5) Confirm local behavioral smoke preflight was run (fast fail; when possible):
+   - The integ-core kickoff prompt requires a local behavioral smoke preflight when `"$FEATURE_DIR/smoke/"` exists and the platform matches.
+   - Confirm the integ-core agent explicitly reported the local smoke preflight as:
+     - executed, and
+     - green (exit `0`).
+   - Only if the preflight is missing or ambiguous, re-run it locally from the integ-core worktree before any CI dispatch.
+   - Determine behavior platforms from the pack:
+     - `jq -r '.meta.behavior_platforms_required // [] | join(",")' "$FEATURE_DIR/tasks.json"`
+   - Local smoke preflight (choose the block matching your current platform):
+     - Linux:
+       - `cd "$INTEG_CORE_WORKTREE" && cargo build --bin substrate && export PATH="$PWD/target/debug:$PATH" && bash "$FEATURE_DIR/smoke/linux-smoke.sh"`
+     - macOS:
+       - `cd "$INTEG_CORE_WORKTREE" && cargo build --bin substrate && export PATH="$PWD/target/debug:$PATH" && bash "$FEATURE_DIR/smoke/macos-smoke.sh"`
+     - Windows (PowerShell):
+       - `cd "$INTEG_CORE_WORKTREE"; cargo build --bin substrate; $env:Path=\"$pwd\\target\\debug;$env:Path\"; pwsh -File \"$FEATURE_DIR\\smoke\\windows-smoke.ps1\"`
+   - If local smoke preflight is re-run and fails:
+     - Treat this as **blocking**.
+     - Fix behavior drift in the **integ-core** branch/worktree, commit, and re-run local smoke preflight until it is green.
+     - Only then proceed to CI dispatch (compile parity and Feature Smoke).
+
 2) Run cross-platform compile parity for the integ-core commit (fast fail; do this before relying on smoke):
    - Run from the integ-core worktree (validates `INTEG_CORE_HEAD_SHA` via a throwaway branch):
      - `cd "$INTEG_CORE_WORKTREE" && make ci-compile-parity CI_WORKFLOW_REF="$ORCH_BRANCH" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="$INTEG_CORE_HEAD_SHA"`
