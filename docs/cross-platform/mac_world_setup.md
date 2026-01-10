@@ -158,16 +158,19 @@ PATH="$(pwd)/target/debug:$PATH" scripts/mac/smoke.sh
 
 The script performs non-PTY, PTY, and replay runs, then validates that the replayed fs diff includes `world-mac-smoke/file.txt`.
 
-### Using `substrate world doctor`
+### Using `substrate host doctor` and `substrate world doctor`
 
-Once the VM is provisioned, prefer the CLI doctor for day-to-day checks:
+Once the VM is provisioned, prefer the CLI doctors for day-to-day checks:
 
 ```sh
+target/debug/substrate host doctor
+target/debug/substrate host doctor --json | jq .
+
 target/debug/substrate world doctor
 target/debug/substrate world doctor --json | jq .
 ```
 
-The macOS report verifies host prerequisites (limactl, virtualization, optional `vsock-proxy`), Lima VM state, guest service health, and agent responsiveness. The legacy `scripts/mac/lima-doctor.sh` script remains available for deeper troubleshooting but the CLI command is the canonical entry point.
+`substrate host doctor` is host-scoped (limactl + virtualization + VM/service reachability). `substrate world doctor` includes the host report plus world-agent-reported “in-world” facts (guest-kernel Landlock support/ABI + world fs strategy probe) via `/v1/doctor/world`. The legacy `scripts/mac/lima-doctor.sh` script remains available for deeper troubleshooting but the CLI commands are the canonical entry points.
 
 ## Helper Scripts
 
@@ -184,7 +187,7 @@ The macOS report verifies host prerequisites (limactl, virtualization, optional 
 | Virtualization not available | `sysctl kern.hv_support` returns 0 | Enable virtualization in System Settings → Privacy & Security → Developer Tools |
 | Lima VM fails to start | Check `limactl start substrate` output | Ensure sufficient disk space; check `~/Library/Logs/lima/` for detailed logs |
 | SSH connection fails | `limactl shell substrate` fails | Run `limactl shell substrate` once to accept host key |
-| Agent not responding | `curl` to socket times out | Check systemd: `limactl shell substrate systemctl status substrate-world-agent.socket` and `.service`, then inspect `substrate world doctor --json | jq '.world_socket'` inside the VM |
+| Agent not responding | `substrate host doctor` shows agent unreachable | Check systemd: `limactl shell substrate systemctl status substrate-world-agent.socket` and `.service`, then probe directly in-guest: `limactl shell substrate sudo -n curl --fail --unix-socket /run/substrate.sock http://localhost/v1/doctor/world | jq .` |
 | Agent binary missing | Service fails to start | Rebuild and copy binary as shown in Step 2 |
 | Permission errors | Socket operations fail | Ensure directories exist with correct permissions: `/run/substrate` (0750) |
 | DNS resolution issues | Network operations fail in VM | Check dnsmasq: `limactl shell substrate systemctl status dnsmasq` |

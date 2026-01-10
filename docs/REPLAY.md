@@ -44,6 +44,7 @@ substrate --replay --replay-verbose <SPAN_ID>
 
 # Agent unavailable (Linux only):
 # [replay] warn: agent replay unavailable (connect failed: Connection refused (socket: /run/substrate.sock)); falling back to local backend. Run `substrate world doctor --json` or set SUBSTRATE_WORLD_SOCKET to point at a healthy agent socket.
+# For transport-only debugging (socket/unit reachability), `substrate host doctor --json` is a faster host-scoped check.
 # [replay] world strategy: overlay
 # [replay] scopes: []
 

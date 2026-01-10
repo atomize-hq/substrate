@@ -12,7 +12,7 @@ This document mirrors the mental model of the CLI parser in `crates/shell/src/ex
 | Script execution | `-f/--file <SCRIPT>` | Same add-ons as `-c` | `-c`, `--version-json`, shim mgmt, trace/replay | Invokes REPL state preservation per `cli.rs:37`. |
 | Version metadata | `--version-json` | `--world`, `--no-world`, `--shim-skip` | `-c`, `-f`, shim mgmt, trace/replay | Information-only request (`cli.rs:62`). |
 | Trace inspect | `--trace <SPAN>` | `--world`, `--no-world`, anchor/caging flags | `-c`, `-f`, shim mgmt, `--replay` | Pull span metadata (`cli.rs:94`). |
-| Replay | `--replay <SPAN>` | `--replay-verbose`, world + anchor toggles | `-c`, `-f`, `--trace`, shim mgmt | Agent-first replay on Linux with a single `[replay] warn: agent replay unavailable (<cause>); falling back to local backend. Run \`substrate world doctor --json\` or set SUBSTRATE_WORLD_SOCKET to point at a healthy agent socket` warning before switching to the local backend/copy-diff. Defaults to world isolation even when the rest of the CLI is host-only; use `--no-world` or `SUBSTRATE_REPLAY_USE_WORLD=disabled` for host pass-through. |
+| Replay | `--replay <SPAN>` | `--replay-verbose`, world + anchor toggles | `-c`, `-f`, `--trace`, shim mgmt | Agent-first replay on Linux with a single `[replay] warn: agent replay unavailable (<cause>); falling back to local backend. Run \`substrate world doctor --json\` (or \`substrate host doctor --json\` for transport-only checks) or set SUBSTRATE_WORLD_SOCKET to point at a healthy agent socket` warning before switching to the local backend/copy-diff. Defaults to world isolation even when the rest of the CLI is host-only; use `--no-world` or `SUBSTRATE_REPLAY_USE_WORLD=disabled` for host pass-through. |
 | Replay verbose | `--replay <SPAN> --replay-verbose` | Same as replay | Requires `--replay` | Adds command/cwd/mode diagnostics, the active world toggle summary, strategy/scopes lines, and replay warnings (agent fallback, copy-diff retries). Shell transport probes still use the `shell world-agent path ...` prefix so you can distinguish them from `[replay] warn:` entries. |
 
 ## Root Command: Order-Independent Flags
@@ -45,7 +45,7 @@ These flags apply before any subcommand and can appear anywhere before the first
 
 ## Subcommands (change parsing scope)
 
-Once you type `graph`, `world`, `shim`, or `health`, the parser stops accepting additional root flags. Everything that follows must be ordered according to the subcommand’s own definition (subcommand-level flags can be interleaved before any positional data).
+Once you type `graph`, `host`, `world`, `config`, `policy`, `workspace`, `shim`, or `health`, the parser stops accepting additional root flags. Everything that follows must be ordered according to the subcommand’s own definition (subcommand-level flags can be interleaved before any positional data).
 
 ### `host` Subcommand
 

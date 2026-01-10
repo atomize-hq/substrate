@@ -198,7 +198,7 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Default if unset | Linux: `/run/substrate.sock` |
 | Precedence | Env overrides the default socket path; no CLI flag exists |
 | Scope | Run-only |
-| Examples | `SUBSTRATE_WORLD_SOCKET=/run/substrate.sock substrate world doctor --json` |
+| Examples | `SUBSTRATE_WORLD_SOCKET=/run/substrate.sock substrate host doctor --json` |
 | Security notes | Not sensitive; controls which agent socket receives execution requests. On macOS, setting this also bypasses Lima transport detection and connects directly to the provided Unix socket path. |
 
 #### `SUBSTRATE_AGENT_ID`
@@ -1034,4 +1034,5 @@ Use these commands to verify that this contract matches the implementation:
 - Audit supported env reads across runtime code: `rg -n \"env::var\\(\\\"(SUBSTRATE|SHIM|TRACE|AGENT|AUTH|HOST_PROXY|RATE_LIMIT|MAX_BODY|REQUEST_TIMEOUT)\" crates/**/src`
 - Audit installer knobs: `rg -n \"SUBSTRATE_INSTALL_|SUBSTRATE_UNINSTALL_|SUBSTRATE_ROOT\" scripts/substrate`
 - Run a runtime sanity check (host-only): `SUBSTRATE_WORLD=disabled substrate --shim-status-json`
-- Run a world backend sanity check (Linux/macOS): `substrate world doctor --json`
+- Run a host readiness check (Linux/macOS): `substrate host doctor --json`
+- Run a world enforcement check (Linux/macOS): `substrate world doctor --json`

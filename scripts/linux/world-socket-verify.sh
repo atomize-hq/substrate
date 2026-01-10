@@ -140,7 +140,7 @@ if ! run "${SUBSTRATE_BIN}" world doctor --json >"${DOCTOR_JSON}"; then
   exit 1
 fi
 log "Extracting world_socket block"
-jq '.world_socket // .agent_socket' "${DOCTOR_JSON}" >"${DOCTOR_SOCKET_JSON}"
+jq '.host.world_socket // .host.agent_socket // .world_socket // .agent_socket' "${DOCTOR_JSON}" >"${DOCTOR_SOCKET_JSON}"
 
 log "Running substrate --shim-status-json"
 run "${SUBSTRATE_BIN}" --shim-status-json >"${SHIM_STATUS_JSON}"

@@ -119,7 +119,7 @@ Check both sides of the bridge:
 ```powershell
 # inside WSL
 wsl -d substrate-wsl -- bash -lc 'systemctl status substrate-world-agent.socket && systemctl status substrate-world-agent.service'
-wsl -d substrate-wsl -- bash -lc "substrate world doctor --json | jq '.world_socket'"
+wsl -d substrate-wsl -- bash -lc "substrate host doctor --json | jq '.host.world_socket'"
 
 # on Windows
 Get-Content "$env:LOCALAPPDATA\Substrate\logs\forwarder.log" -Tail 50

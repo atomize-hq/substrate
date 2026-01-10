@@ -95,6 +95,8 @@ selected origin after CLI/env/flip overrides. The `fallback_reason` mirrors the 
 (socket path included) and `copydiff_root*` fields appear when copy-diff retries log
 `[replay] warn: copy-diff ...` lines:
 
+For host-only transport debugging (systemd/socket reachability), prefer `substrate host doctor --json`.
+
 ```json
 {
   "ts": "2025-12-04T17:00:00Z",

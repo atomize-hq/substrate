@@ -168,8 +168,8 @@ Policies control whether the world filesystem is writable (overlay/copy-diff) or
   project writes fail (requires `world_fs.require_world: true`).
 
 The shell exports `SUBSTRATE_WORLD_FS_MODE` with the resolved value for telemetry/replay and
-surfaces it in `substrate world doctor --json` so policy enforcement is visible without extra
-flags.
+surfaces it in `substrate host doctor --json` and `substrate world doctor --json` so policy
+enforcement is visible without extra flags.
 
 ### Policy files (`world_fs` schema)
 

@@ -1,7 +1,7 @@
 # Linux world socket verification harness
 
 Use this harness when you need to *prove* that a provisioned Linux host emits the `world_socket`
-block in `substrate world doctor --json` and the socket-activation summary in
+block in `substrate host doctor --json` (and in the `host` block of `substrate world doctor --json`) and the socket-activation summary in
 `substrate --shim-status-json`. It automates the manual instructions already listed in `docs/WORLD.md`
 (step-by-step systemctl checks, doctor, shim status) and captures the results under
 `artifacts/linux/` for audit trails.
@@ -35,7 +35,7 @@ The script performs the following:
    the invoking user's group memberships, and the current `loginctl` lingering
    state so the archive proves group/linger guidance was surfaced.
 5. Runs `substrate world doctor --json` with the newly provisioned socket and writes
-   the JSON and `world_socket` extract to the same artifact directory.
+   the JSON and `host.world_socket` extract to the same artifact directory.
 6. Runs `substrate --shim-status-json` and stores the output.
 7. By default, executes `scripts/substrate/uninstall-substrate.sh` so the host returns to its
    pre-test state (use `--skip-cleanup` if you want to keep the units running).
@@ -44,7 +44,7 @@ Artifacts include:
 
 - `systemctl-socket.txt` / `systemctl-service.txt`
 - `world-doctor.json`
-- `world-doctor-world_socket.json` (falls back to `agent_socket` if the new key is absent)
+- `world-doctor-world_socket.json` (extracts `host.world_socket`; falls back to legacy keys when present)
 - `shim-status.json`
 - `run-substrate-socket.txt` (stat output showing owner/group/mode)
 - `invoking-user-groups.txt`

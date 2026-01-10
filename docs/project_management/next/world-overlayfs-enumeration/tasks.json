@@ -114,7 +114,7 @@
         "A Linux integration test creates a file in world mode and asserts it appears via directory enumeration in the world project view",
         "A Linux test simulates or forces primary-strategy enumeration failure and asserts fuse-overlayfs fallback is selected",
         "A test asserts trace metadata includes world_fs_strategy_primary, world_fs_strategy_final, and world_fs_strategy_fallback_reason with allowed enum values",
-        "A test asserts doctor JSON includes world_fs_strategy_primary, world_fs_strategy_fallback, and world_fs_strategy_probe keys"
+        "A test asserts doctor JSON includes world.world_fs_strategy.{primary,fallback,probe} keys"
       ],
       "start_checklist": [
         "Read ADR/spec",

@@ -38,7 +38,7 @@ Actions:
 Outputs:
 - Correct directory listing semantics inside the world project view.
 - Trace annotations for strategy selection and fallback reasons.
-- Doctor JSON diagnostics for strategy availability and probe status.
+- Doctor JSON diagnostics for strategy availability and probe status (via `substrate world doctor --json` → `.world.world_fs_strategy`).
 
 ## Component map (what changes where)
 
@@ -66,4 +66,3 @@ Outputs:
 
 - Sequencing entry: `docs/project_management/next/sequencing.json` → `world_overlayfs_enumeration` (`WO0`)
 - This feature is sequenced before world-sync to avoid building new flows on an unreliable world filesystem contract.
-

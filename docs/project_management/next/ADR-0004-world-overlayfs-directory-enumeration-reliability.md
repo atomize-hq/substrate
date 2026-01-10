@@ -24,7 +24,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 5869e26e0dcaea4e2cd25daf4fe5c1b93fdfba697798993472632b13c8c6c33a
+ADR_BODY_SHA256: 8309c36c2114249058470978a5c13c0569d1024336d35cf71f264520a80330a4
 ### Changes (operator-facing)
 - World overlay directory enumeration reliability (Linux)
   - Existing: On some Linux hosts, a world overlay mount can succeed but directory enumeration in the merged view is broken (e.g., `ls` shows empty even though `stat` works), making worlds unsafe/confusing.
@@ -166,10 +166,10 @@ ADR_BODY_SHA256: 5869e26e0dcaea4e2cd25daf4fe5c1b93fdfba697798993472632b13c8c6c33
       - `fallback_mount_failed`
       - `fallback_probe_failed`
       - `world_optional_fallback_to_host`
-  - `substrate world doctor --json` MUST include these keys:
-    - `world_fs_strategy_primary`: `overlay`
-    - `world_fs_strategy_fallback`: `fuse`
-    - `world_fs_strategy_probe`:
+  - `substrate world doctor --json` MUST include these keys (DS0 doctor envelope):
+    - `world.world_fs_strategy.primary`: `overlay`
+    - `world.world_fs_strategy.fallback`: `fuse`
+    - `world.world_fs_strategy.probe`:
       - `id`: `enumeration_v1`
       - `probe_file`: `.substrate_enum_probe`
       - `result`: `pass|fail`

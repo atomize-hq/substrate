@@ -55,13 +55,13 @@ Implement a Linux world filesystem strategy that guarantees directory enumeratio
     - `fallback_mount_failed`
     - `fallback_probe_failed`
     - `world_optional_fallback_to_host`
-- `substrate world doctor --json` MUST include:
-  - `world_fs_strategy_primary`: `overlay`
-  - `world_fs_strategy_fallback`: `fuse`
-  - `world_fs_strategy_probe.id`: `enumeration_v1`
-  - `world_fs_strategy_probe.probe_file`: `.substrate_enum_probe`
-  - `world_fs_strategy_probe.result`: `pass|fail`
-  - `world_fs_strategy_probe.failure_reason`: string or null
+- `substrate world doctor --json` MUST include (DS0 doctor envelope):
+  - `world.world_fs_strategy.primary`: `overlay`
+  - `world.world_fs_strategy.fallback`: `fuse`
+  - `world.world_fs_strategy.probe.id`: `enumeration_v1`
+  - `world.world_fs_strategy.probe.probe_file`: `.substrate_enum_probe`
+  - `world.world_fs_strategy.probe.result`: `pass|fail`
+  - `world.world_fs_strategy.probe.failure_reason`: string or null
 
 ### Exit codes
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
