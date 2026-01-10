@@ -1,8 +1,8 @@
 # ADR-0008 — Workspace Config/Policy Scopes + `.substrate/` Unification (Patch Files)
 
 ## Status
-- Status: Draft
-- Date (UTC): 2026-01-08
+- Status: Approved
+- Date (UTC): 2026-01-10
 - Owner(s): spenser
 
 ## Scope
@@ -85,6 +85,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0008-wo
 - **Workspace disabled**: a workspace root that has `<workspace_root>/.substrate/workspace.disabled` present; it is treated as non-existent for discovery and effective resolution.
 - **Patch file**: a YAML mapping that may omit any keys; omitted keys mean “inherit from the next lower precedence layer”.
 - **Patch view**: a CLI output that prints *exactly the patch file contents* at a scope (global/workspace), without merging defaults or other layers.
+- **Workspace discovery**: starting from the current `cwd` (or an explicit `PATH`), Substrate walks up parent directories to find the nearest enabled workspace root. Commands do not require being run from the workspace root itself.
 
 ### Patch file comment headers (authoritative)
 Patch files created by Substrate MUST include a short comment header explaining patch semantics and pointing to the relevant CLI commands. This applies to:
@@ -101,11 +102,14 @@ When these files are created (by `workspace init`, `global init`, `set` creating
 Config patch header template (global/workspace):
 ```yaml
 # Substrate config patch (sparse overrides).
-# - This file is a patch: omit keys to inherit from lower-precedence layers.
-# - Edit via:
+# - This file is a YAML mapping of overrides at this scope.
+#   - Workspace patch: overrides the global patch + defaults.
+#   - Global patch: overrides defaults.
+# - You may edit this file directly, or use the CLI (recommended) for validated updates:
 #   - Global:    `substrate config global set ...` / `substrate config global reset ...`
 #   - Workspace: `substrate config workspace set ...` / `substrate config workspace reset ...`
-# - View the effective config for the current directory:
+# - To inherit (stop overriding): delete a key or leave this file as `{}`.
+# - Inspect the effective config (for your current directory) and per-key sources:
 #   `substrate config current show --explain`
 # Examples:
 # world:
@@ -119,11 +123,14 @@ Config patch header template (global/workspace):
 Policy patch header template (global/workspace):
 ```yaml
 # Substrate policy patch (sparse overrides).
-# - This file is a patch: omit keys to inherit from lower-precedence layers.
-# - Edit via:
+# - This file is a YAML mapping of overrides at this scope.
+#   - Workspace patch: overrides the global patch + defaults.
+#   - Global patch: overrides defaults.
+# - You may edit this file directly, or use the CLI (recommended) for validated updates:
 #   - Global:    `substrate policy global set ...` / `substrate policy global reset ...`
 #   - Workspace: `substrate policy workspace set ...` / `substrate policy workspace reset ...`
-# - View the effective policy for the current directory:
+# - To inherit (stop overriding): delete a key or leave this file as `{}`.
+# - Inspect the effective policy (for your current directory) and per-key sources:
 #   `substrate policy current show --explain`
 # Examples:
 # world_fs:
@@ -136,6 +143,7 @@ Policy patch header template (global/workspace):
 
 #### `substrate config current show [--json] [--explain]`
 - Prints the **effective config** for the current `cwd` (YAML by default, JSON with `--json`).
+- Workspace selection (if any) is determined by workspace discovery from `cwd` (nearest enabled workspace root). Nested workspaces are refused by `workspace init`, so at most one workspace patch applies.
 - Stdout:
   - YAML or JSON payload of the effective config.
 - Stderr (always):
@@ -158,6 +166,8 @@ Policy patch header template (global/workspace):
 - It MUST NOT create the file as a side effect.
 - It MUST NOT incorporate workspace patches, override env vars, protected-exclude injection, or CLI flag overrides.
 - It MUST NOT print built-in defaults; use `substrate config current show` for the effective (merged) view.
+- Stderr (only if the global patch is empty after parsing, including when the file is missing):
+  - `substrate: note: global config patch is empty (no overrides); run 'substrate config current show --explain' to view the effective config for this directory`
 - Exit codes: `0` on success; `2` on invalid YAML; `1` on unexpected failure.
 
 #### `substrate config global init [--force]`
@@ -191,20 +201,22 @@ Policy patch header template (global/workspace):
 - Exit codes: `0` success (including no-op); `2` invalid key; `1` unexpected.
 
 #### `substrate config workspace show [--json]`
-- Requires a workspace root for current `cwd`.
+- Requires that the current `cwd` is within an enabled workspace (workspace root is discovered by walking up from `cwd`).
 - Prints the **workspace config patch** at `<workspace_root>/.substrate/workspace.yaml`.
-- If the file does not exist, it prints `{}` (the workspace has no overrides).
+- Because `<workspace_root>/.substrate/workspace.yaml` is the workspace root marker, it MUST exist; if it is missing, workspace discovery fails and this command exits `2` (“no workspace root found”).
 - It MUST NOT incorporate global patch, override env vars, protected-exclude injection, or CLI flag overrides.
 - It MUST NOT print built-in defaults; use `substrate config current show` for the effective (merged) view.
+- Stderr (only if the workspace patch file exists and is empty after parsing):
+  - `substrate: note: workspace config patch is empty (no overrides); run 'substrate config current show --explain' to view the effective config for this directory`
 - Exit codes:
   - `0`: success
   - `2`: no workspace root found
   - `1`: unexpected failure
 
 #### `substrate config workspace set [--json] UPDATE...`
-- Requires a workspace root for current `cwd`.
-- Applies updates to `<workspace_root>/.substrate/workspace.yaml`, creating the file if missing.
-- If the patch file does not exist, it MUST be created with the standard comment header (see “Patch file comment headers”).
+- Requires that the current `cwd` is within an enabled workspace (workspace root is discovered by walking up from `cwd`).
+- Applies updates to `<workspace_root>/.substrate/workspace.yaml`.
+- If `<workspace_root>/.substrate/workspace.yaml` is missing, workspace discovery fails; users should run `substrate workspace init --force` to repair the workspace marker.
 - `UPDATE` syntax matches `config global set`.
 - On success:
   - Prints the **effective config for `cwd`** after applying the update (same output contract as `config current show` but without the merged notice line).
@@ -212,11 +224,12 @@ Policy patch header template (global/workspace):
 - Exit codes: `0` success; `2` actionable user error; `1` unexpected.
 
 #### `substrate config workspace reset [KEY ...]`
-- Requires a workspace root for current `cwd`.
+- Requires that the current `cwd` is within an enabled workspace (workspace root is discovered by walking up from `cwd`).
 - If no `KEY` arguments are provided:
   - Resets the workspace config patch to `{}` (meaning “inherit all config from global/default layers”).
 - If one or more `KEY` arguments are provided:
   - Removes those keys from the workspace patch (so they inherit from global/default).
+- If `<workspace_root>/.substrate/workspace.yaml` is missing, workspace discovery fails; users should run `substrate workspace init --force` to repair the workspace marker.
 - If the workspace patch file exists and contains a comment header, reset MUST preserve the comment header.
 - Exit codes: `0` success (including no-op); `2` actionable user error; `1` unexpected.
 
@@ -226,6 +239,7 @@ Policy patch header template (global/workspace):
 - Prints the **effective policy** for the current `cwd`:
   - If a workspace root exists and is enabled and `<workspace_root>/.substrate/policy.yaml` exists: apply workspace patch over the global policy patch over defaults.
   - Otherwise: apply global policy patch over defaults.
+- Workspace selection (if any) is determined by workspace discovery from `cwd` (nearest enabled workspace root). Nested workspaces are refused by `workspace init`, so at most one workspace patch applies.
 - Stderr (always):
   - `substrate: note: showing effective merged policy; use --explain to view per-key sources`
 - `--explain`:
@@ -238,6 +252,8 @@ Policy patch header template (global/workspace):
 - It MUST NOT create the file as a side effect.
 - It MUST NOT incorporate workspace patches.
 - It MUST NOT print built-in defaults; use `substrate policy current show` for the effective (merged) view.
+- Stderr (only if the global patch is empty after parsing, including when the file is missing):
+  - `substrate: note: global policy patch is empty (no overrides); run 'substrate policy current show --explain' to view the effective policy for this directory`
 - Exit codes: `0` on success; `2` on invalid YAML / invalid policy; `1` on unexpected failure.
 
 #### `substrate policy global init [--force]`
@@ -262,15 +278,17 @@ Policy patch header template (global/workspace):
 - Exit codes: `0` success (including no-op); `2` invalid key / invalid policy; `1` unexpected.
 
 #### `substrate policy workspace show [--json]`
-- Requires a workspace root for current `cwd`.
+- Requires that the current `cwd` is within an enabled workspace (workspace root is discovered by walking up from `cwd`).
 - Prints the **workspace policy patch** at `<workspace_root>/.substrate/policy.yaml`.
 - If the file does not exist, it prints `{}` (the workspace has no overrides).
 - It MUST NOT incorporate the global policy patch or any config env/CLI layers.
 - It MUST NOT print built-in defaults; use `substrate policy current show` for the effective (merged) view.
+- Stderr (only if the workspace patch file exists and is empty after parsing):
+  - `substrate: note: workspace policy patch is empty (no overrides); run 'substrate policy current show --explain' to view the effective policy for this directory`
 - Exit codes: `0` success; `2` no workspace root found; `1` unexpected.
 
 #### `substrate policy workspace set [--json] UPDATE...`
-- Requires a workspace root for current `cwd`.
+- Requires that the current `cwd` is within an enabled workspace (workspace root is discovered by walking up from `cwd`).
 - Applies dotted updates to the workspace policy patch, creating the file if missing.
 - If the patch file does not exist, it MUST be created with the standard comment header (see “Patch file comment headers”).
 - On success:
@@ -278,7 +296,7 @@ Policy patch header template (global/workspace):
 - Exit codes: `0` success; `2` invalid update/value/YAML/policy; `1` unexpected.
 
 #### `substrate policy workspace reset [KEY ...]`
-- Requires a workspace root for current `cwd`.
+- Requires that the current `cwd` is within an enabled workspace (workspace root is discovered by walking up from `cwd`).
 - If no `KEY` arguments are provided: resets the workspace policy patch to `{}` (inherit global/default).
 - If one or more `KEY` arguments are provided: removes those keys from the workspace patch (inherit global/default).
 - If the workspace patch file exists and contains a comment header, reset MUST preserve the comment header.
