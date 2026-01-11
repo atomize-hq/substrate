@@ -135,10 +135,10 @@ fn diff_paths(target: &Path, base: &Path) -> Option<PathBuf> {
         common_len += 1;
     }
 
-    let mut out = PathBuf::new();
+    let mut segments: Vec<String> = Vec::new();
     for component in &base_components[common_len..] {
         match component {
-            Component::Normal(_) | Component::ParentDir => out.push(".."),
+            Component::Normal(_) | Component::ParentDir => segments.push("..".to_string()),
             Component::CurDir => {}
             Component::RootDir | Component::Prefix(_) => {}
         }
@@ -146,18 +146,20 @@ fn diff_paths(target: &Path, base: &Path) -> Option<PathBuf> {
 
     for component in &target_components[common_len..] {
         match component {
-            Component::Normal(seg) => out.push(seg),
-            Component::ParentDir => out.push(".."),
+            Component::Normal(seg) => segments.push(seg.to_string_lossy().to_string()),
+            Component::ParentDir => segments.push("..".to_string()),
             Component::CurDir => {}
             Component::RootDir | Component::Prefix(_) => {}
         }
     }
 
-    if out.as_os_str().is_empty() {
-        out.push(".");
+    if segments.is_empty() {
+        return Some(PathBuf::from("."));
     }
 
-    Some(out)
+    // Use forward slashes even on Windows so JSON output is stable across platforms and matches
+    // the planning-pack smoke expectations (e.g., `.substrate/world-deps.selection.yaml`).
+    Some(PathBuf::from(segments.join("/")))
 }
 
 #[derive(Debug)]
