@@ -1,34 +1,28 @@
-# Kickoff: WDL1-test (Install classes tests)
+# Kickoff: WDL1-test (test)
 
 ## Scope
-- Add tests for install-class behavior and manifest validation per `S1-spec-install-classes.md`.
-- Tests only; do not modify production code (except minimal test-only helpers if required).
+- Tests only (plus minimal test-only helpers if absolutely needed); no production code.
+- Spec: `docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md`
+- Execution workflow standard: `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Start Checklist
-
 Do not edit planning docs inside the worktree.
 
-1. `git checkout feat/world-sync && git pull --ff-only`
-2. Read: `docs/project_management/next/world_deps_selection_layer/plan.md`, `docs/project_management/next/world_deps_selection_layer/tasks.json`, `docs/project_management/next/world_deps_selection_layer/session_log.md`, `docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md`, and this prompt.
-3. Set `WDL1-test` status to `in_progress` in `docs/project_management/next/world_deps_selection_layer/tasks.json`; add a START entry to `docs/project_management/next/world_deps_selection_layer/session_log.md`; commit docs (`docs: start WDL1-test`).
-4. Create branch and worktree:
-   - `git checkout -b ws-wdl1-install-classes-test`
-   - `git worktree add wt/wdl1-install-classes-test ws-wdl1-install-classes-test`
-5. Do not edit docs/tasks/session_log.md inside the worktree.
+1. Verify you are in the task worktree `wt/world_deps_selection_layer-wdl1-test` on branch `world_deps_selection_layer-wdl1-test` and that `.taskmeta.json` exists at the worktree root.
+2. Read: `docs/project_management/next/world_deps_selection_layer/plan.md`, `docs/project_management/next/world_deps_selection_layer/tasks.json`, `docs/project_management/next/world_deps_selection_layer/session_log.md`, the spec, and this prompt.
+3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
+   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/world_deps_selection_layer" SLICE_ID="WDL1"` (preferred)
+   - `make triad-task-start FEATURE_DIR="docs/project_management/next/world_deps_selection_layer" TASK_ID="WDL1-test"` (single task)
 
 ## Requirements
-- Tests must cover:
-  - Manifest validation for install classes (schema + mutually exclusive fields).
-  - Routing behavior: `system_packages` and `manual` are blocked with the defined exit codes/messages.
-  - Runtime path refuses OS package managers (no `apt` execution) per S1.
-
-## Required Commands
-- `cargo fmt`
-- Targeted `cargo test ...` commands for the tests added/changed.
+- Add/modify tests that enforce S1 acceptance criteria (manifest v2 validation and routing).
+- Run:
+  - `cargo fmt`
+  - the targeted tests you add/touch
 
 ## End Checklist
-1. Run required commands; capture outputs for the END entry.
-2. Commit worktree changes.
-3. Merge back to `feat/world-sync` (ff-only).
-4. Update `docs/project_management/next/world_deps_selection_layer/tasks.json` + `docs/project_management/next/world_deps_selection_layer/session_log.md` (END entry), commit docs (`docs: finish WDL1-test`).
-5. Remove worktree.
+1. Run required commands; capture outputs.
+2. From inside the worktree, run: `make triad-task-finish TASK_ID="WDL1-test"`.
+3. Hand off the targeted test command(s) and outcomes to the operator (do not edit planning docs inside the worktree).
+4. Do not delete the worktree (feature cleanup removes worktrees at feature end).
+

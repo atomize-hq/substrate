@@ -123,6 +123,7 @@ managers:
 ### `status`
 For each tool in scope (selection or `--all`):
 - `install_class` is displayed.
+- `status --json` must include `install_class` for each `tools[]` entry (string; one of `user_space|system_packages|manual|copy_from_host`).
 - `guest.status` behavior by class:
   - `user_space`: normal present/missing probe.
   - `system_packages`:

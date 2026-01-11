@@ -1,341 +1,1011 @@
 {
   "meta": {
-    "external_task_ids": ["Y0-integ", "C1-integ"]
+    "schema_version": 3,
+    "feature": "world_deps_selection_layer",
+    "cross_platform": true,
+    "behavior_platforms_required": ["linux", "macos", "windows"],
+    "ci_parity_platforms_required": ["linux", "macos", "windows"],
+    "execution_gates": true,
+    "automation": {
+      "enabled": true,
+      "orchestration_branch": "feat/world_deps_selection_layer"
+    },
+    "external_task_ids": ["Y0-integ"]
   },
   "tasks": [
     {
-      "id": "WDL0-code",
-      "name": "Selection config + UX (code)",
-      "type": "code",
-      "phase": "World Deps Selection Layer",
+      "id": "F0-exec-preflight",
+      "name": "Execution preflight gate (feature start)",
+      "type": "ops",
+      "phase": "F0",
       "status": "pending",
-      "description": "Implement YAML selection config loading, precedence, `--all` semantics, CLI UX, and exit codes per S0 (production code only).",
+      "description": "Run the execution preflight gate to confirm smoke/manual/CI plans are adequate before starting triads.",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
+        "docs/project_management/next/world_deps_selection_layer/execution_preflight_report.md",
+        "docs/project_management/next/world_deps_selection_layer/decision_register.md",
+        "docs/project_management/next/world_deps_selection_layer/integration_map.md",
+        "docs/project_management/next/world_deps_selection_layer/manual_testing_playbook.md",
+        "docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md"
+      ],
+      "acceptance_criteria": ["Execution preflight recommendation recorded (ACCEPT or REVISE)"],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, specs, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Confirm prerequisite task is integrated: Y0-integ"
+      ],
+      "end_checklist": [
+        "Complete execution_preflight_report.md with ACCEPT/REVISE and required fixes",
+        "Set status to completed; add END entry; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/F0-exec-preflight.md",
+      "depends_on": ["Y0-integ"],
+      "concurrent_with": []
+    },
+
+    {
+      "id": "WDL0-code",
+      "name": "WDL0 — Selection config + UX (code)",
+      "type": "code",
+      "phase": "WDL0",
+      "status": "pending",
+      "description": "Implement selection config loading, precedence, init/select UX, `--all` semantics, and exit-code behavior per S0 (production code only).",
       "references": [
         "docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md",
         "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
         "docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md",
-        "docs/project_management/next/world_deps_selection_layer/decision_register.md (DR-0001, DR-0004, DR-0005, DR-0013)",
+        "docs/project_management/next/world_deps_selection_layer/decision_register.md (DR-0001..DR-0005, DR-0011, DR-0013, DR-0015..DR-0017)",
         "docs/project_management/next/world_deps_selection_layer/integration_map.md",
-        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md",
-        "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Selection is required and missing selection is a no-op with exit 0 and no world calls",
-        "Workspace/global selection paths and precedence match S0",
-        "`--all` ignores selection and expands scope to inventory",
-        "Exit code taxonomy matches S0 (0/2/3/4/5) for the defined failure modes"
+        "Selection missing is a no-op (exit 0) for status/sync/install with the exact “not configured” guidance",
+        "Workspace/global selection precedence matches S0 and is surfaced in `status --json`",
+        "`world deps init/select` write selection files deterministically per S0",
+        "`--all` semantics match S0 and DR-0005",
+        "Exit codes match S0 and `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`"
       ],
       "start_checklist": [
-        "git checkout feat/world-sync && git pull --ff-only",
-        "Read plan/spec/decision_register for WDL0; confirm dependencies Y0 and C1 are integrated",
-        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
-        "Create worktree wt/wdl0-selection-code; do not edit docs/tasks/session_log.md inside the worktree"
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S0 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" SLICE_ID=\"WDL0\""
       ],
       "end_checklist": [
-        "Run cargo fmt and cargo clippy (workspace, -D warnings) in the worktree",
-        "Commit worktree changes to the task branch",
-        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
-        "Remove worktree"
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL0-code\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
       ],
-      "worktree": "wt/wdl0-selection-code",
-      "integration_task": "WDL0-integ",
+      "worktree": "wt/world_deps_selection_layer-wdl0-code",
+      "integration_task": "WDL0-integ-core",
       "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL0-code.md",
-      "depends_on": ["Y0-integ", "C1-integ"],
-      "concurrent_with": ["WDL0-test"]
+      "depends_on": ["F0-exec-preflight"],
+      "concurrent_with": ["WDL0-test"],
+      "git_branch": "world_deps_selection_layer-wdl0-code",
+      "required_make_targets": ["triad-code-checks"]
     },
     {
       "id": "WDL0-test",
-      "name": "Selection config + UX (test)",
+      "name": "WDL0 — Selection config + UX (test)",
       "type": "test",
-      "phase": "World Deps Selection Layer",
+      "phase": "WDL0",
       "status": "pending",
-      "description": "Add tests for selection parsing/precedence, tool scoping, and exit-code taxonomy per S0.",
+      "description": "Add tests for selection parsing/precedence, scoping, and exit-code behavior per S0 (tests only).",
       "references": [
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
         "docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md",
-        "docs/project_management/next/world_deps_selection_layer/decision_register.md (DR-0001, DR-0004, DR-0005, DR-0013)",
-        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Tests cover selection parsing, precedence, and empty-selection semantics",
-        "Tests cover `--all` semantics and configured/unconfigured behavior",
-        "Tests assert exit codes for config errors and backend-unavailable behavior per S0"
+        "Tests cover selection path precedence and strict YAML schema validation",
+        "Tests cover no-op behavior for missing selection and configured-but-empty selection",
+        "Tests cover `--all` semantics and selection scoping rules"
       ],
       "start_checklist": [
-        "git checkout feat/world-sync && git pull --ff-only",
-        "Read S0; identify target test modules and fixtures",
-        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
-        "Create worktree wt/wdl0-selection-test; do not edit docs/tasks/session_log.md inside the worktree"
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S0 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" SLICE_ID=\"WDL0\""
       ],
       "end_checklist": [
-        "Run cargo fmt and targeted cargo test commands for the tests added/changed",
-        "Commit worktree changes to the task branch",
-        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
-        "Remove worktree"
+        "cargo fmt",
+        "Run the targeted tests you add/touch",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL0-test\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
       ],
-      "worktree": "wt/wdl0-selection-test",
-      "integration_task": "WDL0-integ",
+      "worktree": "wt/world_deps_selection_layer-wdl0-test",
+      "integration_task": "WDL0-integ-core",
       "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL0-test.md",
-      "depends_on": ["Y0-integ", "C1-integ"],
-      "concurrent_with": ["WDL0-code"]
+      "depends_on": ["F0-exec-preflight"],
+      "concurrent_with": ["WDL0-code"],
+      "git_branch": "world_deps_selection_layer-wdl0-test",
+      "required_make_targets": ["triad-test-checks"]
+    },
+    {
+      "id": "WDL0-integ-core",
+      "name": "WDL0 — Integration core",
+      "type": "integration",
+      "phase": "WDL0",
+      "status": "pending",
+      "description": "Merge WDL0 code+tests, reconcile to S0, and make the slice green on the primary dev platform.",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
+        "docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md",
+        "docs/project_management/next/world_deps_selection_layer/manual_testing_playbook.md",
+        "docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh",
+        "docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh",
+        "docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md"
+      ],
+      "acceptance_criteria": [
+        "Core slice is green under make integ-checks and matches S0",
+        "CI compile parity is green for this exact HEAD",
+        "Behavioral smoke dispatched via CI and run ids/URLs are recorded"
+      ],
+      "start_checklist": [
+        "Run on Linux host",
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S0 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" TASK_ID=\"WDL0-integ-core\""
+      ],
+      "end_checklist": [
+        "Merge WDL0 code+test branches; resolve drift to spec (spec wins)",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world_deps_selection_layer\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Dispatch behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" PLATFORM=behavior RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world_deps_selection_layer\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "If any platform smoke fails: start only failing platform-fix tasks via: make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" SLICE_ID=\"WDL0\" SMOKE_RUN_ID=\"<run-id>\" LAUNCH_CODEX=1",
+        "After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" SLICE_ID=\"WDL0\" LAUNCH_CODEX=1",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL0-integ-core\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world_deps_selection_layer-wdl0-integ-core",
+      "integration_task": "WDL0-integ-core",
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL0-integ-core.md",
+      "depends_on": ["WDL0-code", "WDL0-test"],
+      "concurrent_with": [],
+      "git_branch": "world_deps_selection_layer-wdl0-integ-core",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDL0-integ-linux",
+      "name": "WDL0 — Integration Linux (platform-fix)",
+      "type": "integration",
+      "phase": "WDL0",
+      "status": "pending",
+      "description": "Linux platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
+        "docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md",
+        "docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh"
+      ],
+      "acceptance_criteria": ["Linux smoke is green for this slice"],
+      "start_checklist": [
+        "Run on linux host if possible",
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S0 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" TASK_ID=\"WDL0-integ-linux\" TASK_PLATFORM=linux"
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" PLATFORM=linux RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world_deps_selection_layer\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL0-integ-linux\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world_deps_selection_layer-wdl0-integ-linux",
+      "integration_task": "WDL0-integ-linux",
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL0-integ-linux.md",
+      "depends_on": ["WDL0-integ-core"],
+      "concurrent_with": [],
+      "platform": "linux",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "world_deps_selection_layer-wdl0-integ-linux",
+      "required_make_targets": ["triad-code-checks"],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDL0-integ-macos",
+      "name": "WDL0 — Integration macOS (platform-fix)",
+      "type": "integration",
+      "phase": "WDL0",
+      "status": "pending",
+      "description": "macOS platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
+        "docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md",
+        "docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh"
+      ],
+      "acceptance_criteria": ["macOS smoke is green for this slice"],
+      "start_checklist": [
+        "Run on macos host if possible",
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S0 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" TASK_ID=\"WDL0-integ-macos\" TASK_PLATFORM=macos"
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" PLATFORM=macos RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world_deps_selection_layer\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL0-integ-macos\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world_deps_selection_layer-wdl0-integ-macos",
+      "integration_task": "WDL0-integ-macos",
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL0-integ-macos.md",
+      "depends_on": ["WDL0-integ-core"],
+      "concurrent_with": [],
+      "platform": "macos",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "world_deps_selection_layer-wdl0-integ-macos",
+      "required_make_targets": ["triad-code-checks"],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDL0-integ-windows",
+      "name": "WDL0 — Integration Windows (platform-fix)",
+      "type": "integration",
+      "phase": "WDL0",
+      "status": "pending",
+      "description": "Windows platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
+        "docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md",
+        "docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": ["Windows smoke is green for this slice"],
+      "start_checklist": [
+        "Run on windows host if possible",
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S0 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" TASK_ID=\"WDL0-integ-windows\" TASK_PLATFORM=windows"
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" PLATFORM=windows RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world_deps_selection_layer\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL0-integ-windows\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world_deps_selection_layer-wdl0-integ-windows",
+      "integration_task": "WDL0-integ-windows",
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL0-integ-windows.md",
+      "depends_on": ["WDL0-integ-core"],
+      "concurrent_with": [],
+      "platform": "windows",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "world_deps_selection_layer-wdl0-integ-windows",
+      "required_make_targets": ["triad-code-checks"],
+      "merge_to_orchestration": false
     },
     {
       "id": "WDL0-integ",
-      "name": "Selection config + UX (integration)",
+      "name": "WDL0 — Integration final (cross-platform merge)",
       "type": "integration",
-      "phase": "World Deps Selection Layer",
+      "phase": "WDL0",
       "status": "pending",
-      "description": "Merge WDL0 code+tests, reconcile to S0, and run fmt/clippy/tests/preflight.",
+      "description": "Merge platform-fix branches (if any) and finalize WDL0 with an auditable cross-platform green state.",
       "references": [
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
         "docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md",
+        "docs/project_management/next/world_deps_selection_layer/WDL0-closeout_report.md",
         "docs/project_management/next/world_deps_selection_layer/manual_testing_playbook.md",
         "docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh",
         "docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh",
-        "docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1",
-        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+        "docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1"
       ],
       "acceptance_criteria": [
-        "WDL0 code and tests are merged and match S0 exactly",
-        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
-        "Feature-local smoke scripts run and results are recorded in session_log.md"
+        "All required platforms are green (smoke + CI parity) for this slice",
+        "WDL0-closeout_report.md is completed with run ids/URLs and evidence",
+        "Final integration is merged back to the orchestration branch"
       ],
       "start_checklist": [
-        "git checkout feat/world-sync && git pull --ff-only",
-        "Read S0 and confirm WDL0-code and WDL0-test branches are ready to merge",
-        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
-        "Create worktree wt/wdl0-selection-integ; do not edit docs/tasks/session_log.md inside the worktree"
+        "Run on Linux host",
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S0 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-integ-final FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" SLICE_ID=\"WDL0\" LAUNCH_CODEX=0"
       ],
       "end_checklist": [
-        "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
-        "Run: bash docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh",
-        "Run: bash docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh",
-        "Run: pwsh -File docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1",
-        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+        "Merge platform-fix branches (if any) + resolve conflicts",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "Re-run CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world_deps_selection_layer\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" PLATFORM=behavior RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world_deps_selection_layer\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "Complete slice closeout gate report: docs/project_management/next/world_deps_selection_layer/WDL0-closeout_report.md",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL0-integ\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
       ],
-      "worktree": "wt/wdl0-selection-integ",
-      "integration_task": null,
+      "worktree": "wt/world_deps_selection_layer-wdl0-integ",
+      "integration_task": "WDL0-integ",
       "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL0-integ.md",
-      "depends_on": ["WDL0-code", "WDL0-test"],
-      "concurrent_with": []
+      "depends_on": ["WDL0-integ-core", "WDL0-integ-linux", "WDL0-integ-macos", "WDL0-integ-windows"],
+      "concurrent_with": [],
+      "git_branch": "world_deps_selection_layer-wdl0-integ",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": true
     },
+
     {
       "id": "WDL1-code",
-      "name": "Install classes (code)",
+      "name": "WDL1 — Install classes (code)",
       "type": "code",
-      "phase": "World Deps Selection Layer",
+      "phase": "WDL1",
       "status": "pending",
-      "description": "Extend manifest schema to declare install class metadata and enforce class routing in world-deps status/sync/install per S1.",
+      "description": "Implement manifest v2 install class schema + validation and enforce routing in status/sync/install per S1 (production code only).",
       "references": [
+        "docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md",
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
         "docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md",
-        "docs/project_management/next/world_deps_selection_layer/decision_register.md (DR-0006, DR-0007, DR-0012, DR-0014)",
-        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+        "docs/project_management/next/world_deps_selection_layer/decision_register.md (DR-0006..DR-0008, DR-0012, DR-0014, DR-0016..DR-0017)",
+        "docs/project_management/next/world_deps_selection_layer/integration_map.md",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Manifest schema changes (v2) and validation rules match S1",
-        "Install class routing is enforced in status/sync/install per S1",
-        "`system_packages` presence is determined by guest_detect probes per DR-0014"
+        "Manifest v2 schema and validation rules match S1 exactly",
+        "`world deps status --json` includes `install_class` for every tool in scope",
+        "`system_packages` tools are never installed by runtime sync/install and are routed to provision guidance",
+        "Exit codes and messages match S1"
       ],
       "start_checklist": [
-        "git checkout feat/world-sync && git pull --ff-only",
-        "Read S1 and the referenced DR entries; confirm WDL0-integ is integrated",
-        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
-        "Create worktree wt/wdl1-classes-code; do not edit docs/tasks/session_log.md inside the worktree"
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S1 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" SLICE_ID=\"WDL1\""
       ],
       "end_checklist": [
-        "Run cargo fmt and cargo clippy (workspace, -D warnings) in the worktree",
-        "Commit worktree changes to the task branch",
-        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
-        "Remove worktree"
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL1-code\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
       ],
-      "worktree": "wt/wdl1-classes-code",
-      "integration_task": "WDL1-integ",
+      "worktree": "wt/world_deps_selection_layer-wdl1-code",
+      "integration_task": "WDL1-integ-core",
       "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL1-code.md",
       "depends_on": ["WDL0-integ"],
-      "concurrent_with": ["WDL1-test"]
+      "concurrent_with": ["WDL1-test"],
+      "git_branch": "world_deps_selection_layer-wdl1-code",
+      "required_make_targets": ["triad-code-checks"]
     },
     {
       "id": "WDL1-test",
-      "name": "Install classes (test)",
+      "name": "WDL1 — Install classes (test)",
       "type": "test",
-      "phase": "World Deps Selection Layer",
+      "phase": "WDL1",
       "status": "pending",
-      "description": "Add manifest validation and routing tests for install classes per S1.",
+      "description": "Add tests for manifest v2 parsing/validation and install-class routing per S1 (tests only).",
       "references": [
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
         "docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md",
-        "docs/project_management/next/world_deps_selection_layer/decision_register.md (DR-0012, DR-0014)",
-        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Tests cover manifest v2 validation, including required guest_install.class and guest_detect probes",
-        "Tests cover routing behavior for user_space/system_packages/manual/copy_from_host",
-        "Tests assert exit code behavior for blocked/unsupported operations per S1"
+        "Tests cover manifest v2 schema validation and class-specific required/forbidden fields",
+        "Tests cover routing signals in status/sync/install (exit codes and messages) per S1"
       ],
       "start_checklist": [
-        "git checkout feat/world-sync && git pull --ff-only",
-        "Read S1; identify target test modules and fixtures",
-        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
-        "Create worktree wt/wdl1-classes-test; do not edit docs/tasks/session_log.md inside the worktree"
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S1 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" SLICE_ID=\"WDL1\""
       ],
       "end_checklist": [
-        "Run cargo fmt and targeted cargo test commands for the tests added/changed",
-        "Commit worktree changes to the task branch",
-        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
-        "Remove worktree"
+        "cargo fmt",
+        "Run the targeted tests you add/touch",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL1-test\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
       ],
-      "worktree": "wt/wdl1-classes-test",
-      "integration_task": "WDL1-integ",
+      "worktree": "wt/world_deps_selection_layer-wdl1-test",
+      "integration_task": "WDL1-integ-core",
       "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL1-test.md",
       "depends_on": ["WDL0-integ"],
-      "concurrent_with": ["WDL1-code"]
+      "concurrent_with": ["WDL1-code"],
+      "git_branch": "world_deps_selection_layer-wdl1-test",
+      "required_make_targets": ["triad-test-checks"]
+    },
+    {
+      "id": "WDL1-integ-core",
+      "name": "WDL1 — Integration core",
+      "type": "integration",
+      "phase": "WDL1",
+      "status": "pending",
+      "description": "Merge WDL1 code+tests, reconcile to S1, and make the slice green on the primary dev platform.",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
+        "docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md",
+        "docs/project_management/next/world_deps_selection_layer/manual_testing_playbook.md",
+        "docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh",
+        "docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh",
+        "docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1",
+        "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md"
+      ],
+      "acceptance_criteria": [
+        "Core slice is green under make integ-checks and matches S1",
+        "WDL1 capability is present before smoke dispatch: status JSON includes tools[].install_class",
+        "CI compile parity is green for this exact HEAD",
+        "Behavioral smoke dispatched via CI and run ids/URLs are recorded"
+      ],
+      "start_checklist": [
+        "Run on Linux host",
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S1 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" TASK_ID=\"WDL1-integ-core\""
+      ],
+      "end_checklist": [
+        "Merge WDL1 code+test branches; resolve drift to spec (spec wins)",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "Assert WDL1 capability before smoke dispatch: `cargo build --bin substrate && export PATH=\"$PWD/target/debug:$PATH\" && substrate world deps status --all --json | jq -e '.tools[0].install_class? != null' >/dev/null`",
+        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world_deps_selection_layer\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Dispatch behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" PLATFORM=behavior RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world_deps_selection_layer\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "If any platform smoke fails: start only failing platform-fix tasks via: make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" SLICE_ID=\"WDL1\" SMOKE_RUN_ID=\"<run-id>\" LAUNCH_CODEX=1",
+        "After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" SLICE_ID=\"WDL1\" LAUNCH_CODEX=1",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL1-integ-core\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world_deps_selection_layer-wdl1-integ-core",
+      "integration_task": "WDL1-integ-core",
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL1-integ-core.md",
+      "depends_on": ["WDL1-code", "WDL1-test"],
+      "concurrent_with": [],
+      "git_branch": "world_deps_selection_layer-wdl1-integ-core",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDL1-integ-linux",
+      "name": "WDL1 — Integration Linux (platform-fix)",
+      "type": "integration",
+      "phase": "WDL1",
+      "status": "pending",
+      "description": "Linux platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
+        "docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md",
+        "docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh"
+      ],
+      "acceptance_criteria": ["Linux smoke is green for this slice"],
+      "start_checklist": [
+        "Run on linux host if possible",
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S1 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" TASK_ID=\"WDL1-integ-linux\" TASK_PLATFORM=linux"
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" PLATFORM=linux RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world_deps_selection_layer\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL1-integ-linux\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world_deps_selection_layer-wdl1-integ-linux",
+      "integration_task": "WDL1-integ-linux",
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL1-integ-linux.md",
+      "depends_on": ["WDL1-integ-core"],
+      "concurrent_with": [],
+      "platform": "linux",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "world_deps_selection_layer-wdl1-integ-linux",
+      "required_make_targets": ["triad-code-checks"],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDL1-integ-macos",
+      "name": "WDL1 — Integration macOS (platform-fix)",
+      "type": "integration",
+      "phase": "WDL1",
+      "status": "pending",
+      "description": "macOS platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
+        "docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md",
+        "docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh"
+      ],
+      "acceptance_criteria": ["macOS smoke is green for this slice"],
+      "start_checklist": [
+        "Run on macos host if possible",
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S1 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" TASK_ID=\"WDL1-integ-macos\" TASK_PLATFORM=macos"
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" PLATFORM=macos RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world_deps_selection_layer\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL1-integ-macos\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world_deps_selection_layer-wdl1-integ-macos",
+      "integration_task": "WDL1-integ-macos",
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL1-integ-macos.md",
+      "depends_on": ["WDL1-integ-core"],
+      "concurrent_with": [],
+      "platform": "macos",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "world_deps_selection_layer-wdl1-integ-macos",
+      "required_make_targets": ["triad-code-checks"],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDL1-integ-windows",
+      "name": "WDL1 — Integration Windows (platform-fix)",
+      "type": "integration",
+      "phase": "WDL1",
+      "status": "pending",
+      "description": "Windows platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
+        "docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md",
+        "docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": ["Windows smoke is green for this slice"],
+      "start_checklist": [
+        "Run on windows host if possible",
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S1 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" TASK_ID=\"WDL1-integ-windows\" TASK_PLATFORM=windows"
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" PLATFORM=windows RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world_deps_selection_layer\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL1-integ-windows\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world_deps_selection_layer-wdl1-integ-windows",
+      "integration_task": "WDL1-integ-windows",
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL1-integ-windows.md",
+      "depends_on": ["WDL1-integ-core"],
+      "concurrent_with": [],
+      "platform": "windows",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "world_deps_selection_layer-wdl1-integ-windows",
+      "required_make_targets": ["triad-code-checks"],
+      "merge_to_orchestration": false
     },
     {
       "id": "WDL1-integ",
-      "name": "Install classes (integration)",
+      "name": "WDL1 — Integration final (cross-platform merge)",
       "type": "integration",
-      "phase": "World Deps Selection Layer",
+      "phase": "WDL1",
       "status": "pending",
-      "description": "Merge WDL1 code+tests, reconcile to S1, and run fmt/clippy/tests/preflight.",
+      "description": "Merge platform-fix branches (if any) and finalize WDL1 with an auditable cross-platform green state.",
       "references": [
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
         "docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md",
+        "docs/project_management/next/world_deps_selection_layer/WDL1-closeout_report.md",
         "docs/project_management/next/world_deps_selection_layer/manual_testing_playbook.md",
         "docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh",
         "docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh",
-        "docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1",
-        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+        "docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1"
       ],
       "acceptance_criteria": [
-        "WDL1 code and tests are merged and match S1 exactly",
-        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
-        "Feature-local smoke scripts run and results are recorded in session_log.md"
+        "All required platforms are green (smoke + CI parity) for this slice",
+        "WDL1-closeout_report.md is completed with run ids/URLs and evidence",
+        "Final integration is merged back to the orchestration branch"
       ],
       "start_checklist": [
-        "git checkout feat/world-sync && git pull --ff-only",
-        "Read S1 and confirm WDL1-code and WDL1-test branches are ready to merge",
-        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
-        "Create worktree wt/wdl1-classes-integ; do not edit docs/tasks/session_log.md inside the worktree"
+        "Run on Linux host",
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S1 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-integ-final FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" SLICE_ID=\"WDL1\" LAUNCH_CODEX=0"
       ],
       "end_checklist": [
-        "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
-        "Run: bash docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh",
-        "Run: bash docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh",
-        "Run: pwsh -File docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1",
-        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+        "Merge platform-fix branches (if any) + resolve conflicts",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "Re-run CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world_deps_selection_layer\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" PLATFORM=behavior RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world_deps_selection_layer\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "Complete slice closeout gate report: docs/project_management/next/world_deps_selection_layer/WDL1-closeout_report.md",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL1-integ\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
       ],
-      "worktree": "wt/wdl1-classes-integ",
-      "integration_task": null,
+      "worktree": "wt/world_deps_selection_layer-wdl1-integ",
+      "integration_task": "WDL1-integ",
       "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL1-integ.md",
-      "depends_on": ["WDL1-code", "WDL1-test"],
-      "concurrent_with": []
+      "depends_on": ["WDL1-integ-core", "WDL1-integ-linux", "WDL1-integ-macos", "WDL1-integ-windows"],
+      "concurrent_with": [],
+      "git_branch": "world_deps_selection_layer-wdl1-integ",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": true
     },
+
     {
       "id": "WDL2-code",
-      "name": "System packages provisioning (code)",
+      "name": "WDL2 — System packages provisioning (code)",
       "type": "code",
-      "phase": "World Deps Selection Layer",
+      "phase": "WDL2",
       "status": "pending",
-      "description": "Implement `substrate world deps provision` (apt-only in guests) and platform gating per S2; update platform smoke scripts accordingly (production code + scripts only).",
+      "description": "Implement `substrate world deps provision` and package list computation per S2 (production code only).",
       "references": [
+        "docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md",
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
         "docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md",
-        "docs/project_management/next/world_deps_selection_layer/decision_register.md (DR-0009, DR-0010, DR-0014)",
-        "docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh",
-        "docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh",
-        "docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1",
-        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+        "docs/project_management/next/world_deps_selection_layer/decision_register.md (DR-0009..DR-0011, DR-0014, DR-0017)",
+        "docs/project_management/next/world_deps_selection_layer/integration_map.md",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "`substrate world deps provision` behavior matches S2 across platforms (guest supported; Linux host unsupported)",
-        "Provisioning does not run during sync/install paths",
-        "Feature-local smoke scripts cover the acceptance matrix rows and are kept up to date"
+        "`world deps provision` CLI and behavior match S2, including exit codes",
+        "Linux host behavior is explicit unsupported (exit 4) and prints package list",
+        "macOS/Windows provisioning runs apt inside the guest and is idempotent",
+        "Deterministic package list computation matches S2 algorithm"
       ],
       "start_checklist": [
-        "git checkout feat/world-sync && git pull --ff-only",
-        "Read S2 and the referenced DR entries; confirm WDL1-integ is integrated",
-        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
-        "Create worktree wt/wdl2-provision-code; do not edit docs/tasks/session_log.md inside the worktree"
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S2 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" SLICE_ID=\"WDL2\""
       ],
       "end_checklist": [
-        "Run cargo fmt and cargo clippy (workspace, -D warnings) in the worktree",
-        "Commit worktree changes to the task branch",
-        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
-        "Remove worktree"
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL2-code\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
       ],
-      "worktree": "wt/wdl2-provision-code",
-      "integration_task": "WDL2-integ",
+      "worktree": "wt/world_deps_selection_layer-wdl2-code",
+      "integration_task": "WDL2-integ-core",
       "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL2-code.md",
       "depends_on": ["WDL1-integ"],
-      "concurrent_with": ["WDL2-test"]
+      "concurrent_with": ["WDL2-test"],
+      "git_branch": "world_deps_selection_layer-wdl2-code",
+      "required_make_targets": ["triad-code-checks"]
     },
     {
       "id": "WDL2-test",
-      "name": "System packages provisioning (test)",
+      "name": "WDL2 — System packages provisioning (test)",
       "type": "test",
-      "phase": "World Deps Selection Layer",
+      "phase": "WDL2",
       "status": "pending",
-      "description": "Add tests for deterministic package list computation, platform gating, and exit codes per S2.",
+      "description": "Add tests for deterministic package list computation, platform gating, and exit codes per S2 (tests only).",
       "references": [
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
         "docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md",
-        "docs/project_management/next/world_deps_selection_layer/decision_register.md (DR-0009, DR-0010, DR-0014)",
-        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
         "Tests cover deterministic package list computation and stable ordering",
-        "Tests cover platform gating and Linux-host unsupported behavior (exit code 4)",
-        "Tests cover backend unavailable and hardening/cage exit codes per S2"
+        "Tests cover Linux host unsupported behavior (exit 4) and backend unavailable (exit 3) per S2"
       ],
       "start_checklist": [
-        "git checkout feat/world-sync && git pull --ff-only",
-        "Read S2; identify target test modules and fixtures",
-        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
-        "Create worktree wt/wdl2-provision-test; do not edit docs/tasks/session_log.md inside the worktree"
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S2 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" SLICE_ID=\"WDL2\""
       ],
       "end_checklist": [
-        "Run cargo fmt and targeted cargo test commands for the tests added/changed",
-        "Commit worktree changes to the task branch",
-        "Merge/fast-forward into orchestration branch per triad standard; update tasks.json + session_log.md END entry; commit docs",
-        "Remove worktree"
+        "cargo fmt",
+        "Run the targeted tests you add/touch",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL2-test\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
       ],
-      "worktree": "wt/wdl2-provision-test",
-      "integration_task": "WDL2-integ",
+      "worktree": "wt/world_deps_selection_layer-wdl2-test",
+      "integration_task": "WDL2-integ-core",
       "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL2-test.md",
       "depends_on": ["WDL1-integ"],
-      "concurrent_with": ["WDL2-code"]
+      "concurrent_with": ["WDL2-code"],
+      "git_branch": "world_deps_selection_layer-wdl2-test",
+      "required_make_targets": ["triad-test-checks"]
     },
     {
-      "id": "WDL2-integ",
-      "name": "System packages provisioning (integration)",
+      "id": "WDL2-integ-core",
+      "name": "WDL2 — Integration core",
       "type": "integration",
-      "phase": "World Deps Selection Layer",
+      "phase": "WDL2",
       "status": "pending",
-      "description": "Merge WDL2 code+tests, reconcile to S2, run fmt/clippy/tests, then run the feature-local smoke script for your platform.",
+      "description": "Merge WDL2 code+tests, reconcile to S2, and make the slice green on the primary dev platform.",
       "references": [
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
         "docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md",
         "docs/project_management/next/world_deps_selection_layer/manual_testing_playbook.md",
         "docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh",
         "docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh",
         "docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1",
-        "docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md"
+        "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md"
       ],
       "acceptance_criteria": [
-        "WDL2 code and tests are merged and match S2 exactly",
-        "cargo fmt, cargo clippy (-D warnings), relevant cargo test, and make integ-checks succeed",
-        "Feature-local smoke scripts run and results are recorded in session_log.md"
+        "Core slice is green under make integ-checks and matches S2",
+        "WDL2 capability is present before smoke dispatch: `world deps --help` includes `provision`",
+        "CI compile parity is green for this exact HEAD",
+        "Behavioral smoke dispatched via CI and run ids/URLs are recorded"
       ],
       "start_checklist": [
-        "git checkout feat/world-sync && git pull --ff-only",
-        "Read S2 and confirm WDL2-code and WDL2-test branches are ready to merge",
-        "Update tasks.json status to in_progress and add START entry to session_log.md; commit docs on orchestration branch",
-        "Create worktree wt/wdl2-provision-integ; do not edit docs/tasks/session_log.md inside the worktree"
+        "Run on Linux host",
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S2 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" TASK_ID=\"WDL2-integ-core\""
       ],
       "end_checklist": [
-        "Run cargo fmt, cargo clippy, relevant cargo test, and make integ-checks",
-        "Run: bash docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh",
-        "Run: bash docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh",
-        "Run: pwsh -File docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1",
-        "Commit integration changes; merge to orchestration branch; update tasks.json + session_log.md END entry; commit docs; remove worktree"
+        "Merge WDL2 code+test branches; resolve drift to spec (spec wins)",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "Assert WDL2 capability before smoke dispatch: `cargo build --bin substrate && export PATH=\"$PWD/target/debug:$PATH\" && substrate world deps --help 2>/dev/null | grep -Eq \"\\\\bprovision\\\\b\"`",
+        "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world_deps_selection_layer\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Dispatch behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" PLATFORM=behavior RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world_deps_selection_layer\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "If any platform smoke fails: start only failing platform-fix tasks via: make triad-task-start-platform-fixes-from-smoke FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" SLICE_ID=\"WDL2\" SMOKE_RUN_ID=\"<run-id>\" LAUNCH_CODEX=1",
+        "After all failing platforms are green: start final aggregator via: make triad-task-start-integ-final FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" SLICE_ID=\"WDL2\" LAUNCH_CODEX=1",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL2-integ-core\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
       ],
-      "worktree": "wt/wdl2-provision-integ",
-      "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL2-integ.md",
+      "worktree": "wt/world_deps_selection_layer-wdl2-integ-core",
+      "integration_task": "WDL2-integ-core",
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL2-integ-core.md",
       "depends_on": ["WDL2-code", "WDL2-test"],
+      "concurrent_with": [],
+      "git_branch": "world_deps_selection_layer-wdl2-integ-core",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDL2-integ-linux",
+      "name": "WDL2 — Integration Linux (platform-fix)",
+      "type": "integration",
+      "phase": "WDL2",
+      "status": "pending",
+      "description": "Linux platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
+        "docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md",
+        "docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh"
+      ],
+      "acceptance_criteria": ["Linux smoke is green for this slice"],
+      "start_checklist": [
+        "Run on linux host if possible",
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S2 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" TASK_ID=\"WDL2-integ-linux\" TASK_PLATFORM=linux"
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" PLATFORM=linux RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world_deps_selection_layer\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL2-integ-linux\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world_deps_selection_layer-wdl2-integ-linux",
+      "integration_task": "WDL2-integ-linux",
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL2-integ-linux.md",
+      "depends_on": ["WDL2-integ-core"],
+      "concurrent_with": [],
+      "platform": "linux",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "world_deps_selection_layer-wdl2-integ-linux",
+      "required_make_targets": ["triad-code-checks"],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDL2-integ-macos",
+      "name": "WDL2 — Integration macOS (platform-fix)",
+      "type": "integration",
+      "phase": "WDL2",
+      "status": "pending",
+      "description": "macOS platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
+        "docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md",
+        "docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh"
+      ],
+      "acceptance_criteria": ["macOS smoke is green for this slice"],
+      "start_checklist": [
+        "Run on macos host if possible",
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S2 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" TASK_ID=\"WDL2-integ-macos\" TASK_PLATFORM=macos"
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" PLATFORM=macos RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world_deps_selection_layer\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL2-integ-macos\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world_deps_selection_layer-wdl2-integ-macos",
+      "integration_task": "WDL2-integ-macos",
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL2-integ-macos.md",
+      "depends_on": ["WDL2-integ-core"],
+      "concurrent_with": [],
+      "platform": "macos",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "world_deps_selection_layer-wdl2-integ-macos",
+      "required_make_targets": ["triad-code-checks"],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDL2-integ-windows",
+      "name": "WDL2 — Integration Windows (platform-fix)",
+      "type": "integration",
+      "phase": "WDL2",
+      "status": "pending",
+      "description": "Windows platform-fix integration task (may be a no-op if already green).",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
+        "docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md",
+        "docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": ["Windows smoke is green for this slice"],
+      "start_checklist": [
+        "Run on windows host if possible",
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S2 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" TASK_ID=\"WDL2-integ-windows\" TASK_PLATFORM=windows"
+      ],
+      "end_checklist": [
+        "Dispatch platform smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" PLATFORM=windows RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world_deps_selection_layer\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
+        "If needed: fix + fmt/clippy + targeted tests",
+        "Ensure smoke is green; record run id/URL",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL2-integ-windows\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world_deps_selection_layer-wdl2-integ-windows",
+      "integration_task": "WDL2-integ-windows",
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL2-integ-windows.md",
+      "depends_on": ["WDL2-integ-core"],
+      "concurrent_with": [],
+      "platform": "windows",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "world_deps_selection_layer-wdl2-integ-windows",
+      "required_make_targets": ["triad-code-checks"],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "WDL2-integ",
+      "name": "WDL2 — Integration final (cross-platform merge)",
+      "type": "integration",
+      "phase": "WDL2",
+      "status": "pending",
+      "description": "Merge platform-fix branches (if any) and finalize WDL2 with an auditable cross-platform green state.",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
+        "docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md",
+        "docs/project_management/next/world_deps_selection_layer/WDL2-closeout_report.md",
+        "docs/project_management/next/world_deps_selection_layer/manual_testing_playbook.md",
+        "docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh",
+        "docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh",
+        "docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "All required platforms are green (smoke + CI parity) for this slice",
+        "WDL2-closeout_report.md is completed with run ids/URLs and evidence",
+        "Final integration is merged back to the orchestration branch"
+      ],
+      "start_checklist": [
+        "Run on Linux host",
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Read plan.md, tasks.json, session_log.md, S2 spec, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-integ-final FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" SLICE_ID=\"WDL2\" LAUNCH_CODEX=0"
+      ],
+      "end_checklist": [
+        "Merge platform-fix branches (if any) + resolve conflicts",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "Re-run CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/world_deps_selection_layer\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
+        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" PLATFORM=behavior RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/world_deps_selection_layer\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
+        "Complete slice closeout gate report: docs/project_management/next/world_deps_selection_layer/WDL2-closeout_report.md",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WDL2-integ\"",
+        "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
+      ],
+      "worktree": "wt/world_deps_selection_layer-wdl2-integ",
+      "integration_task": "WDL2-integ",
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/WDL2-integ.md",
+      "depends_on": ["WDL2-integ-core", "WDL2-integ-linux", "WDL2-integ-macos", "WDL2-integ-windows"],
+      "concurrent_with": [],
+      "git_branch": "world_deps_selection_layer-wdl2-integ",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": true
+    },
+
+    {
+      "id": "FZ-feature-cleanup",
+      "name": "Feature cleanup (worktrees + branches)",
+      "type": "ops",
+      "phase": "FZ",
+      "status": "pending",
+      "description": "At feature end, remove retained worktrees and optionally prune task branches via scripts/triad/feature_cleanup.sh.",
+      "references": [
+        "docs/project_management/next/world_deps_selection_layer/plan.md",
+        "docs/project_management/next/world_deps_selection_layer/tasks.json",
+        "docs/project_management/next/world_deps_selection_layer/session_log.md",
+        "scripts/triad/feature_cleanup.sh"
+      ],
+      "acceptance_criteria": ["All worktrees removed (or intentionally retained) and cleanup summary recorded in session_log.md"],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\"",
+        "Confirm all tasks are completed and merged as intended",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "end_checklist": [
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Then run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/world_deps_selection_layer\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Set status to completed; add END entry with script summary; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/world_deps_selection_layer/kickoff_prompts/FZ-feature-cleanup.md",
+      "depends_on": ["WDL2-integ"],
       "concurrent_with": []
     }
   ]

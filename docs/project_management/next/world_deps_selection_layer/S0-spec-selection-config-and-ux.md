@@ -22,7 +22,9 @@ Selection filename is fixed (DR-0002): `world-deps.selection.yaml`.
 
 Paths (DR-0001):
 1) Workspace selection: `.substrate/world-deps.selection.yaml`
-2) Global selection: `~/.substrate/world-deps.selection.yaml`
+2) Global selection:
+   - If `SUBSTRATE_HOME` is set: `$SUBSTRATE_HOME/world-deps.selection.yaml`
+   - Otherwise: `~/.substrate/world-deps.selection.yaml`
 
 Precedence:
 - If workspace selection exists, it is the **active** selection and global selection is ignored (“shadowed”).
@@ -76,9 +78,11 @@ New (required for selection-driven UX):
 - `substrate world deps init [--workspace|--global] [--force]`
   - Writes a selection file containing an empty selection list.
   - Default target: `--workspace` if `.substrate/` exists; otherwise `--global`.
+  - `--workspace` creates `.substrate/` if missing and writes only `.substrate/world-deps.selection.yaml` (it does not create `.substrate/settings.yaml`; that is owned by `substrate init` in `world-sync`).
 - `substrate world deps select [--workspace|--global] TOOL ...`
   - Adds tools to the selection file (creates it if missing at that scope).
   - Validates tool names against inventory; rejects unknown tools.
+  - `--workspace` creates `.substrate/` if missing.
 
 `S2` adds:
 - `substrate world deps provision [--all] [--dry-run] [--verbose]`
@@ -193,7 +197,12 @@ Installing `bun` (install_class=user_space)...
   - `shadowed_paths: [string]`
   - `selected: [string]` (normalized)
   - `ignored_due_to_all: bool`
-- `tools[]` entries include `selected: bool` and `install_class: string`.
+- `tools[]` entries include:
+  - `name: string` (normalized lower-case tool name)
+  - `selected: bool`
+  - `guest` block:
+    - `status: present|missing|skipped|unavailable`
+    - `reason: string|null` (required when `status` is `skipped` or `unavailable`; otherwise `null`)
 
 This is intentionally additive to existing JSON output; JSON-mode track (J*) will later standardize formats.
 
@@ -247,7 +256,11 @@ Notes:
 - With a selection file that is configured but empty (`selected: []`) and `--all` is not used:
   - `substrate world deps status` exits `0` and makes no guest probes.
   - `substrate world deps sync` exits `0` and makes no world-agent calls.
-  - `substrate world deps provision` exits `0` and makes no world-agent calls.
+  - When `substrate world deps provision` is present (WDL2 capability), it exits `0` and makes no world-agent calls.
+
+- Proving “no world-agent calls” (mechanical):
+  - Set `SUBSTRATE_WORLD_SOCKET` to a non-existent path and re-run the no-op cases above.
+  - Expected: behavior and exit codes are unchanged (because the code path must not attempt a backend connection).
 
 - With a valid selection file:
   - `status --json` includes the required `selection.*` fields.
@@ -275,4 +288,6 @@ Notes:
 - `--all` is redefined to mean “ignore selection and use full inventory scope”.
 - New YAML selection config file name and locations:
   - `.substrate/world-deps.selection.yaml`
-  - `~/.substrate/world-deps.selection.yaml`
+  - Global selection:
+    - `$SUBSTRATE_HOME/world-deps.selection.yaml` (when `SUBSTRATE_HOME` is set)
+    - `~/.substrate/world-deps.selection.yaml` (otherwise)

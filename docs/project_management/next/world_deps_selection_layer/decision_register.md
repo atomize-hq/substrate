@@ -9,8 +9,8 @@ This is the single source of truth for **all** architectural decisions required 
 
 Related docs (authoritative inputs):
 - `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
-- `docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md` (D1/D2)
-- `docs/project_management/next/yaml-settings-migration/Y0-spec.md`
+- `docs/project_management/_archived/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md` (D1/D2)
+- `docs/project_management/_archived/yaml-settings-migration/Y0-spec.md`
 - `docs/project_management/next/world-sync/C0-spec.md` (workspace init/gating)
 - `docs/project_management/next/world-sync/C2-spec.md` (filters/protected paths patterns)
 
@@ -762,3 +762,166 @@ Specs (this triad):
 - Update `S1` to require `guest_detect.command` for `system_packages` tools and to define sync satisfaction based on it.
 - Update `S2` to state that provisioning does not define “present”; detection remains probe-based.
 - Update the manual testing playbook to assert `system_packages` becomes `present` after `provision` by checking `status --json` fields.
+
+---
+
+### DR-0015 — Orchestration branch isolation model (feature execution)
+
+**Decision owner(s):** Project management / maintainers  
+**Date:** 2026-01-10  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/next/sequencing.json`, `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+
+**Problem / Context**
+- This Planning Pack must be mechanically compatible with triad automation (worktrees + task finisher) and must not interleave unrelated feature work on the same orchestration branch.
+- `docs/project_management/next/sequencing.json` lists `world_deps_selection_layer` as a distinct sprint; branch naming must reflect that separation.
+
+**Option A — Share an orchestration branch with `world-sync` (`feat/world-sync`)**
+- **Pros:**
+  - Fewer long-lived branches.
+  - Lower immediate branch-management overhead for operators.
+- **Cons:**
+  - Interleaves two feature tracks on one ref; increases conflict risk and makes audit trails ambiguous.
+  - Breaks the “feature directory ↔ orchestration branch” convention used by triad automation templates.
+- **Cascading implications:**
+  - CI dispatch (`WORKFLOW_REF`) becomes ambiguous (“which feature commit is being validated?”).
+  - Harder to reason about dependency edges between WDL and C* slices.
+- **Risks:**
+  - Accidental coupling: unrelated changes land together and are harder to revert.
+- **Unlocks:**
+  - None that cannot be achieved with explicit sequencing and a dedicated branch.
+- **Quick wins / low-hanging fruit:**
+  - None beyond avoiding a branch rename.
+
+**Option B — Dedicated orchestration branch per feature directory (`feat/world_deps_selection_layer`)**
+- **Pros:**
+  - Clean audit trail: one feature directory, one orchestration ref, one set of smoke dispatches.
+  - Matches triad automation templates and reduces ambiguity for operators and CI workflows.
+- **Cons:**
+  - One additional long-lived branch while the feature is executed.
+- **Cascading implications:**
+  - Sequencing/dependencies remain explicit via `docs/project_management/next/sequencing.json` and `tasks.json` external task ids.
+- **Risks:**
+  - Minimal.
+- **Unlocks:**
+  - Enables deterministic smoke dispatch via `WORKFLOW_REF="feat/world_deps_selection_layer"` with no cross-feature interference.
+- **Quick wins / low-hanging fruit:**
+  - Immediate: `tasks.json` can enable automation with deterministic branch naming.
+
+**Recommendation**
+- **Selected:** Option B — Dedicated orchestration branch per feature directory (`feat/world_deps_selection_layer`)
+- **Rationale (crisp):** It preserves a single, unambiguous execution spine for WDL triads and aligns mechanically with automation/worktree execution.
+
+**Follow-up tasks (explicit)**
+- Update `docs/project_management/next/sequencing.json` sprint entry `world_deps_selection_layer.branch` to `feat/world_deps_selection_layer`.
+- Set `tasks.json` meta automation `orchestration_branch` to `feat/world_deps_selection_layer` and ensure all smoke dispatch commands use `WORKFLOW_REF="feat/world_deps_selection_layer"`.
+
+---
+
+### DR-0016 — Cross-platform integration task model (validation-only vs platform-fix)
+
+**Decision owner(s):** Maintainers  
+**Date:** 2026-01-10  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`, `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+
+**Problem / Context**
+- WDL changes touch CLI, manifest schema validation, and platform-specific world backends (Linux host, macOS Lima, Windows WSL).
+- Cross-platform failures are expected to require ownership loops (fix + re-run) without blocking the primary integration path.
+
+**Option A — Validation-only (single integration task dispatches smoke for all required platforms)**
+- **Pros:**
+  - Fewer tasks.
+  - Simpler dependency graph.
+- **Cons:**
+  - No explicit ownership for platform-specific fixes; retries become ad-hoc.
+  - Harder to parallelize fixes across platforms.
+- **Cascading implications:**
+  - Integration task becomes a bottleneck with mixed concerns (merge + cross-platform triage + fixes).
+- **Risks:**
+  - Longer cycle time due to serialized platform debugging.
+- **Unlocks:**
+  - None; platform-fix can still dispatch “behavior” smoke as a single run when green.
+- **Quick wins / low-hanging fruit:**
+  - Reduced upfront planning work (but increases execution ambiguity).
+
+**Option B — Platform-fix when needed (core + per-platform + final aggregator; P3-008)**
+- **Pros:**
+  - Explicit ownership loops per platform; parallelizable.
+  - Keeps core integration focused on “primary dev platform green”.
+  - Matches the repo’s recommended model for cross-platform planning packs.
+- **Cons:**
+  - More tasks per slice.
+- **Cascading implications:**
+  - Requires `tasks.json` meta schema v2+ (we use v3) and explicit behavior + CI parity platform sets.
+- **Risks:**
+  - Slightly higher planning overhead; mitigated by strict templates.
+- **Unlocks:**
+  - Clear cross-platform audit: smoke run ids/URLs per platform are recorded in slice closeout reports.
+- **Quick wins / low-hanging fruit:**
+  - Enables `make triad-task-start-platform-fixes-from-smoke ...` workflow when smoke fails.
+
+**Recommendation**
+- **Selected:** Option B — Platform-fix when needed (core + per-platform + final aggregator)
+- **Rationale (crisp):** It makes cross-platform parity an explicit, auditable execution artifact instead of an implicit “hope it works” step.
+
+**Follow-up tasks (explicit)**
+- Set `tasks.json` `meta.schema_version=3` and declare:
+  - `meta.behavior_platforms_required=["linux","macos","windows"]`
+  - `meta.ci_parity_platforms_required=["linux","macos","windows"]`
+- For each WDL slice, create integration tasks: `WDLx-integ-core`, `WDLx-integ-linux`, `WDLx-integ-macos`, `WDLx-integ-windows`, and `WDLx-integ` (final).
+
+---
+
+### DR-0017 — Smoke script strategy across multi-slice delivery
+
+**Decision owner(s):** Maintainers  
+**Date:** 2026-01-10  
+**Status:** Accepted  
+**Related docs:** `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`, `docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
+
+**Problem / Context**
+- The feature-local smoke entrypoints (`smoke/linux-smoke.sh`, `smoke/macos-smoke.sh`, `smoke/windows-smoke.ps1`) are executed by CI with no arguments.
+- WDL is delivered across multiple slices (WDL0/WDL1/WDL2). Smoke must remain runnable and meaningful after each slice without requiring per-slice script variants.
+
+**Option A — Monolithic “final feature” smoke only**
+- **Pros:**
+  - Maximum end-to-end coverage in a single script.
+- **Cons:**
+  - Cannot pass after early slices if it asserts behaviors introduced in later slices.
+  - Forces either delaying smoke until WDL2 (violates integration discipline) or artificially bloating WDL0.
+- **Cascading implications:**
+  - Slice closeout reports for WDL0/WDL1 cannot record meaningful smoke results.
+- **Risks:**
+  - Encourages skipping smoke or weakening checks (“toy smoke”) to get early slices through.
+- **Unlocks:**
+  - None.
+- **Quick wins / low-hanging fruit:**
+  - None that are compatible with multi-slice execution.
+
+**Option B — Capability-gated smoke (always validates WDL0; validates WDL1/WDL2 when detectable)**
+- **Pros:**
+  - The same entrypoint remains runnable after each slice with deterministic behavior.
+  - Smoke is never “toy”: WDL0 checks always execute; WDL1/WDL2 checks execute when the CLI/JSON surface is present.
+- **Cons:**
+  - Requires a crisp detection mechanism (CLI help contains `provision`; `status --json` includes `install_class`).
+- **Cascading implications:**
+  - WDL1/WDL2 integration tasks must include explicit “capability present” assertions before dispatching smoke, so missing functionality cannot be hidden by a gated block.
+- **Risks:**
+  - If detection is too loose, smoke could skip checks; mitigated by required explicit assertions in WDL1/WDL2 integration checklists.
+- **Unlocks:**
+  - Stable smoke scripts that remain valid as the feature evolves within the planned slice set.
+- **Quick wins / low-hanging fruit:**
+  - Allows WDL0 to ship with meaningful smoke (selection gating) while keeping WDL2 provisioning journeys in the same entrypoint.
+
+**Recommendation**
+- **Selected:** Option B — Capability-gated smoke
+- **Rationale (crisp):** It preserves a single CI smoke entrypoint while ensuring each slice has meaningful, deterministic smoke coverage.
+
+**Follow-up tasks (explicit)**
+- Implement capability gating in all three smoke scripts:
+  - Always run WDL0 selection-gating checks.
+  - Run WDL1 checks only if `status --json` includes `install_class`.
+  - Run WDL2 checks only if `substrate world deps --help` includes `provision`.
+- In WDL1 integration tasks: add an explicit assertion that `install_class` is present in `status --json` before smoke dispatch.
+- In WDL2 integration tasks: add an explicit assertion that `provision` exists in CLI help before smoke dispatch.

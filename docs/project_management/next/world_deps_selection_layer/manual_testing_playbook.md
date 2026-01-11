@@ -1,6 +1,4 @@
-# World Deps Selection Layer — Manual Testing Playbook
-
-This is the human-run validation checklist for the selection-driven world-deps model and ADR-0002 install-class + provisioning routing.
+# World Deps Selection Layer — Manual Testing Playbook (WDL0/WDL1/WDL2)
 
 Authoritative specs:
 - `docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md`
@@ -8,315 +6,337 @@ Authoritative specs:
 - `docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
-## Automated smoke scripts
+## Which sections must be run (per slice closeout)
 
-Run the platform smoke script first:
+This playbook is organized so slice closeout is deterministic:
+
+| Closeout target | Required sections |
+|---|---|
+| `WDL0-closeout_report.md` | Sections `0`, `1`, `2` |
+| `WDL1-closeout_report.md` | Sections `0`, `1`, `2`, `3` |
+| `WDL2-closeout_report.md` | Sections `0`, `1`, `2`, `3`, `4` |
+
+Constraint:
+- Section `4` must not be executed unless `substrate world deps --help` contains the `provision` subcommand (WDL2 capability).
+
+---
+
+## Automated smoke scripts (preferred first step)
+
+Run the platform smoke script locally (fast preflight):
 - Linux: `bash docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh`
 - macOS: `bash docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh`
 - Windows: `pwsh -File docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1`
 
+Cross-platform smoke via CI (preferred for audit + parity):
+- Behavioral smoke (all behavior platforms, from the orchestration ref):
+  - `make feature-smoke FEATURE_DIR="docs/project_management/next/world_deps_selection_layer" PLATFORM=behavior RUNNER_KIND=self-hosted WORKFLOW_REF="feat/world_deps_selection_layer" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+- Compile parity (GitHub-hosted runners; fast fail for macOS/Windows compilation):
+  - `make ci-compile-parity CI_WORKFLOW_REF="feat/world_deps_selection_layer" CI_REMOTE=origin CI_CLEANUP=1`
+
+---
+
+## 0) Test fixtures (all platforms)
+
+This playbook must not modify your real `~/.substrate` state. Use an isolated `SUBSTRATE_HOME`.
+
+### Linux/macOS (bash)
+
+```bash
+set -euo pipefail
+
+export WDL_FIXTURE_HOME="$(mktemp -d)"
+export WDL_FIXTURE_WS="$(mktemp -d)"
+export SUBSTRATE_HOME="$WDL_FIXTURE_HOME/.substrate"
+
+mkdir -p "$SUBSTRATE_HOME"
+cd "$WDL_FIXTURE_WS"
+```
+
+### Windows (PowerShell)
+
+```powershell
+$ErrorActionPreference = "Stop"
+
+$env:WDL_FIXTURE_HOME = Join-Path $env:TEMP ("substrate-wdl-home-" + [guid]::NewGuid().ToString("N"))
+$env:WDL_FIXTURE_WS = Join-Path $env:TEMP ("substrate-wdl-ws-" + [guid]::NewGuid().ToString("N"))
+$env:SUBSTRATE_HOME = Join-Path $env:WDL_FIXTURE_HOME ".substrate"
+
+New-Item -ItemType Directory -Force -Path $env:SUBSTRATE_HOME | Out-Null
+New-Item -ItemType Directory -Force -Path $env:WDL_FIXTURE_WS | Out-Null
+Set-Location $env:WDL_FIXTURE_WS
+```
+
+---
+
+## 1) WDL0 — Selection gating (unconfigured selection is a no-op)
+
 Goal:
-- Validate end-to-end behavior across Linux, macOS (Lima), and Windows (WSL) where technically possible.
-- Where a journey is not supported, validate explicit, actionable failure messages and exit codes.
+- Prove the “selection missing” no-op contract (exit `0`, actionable message, no world backend calls).
 
----
+### 1.1 Clear selection files
 
-## 0) Preconditions (all platforms)
-
-1) Verify the CLI:
+Linux/macOS:
 ```bash
-substrate --version
-which substrate
+rm -rf .substrate
+rm -f "$SUBSTRATE_HOME/world-deps.selection.yaml"
 ```
 
-2) Capture world readiness:
-```bash
-substrate world doctor --json | jq .
+Windows:
+```powershell
+Remove-Item -Recurse -Force -ErrorAction SilentlyContinue .substrate
+Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:SUBSTRATE_HOME "world-deps.selection.yaml")
 ```
 
-3) Capture baseline health:
+### 1.2 Prove “no world calls” using an invalid socket override
+
+Linux/macOS:
 ```bash
-substrate health --json | jq .
+export SUBSTRATE_WORLD_SOCKET="$WDL_FIXTURE_HOME/does-not-exist.sock"
 ```
 
-4) Create a clean test workspace:
-```bash
-mkdir -p /tmp/substrate-wdl-smoke
-cd /tmp/substrate-wdl-smoke
+Windows:
+```powershell
+$env:SUBSTRATE_WORLD_SOCKET = Join-Path $env:WDL_FIXTURE_HOME "does-not-exist.sock"
 ```
 
-5) Initialize the workspace (C0):
-```bash
-substrate init
-echo "exit=$?"
-```
+Run (all platforms):
+- `substrate world deps status`
+- `substrate world deps sync`
+- `substrate world deps install nvm`
+- If `substrate world deps --help` contains `provision`: also run `substrate world deps provision`
 
-Expected:
-- Exit `0`.
-
----
-
-## 1) Selection gating (required)
-
-### 1.1 Unconfigured selection is a no-op (all subcommands)
-
-1) Ensure selection files are absent:
-```bash
-rm -f .substrate/world-deps.selection.yaml
-rm -f ~/.substrate/world-deps.selection.yaml
-```
-
-2) Run:
-```bash
-substrate world deps status
-echo "exit=$?"
-substrate world deps sync
-echo "exit=$?"
-substrate world deps install nvm
-echo "exit=$?"
-substrate world deps provision
-echo "exit=$?"
-```
-
-Expected:
-- Each command prints one prominent “not configured (selection file missing)” line plus next steps.
+Expected (all platforms):
 - Each command exits `0`.
-- No guest installs occur and no provisioning attempts occur.
-
-### 1.2 Configure selection (workspace) and verify precedence output
-
-1) Create a minimal workspace selection:
-```bash
-mkdir -p .substrate
-cat > .substrate/world-deps.selection.yaml <<'YAML'
-version: 1
-selected:
-  - nvm
-  - pyenv
-  - bun
-YAML
-```
-
-2) Run:
-```bash
-substrate world deps status --json | jq '.selection'
-```
-
-Expected:
-- `configured=true`
-- `active_scope="workspace"`
-- `active_path=".substrate/world-deps.selection.yaml"`
-
-### 1.3 `--all` ignores selection (discovery + debugging)
-
-1) Run:
-```bash
-substrate world deps status --all --json | jq '.selection.ignored_due_to_all'
-```
-
-Expected:
-- `ignored_due_to_all=true`
-- Tool scope expands to inventory (tools list includes entries not in `selected`).
+- Each command prints the exact substring: `world deps not configured (selection file missing)`.
 
 ---
 
-## 2) Install class enforcement (required)
+## 2) WDL0 — Selection init/select semantics (configured but empty selection)
 
-### 2.1 `user_space` installs succeed (prefix writable)
+Goal:
+- Prove `init/select` write the selection file deterministically and that empty selection is valid configuration.
 
-Precondition:
-- Pick at least one selected tool that is `user_space` (expected: `bun`).
-
-1) Run:
-```bash
-substrate world deps sync
-echo "exit=$?"
-substrate world deps status --json | jq '.tools[] | select(.name=="bun")'
-```
-
-Expected:
-- Exit `0` if all in-scope tools are satisfied (per S1).
-- `bun` transitions to guest `present`.
-- No runtime OS package installation is attempted.
-
-### 2.2 `system_packages` never installs at runtime (must route to provisioning)
-
-Precondition:
-- Pick at least one selected tool that is `system_packages` (expected: `pyenv`).
-
-1) Run:
-```bash
-substrate world deps sync
-echo "exit=$?"
-substrate world deps status --json | jq '.tools[] | select(.name=="pyenv")'
-```
-
-Expected:
-- `sync` does not run any OS package manager.
-- `pyenv` remains blocked and output references:
-  - `substrate world deps provision`
-- Exit code reflects “unmet prerequisites” (`4`) if any selected `system_packages` tool is not satisfied.
-
-### 2.3 `manual` tools are never installed
-
-Precondition:
-- Add a manual tool via the user manifest overlay and select it.
-
-1) Create a manual tool entry in the user overlay (`~/.substrate/manager_hooks.local.yaml`):
-```bash
-cat > ~/.substrate/manager_hooks.local.yaml <<'YAML'
-version: 2
-managers:
-  - name: wdl-manual-demo
-    guest_detect:
-      command: "command -v wdl-manual-demo >/dev/null 2>&1"
-    guest_install:
-      class: manual
-      manual_instructions: |
-        Create a shim inside the world-deps prefix:
-          /var/lib/substrate/world-deps/bin/wdl-manual-demo
-        Example (run inside the world):
-          printf '#!/bin/sh\necho wdl-manual-demo\n' > /var/lib/substrate/world-deps/bin/wdl-manual-demo
-          chmod +x /var/lib/substrate/world-deps/bin/wdl-manual-demo
-YAML
-```
-
-2) Update the workspace selection to include the manual tool:
-```bash
-cat > .substrate/world-deps.selection.yaml <<'YAML'
-version: 1
-selected:
-  - nvm
-  - pyenv
-  - bun
-  - wdl-manual-demo
-YAML
-```
-
-3) Run:
-```bash
-substrate world deps status --json | jq '.tools[] | select(.name=="wdl-manual-demo")'
-```
-
-Expected:
-- `selected=true`
-- `install_class="manual"`
-
-Expected:
-- If the manual tool is missing in the guest, `sync` prints manual instructions, does not install, and exits `4`.
-- `install wdl-manual-demo` exits `4` and prints the manual instructions.
-
----
-
-## 3) Provisioning system packages (`world deps provision`)
-
-### 3.1 macOS (Lima) and Windows (WSL): provisioning succeeds
-
-Precondition:
-- The active selection includes at least one tool whose `install_class` is `system_packages`.
-
-1) Run:
-```bash
-substrate world deps provision
-echo "exit=$?"
-```
-
-Expected:
-- Exit `0`.
-- Output lists computed apt packages and confirms success.
-
-2) Re-run (idempotency):
-```bash
-substrate world deps provision
-echo "exit=$?"
-```
-
-Expected:
-- Exit `0` again (repair/upgrade is “re-run provision”).
-
-3) Concrete “becomes present” assertion (system_packages)
-
-This is the required proof that `system_packages` tools become satisfied after provisioning:
-- The tool’s `guest_detect.command` must succeed (per `decision_register.md` DR-0014), and `status` must show `guest.status="present"`.
+### 2.1 Initialize workspace selection
 
 Run:
-```bash
-substrate world deps status --json | jq -e '
-  .tools[]
-  | select(.selected==true)
-  | select(.install_class=="system_packages")
-  | select(.guest.status=="present")
-' >/dev/null
-echo "exit=$?"
-```
+- `substrate world deps init --workspace --force`
 
 Expected:
 - Exit `0`.
+- Creates `.substrate/world-deps.selection.yaml` (and creates `.substrate/` if missing).
 
-4) Follow-up:
-```bash
-substrate world deps sync
-echo "exit=$?"
-```
+### 2.2 Validate configured-but-empty behavior (no world calls)
+
+Keep `SUBSTRATE_WORLD_SOCKET` pointing to a non-existent path (from section `1.2`).
+
+Run:
+- `substrate world deps status --json`
+- `substrate world deps sync`
+- `substrate world deps install nvm`
 
 Expected:
-- Tools that were blocked on `system_packages` can now proceed (depending on their class/routing rules).
+- `status --json` exits `0` and includes:
+  - `selection.configured=true`
+  - `selection.active_scope="workspace"`
+  - `selection.active_path=".substrate/world-deps.selection.yaml"`
+  - `selection.selected` is an empty list
+- `sync` exits `0` and prints the exact substring: `No tools selected; nothing to do.`
+- `install nvm` exits `2` and prints the exact substring: `tool not selected`
 
-### 3.2 Linux host backend: provisioning is explicitly unsupported
+JSON assertion examples:
 
-1) Run:
+Linux/macOS:
 ```bash
-substrate world deps provision
-echo "exit=$?"
+substrate world deps status --json | jq -e '.selection.configured==true and .selection.active_scope=="workspace" and (.selection.selected|length)==0' >/dev/null
 ```
+
+Windows:
+```powershell
+$s = (substrate world deps status --json | ConvertFrom-Json)
+if (-not $s.selection.configured) { throw "expected selection.configured=true" }
+if ($s.selection.active_scope -ne "workspace") { throw "expected selection.active_scope=workspace" }
+if ($s.selection.selected.Count -ne 0) { throw "expected empty selection.selected" }
+```
+
+### 2.3 Select tools (workspace scope) and validate selection normalization
+
+Run:
+- `substrate world deps select --workspace nvm bun`
+- `substrate world deps status --json`
+
+Expected:
+- Exit `0`.
+- JSON includes `selection.selected` containing `["nvm","bun"]` (lower-case normalization).
+
+---
+
+## 3) WDL1 — Install class visibility + routing signals (status/sync/install)
+
+Goal:
+- Prove install class metadata is surfaced and that `system_packages` tools are routed to provisioning (not runtime installs).
+
+Precondition (must be true before running this section):
+- `substrate world deps status --json` includes `tools[].install_class` (WDL1 capability).
+
+Linux/macOS:
+```bash
+substrate world deps status --all --json | jq -e '.tools[0].install_class? != null' >/dev/null
+```
+
+Windows:
+```powershell
+$s = (substrate world deps status --all --json | ConvertFrom-Json)
+if ($null -eq $s.tools[0].install_class) { throw "expected tools[].install_class to be present" }
+```
+
+### 3.1 Assert install class values (inventory expectations)
+
+Run:
+- `substrate world deps status --all --json`
+
+Expected (must hold simultaneously):
+- Tool `bun` has `install_class="user_space"`.
+- Tool `pyenv` has `install_class="system_packages"`.
+
+Linux/macOS:
+```bash
+substrate world deps status --all --json | jq -e '
+  ( .tools[] | select(.name=="bun") | .install_class=="user_space" )
+  and
+  ( .tools[] | select(.name=="pyenv") | .install_class=="system_packages" )
+' >/dev/null
+```
+
+Windows:
+```powershell
+$s = (substrate world deps status --all --json | ConvertFrom-Json)
+$bun = $s.tools | Where-Object { $_.name -eq "bun" } | Select-Object -First 1
+$pyenv = $s.tools | Where-Object { $_.name -eq "pyenv" } | Select-Object -First 1
+if ($bun.install_class -ne "user_space") { throw "expected bun.install_class=user_space" }
+if ($pyenv.install_class -ne "system_packages") { throw "expected pyenv.install_class=system_packages" }
+```
+
+### 3.2 Assert runtime routing signal for `system_packages`
+
+Goal:
+- Validate routing deterministically without relying on the guest image’s preinstalled package set.
+
+Requirement:
+- This step requires a reachable world backend because `sync` is an action command (exit `3` when backend unavailable).
+
+Create a deterministic `system_packages` fixture tool in the user overlay (scoped to `SUBSTRATE_HOME`):
+
+Linux/macOS:
+```bash
+cat > "$SUBSTRATE_HOME/manager_hooks.local.yaml" <<'YAML'
+version: 2
+managers:
+  - name: wdl-smoke-system-packages
+    guest_detect:
+      command: "dpkg -s cowsay >/dev/null 2>&1"
+    guest_install:
+      class: system_packages
+      system_packages:
+        apt:
+          - cowsay
+YAML
+```
+
+Windows:
+```powershell
+$overlayPath = Join-Path $env:SUBSTRATE_HOME "manager_hooks.local.yaml"
+$overlay = @"
+version: 2
+managers:
+  - name: wdl-smoke-system-packages
+    guest_detect:
+      command: "dpkg -s cowsay >/dev/null 2>&1"
+    guest_install:
+      class: system_packages
+      system_packages:
+        apt:
+          - cowsay
+"@
+Set-Content -LiteralPath $overlayPath -Value $overlay -Encoding UTF8
+```
+
+Ensure backend readiness:
+
+Linux/macOS:
+```bash
+unset SUBSTRATE_WORLD_SOCKET
+substrate world doctor --json | jq -e '.world.ok==true' >/dev/null
+```
+
+Windows:
+```powershell
+Remove-Item Env:SUBSTRATE_WORLD_SOCKET -ErrorAction SilentlyContinue
+$d = (substrate world doctor --json | ConvertFrom-Json)
+if (-not $d.world.ok) { throw "expected world.ok=true before running sync checks" }
+```
+
+Select the fixture tool and inspect its current guest status:
+
+Linux/macOS:
+```bash
+substrate world deps select --workspace wdl-smoke-system-packages
+substrate world deps status --all --json | jq '.tools[] | select(.name=="wdl-smoke-system-packages") | {install_class, guest: .guest.status}'
+```
+
+Windows:
+```powershell
+substrate world deps select --workspace wdl-smoke-system-packages
+$s = (substrate world deps status --all --json | ConvertFrom-Json)
+($s.tools | Where-Object { $_.name -eq "wdl-smoke-system-packages" } | Select-Object -First 1) | Select-Object install_class, @{Name="guest_status";Expression={$_.guest.status}}
+```
+
+Expected (must hold):
+- `install_class="system_packages"`.
+- If the tool’s `guest.status` is `skipped` (probe failing):
+  - `substrate world deps sync` exits `4` and output contains the exact substring: `substrate world deps provision`.
+- If the tool’s `guest.status` is `present` (probe already satisfied):
+  - `substrate world deps sync` exits `0`.
+
+---
+
+## 4) WDL2 — Provisioning (`world deps provision`)
+
+Goal:
+- Prove `system_packages` are fulfilled only by explicit provisioning, and that provisioning behavior matches the platform strategy.
+
+Preconditions (must hold before running this section):
+- `substrate world deps --help` contains the `provision` subcommand (WDL2 capability).
+- The workspace selection includes at least one `system_packages` tool (use `pyenv`).
+
+### 4.1 Linux host backend: explicit unsupported error
+
+Run:
+- `substrate world deps provision --all`
 
 Expected:
 - Exit `4`.
-- Message: “unsupported on Linux host backend (would mutate host system packages)”.
-- Output includes the required package list and manual install guidance.
+- Output contains the exact substring: `unsupported on Linux host backend`.
+- Output prints a non-empty package list under a “required system packages” heading.
 
----
+### 4.2 macOS (Lima) and Windows (WSL): provisioning succeeds and is idempotent
 
-## 4) Full-isolation compatibility spot check (Linux only)
+Requirement:
+- World backend must be reachable:
+  - `substrate world doctor --json` must indicate `.world.ok==true`.
 
-Preconditions:
-- Linux host with I2/I3 implemented and enabled.
-- A world backend is available (`substrate world doctor --json` reports the backend as available).
-
-1) Request full isolation via a per-workspace policy file (`.substrate-profile`):
-```bash
-cat > .substrate-profile <<'YAML'
-world_fs:
-  require_world: true
-  mode: writable
-  isolation: full
-  read_allowlist:
-    - "**"
-  write_allowlist:
-    - "**"
-YAML
-```
-
-2) Run:
-```bash
-substrate world deps sync
-echo "exit=$?"
-```
+Run:
+- `substrate world deps provision`
+- Re-run: `substrate world deps provision`
 
 Expected:
-- If the full isolation rootfs is created successfully and `/var/lib/substrate/world-deps` is writable inside it, user-space installs succeed and exit code is `0`.
-- If full isolation cannot be created, `sync` exits non-zero and prints an actionable error.
+- Both runs exit `0`.
+- Output contains a non-empty apt package list and the exact substring: `system packages installed`.
 
----
+### 4.3 Proof that `system_packages` becomes “present”
 
-## 5) Evidence to capture in PRs (copy/paste checklist)
+Run:
+- `substrate world deps status --json`
 
-- `substrate world doctor --json` (platform-specific proof of backend availability)
-- `substrate world deps status --json | jq '.selection'`
-- `substrate world deps status --json | jq '.tools'`
-- Logs/outputs for:
-  - unconfigured selection no-op (`status`, `sync`, `install`, `provision`)
-  - `--all` ignoring selection
-  - `system_packages` runtime block + provisioning route
-  - provisioning success (Lima/WSL) or explicit unsupported error (Linux)
-  - full-isolation spot check (if applicable)
+Expected:
+- Tool `wdl-smoke-system-packages` is reported as `guest.status="present"` only if its `guest_detect.command` probe succeeds (DR-0014).

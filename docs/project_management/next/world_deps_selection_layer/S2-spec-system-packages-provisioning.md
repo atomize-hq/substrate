@@ -146,26 +146,53 @@ Next: substrate world deps sync
 
 ## Automation hooks (required)
 
+This slice is validated by the feature-local smoke scripts referenced below. These scripts are the authoritative automation surface for the acceptance matrix in this spec.
+
+Smoke entrypoints (must exist and be used by CI smoke dispatch):
+- Linux: `docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1`
+
+Requirements for the smoke scripts (no ambiguity):
+1) **Environment isolation (required)**
+   - Each smoke script must use a temporary `SUBSTRATE_HOME` and a temporary workspace directory so it does not mutate the operator’s real `~/.substrate` state or any real workspace config.
+
+2) **Proving “no world-agent calls” for the no-op paths (required)**
+   - For “selection missing” and “configured but empty selection” cases, each smoke script must set `SUBSTRATE_WORLD_SOCKET` to a non-existent path and assert the commands still exit `0`.
+   - This is the mechanical proof that the code path did not attempt a backend connection.
+
+3) **Backend prerequisites handling (required)**
+   - Smoke scripts must not attempt to provision the world backend (no automatic calls to `scripts/mac/lima-warm.sh` or `scripts/windows/wsl-warm.ps1`).
+   - If a backend-required command fails due to backend unavailability, the smoke script must fail with an explicit remediation block that points to:
+     - `substrate world doctor --json`
+     - the relevant warm/provision script for the platform.
+
+4) **Capability-gated smoke design (required; DR-0017)**
+   - The smoke scripts are allowed to gate WDL2-specific assertions on the presence of the `provision` subcommand in `substrate world deps --help`.
+   - WDL2 integration tasks must include a separate explicit assertion that `provision` exists before dispatching CI smoke, so missing command surfaces cannot be hidden by gating.
+
+5) **CI dispatch contract (required)**
+   - Integration tasks dispatch feature smoke via:
+     - `make feature-smoke FEATURE_DIR="docs/project_management/next/world_deps_selection_layer" PLATFORM=behavior RUNNER_KIND=self-hosted WORKFLOW_REF="feat/world_deps_selection_layer" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+   - Per-platform smoke dispatches use `PLATFORM=linux|macos|windows` with the same `FEATURE_DIR` and `WORKFLOW_REF`.
+
 ## Acceptance matrix (automatable; required)
 
 Each row must be runnable by a script (no manual interpretation beyond viewing logs). “Pass checks” are concrete assertions.
 
 | Journey | Linux (host agent) | macOS (Lima) | Windows (WSL) | Pass checks |
 |---|---:|---:|---:|---|
-| A: Unconfigured selection no-op | ✅ | ✅ | ✅ | `status/sync/install/provision` exit `0` and print “not configured”; no guest calls attempted |
+| A: Unconfigured selection no-op | ✅ | ✅ | ✅ | `status/sync/install/provision` exit `0` and print “not configured”; prove no guest calls by setting invalid `SUBSTRATE_WORLD_SOCKET` and observing unchanged exit `0` |
 | B: Provision on supported guests | ❌ | ✅ | ✅ | `provision` exit `0`; output includes apt package list and “installed”; rerun also exit `0` |
 | C: Provision on Linux host unsupported | ✅ (as failure) | N/A | N/A | `provision` exit `4`; output includes “unsupported on Linux host backend” and prints package list |
-| D: Sync blocked until provision | ✅ | ✅ | ✅ | With a selection including a `system_packages` tool: `sync` exits `4` and references `provision` |
-| E: Sync succeeds after provision | N/A (manual deps) | ✅ | ✅ | After `provision`, `sync` no longer reports `system_packages` tools as blocked (tool-specific state depends on class) |
+| D: Sync blocked until provision | ✅ | ✅ | ✅ | When at least one selected `system_packages` tool’s probe is failing: `sync` exits `4` and references `provision` |
+| E: Sync succeeds after provision | N/A (manual deps) | ✅ | ✅ | For tools whose probe becomes satisfied after `provision`: `sync` no longer exits `4` due to `system_packages` prerequisites |
 
 Automation approach (required):
 - Add and maintain feature-local smoke scripts (no repo-root `scripts/` changes required for this triad):
   - Linux: `bash docs/project_management/next/world_deps_selection_layer/smoke/linux-smoke.sh`
   - macOS: `bash docs/project_management/next/world_deps_selection_layer/smoke/macos-smoke.sh`
   - Windows: `pwsh -File docs/project_management/next/world_deps_selection_layer/smoke/windows-smoke.ps1`
-
-Notes:
-- These feature-local smoke entrypoints may call existing warm/provision helpers as prerequisites (e.g., `scripts/mac/lima-warm.sh`, `scripts/windows/wsl-warm.ps1`), but the smoke entrypoints live in the feature directory and must remain runnable and auditable on their own.
 
 Unit/integration tests (Rust):
 - Add parsing/validation tests for system package metadata.

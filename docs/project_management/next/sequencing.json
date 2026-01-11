@@ -185,7 +185,7 @@
 	      "order": 28,
 	      "id": "world_deps_selection_layer",
 	      "title": "World deps selection layer",
-	      "branch": "feat/world-sync",
+	      "branch": "feat/world_deps_selection_layer",
 	      "directory": "docs/project_management/next/world_deps_selection_layer",
 	      "plan": "docs/project_management/next/world_deps_selection_layer/plan.md",
 	      "status": "not_started",
@@ -196,7 +196,7 @@
 	      ],
 	      "notes": [
 	        "Implements ADR-0002 world-deps selection + install classes + provisioning.",
-	        "Sequenced before world_sync so C1 can assume the selection/UX model is stable."
+	        "Sequenced before world_sync so later world-sync slices can assume the selection/UX model is stable (world-sync execution should treat WDL2-integ as a prerequisite)."
 	      ]
 	    },
 	    {

@@ -126,7 +126,8 @@ Hard requirements imposed on world-deps:
 
 ### C0–C9 (world-sync)
 Dependencies:
-- Workspace selection file is under `.substrate/`; C0 establishes `.substrate/` and sets precedent that it is a protected path.
+- None (explicit). WDL creates `.substrate/` as needed when writing workspace selection files (S0).
+- World-sync must continue to treat `.substrate/` as a protected path and must not attempt to sync or mutate Substrate-owned world-deps prefixes.
 
 Composition:
 - World-deps must not store managed tooling inside the project tree; it uses `/var/lib/substrate/world-deps` to avoid sync interactions.
@@ -139,13 +140,13 @@ Composition:
 ### Required prerequisites (must land first)
 1) **Y0**: YAML settings migration (Y0-spec) must land before any WDL slices.
 2) **Hardening**: I2/I3 full cage must incorporate the world-deps prefix mount requirement before WDL2 is considered “full-cage compatible”.
-3) **World sync**: C0 and C1 land before WDL0 to avoid CLI and workspace-model conflicts.
 
-### Final insertion point in `docs/project_management/next/sequencing.json`
-We insert this triad into the **world_sync** sprint after `C1`:
-- Rationale: C1 touches CLI parsing/settings surfaces; sequencing WDL after C1 avoids churn/conflicts, and `.substrate/` already exists after C0.
+### Sequencing position in `docs/project_management/next/sequencing.json`
+This feature is executed as its own sprint (`id="world_deps_selection_layer"`) on its own orchestration branch (DR-0015):
+- Orchestration branch: `feat/world_deps_selection_layer`
+- It is sequenced before the `world-sync` sprint so later world-sync slices can rely on the WDL selection + install-class model being stable.
 
-Exact sequence entries (implemented in `docs/project_management/next/sequencing.json`):
+Exact sequence entries (implemented in `docs/project_management/next/sequencing.json` for this sprint):
 - `WDL0` → `S0-spec-selection-config-and-ux.md`
 - `WDL1` → `S1-spec-install-classes.md`
 - `WDL2` → `S2-spec-system-packages-provisioning.md`
