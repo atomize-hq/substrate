@@ -268,6 +268,15 @@ fn default_global_substrate_dir() -> Option<PathBuf> {
     dirs::home_dir().map(|home| home.join(SUBSTRATE_DIR_NAME))
 }
 
+fn paths_equivalent(a: &Path, b: &Path) -> bool {
+    if cfg!(windows) {
+        let norm = |p: &Path| p.to_string_lossy().replace('/', "\\").to_ascii_lowercase();
+        norm(a) == norm(b)
+    } else {
+        a == b
+    }
+}
+
 fn find_workspace_selection_file(cwd: &Path) -> Option<PathBuf> {
     let start = canonicalize_if_exists(cwd.to_path_buf());
     let default_global = default_global_selection_path();
@@ -280,7 +289,7 @@ fn find_workspace_selection_file(cwd: &Path) -> Option<PathBuf> {
             // user's global config.
             if default_global
                 .as_ref()
-                .is_some_and(|path| path == &candidate)
+                .is_some_and(|path| paths_equivalent(path, &candidate))
             {
                 continue;
             }
@@ -298,7 +307,7 @@ fn find_workspace_root_if_substrate_dir_exists(cwd: &Path) -> Option<PathBuf> {
         if marker.is_dir() {
             if default_global_dir
                 .as_ref()
-                .is_some_and(|path| path == &marker)
+                .is_some_and(|path| paths_equivalent(path, &marker))
             {
                 continue;
             }
