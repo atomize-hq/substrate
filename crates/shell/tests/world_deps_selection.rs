@@ -163,8 +163,11 @@ fn test_world_deps_status_json_reports_workspace_selection_precedence() {
     let selection = json
         .get("selection")
         .expect("status --json includes selection block");
-    let workspace_selection_str = canonicalize_for_assert(&workspace_selection);
     let global_selection_str = canonicalize_for_assert(&global_selection);
+    let expected_workspace_active_path = std::path::Path::new(".substrate")
+        .join("world-deps.selection.yaml")
+        .to_string_lossy()
+        .to_string();
     assert_eq!(
         selection.get("configured").and_then(|v| v.as_bool()),
         Some(true)
@@ -175,7 +178,7 @@ fn test_world_deps_status_json_reports_workspace_selection_precedence() {
     );
     assert_eq!(
         selection.get("active_path").and_then(|v| v.as_str()),
-        Some(workspace_selection_str.as_str())
+        Some(expected_workspace_active_path.as_str())
     );
     let shadowed = selection
         .get("shadowed_paths")

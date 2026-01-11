@@ -19,7 +19,7 @@ use crate::{
 use anyhow::{anyhow, bail, Context, Result};
 use std::collections::HashSet;
 use std::env;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use substrate_common::{paths as substrate_paths, WorldDepTool, WorldDepsManifest};
 use tracing::warn;
 
@@ -110,6 +110,54 @@ fn looks_like_world_deps_hardening_violation(err: &anyhow::Error) -> bool {
         current = e.source();
     }
     false
+}
+
+fn diff_paths(target: &Path, base: &Path) -> Option<PathBuf> {
+    if target.is_absolute() != base.is_absolute() {
+        return None;
+    }
+
+    let target_components: Vec<Component<'_>> = target.components().collect();
+    let base_components: Vec<Component<'_>> = base.components().collect();
+
+    if matches!(target_components.first(), Some(Component::Prefix(_)))
+        && matches!(base_components.first(), Some(Component::Prefix(_)))
+        && target_components.first() != base_components.first()
+    {
+        return None;
+    }
+
+    let mut common_len = 0usize;
+    while common_len < target_components.len()
+        && common_len < base_components.len()
+        && target_components[common_len] == base_components[common_len]
+    {
+        common_len += 1;
+    }
+
+    let mut out = PathBuf::new();
+    for component in &base_components[common_len..] {
+        match component {
+            Component::Normal(_) | Component::ParentDir => out.push(".."),
+            Component::CurDir => {}
+            Component::RootDir | Component::Prefix(_) => {}
+        }
+    }
+
+    for component in &target_components[common_len..] {
+        match component {
+            Component::Normal(seg) => out.push(seg),
+            Component::ParentDir => out.push(".."),
+            Component::CurDir => {}
+            Component::RootDir | Component::Prefix(_) => {}
+        }
+    }
+
+    if out.as_os_str().is_empty() {
+        out.push(".");
+    }
+
+    Some(out)
 }
 
 #[derive(Debug)]
@@ -432,9 +480,17 @@ impl WorldDepsRunner {
         include_all: bool,
     ) -> Result<WorldDepsStatusReport> {
         let selection = self.load_active_selection()?;
+        let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let report_active_path = match (selection.active_scope, selection.active_path.as_ref()) {
+            (Some(WorldDepsSelectionScope::Workspace), Some(path)) => {
+                Some(diff_paths(path, &cwd).unwrap_or_else(|| path.clone()))
+            }
+            (_, Some(path)) => Some(path.clone()),
+            (_, None) => None,
+        };
         let selection_info = WorldDepsSelectionInfo {
             configured: selection.configured,
-            active_path: selection.active_path.clone(),
+            active_path: report_active_path,
             active_scope: selection.active_scope,
             shadowed_paths: selection.shadowed_paths.clone(),
             selected: selection.selected.clone(),
