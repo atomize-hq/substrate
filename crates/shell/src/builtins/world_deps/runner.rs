@@ -55,10 +55,12 @@ pub fn run(cmd: &WorldDepsCmd, cli_no_world: bool, cli_force_world: bool) -> i32
                 eprintln!("Underlying error: {:#}", err);
             } else if code == 3 {
                 if let Some(reason) = world_backend_unavailable_reason(&err) {
-                    eprintln!(
-                        "substrate: world backend unavailable for world deps; run `substrate world doctor --json` to inspect backend status, then retry.\nUnderlying error: {}",
-                        reason
-                    );
+                    let header = if cfg!(target_os = "macos") {
+                        "substrate: world backend unavailable for world deps on macOS; run `substrate world doctor --json` to inspect backend status, then retry."
+                    } else {
+                        "substrate: world backend unavailable for world deps; run `substrate world doctor --json` to inspect backend status, then retry."
+                    };
+                    eprintln!("{header}\nUnderlying error: {reason}");
                 } else {
                     eprintln!("{:#}", err);
                 }
