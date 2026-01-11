@@ -97,7 +97,7 @@
       "name": "WDL0 — Selection config + UX (test)",
       "type": "test",
       "phase": "WDL0",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add tests for selection parsing/precedence, scoping, and exit-code behavior per S0 (tests only).",
       "references": [
         "docs/project_management/next/world_deps_selection_layer/plan.md",

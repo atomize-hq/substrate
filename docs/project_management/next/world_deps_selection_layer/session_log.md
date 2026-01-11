@@ -107,3 +107,22 @@
   - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL0-code/events.jsonl`
   - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL0-code/stderr.log`
 - Blockers: `NONE`
+
+## END — 2026-01-11T19:40:44Z — test — WDL0-test
+- Worktree: `/home/spenser/__Active_code/substrate/wt/world_deps_selection_layer-wdl0-test`
+- Branch: `world_deps_selection_layer-wdl0-test`
+- HEAD: `e0659a8543bb361a0768fd085a8d2d67241a77ab`
+- Codex: `CODEX_TEST_EXIT=0`
+- Finisher summary:
+  - `TASK_BRANCH=world_deps_selection_layer-wdl0-test`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/world_deps_selection_layer-wdl0-test`
+  - `HEAD=e0659a8543bb361a0768fd085a8d2d67241a77ab`
+  - `COMMITS=1`
+  - `CHECKS=verify-only`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=`
+- Artifacts:
+  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL0-test/last_message.md`
+  - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL0-test/events.jsonl`
+  - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL0-test/stderr.log`
+- Blockers: `crates/shell/tests/world_deps_selection.rs` currently fails until WDL0-code behavior is integrated
