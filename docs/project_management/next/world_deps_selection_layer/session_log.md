@@ -59,3 +59,70 @@
 - Next steps:
   - Planning quality gate reviewer produces `docs/project_management/next/world_deps_selection_layer/quality_gate_report.md` with `RECOMMENDATION: ACCEPT`.
   - Operator runs `F0-exec-preflight` and records `ACCEPT|REVISE` in `docs/project_management/next/world_deps_selection_layer/execution_preflight_report.md`.
+
+## START — 2026-01-11T16:12:53Z — F0-exec-preflight — execution preflight gate
+- Feature: `docs/project_management/next/world_deps_selection_layer`
+- Branch: `feat/world_deps_selection_layer`
+- Standard: `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+- Goal: Confirm the Planning Pack is runnable (smoke is non-toy; CI dispatch commands are valid) before starting any triads.
+- Inputs read end-to-end:
+  - ADR: `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
+  - Planning Pack: `plan.md`, `tasks.json`, `session_log.md`, `decision_register.md`, `integration_map.md`, `manual_testing_playbook.md`, `S0`, `S1`, `S2`, smoke scripts, kickoff prompt
+- Orchestration branch ensured via: `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/world_deps_selection_layer"`
+
+## END — 2026-01-11T16:15:04Z — F0-exec-preflight — execution preflight gate
+- Recommendation: `ACCEPT`
+- Required fixes before starting triads: `NONE`
+- Output: `docs/project_management/next/world_deps_selection_layer/execution_preflight_report.md`
+
+## START — 2026-01-11T19:07:33Z — code — WDL0-code
+- Worktree: `wt/world_deps_selection_layer-wdl0-code`
+- Branch: `world_deps_selection_layer-wdl0-code`
+- Orchestration branch: `feat/world_deps_selection_layer`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/world_deps_selection_layer" SLICE_ID="WDL0" LAUNCH_CODEX=1`
+
+## START — 2026-01-11T19:07:33Z — test — WDL0-test
+- Worktree: `wt/world_deps_selection_layer-wdl0-test`
+- Branch: `world_deps_selection_layer-wdl0-test`
+- Orchestration branch: `feat/world_deps_selection_layer`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/world_deps_selection_layer" SLICE_ID="WDL0" LAUNCH_CODEX=1`
+
+## END — 2026-01-11T19:39:59Z — code — WDL0-code
+- Worktree: `/home/spenser/__Active_code/substrate/wt/world_deps_selection_layer-wdl0-code`
+- Branch: `world_deps_selection_layer-wdl0-code`
+- HEAD: `8ae36b4ef829480b1a209850bb2f23ea02e28945`
+- Codex: `CODEX_CODE_EXIT=0`
+- Finisher summary:
+  - `TASK_BRANCH=world_deps_selection_layer-wdl0-code`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/world_deps_selection_layer-wdl0-code`
+  - `HEAD=8ae36b4ef829480b1a209850bb2f23ea02e28945`
+  - `COMMITS=1`
+  - `CHECKS=verify-only`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=`
+- Artifacts:
+  - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL0-code/last_message.md`
+  - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL0-code/events.jsonl`
+  - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL0-code/stderr.log`
+- Blockers: `NONE`
+
+## END — 2026-01-11T19:40:44Z — test — WDL0-test
+- Worktree: `/home/spenser/__Active_code/substrate/wt/world_deps_selection_layer-wdl0-test`
+- Branch: `world_deps_selection_layer-wdl0-test`
+- HEAD: `e0659a8543bb361a0768fd085a8d2d67241a77ab`
+- Codex: `CODEX_TEST_EXIT=0`
+- Finisher summary:
+  - `TASK_BRANCH=world_deps_selection_layer-wdl0-test`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/world_deps_selection_layer-wdl0-test`
+  - `HEAD=e0659a8543bb361a0768fd085a8d2d67241a77ab`
+  - `COMMITS=1`
+  - `CHECKS=verify-only`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=`
+- Artifacts:
+  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL0-test/last_message.md`
+  - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL0-test/events.jsonl`
+  - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL0-test/stderr.log`
+- Blockers: `crates/shell/tests/world_deps_selection.rs` currently fails until WDL0-code behavior is integrated

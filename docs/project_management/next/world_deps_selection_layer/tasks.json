@@ -18,7 +18,7 @@
       "name": "Execution preflight gate (feature start)",
       "type": "ops",
       "phase": "F0",
-      "status": "pending",
+      "status": "completed",
       "description": "Run the execution preflight gate to confirm smoke/manual/CI plans are adequate before starting triads.",
       "references": [
         "docs/project_management/next/world_deps_selection_layer/plan.md",
@@ -53,7 +53,7 @@
       "name": "WDL0 — Selection config + UX (code)",
       "type": "code",
       "phase": "WDL0",
-      "status": "pending",
+      "status": "completed",
       "description": "Implement selection config loading, precedence, init/select UX, `--all` semantics, and exit-code behavior per S0 (production code only).",
       "references": [
         "docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md",
@@ -97,7 +97,7 @@
       "name": "WDL0 — Selection config + UX (test)",
       "type": "test",
       "phase": "WDL0",
-      "status": "pending",
+      "status": "completed",
       "description": "Add tests for selection parsing/precedence, scoping, and exit-code behavior per S0 (tests only).",
       "references": [
         "docs/project_management/next/world_deps_selection_layer/plan.md",
@@ -136,7 +136,7 @@
       "name": "WDL0 — Integration core",
       "type": "integration",
       "phase": "WDL0",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge WDL0 code+tests, reconcile to S0, and make the slice green on the primary dev platform.",
       "references": [
         "docs/project_management/next/world_deps_selection_layer/plan.md",
@@ -188,7 +188,7 @@
       "name": "WDL0 — Integration Linux (platform-fix)",
       "type": "integration",
       "phase": "WDL0",
-      "status": "pending",
+      "status": "completed",
       "description": "Linux platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/world_deps_selection_layer/plan.md",
@@ -229,7 +229,7 @@
       "name": "WDL0 — Integration macOS (platform-fix)",
       "type": "integration",
       "phase": "WDL0",
-      "status": "pending",
+      "status": "completed",
       "description": "macOS platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/world_deps_selection_layer/plan.md",
@@ -270,7 +270,7 @@
       "name": "WDL0 — Integration Windows (platform-fix)",
       "type": "integration",
       "phase": "WDL0",
-      "status": "pending",
+      "status": "completed",
       "description": "Windows platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/world_deps_selection_layer/plan.md",
