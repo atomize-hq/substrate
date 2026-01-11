@@ -35,6 +35,7 @@ This runner checks (at minimum):
 - Kickoff prompt sentinel coverage (must contain `Do not edit planning docs inside the worktree.`)
 - Manual playbook must reference smoke scripts (when both exist)
 - `sequencing.json` includes this feature directory
+- `sequencing.json` completed sprint pointers resolve (supports archived Planning Packs under `docs/project_management/_archived/`)
 
 ## Debugging a failure (optional)
 

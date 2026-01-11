@@ -184,4 +184,37 @@ fi
 echo "-- Sequencing alignment"
 jq -e --arg dir "${FEATURE_DIR}" '.sprints[] | select(.directory==$dir) | .id' docs/project_management/next/sequencing.json >/dev/null
 
+echo "-- Sequencing spine validity (completed sprints)"
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+path = Path("docs/project_management/next/sequencing.json")
+data = json.loads(path.read_text(encoding="utf-8"))
+
+missing = []
+for sprint in data.get("sprints", []):
+    if sprint.get("status") != "completed":
+        continue
+
+    sprint_id = sprint.get("id", "<missing-id>")
+    for key in ("directory", "plan"):
+        p = sprint.get(key)
+        if p and not Path(p).exists():
+            missing.append((sprint_id, key, p))
+
+    for entry in sprint.get("sequence") or []:
+        if not isinstance(entry, dict):
+            continue
+        spec = entry.get("spec")
+        if spec and not Path(spec).exists():
+            missing.append((sprint_id, "spec", spec))
+
+if missing:
+    for sprint_id, key, p in missing:
+        print(f"FAIL: sequencing.json references missing path for completed sprint: {sprint_id} {key}={p}")
+    raise SystemExit(1)
+print("OK: completed sprint paths resolve")
+PY
+
 echo "OK: planning lint passed"

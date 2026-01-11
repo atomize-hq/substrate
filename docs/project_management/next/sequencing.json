@@ -16,10 +16,10 @@
       "id": "yaml_settings_migration",
       "title": "Runtime settings migration: TOML → YAML",
       "branch": "feat/yaml-settings-migration",
-      "directory": "docs/project_management/next/yaml-settings-migration",
-      "plan": "docs/project_management/next/yaml-settings-migration/plan.md",
+      "directory": "docs/project_management/_archived/yaml-settings-migration",
+      "plan": "docs/project_management/_archived/yaml-settings-migration/plan.md",
       "status": "completed",
-      "sequence": [{ "id": "Y0", "spec": "docs/project_management/next/yaml-settings-migration/Y0-spec.md" }],
+      "sequence": [{ "id": "Y0", "spec": "docs/project_management/_archived/yaml-settings-migration/Y0-spec.md" }],
       "notes": [
         "This is the smallest migration needed to reach YAML-only for Substrate-owned runtime config.",
         "Land before any work that adds new settings keys (world-sync, world-deps selection, agent-hub config extensions)."
@@ -30,10 +30,10 @@
       "id": "p0_platform_stability",
       "title": "P0 platform stability",
       "branch": "feat/p0-platform-stability",
-      "directory": "docs/project_management/next/p0-platform-stability",
-      "plan": "docs/project_management/next/p0-platform-stability/plan.md",
+      "directory": "docs/project_management/_archived/p0-platform-stability",
+      "plan": "docs/project_management/_archived/p0-platform-stability/plan.md",
       "status": "completed",
-      "sequence": [{ "id": "LP1", "spec": "docs/project_management/next/p0-platform-stability/LP1-spec.md" }],
+      "sequence": [{ "id": "LP1", "spec": "docs/project_management/_archived/p0-platform-stability/LP1-spec.md" }],
       "notes": [
         "Bundles socket activation, replay polish, and health mismatch fixes under one coordination umbrella.",
         "Land before macOS parity work so the parity sprint can mirror the final Linux/WSL behavior."
@@ -44,18 +44,18 @@
       "id": "p0_platform_stability_macos_parity",
       "title": "P0 platform stability: macOS parity",
       "branch": "feat/p0-platform-stability-macOS-parity",
-      "directory": "docs/project_management/next/p0-platform-stability-macOS-parity",
-      "plan": "docs/project_management/next/p0-platform-stability-macOS-parity/plan.md",
+      "directory": "docs/project_management/_archived/p0-platform-stability-macOS-parity",
+      "plan": "docs/project_management/_archived/p0-platform-stability-macOS-parity/plan.md",
       "status": "completed",
       "sequence": [
-        { "id": "M1", "spec": "docs/project_management/next/p0-platform-stability-macOS-parity/M1-spec.md" },
-        { "id": "M2", "spec": "docs/project_management/next/p0-platform-stability-macOS-parity/M2-spec.md" },
-        { "id": "M3", "spec": "docs/project_management/next/p0-platform-stability-macOS-parity/M3-spec.md" },
-        { "id": "M4", "spec": "docs/project_management/next/p0-platform-stability-macOS-parity/M4-spec.md" },
-        { "id": "M5a", "spec": "docs/project_management/next/p0-platform-stability-macOS-parity/M5a-spec.md" },
-        { "id": "M5b", "spec": "docs/project_management/next/p0-platform-stability-macOS-parity/M5b-spec.md" },
-        { "id": "M5c", "spec": "docs/project_management/next/p0-platform-stability-macOS-parity/M5c-spec.md" },
-        { "id": "M6", "spec": "docs/project_management/next/p0-platform-stability-macOS-parity/M6-spec.md" }
+        { "id": "M1", "spec": "docs/project_management/_archived/p0-platform-stability-macOS-parity/M1-spec.md" },
+        { "id": "M2", "spec": "docs/project_management/_archived/p0-platform-stability-macOS-parity/M2-spec.md" },
+        { "id": "M3", "spec": "docs/project_management/_archived/p0-platform-stability-macOS-parity/M3-spec.md" },
+        { "id": "M4", "spec": "docs/project_management/_archived/p0-platform-stability-macOS-parity/M4-spec.md" },
+        { "id": "M5a", "spec": "docs/project_management/_archived/p0-platform-stability-macOS-parity/M5a-spec.md" },
+        { "id": "M5b", "spec": "docs/project_management/_archived/p0-platform-stability-macOS-parity/M5b-spec.md" },
+        { "id": "M5c", "spec": "docs/project_management/_archived/p0-platform-stability-macOS-parity/M5c-spec.md" },
+        { "id": "M6", "spec": "docs/project_management/_archived/p0-platform-stability-macOS-parity/M6-spec.md" }
       ],
       "notes": [
         "Bridges the P0 platform stability behavior set to macOS (Lima guest + host UX parity).",
@@ -67,16 +67,16 @@
       "id": "agent_hub_isolation_hardening",
       "title": "Agent hub isolation hardening",
       "branch": "feat/p0-agent-hub-isolation-hardening",
-      "directory": "docs/project_management/next/p0-agent-hub-isolation-hardening",
-      "plan": "docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md",
+      "directory": "docs/project_management/_archived/p0-agent-hub-isolation-hardening",
+      "plan": "docs/project_management/_archived/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md",
       "status": "completed",
       "sequence": [
-        { "id": "I0", "spec": "docs/project_management/next/p0-agent-hub-isolation-hardening/I0-spec.md" },
-        { "id": "I1", "spec": "docs/project_management/next/p0-agent-hub-isolation-hardening/I1-spec.md" },
-        { "id": "I2", "spec": "docs/project_management/next/p0-agent-hub-isolation-hardening/I2-spec.md" },
-        { "id": "I3", "spec": "docs/project_management/next/p0-agent-hub-isolation-hardening/I3-spec.md" },
-        { "id": "I4", "spec": "docs/project_management/next/p0-agent-hub-isolation-hardening/I4-spec.md" },
-        { "id": "I5", "spec": "docs/project_management/next/p0-agent-hub-isolation-hardening/I5-spec.md" }
+        { "id": "I0", "spec": "docs/project_management/_archived/p0-agent-hub-isolation-hardening/I0-spec.md" },
+        { "id": "I1", "spec": "docs/project_management/_archived/p0-agent-hub-isolation-hardening/I1-spec.md" },
+        { "id": "I2", "spec": "docs/project_management/_archived/p0-agent-hub-isolation-hardening/I2-spec.md" },
+        { "id": "I3", "spec": "docs/project_management/_archived/p0-agent-hub-isolation-hardening/I3-spec.md" },
+        { "id": "I4", "spec": "docs/project_management/_archived/p0-agent-hub-isolation-hardening/I4-spec.md" },
+        { "id": "I5", "spec": "docs/project_management/_archived/p0-agent-hub-isolation-hardening/I5-spec.md" }
       ],
       "notes": [
         "I2/I3 full cage must mount `/var/lib/substrate/world-deps` read-write so ADR-0002 user-space world-deps installs remain compatible under pivot_root (see docs/project_management/next/world_deps_selection_layer/decision_register.md DR-0008)."
@@ -87,25 +87,25 @@
       "id": "policy_and_config_mental_model_simplification",
       "title": "Policy + config mental model simplification",
       "branch": "feat/policy_and_config",
-      "directory": "docs/project_management/next/policy_and_config_mental_model_simplification",
-      "plan": "docs/project_management/next/policy_and_config_mental_model_simplification/plan.md",
+      "directory": "docs/project_management/_archived/policy_and_config_mental_model_simplification",
+      "plan": "docs/project_management/_archived/policy_and_config_mental_model_simplification/plan.md",
       "status": "completed",
       "sequence": [
         {
           "id": "PCM0",
-          "spec": "docs/project_management/next/policy_and_config_mental_model_simplification/PCM0-spec.md"
+          "spec": "docs/project_management/_archived/policy_and_config_mental_model_simplification/PCM0-spec.md"
         },
         {
           "id": "PCM1",
-          "spec": "docs/project_management/next/policy_and_config_mental_model_simplification/PCM1-spec.md"
+          "spec": "docs/project_management/_archived/policy_and_config_mental_model_simplification/PCM1-spec.md"
         },
         {
           "id": "PCM2",
-          "spec": "docs/project_management/next/policy_and_config_mental_model_simplification/PCM2-spec.md"
+          "spec": "docs/project_management/_archived/policy_and_config_mental_model_simplification/PCM2-spec.md"
         },
         {
           "id": "PCM3",
-          "spec": "docs/project_management/next/policy_and_config_mental_model_simplification/PCM3-spec.md"
+          "spec": "docs/project_management/_archived/policy_and_config_mental_model_simplification/PCM3-spec.md"
         }
       ],
       "notes": [

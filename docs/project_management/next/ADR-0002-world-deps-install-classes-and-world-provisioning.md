@@ -10,7 +10,7 @@ Planning Pack directory:
 - `docs/project_management/next/world_deps_selection_layer/`
 
 Intended execution branch:
-- `feat/world-sync`
+- `feat/world_deps_selection_layer`
 
 Exit code taxonomy:
 - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md` (this ADR’s exit-code meanings must remain consistent with this taxonomy)
@@ -26,14 +26,13 @@ Authoritative implementation docs:
 - Sequencing: `docs/project_management/next/sequencing.json`
 
 Related tracks:
-- YAML settings migration (Y0): `docs/project_management/next/yaml-settings-migration/Y0-spec.md`
-- Agent hub isolation hardening (I0–I5): `docs/project_management/next/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md`
+- YAML settings migration (Y0): `docs/project_management/_archived/yaml-settings-migration/Y0-spec.md`
+- Agent hub isolation hardening (I0–I5): `docs/project_management/_archived/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md`
 - World sync (C0–C9): `docs/project_management/next/world-sync/plan.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 05ff5a8dca5d85f9f583a0bba032853dbd0bd6f00a854635e6d6991d3e0dfdba
-
+ADR_BODY_SHA256: 13264bd73aef13d8768d6180986d7d2fa5848b7990c200a14bb0dd184da8bf62
 ADR_BODY_SHA256: <run `python3 scripts/planning/check_adr_exec_summary.py --adr <this-file> --fix` after editing>
 
 - Existing: `substrate world deps *` behavior is not fully selection-driven; some operations risk feeling “implicit” or “surprising” across platforms.
