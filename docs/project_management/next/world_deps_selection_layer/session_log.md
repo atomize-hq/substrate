@@ -69,3 +69,8 @@
   - ADR: `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
   - Planning Pack: `plan.md`, `tasks.json`, `session_log.md`, `decision_register.md`, `integration_map.md`, `manual_testing_playbook.md`, `S0`, `S1`, `S2`, smoke scripts, kickoff prompt
 - Orchestration branch ensured via: `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/world_deps_selection_layer"`
+
+## END — 2026-01-11T16:15:04Z — F0-exec-preflight — execution preflight gate
+- Recommendation: `ACCEPT`
+- Required fixes before starting triads: `NONE`
+- Output: `docs/project_management/next/world_deps_selection_layer/execution_preflight_report.md`
