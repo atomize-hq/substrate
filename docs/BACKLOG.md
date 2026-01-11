@@ -34,6 +34,14 @@ Keep concise, actionable, and security-focused.
     - Add fields as optional/backwards-compatible (or bump schema with clear migration rules) and update any schema/fixtures/tests/docs.
   - Acceptance: `substrate world doctor --json` includes the world OS identity fields when world is enabled; missing data degrades gracefully; docs explain the semantics.
 
+- **P2 – World image selection/pinning (Linux guest-rootfs, Lima, WSL)**
+  - Problem: once we have guest-like world images across platforms, operators will want to pin the world OS/distro per workspace for reproducibility and parity (instead of relying on whatever Substrate ships by default or whatever the host happens to be).
+  - Work:
+    - Add a first-class “world image” identity and selection surface (workspace + global), surfaced in `substrate world doctor --json` and health output.
+    - Support pinning per workspace (e.g., `.substrate/settings.yaml`) with a stable identifier and upgrade story.
+    - Ensure `world deps provision` and other guest-only flows validate that the active image is supported and report actionable remediation when it is not.
+  - Acceptance: operators can pin the world image per workspace and see the effective image in doctor/health; behavior is reproducible across machines; unsafe/unknown images fail closed with clear guidance.
+
 - **P1 fs_diff parity (agent HTTP + PTY)**
   - *Agent HTTP path:* Today only replay/local backends attach `fs_diff`; agent-routed non-PTY commands drop the diff. Extend `agent-api-types::ExecuteResponse` / `world-agent` so `/v1/execute` returns `fs_diff: Option<FsDiff>` and update the shell to record it in completion spans. Acceptance: `fs_diff` shows up in `trace.jsonl` for agent HTTP runs.
   - *PTY sessions:* Interactive runs still lack filesystem diffs. Explore capturing post-exit diffs via overlayfs/copydiff and plumb the result through the PTY telemetry path so REPL + `substrate -i` sessions produce the same audit artifacts as non-PTY commands. Document caveats (long-running PTYs, partial diffs) and add tests to prove PTY diffs land in spans.
