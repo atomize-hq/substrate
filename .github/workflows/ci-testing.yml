@@ -9,18 +9,33 @@ on:
       checkout_ref:
         required: false
         type: string
+      mode:
+        description: "CI mode: full|quick|compile-parity"
+        required: false
+        type: string
+        default: full
   workflow_dispatch:
+    inputs:
+      checkout_ref:
+        description: "Git ref to checkout for running CI Testing (defaults to workflow ref HEAD)."
+        required: false
+        default: ""
+      mode:
+        description: "CI mode: full|quick|compile-parity (quick skips docs/cross-build; compile-parity skips tests/builds too)"
+        required: false
+        default: "full"
 
 env:
   CARGO_TERM_COLOR: always
   RUST_TOOLCHAIN: 1.89.0
+  CI_MODE: ${{ inputs.mode || 'full' }}
 
 jobs:
   lint-and-test:
     name: Lint & Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: ${{ github.event_name != 'pull_request' }}
       matrix:
         os:
           - ubuntu-24.04
@@ -42,10 +57,16 @@ jobs:
           submodules: recursive
 
       - name: Install system dependencies (Linux)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && env.CI_MODE != 'compile-parity'
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libseccomp-dev shellcheck shfmt
+
+      - name: Install system dependencies (Linux, compile parity)
+        if: runner.os == 'Linux' && env.CI_MODE == 'compile-parity'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libseccomp-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -67,42 +88,49 @@ jobs:
       - name: cargo fmt
         run: cargo fmt --all -- --check
 
+      - name: cargo check (compile parity; all targets)
+        if: env.CI_MODE == 'compile-parity'
+        run: cargo check --workspace --all-targets
+
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Cargo build (debug)
+        if: env.CI_MODE != 'compile-parity'
         run: cargo build --workspace
 
       - name: Build telemetry cdylib (Unix)
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && env.CI_MODE != 'compile-parity'
         run: cargo rustc -p substrate-telemetry --profile dist --crate-type=rlib,cdylib
 
       - name: Build telemetry cdylib (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && env.CI_MODE != 'compile-parity'
         shell: pwsh
         run: cargo rustc -p substrate-telemetry --profile dist --crate-type=rlib,cdylib
 
       - name: cargo test
+        if: env.CI_MODE != 'compile-parity'
         run: cargo test --workspace --all-targets
         env:
           RUST_TEST_THREADS: 1
 
       - name: Shell lint (Linux)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && env.CI_MODE != 'compile-parity'
         run: |
           git ls-files '*.sh' | xargs -r shellcheck -x -S warning
 
       - name: Substrate CLI smoke test (Linux/macOS)
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && env.CI_MODE != 'compile-parity'
         run: cargo run --bin substrate -- --version
 
       - name: Substrate CLI smoke test (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && env.CI_MODE != 'compile-parity'
         shell: pwsh
         run: cargo run --bin substrate -- --version
 
   docs-and-packaging:
     name: Docs & Packaging Checks
+    if: ${{ github.event_name == 'pull_request' || (inputs.mode || github.event.inputs.mode || 'full') == 'full' }}
     needs: lint-and-test
     runs-on: ubuntu-24.04
 
@@ -147,6 +175,7 @@ jobs:
 
   cross-build:
     name: Cross Build (${{ matrix.target }})
+    if: ${{ github.event_name == 'pull_request' || (inputs.mode || github.event.inputs.mode || 'full') == 'full' }}
     needs: lint-and-test
     runs-on: ubuntu-24.04
     strategy:
@@ -178,7 +207,7 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
 
       - name: Install cross
-        run: cargo install cross --git https://github.com/cross-rs/cross --locked
+        run: cargo install cross --version 0.2.4 --locked
 
       - name: Cache cargo artifacts
         uses: actions/cache@v4
