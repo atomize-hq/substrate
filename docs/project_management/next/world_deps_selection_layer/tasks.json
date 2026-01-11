@@ -311,7 +311,7 @@
       "name": "WDL0 — Integration final (cross-platform merge)",
       "type": "integration",
       "phase": "WDL0",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge platform-fix branches (if any) and finalize WDL0 with an auditable cross-platform green state.",
       "references": [
         "docs/project_management/next/world_deps_selection_layer/plan.md",
