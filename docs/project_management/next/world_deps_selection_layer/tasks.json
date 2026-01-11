@@ -363,7 +363,7 @@
       "name": "WDL1 — Install classes (code)",
       "type": "code",
       "phase": "WDL1",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Implement manifest v2 install class schema + validation and enforce routing in status/sync/install per S1 (production code only).",
       "references": [
         "docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md",

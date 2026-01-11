@@ -126,3 +126,10 @@
   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL0-test/events.jsonl`
   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL0-test/stderr.log`
 - Blockers: `crates/shell/tests/world_deps_selection.rs` currently fails until WDL0-code behavior is integrated
+
+## START — 2026-01-11T22:39:58Z — code — WDL1-code
+- Worktree: `wt/world_deps_selection_layer-wdl1-code`
+- Branch: `world_deps_selection_layer-wdl1-code`
+- Orchestration branch: `feat/world_deps_selection_layer`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/world_deps_selection_layer" SLICE_ID="WDL1" LAUNCH_CODEX=1`
