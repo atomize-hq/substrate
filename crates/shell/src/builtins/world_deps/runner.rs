@@ -1,14 +1,20 @@
 use super::guest::{
-    detect_guest, detect_host, detect_host_bulk, macos_world_deps_unavailable_error,
-    run_guest_install, world_exec_fallback_active, HostBulkDetection, WorldBackendUnavailable,
+    detect_guest, detect_host, detect_host_bulk, run_guest_install, world_exec_fallback_active,
+    WorldBackendUnavailable,
 };
 use super::models::{
     sanitize_reason, GuestProbe, ManifestLayerInfo, WorldDepGuestStatus, WorldDepStatusEntry,
-    WorldDepsManifestInfo, WorldDepsOverlayInfo, WorldDepsStatusReport,
+    WorldDepsManifestInfo, WorldDepsOverlayInfo, WorldDepsSelectionInfo, WorldDepsSelectionScope,
+    WorldDepsStatusReport,
+};
+use super::selection::{
+    add_tools_to_selection_file, resolve_active_selection, resolve_selection_target,
+    write_empty_selection_file, ActiveSelection, SelectionConfigError,
 };
 use super::state::WorldState;
 use crate::{
-    WorldDepsAction, WorldDepsCmd, WorldDepsInstallArgs, WorldDepsStatusArgs, WorldDepsSyncArgs,
+    WorldDepsAction, WorldDepsCmd, WorldDepsInitArgs, WorldDepsInstallArgs, WorldDepsSelectArgs,
+    WorldDepsStatusArgs, WorldDepsSyncArgs,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use std::collections::HashSet;
@@ -26,14 +32,98 @@ pub(crate) fn status_report_for_health(
     runner.status_report(tools, false)
 }
 
-pub fn run(cmd: &WorldDepsCmd, cli_no_world: bool, cli_force_world: bool) -> Result<()> {
-    let runner = build_runner(cli_no_world, cli_force_world)?;
-    match &cmd.action {
-        WorldDepsAction::Status(args) => runner.run_status(args),
-        WorldDepsAction::Install(args) => runner.run_install(args),
-        WorldDepsAction::Sync(args) => runner.run_sync(args),
+pub fn run(cmd: &WorldDepsCmd, cli_no_world: bool, cli_force_world: bool) -> i32 {
+    let result = (|| -> Result<()> {
+        let runner = build_runner(cli_no_world, cli_force_world)?;
+        match &cmd.action {
+            WorldDepsAction::Status(args) => runner.run_status(args),
+            WorldDepsAction::Install(args) => runner.run_install(args),
+            WorldDepsAction::Sync(args) => runner.run_sync(args),
+            WorldDepsAction::Init(args) => runner.run_init(args),
+            WorldDepsAction::Select(args) => runner.run_select(args),
+        }
+    })();
+
+    match result {
+        Ok(()) => 0,
+        Err(err) => {
+            let code = world_deps_exit_code(&err);
+            if code == 5 {
+                eprintln!(
+                    "substrate: world deps blocked by hardening/cage: required writes to `/var/lib/substrate/world-deps` are not permitted.\nHint: ensure `/var/lib/substrate/world-deps` is bind-mounted read-write inside the world and retry (see `docs/project_management/_archived/p0-agent-hub-isolation-hardening/I2-spec.md` and `docs/project_management/_archived/p0-agent-hub-isolation-hardening/I3-spec.md`)."
+                );
+                eprintln!("Underlying error: {:#}", err);
+            } else if code == 3 {
+                if let Some(reason) = world_backend_unavailable_reason(&err) {
+                    eprintln!(
+                        "substrate: world backend unavailable for world deps; run `substrate world doctor --json` to inspect backend status, then retry.\nUnderlying error: {}",
+                        reason
+                    );
+                } else {
+                    eprintln!("{:#}", err);
+                }
+            } else {
+                eprintln!("{:#}", err);
+            }
+            code
+        }
     }
 }
+
+fn world_backend_unavailable_reason(err: &anyhow::Error) -> Option<String> {
+    err.chain()
+        .find_map(|cause| cause.downcast_ref::<WorldBackendUnavailable>())
+        .map(|e| e.reason().to_string())
+}
+
+fn world_deps_exit_code(err: &anyhow::Error) -> i32 {
+    if err.is::<SelectionConfigError>() {
+        return 2;
+    }
+    if err.is::<WorldDepsBackendRequiredError>() {
+        return 3;
+    }
+    if err
+        .chain()
+        .any(|cause| cause.downcast_ref::<WorldBackendUnavailable>().is_some())
+    {
+        return 3;
+    }
+    if looks_like_world_deps_hardening_violation(err) {
+        return 5;
+    }
+    1
+}
+
+fn looks_like_world_deps_hardening_violation(err: &anyhow::Error) -> bool {
+    let mut current: Option<&(dyn std::error::Error + 'static)> = Some(err.as_ref());
+    while let Some(e) = current {
+        let msg = e.to_string();
+        if msg.contains("/var/lib/substrate/world-deps")
+            && (msg.contains("Permission denied")
+                || msg.contains("permission denied")
+                || msg.contains("Read-only file system")
+                || msg.contains("read-only file system"))
+        {
+            return true;
+        }
+        current = e.source();
+    }
+    false
+}
+
+#[derive(Debug)]
+struct WorldDepsBackendRequiredError {
+    message: String,
+}
+
+impl std::fmt::Display for WorldDepsBackendRequiredError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for WorldDepsBackendRequiredError {}
 
 struct ManifestPaths {
     inventory_base: PathBuf,
@@ -205,6 +295,35 @@ impl WorldDepsRunner {
         }
     }
 
+    fn inventory_tool_names(&self) -> HashSet<String> {
+        self.manifest
+            .tools
+            .iter()
+            .map(|tool| tool.name.to_ascii_lowercase())
+            .collect()
+    }
+
+    fn load_active_selection(&self) -> Result<ActiveSelection> {
+        let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let inventory = self.inventory_tool_names();
+        resolve_active_selection(&cwd, &inventory)
+    }
+
+    fn require_world_backend(&self) -> Result<()> {
+        if self.world.is_disabled() {
+            let reason = self
+                .world
+                .reason()
+                .unwrap_or_else(|| "unknown reason".to_string());
+            return Err(anyhow!(WorldDepsBackendRequiredError {
+                message: format!(
+                    "substrate: world backend unavailable for world deps ({reason})\nHint: run `substrate world doctor --json` and/or `substrate world enable`, then retry."
+                ),
+            }));
+        }
+        Ok(())
+    }
+
     fn manifest_info(&self) -> WorldDepsManifestInfo {
         let layers = {
             let mut layers = Vec::new();
@@ -242,12 +361,8 @@ impl WorldDepsRunner {
             return Ok(());
         }
 
-        if self.world.cli_disabled() {
-            if let Some(message) = &report.world_disabled_reason {
-                println!("substrate: warn: world deps status skipped ({message})");
-            } else {
-                println!("substrate: warn: world deps status skipped");
-            }
+        if !report.selection.configured {
+            print_selection_missing_guidance();
             return Ok(());
         }
 
@@ -256,6 +371,23 @@ impl WorldDepsRunner {
                 "No tools defined in inventory {}",
                 self.paths.inventory_base.display()
             );
+            return Ok(());
+        }
+
+        if let Some(path) = &report.selection.active_path {
+            let scope = match report.selection.active_scope {
+                Some(WorldDepsSelectionScope::Workspace) => "workspace",
+                Some(WorldDepsSelectionScope::Global) => "global",
+                None => "unknown",
+            };
+            println!("Selection: {} ({scope})", path.display());
+        }
+        if report.selection.ignored_due_to_all {
+            println!("Selection ignored due to --all");
+        }
+
+        if report.selection.selected.is_empty() && args.tools.is_empty() && !args.all {
+            println!("Selection configured but empty; no tools selected.");
             return Ok(());
         }
 
@@ -290,24 +422,6 @@ impl WorldDepsRunner {
             println!("substrate: warn: world backend disabled ({message})");
         }
 
-        if report.tools.is_empty() && args.tools.is_empty() && !args.all {
-            let host_probe = self
-                .manifest
-                .tools
-                .first()
-                .map(|tool| detect_host(&tool.host.commands));
-            if let Some(reason) = host_probe.and_then(|probe| probe.reason) {
-                println!(
-                    "No host-present tools detected (host detection skipped or degraded: {}).",
-                    sanitize_reason(&reason)
-                );
-            } else {
-                println!("No host-present tools detected.");
-            }
-            println!("Re-run `substrate world deps status --all` to include host-missing tools.");
-            return Ok(());
-        }
-
         print_status_table(&report.tools);
         Ok(())
     }
@@ -317,55 +431,66 @@ impl WorldDepsRunner {
         tool_names: &[String],
         include_all: bool,
     ) -> Result<WorldDepsStatusReport> {
-        if self.world.cli_disabled() {
+        let selection = self.load_active_selection()?;
+        let selection_info = WorldDepsSelectionInfo {
+            configured: selection.configured,
+            active_path: selection.active_path.clone(),
+            active_scope: selection.active_scope,
+            shadowed_paths: selection.shadowed_paths.clone(),
+            selected: selection.selected.clone(),
+            ignored_due_to_all: selection.configured && include_all,
+        };
+
+        if !selection.configured {
             return Ok(WorldDepsStatusReport {
+                selection: selection_info,
                 manifest: self.manifest_info(),
                 world_disabled_reason: self.world.reason(),
                 tools: Vec::new(),
             });
         }
 
-        let tools = self.select_tools(tool_names)?;
-        if tools.is_empty() {
-            return Ok(WorldDepsStatusReport {
-                manifest: self.manifest_info(),
-                world_disabled_reason: self.world.reason(),
-                tools: Vec::new(),
-            });
-        }
+        let selected_set: HashSet<String> = selection.selected.iter().cloned().collect();
+
+        let tools = if tool_names.is_empty() {
+            if include_all {
+                self.manifest.tools.iter().collect::<Vec<_>>()
+            } else {
+                self.manifest
+                    .tools
+                    .iter()
+                    .filter(|tool| selected_set.contains(&tool.name.to_ascii_lowercase()))
+                    .collect::<Vec<_>>()
+            }
+        } else {
+            self.select_tools(tool_names)?
+        };
 
         let mut entries = Vec::with_capacity(tools.len());
-        let filter_host_present = tool_names.is_empty() && !include_all;
-        let host_bulk: Option<HostBulkDetection> = filter_host_present.then(|| {
-            detect_host_bulk(
-                &tools
-                    .iter()
-                    .map(|tool| tool.host.commands.clone())
-                    .collect::<Vec<_>>(),
-            )
-        });
+        let host_bulk = detect_host_bulk(
+            &tools
+                .iter()
+                .map(|tool| tool.host.commands.clone())
+                .collect::<Vec<_>>(),
+        );
         for (idx, tool) in tools.into_iter().enumerate() {
-            let (host_detected, host_reason) = if let Some(summary) = host_bulk.as_ref() {
-                let detected = summary.detected.get(idx).copied().unwrap_or(false);
-                let reason = (!detected)
-                    .then(|| summary.degraded_reason.as_deref().map(sanitize_reason))
-                    .flatten();
-                (detected, reason)
+            let selected = selected_set.contains(&tool.name.to_ascii_lowercase());
+            let detected = host_bulk.detected.get(idx).copied().unwrap_or(false);
+            let host_reason = (!detected)
+                .then(|| host_bulk.degraded_reason.as_deref().map(sanitize_reason))
+                .flatten();
+
+            let guest_status = if include_all || tool_names.is_empty() || selected {
+                self.probe_guest(tool)
             } else {
-                let host_probe = detect_host(&tool.host.commands);
-                (
-                    host_probe.detected,
-                    host_probe.reason.map(|reason| sanitize_reason(&reason)),
-                )
+                GuestProbe::Skipped("not selected".to_string())
             };
-            if filter_host_present && !host_detected {
-                continue;
-            }
-            let guest_status = self.probe_guest(tool);
             let provider = tool.install.first().map(|recipe| recipe.provider.clone());
+            let name = tool.name.to_ascii_lowercase();
             entries.push(WorldDepStatusEntry {
-                name: tool.name.clone(),
-                host_detected,
+                name,
+                selected,
+                host_detected: detected,
                 host_reason,
                 provider,
                 guest: WorldDepGuestStatus::from_probe(guest_status),
@@ -373,6 +498,7 @@ impl WorldDepsRunner {
         }
 
         Ok(WorldDepsStatusReport {
+            selection: selection_info,
             manifest: self.manifest_info(),
             world_disabled_reason: self.world.reason(),
             tools: entries,
@@ -380,7 +506,40 @@ impl WorldDepsRunner {
     }
 
     fn run_install(&self, args: &WorldDepsInstallArgs) -> Result<()> {
-        self.world.ensure_enabled()?;
+        let selection = self.load_active_selection()?;
+        if !selection.configured {
+            print_selection_missing_guidance();
+            return Ok(());
+        }
+
+        let selected_set: HashSet<String> = selection.selected.iter().cloned().collect();
+        if !args.all {
+            let mut not_selected = Vec::new();
+            for name in &args.tools {
+                let normalized = name.trim().to_ascii_lowercase();
+                if normalized.is_empty() {
+                    continue;
+                }
+                if !selected_set.contains(&normalized) {
+                    not_selected.push(normalized);
+                }
+            }
+            not_selected.sort();
+            not_selected.dedup();
+            if !not_selected.is_empty() {
+                return Err(anyhow!(SelectionConfigError {
+                    message: format!(
+                        "substrate: tool not selected: {}\nHint: add it to the selection file (e.g. `substrate world deps select {}`) or pass --all to ignore selection.",
+                        not_selected.join(", "),
+                        not_selected.join(" ")
+                    ),
+                }));
+            }
+        } else {
+            println!("Selection ignored due to --all");
+        }
+
+        self.require_world_backend()?;
         let tools = self.select_tools(&args.tools)?;
         if tools.is_empty() {
             bail!("no matching tools were found in the manifest");
@@ -393,68 +552,96 @@ impl WorldDepsRunner {
     }
 
     fn run_sync(&self, args: &WorldDepsSyncArgs) -> Result<()> {
-        self.world.ensure_enabled()?;
-        let tools = self.manifest.tools.iter().collect::<Vec<_>>();
-        if tools.is_empty() {
-            println!(
-                "No tools defined in inventory {}; nothing to sync.",
-                self.paths.inventory_base.display()
-            );
+        let selection = self.load_active_selection()?;
+        if !selection.configured {
+            print_selection_missing_guidance();
             return Ok(());
         }
 
+        let selected_set: HashSet<String> = selection.selected.iter().cloned().collect();
+        let tools = if args.all {
+            println!("Selection ignored due to --all");
+            self.manifest.tools.iter().collect::<Vec<_>>()
+        } else {
+            self.manifest
+                .tools
+                .iter()
+                .filter(|tool| selected_set.contains(&tool.name.to_ascii_lowercase()))
+                .collect::<Vec<_>>()
+        };
+
+        if tools.is_empty() {
+            println!("No tools selected; nothing to do.");
+            return Ok(());
+        }
+
+        self.require_world_backend()?;
+
         let mut to_install = Vec::new();
-        let mut host_detection_reason: Option<String> = None;
-        let mut missing_in_guest = false;
-        let mut skipped_on_host = Vec::new();
         for tool in tools {
-            let host_probe = detect_host(&tool.host.commands);
-            if host_detection_reason.is_none() {
-                host_detection_reason = host_probe.reason.clone();
-            }
-            let host_detected = host_probe.detected;
             let guest_status = self.ensure_guest_state(tool)?;
             if guest_status {
                 continue;
             }
-            missing_in_guest = true;
-            if args.all || host_detected {
-                to_install.push(tool);
-            } else {
-                skipped_on_host.push(tool.name.clone());
-            }
+            to_install.push(tool);
         }
 
-        let host_detection_reason = host_detection_reason.map(|reason| sanitize_reason(&reason));
-
         if to_install.is_empty() {
-            if missing_in_guest && !args.all {
-                if let Some(reason) = host_detection_reason.as_deref() {
-                    println!(
-                        "No tools were synced because host detection was skipped or degraded ({}).",
-                        reason
-                    );
-                    return Ok(());
-                }
-                if !skipped_on_host.is_empty() {
-                    println!(
-                        "No tools were synced because these tools were not detected on the host: {}.",
-                        skipped_on_host.join(", ")
-                    );
-                    println!(
-                        "Install them on the host first, or rerun `substrate world deps sync --all` to force guest installs."
-                    );
-                    return Ok(());
-                }
-            }
-            println!("All tracked tools are already available inside the guest.");
+            println!("All scoped tools are already available inside the guest.");
             return Ok(());
         }
 
         for tool in to_install {
-            self.install_tool(tool, args.verbose, false)?;
+            self.install_tool(tool, args.verbose, args.dry_run)?;
         }
 
+        Ok(())
+    }
+
+    fn run_init(&self, args: &WorldDepsInitArgs) -> Result<()> {
+        let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let (scope, path) = resolve_selection_target(&cwd, args.workspace, args.global)?;
+        write_empty_selection_file(&path, args.force)?;
+        match scope {
+            WorldDepsSelectionScope::Workspace => {
+                println!(
+                    "substrate: initialized world-deps selection at {} (workspace)",
+                    path.display()
+                );
+            }
+            WorldDepsSelectionScope::Global => {
+                println!(
+                    "substrate: initialized world-deps selection at {} (global)",
+                    path.display()
+                );
+            }
+        }
+        Ok(())
+    }
+
+    fn run_select(&self, args: &WorldDepsSelectArgs) -> Result<()> {
+        let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let (scope, path) = resolve_selection_target(&cwd, args.workspace, args.global)?;
+        let inventory = self.inventory_tool_names();
+        let added = add_tools_to_selection_file(&path, &args.tools, &inventory)?;
+        let scope_label = match scope {
+            WorldDepsSelectionScope::Workspace => "workspace",
+            WorldDepsSelectionScope::Global => "global",
+        };
+        if added.is_empty() {
+            println!(
+                "substrate: world-deps selection unchanged at {} ({})",
+                path.display(),
+                scope_label
+            );
+        } else {
+            println!(
+                "substrate: updated world-deps selection at {} ({})\nAdded: {}",
+                path.display(),
+                scope_label,
+                added.join(", ")
+            );
+        }
         Ok(())
     }
 
@@ -539,7 +726,14 @@ impl WorldDepsRunner {
             let tool = self
                 .manifest
                 .tool(name)
-                .ok_or_else(|| anyhow!("tool `{}` is not defined in the manifest", name))?;
+                .ok_or_else(|| {
+                    anyhow!(SelectionConfigError {
+                        message: format!(
+                            "substrate: unknown tool `{}` (not in inventory)\nHint: run `substrate world deps status --all` after initializing selection to discover available tool names.",
+                            name
+                        ),
+                    })
+                })?;
             tools.push(tool);
         }
         Ok(tools)
@@ -567,18 +761,8 @@ impl WorldDepsRunner {
 
     fn ensure_guest_state(&self, tool: &WorldDepTool) -> Result<bool> {
         detect_guest(&tool.guest.commands)
-            .map_err(map_guest_unavailable_error)
             .with_context(|| format!("failed to detect `{}` inside the world backend", tool.name))
     }
-}
-
-fn map_guest_unavailable_error(err: anyhow::Error) -> anyhow::Error {
-    if cfg!(target_os = "macos") {
-        if let Some(unavailable) = err.downcast_ref::<WorldBackendUnavailable>() {
-            return macos_world_deps_unavailable_error(unavailable.reason());
-        }
-    }
-    err
 }
 
 fn print_status_table(entries: &[WorldDepStatusEntry]) {
@@ -592,11 +776,19 @@ fn print_status_table(entries: &[WorldDepStatusEntry]) {
             "missing".to_string()
         };
         println!(
-            "- {}: host={} guest={} installer={}",
+            "- {}: selected={} host={} guest={} installer={}",
             entry.name,
+            entry.selected,
             host_label,
             entry.guest.label(),
             provider
         );
     }
+}
+
+fn print_selection_missing_guidance() {
+    println!("substrate: world deps not configured (selection file missing)");
+    println!("Next steps:");
+    println!("  - Create a selection file: substrate world deps init --workspace");
+    println!("  - Discover available tools: substrate world deps status --all");
 }

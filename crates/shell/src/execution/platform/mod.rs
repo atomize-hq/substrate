@@ -156,7 +156,8 @@ pub(crate) fn handle_world_command(cmd: &WorldCmd, cli: &Cli) -> Result<()> {
             commands::world_enable::run_enable(opts)?;
         }
         WorldAction::Deps(opts) => {
-            commands::world_deps::run(opts, cli.no_world, cli.world)?;
+            let code = commands::world_deps::run(opts, cli.no_world, cli.world);
+            std::process::exit(code);
         }
         WorldAction::Cleanup(opts) => {
             commands::world_cleanup::run(opts)?;
