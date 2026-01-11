@@ -137,10 +137,10 @@ fn diff_paths(target: &Path, base: &Path) -> Option<PathBuf> {
         common_len += 1;
     }
 
-    let mut out = PathBuf::new();
+    let mut segments: Vec<String> = Vec::new();
     for component in &base_components[common_len..] {
         match component {
-            Component::Normal(_) | Component::ParentDir => out.push(".."),
+            Component::Normal(_) | Component::ParentDir => segments.push("..".to_string()),
             Component::CurDir => {}
             Component::RootDir | Component::Prefix(_) => {}
         }
@@ -148,18 +148,20 @@ fn diff_paths(target: &Path, base: &Path) -> Option<PathBuf> {
 
     for component in &target_components[common_len..] {
         match component {
-            Component::Normal(seg) => out.push(seg),
-            Component::ParentDir => out.push(".."),
+            Component::Normal(seg) => segments.push(seg.to_string_lossy().to_string()),
+            Component::ParentDir => segments.push("..".to_string()),
             Component::CurDir => {}
             Component::RootDir | Component::Prefix(_) => {}
         }
     }
 
-    if out.as_os_str().is_empty() {
-        out.push(".");
+    if segments.is_empty() {
+        return Some(PathBuf::from("."));
     }
 
-    Some(out)
+    // Use forward slashes even on Windows so JSON output is stable across platforms and matches
+    // the planning-pack smoke expectations (e.g., `.substrate/world-deps.selection.yaml`).
+    Some(PathBuf::from(segments.join("/")))
 }
 
 #[derive(Debug)]
@@ -312,7 +314,6 @@ fn prepare_manager_env() {
 }
 
 fn build_runner(cli_no_world: bool, cli_force_world: bool) -> Result<WorldDepsRunner> {
-    prepare_manager_env();
     let manifest_paths = ManifestPaths::resolve()?;
     let overlays = manifest_paths.overlays_for_loading();
     let manifest = WorldDepsManifest::load_layered(
@@ -357,6 +358,13 @@ impl WorldDepsRunner {
         let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         let inventory = self.inventory_tool_names();
         resolve_active_selection(&cwd, &inventory)
+    }
+
+    fn ensure_manager_env_ready(&self) {
+        if cfg!(windows) {
+            return;
+        }
+        prepare_manager_env();
     }
 
     fn require_world_backend(&self) -> Result<()> {
@@ -524,6 +532,10 @@ impl WorldDepsRunner {
             self.select_tools(tool_names)?
         };
 
+        if !tools.is_empty() {
+            self.ensure_manager_env_ready();
+        }
+
         let mut entries = Vec::with_capacity(tools.len());
         let host_bulk = detect_host_bulk(
             &tools
@@ -597,6 +609,7 @@ impl WorldDepsRunner {
             println!("Selection ignored due to --all");
         }
 
+        self.ensure_manager_env_ready();
         self.require_world_backend()?;
         let tools = self.select_tools(&args.tools)?;
         if tools.is_empty() {
@@ -633,6 +646,7 @@ impl WorldDepsRunner {
             return Ok(());
         }
 
+        self.ensure_manager_env_ready();
         self.require_world_backend()?;
 
         let mut to_install = Vec::new();

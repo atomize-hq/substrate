@@ -258,6 +258,8 @@ fn run_detect_script(script: &str, platform: Platform) -> Result<bool> {
     };
 
     cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::null());
     let status = cmd.status()?;
     Ok(status.success())
 }

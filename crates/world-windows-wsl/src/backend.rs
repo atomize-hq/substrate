@@ -157,6 +157,19 @@ impl WindowsWslBackend {
                     error = %initial_err,
                     "Agent capabilities check failed; invoking warm script"
                 );
+
+                if self.warm_cmd.enabled {
+                    let script_path = self.project_path.join("scripts/windows/wsl-warm.ps1");
+                    if !script_path.is_file() {
+                        return Err(anyhow!(
+                            "world backend unavailable (WSL agent not ready) and warm script was not found at {}\nHint: run `pwsh -File scripts/windows/wsl-warm.ps1 -DistroName {} -ProjectPath (Resolve-Path .)` from the Substrate repo root, then retry.",
+                            script_path.display(),
+                            self.distro
+                        ))
+                        .context(initial_err);
+                    }
+                }
+
                 self.warm_cmd
                     .run()
                     .context("wsl warm script failed to execute")?;

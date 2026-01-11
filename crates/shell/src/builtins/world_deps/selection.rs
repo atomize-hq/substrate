@@ -241,7 +241,14 @@ fn global_selection_path() -> Result<PathBuf> {
 
 fn canonicalize_if_exists(path: PathBuf) -> PathBuf {
     if path.exists() {
-        path.canonicalize().unwrap_or(path)
+        // On Windows, `canonicalize()` commonly introduces a `\\\\?\\` verbatim prefix, which can
+        // make relative path rendering and equality checks brittle (and breaks our smoke
+        // expectations for stable `.substrate/...` paths). Keep the original path instead.
+        if cfg!(windows) {
+            path
+        } else {
+            path.canonicalize().unwrap_or(path)
+        }
     } else {
         path
     }
@@ -253,11 +260,39 @@ fn workspace_selection_path_at(workspace_root: &Path) -> PathBuf {
         .join(SELECTION_FILENAME)
 }
 
+fn default_global_selection_path() -> Option<PathBuf> {
+    dirs::home_dir().map(|home| home.join(SUBSTRATE_DIR_NAME).join(SELECTION_FILENAME))
+}
+
+fn default_global_substrate_dir() -> Option<PathBuf> {
+    dirs::home_dir().map(|home| home.join(SUBSTRATE_DIR_NAME))
+}
+
+fn paths_equivalent(a: &Path, b: &Path) -> bool {
+    if cfg!(windows) {
+        let norm = |p: &Path| p.to_string_lossy().replace('/', "\\").to_ascii_lowercase();
+        norm(a) == norm(b)
+    } else {
+        a == b
+    }
+}
+
 fn find_workspace_selection_file(cwd: &Path) -> Option<PathBuf> {
-    let start = cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf());
+    let start = canonicalize_if_exists(cwd.to_path_buf());
+    let default_global = default_global_selection_path();
     for dir in start.ancestors() {
         let candidate = workspace_selection_path_at(dir);
         if candidate.is_file() {
+            // Treat the default global selection file (`~/.substrate/...`) as global-only, even
+            // when the current working directory happens to live under the home directory tree
+            // (e.g., CI temp workspaces). This keeps workspace detection from "capturing" the
+            // user's global config.
+            if default_global
+                .as_ref()
+                .is_some_and(|path| paths_equivalent(path, &candidate))
+            {
+                continue;
+            }
             return Some(candidate);
         }
     }
@@ -265,9 +300,17 @@ fn find_workspace_selection_file(cwd: &Path) -> Option<PathBuf> {
 }
 
 fn find_workspace_root_if_substrate_dir_exists(cwd: &Path) -> Option<PathBuf> {
-    let start = cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf());
+    let start = canonicalize_if_exists(cwd.to_path_buf());
+    let default_global_dir = default_global_substrate_dir();
     for dir in start.ancestors() {
-        if dir.join(SUBSTRATE_DIR_NAME).is_dir() {
+        let marker = dir.join(SUBSTRATE_DIR_NAME);
+        if marker.is_dir() {
+            if default_global_dir
+                .as_ref()
+                .is_some_and(|path| paths_equivalent(path, &marker))
+            {
+                continue;
+            }
             return Some(dir.to_path_buf());
         }
     }
