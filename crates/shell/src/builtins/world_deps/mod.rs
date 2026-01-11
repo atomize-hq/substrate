@@ -1,6 +1,7 @@
 mod guest;
 mod models;
 mod runner;
+mod selection;
 mod state;
 
 pub(crate) use models::{WorldDepGuestState, WorldDepsStatusReport};

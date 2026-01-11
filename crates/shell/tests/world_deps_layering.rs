@@ -2,10 +2,13 @@
 
 #[path = "common.rs"]
 mod common;
+#[path = "support/socket.rs"]
+mod socket;
 
 use assert_cmd::Command;
 use common::substrate_shell_driver;
 use serde_json::{json, Map, Value};
+use socket::{AgentSocket, SocketResponse};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -73,9 +76,10 @@ struct LayeringFixture {
 
 impl LayeringFixture {
     fn new() -> Self {
+        // Keep the Unix socket path short to avoid `SUN_LEN` failures.
         let temp = Builder::new()
             .prefix("substrate-world-deps-layering-")
-            .tempdir()
+            .tempdir_in("/tmp")
             .expect("world deps layering tempdir");
         let root = temp.path();
         let home = root.join("home");
@@ -121,6 +125,24 @@ impl LayeringFixture {
         }
     }
 
+    fn selection_path(&self) -> PathBuf {
+        self.substrate_home.join("world-deps.selection.yaml")
+    }
+
+    fn write_selection(&self, selected: &[&str]) {
+        let path = self.selection_path();
+        let contents = if selected.is_empty() {
+            "version: 1\nselected: []\n".to_string()
+        } else {
+            let mut buf = String::from("version: 1\nselected:\n");
+            for tool in selected {
+                buf.push_str(&format!("  - {tool}\n"));
+            }
+            buf
+        };
+        fs::write(&path, contents).expect("write selection file");
+    }
+
     fn command(&self) -> Command {
         let mut cmd = substrate_shell_driver();
         cmd.arg("world")
@@ -141,7 +163,7 @@ impl LayeringFixture {
             .env("SUBSTRATE_WORLD_DEPS_GUEST_LOG", &self.guest_log_path)
             .env("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR", &self.guest_bin_dir)
             .env("SUBSTRATE_WORLD_DEPS_EXECUTOR_LOG", &self.executor_log_path)
-            // Force the backend unavailable so non-mac platforms fall back to host execution.
+            // Force world execution through a test-owned socket stub (avoid relying on real world-agent).
             .env_remove("SUBSTRATE_WORLD")
             .env_remove("SUBSTRATE_WORLD_ENABLED")
             .env("SUBSTRATE_OVERRIDE_WORLD", "enabled")
@@ -406,6 +428,11 @@ fn world_deps_inventory_includes_base_and_installed_overlay_tools() {
     let fixture = LayeringFixture::new();
     fixture.write_base_inventory_manifest(&[("baseonly", "baseonly")]);
     fixture.write_installed_overlay_manifest(&[("overlayonly", "overlayonly")]);
+    fixture.write_selection(&[]);
+    let _socket = AgentSocket::start(
+        &fixture.fake_socket_path,
+        SocketResponse::CapabilitiesAndHostExecute { scopes: vec![] },
+    );
 
     let assert = fixture
         .command()
@@ -443,6 +470,11 @@ fn world_deps_install_prefers_user_overlay_over_installed_and_base() {
     fixture.write_installed_overlay_manifest(&[("git", "installed-git")]);
     fixture.write_user_overlay_manifest(&[("git", "user-git")]);
     fixture.mark_host_tool("git");
+    fixture.write_selection(&["git"]);
+    let _socket = AgentSocket::start(
+        &fixture.fake_socket_path,
+        SocketResponse::CapabilitiesAndHostExecute { scopes: vec![] },
+    );
 
     let assert = fixture
         .command()
@@ -487,6 +519,11 @@ fn world_deps_install_prefers_installed_overlay_over_base_when_no_user_overlay()
     fixture.write_base_inventory_manifest(&[("git", "base-git"), ("baseonly", "baseonly")]);
     fixture.write_installed_overlay_manifest(&[("git", "installed-git")]);
     fixture.mark_host_tool("git");
+    fixture.write_selection(&["git"]);
+    let _socket = AgentSocket::start(
+        &fixture.fake_socket_path,
+        SocketResponse::CapabilitiesAndHostExecute { scopes: vec![] },
+    );
 
     let assert = fixture
         .command()
