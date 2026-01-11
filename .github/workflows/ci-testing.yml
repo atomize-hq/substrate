@@ -130,7 +130,7 @@ jobs:
 
   docs-and-packaging:
     name: Docs & Packaging Checks
-    if: ${{ env.CI_MODE == 'full' }}
+    if: ${{ github.event_name == 'pull_request' || (inputs.mode || github.event.inputs.mode || 'full') == 'full' }}
     needs: lint-and-test
     runs-on: ubuntu-24.04
 
@@ -175,7 +175,7 @@ jobs:
 
   cross-build:
     name: Cross Build (${{ matrix.target }})
-    if: ${{ env.CI_MODE == 'full' }}
+    if: ${{ github.event_name == 'pull_request' || (inputs.mode || github.event.inputs.mode || 'full') == 'full' }}
     needs: lint-and-test
     runs-on: ubuntu-24.04
     strategy:
