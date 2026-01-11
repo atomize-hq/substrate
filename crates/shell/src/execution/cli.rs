@@ -407,14 +407,18 @@ pub enum WorldDepsAction {
     Status(WorldDepsStatusArgs),
     Install(WorldDepsInstallArgs),
     Sync(WorldDepsSyncArgs),
+    /// Initialize a world-deps selection file (required before status/sync/install do anything)
+    Init(WorldDepsInitArgs),
+    /// Add tools to the world-deps selection file
+    Select(WorldDepsSelectArgs),
 }
 
 #[derive(Args, Debug, Clone)]
 pub struct WorldDepsStatusArgs {
-    /// Specific tools to inspect (defaults to host-present tools; use --all to include host-missing)
+    /// Specific tools to inspect (defaults to selected tools; use --all to ignore selection)
     #[arg(value_name = "TOOL")]
     pub tools: Vec<String>,
-    /// Include every manifest entry, even when missing on the host
+    /// Ignore selection and use the full inventory scope
     #[arg(long = "all")]
     pub all: bool,
     /// Emit JSON summary for automation
@@ -427,6 +431,9 @@ pub struct WorldDepsInstallArgs {
     /// Tool names to install inside the guest
     #[arg(value_name = "TOOL", required = true)]
     pub tools: Vec<String>,
+    /// Ignore selection and allow installing tools not present in the selection file
+    #[arg(long = "all")]
+    pub all: bool,
     /// Show planned actions without executing them
     #[arg(long = "dry-run")]
     pub dry_run: bool,
@@ -437,12 +444,41 @@ pub struct WorldDepsInstallArgs {
 
 #[derive(Args, Debug, Clone)]
 pub struct WorldDepsSyncArgs {
-    /// Install every missing tool in the manifest (even if not detected on the host)
+    /// Ignore selection and use the full inventory scope
     #[arg(long = "all")]
     pub all: bool,
+    /// Show planned actions without executing them
+    #[arg(long = "dry-run")]
+    pub dry_run: bool,
     /// Stream guest logs while running installers
     #[arg(long = "verbose")]
     pub verbose: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldDepsInitArgs {
+    /// Write `.substrate/world-deps.selection.yaml` (creates `.substrate/` if missing)
+    #[arg(long, conflicts_with = "global")]
+    pub workspace: bool,
+    /// Write `$SUBSTRATE_HOME/world-deps.selection.yaml` (or `~/.substrate/world-deps.selection.yaml`)
+    #[arg(long, conflicts_with = "workspace")]
+    pub global: bool,
+    /// Overwrite an existing selection file
+    #[arg(long)]
+    pub force: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldDepsSelectArgs {
+    /// Tool names to add to the selection file
+    #[arg(value_name = "TOOL", required = true)]
+    pub tools: Vec<String>,
+    /// Write `.substrate/world-deps.selection.yaml` (creates `.substrate/` if missing)
+    #[arg(long, conflicts_with = "global")]
+    pub workspace: bool,
+    /// Write `$SUBSTRATE_HOME/world-deps.selection.yaml` (or `~/.substrate/world-deps.selection.yaml`)
+    #[arg(long, conflicts_with = "workspace")]
+    pub global: bool,
 }
 
 #[derive(Args, Debug)]

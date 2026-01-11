@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use std::env;
 use std::path::PathBuf;
 
@@ -22,28 +22,11 @@ impl WorldState {
         })
     }
 
-    pub(crate) fn cli_disabled(&self) -> bool {
-        self.cli_disabled
-    }
-
     pub(crate) fn is_disabled(&self) -> bool {
         if self.cli_force_world {
             return false;
         }
         self.cli_disabled || self.config_disabled
-    }
-
-    pub(crate) fn ensure_enabled(&self) -> Result<()> {
-        if self.is_disabled() {
-            let reason = self
-                .reason()
-                .unwrap_or_else(|| "unknown reason".to_string());
-            bail!(
-                "world backend disabled ({}). Re-run `substrate world enable` or drop --no-world.",
-                reason
-            );
-        }
-        Ok(())
     }
 
     pub(crate) fn reason(&self) -> Option<String> {
