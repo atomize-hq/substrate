@@ -48,7 +48,11 @@ pub struct ManagerSpec {
 }
 
 impl ManagerSpec {
-    pub(crate) fn from_raw(name: String, spec: RawManagerSpec, manifest_version: u32) -> Result<Self> {
+    pub(crate) fn from_raw(
+        name: String,
+        spec: RawManagerSpec,
+        manifest_version: u32,
+    ) -> Result<Self> {
         let detect = DetectSpec::from_raw(spec.detect);
         let init = InitSpec::from_raw(spec.init);
         let errors = spec
@@ -60,6 +64,9 @@ impl ManagerSpec {
             })
             .collect::<Result<Vec<_>>>()?;
 
+        let guest = GuestSpec::from_raw(spec.guest_detect, spec.guest_install, manifest_version)
+            .with_context(|| format!("manager `{}` guest spec is invalid", name))?;
+
         Ok(Self {
             name,
             priority: spec.priority.unwrap_or(DEFAULT_PRIORITY),
@@ -67,8 +74,7 @@ impl ManagerSpec {
             init,
             errors,
             repair_hint: spec.repair_hint,
-            guest: GuestSpec::from_raw(spec.guest_detect, spec.guest_install, manifest_version)
-                .with_context(|| format!("manager `{}` guest spec is invalid", name))?,
+            guest,
         })
     }
 }
@@ -148,11 +154,14 @@ impl GuestSpec {
     ) -> Result<Self> {
         let detect_cmd = detect.and_then(|spec| spec.command);
         let install = InstallSpec::from_raw(install, detect_cmd.as_deref(), manifest_version)?;
-        Ok(Self { detect_cmd, install })
+        Ok(Self {
+            detect_cmd,
+            install,
+        })
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct InstallSpec {
     pub class: InstallClass,
     pub custom: Option<String>,
@@ -189,7 +198,10 @@ impl InstallSpec {
                         "guest_install.class=user_space forbids system_packages/manual_instructions"
                     );
                 }
-                let custom = raw.custom.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+                let custom = raw
+                    .custom
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty());
                 if custom.is_none() {
                     anyhow::bail!("guest_install.class=user_space requires custom");
                 }
@@ -224,9 +236,7 @@ impl InstallSpec {
             }
             InstallClass::Manual => {
                 if raw.custom.is_some() || raw.system_packages.is_some() {
-                    anyhow::bail!(
-                        "guest_install.class=manual forbids custom/system_packages"
-                    );
+                    anyhow::bail!("guest_install.class=manual forbids custom/system_packages");
                 }
                 let manual_instructions = raw
                     .manual_instructions
@@ -464,7 +474,11 @@ pub(crate) struct RawSystemPackagesSpec {
 impl RawSystemPackagesSpec {
     pub(crate) fn merge(self, overlay: RawSystemPackagesSpec) -> RawSystemPackagesSpec {
         RawSystemPackagesSpec {
-            apt: if overlay.apt.is_empty() { self.apt } else { overlay.apt },
+            apt: if overlay.apt.is_empty() {
+                self.apt
+            } else {
+                overlay.apt
+            },
         }
     }
 }

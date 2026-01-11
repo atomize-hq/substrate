@@ -1,5 +1,6 @@
 use crate::manager_manifest::schema::{
-    expand_path, ManagerManifest, ManagerSpec, RawManagerSpec, RawManifest, MANAGER_MANIFEST_VERSION,
+    expand_path, ManagerManifest, ManagerSpec, RawManagerSpec, RawManifest,
+    MANAGER_MANIFEST_VERSION,
 };
 use crate::manager_manifest::validator::{insert_entries, parse_manager_entries};
 use anyhow::{anyhow, bail, Context, Result};
