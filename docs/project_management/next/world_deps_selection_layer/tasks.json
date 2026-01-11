@@ -53,7 +53,7 @@
       "name": "WDL0 — Selection config + UX (code)",
       "type": "code",
       "phase": "WDL0",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Implement selection config loading, precedence, init/select UX, `--all` semantics, and exit-code behavior per S0 (production code only).",
       "references": [
         "docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md",
@@ -97,7 +97,7 @@
       "name": "WDL0 — Selection config + UX (test)",
       "type": "test",
       "phase": "WDL0",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add tests for selection parsing/precedence, scoping, and exit-code behavior per S0 (tests only).",
       "references": [
         "docs/project_management/next/world_deps_selection_layer/plan.md",

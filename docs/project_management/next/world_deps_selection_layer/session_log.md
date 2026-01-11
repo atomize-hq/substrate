@@ -74,3 +74,17 @@
 - Recommendation: `ACCEPT`
 - Required fixes before starting triads: `NONE`
 - Output: `docs/project_management/next/world_deps_selection_layer/execution_preflight_report.md`
+
+## START — 2026-01-11T19:07:33Z — code — WDL0-code
+- Worktree: `wt/world_deps_selection_layer-wdl0-code`
+- Branch: `world_deps_selection_layer-wdl0-code`
+- Orchestration branch: `feat/world_deps_selection_layer`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/world_deps_selection_layer" SLICE_ID="WDL0" LAUNCH_CODEX=1`
+
+## START — 2026-01-11T19:07:33Z — test — WDL0-test
+- Worktree: `wt/world_deps_selection_layer-wdl0-test`
+- Branch: `world_deps_selection_layer-wdl0-test`
+- Orchestration branch: `feat/world_deps_selection_layer`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/world_deps_selection_layer" SLICE_ID="WDL0" LAUNCH_CODEX=1`
