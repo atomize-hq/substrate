@@ -140,3 +140,22 @@
 - Orchestration branch: `feat/world_deps_selection_layer`
 - Dispatch:
   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/world_deps_selection_layer" SLICE_ID="WDL1" LAUNCH_CODEX=1`
+
+## END — 2026-01-11T23:06:32Z — code — WDL1-code
+- Worktree: `/home/spenser/__Active_code/substrate/wt/world_deps_selection_layer-wdl1-code`
+- Branch: `world_deps_selection_layer-wdl1-code`
+- HEAD: `ce29089f2307518e89fe6801b7c1cf1b13785efb`
+- Codex: `CODEX_CODE_EXIT=`
+- Finisher summary:
+  - `TASK_BRANCH=world_deps_selection_layer-wdl1-code`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/world_deps_selection_layer-wdl1-code`
+  - `HEAD=ce29089f2307518e89fe6801b7c1cf1b13785efb`
+  - `COMMITS=2`
+  - `CHECKS=make triad-code-checks`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=`
+- Artifacts:
+  - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL1-code/last_message.md`
+  - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL1-code/events.jsonl`
+  - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL1-code/stderr.log`
+- Blockers: `Codex last_message missing; CODEX_CODE_EXIT not captured (start command timed out; stale codex.pid)`
