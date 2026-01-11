@@ -29,31 +29,31 @@
       "description": "Run the execution preflight gate and fill execution_preflight_report.md before starting DS0.",
       "references": [
         "docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md",
-        "docs/project_management/next/doctor_scopes/execution_preflight_report.md",
-        "docs/project_management/next/doctor_scopes/plan.md",
-        "docs/project_management/next/doctor_scopes/tasks.json",
-        "docs/project_management/next/doctor_scopes/session_log.md",
-        "docs/project_management/next/doctor_scopes/DS0-spec.md",
-        "docs/project_management/next/doctor_scopes/manual_testing_playbook.md",
-        "docs/project_management/next/doctor_scopes/smoke/linux-smoke.sh",
-        "docs/project_management/next/doctor_scopes/smoke/macos-smoke.sh",
-        "docs/project_management/next/doctor_scopes/smoke/windows-smoke.ps1"
+        "docs/project_management/_archived/doctor_scopes/execution_preflight_report.md",
+        "docs/project_management/_archived/doctor_scopes/plan.md",
+        "docs/project_management/_archived/doctor_scopes/tasks.json",
+        "docs/project_management/_archived/doctor_scopes/session_log.md",
+        "docs/project_management/_archived/doctor_scopes/DS0-spec.md",
+        "docs/project_management/_archived/doctor_scopes/manual_testing_playbook.md",
+        "docs/project_management/_archived/doctor_scopes/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/doctor_scopes/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/doctor_scopes/smoke/windows-smoke.ps1"
       ],
       "acceptance_criteria": [
         "execution_preflight_report.md contains a concrete recommendation (ACCEPT or REVISE)",
         "If the recommendation is REVISE, DS0 work does not start until the listed issues are resolved"
       ],
       "start_checklist": [
-        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/doctor_scopes\"",
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/_archived/doctor_scopes\"",
         "Set F0-exec-preflight status to in_progress in tasks.json; add START entry to session_log.md; commit docs"
       ],
       "end_checklist": [
-        "Complete docs/project_management/next/doctor_scopes/execution_preflight_report.md",
+        "Complete docs/project_management/_archived/doctor_scopes/execution_preflight_report.md",
         "Set F0-exec-preflight status to completed in tasks.json; add END entry to session_log.md; commit docs"
       ],
       "worktree": null,
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/doctor_scopes/kickoff_prompts/F0-exec-preflight.md",
+      "kickoff_prompt": "docs/project_management/_archived/doctor_scopes/kickoff_prompts/F0-exec-preflight.md",
       "depends_on": [],
       "concurrent_with": []
     },
@@ -66,18 +66,18 @@
       "description": "Implement DS0 spec (production code only): add `substrate host doctor`, implement world-agent world doctor endpoint, and update `substrate world doctor` to consume it.",
       "references": [
         "docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md",
-        "docs/project_management/next/doctor_scopes/DS0-spec.md",
-        "docs/project_management/next/doctor_scopes/decision_register.md (DR-0001, DR-0002, DR-0003, DR-0005, DR-0006, DR-0007, DR-0008, DR-0009, DR-0010, DR-0011, DR-0012)",
-        "docs/project_management/next/doctor_scopes/integration_map.md"
+        "docs/project_management/_archived/doctor_scopes/DS0-spec.md",
+        "docs/project_management/_archived/doctor_scopes/decision_register.md (DR-0001, DR-0002, DR-0003, DR-0005, DR-0006, DR-0007, DR-0008, DR-0009, DR-0010, DR-0011, DR-0012)",
+        "docs/project_management/_archived/doctor_scopes/integration_map.md"
       ],
       "acceptance_criteria": [
-        "Meets all acceptance criteria in docs/project_management/next/doctor_scopes/DS0-spec.md"
+        "Meets all acceptance criteria in docs/project_management/_archived/doctor_scopes/DS0-spec.md"
       ],
       "start_checklist": [
         "Read ADR/spec/decision register/integration map",
         "Do not edit planning docs inside the worktree.",
         "Set DS0-code and DS0-test status to in_progress in tasks.json; add START entries to session_log.md; commit docs",
-        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/doctor_scopes\" SLICE_ID=\"DS0\""
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/_archived/doctor_scopes\" SLICE_ID=\"DS0\""
       ],
       "end_checklist": [
         "cargo fmt",
@@ -93,7 +93,7 @@
       ],
       "merge_to_orchestration": false,
       "integration_task": "DS0-integ-core",
-      "kickoff_prompt": "docs/project_management/next/doctor_scopes/kickoff_prompts/DS0-code.md",
+      "kickoff_prompt": "docs/project_management/_archived/doctor_scopes/kickoff_prompts/DS0-code.md",
       "depends_on": [
         "F0-exec-preflight"
       ],
@@ -110,9 +110,9 @@
       "description": "Implement DS0 spec tests only: JSON schema tests, CLI wiring tests, and agent-api-types schema round-trip tests.",
       "references": [
         "docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md",
-        "docs/project_management/next/doctor_scopes/DS0-spec.md",
-        "docs/project_management/next/doctor_scopes/decision_register.md (DR-0001, DR-0002, DR-0003, DR-0005, DR-0006, DR-0007, DR-0008, DR-0010, DR-0011, DR-0012)",
-        "docs/project_management/next/doctor_scopes/integration_map.md"
+        "docs/project_management/_archived/doctor_scopes/DS0-spec.md",
+        "docs/project_management/_archived/doctor_scopes/decision_register.md (DR-0001, DR-0002, DR-0003, DR-0005, DR-0006, DR-0007, DR-0008, DR-0010, DR-0011, DR-0012)",
+        "docs/project_management/_archived/doctor_scopes/integration_map.md"
       ],
       "acceptance_criteria": [
         "Tests enforce DS0 acceptance criteria (schema, exit codes, and key fields)"
@@ -121,7 +121,7 @@
         "Read ADR/spec/decision register/integration map",
         "Do not edit planning docs inside the worktree.",
         "Set DS0-code and DS0-test status to in_progress in tasks.json; add START entries to session_log.md; commit docs",
-        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/doctor_scopes\" SLICE_ID=\"DS0\""
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/_archived/doctor_scopes\" SLICE_ID=\"DS0\""
       ],
       "end_checklist": [
         "cargo fmt",
@@ -137,7 +137,7 @@
       ],
       "merge_to_orchestration": false,
       "integration_task": "DS0-integ-core",
-      "kickoff_prompt": "docs/project_management/next/doctor_scopes/kickoff_prompts/DS0-test.md",
+      "kickoff_prompt": "docs/project_management/_archived/doctor_scopes/kickoff_prompts/DS0-test.md",
       "depends_on": [
         "F0-exec-preflight"
       ],
@@ -154,11 +154,11 @@
       "description": "Merge DS0 code+test branches, make local integration gates green, run CI compile parity preflight, then dispatch cross-platform Feature Smoke for behavior platforms to determine required platform-fix tasks.",
       "references": [
         "docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md",
-        "docs/project_management/next/doctor_scopes/DS0-spec.md",
-        "docs/project_management/next/doctor_scopes/manual_testing_playbook.md",
-        "docs/project_management/next/doctor_scopes/smoke/linux-smoke.sh",
-        "docs/project_management/next/doctor_scopes/smoke/macos-smoke.sh",
-        "docs/project_management/next/doctor_scopes/smoke/windows-smoke.ps1"
+        "docs/project_management/_archived/doctor_scopes/DS0-spec.md",
+        "docs/project_management/_archived/doctor_scopes/manual_testing_playbook.md",
+        "docs/project_management/_archived/doctor_scopes/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/doctor_scopes/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/doctor_scopes/smoke/windows-smoke.ps1"
       ],
       "acceptance_criteria": [
         "Local integration gates are green (fmt, clippy -D warnings, relevant tests, integ-checks)",
@@ -168,7 +168,7 @@
       "start_checklist": [
         "Do not edit planning docs inside the worktree.",
         "Set DS0-integ-core status to in_progress in tasks.json; add START entry to session_log.md; commit docs",
-        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/doctor_scopes\" TASK_ID=\"DS0-integ-core\""
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/_archived/doctor_scopes\" TASK_ID=\"DS0-integ-core\""
       ],
       "end_checklist": [
         "Merge DS0-code + DS0-test branches; resolve conflicts (spec wins)",
@@ -177,7 +177,7 @@
         "Run relevant tests",
         "make integ-checks",
         "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/doctor-scopes\" CI_REMOTE=origin CI_CLEANUP=1",
-        "Dispatch Feature Smoke for behavior platforms (linux,macos): make feature-smoke FEATURE_DIR=\"docs/project_management/next/doctor_scopes\" PLATFORM=linux RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/doctor-scopes\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (repeat for PLATFORM=macos)",
+        "Dispatch Feature Smoke for behavior platforms (linux,macos): make feature-smoke FEATURE_DIR=\"docs/project_management/_archived/doctor_scopes\" PLATFORM=linux RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/doctor-scopes\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (repeat for PLATFORM=macos)",
         "Record CI run ids/URLs and smoke run ids/URLs in session_log.md END entry for this task",
         "From inside the worktree: make triad-task-finish TASK_ID=\"DS0-integ-core\"",
         "On the orchestration branch: set DS0-integ-core status to completed in tasks.json; add END entry to session_log.md; commit docs",
@@ -190,7 +190,7 @@
       ],
       "merge_to_orchestration": false,
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/doctor_scopes/kickoff_prompts/DS0-integ-core.md",
+      "kickoff_prompt": "docs/project_management/_archived/doctor_scopes/kickoff_prompts/DS0-integ-core.md",
       "depends_on": [
         "DS0-code",
         "DS0-test"
@@ -205,9 +205,9 @@
       "status": "completed",
       "description": "Linux platform-fix integration task. Runs the feature-local Linux smoke script via CI and fixes any Linux-only issues surfaced by smoke.",
       "references": [
-        "docs/project_management/next/doctor_scopes/DS0-spec.md",
-        "docs/project_management/next/doctor_scopes/manual_testing_playbook.md",
-        "docs/project_management/next/doctor_scopes/smoke/linux-smoke.sh"
+        "docs/project_management/_archived/doctor_scopes/DS0-spec.md",
+        "docs/project_management/_archived/doctor_scopes/manual_testing_playbook.md",
+        "docs/project_management/_archived/doctor_scopes/smoke/linux-smoke.sh"
       ],
       "acceptance_criteria": [
         "Linux Feature Smoke is green for this slice"
@@ -215,10 +215,10 @@
       "start_checklist": [
         "Do not edit planning docs inside the worktree.",
         "Set DS0-integ-linux status to in_progress in tasks.json; add START entry to session_log.md; commit docs",
-        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/doctor_scopes\" TASK_ID=\"DS0-integ-linux\""
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/_archived/doctor_scopes\" TASK_ID=\"DS0-integ-linux\""
       ],
       "end_checklist": [
-        "Dispatch Linux Feature Smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/doctor_scopes\" PLATFORM=linux RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/doctor-scopes\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
+        "Dispatch Linux Feature Smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/_archived/doctor_scopes\" PLATFORM=linux RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/doctor-scopes\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
         "If the Linux smoke run is not green, implement fixes in this worktree and repeat the smoke dispatch until it is green",
         "Once Linux smoke is green: record RUN_ID/RUN_URL in session_log.md END entry for this task",
         "From inside the worktree: make triad-task-finish TASK_ID=\"DS0-integ-linux\"",
@@ -232,7 +232,7 @@
       ],
       "merge_to_orchestration": false,
       "integration_task": "DS0-integ-linux",
-      "kickoff_prompt": "docs/project_management/next/doctor_scopes/kickoff_prompts/DS0-integ-linux.md",
+      "kickoff_prompt": "docs/project_management/_archived/doctor_scopes/kickoff_prompts/DS0-integ-linux.md",
       "depends_on": [
         "DS0-integ-core"
       ],
@@ -249,9 +249,9 @@
       "status": "completed",
       "description": "macOS platform-fix integration task. Runs the feature-local macOS smoke script via CI and fixes any macOS-only issues surfaced by smoke.",
       "references": [
-        "docs/project_management/next/doctor_scopes/DS0-spec.md",
-        "docs/project_management/next/doctor_scopes/manual_testing_playbook.md",
-        "docs/project_management/next/doctor_scopes/smoke/macos-smoke.sh"
+        "docs/project_management/_archived/doctor_scopes/DS0-spec.md",
+        "docs/project_management/_archived/doctor_scopes/manual_testing_playbook.md",
+        "docs/project_management/_archived/doctor_scopes/smoke/macos-smoke.sh"
       ],
       "acceptance_criteria": [
         "macOS Feature Smoke is green for this slice"
@@ -259,10 +259,10 @@
       "start_checklist": [
         "Do not edit planning docs inside the worktree.",
         "Set DS0-integ-macos status to in_progress in tasks.json; add START entry to session_log.md; commit docs",
-        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/doctor_scopes\" TASK_ID=\"DS0-integ-macos\""
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/_archived/doctor_scopes\" TASK_ID=\"DS0-integ-macos\""
       ],
       "end_checklist": [
-        "Dispatch macOS Feature Smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/doctor_scopes\" PLATFORM=macos RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/doctor-scopes\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
+        "Dispatch macOS Feature Smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/_archived/doctor_scopes\" PLATFORM=macos RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/doctor-scopes\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
         "If the macOS smoke run is not green, implement fixes in this worktree and repeat the smoke dispatch until it is green",
         "Once macOS smoke is green: record RUN_ID/RUN_URL in session_log.md END entry for this task",
         "From inside the worktree: make triad-task-finish TASK_ID=\"DS0-integ-macos\"",
@@ -276,7 +276,7 @@
       ],
       "merge_to_orchestration": false,
       "integration_task": "DS0-integ-macos",
-      "kickoff_prompt": "docs/project_management/next/doctor_scopes/kickoff_prompts/DS0-integ-macos.md",
+      "kickoff_prompt": "docs/project_management/_archived/doctor_scopes/kickoff_prompts/DS0-integ-macos.md",
       "depends_on": [
         "DS0-integ-core"
       ],
@@ -293,7 +293,7 @@
       "status": "completed",
       "description": "Windows CI parity fix task (compile/test/lint only; no behavioral smoke required for this feature on Windows).",
       "references": [
-        "docs/project_management/next/doctor_scopes/DS0-spec.md"
+        "docs/project_management/_archived/doctor_scopes/DS0-spec.md"
       ],
       "acceptance_criteria": [
         "Windows CI compile parity is green for this slice (no behavioral smoke required)"
@@ -301,7 +301,7 @@
       "start_checklist": [
         "Do not edit planning docs inside the worktree.",
         "Set DS0-integ-windows status to in_progress in tasks.json; add START entry to session_log.md; commit docs",
-        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/doctor_scopes\" TASK_ID=\"DS0-integ-windows\""
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/_archived/doctor_scopes\" TASK_ID=\"DS0-integ-windows\""
       ],
       "end_checklist": [
         "Dispatch CI parity via: make ci-compile-parity CI_WORKFLOW_REF=\"feat/doctor-scopes\" CI_REMOTE=origin CI_CLEANUP=1",
@@ -318,7 +318,7 @@
       ],
       "merge_to_orchestration": false,
       "integration_task": "DS0-integ-windows",
-      "kickoff_prompt": "docs/project_management/next/doctor_scopes/kickoff_prompts/DS0-integ-windows.md",
+      "kickoff_prompt": "docs/project_management/_archived/doctor_scopes/kickoff_prompts/DS0-integ-windows.md",
       "depends_on": [
         "DS0-integ-core"
       ],
@@ -336,12 +336,12 @@
       "description": "Final integration: merge any platform-fix branches, ensure local gates are green, re-run behavioral smoke (linux+macos) and CI parity, then fill the DS0 closeout report.",
       "references": [
         "docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md",
-        "docs/project_management/next/doctor_scopes/DS0-spec.md",
-        "docs/project_management/next/doctor_scopes/manual_testing_playbook.md",
-        "docs/project_management/next/doctor_scopes/smoke/linux-smoke.sh",
-        "docs/project_management/next/doctor_scopes/smoke/macos-smoke.sh",
-        "docs/project_management/next/doctor_scopes/smoke/windows-smoke.ps1",
-        "docs/project_management/next/doctor_scopes/DS0-closeout_report.md"
+        "docs/project_management/_archived/doctor_scopes/DS0-spec.md",
+        "docs/project_management/_archived/doctor_scopes/manual_testing_playbook.md",
+        "docs/project_management/_archived/doctor_scopes/smoke/linux-smoke.sh",
+        "docs/project_management/_archived/doctor_scopes/smoke/macos-smoke.sh",
+        "docs/project_management/_archived/doctor_scopes/smoke/windows-smoke.ps1",
+        "docs/project_management/_archived/doctor_scopes/DS0-closeout_report.md"
       ],
       "acceptance_criteria": [
         "All required platforms are green and the slice matches DS0-spec"
@@ -349,7 +349,7 @@
       "start_checklist": [
         "Do not edit planning docs inside the worktree.",
         "Set DS0-integ status to in_progress in tasks.json; add START entry to session_log.md; commit docs",
-        "Run: make triad-task-start-integ-final FEATURE_DIR=\"docs/project_management/next/doctor_scopes\" SLICE_ID=\"DS0\" LAUNCH_CODEX=1"
+        "Run: make triad-task-start-integ-final FEATURE_DIR=\"docs/project_management/_archived/doctor_scopes\" SLICE_ID=\"DS0\" LAUNCH_CODEX=1"
       ],
       "end_checklist": [
         "Merge all DS0 platform-fix branches (DS0-integ-linux, DS0-integ-macos, DS0-integ-windows) into this worktree and resolve conflicts (if a task made no changes, record 'NO CHANGES' in the DS0-closeout_report.md platform-fix section)",
@@ -358,9 +358,9 @@
         "Run relevant tests",
         "make integ-checks",
         "Re-run CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/doctor-scopes\" CI_REMOTE=origin CI_CLEANUP=1",
-        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/doctor_scopes\" PLATFORM=linux RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/doctor-scopes\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
-        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/doctor_scopes\" PLATFORM=macos RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/doctor-scopes\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
-        "Complete docs/project_management/next/doctor_scopes/DS0-closeout_report.md",
+        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/_archived/doctor_scopes\" PLATFORM=linux RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/doctor-scopes\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
+        "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/_archived/doctor_scopes\" PLATFORM=macos RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/doctor-scopes\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1",
+        "Complete docs/project_management/_archived/doctor_scopes/DS0-closeout_report.md",
         "From inside the worktree: make triad-task-finish TASK_ID=\"DS0-integ\"",
         "On the orchestration branch: set DS0-integ status to completed in tasks.json; add END entry to session_log.md; commit docs",
         "Do not delete the worktree (feature cleanup removes worktrees at feature end)"
@@ -372,7 +372,7 @@
       ],
       "merge_to_orchestration": true,
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/doctor_scopes/kickoff_prompts/DS0-integ.md",
+      "kickoff_prompt": "docs/project_management/_archived/doctor_scopes/kickoff_prompts/DS0-integ.md",
       "depends_on": [
         "DS0-integ-core",
         "DS0-integ-linux",
@@ -397,16 +397,16 @@
       ],
       "start_checklist": [
         "Verify orchestration worktree is clean and all tasks are completed",
-        "Dry-run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/doctor_scopes\" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1"
+        "Dry-run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/_archived/doctor_scopes\" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1"
       ],
       "end_checklist": [
-        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/doctor_scopes\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/_archived/doctor_scopes\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
         "Paste the stdout summary block into the session_log.md END entry for this task",
         "Set FZ-feature-cleanup status to completed in tasks.json; add END entry to session_log.md; commit docs"
       ],
       "worktree": null,
       "integration_task": null,
-      "kickoff_prompt": "docs/project_management/next/doctor_scopes/kickoff_prompts/FZ-feature-cleanup.md",
+      "kickoff_prompt": "docs/project_management/_archived/doctor_scopes/kickoff_prompts/FZ-feature-cleanup.md",
       "depends_on": [
         "DS0-integ"
       ],

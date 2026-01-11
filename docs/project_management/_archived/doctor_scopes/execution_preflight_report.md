@@ -6,7 +6,7 @@ Standard:
 - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
 
 Feature directory:
-- `docs/project_management/next/doctor_scopes/`
+- `docs/project_management/_archived/doctor_scopes/`
 
 ## Recommendation
 
@@ -35,12 +35,12 @@ Rationale:
 ## Smoke ↔ Manual Parity Check
 
 Smoke scripts to validate:
-- Linux smoke: `docs/project_management/next/doctor_scopes/smoke/linux-smoke.sh`
-- macOS smoke: `docs/project_management/next/doctor_scopes/smoke/macos-smoke.sh`
-- Windows smoke: `docs/project_management/next/doctor_scopes/smoke/windows-smoke.ps1` (must be a no-op; Windows is CI-parity-only here)
+- Linux smoke: `docs/project_management/_archived/doctor_scopes/smoke/linux-smoke.sh`
+- macOS smoke: `docs/project_management/_archived/doctor_scopes/smoke/macos-smoke.sh`
+- Windows smoke: `docs/project_management/_archived/doctor_scopes/smoke/windows-smoke.ps1` (must be a no-op; Windows is CI-parity-only here)
 
 Manual playbook:
-- `docs/project_management/next/doctor_scopes/manual_testing_playbook.md`
+- `docs/project_management/_archived/doctor_scopes/manual_testing_playbook.md`
 
 Parity notes:
 - Linux smoke asserts `substrate host doctor --json` and `substrate world doctor --json` stable fields, matching the Linux playbook contract checks.
@@ -49,10 +49,10 @@ Parity notes:
 
 ## CI Dispatch Readiness
 
-The integration tasks in `docs/project_management/next/doctor_scopes/tasks.json` require:
+The integration tasks in `docs/project_management/_archived/doctor_scopes/tasks.json` require:
 - `make ci-compile-parity CI_WORKFLOW_REF="feat/doctor-scopes" CI_REMOTE=origin CI_CLEANUP=1`
-- `make feature-smoke FEATURE_DIR="docs/project_management/next/doctor_scopes" PLATFORM=linux RUNNER_KIND=self-hosted WORKFLOW_REF="feat/doctor-scopes" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
-- `make feature-smoke FEATURE_DIR="docs/project_management/next/doctor_scopes" PLATFORM=macos RUNNER_KIND=self-hosted WORKFLOW_REF="feat/doctor-scopes" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+- `make feature-smoke FEATURE_DIR="docs/project_management/_archived/doctor_scopes" PLATFORM=linux RUNNER_KIND=self-hosted WORKFLOW_REF="feat/doctor-scopes" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+- `make feature-smoke FEATURE_DIR="docs/project_management/_archived/doctor_scopes" PLATFORM=macos RUNNER_KIND=self-hosted WORKFLOW_REF="feat/doctor-scopes" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
 
 Preflight must confirm:
 - The workflow ref exists on the remote (`feat/doctor-scopes` is pushed): `origin/feat/doctor-scopes`.

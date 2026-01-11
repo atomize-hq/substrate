@@ -2,7 +2,7 @@
 
 Driven by:
 - ADR: `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`
-- Decision register: `docs/project_management/next/doctor_scopes/decision_register.md`
+- Decision register: `docs/project_management/_archived/doctor_scopes/decision_register.md`
 
 ## Scope
 - Add a new CLI surface: `substrate host doctor [--json]`.

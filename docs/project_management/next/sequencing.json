@@ -172,10 +172,10 @@
 	      "id": "doctor_scopes",
 	      "title": "Doctor scopes (host vs world)",
 	      "branch": "feat/doctor-scopes",
-	      "directory": "docs/project_management/next/doctor_scopes",
-	      "plan": "docs/project_management/next/doctor_scopes/plan.md",
+	      "directory": "docs/project_management/_archived/doctor_scopes",
+	      "plan": "docs/project_management/_archived/doctor_scopes/plan.md",
 	      "status": "completed",
-	      "sequence": [{ "id": "DS0", "spec": "docs/project_management/next/doctor_scopes/DS0-spec.md" }],
+	      "sequence": [{ "id": "DS0", "spec": "docs/project_management/_archived/doctor_scopes/DS0-spec.md" }],
 	      "notes": [
 	        "Clarifies what is host readiness vs in-world enforcement readiness, especially on macOS (Lima guest kernel facts).",
 	        "Introduces a world-agent doctor endpoint to avoid requiring a guest-installed substrate CLI for world diagnostics."

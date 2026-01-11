@@ -7,10 +7,10 @@ Standards:
 - `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md` (behavior delta format)
 
 Feature directory:
-- `docs/project_management/next/doctor_scopes/`
+- `docs/project_management/_archived/doctor_scopes/`
 
 Slice spec:
-- `docs/project_management/next/doctor_scopes/DS0-spec.md`
+- `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
 
 ## Status
 
@@ -23,7 +23,7 @@ COMPLETED.
 - Why: operators need a single, authoritative answer for “is isolation enforceable right now?” across Linux and macOS, including guest-kernel facts on macOS.
 - Links:
   - `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`
-  - `docs/project_management/next/doctor_scopes/DS0-spec.md`
+  - `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
 
 ## Spec Parity (No Drift)
 
@@ -68,5 +68,5 @@ Platform-fix work summary (must be explicit; use `NONE` if nothing was needed):
 
 ## Smoke ↔ Manual Parity
 
-- Smoke scripts mirror manual playbook: `YES` (`docs/project_management/next/doctor_scopes/manual_testing_playbook.md` ↔ `docs/project_management/next/doctor_scopes/smoke/`)
+- Smoke scripts mirror manual playbook: `YES` (`docs/project_management/_archived/doctor_scopes/manual_testing_playbook.md` ↔ `docs/project_management/_archived/doctor_scopes/smoke/`)
 - Smoke scripts validate exit codes + key output: `YES` (jq assertions on DS0 v1 JSON contracts)

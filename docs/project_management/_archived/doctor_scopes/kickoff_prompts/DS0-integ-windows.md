@@ -3,7 +3,7 @@
 ## Scope
 - Fix Windows compilation/lint/test parity issues only.
 - Windows is CI-parity-only for DS0; no behavioral smoke is required.
-- Spec: `docs/project_management/next/doctor_scopes/DS0-spec.md`
+- Spec: `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
 
 ## Start Checklist
 
@@ -12,7 +12,7 @@ Do not edit planning docs inside the worktree.
 1. Verify you are in the task worktree `wt/dsc-ds0-integ-windows` on branch `dsc-ds0-integ-windows` and that `.taskmeta.json` exists at the worktree root.
 2. Read: spec and this prompt.
 3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
-   - `make triad-task-start FEATURE_DIR="docs/project_management/next/doctor_scopes" TASK_ID="DS0-integ-windows"`
+   - `make triad-task-start FEATURE_DIR="docs/project_management/_archived/doctor_scopes" TASK_ID="DS0-integ-windows"`
 
 ## Requirements
 

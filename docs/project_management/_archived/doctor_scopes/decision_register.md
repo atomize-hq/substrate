@@ -12,7 +12,7 @@ Each decision entry follows the required template in:
 **Decision owner(s):** Substrate CLI maintainers  
 **Date:** 2026-01-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`, `docs/project_management/next/doctor_scopes/DS0-spec.md`
+**Related docs:** `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`, `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
 
 **Problem / Context**
 - DS0 adds a host-scoped doctor surface and requires a single, unambiguous CLI name that is discoverable and consistent with existing nouns (`world`, `shim`, `health`).
@@ -47,7 +47,7 @@ Each decision entry follows the required template in:
 **Decision owner(s):** Substrate CLI maintainers  
 **Date:** 2026-01-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`, `docs/project_management/next/doctor_scopes/DS0-spec.md`
+**Related docs:** `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`, `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
 
 **Problem / Context**
 - `substrate world doctor` must report world readiness, while operators still need host readiness context when the world is down.
@@ -82,7 +82,7 @@ Each decision entry follows the required template in:
 **Decision owner(s):** Substrate world backend maintainers  
 **Date:** 2026-01-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`, `docs/project_management/next/doctor_scopes/DS0-spec.md`
+**Related docs:** `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`, `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
 
 **Problem / Context**
 - On macOS, correctness/security facts for enforcement (Landlock ABI/support, world filesystem probe result) are properties of the Lima guest kernel and the world-agent service privileges.
@@ -118,7 +118,7 @@ Each decision entry follows the required template in:
 **Decision owner(s):** Substrate project maintainers  
 **Date:** 2026-01-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/sequencing.json`, `docs/project_management/next/doctor_scopes/tasks.json`, `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`
+**Related docs:** `docs/project_management/next/sequencing.json`, `docs/project_management/_archived/doctor_scopes/tasks.json`, `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`
 
 **Problem / Context**
 - The planning pack declares an orchestration branch used by triad automation and CI dispatch commands; the branch name must match the sequencing entry and the integration workflow refs.
@@ -153,7 +153,7 @@ Each decision entry follows the required template in:
 **Decision owner(s):** Substrate agent API maintainers  
 **Date:** 2026-01-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`, `docs/project_management/next/doctor_scopes/DS0-spec.md`
+**Related docs:** `docs/project_management/next/ADR-0007-host-and-world-doctor-scopes.md`, `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
 
 **Problem / Context**
 - DS0 introduces an agent endpoint for world doctor. The path must be stable, descriptive, and extensible for future doctor endpoints.
@@ -188,7 +188,7 @@ Each decision entry follows the required template in:
 **Decision owner(s):** Substrate agent API maintainers  
 **Date:** 2026-01-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/doctor_scopes/DS0-spec.md`
+**Related docs:** `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
 
 **Problem / Context**
 - The agent endpoint must be callable by the CLI and smoke scripts with minimal interop risk and minimal input validation surface.
@@ -222,7 +222,7 @@ Each decision entry follows the required template in:
 **Decision owner(s):** Substrate CLI maintainers  
 **Date:** 2026-01-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/doctor_scopes/DS0-spec.md`, `docs/project_management/next/doctor_scopes/manual_testing_playbook.md`, `docs/project_management/next/doctor_scopes/smoke/`
+**Related docs:** `docs/project_management/_archived/doctor_scopes/DS0-spec.md`, `docs/project_management/_archived/doctor_scopes/manual_testing_playbook.md`, `docs/project_management/_archived/doctor_scopes/smoke/`
 
 **Problem / Context**
 - Existing doctor output mixes host- and world-derived facts across platforms.
@@ -258,7 +258,7 @@ Each decision entry follows the required template in:
 **Decision owner(s):** Substrate CLI maintainers  
 **Date:** 2026-01-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`, `docs/project_management/next/doctor_scopes/DS0-spec.md`
+**Related docs:** `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`, `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
 
 **Problem / Context**
 - Existing doctor behavior historically used exit code `2` for readiness failures on some platforms, which conflicts with the canonical taxonomy.
@@ -294,7 +294,7 @@ Each decision entry follows the required template in:
 **Decision owner(s):** Substrate CLI maintainers  
 **Date:** 2026-01-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/doctor_scopes/DS0-spec.md`
+**Related docs:** `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
 
 **Problem / Context**
 - “Doctor” commands are safety diagnostics. Starting services or provisioning during doctor runs makes results non-deterministic and adds side effects that are not expected during validation and smoke.
@@ -328,7 +328,7 @@ Each decision entry follows the required template in:
 **Decision owner(s):** Substrate platform maintainers  
 **Date:** 2026-01-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/doctor_scopes/DS0-spec.md`, `docs/project_management/next/doctor_scopes/manual_testing_playbook.md`
+**Related docs:** `docs/project_management/_archived/doctor_scopes/DS0-spec.md`, `docs/project_management/_archived/doctor_scopes/manual_testing_playbook.md`
 
 **Problem / Context**
 - DS0 introduces new doctor scope commands. On Windows, the backend is not ready to report the required host/world readiness contracts without false-green risk.
@@ -363,7 +363,7 @@ Each decision entry follows the required template in:
 **Decision owner(s):** Substrate CLI maintainers  
 **Date:** 2026-01-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/doctor_scopes/DS0-spec.md`
+**Related docs:** `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
 
 **Problem / Context**
 - When world isolation is disabled by effective config, running probes against world-agent transport can produce misleading “agent down” output and introduces non-determinism for host-only installs.
@@ -398,7 +398,7 @@ Each decision entry follows the required template in:
 **Decision owner(s):** Substrate CLI maintainers  
 **Date:** 2026-01-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/doctor_scopes/DS0-spec.md`
+**Related docs:** `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
 
 **Problem / Context**
 - World doctor is used in smoke and CI contexts where deterministic runtime is required. Retrying can hide failures and inflate time budgets.

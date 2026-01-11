@@ -8,7 +8,7 @@ Goal:
 - CLI:
   - Add: `substrate host doctor [--json]`
   - Change: `substrate world doctor [--json]` semantics and JSON contract
-  - Spec: `docs/project_management/next/doctor_scopes/DS0-spec.md`
+  - Spec: `docs/project_management/_archived/doctor_scopes/DS0-spec.md`
 - Agent API:
   - Add: `GET /v1/doctor/world`
   - Types: add `WorldDoctorReportV1` in `crates/agent-api-types`
@@ -52,12 +52,12 @@ Goal:
 - CI parity:
   - `make ci-compile-parity CI_WORKFLOW_REF="feat/doctor-scopes" CI_REMOTE=origin CI_CLEANUP=1`
 - Behavior smoke:
-  - Linux: `docs/project_management/next/doctor_scopes/smoke/linux-smoke.sh` via `make feature-smoke ... PLATFORM=linux`
-  - macOS: `docs/project_management/next/doctor_scopes/smoke/macos-smoke.sh` via `make feature-smoke ... PLATFORM=macos`
+  - Linux: `docs/project_management/_archived/doctor_scopes/smoke/linux-smoke.sh` via `make feature-smoke ... PLATFORM=linux`
+  - macOS: `docs/project_management/_archived/doctor_scopes/smoke/macos-smoke.sh` via `make feature-smoke ... PLATFORM=macos`
 
 ## Smoke ↔ manual testing parity contract
 
-- Manual testing is defined in `docs/project_management/next/doctor_scopes/manual_testing_playbook.md`.
+- Manual testing is defined in `docs/project_management/_archived/doctor_scopes/manual_testing_playbook.md`.
 - Smoke scripts must:
   - run the same CLI commands as the manual playbook (minimal subset), and
   - assert exit codes + required JSON keys/values (not just “command ran”).

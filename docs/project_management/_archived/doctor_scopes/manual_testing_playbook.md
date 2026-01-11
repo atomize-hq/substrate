@@ -1,8 +1,8 @@
 # Manual Testing Playbook — doctor_scopes (DS0)
 
 Scope:
-- Manual validation for the DS0 contract in `docs/project_management/next/doctor_scopes/DS0-spec.md`.
-- This playbook is the human-readable equivalent of the smoke scripts in `docs/project_management/next/doctor_scopes/smoke/`.
+- Manual validation for the DS0 contract in `docs/project_management/_archived/doctor_scopes/DS0-spec.md`.
+- This playbook is the human-readable equivalent of the smoke scripts in `docs/project_management/_archived/doctor_scopes/smoke/`.
 
 Exit code taxonomy:
 - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -92,6 +92,6 @@ Expected:
 ## Smoke scripts (required parity)
 
 Smoke scripts must be runnable and must match the commands above (minimal subset):
-- Linux: `docs/project_management/next/doctor_scopes/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/doctor_scopes/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/doctor_scopes/smoke/windows-smoke.ps1` (no-op; CI parity only)
+- Linux: `docs/project_management/_archived/doctor_scopes/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/doctor_scopes/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/_archived/doctor_scopes/smoke/windows-smoke.ps1` (no-op; CI parity only)

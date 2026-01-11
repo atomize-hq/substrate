@@ -6,7 +6,7 @@
 - Owner(s): spenser
 
 ## Scope
-- Feature directory: `docs/project_management/next/doctor_scopes/`
+- Feature directory: `docs/project_management/_archived/doctor_scopes/`
 - Sequencing spine: `docs/project_management/next/sequencing.json`
 - Intended branch: `feat/doctor-scopes`
 - Standards:
@@ -15,8 +15,8 @@
   - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
 
 ## Related Docs
-- Plan: `docs/project_management/next/doctor_scopes/plan.md`
-- Decision Register: `docs/project_management/next/doctor_scopes/decision_register.md`
+- Plan: `docs/project_management/_archived/doctor_scopes/plan.md`
+- Decision Register: `docs/project_management/_archived/doctor_scopes/decision_register.md`
 - Existing docs that MUST be updated as part of this ADR:
   - `docs/COMMANDS.md`
   - `docs/ISOLATION_SUPPORT_MATRIX.md` (currently marked incomplete)
@@ -172,7 +172,7 @@ Discriminator for exit `3` vs `4` when world is enabled:
   - Internal consumers in this repo (e.g., health/shim snapshots) MUST be updated in the same change set.
 
 ## Decision Summary
-- Decision register: `docs/project_management/next/doctor_scopes/decision_register.md`
+- Decision register: `docs/project_management/_archived/doctor_scopes/decision_register.md`
   - DR-0001: CLI naming (`substrate host doctor` vs alternatives)
   - DR-0002: `substrate world doctor` scope (combined vs world-only output)
   - DR-0003: Guest probing mechanism (agent endpoint vs guest-installed CLI)
