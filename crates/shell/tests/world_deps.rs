@@ -2,6 +2,7 @@
 
 #[path = "common.rs"]
 mod common;
+#[cfg(not(target_os = "macos"))]
 #[path = "support/socket.rs"]
 mod socket;
 
@@ -10,6 +11,7 @@ use common::{
     binary_path, ensure_substrate_built, shared_tmpdir, substrate_shell_driver, temp_dir,
 };
 use serde_json::{json, Map, Value};
+#[cfg(not(target_os = "macos"))]
 use socket::{AgentSocket, SocketResponse};
 use std::fs;
 use std::os::unix::fs::{symlink, PermissionsExt};
