@@ -159,3 +159,22 @@
   - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL1-code/events.jsonl`
   - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL1-code/stderr.log`
 - Blockers: `Codex last_message missing; CODEX_CODE_EXIT not captured (start command timed out; stale codex.pid)`
+
+## END — 2026-01-11T23:07:15Z — test — WDL1-test
+- Worktree: `/home/spenser/__Active_code/substrate/wt/world_deps_selection_layer-wdl1-test`
+- Branch: `world_deps_selection_layer-wdl1-test`
+- HEAD: `6706c7f2baf61a2ae7c327a4614f70ac41d6b402`
+- Codex: `CODEX_TEST_EXIT=`
+- Finisher summary:
+  - `TASK_BRANCH=world_deps_selection_layer-wdl1-test`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/world_deps_selection_layer-wdl1-test`
+  - `HEAD=6706c7f2baf61a2ae7c327a4614f70ac41d6b402`
+  - `COMMITS=1`
+  - `CHECKS=make triad-test-checks`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=`
+- Artifacts:
+  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL1-test/last_message.md`
+  - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL1-test/events.jsonl`
+  - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL1-test/stderr.log`
+- Blockers: `Codex last_message missing; CODEX_TEST_EXIT not captured (start command timed out; stale codex.pid)`
