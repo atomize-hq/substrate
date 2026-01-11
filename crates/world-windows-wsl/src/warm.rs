@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use tracing::info;
 
 #[cfg(test)]
@@ -73,6 +73,8 @@ impl WarmCmd {
             .arg(&self.distro)
             .arg("-ProjectPath")
             .arg(&self.project_path)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .status()
             .context("failed to spawn pwsh for warm script")?;
 
