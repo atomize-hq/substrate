@@ -1,5 +1,5 @@
 use crate::manager_manifest::schema::{
-    expand_path, ManagerManifest, ManagerSpec, RawManagerSpec, RawManifest,
+    expand_path, ManagerManifest, ManagerSpec, RawManagerSpec, RawManifest, MANAGER_MANIFEST_VERSION,
 };
 use crate::manager_manifest::validator::{insert_entries, parse_manager_entries};
 use anyhow::{anyhow, bail, Context, Result};
@@ -28,6 +28,14 @@ impl ManagerManifest {
             .with_context(|| format!("failed to load manager manifest from {}", base.display()))?;
         let base_manifest: RawManifest =
             serde_yaml::from_value(base_value).context("manager manifest schema is invalid")?;
+
+        if base_manifest.version != MANAGER_MANIFEST_VERSION {
+            bail!(
+                "manager manifest version must be {} (got {})",
+                MANAGER_MANIFEST_VERSION,
+                base_manifest.version
+            );
+        }
 
         let mut merged: HashMap<String, RawManagerSpec> = HashMap::new();
         insert_entries(
@@ -66,7 +74,7 @@ impl ManagerManifest {
 
         let mut managers = Vec::with_capacity(merged.len());
         for (name, spec) in merged {
-            managers.push(ManagerSpec::from_raw(name, spec)?);
+            managers.push(ManagerSpec::from_raw(name, spec, base_manifest.version)?);
         }
 
         managers.sort_by(|a, b| {

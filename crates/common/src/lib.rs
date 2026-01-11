@@ -12,8 +12,8 @@ pub mod world_deps_manifest;
 pub use agent_events::{AgentEvent, AgentEventKind};
 pub use fs_diff::FsDiff;
 pub use manager_manifest::{
-    DetectSpec, GuestSpec, InitSpec, InstallSpec, ManagerManifest, ManagerSpec, Platform,
-    RegexPattern,
+    DetectSpec, GuestSpec, InitSpec, InstallClass, InstallSpec, ManagerManifest, ManagerSpec,
+    Platform, RegexPattern, SystemPackagesSpec, MANAGER_MANIFEST_VERSION,
 };
 pub use settings::{WorldFsMode, WorldRootMode};
 pub use settings::{
@@ -44,8 +44,8 @@ pub mod prelude {
     pub use crate::fs_diff::FsDiff;
     pub use crate::log_schema;
     pub use crate::manager_manifest::{
-        DetectSpec, GuestSpec, InitSpec, InstallSpec, ManagerManifest, ManagerSpec, Platform,
-        RegexPattern,
+        DetectSpec, GuestSpec, InitSpec, InstallClass, InstallSpec, ManagerManifest, ManagerSpec,
+        Platform, RegexPattern, SystemPackagesSpec, MANAGER_MANIFEST_VERSION,
     };
     pub use crate::paths;
     pub use crate::settings::{WorldFsMode, WorldRootMode};

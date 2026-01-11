@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::{anyhow, Context, Result};
 
-use crate::manager_manifest::{InstallSpec, ManagerManifest, ManagerSpec, Platform};
+use crate::manager_manifest::{InstallClass, InstallSpec, ManagerManifest, ManagerSpec, Platform};
 
 /// Wrapper around the shared manager manifest that exposes world-deps specific
 /// helpers (host detection commands + guest install recipes).
@@ -49,6 +49,8 @@ pub struct WorldDepTool {
     pub name: String,
     pub host: WorldDepDetectSpec,
     pub guest: WorldDepDetectSpec,
+    pub install_class: InstallClass,
+    pub manual_instructions: Option<String>,
     pub install: Vec<WorldDepInstallRecipe>,
 }
 
@@ -56,6 +58,17 @@ impl WorldDepTool {
     fn from_manager(spec: &ManagerSpec) -> Result<Self> {
         let host_commands = build_host_commands(&spec.name, &spec.detect.commands);
         let guest_commands = build_guest_commands(&spec.name, spec.guest.detect_cmd.as_deref());
+        let install_class = spec
+            .guest
+            .install
+            .as_ref()
+            .map(|install| install.class)
+            .unwrap_or(InstallClass::Manual);
+        let manual_instructions = spec
+            .guest
+            .install
+            .as_ref()
+            .and_then(|install| install.manual_instructions.clone());
         let install = build_install_recipes(&spec.guest.install, &spec.name)?;
 
         Ok(Self {
@@ -66,6 +79,8 @@ impl WorldDepTool {
             guest: WorldDepDetectSpec {
                 commands: guest_commands,
             },
+            install_class,
+            manual_instructions,
             install,
         })
     }
@@ -136,31 +151,27 @@ fn build_install_recipes(
 ) -> Result<Vec<WorldDepInstallRecipe>> {
     let mut recipes = Vec::new();
     if let Some(install) = spec {
-        if let Some(apt) = &install.apt {
-            let script = apt.trim();
-            if script.is_empty() {
-                return Err(anyhow!(
-                    "tool `{}` declares an apt recipe without commands",
-                    tool
-                ));
+        match install.class {
+            InstallClass::UserSpace => {
+                let Some(custom) = &install.custom else {
+                    return Err(anyhow!(
+                        "tool `{}` declares class=user_space without a custom recipe",
+                        tool
+                    ));
+                };
+                let script = custom.trim();
+                if script.is_empty() {
+                    return Err(anyhow!(
+                        "tool `{}` declares a custom recipe without commands",
+                        tool
+                    ));
+                }
+                recipes.push(WorldDepInstallRecipe {
+                    provider: "custom".to_string(),
+                    script: script.to_string(),
+                });
             }
-            recipes.push(WorldDepInstallRecipe {
-                provider: "apt".to_string(),
-                script: script.to_string(),
-            });
-        }
-        if let Some(custom) = &install.custom {
-            let script = custom.trim();
-            if script.is_empty() {
-                return Err(anyhow!(
-                    "tool `{}` declares a custom recipe without commands",
-                    tool
-                ));
-            }
-            recipes.push(WorldDepInstallRecipe {
-                provider: "custom".to_string(),
-                script: script.to_string(),
-            });
+            InstallClass::SystemPackages | InstallClass::Manual | InstallClass::CopyFromHost => {}
         }
     }
 
