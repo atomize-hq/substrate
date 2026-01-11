@@ -39,7 +39,7 @@ The system is designed for:
 - `scripts/planning/validate_tasks_json.py`
 - `scripts/planning/new_feature.sh`
 - `scripts/planning/new_feature.ps1`
-- `scripts/planning/archive_project_management_dir.py` (archive a Planning Pack into `docs/project_management/_archived/` and rewrite internal links)
+- `scripts/planning/archive_project_management_dir.py` (archive a Planning Pack into `docs/project_management/_archived/` and rewrite in-repo references)
 - `Makefile`
 
 ## Quickstart (Recommended Workflow)

@@ -7,7 +7,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Iterator
 
 
 def run(cmd: list[str], *, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess:
@@ -47,9 +47,10 @@ def is_text_file(path: Path) -> bool:
 
 @dataclass(frozen=True)
 class ArchivePlan:
-    src_dir_repo: Path
-    dst_dir_repo: Path
+    src_dir_repo: Path | None
+    dst_dir_repo: Path | None
     replacements: list[tuple[str, str]]
+    strict_needles: list[str]
 
 
 def compute_archive_plan(repo_root: Path, src_dir: Path) -> ArchivePlan:
@@ -93,12 +94,57 @@ def compute_archive_plan(repo_root: Path, src_dir: Path) -> ArchivePlan:
         (f"./{old_prefix}", f"./{new_prefix}"),
     ]
 
-    return ArchivePlan(src_dir_repo=src_dir_repo, dst_dir_repo=dst_dir_repo, replacements=replacements)
+    strict_needles = [
+        old_prefix,
+        f"./{old_prefix}",
+    ]
+
+    return ArchivePlan(
+        src_dir_repo=src_dir_repo,
+        dst_dir_repo=dst_dir_repo,
+        replacements=replacements,
+        strict_needles=strict_needles,
+    )
+
+def compute_rewrite_only_plan(from_prefix: str, to_prefix: str) -> ArchivePlan:
+    from_prefix = from_prefix.strip()
+    to_prefix = to_prefix.strip()
+    if not from_prefix or not to_prefix:
+        raise ValueError("--from and --to must be non-empty")
+    replacements = [
+        (from_prefix, to_prefix),
+        (f"./{from_prefix}", f"./{to_prefix}"),
+    ]
+    strict_needles = [
+        from_prefix,
+        f"./{from_prefix}",
+    ]
+    return ArchivePlan(
+        src_dir_repo=None,
+        dst_dir_repo=None,
+        replacements=replacements,
+        strict_needles=strict_needles,
+    )
 
 
-def iter_project_management_files(repo_root: Path) -> Iterable[Path]:
-    pm_root = repo_root / "docs" / "project_management"
-    for root, _, filenames in os.walk(pm_root):
+def should_skip_dir(dirname: str) -> bool:
+    # Keep this conservative: avoid rewriting vendored/build/worktree content.
+    return dirname in {
+        ".git",
+        "target",
+        "node_modules",
+        "dist",
+        "build",
+        "out",
+        "wt",
+        ".venv",
+        "__pycache__",
+    }
+
+
+def iter_repo_text_files(repo_root: Path) -> Iterator[Path]:
+    for root, dirnames, filenames in os.walk(repo_root):
+        dirnames[:] = [d for d in dirnames if not should_skip_dir(d)]
         for name in filenames:
             path = Path(root) / name
             if is_text_file(path):
@@ -109,6 +155,10 @@ def rewrite_paths_in_file(path: Path, replacements: list[tuple[str, str]]) -> tu
     try:
         raw = path.read_bytes()
     except OSError:
+        return False, ""
+
+    # Avoid huge file rewrites (logs, corpora, large fixtures).
+    if len(raw) > 5 * 1024 * 1024:
         return False, ""
 
     # Skip binary-ish files.
@@ -130,6 +180,30 @@ def rewrite_paths_in_file(path: Path, replacements: list[tuple[str, str]]) -> tu
     return True, text
 
 
+def find_remaining_references(
+    repo_root: Path, strict_needles: list[str]
+) -> list[tuple[Path, str]]:
+    remaining: list[tuple[Path, str]] = []
+    for path in iter_repo_text_files(repo_root):
+        try:
+            raw = path.read_bytes()
+        except OSError:
+            continue
+        if b"\x00" in raw:
+            continue
+        if len(raw) > 5 * 1024 * 1024:
+            continue
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        for needle in strict_needles:
+            if needle in text:
+                remaining.append((path.relative_to(repo_root), needle))
+                break
+    return remaining
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -140,8 +214,17 @@ def main() -> int:
             "  docs/project_management/next/env_var_taxonomy_and_override_split -> docs/project_management/_archived/env_var_taxonomy_and_override_split\n"
         )
     )
-    parser.add_argument("--src", required=True, help="Directory to archive (e.g. docs/project_management/next/<feature>)")
+    parser.add_argument("--src", help="Directory to archive (e.g. docs/project_management/next/<feature>)")
     parser.add_argument("--dry-run", action="store_true", help="Print planned actions without modifying anything")
+    parser.add_argument(
+        "--rewrite-only",
+        action="store_true",
+        help=(
+            "Rewrite references without moving directories. Use --from/--to to retro-fix already-archived packs."
+        ),
+    )
+    parser.add_argument("--from", dest="from_prefix", help="When --rewrite-only: rewrite this prefix")
+    parser.add_argument("--to", dest="to_prefix", help="When --rewrite-only: rewrite to this prefix")
     parser.add_argument(
         "--allow-dirty",
         action="store_true",
@@ -155,16 +238,29 @@ def main() -> int:
         return 2
 
     try:
-        plan = compute_archive_plan(repo_root, repo_root / args.src)
+        if args.rewrite_only and args.from_prefix and args.to_prefix:
+            plan = compute_rewrite_only_plan(args.from_prefix, args.to_prefix)
+        else:
+            if not args.src:
+                print(
+                    "ERROR: --src is required unless running --rewrite-only with both --from and --to",
+                    file=sys.stderr,
+                )
+                return 2
+            plan = compute_archive_plan(repo_root, repo_root / args.src)
     except ValueError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 2
 
-    src_abs = repo_root / plan.src_dir_repo
-    dst_abs = repo_root / plan.dst_dir_repo
+    src_abs = (repo_root / plan.src_dir_repo) if plan.src_dir_repo else None
+    dst_abs = (repo_root / plan.dst_dir_repo) if plan.dst_dir_repo else None
 
-    print(f"SRC={plan.src_dir_repo.as_posix()}")
-    print(f"DST={plan.dst_dir_repo.as_posix()}")
+    if plan.src_dir_repo is not None and plan.dst_dir_repo is not None:
+        print(f"SRC={plan.src_dir_repo.as_posix()}")
+        print(f"DST={plan.dst_dir_repo.as_posix()}")
+    else:
+        print("SRC=(none)")
+        print("DST=(none)")
     for old, new in plan.replacements:
         print(f"REWRITE={old} -> {new}")
 
@@ -173,18 +269,26 @@ def main() -> int:
     else:
         print("DRY_RUN=0")
 
-    if args.dry_run:
-        print(f"[dry-run] git mv {plan.src_dir_repo.as_posix()} {plan.dst_dir_repo.as_posix()}")
+    if args.rewrite_only:
+        print("MOVE=0")
     else:
-        dst_abs.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(
-            ["git", "mv", plan.src_dir_repo.as_posix(), plan.dst_dir_repo.as_posix()],
-            cwd=repo_root,
-            check=True,
-        )
+        print("MOVE=1")
+
+    if not args.rewrite_only:
+        assert src_abs is not None
+        assert dst_abs is not None
+        if args.dry_run:
+            print(f"[dry-run] git mv {plan.src_dir_repo.as_posix()} {plan.dst_dir_repo.as_posix()}")
+        else:
+            dst_abs.parent.mkdir(parents=True, exist_ok=True)
+            subprocess.run(
+                ["git", "mv", plan.src_dir_repo.as_posix(), plan.dst_dir_repo.as_posix()],
+                cwd=repo_root,
+                check=True,
+            )
 
     modified: list[Path] = []
-    for path in iter_project_management_files(repo_root):
+    for path in iter_repo_text_files(repo_root):
         changed, new_text = rewrite_paths_in_file(path, plan.replacements)
         if not changed:
             continue
@@ -199,9 +303,24 @@ def main() -> int:
     else:
         print("UPDATED_FILES=0")
 
+    if args.dry_run:
+        print("REMAINING_REFERENCES=SKIPPED_DRY_RUN")
+        return 0
+
+    remaining = find_remaining_references(repo_root, plan.strict_needles)
+    if remaining:
+        print(f"REMAINING_REFERENCES={len(remaining)}", file=sys.stderr)
+        for path, needle in remaining:
+            print(f"REMAINING={path.as_posix()} needle={needle}", file=sys.stderr)
+        print(
+            "ERROR: stale references remain; rerun with --rewrite-only after updating replacements or fix manually",
+            file=sys.stderr,
+        )
+        return 2
+    print("REMAINING_REFERENCES=0")
+
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
