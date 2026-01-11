@@ -43,6 +43,13 @@ fn selection_path_workspace(workspace: &Path) -> PathBuf {
     workspace.join(".substrate/world-deps.selection.yaml")
 }
 
+fn canonicalize_for_assert(path: &Path) -> String {
+    fs::canonicalize(path)
+        .unwrap_or_else(|_| path.to_path_buf())
+        .to_string_lossy()
+        .into_owned()
+}
+
 #[test]
 fn test_world_deps_missing_selection_is_noop_for_status_and_all() {
     let fixture = ShellEnvFixture::new();
@@ -156,8 +163,8 @@ fn test_world_deps_status_json_reports_workspace_selection_precedence() {
     let selection = json
         .get("selection")
         .expect("status --json includes selection block");
-    let workspace_selection_str = workspace_selection.display().to_string();
-    let global_selection_str = global_selection.display().to_string();
+    let workspace_selection_str = canonicalize_for_assert(&workspace_selection);
+    let global_selection_str = canonicalize_for_assert(&global_selection);
     assert_eq!(
         selection.get("configured").and_then(|v| v.as_bool()),
         Some(true)
@@ -290,7 +297,7 @@ fn test_world_deps_invalid_selection_yaml_exits_2() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(
-        combined.contains(&workspace_selection.display().to_string()),
+        combined.contains(&canonicalize_for_assert(&workspace_selection)),
         "expected output to mention selection path"
     );
 }

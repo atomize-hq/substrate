@@ -43,7 +43,7 @@ pub(crate) fn resolve_active_selection(
     inventory_tool_names: &HashSet<String>,
 ) -> Result<ActiveSelection> {
     let workspace = find_workspace_selection_file(cwd);
-    let global = global_selection_path()?;
+    let global = canonicalize_if_exists(global_selection_path()?);
 
     let (active_path, active_scope) = if let Some(workspace) = &workspace {
         (
@@ -237,6 +237,14 @@ fn write_selection_file(path: &Path, selected: &[String]) -> Result<()> {
 
 fn global_selection_path() -> Result<PathBuf> {
     Ok(substrate_paths::substrate_home()?.join(SELECTION_FILENAME))
+}
+
+fn canonicalize_if_exists(path: PathBuf) -> PathBuf {
+    if path.exists() {
+        path.canonicalize().unwrap_or(path)
+    } else {
+        path
+    }
 }
 
 fn workspace_selection_path_at(workspace_root: &Path) -> PathBuf {

@@ -2,12 +2,15 @@
 
 #[path = "common.rs"]
 mod common;
+#[path = "support/socket.rs"]
+mod socket;
 
 use assert_cmd::Command;
 use common::{
     binary_path, ensure_substrate_built, shared_tmpdir, substrate_shell_driver, temp_dir,
 };
 use serde_json::{json, Map, Value};
+use socket::{AgentSocket, SocketResponse};
 use std::fs;
 use std::os::unix::fs::{symlink, PermissionsExt};
 use std::path::{Path, PathBuf};
@@ -92,10 +95,10 @@ struct WorldDepsFixture {
 
 impl WorldDepsFixture {
     fn new() -> Self {
-        // Use /tmp to ensure the world sandbox can write logs/markers.
+        // Use /tmp to keep Unix socket paths short and ensure the world sandbox can write logs/markers.
         let temp = Builder::new()
             .prefix("substrate-world-deps-")
-            .tempdir()
+            .tempdir_in("/tmp")
             .expect("world deps tempdir");
         let root = temp.path();
         let home = root.join("home");
@@ -145,6 +148,20 @@ impl WorldDepsFixture {
             guest_bin_dir,
             manager_bin_dir,
         }
+    }
+
+    fn write_selection(&self, selected: &[&str]) {
+        let path = self.substrate_home.join("world-deps.selection.yaml");
+        let contents = if selected.is_empty() {
+            "version: 1\nselected: []\n".to_string()
+        } else {
+            let mut buf = String::from("version: 1\nselected:\n");
+            for tool in selected {
+                buf.push_str(&format!("  - {tool}\n"));
+            }
+            buf
+        };
+        fs::write(&path, contents).expect("write selection file");
     }
 
     fn command(&self) -> Command {
@@ -211,6 +228,7 @@ impl WorldDepsFixture {
             serde_json::to_string_pretty(&manifest).unwrap(),
         )
         .expect("write manifest");
+        self.write_selection(tools);
     }
 
     fn write_manifest_with_host_command(&self, tool: &str, host_command: &str) {
@@ -242,6 +260,7 @@ impl WorldDepsFixture {
             serde_json::to_string_pretty(&manifest).unwrap(),
         )
         .expect("write manifest");
+        self.write_selection(&[tool]);
     }
 
     fn write_manager_manifest_for_init(&self) {
@@ -645,6 +664,10 @@ fn world_deps_install_executes_install_script_and_streams_output() {
     let fixture = WorldDepsFixture::new();
     fixture.write_manifest(&["git"]);
     fixture.mark_host_tool("git");
+    let _socket = AgentSocket::start(
+        &fixture.fake_socket_path,
+        SocketResponse::CapabilitiesAndHostExecute { scopes: vec![] },
+    );
 
     let assert = fixture
         .command()
@@ -676,6 +699,10 @@ fn world_deps_install_respects_dry_run() {
     let fixture = WorldDepsFixture::new();
     fixture.write_manifest(&["git"]);
     fixture.mark_host_tool("git");
+    let _socket = AgentSocket::start(
+        &fixture.fake_socket_path,
+        SocketResponse::CapabilitiesAndHostExecute { scopes: vec![] },
+    );
 
     fixture
         .command()
@@ -710,8 +737,9 @@ fn world_deps_install_fails_when_world_disabled() {
         .failure();
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
     assert!(
-        stderr.contains("world backend disabled"),
-        "stderr missing guidance when world disabled: {}",
+        stderr.contains("world backend unavailable for world deps")
+            && stderr.contains("substrate world doctor --json"),
+        "stderr missing world backend unavailable guidance: {}",
         stderr
     );
     assert!(
@@ -764,29 +792,34 @@ fn world_deps_install_fails_when_backend_unavailable_on_macos() {
 #[test]
 fn world_deps_sync_skips_missing_host_tools_without_all_flag() {
     let fixture = WorldDepsFixture::new();
-    fixture.write_manifest(&["git"]);
-
-    let assert = fixture.command().arg("sync").assert().success();
-    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
-    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
-    let combined = format!("{stdout}{stderr}");
-    let combined_lower = combined.to_lowercase();
-    let mentions_skip = combined_lower.contains("no tools were synced")
-        || combined_lower.contains("host detection")
-        || combined_lower.contains("not detected on the host")
-        || (combined_lower.contains("skip") && combined_lower.contains("host"));
-    assert!(
-        mentions_skip,
-        "sync should explain the host-missing skip: {combined}"
+    fixture.write_manifest(&["git", "node"]);
+    fixture.write_selection(&["node"]);
+    fixture.mark_host_tool("node");
+    fixture.mark_guest_tool("node"); // already present in guest
+    let _socket = AgentSocket::start(
+        &fixture.fake_socket_path,
+        SocketResponse::CapabilitiesAndHostExecute { scopes: vec![] },
     );
+
+    let assert = fixture
+        .command()
+        .arg("sync")
+        .arg("--verbose")
+        .assert()
+        .success();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
     assert!(
-        !combined.contains("All tracked tools are already available inside the guest."),
-        "sync should not claim all tools present when host detection fails: {combined}"
+        stdout.contains("All scoped tools are already available inside the guest."),
+        "sync should report scoped tools already present: {stdout}"
     );
     assert!(
         fixture.executor_log().is_empty(),
-        "sync should not attempt installs when host tools are missing: {}",
+        "sync should not attempt installs when selected tools are already present: {}",
         fixture.executor_log()
+    );
+    assert!(
+        !fixture.guest_marker_exists("git"),
+        "sync should not install unselected tools"
     );
 }
 
@@ -798,14 +831,24 @@ fn world_deps_sync_installs_missing_tools_with_all_flag() {
     fixture.mark_host_tool("git");
     fixture.mark_host_tool("node");
     fixture.mark_guest_tool("node"); // already present in guest
+    fixture.write_selection(&["node"]);
+    let _socket = AgentSocket::start(
+        &fixture.fake_socket_path,
+        SocketResponse::CapabilitiesAndHostExecute { scopes: vec![] },
+    );
 
-    fixture
+    let assert = fixture
         .command()
         .arg("sync")
         .arg("--all")
         .arg("--verbose")
         .assert()
         .success();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    assert!(
+        stdout.contains("Selection ignored due to --all"),
+        "stdout missing selection ignored banner: {stdout}"
+    );
 
     assert!(
         fixture.guest_marker_exists("git"),
@@ -875,6 +918,10 @@ fn world_deps_install_prefers_overlay_manifest_entries() {
     fixture.write_manifest(&["git"]);
     fixture.mark_host_tool("git");
     fixture.write_overlay_install_override("git");
+    let _socket = AgentSocket::start(
+        &fixture.fake_socket_path,
+        SocketResponse::CapabilitiesAndHostExecute { scopes: vec![] },
+    );
 
     fixture
         .command()
@@ -899,6 +946,10 @@ fn world_deps_install_surfaces_helper_failures() {
     let fixture = WorldDepsFixture::new();
     fixture.write_manifest(&["git"]);
     fixture.mark_host_tool("git");
+    let _socket = AgentSocket::start(
+        &fixture.fake_socket_path,
+        SocketResponse::CapabilitiesAndHostExecute { scopes: vec![] },
+    );
 
     let assert = fixture
         .command()
