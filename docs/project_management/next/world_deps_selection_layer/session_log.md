@@ -59,3 +59,13 @@
 - Next steps:
   - Planning quality gate reviewer produces `docs/project_management/next/world_deps_selection_layer/quality_gate_report.md` with `RECOMMENDATION: ACCEPT`.
   - Operator runs `F0-exec-preflight` and records `ACCEPT|REVISE` in `docs/project_management/next/world_deps_selection_layer/execution_preflight_report.md`.
+
+## START — 2026-01-11T16:12:53Z — F0-exec-preflight — execution preflight gate
+- Feature: `docs/project_management/next/world_deps_selection_layer`
+- Branch: `feat/world_deps_selection_layer`
+- Standard: `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+- Goal: Confirm the Planning Pack is runnable (smoke is non-toy; CI dispatch commands are valid) before starting any triads.
+- Inputs read end-to-end:
+  - ADR: `docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
+  - Planning Pack: `plan.md`, `tasks.json`, `session_log.md`, `decision_register.md`, `integration_map.md`, `manual_testing_playbook.md`, `S0`, `S1`, `S2`, smoke scripts, kickoff prompt
+- Orchestration branch ensured via: `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/world_deps_selection_layer"`
