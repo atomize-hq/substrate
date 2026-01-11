@@ -133,3 +133,10 @@
 - Orchestration branch: `feat/world_deps_selection_layer`
 - Dispatch:
   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/world_deps_selection_layer" SLICE_ID="WDL1" LAUNCH_CODEX=1`
+
+## START — 2026-01-11T22:40:20Z — test — WDL1-test
+- Worktree: `wt/world_deps_selection_layer-wdl1-test`
+- Branch: `world_deps_selection_layer-wdl1-test`
+- Orchestration branch: `feat/world_deps_selection_layer`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/world_deps_selection_layer" SLICE_ID="WDL1" LAUNCH_CODEX=1`

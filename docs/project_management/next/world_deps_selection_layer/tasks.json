@@ -406,7 +406,7 @@
       "name": "WDL1 — Install classes (test)",
       "type": "test",
       "phase": "WDL1",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add tests for manifest v2 parsing/validation and install-class routing per S1 (tests only).",
       "references": [
         "docs/project_management/next/world_deps_selection_layer/plan.md",
