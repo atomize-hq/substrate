@@ -3,10 +3,31 @@ use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct WorldDepsStatusReport {
+    #[serde(default)]
+    pub selection: WorldDepsSelectionInfo,
     pub manifest: WorldDepsManifestInfo,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub world_disabled_reason: Option<String>,
     pub tools: Vec<WorldDepStatusEntry>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub(crate) struct WorldDepsSelectionInfo {
+    pub configured: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_path: Option<PathBuf>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_scope: Option<WorldDepsSelectionScope>,
+    pub shadowed_paths: Vec<PathBuf>,
+    pub selected: Vec<String>,
+    pub ignored_due_to_all: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WorldDepsSelectionScope {
+    Workspace,
+    Global,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -36,6 +57,8 @@ pub(crate) struct WorldDepsOverlayInfo {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct WorldDepStatusEntry {
     pub name: String,
+    #[serde(default)]
+    pub selected: bool,
     pub host_detected: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub host_reason: Option<String>,
