@@ -5,14 +5,14 @@ Goal: validate that world execution shows files via directory enumeration and th
 ## Prerequisites
 - Platform: Linux
 - Required commands: `substrate`, `rg`, `jq`, `mktemp`
-- Smoke script entrypoint: `bash docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh`
+- Smoke script entrypoint: `bash docs/project_management/_archived/world-overlayfs-enumeration/smoke/linux-smoke.sh`
 
 ## Linux (required)
 
 ### 0) Run the smoke script
 ```bash
 set -euo pipefail
-bash docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh
+bash docs/project_management/_archived/world-overlayfs-enumeration/smoke/linux-smoke.sh
 ```
 
 Expected:
@@ -97,6 +97,6 @@ Expected:
 - Out of scope for this ADR.
 
 ## Smoke scripts
-- Linux: `docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/world-overlayfs-enumeration/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/world-overlayfs-enumeration/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/_archived/world-overlayfs-enumeration/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/world-overlayfs-enumeration/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/_archived/world-overlayfs-enumeration/smoke/windows-smoke.ps1`

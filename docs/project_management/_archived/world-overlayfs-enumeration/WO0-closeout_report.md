@@ -7,10 +7,10 @@ Standards:
 - `docs/project_management/standards/EXECUTIVE_SUMMARY_STANDARD.md` (behavior delta format)
 
 Feature directory:
-- `docs/project_management/next/world-overlayfs-enumeration/`
+- `docs/project_management/_archived/world-overlayfs-enumeration/`
 
 Slice spec:
-- `docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md`
+- `docs/project_management/_archived/world-overlayfs-enumeration/WO0-spec.md`
 
 ## Behavior Delta (Existing → New → Why)
 

@@ -4,14 +4,14 @@ This register contains the architectural decisions required by:
 - `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
 
 Each entry presents exactly two viable options (A/B), selects one option, and maps follow-ups to triad task IDs in:
-- `docs/project_management/next/world-overlayfs-enumeration/tasks.json`
+- `docs/project_management/_archived/world-overlayfs-enumeration/tasks.json`
 
 ### DR-0001 — Primary topology change to eliminate enumeration failures
 
 **Decision owner(s):** spenser  
 **Date:** 2025-12-29  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`, `docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md`
+**Related docs:** `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`, `docs/project_management/_archived/world-overlayfs-enumeration/WO0-spec.md`
 
 **Problem / Context**
 - The current Linux “project cage” enforcement overlays the project directory by bind-mounting the overlay merged directory onto the host project path inside a private mount namespace.
@@ -47,7 +47,7 @@ Each entry presents exactly two viable options (A/B), selects one option, and ma
 **Decision owner(s):** spenser  
 **Date:** 2025-12-29  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`, `docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md`
+**Related docs:** `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`, `docs/project_management/_archived/world-overlayfs-enumeration/WO0-spec.md`
 
 **Problem / Context**
 - Substrate needs deterministic behavior when primary kernel overlayfs is unavailable or enumeration-unhealthy.

@@ -1,7 +1,7 @@
 # world-overlayfs-enumeration — plan
 
 ## Scope
-- Feature directory: `docs/project_management/next/world-overlayfs-enumeration/`
+- Feature directory: `docs/project_management/_archived/world-overlayfs-enumeration/`
 - Orchestration branch: `feat/world-overlayfs-enumeration`
 - ADR: `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
 
@@ -22,6 +22,6 @@
 - WO0: overlayfs enumeration reliability (code/test/integ)
 
 ## Smoke
-- Linux: `docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/world-overlayfs-enumeration/smoke/macos-smoke.sh` (skip; ADR scope is Linux-only)
-- Windows: `docs/project_management/next/world-overlayfs-enumeration/smoke/windows-smoke.ps1` (skip; ADR scope is Linux-only)
+- Linux: `docs/project_management/_archived/world-overlayfs-enumeration/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/world-overlayfs-enumeration/smoke/macos-smoke.sh` (skip; ADR scope is Linux-only)
+- Windows: `docs/project_management/_archived/world-overlayfs-enumeration/smoke/windows-smoke.ps1` (skip; ADR scope is Linux-only)

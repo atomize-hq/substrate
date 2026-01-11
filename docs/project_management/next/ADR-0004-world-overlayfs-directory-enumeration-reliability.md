@@ -6,7 +6,7 @@
 - Owner(s): spenser
 
 ## Scope
-- Feature directory: `docs/project_management/next/world-overlayfs-enumeration/`
+- Feature directory: `docs/project_management/_archived/world-overlayfs-enumeration/`
 - Orchestration branch: `feat/world-overlayfs-enumeration`
 - Sequencing spine: `docs/project_management/next/sequencing.json`
 - Standards:
@@ -14,13 +14,13 @@
   - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
 
 ## Related Docs
-- Plan: `docs/project_management/next/world-overlayfs-enumeration/plan.md`
-- Tasks: `docs/project_management/next/world-overlayfs-enumeration/tasks.json`
+- Plan: `docs/project_management/_archived/world-overlayfs-enumeration/plan.md`
+- Tasks: `docs/project_management/_archived/world-overlayfs-enumeration/tasks.json`
 - Specs:
-  - `docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md`
-- Decision Register: `docs/project_management/next/world-overlayfs-enumeration/decision_register.md`
-- Integration Map: `docs/project_management/next/world-overlayfs-enumeration/integration_map.md`
-- Manual Playbook: `docs/project_management/next/world-overlayfs-enumeration/manual_testing_playbook.md`
+  - `docs/project_management/_archived/world-overlayfs-enumeration/WO0-spec.md`
+- Decision Register: `docs/project_management/_archived/world-overlayfs-enumeration/decision_register.md`
+- Integration Map: `docs/project_management/_archived/world-overlayfs-enumeration/integration_map.md`
+- Manual Playbook: `docs/project_management/_archived/world-overlayfs-enumeration/manual_testing_playbook.md`
 
 ## Executive Summary (Operator)
 
@@ -31,9 +31,9 @@ ADR_BODY_SHA256: 8309c36c2114249058470978a5c13c0569d1024336d35cf71f264520a80330a
   - New: Substrate refuses to run a world command on any filesystem strategy that fails an enumeration health check; it selects a strategy + fallback chain deterministically and records the choice/fallback reason in trace and doctor output.
   - Why: Restores the core world contract (observable filesystem state) and makes host variance reproducible and debuggable.
   - Links:
-    - `docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md`
-    - `docs/project_management/next/world-overlayfs-enumeration/manual_testing_playbook.md`
-    - `docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh`
+    - `docs/project_management/_archived/world-overlayfs-enumeration/WO0-spec.md`
+    - `docs/project_management/_archived/world-overlayfs-enumeration/manual_testing_playbook.md`
+    - `docs/project_management/_archived/world-overlayfs-enumeration/smoke/linux-smoke.sh`
 
 ## Problem / Context
 - Substrate’s Linux world execution uses overlayfs to present an isolated, writable view of the project and to compute filesystem diffs.
@@ -185,12 +185,12 @@ ADR_BODY_SHA256: 8309c36c2114249058470978a5c13c0569d1024336d35cf71f264520a80330a
   - A regression test that simulates an unhealthy overlay strategy (forced via test hook) and asserts fallback strategy selection and trace annotation.
 
 ### Manual validation
-- Manual playbook: `docs/project_management/next/world-overlayfs-enumeration/manual_testing_playbook.md`
+- Manual playbook: `docs/project_management/_archived/world-overlayfs-enumeration/manual_testing_playbook.md`
 
 ### Smoke scripts
-- Linux: `docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/world-overlayfs-enumeration/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/world-overlayfs-enumeration/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/_archived/world-overlayfs-enumeration/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/_archived/world-overlayfs-enumeration/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/_archived/world-overlayfs-enumeration/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed
@@ -198,5 +198,5 @@ ADR_BODY_SHA256: 8309c36c2114249058470978a5c13c0569d1024336d35cf71f264520a80330a
 
 ## Decision Summary
 - Decision Register entries:
-  - `docs/project_management/next/world-overlayfs-enumeration/decision_register.md`:
+  - `docs/project_management/_archived/world-overlayfs-enumeration/decision_register.md`:
     - DR-0001, DR-0002

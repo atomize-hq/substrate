@@ -632,14 +632,14 @@
             "status": "completed",
             "problem": "Some kickoff prompt files used by automation were not present under the orchestration branch Planning Pack directory, reducing auditability and making it harder to reproduce runs from the planning pack alone.",
             "evidence": {
-                "orchestration_pack_prompts": "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/ (WO0-code, WO0-test, WO0-integ, plus gate/cleanup)",
+                "orchestration_pack_prompts": "docs/project_management/_archived/world-overlayfs-enumeration/kickoff_prompts/ (WO0-code, WO0-test, WO0-integ, plus gate/cleanup)",
                 "worktree_only_prompts": [
-                    "wt/woe-wo0-integ-core/docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-core.md",
-                    "wt/woe-wo0-integ-core/docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-linux.md",
-                    "wt/woe-wo0-integ-core/docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-macos.md",
-                    "wt/woe-wo0-integ-core/docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-windows.md"
+                    "wt/woe-wo0-integ-core/docs/project_management/_archived/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-core.md",
+                    "wt/woe-wo0-integ-core/docs/project_management/_archived/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-linux.md",
+                    "wt/woe-wo0-integ-core/docs/project_management/_archived/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-macos.md",
+                    "wt/woe-wo0-integ-core/docs/project_management/_archived/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-windows.md"
                 ],
-                "tasks_json_references": "docs/project_management/next/world-overlayfs-enumeration/tasks.json references kickoff_prompt paths for WO0-integ-core/platform-fix tasks."
+                "tasks_json_references": "docs/project_management/_archived/world-overlayfs-enumeration/tasks.json references kickoff_prompt paths for WO0-integ-core/platform-fix tasks."
             },
             "proposed_fix": {
                 "behavior": [
@@ -658,16 +658,16 @@
                 ],
                 "files_updated": [
                     "scripts/planning/validate_tasks_json.py",
-                    "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-core.md",
-                    "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-linux.md",
-                    "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-macos.md",
-                    "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-windows.md"
+                    "docs/project_management/_archived/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-core.md",
+                    "docs/project_management/_archived/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-linux.md",
+                    "docs/project_management/_archived/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-macos.md",
+                    "docs/project_management/_archived/world-overlayfs-enumeration/kickoff_prompts/WO0-integ-windows.md"
                 ]
             },
             "sources": [
-                "docs/project_management/next/world-overlayfs-enumeration/tasks.json",
-                "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/",
-                "wt/woe-wo0-integ-core/docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/"
+                "docs/project_management/_archived/world-overlayfs-enumeration/tasks.json",
+                "docs/project_management/_archived/world-overlayfs-enumeration/kickoff_prompts/",
+                "wt/woe-wo0-integ-core/docs/project_management/_archived/world-overlayfs-enumeration/kickoff_prompts/"
             ]
         },
         {
@@ -713,7 +713,7 @@
             },
             "sources": [
                 "target/triad/world-overlayfs-enumeration/codex/WO0-integ-linux/stderr.log",
-                "docs/project_management/next/world-overlayfs-enumeration/kickoff_prompts/"
+                "docs/project_management/_archived/world-overlayfs-enumeration/kickoff_prompts/"
             ]
         },
         {
@@ -726,8 +726,8 @@
                 "codex_log": {
                     "file": "target/triad/world-overlayfs-enumeration/codex/WO0-integ/stderr.log",
                     "excerpt": [
-                        "Auto-merging docs/project_management/next/world-overlayfs-enumeration/tasks.json",
-                        "CONFLICT (content): Merge conflict in docs/project_management/next/world-overlayfs-enumeration/tasks.json"
+                        "Auto-merging docs/project_management/_archived/world-overlayfs-enumeration/tasks.json",
+                        "CONFLICT (content): Merge conflict in docs/project_management/_archived/world-overlayfs-enumeration/tasks.json"
                     ],
                     "excerpt_location_hint": "See line-numbered excerpt around 758-760."
                 },
@@ -912,10 +912,10 @@
             "evidence": {
                 "behavioral_scope": [
                     "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md (Linux-only changes; macOS/Windows out of scope)",
-                    "docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md (Linux-only contract)"
+                    "docs/project_management/_archived/world-overlayfs-enumeration/WO0-spec.md (Linux-only contract)"
                 ],
                 "ci_parity_scope": [
-                    "docs/project_management/next/world-overlayfs-enumeration/tasks.json meta.cross_platform=true and meta.platforms_required=[linux,macos,windows]",
+                    "docs/project_management/_archived/world-overlayfs-enumeration/tasks.json meta.cross_platform=true and meta.platforms_required=[linux,macos,windows]",
                     "CI testing failure on macOS/Windows blocks completion (e.g., run 20763974819)"
                 ]
             },
@@ -955,8 +955,8 @@
                 ],
                 "verification": {
                     "commands": [
-                        "make planning-lint FEATURE_DIR=\"docs/project_management/next/world-overlayfs-enumeration\"",
-                        "make planning-validate FEATURE_DIR=\"docs/project_management/next/world-overlayfs-enumeration\"",
+                        "make planning-lint FEATURE_DIR=\"docs/project_management/_archived/world-overlayfs-enumeration\"",
+                        "make planning-validate FEATURE_DIR=\"docs/project_management/_archived/world-overlayfs-enumeration\"",
                         "make planning-new-feature FEATURE=\"__tmp_p3_008_test\" CROSS_PLATFORM=1 AUTOMATION=1 BEHAVIOR_PLATFORMS=linux CI_PARITY_PLATFORMS=linux,macos,windows",
                         "python3 scripts/planning/validate_tasks_json.py --feature-dir docs/project_management/next/__tmp_p3_008_test"
                     ],
@@ -1084,9 +1084,9 @@
                 ]
             },
             "sources": [
-                "docs/project_management/next/world-overlayfs-enumeration/tasks.json",
+                "docs/project_management/_archived/world-overlayfs-enumeration/tasks.json",
                 "docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md",
-                "docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md"
+                "docs/project_management/_archived/world-overlayfs-enumeration/WO0-spec.md"
             ]
         },
         {

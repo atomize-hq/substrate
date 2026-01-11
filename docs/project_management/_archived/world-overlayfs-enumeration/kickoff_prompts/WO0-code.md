@@ -3,16 +3,16 @@
 ## Scope
 - Production code only; no tests.
 - ADR: `docs/project_management/next/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
-- Spec: `docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md`
+- Spec: `docs/project_management/_archived/world-overlayfs-enumeration/WO0-spec.md`
 
 ## Start Checklist
 
 Do not edit planning docs inside the worktree.
 
 1. Verify you are in the task worktree `wt/woe-wo0-code` on branch `woe-wo0-code` and that `.taskmeta.json` exists at the worktree root.
-2. Read: `docs/project_management/next/world-overlayfs-enumeration/plan.md`, `docs/project_management/next/world-overlayfs-enumeration/tasks.json`, `docs/project_management/next/world-overlayfs-enumeration/session_log.md`, ADR, spec, and this prompt.
+2. Read: `docs/project_management/_archived/world-overlayfs-enumeration/plan.md`, `docs/project_management/_archived/world-overlayfs-enumeration/tasks.json`, `docs/project_management/_archived/world-overlayfs-enumeration/session_log.md`, ADR, spec, and this prompt.
 3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run:
-   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/world-overlayfs-enumeration" SLICE_ID="WO0"`
+   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/_archived/world-overlayfs-enumeration" SLICE_ID="WO0"`
 
 ## Requirements
 - Implement the project-isolation mount choreography change required by ADR-0004 (`mount --move`, not `mount --bind`).

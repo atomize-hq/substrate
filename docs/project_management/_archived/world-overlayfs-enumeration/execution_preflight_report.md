@@ -6,7 +6,7 @@ Standard:
 - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
 
 Feature directory:
-- `docs/project_management/next/world-overlayfs-enumeration/`
+- `docs/project_management/_archived/world-overlayfs-enumeration/`
 
 ## Recommendation
 
@@ -22,17 +22,17 @@ RECOMMENDATION: **ACCEPT**
 - [x] Smoke scripts map to the manual playbook (minimal subset)
 
 Commands run during preflight:
-- `make planning-validate FEATURE_DIR="docs/project_management/next/world-overlayfs-enumeration"` → `PASS`
-- `make planning-lint FEATURE_DIR="docs/project_management/next/world-overlayfs-enumeration"` → `PASS`
-- `bash -n docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh` → `PASS`
+- `make planning-validate FEATURE_DIR="docs/project_management/_archived/world-overlayfs-enumeration"` → `PASS`
+- `make planning-lint FEATURE_DIR="docs/project_management/_archived/world-overlayfs-enumeration"` → `PASS`
+- `bash -n docs/project_management/_archived/world-overlayfs-enumeration/smoke/linux-smoke.sh` → `PASS`
 
 ## Smoke and Manual Parity
 
 Smoke scripts mirror the manual playbook by running the same commands and validating exit codes and key output.
 
-- Linux smoke: `docs/project_management/next/world-overlayfs-enumeration/smoke/linux-smoke.sh`
-- macOS smoke: `docs/project_management/next/world-overlayfs-enumeration/smoke/macos-smoke.sh`
-- Windows smoke: `docs/project_management/next/world-overlayfs-enumeration/smoke/windows-smoke.ps1`
+- Linux smoke: `docs/project_management/_archived/world-overlayfs-enumeration/smoke/linux-smoke.sh`
+- macOS smoke: `docs/project_management/_archived/world-overlayfs-enumeration/smoke/macos-smoke.sh`
+- Windows smoke: `docs/project_management/_archived/world-overlayfs-enumeration/smoke/windows-smoke.ps1`
 
 Notes:
 - `linux-smoke.sh` exercises the playbook’s enumeration check and validates doctor/trace keys required by ADR-0004 + WO0-spec.

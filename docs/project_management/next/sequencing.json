@@ -156,11 +156,11 @@
 	      "id": "world_overlayfs_enumeration",
 	      "title": "Linux world overlayfs enumeration reliability",
 	      "branch": "feat/world-overlayfs-enumeration",
-	      "directory": "docs/project_management/next/world-overlayfs-enumeration",
-	      "plan": "docs/project_management/next/world-overlayfs-enumeration/plan.md",
+	      "directory": "docs/project_management/_archived/world-overlayfs-enumeration",
+	      "plan": "docs/project_management/_archived/world-overlayfs-enumeration/plan.md",
 	      "status": "completed",
 	      "sequence": [
-	        { "id": "WO0", "spec": "docs/project_management/next/world-overlayfs-enumeration/WO0-spec.md" }
+	        { "id": "WO0", "spec": "docs/project_management/_archived/world-overlayfs-enumeration/WO0-spec.md" }
 	      ],
 	      "notes": [
 	        "Land before world_sync to ensure world execution is usable for interactive workflows and reliable for integration testing.",
