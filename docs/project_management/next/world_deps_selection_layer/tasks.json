@@ -716,7 +716,7 @@
       "name": "WDL2 — System packages provisioning (test)",
       "type": "test",
       "phase": "WDL2",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add tests for deterministic package list computation, platform gating, and exit codes per S2 (tests only).",
       "references": [
         "docs/project_management/next/world_deps_selection_layer/plan.md",
