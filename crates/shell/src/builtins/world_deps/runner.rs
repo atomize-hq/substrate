@@ -873,7 +873,7 @@ impl WorldDepsRunner {
             // When we detect that guest apt state directories are not writable, fall back to
             // invoking `wsl.exe` directly as root to provision packages.
             let guest_can_mutate_apt_state = detect_guest(&[String::from(
-                "test -w /var/lib/apt/lists && test -w /var/lib/dpkg",
+                "tmp=\"/var/lib/apt/lists/.substrate_writecheck.$$\"; (umask 022; : >\"$tmp\") && rm -f \"$tmp\"",
             )])?;
             if !guest_can_mutate_apt_state {
                 println!(
