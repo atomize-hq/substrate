@@ -310,12 +310,58 @@ echo "Waiting for run to start..." >&2
 started_lookup_at="$(date +%s)"
 RUN_ID=""
 checked_runs=""
+fallback_run_id=""
 while [[ -z "${RUN_ID}" ]]; do
     # Do not rely on local time-based filtering; runner clocks can drift relative to GitHub's
     # createdAt timestamps and cause false "run_lookup_timeout" failures.
     candidates_json="$(run_with_timeout "${GH_TIMEOUT_SECS}" gh run list --workflow "${WORKFLOW}" --event workflow_dispatch --branch "${WORKFLOW_REF}" --limit 20 --json databaseId,createdAt -q '.' 2>/dev/null || true)"
 
     if [[ -n "${candidates_json}" ]]; then
+        # Best-effort fallback: prefer the newest run created after we dispatched, otherwise
+        # fall back to the newest run overall on the workflow ref. This avoids false negatives
+        # when job logs are temporarily unavailable for matching.
+        fallback_run_id="$(
+            python3 - "${candidates_json}" "${dispatch_started}" <<'PY' || true
+import json
+import sys
+from datetime import datetime, timezone
+
+raw = sys.argv[1]
+dispatch_started_raw = sys.argv[2]
+
+try:
+    data = json.loads(raw)
+except Exception:
+    raise SystemExit(0)
+
+def parse_ts(s: str):
+    # GitHub timestamps are ISO8601 with Z.
+    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+
+try:
+    dispatch_started = parse_ts(dispatch_started_raw)
+except Exception:
+    dispatch_started = None
+
+for r in data:
+    rid = r.get("databaseId")
+    created_at = r.get("createdAt")
+    if rid is None or not created_at or dispatch_started is None:
+        continue
+    try:
+        if parse_ts(created_at) >= dispatch_started:
+            print(rid)
+            raise SystemExit(0)
+    except Exception:
+        continue
+
+if data and isinstance(data, list):
+    rid = data[0].get("databaseId")
+    if rid is not None:
+        print(rid)
+PY
+        )"
+
         candidate_ids="$(python3 - "${candidates_json}" <<'PY' || true
 import json
 import sys
@@ -363,6 +409,12 @@ PY
 
     now="$(date +%s)"
     if [[ $((now - started_lookup_at)) -ge "${RUN_LOOKUP_TIMEOUT_SECS}" ]]; then
+        if [[ -n "${fallback_run_id}" ]]; then
+            echo "WARN: Could not confirm run checkout ref via logs after ${RUN_LOOKUP_TIMEOUT_SECS}s; proceeding with newest candidate run id: ${fallback_run_id}" >&2
+            RUN_ID="${fallback_run_id}"
+            break
+        fi
+
         ERROR_KIND="run_lookup_timeout"
         die "Could not find a matching workflow run for ${TEMP_BRANCH} after ${RUN_LOOKUP_TIMEOUT_SECS}s"
     fi
