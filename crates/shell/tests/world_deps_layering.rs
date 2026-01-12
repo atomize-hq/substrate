@@ -218,6 +218,7 @@ impl LayeringFixture {
                         "command": self.guest_script(tool, marker_name, path.file_name().unwrap_or_default().to_string_lossy().as_ref())
                     },
                     "guest_install": {
+                        "class": "user_space",
                         "custom": self.install_script(tool, marker_name, path.file_name().unwrap_or_default().to_string_lossy().as_ref())
                     }
                 }),
@@ -226,7 +227,7 @@ impl LayeringFixture {
 
         let manifest = Value::Object({
             let mut root = Map::new();
-            root.insert("version".into(), json!(1));
+            root.insert("version".into(), json!(2));
             root.insert("managers".into(), Value::Object(managers));
             root
         });

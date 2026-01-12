@@ -9,7 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 fn write_manager_manifest(fixture: &ShellEnvFixture, tools: &[&str]) -> PathBuf {
-    let mut contents = String::from("version: 1\n\nmanagers:\n");
+    let mut contents = String::from("version: 2\n\nmanagers:\n");
     for tool in tools {
         contents.push_str(&format!(
             "  - name: {tool}\n    guest_detect:\n      command: \"true\"\n"
@@ -20,7 +20,7 @@ fn write_manager_manifest(fixture: &ShellEnvFixture, tools: &[&str]) -> PathBuf 
 
 fn write_empty_world_deps_overlay(fixture: &ShellEnvFixture) -> PathBuf {
     let path = fixture.home().join("world-deps.overlay.yaml");
-    fs::write(&path, "version: 1\nmanagers: []\n").expect("write world deps overlay");
+    fs::write(&path, "version: 2\nmanagers: []\n").expect("write world deps overlay");
     path
 }
 

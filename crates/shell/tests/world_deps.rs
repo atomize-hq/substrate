@@ -212,6 +212,7 @@ impl WorldDepsFixture {
                         "command": self.guest_script(tool)
                     },
                     "guest_install": {
+                        "class": "user_space",
                         "custom": self.install_script(tool, tool)
                     }
                 }),
@@ -220,7 +221,7 @@ impl WorldDepsFixture {
 
         let manifest = Value::Object({
             let mut root = Map::new();
-            root.insert("version".into(), json!(1));
+            root.insert("version".into(), json!(2));
             root.insert("managers".into(), Value::Object(managers));
             root
         });
@@ -245,6 +246,7 @@ impl WorldDepsFixture {
                     "command": self.guest_script(tool)
                 },
                 "guest_install": {
+                    "class": "user_space",
                     "custom": self.install_script(tool, tool)
                 }
             }),
@@ -252,7 +254,7 @@ impl WorldDepsFixture {
 
         let manifest = Value::Object({
             let mut root = Map::new();
-            root.insert("version".into(), json!(1));
+            root.insert("version".into(), json!(2));
             root.insert("managers".into(), Value::Object(managers));
             root
         });
@@ -267,7 +269,7 @@ impl WorldDepsFixture {
 
     fn write_manager_manifest_for_init(&self) {
         let contents = format!(
-            "version: 1\nmanagers:\n  - name: manager-init-test\n    detect:\n      script: \"exit 0\"\n    init:\n      shell: |\n        export {marker_env}=\"{marker_value}\"\n        export PATH=\"{manager_bin}:$PATH\"\n",
+            "version: 2\nmanagers:\n  - name: manager-init-test\n    detect:\n      script: \"exit 0\"\n    init:\n      shell: |\n        export {marker_env}=\"{marker_value}\"\n        export PATH=\"{manager_bin}:$PATH\"\n",
             marker_env = MANAGER_INIT_MARKER_ENV,
             marker_value = MANAGER_INIT_MARKER_VALUE,
             manager_bin = self.manager_bin_dir.display()
@@ -282,7 +284,7 @@ impl WorldDepsFixture {
         let guest_detect = self.guest_script_with_marker(tool, &marker_name, "-overlay");
         let overlay = Value::Object({
             let mut root = Map::new();
-            root.insert("version".into(), json!(1));
+            root.insert("version".into(), json!(2));
             root.insert(
                 "managers".into(),
                 Value::Object({
@@ -294,6 +296,7 @@ impl WorldDepsFixture {
                                 "command": guest_detect
                             },
                             "guest_install": {
+                                "class": "user_space",
                                 "custom": script
                             }
                         }),
@@ -428,7 +431,7 @@ fn write_minimal_manifest(path: &Path) {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).expect("manifest parent dir");
     }
-    fs::write(path, "version: 1\nmanagers: {}\n").expect("write manifest");
+    fs::write(path, "version: 2\nmanagers: {}\n").expect("write manifest");
 }
 
 fn canonicalize_or(path: &Path) -> PathBuf {
