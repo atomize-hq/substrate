@@ -1,6 +1,7 @@
 use super::*;
 use crate::manager_manifest::schema::{
     RawDetectSpec, RawGuestDetect, RawInitSpec, RawInstallSpec, RawManagerSpec,
+    RawSystemPackagesSpec,
 };
 use proptest::collection::hash_map;
 use proptest::prelude::*;
@@ -14,7 +15,7 @@ fn loads_manifest_with_overlay_and_sorting() {
     let overlay_path = dir.path().join("overlay.yaml");
 
     let base = r#"
-version: 1
+version: 2
 managers:
   - name: nvm
     priority: 20
@@ -35,7 +36,7 @@ managers:
 "#;
 
     let overlay = r#"
-version: 1
+version: 2
 managers:
   nvm:
     priority: 1
@@ -56,7 +57,7 @@ managers:
     );
 
     let manifest = ManagerManifest::load(&base_path, Some(&overlay_path)).unwrap();
-    assert_eq!(manifest.version, 1);
+    assert_eq!(manifest.version, 2);
     assert_eq!(manifest.managers.len(), 3);
     assert_eq!(manifest.managers[0].name, "nvm");
     assert_eq!(manifest.managers[0].priority, 1);
@@ -78,7 +79,7 @@ fn expands_env_and_tilde_in_detect_fields() {
     fs::write(
         &base_path,
         r#"
-version: 1
+version: 2
 managers:
   envy:
     detect:
@@ -123,7 +124,7 @@ fn overlay_merges_detect_env_and_install_spec() {
     fs::write(
         &base_path,
         r#"
-version: 1
+version: 2
 managers:
   direnv:
     detect:
@@ -136,14 +137,15 @@ managers:
     guest_detect:
       command: "direnv version"
     guest_install:
-      apt: "sudo apt install direnv"
+      class: user_space
+      custom: "base-install.sh"
 "#,
     )
     .unwrap();
     fs::write(
         &overlay_path,
         r#"
-version: 1
+version: 2
 managers:
   direnv:
     detect:
@@ -151,6 +153,7 @@ managers:
       env:
         DIRENV_HOME: "/overlay/home"
     guest_install:
+      class: user_space
       custom: "run-me.sh"
 "#,
     )
@@ -175,8 +178,10 @@ managers:
         Some("/overlay/home")
     );
     let install = direnv.guest.install.as_ref().expect("install spec");
-    assert_eq!(install.apt.as_deref(), Some("sudo apt install direnv"));
+    assert_eq!(install.class, InstallClass::UserSpace);
     assert_eq!(install.custom.as_deref(), Some("run-me.sh"));
+    assert!(install.system_packages.is_none());
+    assert!(install.manual_instructions.is_none());
 }
 
 #[test]
@@ -187,7 +192,7 @@ fn overlay_version_mismatch_returns_error() {
     fs::write(
         &base_path,
         r#"
-version: 1
+version: 2
 managers:
   base:
     detect: {}
@@ -199,7 +204,7 @@ managers:
     fs::write(
         &overlay_path,
         r#"
-version: 2
+version: 3
 managers:
   base:
     detect: {}
@@ -212,7 +217,7 @@ managers:
     let err = ManagerManifest::load(&base_path, Some(&overlay_path)).unwrap_err();
     assert!(err
         .to_string()
-        .contains("overlay manifest version 2 does not match base 1"));
+        .contains("overlay manifest version 3 does not match base 2"));
 }
 
 #[test]
@@ -222,7 +227,7 @@ fn missing_overlay_is_ignored() {
     fs::write(
         &base_path,
         r#"
-version: 1
+version: 2
 managers:
   - name: only
     detect:
@@ -246,7 +251,7 @@ fn duplicate_names_return_error() {
     fs::write(
         &base_path,
         r#"
-version: 1
+version: 2
 managers:
   - name: dup
     detect: {}
@@ -271,7 +276,7 @@ fn invalid_regex_is_reported() {
     fs::write(
         &base_path,
         r#"
-version: 1
+version: 2
 managers:
   broken:
     detect: {}
@@ -293,7 +298,7 @@ fn resolve_for_platform_trims_init_snippets() {
     fs::write(
         &base_path,
         r#"
-version: 1
+version: 2
 managers:
   shellish:
     detect: {}
@@ -326,7 +331,7 @@ fn tier2_managers_include_complete_metadata() {
     let tier2_str = tier2_root.to_string_lossy().replace('\\', "\\\\");
     let manifest_body = format!(
         r#"
-version: 1
+version: 2
 managers:
   - name: mise
     priority: 9
@@ -347,7 +352,10 @@ managers:
     guest_detect:
       command: "mise --version"
     guest_install:
-      apt: "sudo apt install mise"
+      class: system_packages
+      system_packages:
+        apt:
+          - mise
   - name: rtx
     priority: 12
     detect:
@@ -364,6 +372,7 @@ managers:
     guest_detect:
       command: "rtx --version"
     guest_install:
+      class: user_space
       custom: "curl https://rtx.pub/install.sh | sh"
   - name: rbenv
     priority: 14
@@ -383,7 +392,10 @@ managers:
     guest_detect:
       command: "rbenv --version"
     guest_install:
-      apt: "sudo apt install rbenv"
+      class: system_packages
+      system_packages:
+        apt:
+          - rbenv
   - name: sdkman
     priority: 18
     detect:
@@ -404,6 +416,7 @@ managers:
     guest_detect:
       command: "sdk version"
     guest_install:
+      class: user_space
       custom: "curl -s https://get.sdkman.io | bash"
   - name: bun
     priority: 30
@@ -422,6 +435,7 @@ managers:
     guest_detect:
       command: "bun --version"
     guest_install:
+      class: user_space
       custom: "curl https://bun.sh/install | bash"
   - name: volta
     priority: 22
@@ -441,7 +455,10 @@ managers:
     guest_detect:
       command: "volta --version"
     guest_install:
-      apt: "sudo apt install volta"
+      class: system_packages
+      system_packages:
+        apt:
+          - volta
   - name: goenv
     priority: 35
     detect:
@@ -460,7 +477,7 @@ managers:
     guest_detect:
       command: "goenv --version"
     guest_install:
-      apt: "sudo apt install goenv"
+      class: user_space
       custom: "brew install goenv"
   - name: asdf-node
     priority: 40
@@ -477,6 +494,7 @@ managers:
     guest_detect:
       command: "asdf current nodejs"
     guest_install:
+      class: user_space
       custom: "asdf plugin add nodejs && asdf install nodejs latest"
 "#,
         tier2 = tier2_str
@@ -534,7 +552,15 @@ managers:
         .contains("$MISE_DATA_DIR/bin/mise"));
     assert_eq!(mise.guest.detect_cmd.as_deref(), Some("mise --version"));
     let mise_install = mise.guest.install.as_ref().expect("mise install spec");
-    assert_eq!(mise_install.apt.as_deref(), Some("sudo apt install mise"));
+    assert_eq!(mise_install.class, InstallClass::SystemPackages);
+    assert_eq!(
+        mise_install
+            .system_packages
+            .as_ref()
+            .expect("mise system packages")
+            .apt,
+        vec!["mise".to_string()]
+    );
 
     let home = dirs::home_dir().expect("home directory");
     let rtx = find("rtx");
@@ -582,7 +608,7 @@ managers:
         Some(expected_goenv_root.as_path())
     );
     let install = goenv.guest.install.as_ref().expect("goenv install");
-    assert_eq!(install.apt.as_deref(), Some("sudo apt install goenv"));
+    assert_eq!(install.class, InstallClass::UserSpace);
     assert_eq!(install.custom.as_deref(), Some("brew install goenv"));
 
     let asdf_node = find("asdf-node");
@@ -650,13 +676,22 @@ proptest! {
     }
 }
 
-fn install_from_opts(apt: &Option<String>, custom: &Option<String>) -> Option<RawInstallSpec> {
-    if apt.is_none() && custom.is_none() {
+fn install_from_opts(
+    system_packages_apt: &Option<String>,
+    custom: &Option<String>,
+) -> Option<RawInstallSpec> {
+    if system_packages_apt.is_none() && custom.is_none() {
         None
     } else {
         Some(RawInstallSpec {
-            apt: apt.clone(),
+            class: None,
             custom: custom.clone(),
+            system_packages: system_packages_apt
+                .as_ref()
+                .map(|apt| RawSystemPackagesSpec {
+                    apt: vec![apt.clone()],
+                }),
+            manual_instructions: None,
         })
     }
 }
@@ -785,9 +820,9 @@ proptest! {
             (Some(base), None) => Some(base),
             (None, None) => None,
         };
-        let expected_guest_install_apt = expected_guest_install
+        let expected_guest_install_system_packages = expected_guest_install
             .as_ref()
-            .and_then(|spec| spec.apt.clone());
+            .and_then(|spec| spec.system_packages.as_ref().map(|spec| spec.apt.clone()));
         let expected_guest_install_custom = expected_guest_install
             .as_ref()
             .and_then(|spec| spec.custom.clone());
@@ -811,8 +846,8 @@ proptest! {
             merged
                 .guest_install
                 .as_ref()
-                .and_then(|spec| spec.apt.clone()),
-            expected_guest_install_apt
+                .and_then(|spec| spec.system_packages.as_ref().map(|spec| spec.apt.clone())),
+            expected_guest_install_system_packages
         );
         assert_eq!(
             merged

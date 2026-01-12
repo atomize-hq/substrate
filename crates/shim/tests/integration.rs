@@ -638,7 +638,7 @@ fn manager_hint_logging_records_entry() -> Result<()> {
 
     fs::write(
         &manifest_path,
-        r#"version: 1
+        r#"version: 2
 managers:
   - name: nvm
     priority: 10
@@ -735,7 +735,7 @@ fn tier2_manager_hint_logging_records_entry() -> Result<()> {
 
     fs::write(
         &manifest_path,
-        r#"version: 1
+        r#"version: 2
 managers:
   - name: bun
     priority: 15
@@ -837,7 +837,7 @@ fn manager_hint_skipped_when_world_disabled() -> Result<()> {
 
     fs::write(
         &manifest_path,
-        r#"version: 1
+        r#"version: 2
 managers:
   - name: direnv
     priority: 5

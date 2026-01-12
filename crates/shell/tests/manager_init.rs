@@ -13,7 +13,7 @@ fn tier2_managers_generate_snippets() {
     let manifest_path = dir.path().join("manager_hooks.yaml");
     fs::write(
         &manifest_path,
-        r#"version: 1
+        r#"version: 2
 managers:
   - name: mise
     priority: 9
