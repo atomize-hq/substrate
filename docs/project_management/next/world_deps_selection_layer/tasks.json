@@ -754,7 +754,7 @@
       "name": "WDL2 — Integration core",
       "type": "integration",
       "phase": "WDL2",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge WDL2 code+tests, reconcile to S2, and make the slice green on the primary dev platform.",
       "references": [
         "docs/project_management/next/world_deps_selection_layer/plan.md",
