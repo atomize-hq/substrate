@@ -274,7 +274,7 @@ mod tests {
         let manifest_path = temp.path().join("manager_hooks.yaml");
         fs::write(
             &manifest_path,
-            r#"version: 1
+            r#"version: 2
 managers:
   - name: Tool
     detect: {}
@@ -310,7 +310,7 @@ managers:
         let manifest_path = temp.path().join("manager_hooks.yaml");
         fs::write(
             &manifest_path,
-            r#"version: 1
+            r#"version: 2
 managers:
   - name: Disabled
     detect: {}

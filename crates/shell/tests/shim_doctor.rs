@@ -9,7 +9,7 @@ use std::fs;
 
 #[test]
 fn shim_doctor_human_mode_reports_status_and_path_diagnostics() {
-    let manifest = r#"version: 1
+    let manifest = r#"version: 2
 managers:
   - name: DetectedManager
     priority: 10
@@ -68,6 +68,7 @@ managers:
             {
                 "name": "node",
                 "host_detected": true,
+                "install_class": "user_space",
                 "provider": "apt",
                 "guest": {"status": "missing"}
             }
@@ -127,7 +128,7 @@ managers:
 
 #[test]
 fn shim_doctor_json_reports_tier2_managers() {
-    let manifest = r#"version: 1
+    let manifest = r#"version: 2
 managers:
   - name: Bun
     priority: 10
@@ -212,7 +213,7 @@ managers:
 fn shim_doctor_json_mode_surfaces_states_hints_and_path_details() {
     let missing_file = "/nonexistent/path/for/json-test";
     let manifest = format!(
-        r#"version: 1
+        r#"version: 2
 managers:
   - name: JsonDetected
     priority: 1
@@ -356,7 +357,7 @@ managers:
 
 #[test]
 fn shim_doctor_reports_world_backend_and_deps_errors() {
-    let manifest = r#"version: 1
+    let manifest = r#"version: 2
 managers:
   - name: SampleManager
     priority: 1
@@ -470,7 +471,7 @@ managers:
 
 #[test]
 fn shim_doctor_repair_appends_snippet_and_creates_backup_files() {
-    let manifest = r#"version: 1
+    let manifest = r#"version: 2
 managers:
   - name: RepairManager
     priority: 1
@@ -555,7 +556,7 @@ managers:
 
 #[test]
 fn shim_doctor_marks_world_deps_skipped_when_no_world_requested() {
-    let manifest = r#"version: 1
+    let manifest = r#"version: 2
 managers:
   - name: SkipWorld
     priority: 1
@@ -605,7 +606,7 @@ managers:
 
 #[test]
 fn shim_doctor_json_surfaces_world_fs_mode_details() {
-    let manifest = r#"version: 1
+    let manifest = r#"version: 2
 managers:
   - name: DetectedManager
     priority: 1
@@ -678,7 +679,7 @@ managers:
 
 #[test]
 fn shim_doctor_json_surfaces_world_socket_and_landlock_details() {
-    let manifest = r#"version: 1
+    let manifest = r#"version: 2
 managers:
   - name: DetectedManager
     priority: 1

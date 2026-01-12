@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 use std::fs;
 
 fn sample_manifest() -> &'static str {
-    r#"version: 1
+    r#"version: 2
 managers:
   - name: HealthyManager
     priority: 10
@@ -35,7 +35,7 @@ managers:
 }
 
 fn parity_manifest() -> &'static str {
-    r#"version: 1
+    r#"version: 2
 managers:
   - name: direnv
     priority: 10
@@ -96,6 +96,7 @@ fn parity_world_deps_report(fixture: &DoctorFixture) -> Value {
             {
                 "name": "direnv",
                 "host_detected": false,
+                "install_class": "system_packages",
                 "provider": "custom",
                 "guest": {
                     "status": "missing",
@@ -105,6 +106,7 @@ fn parity_world_deps_report(fixture: &DoctorFixture) -> Value {
             {
                 "name": "asdf",
                 "host_detected": true,
+                "install_class": "user_space",
                 "provider": "custom",
                 "guest": {
                     "status": "missing",
@@ -114,6 +116,7 @@ fn parity_world_deps_report(fixture: &DoctorFixture) -> Value {
             {
                 "name": "conda",
                 "host_detected": false,
+                "install_class": "user_space",
                 "provider": "custom",
                 "guest": {
                     "status": "present"
@@ -122,6 +125,7 @@ fn parity_world_deps_report(fixture: &DoctorFixture) -> Value {
             {
                 "name": "pyenv",
                 "host_detected": true,
+                "install_class": "system_packages",
                 "provider": "custom",
                 "guest": {
                     "status": "present"
@@ -164,6 +168,7 @@ fn health_json_reports_summary_details() {
             {
                 "name": "bun",
                 "host_detected": false,
+                "install_class": "user_space",
                 "provider": "custom",
                 "guest": {"status": "missing"}
             }
@@ -243,6 +248,7 @@ fn health_human_summary_highlights_failures() {
             {
                 "name": "bun",
                 "host_detected": false,
+                "install_class": "user_space",
                 "provider": "custom",
                 "guest": {"status": "missing"}
             }
@@ -383,6 +389,7 @@ fn health_json_reports_world_backend_error_and_guest_missing_tools() {
             {
                 "name": "HealthyManager",
                 "host_detected": true,
+                "install_class": "user_space",
                 "provider": "custom",
                 "guest": {
                     "status": "missing",

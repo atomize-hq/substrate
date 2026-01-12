@@ -3,8 +3,8 @@ mod schema;
 mod validator;
 
 pub use schema::{
-    DetectSpec, GuestSpec, InitSpec, InstallSpec, ManagerManifest, ManagerSpec, Platform,
-    RegexPattern,
+    DetectSpec, GuestSpec, InitSpec, InstallClass, InstallSpec, ManagerManifest, ManagerSpec,
+    Platform, RegexPattern, SystemPackagesSpec, MANAGER_MANIFEST_VERSION,
 };
 
 #[cfg(test)]

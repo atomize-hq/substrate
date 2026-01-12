@@ -9,6 +9,7 @@ use std::{
 };
 
 pub const DEFAULT_PRIORITY: u8 = 50;
+pub const MANAGER_MANIFEST_VERSION: u32 = 2;
 
 /// Platform-specific view selection when resolving manager manifests.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -47,7 +48,11 @@ pub struct ManagerSpec {
 }
 
 impl ManagerSpec {
-    pub(crate) fn from_raw(name: String, spec: RawManagerSpec) -> Result<Self> {
+    pub(crate) fn from_raw(
+        name: String,
+        spec: RawManagerSpec,
+        manifest_version: u32,
+    ) -> Result<Self> {
         let detect = DetectSpec::from_raw(spec.detect);
         let init = InitSpec::from_raw(spec.init);
         let errors = spec
@@ -59,6 +64,9 @@ impl ManagerSpec {
             })
             .collect::<Result<Vec<_>>>()?;
 
+        let guest = GuestSpec::from_raw(spec.guest_detect, spec.guest_install, manifest_version)
+            .with_context(|| format!("manager `{}` guest spec is invalid", name))?;
+
         Ok(Self {
             name,
             priority: spec.priority.unwrap_or(DEFAULT_PRIORITY),
@@ -66,7 +74,7 @@ impl ManagerSpec {
             init,
             errors,
             repair_hint: spec.repair_hint,
-            guest: GuestSpec::from_raw(spec.guest_detect, spec.guest_install),
+            guest,
         })
     }
 }
@@ -142,30 +150,149 @@ impl GuestSpec {
     pub(crate) fn from_raw(
         detect: Option<RawGuestDetect>,
         install: Option<RawInstallSpec>,
-    ) -> Self {
-        Self {
-            detect_cmd: detect.and_then(|spec| spec.command),
-            install: install.and_then(InstallSpec::from_raw),
+        manifest_version: u32,
+    ) -> Result<Self> {
+        let detect_cmd = detect.and_then(|spec| spec.command);
+        let install = InstallSpec::from_raw(install, detect_cmd.as_deref(), manifest_version)?;
+        Ok(Self {
+            detect_cmd,
+            install,
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct InstallSpec {
+    pub class: InstallClass,
+    pub custom: Option<String>,
+    pub system_packages: Option<SystemPackagesSpec>,
+    pub manual_instructions: Option<String>,
+}
+
+impl InstallSpec {
+    pub(crate) fn from_raw(
+        raw: Option<RawInstallSpec>,
+        guest_detect_cmd: Option<&str>,
+        manifest_version: u32,
+    ) -> Result<Option<Self>> {
+        let Some(raw) = raw else {
+            return Ok(None);
+        };
+
+        if manifest_version != MANAGER_MANIFEST_VERSION {
+            anyhow::bail!(
+                "manifest version must be {} (got {})",
+                MANAGER_MANIFEST_VERSION,
+                manifest_version
+            );
+        }
+
+        let class = raw.class.ok_or_else(|| {
+            anyhow::anyhow!("guest_install.class is required (user_space|system_packages|manual|copy_from_host)")
+        })?;
+
+        match class {
+            InstallClass::UserSpace => {
+                if raw.system_packages.is_some() || raw.manual_instructions.is_some() {
+                    anyhow::bail!(
+                        "guest_install.class=user_space forbids system_packages/manual_instructions"
+                    );
+                }
+                let custom = raw
+                    .custom
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty());
+                if custom.is_none() {
+                    anyhow::bail!("guest_install.class=user_space requires custom");
+                }
+                Ok(Some(Self {
+                    class,
+                    custom,
+                    system_packages: None,
+                    manual_instructions: None,
+                }))
+            }
+            InstallClass::SystemPackages => {
+                if raw.custom.is_some() || raw.manual_instructions.is_some() {
+                    anyhow::bail!(
+                        "guest_install.class=system_packages forbids custom/manual_instructions"
+                    );
+                }
+                if guest_detect_cmd.is_none() {
+                    anyhow::bail!(
+                        "guest_install.class=system_packages requires guest_detect.command"
+                    );
+                }
+                let system_packages = raw.system_packages.ok_or_else(|| {
+                    anyhow::anyhow!("guest_install.class=system_packages requires system_packages")
+                })?;
+                let system_packages = SystemPackagesSpec::from_raw(system_packages)?;
+                Ok(Some(Self {
+                    class,
+                    custom: None,
+                    system_packages: Some(system_packages),
+                    manual_instructions: None,
+                }))
+            }
+            InstallClass::Manual => {
+                if raw.custom.is_some() || raw.system_packages.is_some() {
+                    anyhow::bail!("guest_install.class=manual forbids custom/system_packages");
+                }
+                let manual_instructions = raw
+                    .manual_instructions
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty());
+                if manual_instructions.is_none() {
+                    anyhow::bail!("guest_install.class=manual requires manual_instructions");
+                }
+                Ok(Some(Self {
+                    class,
+                    custom: None,
+                    system_packages: None,
+                    manual_instructions,
+                }))
+            }
+            InstallClass::CopyFromHost => {
+                if raw.custom.is_some()
+                    || raw.system_packages.is_some()
+                    || raw.manual_instructions.is_some()
+                {
+                    anyhow::bail!(
+                        "guest_install.class=copy_from_host forbids custom/system_packages/manual_instructions"
+                    );
+                }
+                Ok(Some(Self {
+                    class,
+                    custom: None,
+                    system_packages: None,
+                    manual_instructions: None,
+                }))
+            }
         }
     }
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct InstallSpec {
-    pub apt: Option<String>,
-    pub custom: Option<String>,
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InstallClass {
+    UserSpace,
+    SystemPackages,
+    Manual,
+    CopyFromHost,
 }
 
-impl InstallSpec {
-    pub(crate) fn from_raw(raw: RawInstallSpec) -> Option<Self> {
-        if raw.apt.is_none() && raw.custom.is_none() {
-            None
-        } else {
-            Some(Self {
-                apt: raw.apt,
-                custom: raw.custom,
-            })
+#[derive(Clone, Debug)]
+pub struct SystemPackagesSpec {
+    pub apt: Vec<String>,
+}
+
+impl SystemPackagesSpec {
+    fn from_raw(raw: RawSystemPackagesSpec) -> Result<Self> {
+        let apt = raw.apt;
+        if apt.is_empty() {
+            anyhow::bail!("guest_install.system_packages.apt must be non-empty");
         }
+        Ok(Self { apt })
     }
 }
 
@@ -314,15 +441,44 @@ impl RawGuestDetect {
 
 #[derive(Debug, Default, Deserialize)]
 pub(crate) struct RawInstallSpec {
-    pub(crate) apt: Option<String>,
+    #[serde(default)]
+    pub(crate) class: Option<InstallClass>,
     pub(crate) custom: Option<String>,
+    pub(crate) system_packages: Option<RawSystemPackagesSpec>,
+    pub(crate) manual_instructions: Option<String>,
 }
 
 impl RawInstallSpec {
     pub(crate) fn merge(self, overlay: RawInstallSpec) -> RawInstallSpec {
         RawInstallSpec {
-            apt: overlay.apt.or(self.apt),
+            class: overlay.class.or(self.class),
             custom: overlay.custom.or(self.custom),
+            system_packages: match (self.system_packages, overlay.system_packages) {
+                (Some(base), Some(next)) => Some(base.merge(next)),
+                (None, Some(next)) => Some(next),
+                (Some(base), None) => Some(base),
+                (None, None) => None,
+            },
+            manual_instructions: overlay.manual_instructions.or(self.manual_instructions),
+        }
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RawSystemPackagesSpec {
+    #[serde(default)]
+    pub(crate) apt: Vec<String>,
+}
+
+impl RawSystemPackagesSpec {
+    pub(crate) fn merge(self, overlay: RawSystemPackagesSpec) -> RawSystemPackagesSpec {
+        RawSystemPackagesSpec {
+            apt: if overlay.apt.is_empty() {
+                self.apt
+            } else {
+                overlay.apt
+            },
         }
     }
 }
