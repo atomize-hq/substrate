@@ -265,7 +265,9 @@ GH_TIMEOUT_SECS="${FEATURE_SMOKE_GH_TIMEOUT_SECS:-120}"
 WATCH_INTERVAL_SECS="${FEATURE_SMOKE_WATCH_INTERVAL_SECS:-15}"
 WATCH_TIMEOUT_SECS="${FEATURE_SMOKE_WATCH_TIMEOUT_SECS:-7200}" # 2h
 WATCH_MAX_CONSECUTIVE_ERRORS="${FEATURE_SMOKE_WATCH_MAX_CONSECUTIVE_ERRORS:-20}"
-RUN_LOOKUP_TIMEOUT_SECS="${FEATURE_SMOKE_RUN_LOOKUP_TIMEOUT_SECS:-120}"
+# Under heavy CI load, workflow runs can remain queued long enough that no job logs are available
+# for matching. Allow a longer default to avoid spurious lookup timeouts.
+RUN_LOOKUP_TIMEOUT_SECS="${FEATURE_SMOKE_RUN_LOOKUP_TIMEOUT_SECS:-600}"
 
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 safe_feature="$(basename "${FEATURE_DIR}")"
