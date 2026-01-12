@@ -22,7 +22,9 @@ function Convert-ToWslPathFragment {
 function Quote-ForBash {
     param([string]$Value)
     if ($null -eq $Value) { return "''" }
-    return "'" + ($Value -replace "'", "'\"'\"'") + "'"
+    # Bash single-quote escape sequence: close-quote, insert '"'"', reopen.
+    $singleQuoteEscape = "'" + '"' + "'" + '"' + "'"
+    return "'" + ($Value -replace "'", $singleQuoteEscape) + "'"
 }
 
 Write-Info "Starting wsl-warm for distro '$DistroName'"
