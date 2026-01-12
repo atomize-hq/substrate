@@ -1,6 +1,6 @@
 # Slice Closeout Gate Report — world_deps_selection_layer / WDL2
 
-Date (UTC): 2026-01-10
+Date (UTC): 2026-01-12
 
 Standards:
 - `docs/project_management/standards/SLICE_CLOSEOUT_GATE_STANDARD.md`
@@ -14,41 +14,47 @@ Slice spec:
 
 ## Status
 
-STATUS: **NOT RUN**
+STATUS: **COMPLETED**
 
 Rule:
 - The `WDL2-integ` task must replace `NOT RUN` with `COMPLETED` and fill every section below.
 
-## Behavior Delta (Existing → New → Why) (NOT RUN)
+## Behavior Delta (Existing → New → Why)
 
-- Existing behavior: NOT RUN
-- New behavior: NOT RUN
-- Why: NOT RUN
-- Links: NOT RUN
+- Existing behavior: No `substrate world deps provision` command; tools requiring `install_class=system_packages` could not be explicitly provisioned by Substrate.
+- New behavior: Adds `substrate world deps provision` to explicitly provision apt system packages for selected `system_packages` tools (or `--all`) on macOS (Lima guest) and Windows (WSL); Linux host backend fails with exit `4` and prints required packages + manual install guidance.
+- Why: ADR-0002 / S2 require provisioning-time explicit system package installs and forbids implicit OS package mutation during `sync/install` (and forbids Linux host package mutation).
+- Links:
+  - Spec: `docs/project_management/next/world_deps_selection_layer/S2-spec-system-packages-provisioning.md`
+  - CI behavior smoke: https://github.com/atomize-hq/substrate/actions/runs/20926130431
+  - Integrated HEAD: `f4a05c40dbd2b3d225fce1e5132059eb956a2f75`
 
-## Spec Parity (No Drift) (NOT RUN)
+## Spec Parity (No Drift)
 
-- Acceptance criteria satisfied: NOT RUN
-- Spec changes during the slice recorded (with rationale): NOT RUN
+- Acceptance criteria satisfied: YES
+- Spec changes during the slice recorded (with rationale): NONE
 
-## Checks Run (Evidence) (NOT RUN)
+## Checks Run (Evidence)
 
-- `cargo fmt`: NOT RUN
-- `cargo clippy --workspace --all-targets -- -D warnings`: NOT RUN
-- Relevant tests: NOT RUN
-- `make integ-checks`: NOT RUN
+- `cargo fmt`: PASS
+- `cargo clippy --workspace --all-targets -- -D warnings`: PASS
+- Relevant tests:
+  - `cargo test -p substrate-shell --test world_deps`
+  - `cargo test -p world-agent`
+  - `cargo test -p world`
+- `make integ-checks`: PASS
 
-## Cross-Platform Smoke (NOT RUN)
+## Cross-Platform Smoke
 
 Record run ids/URLs for required behavior platforms:
-- Linux: NOT RUN
-- macOS: NOT RUN
-- Windows: NOT RUN
+- Linux: https://github.com/atomize-hq/substrate/actions/runs/20926130431 (success)
+- macOS: https://github.com/atomize-hq/substrate/actions/runs/20926130431 (success)
+- Windows: https://github.com/atomize-hq/substrate/actions/runs/20926130431 (success)
 
-## Smoke ↔ Manual Parity (NOT RUN)
+## Smoke ↔ Manual Parity
 
-- Smoke scripts run the same commands/workflows as the manual testing playbook (minimal viable subset): NOT RUN
-- Smoke scripts validate exit codes and key output: NOT RUN
+- Smoke scripts run the same commands/workflows as the manual testing playbook (minimal viable subset): YES
+- Smoke scripts validate exit codes and key output: YES
 
-Notes: NOT RUN
-
+Notes:
+- Behavior smoke passed for `linux`, `macos`, and `windows` in a single dispatched run: https://github.com/atomize-hq/substrate/actions/runs/20926130431
