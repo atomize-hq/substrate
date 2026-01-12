@@ -18,6 +18,17 @@ apt-get install -y \
     unzip \
     ca-certificates
 
+if ! command -v cargo >/dev/null 2>&1; then
+    echo "[INFO] Installing Rust toolchain via rustup (required to build world-agent)"
+    curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.89.0
+fi
+
+# Ensure cargo/rustup are on PATH for subsequent provisioning steps.
+if [[ -f /root/.cargo/env ]]; then
+    # shellcheck disable=SC1091
+    . /root/.cargo/env
+fi
+
 install -d -m 0700 /run/substrate
 install -d -m 0755 /etc/substrate
 install -d -m 0755 /var/log/substrate
