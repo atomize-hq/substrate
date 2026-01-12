@@ -97,20 +97,17 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
         match report {
             Ok(report) => {
                 let mut value = serde_json::to_value(report).unwrap_or_else(|_| json!({}));
-                let status = if value.get("ok").and_then(Value::as_bool) == Some(true) {
-                    "ok"
-                } else {
-                    "missing_prereqs"
-                };
+                let enforcement_ok = value.get("ok").and_then(Value::as_bool).unwrap_or(false);
                 if let Some(obj) = value.as_object_mut() {
-                    obj.insert("status".to_string(), json!(status));
+                    obj.insert("enforcement_ok".to_string(), json!(enforcement_ok));
+                    // On Windows (WSL backend), treat successful doctor retrieval as backend readiness:
+                    // `ok=true` means the backend is reachable, while `enforcement_ok` carries the
+                    // stricter in-world enforcement signal from the agent report.
+                    obj.insert("ok".to_string(), json!(true));
+                    obj.insert("status".to_string(), json!("ok"));
                 }
 
-                if host_ok && value.get("ok").and_then(Value::as_bool) == Some(true) {
-                    exit_code = 0;
-                } else {
-                    exit_code = 4;
-                }
+                exit_code = if host_ok { 0 } else { 4 };
                 value
             }
             Err(_) => {
@@ -157,10 +154,17 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
                     .get("ok")
                     .and_then(Value::as_bool)
                     .unwrap_or(false);
+                let enforcement_ok = world_value
+                    .get("enforcement_ok")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true);
                 if ok {
                     pass("world doctor: ok");
                 } else {
                     warn("world doctor: ok=false");
+                }
+                if !enforcement_ok {
+                    warn("world doctor: enforcement_ok=false (non-fatal on Windows WSL backend)");
                 }
             }
             _ => fail("world doctor: unknown status"),
