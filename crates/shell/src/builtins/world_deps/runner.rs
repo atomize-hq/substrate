@@ -876,6 +876,9 @@ impl WorldDepsRunner {
                 "test -w /var/lib/apt/lists && test -w /var/lib/dpkg",
             )])?;
             if !guest_can_mutate_apt_state {
+                println!(
+                    "substrate: world deps provision: falling back to wsl.exe (root) for apt (guest agent lacks write access to /var/lib/apt)"
+                );
                 provision_system_packages_via_wsl(&packages, verbose)?;
                 println!("\u{2713} system packages installed");
                 println!("Next: substrate world deps sync");
