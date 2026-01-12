@@ -239,6 +239,7 @@ impl WorldDepsFixture {
         self.write_selection(tools);
     }
 
+    #[cfg(target_os = "linux")]
     fn write_manifest_with_system_packages(&self, system_packages: &[(&str, &[&str])]) {
         let mut managers: Map<String, Value> = Map::new();
         for (tool, packages) in system_packages {
