@@ -60,9 +60,9 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
         match ctx.as_ref() {
             Ok(c) => match (c.ensure_ready.as_ref())() {
                 Ok(()) => (true, None),
-                Err(err) => (false, Some(err.to_string())),
+                Err(err) => (false, Some(format!("{err:#}"))),
             },
-            Err(err) => (false, Some(err.to_string())),
+            Err(err) => (false, Some(format!("{err:#}"))),
         }
     };
 
