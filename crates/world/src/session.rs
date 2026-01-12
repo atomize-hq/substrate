@@ -169,11 +169,16 @@ impl SessionWorld {
         let mut diff_opt: Option<FsDiff> = None;
         let mut fs_strategy_meta: Option<crate::overlayfs::WorldFsStrategyMeta> = None;
 
+        let force_direct_exec = env
+            .get("SUBSTRATE_WORLD_EXEC_FORCE_DIRECT")
+            .is_some_and(|value| is_truthy(value));
+
         // When fs_mode is enforced or heuristics request isolation, run against a persistent overlay
         // so state is consistent across commands within this session.
-        if self.spec.fs_mode == WorldFsMode::ReadOnly
-            || self.spec.fs_mode != WorldFsMode::Writable
-            || self.should_isolate_command(cmd)
+        if !force_direct_exec
+            && (self.spec.fs_mode == WorldFsMode::ReadOnly
+                || self.spec.fs_mode != WorldFsMode::Writable
+                || self.should_isolate_command(cmd))
         {
             let merged_dir = self.ensure_overlay_mounted()?;
             fs_strategy_meta = crate::overlayfs::world_fs_strategy_meta(&self.id);
@@ -362,6 +367,13 @@ impl SessionWorld {
         // TODO: Implement policy application
         Ok(())
     }
+}
+
+fn is_truthy(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes"
+    )
 }
 
 impl Drop for SessionWorld {
