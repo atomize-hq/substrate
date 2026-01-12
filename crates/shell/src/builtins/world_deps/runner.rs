@@ -13,8 +13,8 @@ use super::selection::{
 };
 use super::state::WorldState;
 use crate::{
-    WorldDepsAction, WorldDepsCmd, WorldDepsInitArgs, WorldDepsInstallArgs, WorldDepsSelectArgs,
-    WorldDepsStatusArgs, WorldDepsSyncArgs,
+    WorldDepsAction, WorldDepsCmd, WorldDepsInitArgs, WorldDepsInstallArgs, WorldDepsProvisionArgs,
+    WorldDepsSelectArgs, WorldDepsStatusArgs, WorldDepsSyncArgs,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use std::collections::HashSet;
@@ -39,6 +39,7 @@ pub fn run(cmd: &WorldDepsCmd, cli_no_world: bool, cli_force_world: bool) -> i32
             WorldDepsAction::Status(args) => runner.run_status(args),
             WorldDepsAction::Install(args) => runner.run_install(args),
             WorldDepsAction::Sync(args) => runner.run_sync(args),
+            WorldDepsAction::Provision(args) => runner.run_provision(args),
             WorldDepsAction::Init(args) => runner.run_init(args),
             WorldDepsAction::Select(args) => runner.run_select(args),
         }
@@ -54,6 +55,11 @@ pub fn run(cmd: &WorldDepsCmd, cli_no_world: bool, cli_force_world: bool) -> i32
                 );
                 eprintln!("Underlying error: {:#}", err);
             } else if code == 3 {
+                if cfg!(target_os = "macos") {
+                    eprintln!("Remediation:\n  - Run: scripts/mac/lima-warm.sh");
+                } else if cfg!(windows) {
+                    eprintln!("Remediation:\n  - Run: scripts/windows/wsl-warm.ps1");
+                }
                 if let Some(reason) = world_backend_unavailable_reason(&err) {
                     let header = if cfg!(target_os = "macos") {
                         "substrate: world backend unavailable for world deps on macOS; run `substrate world doctor --json` to inspect backend status, then retry."
@@ -85,6 +91,9 @@ fn world_deps_exit_code(err: &anyhow::Error) -> i32 {
     if err.is::<WorldDepsUnmetPrerequisiteError>() {
         return 4;
     }
+    if err.is::<WorldDepsProvisionUnsupportedError>() {
+        return 4;
+    }
     if err.is::<WorldDepsBackendRequiredError>() {
         return 3;
     }
@@ -102,9 +111,16 @@ fn world_deps_exit_code(err: &anyhow::Error) -> i32 {
 
 fn looks_like_world_deps_hardening_violation(err: &anyhow::Error) -> bool {
     let mut current: Option<&(dyn std::error::Error + 'static)> = Some(err.as_ref());
+    let hardening_paths = [
+        "/var/lib/substrate/world-deps",
+        "/var/lib/apt",
+        "/var/cache/apt",
+        "/var/lib/dpkg",
+        "/etc/apt",
+    ];
     while let Some(e) = current {
         let msg = e.to_string();
-        if msg.contains("/var/lib/substrate/world-deps")
+        if hardening_paths.iter().any(|path| msg.contains(path))
             && (msg.contains("Permission denied")
                 || msg.contains("permission denied")
                 || msg.contains("Read-only file system")
@@ -192,6 +208,19 @@ impl std::fmt::Display for WorldDepsUnmetPrerequisiteError {
 }
 
 impl std::error::Error for WorldDepsUnmetPrerequisiteError {}
+
+#[derive(Debug)]
+struct WorldDepsProvisionUnsupportedError {
+    message: String,
+}
+
+impl std::fmt::Display for WorldDepsProvisionUnsupportedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for WorldDepsProvisionUnsupportedError {}
 
 struct ManifestPaths {
     inventory_base: PathBuf,
@@ -395,9 +424,16 @@ impl WorldDepsRunner {
                 .world
                 .reason()
                 .unwrap_or_else(|| "unknown reason".to_string());
+            let remediation = if cfg!(target_os = "macos") {
+                "Hint: run `substrate world doctor --json` to inspect backend status.\nRemediation:\n  - Run: scripts/mac/lima-warm.sh"
+            } else if cfg!(windows) {
+                "Hint: run `substrate world doctor --json` to inspect backend status.\nRemediation:\n  - Run: scripts/windows/wsl-warm.ps1"
+            } else {
+                "Hint: run `substrate world doctor --json` and/or `substrate world enable`, then retry."
+            };
             return Err(anyhow!(WorldDepsBackendRequiredError {
                 message: format!(
-                    "substrate: world backend unavailable for world deps ({reason})\nHint: run `substrate world doctor --json` and/or `substrate world enable`, then retry."
+                    "substrate: world backend unavailable for world deps ({reason})\n{remediation}"
                 ),
             }));
         }
@@ -747,6 +783,92 @@ impl WorldDepsRunner {
         }))
     }
 
+    fn run_provision(&self, args: &WorldDepsProvisionArgs) -> Result<()> {
+        let selection = self.load_active_selection()?;
+        if !selection.configured {
+            print_selection_missing_guidance();
+            return Ok(());
+        }
+
+        let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        if let Some(path) = selection_path_for_human(&selection, &cwd) {
+            let scope = match selection.active_scope {
+                Some(WorldDepsSelectionScope::Workspace) => "workspace",
+                Some(WorldDepsSelectionScope::Global) => "global",
+                None => "unknown",
+            };
+            println!("Selection: {} ({scope})", path.display());
+        }
+        if args.all {
+            println!("Selection ignored due to --all");
+        }
+        println!(
+            "Dry run: {}",
+            if args.dry_run { "enabled" } else { "disabled" }
+        );
+
+        let selected_set: HashSet<String> = selection.selected.iter().cloned().collect();
+        let tools = if args.all {
+            self.manifest.tools.iter().collect::<Vec<_>>()
+        } else {
+            self.manifest
+                .tools
+                .iter()
+                .filter(|tool| selected_set.contains(&tool.name.to_ascii_lowercase()))
+                .collect::<Vec<_>>()
+        };
+
+        let (tool_count, packages) = compute_apt_system_packages(&tools);
+        if packages.is_empty() {
+            println!("No system packages required for the current selection.");
+            return Ok(());
+        }
+
+        println!(
+            "Provisioning system packages for {tool_count} {} (apt):",
+            if tool_count == 1 { "tool" } else { "tools" }
+        );
+        println!("  {}", packages.join(" "));
+
+        if cfg!(target_os = "linux") {
+            println!(
+                "Install them manually, then re-run:\n  substrate world deps sync\n\nSuggested commands (not executed):\n  sudo apt-get update && sudo apt-get install -y --no-install-recommends {}\n  sudo dnf install -y {}\n  sudo yum install -y {}\n  sudo pacman -S --needed {}\n",
+                packages.join(" "),
+                packages.join(" "),
+                packages.join(" "),
+                packages.join(" "),
+            );
+            return Err(anyhow!(WorldDepsProvisionUnsupportedError {
+                message:
+                    "substrate: world deps provision: unsupported on Linux host backend (would mutate host system packages)"
+                        .to_string(),
+            }));
+        }
+
+        if args.dry_run {
+            return Ok(());
+        }
+
+        self.require_world_backend()?;
+
+        let apt_available = detect_guest(&[String::from("command -v apt-get >/dev/null 2>&1")])?;
+        if !apt_available {
+            return Err(anyhow!(WorldDepsProvisionUnsupportedError {
+                message:
+                    "substrate: world deps provision: guest does not support apt; provisioning is not supported on this world image"
+                        .to_string(),
+            }));
+        }
+
+        let verbose = args.verbose;
+        run_guest_install("apt-get update", verbose)?;
+        run_guest_install(&build_apt_install_script(&packages), verbose)?;
+
+        println!("\u{2713} system packages installed");
+        println!("Next: substrate world deps sync");
+        Ok(())
+    }
+
     fn run_init(&self, args: &WorldDepsInitArgs) -> Result<()> {
         let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         let (scope, path) = resolve_selection_target(&cwd, args.workspace, args.global)?;
@@ -969,6 +1091,60 @@ impl WorldDepsRunner {
     fn ensure_guest_state(&self, tool: &WorldDepTool) -> Result<bool> {
         detect_guest(&tool.guest.commands)
             .with_context(|| format!("failed to detect `{}` inside the world backend", tool.name))
+    }
+}
+
+fn selection_path_for_human(selection: &ActiveSelection, cwd: &Path) -> Option<PathBuf> {
+    match (selection.active_scope, selection.active_path.as_ref()) {
+        (Some(WorldDepsSelectionScope::Workspace), Some(path)) => {
+            Some(diff_paths(path, cwd).unwrap_or_else(|| path.clone()))
+        }
+        (_, Some(path)) => Some(path.clone()),
+        (_, None) => None,
+    }
+}
+
+fn compute_apt_system_packages(tools: &[&WorldDepTool]) -> (usize, Vec<String>) {
+    let mut tool_count = 0usize;
+    let mut packages = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    for tool in tools {
+        if tool.install_class != InstallClass::SystemPackages {
+            continue;
+        }
+        tool_count += 1;
+
+        let mut per_tool = tool
+            .system_packages_apt
+            .iter()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .collect::<Vec<_>>();
+        per_tool.sort();
+        per_tool.dedup();
+        for pkg in per_tool {
+            if seen.insert(pkg.clone()) {
+                packages.push(pkg);
+            }
+        }
+    }
+    (tool_count, packages)
+}
+
+fn build_apt_install_script(packages: &[String]) -> String {
+    let escaped = packages
+        .iter()
+        .map(|pkg| shell_escape_for_bash_arg(pkg))
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!("DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends {escaped}")
+}
+
+fn shell_escape_for_bash_arg(value: &str) -> String {
+    if value.contains('\'') {
+        format!("'{}'", value.replace('\'', "'\"'\"'"))
+    } else {
+        format!("'{value}'")
     }
 }
 
