@@ -861,7 +861,7 @@ impl WorldDepsRunner {
         }
 
         let verbose = args.verbose;
-        run_guest_install("apt-get update", verbose)?;
+        run_guest_install(&build_apt_update_script(), verbose)?;
         run_guest_install(&build_apt_install_script(&packages), verbose)?;
 
         println!("\u{2713} system packages installed");
@@ -1137,7 +1137,38 @@ fn build_apt_install_script(packages: &[String]) -> String {
         .map(|pkg| shell_escape_for_bash_arg(pkg))
         .collect::<Vec<_>>()
         .join(" ");
-    format!("DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends {escaped}")
+    format!(
+        "mkdir -p {dir}/state {dir}/lists/partial {dir}/cache/archives; \
+         DEBIAN_FRONTEND=noninteractive apt-get {opts} install -y --no-install-recommends {escaped}",
+        dir = world_deps_apt_dir(),
+        opts = apt_options_for_world_deps(),
+    )
+}
+
+fn build_apt_update_script() -> String {
+    format!(
+        "mkdir -p {dir}/state {dir}/lists/partial {dir}/cache/archives; \
+         DEBIAN_FRONTEND=noninteractive apt-get {opts} update",
+        dir = world_deps_apt_dir(),
+        opts = apt_options_for_world_deps(),
+    )
+}
+
+fn world_deps_apt_dir() -> &'static str {
+    // World backends may mount `/var/lib/apt` and `/var/cache/apt` read-only for hardening.
+    // The WDL2 provisioning flow is allowed to write to `/var/lib/substrate/world-deps`, so
+    // point apt state/cache there.
+    "/var/lib/substrate/world-deps/apt"
+}
+
+fn apt_options_for_world_deps() -> &'static str {
+    // - Avoid dropping privileges to `_apt` (can fail under some world sandbox constraints).
+    // - Relocate apt state/cache to the world-deps writable mount.
+    "-o APT::Sandbox::User=root \
+     -o Dir::State=/var/lib/substrate/world-deps/apt/state \
+     -o Dir::State::lists=/var/lib/substrate/world-deps/apt/lists \
+     -o Dir::Cache=/var/lib/substrate/world-deps/apt/cache \
+     -o Dir::Cache::archives=/var/lib/substrate/world-deps/apt/cache/archives"
 }
 
 fn shell_escape_for_bash_arg(value: &str) -> String {

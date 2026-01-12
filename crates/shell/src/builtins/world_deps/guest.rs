@@ -220,9 +220,20 @@ pub(crate) fn install_in_guest(script: &str, verbose: bool) -> Result<()> {
                     let stderr = BASE64
                         .decode(response.stderr_b64.as_bytes())
                         .unwrap_or_default();
-                    eprintln!("{}", String::from_utf8_lossy(&stdout));
-                    eprintln!("{}", String::from_utf8_lossy(&stderr));
-                    bail!("installer exited with status {}", response.exit);
+                    let stdout_text = String::from_utf8_lossy(&stdout);
+                    let stderr_text = String::from_utf8_lossy(&stderr);
+                    eprintln!("{stdout_text}");
+                    eprintln!("{stderr_text}");
+
+                    let stderr_snippet = truncate_for_error(&stderr_text, 4096);
+                    if stderr_snippet.trim().is_empty() {
+                        bail!("installer exited with status {}", response.exit);
+                    }
+                    bail!(
+                        "installer exited with status {}:\n{}",
+                        response.exit,
+                        stderr_snippet.trim_end()
+                    );
                 }
             }
             Err(err) if should_fallback_to_host(&err) => {
@@ -499,6 +510,19 @@ fn build_bash_body(script: &str, strict: bool) -> String {
     }
     body.push_str(script);
     body
+}
+
+fn truncate_for_error(text: &str, max_bytes: usize) -> String {
+    if text.len() <= max_bytes {
+        return text.to_string();
+    }
+    let mut out = text.as_bytes()[..max_bytes].to_vec();
+    while !out.is_empty() && std::str::from_utf8(&out).is_err() {
+        out.pop();
+    }
+    let mut truncated = String::from_utf8_lossy(&out).to_string();
+    truncated.push_str("\n...<truncated>...");
+    truncated
 }
 
 fn host_fallback_allowed() -> bool {
