@@ -8,6 +8,6 @@ pub use execution::{
     needs_shell, run_shell, run_shell_with_cli, AnchorModeArg, Cli, GraphAction, GraphCmd,
     HealthCmd, HostAction, HostCmd, ShellConfig, ShellMode, ShimAction, ShimCmd, WorldAction,
     WorldCleanupArgs, WorldCmd, WorldDepsAction, WorldDepsCmd, WorldDepsInitArgs,
-    WorldDepsInstallArgs, WorldDepsSelectArgs, WorldDepsStatusArgs, WorldDepsSyncArgs,
-    WorldEnableArgs, WorldVerifyArgs,
+    WorldDepsInstallArgs, WorldDepsProvisionArgs, WorldDepsSelectArgs, WorldDepsStatusArgs,
+    WorldDepsSyncArgs, WorldEnableArgs, WorldVerifyArgs,
 };

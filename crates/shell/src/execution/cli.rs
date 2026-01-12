@@ -407,6 +407,8 @@ pub enum WorldDepsAction {
     Status(WorldDepsStatusArgs),
     Install(WorldDepsInstallArgs),
     Sync(WorldDepsSyncArgs),
+    /// Provision system packages required by selected tools (or the full inventory with --all)
+    Provision(WorldDepsProvisionArgs),
     /// Initialize a world-deps selection file (required before status/sync/install do anything)
     Init(WorldDepsInitArgs),
     /// Add tools to the world-deps selection file
@@ -451,6 +453,19 @@ pub struct WorldDepsSyncArgs {
     #[arg(long = "dry-run")]
     pub dry_run: bool,
     /// Stream guest logs while running installers
+    #[arg(long = "verbose")]
+    pub verbose: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldDepsProvisionArgs {
+    /// Ignore selection and use the full inventory scope
+    #[arg(long = "all")]
+    pub all: bool,
+    /// Show planned actions without executing them
+    #[arg(long = "dry-run")]
+    pub dry_run: bool,
+    /// Stream guest logs while running provisioning commands
     #[arg(long = "verbose")]
     pub verbose: bool,
 }
