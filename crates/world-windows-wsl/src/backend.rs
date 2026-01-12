@@ -7,7 +7,7 @@ use anyhow::{anyhow, Context, Result};
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine as _;
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use substrate_common::FsDiff;
 use tokio::runtime::{self, Runtime};
@@ -37,13 +37,13 @@ pub struct WindowsWslBackend {
 }
 
 impl WindowsWslBackend {
-    fn discover_warm_project_path(workspace_project_path: &PathBuf) -> PathBuf {
+    fn discover_warm_project_path(workspace_project_path: &Path) -> PathBuf {
         let script_rel = PathBuf::from("scripts")
             .join("windows")
             .join("wsl-warm.ps1");
 
         if workspace_project_path.join(&script_rel).is_file() {
-            return workspace_project_path.clone();
+            return workspace_project_path.to_path_buf();
         }
 
         if let Ok(github_workspace) = std::env::var("GITHUB_WORKSPACE") {
@@ -63,7 +63,7 @@ impl WindowsWslBackend {
             }
         }
 
-        workspace_project_path.clone()
+        workspace_project_path.to_path_buf()
     }
 
     /// Create backend using environment defaults.
