@@ -423,21 +423,19 @@ pub(crate) fn run_guest_install(script: &str, verbose: bool) -> Result<()> {
     install_in_guest(script, verbose)
 }
 
+#[cfg(not(target_os = "macos"))]
 pub(crate) fn run_guest_provision_install(script: &str, verbose: bool) -> Result<()> {
-    #[cfg(target_os = "macos")]
-    {
-        return run_macos_lima_provision_install(script, verbose);
-    }
+    install_in_guest_with_overrides(
+        script,
+        verbose,
+        Some("world-deps-provision"),
+        Some(WorldFsMode::Writable),
+    )
+}
 
-    #[cfg(not(target_os = "macos"))]
-    {
-        install_in_guest_with_overrides(
-            script,
-            verbose,
-            Some("world-deps-provision"),
-            Some(WorldFsMode::Writable),
-        )
-    }
+#[cfg(target_os = "macos")]
+pub(crate) fn run_guest_provision_install(script: &str, verbose: bool) -> Result<()> {
+    run_macos_lima_provision_install(script, verbose)
 }
 
 #[cfg(target_os = "macos")]
@@ -496,6 +494,7 @@ fn run_world_command_with_overrides(
     Ok(response)
 }
 
+#[cfg(not(target_os = "macos"))]
 fn install_in_guest_with_overrides(
     script: &str,
     verbose: bool,
