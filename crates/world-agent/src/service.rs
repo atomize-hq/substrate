@@ -142,8 +142,10 @@ impl WorldAgentService {
             anyhow::bail!("agent_id is required for API calls");
         }
 
+        let always_isolate = should_always_isolate(&req);
+
         // Apply and track budget
-        if let Some(budget) = req.budget {
+        if let Some(budget) = req.budget.clone() {
             {
                 let mut budgets = self.budgets.write().unwrap();
                 let tracker = budgets
@@ -201,7 +203,7 @@ impl WorldAgentService {
             project_dir,
             // For agent non-PTY path, prefer consistent fs_diff collection
             // to enable immediate span enrichment in the shell.
-            always_isolate: true,
+            always_isolate,
             fs_mode,
         };
 
@@ -300,6 +302,7 @@ impl WorldAgentService {
         let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
         let fs_mode = resolve_fs_mode(req.world_fs_mode, env_ref);
         let isolation_full = is_full_isolation(env_ref);
+        let always_isolate = should_always_isolate(&req);
 
         let (write_allowlist_prefixes, landlock_read_paths, landlock_write_paths) =
             if isolation_full {
@@ -330,7 +333,7 @@ impl WorldAgentService {
             enable_preload: false,
             allowed_domains: substrate_broker::allowed_domains(),
             project_dir,
-            always_isolate: true,
+            always_isolate,
             fs_mode,
         };
 
@@ -494,6 +497,13 @@ impl StreamSink for StreamingSink {
         };
         let _ = self.tx.send(frame);
     }
+}
+
+fn should_always_isolate(req: &ExecuteRequest) -> bool {
+    // `world deps provision` is explicitly intended to mutate guest system packages (apt/dpkg),
+    // which is incompatible with the default cage's write restrictions. Use a request profile to
+    // opt out of `always_isolate` for that explicit provisioning workflow.
+    !matches!(req.profile.as_deref(), Some("world-deps-provision"))
 }
 
 pub(crate) fn resolve_fs_mode(
