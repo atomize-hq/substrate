@@ -673,7 +673,7 @@
       "name": "WDL2 — System packages provisioning (code)",
       "type": "code",
       "phase": "WDL2",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Implement `substrate world deps provision` and package list computation per S2 (production code only).",
       "references": [
         "docs/project_management/next/ADR-0002-world-deps-install-classes-and-world-provisioning.md",
