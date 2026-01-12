@@ -68,7 +68,7 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
 
     if json_mode {
         if let Some(err) = &host_error {
-            eprintln!("substrate world doctor (windows): backend not ready: {err}");
+            eprintln!("substrate world doctor (windows): backend not ready: {err:#}");
         }
     }
 
