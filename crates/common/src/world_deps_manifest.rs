@@ -50,6 +50,7 @@ pub struct WorldDepTool {
     pub host: WorldDepDetectSpec,
     pub guest: WorldDepDetectSpec,
     pub install_class: InstallClass,
+    pub system_packages_apt: Vec<String>,
     pub manual_instructions: Option<String>,
     pub install: Vec<WorldDepInstallRecipe>,
 }
@@ -64,6 +65,13 @@ impl WorldDepTool {
             .as_ref()
             .map(|install| install.class)
             .unwrap_or(InstallClass::Manual);
+        let system_packages_apt = spec
+            .guest
+            .install
+            .as_ref()
+            .and_then(|install| install.system_packages.as_ref())
+            .map(|spec| spec.apt.clone())
+            .unwrap_or_default();
         let manual_instructions = spec
             .guest
             .install
@@ -80,6 +88,7 @@ impl WorldDepTool {
                 commands: guest_commands,
             },
             install_class,
+            system_packages_apt,
             manual_instructions,
             install,
         })
