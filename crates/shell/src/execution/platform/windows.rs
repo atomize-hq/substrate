@@ -66,6 +66,12 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
         }
     };
 
+    if json_mode {
+        if let Some(err) = &host_error {
+            eprintln!("substrate world doctor (windows): backend not ready: {err}");
+        }
+    }
+
     let host_error_json = host_error.clone();
     let host_value = json!({
         "platform": "windows",
@@ -110,7 +116,12 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
                 exit_code = if host_ok { 0 } else { 4 };
                 value
             }
-            Err(_) => {
+            Err(err) => {
+                if json_mode {
+                    eprintln!(
+                        "substrate world doctor (windows): agent doctor request failed: {err:#}"
+                    );
+                }
                 exit_code = 3;
                 json!({"status": "unreachable", "ok": false})
             }
