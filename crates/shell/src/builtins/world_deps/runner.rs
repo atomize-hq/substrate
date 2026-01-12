@@ -861,7 +861,10 @@ impl WorldDepsRunner {
         }
 
         let verbose = args.verbose;
-        run_guest_install("apt-get update", verbose)?;
+        // In ideal configurations the world-agent runs as root (Lima/WSL), but in practice some
+        // environments may execute as a non-root user. Use `sudo` so apt can acquire locks and
+        // mutate package state when needed.
+        run_guest_install("sudo apt-get update", verbose)?;
         run_guest_install(&build_apt_install_script(&packages), verbose)?;
 
         println!("\u{2713} system packages installed");
@@ -1137,7 +1140,8 @@ fn build_apt_install_script(packages: &[String]) -> String {
         .map(|pkg| shell_escape_for_bash_arg(pkg))
         .collect::<Vec<_>>()
         .join(" ");
-    format!("DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends {escaped}")
+    // Prefer `env` so DEBIAN_FRONTEND is applied even when `sudo` resets environment.
+    format!("sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends {escaped}")
 }
 
 fn shell_escape_for_bash_arg(value: &str) -> String {
