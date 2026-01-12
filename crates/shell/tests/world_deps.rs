@@ -1234,18 +1234,15 @@ fn world_deps_provision_unsupported_on_linux_host_backend_exits_4_and_prints_det
         "output missing Linux-host unsupported message: {output}"
     );
 
-    let expected_order = ["build-essential", "libssl-dev", "zlib1g-dev", "curl"];
-    let mut cursor = 0usize;
-    for pkg in expected_order {
-        let idx = output[cursor..]
-            .find(pkg)
-            .unwrap_or_else(|| panic!("output missing `{pkg}`: {output}"));
-        cursor += idx;
-    }
-
-    let libssl_count = output.matches("libssl-dev").count();
+    let packages_line = output
+        .lines()
+        .skip_while(|line| !line.starts_with("Provisioning system packages for"))
+        .nth(1)
+        .unwrap_or("");
+    let packages: Vec<&str> = packages_line.split_whitespace().collect();
     assert_eq!(
-        libssl_count, 1,
-        "expected package de-duplication across tools (libssl-dev appears once), got {libssl_count}: {output}"
+        packages,
+        vec!["build-essential", "libssl-dev", "zlib1g-dev", "curl"],
+        "expected deterministic system package ordering on Linux host: {output}"
     );
 }
