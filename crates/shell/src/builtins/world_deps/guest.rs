@@ -424,12 +424,48 @@ pub(crate) fn run_guest_install(script: &str, verbose: bool) -> Result<()> {
 }
 
 pub(crate) fn run_guest_provision_install(script: &str, verbose: bool) -> Result<()> {
-    install_in_guest_with_overrides(
-        script,
-        verbose,
-        Some("world-deps-provision"),
-        Some(WorldFsMode::Writable),
-    )
+    #[cfg(target_os = "macos")]
+    {
+        return run_macos_lima_provision_install(script, verbose);
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        install_in_guest_with_overrides(
+            script,
+            verbose,
+            Some("world-deps-provision"),
+            Some(WorldFsMode::Writable),
+        )
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn run_macos_lima_provision_install(script: &str, verbose: bool) -> Result<()> {
+    // `world-agent` execution inside the Lima VM can run under a hardening cage that only allows
+    // writes to `/var/lib/substrate/world-deps`, which is incompatible with apt/dpkg provisioning.
+    // For explicit provisioning, run via `limactl shell` directly to mutate the VM image.
+    let body = build_bash_body(script, true);
+    let output = Command::new("limactl")
+        .args(["shell", "substrate", "sudo", "-n", "bash", "-lc", &body])
+        .output()
+        .map_err(|e| {
+            anyhow!("failed to run `limactl shell substrate ...` for world deps provisioning: {e}")
+        })?;
+
+    if verbose || !output.status.success() {
+        eprintln!("{}", String::from_utf8_lossy(&output.stdout));
+        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+    }
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        bail!(
+            "installer exited with status {}",
+            output.status.code().unwrap_or(-1)
+        );
+    }
 }
 
 fn run_world_command(command: &str) -> Result<agent_api_types::ExecuteResponse> {
