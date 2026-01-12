@@ -1,6 +1,6 @@
 use super::guest::{
-    detect_guest, detect_host, detect_host_bulk, run_guest_install, world_exec_fallback_active,
-    WorldBackendUnavailable,
+    detect_guest, detect_host, detect_host_bulk, run_guest_install, run_guest_provision_install,
+    world_exec_fallback_active, WorldBackendUnavailable,
 };
 use super::models::{
     sanitize_reason, GuestProbe, ManifestLayerInfo, WorldDepGuestState, WorldDepGuestStatus,
@@ -861,8 +861,8 @@ impl WorldDepsRunner {
         }
 
         let verbose = args.verbose;
-        run_guest_install(&build_apt_update_script(), verbose)?;
-        run_guest_install(&build_apt_install_script(&packages), verbose)?;
+        run_guest_provision_install(&build_apt_update_script(), verbose)?;
+        run_guest_provision_install(&build_apt_install_script(&packages), verbose)?;
 
         println!("\u{2713} system packages installed");
         println!("Next: substrate world deps sync");

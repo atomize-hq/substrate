@@ -1,4 +1,5 @@
 use crate::execution::{build_agent_client_and_request, stream_non_pty_via_agent};
+use agent_api_types::WorldFsMode;
 use anyhow::{anyhow, bail, Result};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -422,7 +423,24 @@ pub(crate) fn run_guest_install(script: &str, verbose: bool) -> Result<()> {
     install_in_guest(script, verbose)
 }
 
+pub(crate) fn run_guest_provision_install(script: &str, verbose: bool) -> Result<()> {
+    install_in_guest_with_overrides(
+        script,
+        verbose,
+        Some("world-deps-provision"),
+        Some(WorldFsMode::Writable),
+    )
+}
+
 fn run_world_command(command: &str) -> Result<agent_api_types::ExecuteResponse> {
+    run_world_command_with_overrides(command, None, None)
+}
+
+fn run_world_command_with_overrides(
+    command: &str,
+    profile: Option<&str>,
+    world_fs_mode: Option<WorldFsMode>,
+) -> Result<agent_api_types::ExecuteResponse> {
     let (client, mut request, _) = build_agent_client_and_request(command)?;
     // On macOS the world backend runs inside a Linux VM (Lima). The host cwd can be a path
     // that is not mounted into the VM (e.g. mktemp under /var/folders), causing world-agent
@@ -431,9 +449,68 @@ fn run_world_command(command: &str) -> Result<agent_api_types::ExecuteResponse> 
     if cfg!(target_os = "macos") {
         request.cwd = Some("/tmp".to_string());
     }
+    if let Some(profile) = profile {
+        request.profile = Some(profile.to_string());
+    }
+    if let Some(mode) = world_fs_mode {
+        request.world_fs_mode = Some(mode);
+    }
     let rt = Runtime::new()?;
     let response = rt.block_on(async move { client.execute(request).await })?;
     Ok(response)
+}
+
+fn install_in_guest_with_overrides(
+    script: &str,
+    verbose: bool,
+    profile: Option<&str>,
+    world_fs_mode: Option<WorldFsMode>,
+) -> Result<()> {
+    let fallback_allowed = host_fallback_allowed();
+    if WORLD_EXEC_FALLBACK.load(Ordering::SeqCst) {
+        return Err(anyhow!(WorldBackendUnavailable::new(
+            "world backend unavailable".to_string()
+        )));
+    }
+
+    let command = wrap_for_bash(&wrap_guest_install_script(script), true);
+    match run_world_command_with_overrides(&command, profile, world_fs_mode) {
+        Ok(response) => {
+            if response.exit == 0 {
+                return Ok(());
+            }
+            let stdout = BASE64
+                .decode(response.stdout_b64.as_bytes())
+                .unwrap_or_default();
+            let stderr = BASE64
+                .decode(response.stderr_b64.as_bytes())
+                .unwrap_or_default();
+            let stdout_text = String::from_utf8_lossy(&stdout);
+            let stderr_text = String::from_utf8_lossy(&stderr);
+            if verbose || response.exit != 0 {
+                eprintln!("{stdout_text}");
+                eprintln!("{stderr_text}");
+            }
+            let stderr_snippet = truncate_for_error(&stderr_text, 4096);
+            if stderr_snippet.trim().is_empty() {
+                bail!("installer exited with status {}", response.exit);
+            }
+            bail!(
+                "installer exited with status {}:\n{}",
+                response.exit,
+                stderr_snippet.trim_end()
+            );
+        }
+        Err(err) if should_fallback_to_host(&err) => {
+            if fallback_allowed {
+                mark_world_exec_unavailable(&err);
+                run_host_install(script, verbose)
+            } else {
+                Err(anyhow!(WorldBackendUnavailable::new(format!("{:#}", err))))
+            }
+        }
+        Err(err) => Err(err),
+    }
 }
 
 fn run_host_install(script: &str, verbose: bool) -> Result<()> {
