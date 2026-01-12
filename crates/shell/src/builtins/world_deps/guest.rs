@@ -412,7 +412,14 @@ pub(crate) fn run_guest_install(script: &str, verbose: bool) -> Result<()> {
 }
 
 fn run_world_command(command: &str) -> Result<agent_api_types::ExecuteResponse> {
-    let (client, request, _) = build_agent_client_and_request(command)?;
+    let (client, mut request, _) = build_agent_client_and_request(command)?;
+    // On macOS the world backend runs inside a Linux VM (Lima). The host cwd can be a path
+    // that is not mounted into the VM (e.g. mktemp under /var/folders), causing world-agent
+    // overlay/bind-mount setup to fail before the command even runs. World-deps commands do
+    // not require project-relative access inside the guest, so use a stable guest cwd.
+    if cfg!(target_os = "macos") {
+        request.cwd = Some("/tmp".to_string());
+    }
     let rt = Runtime::new()?;
     let response = rt.block_on(async move { client.execute(request).await })?;
     Ok(response)
@@ -451,7 +458,9 @@ fn run_host_install(script: &str, verbose: bool) -> Result<()> {
 fn wrap_for_bash(script: &str, strict: bool) -> String {
     let body = build_bash_body(script, strict);
     let escaped = body.replace('\'', "'\"'\"'");
-    format!("bash -lc '{}'", escaped)
+    // When executing inside a world backend, PATH may be minimal; prefer an absolute bash path
+    // to avoid spawn failures that surface as "internal: Command execution failed".
+    format!("/bin/bash -lc '{}'", escaped)
 }
 
 fn wrap_guest_install_script(script: &str) -> String {

@@ -265,7 +265,9 @@ GH_TIMEOUT_SECS="${FEATURE_SMOKE_GH_TIMEOUT_SECS:-120}"
 WATCH_INTERVAL_SECS="${FEATURE_SMOKE_WATCH_INTERVAL_SECS:-15}"
 WATCH_TIMEOUT_SECS="${FEATURE_SMOKE_WATCH_TIMEOUT_SECS:-7200}" # 2h
 WATCH_MAX_CONSECUTIVE_ERRORS="${FEATURE_SMOKE_WATCH_MAX_CONSECUTIVE_ERRORS:-20}"
-RUN_LOOKUP_TIMEOUT_SECS="${FEATURE_SMOKE_RUN_LOOKUP_TIMEOUT_SECS:-120}"
+# Under heavy CI load, workflow runs can remain queued long enough that no job logs are available
+# for matching. Allow a longer default to avoid spurious lookup timeouts.
+RUN_LOOKUP_TIMEOUT_SECS="${FEATURE_SMOKE_RUN_LOOKUP_TIMEOUT_SECS:-600}"
 
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 safe_feature="$(basename "${FEATURE_DIR}")"
@@ -307,11 +309,58 @@ DISPATCH_OK=1
 echo "Waiting for run to start..." >&2
 started_lookup_at="$(date +%s)"
 RUN_ID=""
+checked_runs=""
 while [[ -z "${RUN_ID}" ]]; do
-    RUN_ID="$(run_with_timeout "${GH_TIMEOUT_SECS}" gh run list --workflow "${WORKFLOW}" --event workflow_dispatch --branch "${WORKFLOW_REF}" --limit 20 --json databaseId,createdAt -q "map(select(.createdAt >= \"${dispatch_started}\")) | .[0].databaseId" 2>/dev/null || true)"
+    # Do not rely on local time-based filtering; runner clocks can drift relative to GitHub's
+    # createdAt timestamps and cause false "run_lookup_timeout" failures.
+    candidates_json="$(run_with_timeout "${GH_TIMEOUT_SECS}" gh run list --workflow "${WORKFLOW}" --event workflow_dispatch --branch "${WORKFLOW_REF}" --limit 20 --json databaseId,createdAt -q '.' 2>/dev/null || true)"
+
+    if [[ -n "${candidates_json}" ]]; then
+        candidate_ids="$(python3 - "${candidates_json}" <<'PY' || true
+import json
+import sys
+
+raw = sys.argv[1]
+try:
+    data = json.loads(raw)
+except Exception:
+    raise SystemExit(0)
+
+for r in data:
+    rid = r.get("databaseId")
+    if rid is None:
+        continue
+    print(rid)
+PY
+)"
+
+        while IFS= read -r rid; do
+            [[ -z "${rid}" ]] && continue
+            if printf '%s\n' "${checked_runs}" | grep -Fxq "${rid}"; then
+                continue
+            fi
+
+            feature_meta_job_id="$(run_with_timeout "${GH_TIMEOUT_SECS}" gh run view "${rid}" --json jobs -q '.jobs[] | select(.name == "feature_meta") | .databaseId' 2>/dev/null || true)"
+            [[ -z "${feature_meta_job_id}" ]] && continue
+
+            feature_meta_log="$(run_with_timeout "${GH_TIMEOUT_SECS}" gh run view "${rid}" --job "${feature_meta_job_id}" --log 2>/dev/null || true)"
+            if [[ -n "${feature_meta_log}" ]] && printf '%s\n' "${feature_meta_log}" | grep -Fq "ref: ${TEMP_BRANCH}"; then
+                RUN_ID="${rid}"
+                break
+            fi
+
+            # Only mark a run as "checked" once we can definitively see it checked out some other temp branch.
+            # If the job hasn't reached checkout yet (or logs aren't ready), allow re-checking in later iterations.
+            if [[ -n "${feature_meta_log}" ]] && printf '%s\n' "${feature_meta_log}" | grep -Fq "ref: tmp/feature-smoke/"; then
+                checked_runs="$(printf '%s\n%s\n' "${checked_runs}" "${rid}")"
+            fi
+        done <<< "${candidate_ids}"
+    fi
+
     if [[ -n "${RUN_ID}" ]]; then
         break
     fi
+
     now="$(date +%s)"
     if [[ $((now - started_lookup_at)) -ge "${RUN_LOOKUP_TIMEOUT_SECS}" ]]; then
         ERROR_KIND="run_lookup_timeout"
