@@ -5,6 +5,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use std::env;
 use std::error::Error as StdError;
+use std::ffi::OsString;
 use std::fmt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -124,6 +125,42 @@ pub(crate) fn detect_guest(commands: &[String]) -> Result<bool> {
     Ok(false)
 }
 
+pub(crate) fn detect_guest_for_provision(commands: &[String]) -> Result<bool> {
+    let fallback_allowed = host_fallback_allowed();
+    for cmd in commands {
+        if WORLD_EXEC_FALLBACK.load(Ordering::SeqCst) {
+            return Err(anyhow!(WorldBackendUnavailable::new(
+                "world backend unavailable".to_string()
+            )));
+        }
+
+        let wrapped = wrap_for_bash(cmd, false);
+        match run_world_command_with_overrides(
+            &wrapped,
+            Some("world-deps-provision"),
+            Some(WorldFsMode::Writable),
+        ) {
+            Ok(response) => {
+                if response.exit == 0 {
+                    return Ok(true);
+                }
+            }
+            Err(err) if should_fallback_to_host(&err) => {
+                if fallback_allowed {
+                    mark_world_exec_unavailable(&err);
+                    if run_host_command(cmd) {
+                        return Ok(true);
+                    }
+                } else {
+                    return Err(anyhow!(WorldBackendUnavailable::new(format!("{:#}", err))));
+                }
+            }
+            Err(err) => return Err(err),
+        }
+    }
+    Ok(false)
+}
+
 fn resolve_host_detection_context() -> HostDetectionContext {
     if cfg!(windows) {
         return HostDetectionContext::Legacy { reason: None };
@@ -182,6 +219,13 @@ fn resolve_manager_env_path() -> std::result::Result<PathBuf, String> {
 }
 
 pub(crate) fn install_in_guest(script: &str, verbose: bool) -> Result<()> {
+    // Some guest installs (notably system package provisioning) must be executed with real root
+    // privileges. When the world backend runs unprivileged it may enter a user namespace and map
+    // uid 0 to the invoking user, which breaks package managers that require host-root-owned locks
+    // under `/var/lib/*`. For these install flows, force the world backend down the direct exec
+    // path (no overlay/unshare) so `sudo` can elevate normally.
+    let _force_direct_guard = TempEnvVar::set("SUBSTRATE_WORLD_EXEC_FORCE_DIRECT", "1");
+
     let fallback_allowed = host_fallback_allowed();
     if WORLD_EXEC_FALLBACK.load(Ordering::SeqCst) {
         return Err(anyhow!(WorldBackendUnavailable::new(
@@ -246,6 +290,28 @@ pub(crate) fn install_in_guest(script: &str, verbose: bool) -> Result<()> {
                 }
             }
             Err(err) => Err(err),
+        }
+    }
+}
+
+struct TempEnvVar {
+    key: &'static str,
+    previous: Option<OsString>,
+}
+
+impl TempEnvVar {
+    fn set(key: &'static str, value: &str) -> Self {
+        let previous = env::var_os(key);
+        env::set_var(key, value);
+        Self { key, previous }
+    }
+}
+
+impl Drop for TempEnvVar {
+    fn drop(&mut self) {
+        match self.previous.take() {
+            Some(value) => env::set_var(self.key, value),
+            None => env::remove_var(self.key),
         }
     }
 }

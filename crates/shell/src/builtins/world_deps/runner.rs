@@ -1,6 +1,6 @@
 use super::guest::{
-    detect_guest, detect_host, detect_host_bulk, run_guest_install, run_guest_provision_install,
-    world_exec_fallback_active, WorldBackendUnavailable,
+    detect_guest, detect_guest_for_provision, detect_host, detect_host_bulk, run_guest_install,
+    run_guest_provision_install, world_exec_fallback_active, WorldBackendUnavailable,
 };
 use super::models::{
     sanitize_reason, GuestProbe, ManifestLayerInfo, WorldDepGuestState, WorldDepGuestStatus,
@@ -861,6 +861,28 @@ impl WorldDepsRunner {
         }
 
         let verbose = args.verbose;
+        #[cfg(target_os = "windows")]
+        {
+            // Some WSL runner setups execute the world-agent unprivileged, which forces the world
+            // backend into a user namespace (`unshare --user --map-root-user`). That environment
+            // cannot mutate `/var/lib/*` even when `id -u == 0` inside the namespace.
+            //
+            // When we detect that guest package state directories are not writable, fall back to
+            // invoking `wsl.exe` directly as root to provision packages.
+            let guest_can_mutate_package_state = detect_guest_for_provision(&[String::from(
+                "tmp=\"/var/lib/dpkg/.substrate_writecheck.$$\"; (umask 022; : >\"$tmp\") && rm -f \"$tmp\"",
+            )])?;
+            if !guest_can_mutate_package_state {
+                println!(
+                    "substrate: world deps provision: falling back to wsl.exe (root) for apt (guest agent lacks write access to /var/lib/dpkg)"
+                );
+                provision_system_packages_via_wsl(&packages, verbose)?;
+                println!("\u{2713} system packages installed");
+                println!("Next: substrate world deps sync");
+                return Ok(());
+            }
+        }
+
         run_guest_provision_install(&build_apt_update_script(), verbose)?;
         run_guest_provision_install(&build_apt_install_script(&packages), verbose)?;
 
@@ -1139,7 +1161,7 @@ fn build_apt_install_script(packages: &[String]) -> String {
         .join(" ");
     format!(
         "mkdir -p {dir}/state {dir}/lists/partial {dir}/cache/archives; \
-         DEBIAN_FRONTEND=noninteractive apt-get {opts} install -y --no-install-recommends {escaped}",
+         sudo env DEBIAN_FRONTEND=noninteractive apt-get {opts} install -y --no-install-recommends {escaped}",
         dir = world_deps_apt_dir(),
         opts = apt_options_for_world_deps(),
     )
@@ -1148,7 +1170,7 @@ fn build_apt_install_script(packages: &[String]) -> String {
 fn build_apt_update_script() -> String {
     format!(
         "mkdir -p {dir}/state {dir}/lists/partial {dir}/cache/archives; \
-         DEBIAN_FRONTEND=noninteractive apt-get {opts} update",
+         sudo env DEBIAN_FRONTEND=noninteractive apt-get {opts} update",
         dir = world_deps_apt_dir(),
         opts = apt_options_for_world_deps(),
     )
@@ -1169,6 +1191,58 @@ fn apt_options_for_world_deps() -> &'static str {
      -o Dir::State::lists=/var/lib/substrate/world-deps/apt/lists \
      -o Dir::Cache=/var/lib/substrate/world-deps/apt/cache \
      -o Dir::Cache::archives=/var/lib/substrate/world-deps/apt/cache/archives"
+#[cfg(target_os = "windows")]
+fn provision_system_packages_via_wsl(packages: &[String], verbose: bool) -> Result<()> {
+    use std::process::Command;
+
+    let distro =
+        std::env::var("SUBSTRATE_WSL_DISTRO").unwrap_or_else(|_| "substrate-wsl".to_string());
+    let escaped = packages
+        .iter()
+        .map(|pkg| shell_escape_for_bash_arg(pkg))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let script = format!(
+        "set -euo pipefail; apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends {escaped}"
+    );
+
+    let mut cmd = Command::new("wsl");
+    cmd.arg("-d")
+        .arg(distro)
+        .arg("-u")
+        .arg("root")
+        .arg("--")
+        .arg("bash")
+        .arg("-lc")
+        .arg(script);
+
+    if verbose {
+        let status = cmd
+            .status()
+            .context("failed to execute wsl apt provisioning")?;
+        if status.success() {
+            Ok(())
+        } else {
+            bail!(
+                "wsl apt provisioning exited with status {}",
+                status.code().unwrap_or(-1)
+            );
+        }
+    } else {
+        let output = cmd
+            .output()
+            .context("failed to execute wsl apt provisioning")?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            eprintln!("{}", String::from_utf8_lossy(&output.stdout));
+            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+            bail!(
+                "wsl apt provisioning exited with status {}",
+                output.status.code().unwrap_or(-1)
+            );
+        }
+    }
 }
 
 fn shell_escape_for_bash_arg(value: &str) -> String {
