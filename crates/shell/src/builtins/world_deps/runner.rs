@@ -3,9 +3,9 @@ use super::guest::{
     WorldBackendUnavailable,
 };
 use super::models::{
-    sanitize_reason, GuestProbe, ManifestLayerInfo, WorldDepGuestStatus, WorldDepStatusEntry,
-    WorldDepsManifestInfo, WorldDepsOverlayInfo, WorldDepsSelectionInfo, WorldDepsSelectionScope,
-    WorldDepsStatusReport,
+    sanitize_reason, GuestProbe, ManifestLayerInfo, WorldDepGuestState, WorldDepGuestStatus,
+    WorldDepStatusEntry, WorldDepsManifestInfo, WorldDepsOverlayInfo, WorldDepsSelectionInfo,
+    WorldDepsSelectionScope, WorldDepsStatusReport,
 };
 use super::selection::{
     add_tools_to_selection_file, resolve_active_selection, resolve_selection_target,
@@ -20,7 +20,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use std::collections::HashSet;
 use std::env;
 use std::path::{Component, Path, PathBuf};
-use substrate_common::{paths as substrate_paths, WorldDepTool, WorldDepsManifest};
+use substrate_common::{paths as substrate_paths, InstallClass, WorldDepTool, WorldDepsManifest};
 use tracing::warn;
 
 pub(crate) fn status_report_for_health(
@@ -81,6 +81,9 @@ fn world_backend_unavailable_reason(err: &anyhow::Error) -> Option<String> {
 fn world_deps_exit_code(err: &anyhow::Error) -> i32 {
     if err.is::<SelectionConfigError>() {
         return 2;
+    }
+    if err.is::<WorldDepsUnmetPrerequisiteError>() {
+        return 4;
     }
     if err.is::<WorldDepsBackendRequiredError>() {
         return 3;
@@ -176,6 +179,19 @@ impl std::fmt::Display for WorldDepsBackendRequiredError {
 }
 
 impl std::error::Error for WorldDepsBackendRequiredError {}
+
+#[derive(Debug)]
+struct WorldDepsUnmetPrerequisiteError {
+    message: String,
+}
+
+impl std::fmt::Display for WorldDepsUnmetPrerequisiteError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for WorldDepsUnmetPrerequisiteError {}
 
 struct ManifestPaths {
     inventory_base: PathBuf,
@@ -321,11 +337,17 @@ fn build_runner(cli_no_world: bool, cli_force_world: bool) -> Result<WorldDepsRu
         &manifest_paths.inventory_base,
         &overlays,
     )
-    .with_context(|| {
-        format!(
+    .map_err(|err| {
+        let context = format!(
             "failed to load world deps inventory from {}",
             manifest_paths.inventory_base.display()
-        )
+        );
+        anyhow!(SelectionConfigError {
+            message: format!(
+                "substrate: invalid world-deps manager manifest ({context}): {:#}",
+                err
+            ),
+        })
     })?;
     let world = WorldState::detect(cli_no_world, cli_force_world)?;
     Ok(WorldDepsRunner::new(manifest, manifest_paths, world))
@@ -481,6 +503,26 @@ impl WorldDepsRunner {
         }
 
         print_status_table(&report.tools);
+
+        for entry in &report.tools {
+            if entry.install_class != "manual" {
+                continue;
+            }
+            if entry.guest.status == WorldDepGuestState::Present {
+                continue;
+            }
+            let Some(tool) = self.manifest.tool(&entry.name) else {
+                continue;
+            };
+            let Some(instructions) = tool.manual_instructions.as_deref() else {
+                continue;
+            };
+            println!(
+                "\nManual install instructions for `{}`:\n{}",
+                entry.name, instructions
+            );
+        }
+
         Ok(())
     }
 
@@ -551,7 +593,7 @@ impl WorldDepsRunner {
                 .flatten();
 
             let guest_status = if include_all || tool_names.is_empty() || selected {
-                self.probe_guest(tool)
+                self.probe_guest_for_status(tool)
             } else {
                 GuestProbe::Skipped("not selected".to_string())
             };
@@ -560,6 +602,7 @@ impl WorldDepsRunner {
             entries.push(WorldDepStatusEntry {
                 name,
                 selected,
+                install_class: install_class_label(tool.install_class).to_string(),
                 host_detected: detected,
                 host_reason,
                 provider,
@@ -650,15 +693,43 @@ impl WorldDepsRunner {
         self.require_world_backend()?;
 
         let mut to_install = Vec::new();
+        let mut blocked = Vec::new();
         for tool in tools {
+            if tool.install_class == InstallClass::CopyFromHost {
+                blocked.push(format!(
+                    "`{}`: blocked (install_class=copy_from_host)\n  copy_from_host is reserved and unsupported in this increment.",
+                    tool.name
+                ));
+                continue;
+            }
+
             let guest_status = self.ensure_guest_state(tool)?;
             if guest_status {
                 continue;
             }
-            to_install.push(tool);
+
+            match tool.install_class {
+                InstallClass::UserSpace => to_install.push(tool),
+                InstallClass::SystemPackages => blocked.push(format!(
+                    "`{}`: blocked (install_class=system_packages)\n  Requires OS packages. Run:\n    substrate world deps provision",
+                    tool.name
+                )),
+                InstallClass::Manual => {
+                    let mut message = format!(
+                        "`{}`: blocked (install_class=manual)\n  Manual install required.",
+                        tool.name
+                    );
+                    if let Some(instructions) = tool.manual_instructions.as_deref() {
+                        message.push_str("\n\n");
+                        message.push_str(instructions);
+                    }
+                    blocked.push(message);
+                }
+                InstallClass::CopyFromHost => {}
+            }
         }
 
-        if to_install.is_empty() {
+        if to_install.is_empty() && blocked.is_empty() {
             println!("All scoped tools are already available inside the guest.");
             return Ok(());
         }
@@ -667,7 +738,13 @@ impl WorldDepsRunner {
             self.install_tool(tool, args.verbose, args.dry_run)?;
         }
 
-        Ok(())
+        if blocked.is_empty() {
+            return Ok(());
+        }
+
+        Err(anyhow!(WorldDepsUnmetPrerequisiteError {
+            message: blocked.join("\n"),
+        }))
     }
 
     fn run_init(&self, args: &WorldDepsInitArgs) -> Result<()> {
@@ -718,6 +795,15 @@ impl WorldDepsRunner {
     }
 
     fn install_tool(&self, tool: &WorldDepTool, verbose: bool, dry_run: bool) -> Result<()> {
+        if tool.install_class == InstallClass::CopyFromHost {
+            return Err(anyhow!(WorldDepsUnmetPrerequisiteError {
+                message: format!(
+                    "`{}`: blocked (install_class=copy_from_host)\n  copy_from_host is reserved and unsupported in this increment.",
+                    tool.name
+                ),
+            }));
+        }
+
         let host_probe = detect_host(&tool.host.commands);
         let host_detected = host_probe.detected;
         if !host_detected {
@@ -741,6 +827,37 @@ impl WorldDepsRunner {
         if self.ensure_guest_state(tool)? {
             println!("{} already available inside the guest.", tool.name);
             return Ok(());
+        }
+
+        match tool.install_class {
+            InstallClass::UserSpace => {}
+            InstallClass::SystemPackages => {
+                return Err(anyhow!(WorldDepsUnmetPrerequisiteError {
+                    message: format!(
+                        "`{}`: blocked (install_class=system_packages)\n  Requires OS packages. Run:\n    substrate world deps provision",
+                        tool.name
+                    ),
+                }));
+            }
+            InstallClass::Manual => {
+                let mut message = format!(
+                    "`{}`: blocked (install_class=manual)\n  Manual install required.",
+                    tool.name
+                );
+                if let Some(instructions) = tool.manual_instructions.as_deref() {
+                    message.push_str("\n\n");
+                    message.push_str(instructions);
+                }
+                return Err(anyhow!(WorldDepsUnmetPrerequisiteError { message }));
+            }
+            InstallClass::CopyFromHost => {
+                return Err(anyhow!(WorldDepsUnmetPrerequisiteError {
+                    message: format!(
+                        "`{}`: blocked (install_class=copy_from_host)\n  copy_from_host is reserved and unsupported in this increment.",
+                        tool.name
+                    ),
+                }));
+            }
         }
 
         let recipe = tool.install.first().ok_or_else(|| {
@@ -831,6 +948,24 @@ impl WorldDepsRunner {
         }
     }
 
+    fn probe_guest_for_status(&self, tool: &WorldDepTool) -> GuestProbe {
+        let probe = self.probe_guest(tool);
+        match probe {
+            GuestProbe::Available(true) => probe,
+            GuestProbe::Available(false) => match tool.install_class {
+                InstallClass::UserSpace => probe,
+                InstallClass::SystemPackages => GuestProbe::Skipped(
+                    "requires system packages; run `substrate world deps provision`".to_string(),
+                ),
+                InstallClass::Manual => GuestProbe::Skipped("manual install required".to_string()),
+                InstallClass::CopyFromHost => {
+                    GuestProbe::Skipped("unsupported in this increment".to_string())
+                }
+            },
+            other => other,
+        }
+    }
+
     fn ensure_guest_state(&self, tool: &WorldDepTool) -> Result<bool> {
         detect_guest(&tool.guest.commands)
             .with_context(|| format!("failed to detect `{}` inside the world backend", tool.name))
@@ -848,13 +983,23 @@ fn print_status_table(entries: &[WorldDepStatusEntry]) {
             "missing".to_string()
         };
         println!(
-            "- {}: selected={} host={} guest={} installer={}",
+            "- {}: selected={} class={} host={} guest={} installer={}",
             entry.name,
             entry.selected,
+            entry.install_class,
             host_label,
             entry.guest.label(),
             provider
         );
+    }
+}
+
+fn install_class_label(class: InstallClass) -> &'static str {
+    match class {
+        InstallClass::UserSpace => "user_space",
+        InstallClass::SystemPackages => "system_packages",
+        InstallClass::Manual => "manual",
+        InstallClass::CopyFromHost => "copy_from_host",
     }
 }
 

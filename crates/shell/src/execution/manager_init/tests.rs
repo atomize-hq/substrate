@@ -13,7 +13,7 @@ use tempfile::{tempdir, TempDir};
 fn make_manifest(managers: &str) -> (ManifestPaths, TempDir) {
     let dir = tempdir().unwrap();
     let manifest_path = dir.path().join("manager_hooks.yaml");
-    let payload = format!("version: 1\nmanagers:\n{}", managers);
+    let payload = format!("version: 2\nmanagers:\n{}", managers);
     fs::write(&manifest_path, payload).unwrap();
     (
         ManifestPaths {

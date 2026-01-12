@@ -13,7 +13,7 @@ use support::{
 fn shell_env_injects_manager_snippets() {
     let fixture = ShellEnvFixture::new();
     let manifest = fixture.write_manifest(
-        r#"version: 1
+        r#"version: 2
 managers:
   - name: DemoManager
     detect:
