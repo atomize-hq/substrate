@@ -207,7 +207,7 @@ impl WindowsWslBackend {
                     .run()
                     .context("wsl warm script failed to execute")?;
 
-                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
                 let mut last_err: Option<anyhow::Error> = None;
                 while std::time::Instant::now() < deadline {
                     match self.capabilities() {

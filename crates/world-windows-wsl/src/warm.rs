@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use tracing::info;
 
 #[cfg(test)]
@@ -65,7 +65,7 @@ impl WarmCmd {
             "running wsl warm script"
         );
 
-        let status = Command::new("pwsh")
+        let output = Command::new("pwsh")
             .arg("-NoLogo")
             .arg("-File")
             .arg(script)
@@ -73,17 +73,28 @@ impl WarmCmd {
             .arg(&self.distro)
             .arg("-ProjectPath")
             .arg(&self.project_path)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
+            .output()
             .context("failed to spawn pwsh for warm script")?;
 
-        if status.success() {
+        if output.status.success() {
             Ok(())
         } else {
+            let mut stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+            let mut stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+            const MAX: usize = 8 * 1024;
+            if stdout.len() > MAX {
+                stdout.truncate(MAX);
+                stdout.push_str("\n... (truncated)");
+            }
+            if stderr.len() > MAX {
+                stderr.truncate(MAX);
+                stderr.push_str("\n... (truncated)");
+            }
             Err(anyhow!(
-                "wsl warm script exited with status {}",
-                status.code().unwrap_or(-1)
+                "wsl warm script exited with status {}\nstdout:\n{}\nstderr:\n{}",
+                output.status.code().unwrap_or(-1),
+                stdout.trim(),
+                stderr.trim()
             ))
         }
     }
