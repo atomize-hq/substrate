@@ -178,3 +178,10 @@
   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL1-test/events.jsonl`
   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL1-test/stderr.log`
 - Blockers: `Codex last_message missing; CODEX_TEST_EXIT not captured (start command timed out; stale codex.pid)`
+
+## START — 2026-01-12T04:31:19Z — code — WDL2-code
+- Worktree: `wt/world_deps_selection_layer-wdl2-code`
+- Branch: `world_deps_selection_layer-wdl2-code`
+- Orchestration branch: `feat/world_deps_selection_layer`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/world_deps_selection_layer" SLICE_ID="WDL2" LAUNCH_CODEX=1`
