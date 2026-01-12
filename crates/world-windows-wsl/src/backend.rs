@@ -37,6 +37,35 @@ pub struct WindowsWslBackend {
 }
 
 impl WindowsWslBackend {
+    fn discover_warm_project_path(workspace_project_path: &PathBuf) -> PathBuf {
+        let script_rel = PathBuf::from("scripts")
+            .join("windows")
+            .join("wsl-warm.ps1");
+
+        if workspace_project_path.join(&script_rel).is_file() {
+            return workspace_project_path.clone();
+        }
+
+        if let Ok(github_workspace) = std::env::var("GITHUB_WORKSPACE") {
+            let candidate = PathBuf::from(github_workspace);
+            if candidate.join(&script_rel).is_file() {
+                return candidate;
+            }
+        }
+
+        if let Ok(exe) = std::env::current_exe() {
+            let mut dir = exe.parent();
+            while let Some(candidate) = dir {
+                if candidate.join(&script_rel).is_file() {
+                    return candidate.to_path_buf();
+                }
+                dir = candidate.parent();
+            }
+        }
+
+        workspace_project_path.clone()
+    }
+
     /// Create backend using environment defaults.
     pub fn new() -> Result<Self> {
         let distro =
@@ -44,7 +73,8 @@ impl WindowsWslBackend {
         let project_path = std::env::var("SUBSTRATE_PROJECT_PATH")
             .map(PathBuf::from)
             .unwrap_or_else(|_| std::env::current_dir().expect("current directory"));
-        let warm_cmd = WarmCmd::enabled(distro.clone(), project_path.clone());
+        let warm_project_path = Self::discover_warm_project_path(&project_path);
+        let warm_cmd = WarmCmd::enabled(distro.clone(), warm_project_path);
         Self::build(distro, project_path, warm_cmd)
     }
 
@@ -159,7 +189,10 @@ impl WindowsWslBackend {
                 );
 
                 if self.warm_cmd.enabled {
-                    let script_path = self.project_path.join("scripts/windows/wsl-warm.ps1");
+                    let script_path = self
+                        .warm_cmd
+                        .project_path
+                        .join("scripts/windows/wsl-warm.ps1");
                     if !script_path.is_file() {
                         return Err(anyhow!(
                             "world backend unavailable (WSL agent not ready) and warm script was not found at {}\nHint: run `pwsh -File scripts/windows/wsl-warm.ps1 -DistroName {} -ProjectPath (Resolve-Path .)` from the Substrate repo root, then retry.",
@@ -174,7 +207,7 @@ impl WindowsWslBackend {
                     .run()
                     .context("wsl warm script failed to execute")?;
 
-                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
                 let mut last_err: Option<anyhow::Error> = None;
                 while std::time::Instant::now() < deadline {
                     match self.capabilities() {

@@ -22,7 +22,9 @@ function Convert-ToWslPathFragment {
 function Quote-ForBash {
     param([string]$Value)
     if ($null -eq $Value) { return "''" }
-    return "'" + ($Value -replace "'", "'\"'\"'") + "'"
+    # Bash single-quote escape sequence: close-quote, insert '"'"', reopen.
+    $singleQuoteEscape = "'" + '"' + "'" + '"' + "'"
+    return "'" + ($Value -replace "'", $singleQuoteEscape) + "'"
 }
 
 Write-Info "Starting wsl-warm for distro '$DistroName'"
@@ -184,7 +186,18 @@ if ($projectHasCargo) {
     $forwarderHostPath = Join-Path $projectPath 'target\\release\\substrate-forwarder.exe'
     if (-not (Test-Path $forwarderHostPath)) {
         Write-Info "Building substrate-forwarder (release)"
-        & $cargoExe build -p substrate-forwarder --release
+        Push-Location $projectPath
+        try {
+            & $cargoExe build -p substrate-forwarder --release
+        } finally {
+            Pop-Location
+        }
+        if ($LASTEXITCODE -ne 0) {
+            Write-ErrorAndExit "Failed to build substrate-forwarder.exe"
+        }
+        if (-not (Test-Path $forwarderHostPath)) {
+            Write-ErrorAndExit "substrate-forwarder.exe missing after build at $forwarderHostPath"
+        }
     }
 } else {
     $forwarderHostPath = Join-Path $projectPath 'bin\\substrate-forwarder.exe'
