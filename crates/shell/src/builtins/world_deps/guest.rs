@@ -451,7 +451,9 @@ fn run_host_install(script: &str, verbose: bool) -> Result<()> {
 fn wrap_for_bash(script: &str, strict: bool) -> String {
     let body = build_bash_body(script, strict);
     let escaped = body.replace('\'', "'\"'\"'");
-    format!("bash -lc '{}'", escaped)
+    // When executing inside a world backend, PATH may be minimal; prefer an absolute bash path
+    // to avoid spawn failures that surface as "internal: Command execution failed".
+    format!("/bin/bash -lc '{}'", escaped)
 }
 
 fn wrap_guest_install_script(script: &str) -> String {
