@@ -498,7 +498,7 @@
       "name": "WDL1 — Integration Linux (platform-fix)",
       "type": "integration",
       "phase": "WDL1",
-      "status": "pending",
+      "status": "completed",
       "description": "Linux platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/world_deps_selection_layer/plan.md",
@@ -539,7 +539,7 @@
       "name": "WDL1 — Integration macOS (platform-fix)",
       "type": "integration",
       "phase": "WDL1",
-      "status": "pending",
+      "status": "completed",
       "description": "macOS platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/world_deps_selection_layer/plan.md",
@@ -580,7 +580,7 @@
       "name": "WDL1 — Integration Windows (platform-fix)",
       "type": "integration",
       "phase": "WDL1",
-      "status": "pending",
+      "status": "completed",
       "description": "Windows platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/world_deps_selection_layer/plan.md",
