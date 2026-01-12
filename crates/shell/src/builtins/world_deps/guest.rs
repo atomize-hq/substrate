@@ -125,6 +125,7 @@ pub(crate) fn detect_guest(commands: &[String]) -> Result<bool> {
     Ok(false)
 }
 
+#[cfg(target_os = "windows")]
 pub(crate) fn detect_guest_for_provision(commands: &[String]) -> Result<bool> {
     let fallback_allowed = host_fallback_allowed();
     for cmd in commands {

@@ -1,6 +1,8 @@
+#[cfg(target_os = "windows")]
+use super::guest::detect_guest_for_provision;
 use super::guest::{
-    detect_guest, detect_guest_for_provision, detect_host, detect_host_bulk, run_guest_install,
-    run_guest_provision_install, world_exec_fallback_active, WorldBackendUnavailable,
+    detect_guest, detect_host, detect_host_bulk, run_guest_install, run_guest_provision_install,
+    world_exec_fallback_active, WorldBackendUnavailable,
 };
 use super::models::{
     sanitize_reason, GuestProbe, ManifestLayerInfo, WorldDepGuestState, WorldDepGuestStatus,
@@ -1191,6 +1193,8 @@ fn apt_options_for_world_deps() -> &'static str {
      -o Dir::State::lists=/var/lib/substrate/world-deps/apt/lists \
      -o Dir::Cache=/var/lib/substrate/world-deps/apt/cache \
      -o Dir::Cache::archives=/var/lib/substrate/world-deps/apt/cache/archives"
+}
+
 #[cfg(target_os = "windows")]
 fn provision_system_packages_via_wsl(packages: &[String], verbose: bool) -> Result<()> {
     use std::process::Command;
