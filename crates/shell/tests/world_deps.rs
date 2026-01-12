@@ -152,6 +152,11 @@ impl WorldDepsFixture {
         }
     }
 
+    fn write_empty_world_deps_manifest(&self) {
+        let contents = "version: 2\nmanagers: {}\n";
+        fs::write(&self.manifest_path, contents).expect("write world deps manifest");
+    }
+
     fn write_selection(&self, selected: &[&str]) {
         let path = self.substrate_home.join("world-deps.selection.yaml");
         let contents = if selected.is_empty() {
@@ -232,6 +237,42 @@ impl WorldDepsFixture {
         )
         .expect("write manifest");
         self.write_selection(tools);
+    }
+
+    fn write_manifest_with_system_packages(&self, system_packages: &[(&str, &[&str])]) {
+        let mut managers: Map<String, Value> = Map::new();
+        for (tool, packages) in system_packages {
+            managers.insert(
+                (*tool).to_string(),
+                json!({
+                    "detect": {
+                        "commands": [self.host_script(tool)]
+                    },
+                    "guest_detect": {
+                        "command": self.guest_script(tool)
+                    },
+                    "guest_install": {
+                        "class": "system_packages",
+                        "system_packages": {
+                            "apt": packages
+                        }
+                    }
+                }),
+            );
+        }
+
+        let manifest = Value::Object({
+            let mut root = Map::new();
+            root.insert("version".into(), json!(2));
+            root.insert("managers".into(), Value::Object(managers));
+            root
+        });
+
+        fs::write(
+            &self.manifest_path,
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )
+        .expect("write manifest");
     }
 
     fn write_manifest_with_host_command(&self, tool: &str, host_command: &str) {
@@ -432,6 +473,14 @@ fn write_minimal_manifest(path: &Path) {
         fs::create_dir_all(parent).expect("manifest parent dir");
     }
     fs::write(path, "version: 2\nmanagers: {}\n").expect("write manifest");
+}
+
+fn combined_output(stdout: &[u8], stderr: &[u8]) -> String {
+    format!(
+        "{}\n{}",
+        String::from_utf8_lossy(stdout),
+        String::from_utf8_lossy(stderr)
+    )
 }
 
 fn canonicalize_or(path: &Path) -> PathBuf {
@@ -1075,5 +1124,128 @@ fn world_deps_manifest_env_override_takes_precedence_over_defaults() {
     assert_eq!(
         extract_user_overlay(&report),
         Some(substrate_home.join("world-deps.local.yaml"))
+    );
+}
+
+#[test]
+fn world_deps_provision_noops_when_selection_missing_even_without_world_socket() {
+    let fixture = WorldDepsFixture::new();
+    fixture.write_empty_world_deps_manifest();
+
+    let assert = fixture.command().arg("provision").assert();
+
+    let status = &assert.get_output().status;
+    assert!(
+        status.success(),
+        "expected provision to be a no-op (exit 0) when selection missing; status={status:?}\n{}",
+        combined_output(&assert.get_output().stdout, &assert.get_output().stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    assert!(
+        stdout.contains("substrate: world deps not configured (selection file missing)"),
+        "stdout missing selection guidance: {stdout}"
+    );
+    assert!(
+        stdout.contains("Create a selection file: substrate world deps init --workspace"),
+        "stdout missing init guidance: {stdout}"
+    );
+    assert!(
+        stdout.contains("Discover available tools: substrate world deps status --all"),
+        "stdout missing status guidance: {stdout}"
+    );
+}
+
+#[test]
+fn world_deps_provision_exits_0_when_no_system_packages_required() {
+    let fixture = WorldDepsFixture::new();
+    fixture.write_manifest(&["git"]);
+
+    let assert = fixture.command().arg("provision").assert();
+
+    let status = &assert.get_output().status;
+    assert!(
+        status.success(),
+        "expected provision to exit 0 when no system packages are required; status={status:?}\n{}",
+        combined_output(&assert.get_output().stdout, &assert.get_output().stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    assert!(
+        stdout.contains("No system packages required for the current selection."),
+        "stdout missing empty system packages message: {stdout}"
+    );
+}
+
+#[test]
+fn world_deps_provision_exits_2_for_unknown_tool_in_selection() {
+    let fixture = WorldDepsFixture::new();
+    fixture.write_manifest(&["git"]);
+    fixture.write_selection(&["unknown-tool"]);
+
+    let assert = fixture.command().arg("provision").assert();
+
+    let status = &assert.get_output().status;
+    assert_eq!(
+        status.code(),
+        Some(2),
+        "expected provision to exit 2 for invalid selection config; status={status:?}\n{}",
+        combined_output(&assert.get_output().stdout, &assert.get_output().stderr)
+    );
+
+    let output = combined_output(&assert.get_output().stdout, &assert.get_output().stderr);
+    assert!(
+        output.contains("invalid world-deps selection") || output.contains("unknown tool"),
+        "expected selection-config error output (not clap subcommand parsing): {output}"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn world_deps_provision_unsupported_on_linux_host_backend_exits_4_and_prints_deterministic_package_list(
+) {
+    let fixture = WorldDepsFixture::new();
+    fixture.write_manifest_with_system_packages(&[
+        (
+            "alpha",
+            &[
+                "zlib1g-dev",
+                "build-essential",
+                "libssl-dev",
+                "build-essential",
+            ],
+        ),
+        ("beta", &["curl", "libssl-dev", "zlib1g-dev"]),
+    ]);
+    fixture.write_selection(&["alpha", "beta"]);
+
+    let assert = fixture.command().arg("provision").arg("--dry-run").assert();
+    let status = &assert.get_output().status;
+    assert_eq!(
+        status.code(),
+        Some(4),
+        "expected provision to exit 4 on Linux host backend; status={status:?}\n{}",
+        combined_output(&assert.get_output().stdout, &assert.get_output().stderr)
+    );
+
+    let output = combined_output(&assert.get_output().stdout, &assert.get_output().stderr);
+    assert!(
+        output.contains("unsupported on Linux host backend"),
+        "output missing Linux-host unsupported message: {output}"
+    );
+
+    let expected_order = ["build-essential", "libssl-dev", "zlib1g-dev", "curl"];
+    let mut cursor = 0usize;
+    for pkg in expected_order {
+        let idx = output[cursor..]
+            .find(pkg)
+            .unwrap_or_else(|| panic!("output missing `{pkg}`: {output}"));
+        cursor += idx;
+    }
+
+    let libssl_count = output.matches("libssl-dev").count();
+    assert_eq!(
+        libssl_count, 1,
+        "expected package de-duplication across tools (libssl-dev appears once), got {libssl_count}: {output}"
     );
 }
