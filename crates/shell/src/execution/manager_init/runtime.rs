@@ -236,12 +236,8 @@ pub(crate) fn detect_script(script: &str, platform: Platform) -> Result<Option<S
 fn run_detect_script(script: &str, platform: Platform) -> Result<bool> {
     let mut cmd = match platform {
         Platform::Windows => {
-            let shell = if which("pwsh").is_ok() {
-                "pwsh"
-            } else {
-                "powershell"
-            };
-            let mut command = Command::new(shell);
+            let shell = select_windows_shell();
+            let mut command = Command::new(&shell);
             command
                 .arg("-NoProfile")
                 .arg("-NonInteractive")
@@ -262,6 +258,47 @@ fn run_detect_script(script: &str, platform: Platform) -> Result<bool> {
     cmd.stderr(Stdio::null());
     let status = cmd.status()?;
     Ok(status.success())
+}
+
+fn select_windows_shell() -> OsString {
+    if let Some(shell) = env::var_os("SUBSTRATE_MANAGER_INIT_POWERSHELL") {
+        if !shell.as_os_str().is_empty() {
+            return shell;
+        }
+    }
+
+    if which("pwsh").is_ok() {
+        return OsString::from("pwsh");
+    }
+
+    if let Ok(program_files) = env::var("ProgramFiles") {
+        for version in ["7", "6"] {
+            let candidate = PathBuf::from(&program_files)
+                .join("PowerShell")
+                .join(version)
+                .join("pwsh.exe");
+            if candidate.exists() {
+                return candidate.into_os_string();
+            }
+        }
+    }
+
+    if which("powershell").is_ok() {
+        return OsString::from("powershell");
+    }
+
+    if let Ok(system_root) = env::var("SystemRoot") {
+        let candidate = PathBuf::from(&system_root)
+            .join("System32")
+            .join("WindowsPowerShell")
+            .join("v1.0")
+            .join("powershell.exe");
+        if candidate.exists() {
+            return candidate.into_os_string();
+        }
+    }
+
+    OsString::from("powershell")
 }
 
 fn select_posix_shell() -> OsString {
