@@ -27,7 +27,7 @@ In this end state, `world deps` MUST NOT read (or be influenced by) any of:
 - `.substrate/world-deps.selection.yaml`
 - `~/.substrate/world-deps.selection.yaml`
 Replacement completeness requirement:
-- Tests that previously validated legacy file loading MUST be updated to validate the new inventory/selection files, and MUST fail if `world deps` still reads any legacy file paths.
+- Tests that previously validated legacy file loading MUST be updated to validate the new inventory/enabled files, and MUST fail if `world deps` still reads any legacy file paths.
 
 ## Key Terms
 - **Host**: the developer workstation environment running `substrate`.
@@ -47,7 +47,7 @@ Replacement completeness requirement:
 
 ### Naming rules (avoid collisions)
 - Package and bundle names are bare (e.g. `bun`, `node-runtime`).
-- A name MUST NOT exist in both `packages` and `bundles` after inventory merge (selection must be unambiguous).
+- A name MUST NOT exist in both `packages` and `bundles` after inventory merge (enabled names must be unambiguous).
 - Runnable CLIs MUST only be represented as **packages** (never bundles).
 - Non-runnable packages MUST be named like prerequisites (e.g. `python-build-deps`, `node-toolchain-deps`) and MUST NOT reuse well-known CLI names.
 
@@ -73,10 +73,12 @@ name: <package_name>                 # required; MUST match the filename (<dep_n
 description: <string optional>
 runnable: <bool>                      # required
 entrypoints: [<string>...]            # required when runnable=true (e.g. ["bun"])
-platforms: [linux|macos|windows]      # optional allowlist; default: all
+platforms: [linux|macos|windows]      # optional allowlist; default: all (host platform)
 install:                              # required
   method: apt | script | manual
-  apt: [<apt_pkg>...]                 # required iff method=apt
+  apt:                                # required iff method=apt
+    - name: <apt_package_name>
+      version: <string optional>      # when omitted, installs the default candidate/latest
   script_path: <string>               # recommended iff method=script (see deps/scripts/ below)
   script: |                           # allowed iff method=script (inline fallback)
     <sh script>                       # used only when script_path is omitted
@@ -91,7 +93,7 @@ probe:                                # optional; overrides default presence che
 version: 1
 name: <bundle_name>                   # required; MUST match the filename (<dep_name>.yaml)
 description: <string optional>
-platforms: [linux|macos|windows]      # optional allowlist; default: all
+platforms: [linux|macos|windows]      # optional allowlist; default: all (host platform)
 packages: [<package_name>...]
 ```
 
@@ -112,6 +114,11 @@ Default probe behavior when `probe.command` is omitted:
 - For `runnable: true`: present iff every `entrypoints[]` is invokable via `command -v <entrypoint>` in the world.
 - For `runnable: false`: present iff the package’s `install` requirements are satisfied (implementation-defined; non-runnable packages SHOULD provide an explicit `probe.command` to keep status deterministic).
 
+APT version pinning:
+- Each `install.apt[]` entry MAY specify `version`.
+- If `version` is omitted, Substrate installs the default candidate (equivalent to `apt-get install <name>`).
+- If `version` is specified, Substrate installs exactly that version (equivalent to `apt-get install <name>=<version>`); if unavailable, the install MUST fail with an actionable error.
+
 ### Inventory sources and merge order
 Inventory is resolved by merging these sources (later layers override earlier):
 1) **Built-in defaults** shipped with Substrate (configurable to hide/disable; not edited directly).
@@ -119,6 +126,16 @@ Inventory is resolved by merging these sources (later layers override earlier):
 3) **Workspace inventory chain**: from the current directory upward, merge any `<dir>/.substrate/deps/` found (nearest overrides earlier ancestors).
 
 Workspace inventories **extend** global/built-ins by default. A workspace may opt into **workspace-only inventory** via enabled config (see below).
+
+Merge rules:
+- Inventory is merged by item name and kind:
+  - `packages/<name>.yaml` defines package `<name>`.
+  - `bundles/<name>.yaml` defines bundle `<name>`.
+- When the same `<name>` is defined in multiple inventory layers, the closest layer to `cwd` MUST replace the definition (full replacement; not per-field merge).
+- It is an error if, after merge, the same name exists in both packages and bundles.
+- Inventory is filtered by platform:
+  - If an item declares `platforms`, it is visible only when the host platform is in the list.
+  - Non-matching items are treated as non-existent (they do not appear in `available` and cannot be enabled).
 
 ## Enabled Model (Sparse YAML)
 Enabled deps are resolved from sparse YAML config merged by current working directory:
@@ -138,12 +155,17 @@ world:
       - <item_name>
       - <item_name>
     inventory_mode: merged | workspace_only
+    builtins: enabled | disabled
 ```
 
 Rules:
 - `world.deps.enabled` MUST be a YAML list of non-empty strings when present.
 - Ordering is preserved (the order in `enabled` is the order applied/printed).
 - Duplicate names MUST be ignored after the first occurrence.
+- Every enabled name MUST exist in the effective available inventory view for `cwd`; otherwise it is a configuration error (exit `2`).
+- `world.deps.builtins` controls whether Substrate-shipped inventory defaults are visible:
+  - `enabled` (default): built-ins participate in inventory merge.
+  - `disabled`: built-ins are excluded from inventory merge (only user-provided inventory directories apply).
 
 ## Patch File Comment Headers (Examples)
 
@@ -169,6 +191,7 @@ world:
       - "bun"
       - "node-runtime"
     inventory_mode: merged
+    builtins: enabled
 ```
 
 ### Workspace enabled patch (`<workspace_root>/.substrate/workspace.yaml`)
@@ -232,11 +255,13 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - Purpose: show the **effective** (merged) deps views for the current directory.
 - `available` (default):
   - Prints the **current inventory view** visible from `cwd` (after inventory merge + `world.deps.inventory_mode`).
+  - Output SHOULD be a table.
   - It MUST NOT make world-agent calls.
   - Hints (stderr, only if empty):
-    - `substrate: note: no deps inventory items visible for this directory; add definitions under ~/.substrate/deps/ or <workspace>/.substrate/deps/`
+    - `substrate: note: no deps inventory items visible for this directory; add definitions under ~/.substrate/deps/ or <workspace_root>/.substrate/deps/`
 - `enabled`:
   - Prints the **current enabled list** (effective merged enabled list for `cwd`) without querying world-agent.
+  - If any enabled name does not exist in the effective available inventory view, it MUST fail with exit `2` and list the unknown names.
   - Stderr (always):
     - `substrate: note: showing current effective enabled deps list for this directory`
   - Hints (stderr, when empty):
@@ -249,12 +274,13 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
     - `substrate: note: showing current world deps status for this directory`
 - Output MUST include, for each item (view-dependent):
   - Always: `name` (string) and `kind=package|bundle`
-  - For `enabled` and `applied`: `enabled=true|false` (enabled in current enabled list)
+  - For `enabled`: list items are ordered and MUST match the effective `world.deps.enabled` list; `enabled=true` is implied.
+  - For `applied`: `enabled=true|false` (enabled in the effective enabled list)
   - For `applied`: `world=present|missing|blocked`
   - Optional (only for `applied`): `remediation=<one-line remediation or empty>`
 - Exit codes:
   - `0` success
-  - `2` invalid YAML / unknown ids / invalid args
+  - `2` invalid YAML / unknown item name / invalid args
   - `3` world backend unavailable (only for `applied`)
   - `1` unexpected
 
@@ -267,14 +293,14 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
     - Example (persist): `substrate: hint: run 'substrate world deps workspace add <item_name>' then 'substrate world deps current sync'`
 - Exit codes:
   - `0` success
-  - `2` unknown item id / invalid inventory YAML
+  - `2` unknown item name / invalid inventory YAML
   - `3` world backend unavailable (only when `--explain` needs world status)
   - `1` unexpected
 
 #### `substrate world deps global add <item_name...> [--json]`
 - Applies a **global enabled patch** update (does not install).
 - It MUST:
-  - Validate item names exist in the **current available inventory view** for `cwd`.
+  - Validate item names exist in the **global available inventory view** (built-ins + `~/.substrate/deps/`; never workspace inventory).
   - Write only `~/.substrate/config.yaml` (patch semantics; preserve comment header).
 - On success, it MUST print:
   - `Enabled deps updated (global): added: <csv>`
@@ -282,11 +308,14 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - Exit codes: `0` success (including no-op); `2` actionable user error; `1` unexpected
 
 #### `substrate world deps global remove <item_name...> [--json]`
-- Same as `global add`, but removes items from the global enabled patch.
+- Removes items from the global enabled patch (does not install).
+- It MUST:
+  - Not require names to exist in inventory (supports removing unknown names after manual edits).
+  - Write only `~/.substrate/config.yaml` (patch semantics; preserve comment header).
 - On success, it MUST print:
   - `Enabled deps updated (global): removed: <csv>`
   - `substrate: note: 'remove' only updates enabled deps; it does not uninstall. Run 'substrate world deps current sync' to apply`
-- Exit codes match `global add`.
+- Exit codes: `0` success (including no-op); `2` invalid args / invalid YAML; `1` unexpected
 
 #### `substrate world deps global reset [item_name ...] [--json]`
 - Resets global enabled deps back to defaults by editing only `~/.substrate/config.yaml`.
@@ -304,19 +333,22 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - Applies a **workspace enabled patch** update (does not install).
 - Requires `cwd` is within an enabled workspace (workspace root discovered from `cwd`).
 - It MUST:
-  - Validate item names exist in the current available inventory view for `cwd`.
+  - Validate item names exist in the **current available inventory view** for `cwd`.
   - Write only `<workspace_root>/.substrate/workspace.yaml` (patch semantics; preserve comment header).
 - On success, it MUST print:
   - `Enabled deps updated (workspace): added: <csv>`
   - `substrate: note: enabled deps changes apply to the world only after 'substrate world deps current sync'`
-- Exit codes: `0` success (including no-op); `2` no workspace root / unknown ids / invalid YAML; `1` unexpected
+- Exit codes: `0` success (including no-op); `2` no workspace root / unknown item name / invalid YAML; `1` unexpected
 
 #### `substrate world deps workspace remove <item_name...> [--json]`
-- Same as `workspace add`, but removes items from the workspace enabled patch.
+- Removes items from the workspace enabled patch (does not install).
+- It MUST:
+  - Not require names to exist in inventory (supports removing unknown names after manual edits).
+  - Write only `<workspace_root>/.substrate/workspace.yaml` (patch semantics; preserve comment header).
 - On success, it MUST print:
   - `Enabled deps updated (workspace): removed: <csv>`
   - `substrate: note: 'remove' only updates enabled deps; it does not uninstall. Run 'substrate world deps current sync' to apply`
-- Exit codes match `workspace add`.
+- Exit codes: `0` success (including no-op); `2` no workspace root / invalid args / invalid YAML; `1` unexpected
 
 #### `substrate world deps workspace reset [item_name ...] [--json]`
 - Resets workspace enabled deps back to inherited defaults by editing only `<workspace_root>/.substrate/workspace.yaml`.
@@ -332,23 +364,25 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - Exit codes: `0` success (including no-op); `2` actionable user error; `1` unexpected
 
 #### `substrate world deps current install <item_name...> [--dry-run] [--verbose]`
-- Applies items immediately without modifying selection.
+- Applies items immediately without modifying the enabled list.
 - It MUST:
   1) Expand bundles → packages.
   2) Apply **world image** installs first (apt).
   3) Apply **world deps prefix** installs second (scripts + entrypoints under `/var/lib/substrate/world-deps/bin`).
+  4) Never execute `manual` installs; instead print `manual_instructions` and exit `4`.
 - `--dry-run`:
   - MUST print the computed plan (apt list + script package list) and exit `0` without side effects.
 - On success, it MUST print:
   - A short summary of what was applied (world image + world deps prefix), then:
-  - `substrate: note: this updates the world only (selection not modified)`
+  - `substrate: note: this updates the world only (enabled list not modified)`
   - `substrate: hint: run 'substrate world deps current list applied' to verify`
 - Guarantee (runnable packages):
   - After success, runnable package entrypoints are invokable in-world via the standard world execution path (interactive `substrate>` and non-interactive runs) without requiring shell RC sourcing.
 - Exit codes:
   - `0` success
-  - `2` unknown ids / invalid YAML / invalid inventory
+  - `2` unknown item name / invalid YAML / invalid inventory
   - `3` world backend unavailable
+  - `4` unmet prerequisites (e.g. manual install required, platform unsupported)
   - `5` hardening conflict (world is writable only under `/var/lib/substrate/world-deps` but the install needs broader writes)
   - `1` unexpected
 
@@ -364,7 +398,8 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 
 #### `substrate world deps global list [available|enabled] [--json]`
 - `available` (default):
-  - Prints the **global inventory patch view** from `~/.substrate/deps/` (or empty if missing).
+  - Prints the **global inventory patch view** from `~/.substrate/deps/` (or empty if missing) as a table.
+  - Table columns SHOULD include: `kind`, `name`, `runnable`, `method`, `entrypoints`, `platforms`, `description`.
   - It MUST NOT incorporate workspace inventory.
   - It MUST NOT print built-in defaults; use `deps current list available` for the merged view.
 - `enabled`:
@@ -374,7 +409,8 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 #### `substrate world deps workspace list [available|enabled] [--json]`
 - Requires `cwd` is within an enabled workspace.
 - `available` (default):
-  - Prints the **workspace inventory patch view** from `<workspace_root>/.substrate/deps/` (or empty if missing).
+  - Prints the **workspace inventory patch view** from `<workspace_root>/.substrate/deps/` (or empty if missing) as a table.
+  - Table columns SHOULD include: `kind`, `name`, `runnable`, `method`, `entrypoints`, `platforms`, `description`.
   - It MUST NOT incorporate global inventory.
   - It MUST NOT print built-in defaults; use `deps current list available` for the merged view.
 - `enabled`:
@@ -385,6 +421,9 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 `present/missing/blocked` is always from the world perspective.
 - For **runnable packages**, `present` means the package entrypoint is invokable in-world via the standard world shell execution path.
 - For **bundles**, `present` means all constituent packages are `present` (bundles are never invoked directly).
+- For packages with `install.method=manual`:
+  - `present` means the package’s probe succeeds (via `probe.command`, or via `entrypoints[]` when runnable).
+  - `blocked` means the package is not present and Substrate will not install it automatically; `remediation` SHOULD be: `manual install required; run 'substrate world deps current show <name> --explain'`.
 
 ## Notes / Known follow-ups
 - Some packages are “managers” (e.g. `nvm`) and are not the same as their runtimes (e.g. `node`). A manager package being `present` does not imply a runtime exists unless a runtime package/bundle is enabled/installed.
