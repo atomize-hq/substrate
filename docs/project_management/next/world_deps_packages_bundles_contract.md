@@ -7,6 +7,28 @@ This document defines the **user-facing contract** for `substrate world deps` us
 - Unify the mental model around **inventory** (what exists) vs **selection** (what you want applied from the current directory).
 - Avoid misleading names (no more `pyenv`-style “looks like a CLI but isn’t”).
 
+## What “Replace” Means (End State)
+- No user-facing `manager_hooks.yaml` semantics.
+- No `world-deps.yaml` overlay mechanism (and no local variants).
+- Inventory sources become:
+  - Built-in defaults (shipped with Substrate; not user-edited)
+  - `~/.substrate/deps/` (global inventory directory)
+  - `<workspace_root>/.substrate/deps/` (workspace inventory directory)
+- Selection sources become:
+  - `~/.substrate/config.yaml` (global selection patch)
+  - `<workspace_root>/.substrate/workspace.yaml` (workspace selection patch)
+
+### Legacy files removed from plumbing
+In this end state, `world deps` MUST NOT read (or be influenced by) any of:
+- `config/manager_hooks.yaml`
+- `scripts/substrate/world-deps.yaml`
+- `~/.substrate/manager_hooks.local.yaml`
+- `~/.substrate/world-deps.local.yaml`
+- `.substrate/world-deps.selection.yaml`
+- `~/.substrate/world-deps.selection.yaml`
+Replacement completeness requirement:
+- Tests that previously validated legacy file loading MUST be updated to validate the new inventory/selection files, and MUST fail if `world deps` still reads any legacy file paths.
+
 ## Key Terms
 - **Host**: the developer workstation environment running `substrate`.
 - **World**: the isolated execution environment behind world-agent (Linux host, macOS Lima VM, Windows WSL).
@@ -17,31 +39,183 @@ This document defines the **user-facing contract** for `substrate world deps` us
 
 ## Inventory Model
 ### Item types
-- **Package** (`pkg:<name>`): an installable unit.
+- **Package**: an installable unit (via apt or via a script).
   - Install methods:
     - **apt** (world image install)
     - **script** (world deps prefix install; must create/ensure an entrypoint under `/var/lib/substrate/world-deps/bin`)
-- **Bundle** (`bundle:<name>`): named group of packages (expands to packages).
+- **Bundle**: named group of packages (no installer; expands to packages).
 
 ### Naming rules (avoid collisions)
-- Inventory IDs MUST use prefixes: `pkg:` and `bundle:` (no bare names).
-- Bundle IDs MUST NOT be the same string as any package ID (prevents “`bundle:pyenv` that looks like `pkg:pyenv`”).
+- Package and bundle names are bare (e.g. `bun`, `node-runtime`).
+- A name MUST NOT exist in both `packages` and `bundles` after inventory merge (selection must be unambiguous).
 - Runnable CLIs MUST only be represented as **packages** (never bundles).
+- Non-runnable packages MUST be named like prerequisites (e.g. `python-build-deps`, `node-toolchain-deps`) and MUST NOT reuse well-known CLI names.
+
+### Package “runnable” requirement (prevents `pyenv` confusion)
+Every package MUST declare whether it is runnable in-world:
+- `runnable: true` means the user is expected to invoke a CLI entrypoint in the world.
+- `runnable: false` means the package exists only to satisfy prerequisites (it is not a user-facing CLI).
+
+### Inventory schema (`deps/`)
+Inventory is a directory, not a single file.
+
+Layout (per scope):
+- Packages: `<scope>/.substrate/deps/packages/<dep_name>.yaml`
+- Bundles: `<scope>/.substrate/deps/bundles/<dep_name>.yaml`
+
+The item name is the filename without `.yaml` (e.g. `packages/bun.yaml` defines package `bun`).
+For safety, the YAML inside the file MUST also declare `name: ...`, and it MUST match the filename-derived name exactly.
+
+#### Package file schema (`deps/packages/<dep_name>.yaml`)
+```yaml
+version: 1
+name: <package_name>                 # required; MUST match the filename (<dep_name>.yaml)
+description: <string optional>
+runnable: <bool>                      # required
+entrypoints: [<string>...]            # required when runnable=true (e.g. ["bun"])
+platforms: [linux|macos|windows]      # optional allowlist; default: all
+install:                              # required
+  method: apt | script | manual
+  apt: [<apt_pkg>...]                 # required iff method=apt
+  script_path: <string>               # recommended iff method=script (see deps/scripts/ below)
+  script: |                           # allowed iff method=script (inline fallback)
+    <sh script>                       # used only when script_path is omitted
+  manual_instructions: |              # required iff method=manual
+    <text>
+probe:                                # optional; overrides default presence checks
+  command: <string>                   # run inside the world; present iff exit 0
+```
+
+#### Bundle file schema (`deps/bundles/<dep_name>.yaml`)
+```yaml
+version: 1
+name: <bundle_name>                   # required; MUST match the filename (<dep_name>.yaml)
+description: <string optional>
+platforms: [linux|macos|windows]      # optional allowlist; default: all
+packages: [<package_name>...]
+```
+
+### Script install sources (`deps/scripts/`)
+For `method: script`, inventory MAY embed scripts inline, but SHOULD use a script path for maintainability.
+
+Recommended layout (mirrors scope):
+- Global: `~/.substrate/deps/scripts/`
+- Workspace: `<workspace_root>/.substrate/deps/scripts/`
+
+Script path resolution:
+- If `install.script_path` is relative, it is resolved relative to the package definition file that declared it.
+  - Example (from `deps/packages/bun.yaml`): `script_path: ../scripts/bun.sh`
+- If `install.script_path` is absolute, it is used as-is.
+- If both `install.script_path` and inline `install.script` are provided, `script_path` MUST take precedence.
+
+Default probe behavior when `probe.command` is omitted:
+- For `runnable: true`: present iff every `entrypoints[]` is invokable via `command -v <entrypoint>` in the world.
+- For `runnable: false`: present iff the package’s `install` requirements are satisfied (implementation-defined; non-runnable packages SHOULD provide an explicit `probe.command` to keep status deterministic).
 
 ### Inventory sources and merge order
 Inventory is resolved by merging these sources (later layers override earlier):
 1) **Built-in defaults** shipped with Substrate (configurable to hide/disable; not edited directly).
-2) **Global user inventory**: `~/.substrate/deps.yaml`
-3) **Workspace inventory chain**: from the current directory upward, merge any `<dir>/.substrate/deps.yaml` found (nearest overrides earlier ancestors).
+2) **Global user inventory**: `~/.substrate/deps/`
+3) **Workspace inventory chain**: from the current directory upward, merge any `<dir>/.substrate/deps/` found (nearest overrides earlier ancestors).
 
 Workspace inventories **extend** global/built-ins by default. A workspace may opt into **workspace-only inventory** via selection config (see below).
 
 ## Selection Model (Sparse YAML)
 Selection is resolved from sparse YAML config merged by current working directory:
 - **Global selection defaults**: `~/.substrate/config.yaml`
-- **Workspace selection**: `<workspace>/.substrate/workspace.yaml`
+- **Workspace selection**: `<workspace_root>/.substrate/workspace.yaml`
 
-Selection is an ordered list of inventory item IDs (packages and bundles).
+Selection is an ordered list of inventory item names (packages and bundles).
+
+### Selection schema (patch keys)
+Selection lives under `world.deps`:
+```yaml
+world:
+  deps:
+    # Canonical shape (multi-line YAML list).
+    selected:
+      - <item_name>
+      - <item_name>
+      - <item_name>
+    inventory_mode: merged | workspace_only
+```
+
+Rules:
+- `world.deps.selected` MUST be a YAML list of non-empty strings when present.
+- Ordering is preserved (the order in `selected` is the order applied/printed).
+- Duplicate names MUST be ignored after the first occurrence.
+
+## Patch File Comment Headers (Examples)
+
+World deps uses the same “patch file” concept as `ADR-0008`: the file at a scope contains only overrides for that scope, and commands MUST preserve any existing comment header.
+You MAY also edit these files directly; the CLI is a convenience layer over YAML patches (invalid YAML is an actionable user error).
+
+### Global selection patch (`~/.substrate/config.yaml`)
+```yaml
+# Substrate world deps selection patch (global scope).
+# - Update via:
+#   - `substrate world deps global add ...`
+#   - `substrate world deps global remove ...`
+#   - `substrate world deps global reset ...`
+# - Or edit this file directly (YAML).
+# - Changes do not affect the world until you run:
+#   - `substrate world deps current sync`
+# - Inspect the effective view for your current directory:
+#   - `substrate world deps current list selected`
+#   - `substrate world deps current list applied`
+world:
+  deps:
+    selected:
+      - "bun"
+      - "node-runtime"
+    inventory_mode: merged
+```
+
+### Workspace selection patch (`<workspace_root>/.substrate/workspace.yaml`)
+```yaml
+# Substrate world deps selection patch (workspace scope).
+# - Update via:
+#   - `substrate world deps workspace add ...`
+#   - `substrate world deps workspace remove ...`
+#   - `substrate world deps workspace reset ...`
+# - Or edit this file directly (YAML).
+# - Changes do not affect the world until you run:
+#   - `substrate world deps current sync`
+world:
+  deps:
+    selected:
+      - "python-build-deps"
+```
+
+### Inventory directory (`~/.substrate/deps/` or `<workspace_root>/.substrate/deps/`)
+Per-item files live at:
+- `deps/packages/<dep_name>.yaml`
+- `deps/bundles/<dep_name>.yaml`
+```yaml
+# Inventory is a directory:
+#   <scope>/.substrate/deps/
+#
+# Example package file:
+#   <scope>/.substrate/deps/packages/<dep_name>.yaml
+version: 1
+name: bun
+description: Bun runtime
+runnable: true
+entrypoints: ["bun"]
+install:
+  method: script
+  script_path: ../scripts/bun.sh
+probe:
+  command: "bun --version"
+```
+
+```yaml
+# Example bundle file:
+#   <scope>/.substrate/deps/bundles/<dep_name>.yaml
+version: 1
+name: node-runtime
+packages: ["node", "npm"]
+```
 
 ### Workspace-only lever
 `world.deps.inventory_mode`:
@@ -60,7 +234,7 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
   - Prints the **current inventory view** visible from `cwd` (after inventory merge + `world.deps.inventory_mode`).
   - It MUST NOT make world-agent calls.
   - Hints (stderr, only if empty):
-    - `substrate: note: no deps inventory items visible for this directory; add definitions in ~/.substrate/deps.yaml or <workspace>/.substrate/deps.yaml`
+    - `substrate: note: no deps inventory items visible for this directory; add definitions under ~/.substrate/deps/ or <workspace>/.substrate/deps/`
 - `selected`:
   - Prints the **current selection** (effective merged selection for `cwd`) without querying world-agent.
   - Stderr (always):
@@ -71,93 +245,93 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
   - Prints world-agent-backed status for items.
   - Default scope: the current selected set.
   - `--all`: include every currently available inventory item (debug/bring-up only). Valid only with `applied`.
-  - Stderr (always):
-    - `substrate: note: showing current world deps status for this directory`
-- Output MUST include, for each item:
-  - `id` (`pkg:*` or `bundle:*`)
-  - `selected=true|false` (selected in current selection)
-  - `world=present|missing|blocked`
-  - `next=<one-line remediation or empty>`
+- Stderr (always):
+  - `substrate: note: showing current world deps status for this directory`
+- Output MUST include, for each item (view-dependent):
+  - Always: `name` (string) and `kind=package|bundle`
+  - For `selected` and `applied`: `selected=true|false` (selected in current selection)
+  - For `applied`: `world=present|missing|blocked`
+  - Optional (only for `applied`): `remediation=<one-line remediation or empty>`
 - Exit codes:
   - `0` success
   - `2` invalid YAML / unknown ids / invalid args
   - `3` world backend unavailable (only for `applied`)
   - `1` unexpected
 
-#### `substrate world deps current show <item_id> [--json] [--explain]`
-- Prints the **current resolved definition** for `<item_id>` after inventory merges (same inventory view as `deps current list available`).
+#### `substrate world deps current show <item_name> [--json] [--explain]`
+- Prints the **current resolved definition** for `<item_name>` after inventory merges (same inventory view as `deps current list available`).
 - `--explain` adds:
   - Whether the item is selected in the current selection (and whether it is selected via global/workspace patch).
   - If the item is not satisfied in-world, it MUST print a single-line “why” plus the exact next command.
-    - Example (direct): `substrate: hint: run 'substrate world deps current install <item_id>'`
-    - Example (persist): `substrate: hint: run 'substrate world deps workspace add <item_id>' then 'substrate world deps current sync'`
+    - Example (direct): `substrate: hint: run 'substrate world deps current install <item_name>'`
+    - Example (persist): `substrate: hint: run 'substrate world deps workspace add <item_name>' then 'substrate world deps current sync'`
 - Exit codes:
   - `0` success
   - `2` unknown item id / invalid inventory YAML
   - `3` world backend unavailable (only when `--explain` needs world status)
   - `1` unexpected
 
-#### `substrate world deps global add <item_id...> [--json]`
+#### `substrate world deps global add <item_name...> [--json]`
 - Applies a **global selection patch** update (does not install).
 - It MUST:
-  - Validate item IDs exist in the **current available inventory view** for `cwd`.
+  - Validate item names exist in the **current available inventory view** for `cwd`.
   - Write only `~/.substrate/config.yaml` (patch semantics; preserve comment header).
 - On success, it MUST print:
   - `Selection updated (global): added: <csv>`
   - `substrate: note: selection changes apply to the world only after 'substrate world deps current sync'`
 - Exit codes: `0` success (including no-op); `2` actionable user error; `1` unexpected
 
-#### `substrate world deps global remove <item_id...> [--json]`
+#### `substrate world deps global remove <item_name...> [--json]`
 - Same as `global add`, but removes items from the global selection patch.
 - On success, it MUST print:
   - `Selection updated (global): removed: <csv>`
   - `substrate: note: 'remove' only updates selection; it does not uninstall. Run 'substrate world deps current sync' to apply`
 - Exit codes match `global add`.
 
-#### `substrate world deps global reset [item_id ...] [--json]`
+#### `substrate world deps global reset [item_name ...] [--json]`
 - Resets global deps selection back to defaults by editing only `~/.substrate/config.yaml`.
-- If no `item_id` arguments are provided:
+- If no `item_name` arguments are provided:
   - Resets the global deps selection patch to “unset” (inherit from defaults).
-- If one or more `item_id` arguments are provided:
-  - Removes only those IDs from the global selection patch.
+- If one or more `item_name` arguments are provided:
+  - Removes only those names from the global selection patch.
 - It MUST preserve any comment header in the patch file.
 - On success, it MUST print:
   - `Selection reset (global)`
   - `substrate: note: run 'substrate world deps current sync' to apply selection changes`
 - Exit codes: `0` success (including no-op); `2` actionable user error; `1` unexpected
 
-#### `substrate world deps workspace add <item_id...> [--json]`
+#### `substrate world deps workspace add <item_name...> [--json]`
 - Applies a **workspace selection patch** update (does not install).
 - Requires `cwd` is within an enabled workspace (workspace root discovered from `cwd`).
 - It MUST:
-  - Validate item IDs exist in the current available inventory view for `cwd`.
+  - Validate item names exist in the current available inventory view for `cwd`.
   - Write only `<workspace_root>/.substrate/workspace.yaml` (patch semantics; preserve comment header).
 - On success, it MUST print:
   - `Selection updated (workspace): added: <csv>`
   - `substrate: note: selection changes apply to the world only after 'substrate world deps current sync'`
 - Exit codes: `0` success (including no-op); `2` no workspace root / unknown ids / invalid YAML; `1` unexpected
 
-#### `substrate world deps workspace remove <item_id...> [--json]`
+#### `substrate world deps workspace remove <item_name...> [--json]`
 - Same as `workspace add`, but removes items from the workspace selection patch.
 - On success, it MUST print:
   - `Selection updated (workspace): removed: <csv>`
   - `substrate: note: 'remove' only updates selection; it does not uninstall. Run 'substrate world deps current sync' to apply`
 - Exit codes match `workspace add`.
 
-#### `substrate world deps workspace reset [item_id ...] [--json]`
+#### `substrate world deps workspace reset [item_name ...] [--json]`
 - Resets workspace deps selection back to inherited defaults by editing only `<workspace_root>/.substrate/workspace.yaml`.
 - Requires `cwd` is within an enabled workspace.
-- If no `item_id` arguments are provided:
+- If no `item_name` arguments are provided:
   - Resets the workspace deps selection patch to “unset” (inherit from global/defaults).
-- If one or more `item_id` arguments are provided:
-  - Removes only those IDs from the workspace selection patch.
+- If one or more `item_name` arguments are provided:
+  - Removes only those names from the workspace selection patch.
 - It MUST preserve any comment header in the patch file.
 - On success, it MUST print:
   - `Selection reset (workspace)`
   - `substrate: note: run 'substrate world deps current sync' to apply selection changes`
 - Exit codes: `0` success (including no-op); `2` actionable user error; `1` unexpected
 
-#### `substrate world deps current install <item_id...> [--dry-run] [--verbose]`
+#### `substrate world deps current install <item_name...> [--dry-run] [--verbose]`
 - Applies items immediately without modifying selection.
 - It MUST:
   1) Expand bundles → packages.
@@ -190,7 +364,7 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 
 #### `substrate world deps global list [available|selected] [--json]`
 - `available` (default):
-  - Prints the **global inventory patch** at `~/.substrate/deps.yaml` (or `{}` if missing).
+  - Prints the **global inventory patch view** from `~/.substrate/deps/` (or empty if missing).
   - It MUST NOT incorporate workspace inventory.
   - It MUST NOT print built-in defaults; use `deps current list available` for the merged view.
 - `selected`:
@@ -200,7 +374,7 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 #### `substrate world deps workspace list [available|selected] [--json]`
 - Requires `cwd` is within an enabled workspace.
 - `available` (default):
-  - Prints the **workspace inventory patch** at `<workspace_root>/.substrate/deps.yaml` (or `{}` if missing).
+  - Prints the **workspace inventory patch view** from `<workspace_root>/.substrate/deps/` (or empty if missing).
   - It MUST NOT incorporate global inventory.
   - It MUST NOT print built-in defaults; use `deps current list available` for the merged view.
 - `selected`:
@@ -213,4 +387,4 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - For **bundles**, `present` means all constituent packages are `present` (bundles are never invoked directly).
 
 ## Notes / Known follow-ups
-- Some “managers” (e.g. `pkg:nvm`) are not the same as their runtimes (e.g. `pkg:node`). A manager package being `present` does not imply a runtime exists unless a runtime package/bundle is selected/installed.
+- Some packages are “managers” (e.g. `nvm`) and are not the same as their runtimes (e.g. `node`). A manager package being `present` does not imply a runtime exists unless a runtime package/bundle is selected/installed.
