@@ -54,23 +54,23 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 
 ### CLI
 
-#### `substrate world deps current list [--available|--selected|--applied] [--all] [--json]`
+#### `substrate world deps current list [available|selected|applied] [--all] [--json]`
 - Purpose: show the **effective** (merged) deps views for the current directory.
-- `--available` (default):
+- `available` (default):
   - Prints the **current inventory view** visible from `cwd` (after inventory merge + `world.deps.inventory_mode`).
   - It MUST NOT make world-agent calls.
   - Hints (stderr, only if empty):
     - `substrate: note: no deps inventory items visible for this directory; add definitions in ~/.substrate/deps.yaml or <workspace>/.substrate/deps.yaml`
-- `--selected`:
+- `selected`:
   - Prints the **current selection** (effective merged selection for `cwd`) without querying world-agent.
   - Stderr (always):
     - `substrate: note: showing current effective deps selection for this directory`
   - Hints (stderr, when empty):
     - `substrate: hint: add deps with 'substrate world deps workspace add ...' (or '... global add ...') then apply with 'substrate world deps current sync'`
-- `--applied`:
+- `applied`:
   - Prints world-agent-backed status for items.
   - Default scope: the current selected set.
-  - `--all`: include every currently available inventory item (debug/bring-up only).
+  - `--all`: include every currently available inventory item (debug/bring-up only). Valid only with `applied`.
   - Stderr (always):
     - `substrate: note: showing current world deps status for this directory`
 - Output MUST include, for each item:
@@ -81,16 +81,16 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - Exit codes:
   - `0` success
   - `2` invalid YAML / unknown ids / invalid args
-  - `3` world backend unavailable (only for `--applied`)
+  - `3` world backend unavailable (only for `applied`)
   - `1` unexpected
 
 #### `substrate world deps current show <item_id> [--json] [--explain]`
-- Prints the **current resolved definition** for `<item_id>` after inventory merges (same inventory view as `deps current list --available`).
+- Prints the **current resolved definition** for `<item_id>` after inventory merges (same inventory view as `deps current list available`).
 - `--explain` adds:
   - Whether the item is selected in the current selection (and whether it is selected via global/workspace patch).
   - If the item is not satisfied in-world, it MUST print a single-line “why” plus the exact next command.
-    - Example (direct): `Next: substrate world deps current install <item_id>`
-    - Example (persist): `Next: substrate world deps workspace add <item_id> && substrate world deps current sync`
+    - Example (direct): `substrate: hint: run 'substrate world deps current install <item_id>'`
+    - Example (persist): `substrate: hint: run 'substrate world deps workspace add <item_id>' then 'substrate world deps current sync'`
 - Exit codes:
   - `0` success
   - `2` unknown item id / invalid inventory YAML
@@ -105,16 +105,13 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - On success, it MUST print:
   - `Selection updated (global): added: <csv>`
   - `substrate: note: selection changes apply to the world only after 'substrate world deps current sync'`
-  - `Next: substrate world deps current sync`
 - Exit codes: `0` success (including no-op); `2` actionable user error; `1` unexpected
 
 #### `substrate world deps global remove <item_id...> [--json]`
 - Same as `global add`, but removes items from the global selection patch.
 - On success, it MUST print:
   - `Selection updated (global): removed: <csv>`
-  - `substrate: note: selection changes apply to the world only after 'substrate world deps current sync'`
-  - `substrate: note: this does not uninstall anything already present in the world`
-  - `Next: substrate world deps current sync`
+  - `substrate: note: 'remove' only updates selection; it does not uninstall. Run 'substrate world deps current sync' to apply`
 - Exit codes match `global add`.
 
 #### `substrate world deps global reset [item_id ...] [--json]`
@@ -126,7 +123,7 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - It MUST preserve any comment header in the patch file.
 - On success, it MUST print:
   - `Selection reset (global)`
-  - `Next: substrate world deps current sync`
+  - `substrate: note: run 'substrate world deps current sync' to apply selection changes`
 - Exit codes: `0` success (including no-op); `2` actionable user error; `1` unexpected
 
 #### `substrate world deps workspace add <item_id...> [--json]`
@@ -138,16 +135,13 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - On success, it MUST print:
   - `Selection updated (workspace): added: <csv>`
   - `substrate: note: selection changes apply to the world only after 'substrate world deps current sync'`
-  - `Next: substrate world deps current sync`
 - Exit codes: `0` success (including no-op); `2` no workspace root / unknown ids / invalid YAML; `1` unexpected
 
 #### `substrate world deps workspace remove <item_id...> [--json]`
 - Same as `workspace add`, but removes items from the workspace selection patch.
 - On success, it MUST print:
   - `Selection updated (workspace): removed: <csv>`
-  - `substrate: note: selection changes apply to the world only after 'substrate world deps current sync'`
-  - `substrate: note: this does not uninstall anything already present in the world`
-  - `Next: substrate world deps current sync`
+  - `substrate: note: 'remove' only updates selection; it does not uninstall. Run 'substrate world deps current sync' to apply`
 - Exit codes match `workspace add`.
 
 #### `substrate world deps workspace reset [item_id ...] [--json]`
@@ -160,7 +154,7 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - It MUST preserve any comment header in the patch file.
 - On success, it MUST print:
   - `Selection reset (workspace)`
-  - `Next: substrate world deps current sync`
+  - `substrate: note: run 'substrate world deps current sync' to apply selection changes`
 - Exit codes: `0` success (including no-op); `2` actionable user error; `1` unexpected
 
 #### `substrate world deps current install <item_id...> [--dry-run] [--verbose]`
@@ -173,7 +167,8 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
   - MUST print the computed plan (apt list + script package list) and exit `0` without side effects.
 - On success, it MUST print:
   - A short summary of what was applied (world image + world deps prefix), then:
-  - `Next: substrate world deps current list --applied`
+  - `substrate: note: this updates the world only (selection not modified)`
+  - `substrate: hint: run 'substrate world deps current list applied' to verify`
 - Guarantee (runnable packages):
   - After success, runnable package entrypoints are invokable in-world via the standard world execution path (interactive `substrate>` and non-interactive runs) without requiring shell RC sourcing.
 - Exit codes:
@@ -189,25 +184,26 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
   - Ignores selection and applies every visible inventory item (debug/bring-up only).
 - On success, it MUST print:
   - A one-line confirmation plus:
-  - `Next: substrate world deps current list --applied`
+  - `substrate: note: applied effective selection for this directory (sources: workspace, global, defaults as applicable)`
+  - `substrate: hint: run 'substrate world deps current list applied' to verify`
 - Exit codes match `deps current install`.
 
-#### `substrate world deps global list [--available|--selected] [--json]`
-- `--available` (default):
+#### `substrate world deps global list [available|selected] [--json]`
+- `available` (default):
   - Prints the **global inventory patch** at `~/.substrate/deps.yaml` (or `{}` if missing).
   - It MUST NOT incorporate workspace inventory.
-  - It MUST NOT print built-in defaults; use `deps current list --available` for the merged view.
-- `--selected`:
+  - It MUST NOT print built-in defaults; use `deps current list available` for the merged view.
+- `selected`:
   - Prints the **global selection patch** at `~/.substrate/config.yaml` (or `{}` if missing).
 - Exit codes: `0` success; `2` invalid YAML; `1` unexpected.
 
-#### `substrate world deps workspace list [--available|--selected] [--json]`
+#### `substrate world deps workspace list [available|selected] [--json]`
 - Requires `cwd` is within an enabled workspace.
-- `--available` (default):
+- `available` (default):
   - Prints the **workspace inventory patch** at `<workspace_root>/.substrate/deps.yaml` (or `{}` if missing).
   - It MUST NOT incorporate global inventory.
-  - It MUST NOT print built-in defaults; use `deps current list --available` for the merged view.
-- `--selected`:
+  - It MUST NOT print built-in defaults; use `deps current list available` for the merged view.
+- `selected`:
   - Prints the **workspace selection patch** at `<workspace_root>/.substrate/workspace.yaml` (patch view; not merged).
 - Exit codes: `0` success; `2` no workspace root / invalid YAML; `1` unexpected.
 
