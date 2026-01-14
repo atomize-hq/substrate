@@ -2,6 +2,8 @@
 
 This document defines the **user-facing contract** for `substrate world deps` using Substrate’s **host/world** terminology (no “guest” language). It is intentionally concise so we can iterate.
 
+Global paths in this document are rooted at `$SUBSTRATE_HOME` (defaults to `~/.substrate` when `SUBSTRATE_HOME` is unset).
+
 ## Goals
 - Make world deps a predictable way to declare and apply **in-world** dependencies.
 - Unify the mental model around **inventory** (what exists) → **enabled** (what you want applied) → **applied** (what is present in the world).
@@ -12,20 +14,20 @@ This document defines the **user-facing contract** for `substrate world deps` us
 - No `world-deps.yaml` overlay mechanism (and no local variants).
 - Inventory sources become:
   - Built-in defaults (shipped with Substrate; not user-edited)
-  - `~/.substrate/deps/` (global inventory directory)
+  - `$SUBSTRATE_HOME/deps/` (global inventory directory)
   - `<workspace_root>/.substrate/deps/` (workspace inventory directory)
 - Enabled sources become:
-  - `~/.substrate/config.yaml` (global enabled patch)
+  - `$SUBSTRATE_HOME/config.yaml` (global enabled patch)
   - `<workspace_root>/.substrate/workspace.yaml` (workspace enabled patch)
 
 ### Legacy files removed from plumbing
 In this end state, `world deps` MUST NOT read (or be influenced by) any of:
 - `config/manager_hooks.yaml`
 - `scripts/substrate/world-deps.yaml`
-- `~/.substrate/manager_hooks.local.yaml`
-- `~/.substrate/world-deps.local.yaml`
+- `$SUBSTRATE_HOME/manager_hooks.local.yaml`
+- `$SUBSTRATE_HOME/world-deps.local.yaml`
 - `.substrate/world-deps.selection.yaml`
-- `~/.substrate/world-deps.selection.yaml`
+- `$SUBSTRATE_HOME/world-deps.selection.yaml`
 Replacement completeness requirement:
 - Tests that previously validated legacy file loading MUST be updated to validate the new inventory/enabled files, and MUST fail if `world deps` still reads any legacy file paths.
 
@@ -177,7 +179,7 @@ Observability requirements:
 For `method: script`, inventory MAY embed scripts inline, but SHOULD use a script path for maintainability.
 
 Recommended layout (mirrors scope):
-- Global: `~/.substrate/deps/scripts/`
+- Global: `$SUBSTRATE_HOME/deps/scripts/`
 - Workspace: `<workspace_root>/.substrate/deps/scripts/`
 
 Script path resolution:
@@ -193,7 +195,7 @@ Default probe behavior when `probe.command` is omitted:
 ### Inventory sources and merge order
 Inventory is resolved by merging these sources (later layers override earlier):
 1) **Built-in defaults** shipped with Substrate (configurable to hide/disable; not edited directly).
-2) **Global user inventory**: `~/.substrate/deps/`
+2) **Global user inventory**: `$SUBSTRATE_HOME/deps/`
 3) **Workspace inventory chain**: from the current directory upward, merge any `<dir>/.substrate/deps/` found (nearest overrides earlier ancestors).
 
 Workspace inventories **extend** global/built-ins by default. A workspace may opt into **workspace-only inventory** via enabled config (see below).
@@ -210,7 +212,7 @@ Merge rules:
 
 ## Enabled Model (Sparse YAML)
 Enabled deps are resolved from sparse YAML config merged by current working directory:
-- **Global enabled defaults**: `~/.substrate/config.yaml`
+- **Global enabled defaults**: `$SUBSTRATE_HOME/config.yaml`
 - **Workspace enabled**: `<workspace_root>/.substrate/workspace.yaml`
 
 Enabled deps are an ordered list of inventory item names (packages and bundles).
@@ -239,7 +241,7 @@ Rules:
   - `disabled`: built-ins are excluded from inventory merge (only user-provided inventory directories apply).
 - Enabled list merge:
   - The effective enabled list for `cwd` is computed by concatenating enabled lists from applicable scopes, then de-duplicating in-order:
-    1) global enabled list (`~/.substrate/config.yaml`), then
+    1) global enabled list (`$SUBSTRATE_HOME/config.yaml`), then
     2) workspace enabled list (`<workspace_root>/.substrate/workspace.yaml`, when a workspace exists and is enabled).
   - A scope can “contribute nothing” by omitting `world.deps.enabled` (inherit-only); it can “contribute an explicit empty list” by setting `world.deps.enabled: []`.
 
@@ -248,7 +250,7 @@ Rules:
 World deps uses the same “patch file” concept as `ADR-0008`: the file at a scope contains only overrides for that scope, and commands MUST preserve any existing comment header.
 You MAY also edit these files directly; the CLI is a convenience layer over YAML patches (invalid YAML is an actionable user error).
 
-### Global enabled patch (`~/.substrate/config.yaml`)
+### Global enabled patch (`$SUBSTRATE_HOME/config.yaml`)
 ```yaml
 # Substrate world deps enabled patch (global scope).
 # - Update via:
@@ -286,7 +288,7 @@ world:
       - "python-build-deps"
 ```
 
-### Inventory directory (`~/.substrate/deps/` or `<workspace_root>/.substrate/deps/`)
+### Inventory directory (`$SUBSTRATE_HOME/deps/` or `<workspace_root>/.substrate/deps/`)
 Per-item files live at:
 - `deps/packages/<dep_name>.yaml`
 - `deps/bundles/<dep_name>.yaml`
@@ -334,7 +336,7 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
   - Output SHOULD be a table.
   - It MUST NOT make world-agent calls.
   - Hints (stderr, only if empty):
-    - `substrate: note: no deps inventory items visible for this directory; add definitions under ~/.substrate/deps/ or <workspace_root>/.substrate/deps/`
+    - `substrate: note: no deps inventory items visible for this directory; add definitions under $SUBSTRATE_HOME/deps/ or <workspace_root>/.substrate/deps/`
 - `enabled`:
   - Prints the **current enabled list** (effective merged enabled list for `cwd`) without querying world-agent.
   - If any enabled name does not exist in the effective available inventory view, it MUST fail with exit `2` and list the unknown names.
@@ -376,8 +378,8 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 #### `substrate world deps global add <item_name...> [--json]`
 - Applies a **global enabled patch** update (does not install).
 - It MUST:
-  - Validate item names exist in the **global available inventory view** (built-ins + `~/.substrate/deps/`; never workspace inventory).
-  - Write only `~/.substrate/config.yaml` (patch semantics; preserve comment header).
+  - Validate item names exist in the **global available inventory view** (built-ins + `$SUBSTRATE_HOME/deps/`; never workspace inventory).
+  - Write only `$SUBSTRATE_HOME/config.yaml` (patch semantics; preserve comment header).
 - On success, it MUST print:
   - `Enabled deps updated (global): added: <csv>`
   - `substrate: note: enabled deps changes apply to the world only after 'substrate world deps current sync'`
@@ -387,7 +389,7 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - Removes items from the global enabled patch (does not install).
 - It MUST:
   - Not require names to exist in inventory (supports removing unknown names after manual edits).
-  - Write only `~/.substrate/config.yaml` (patch semantics; preserve comment header).
+  - Write only `$SUBSTRATE_HOME/config.yaml` (patch semantics; preserve comment header).
 - On success, it MUST print:
   - `Enabled deps updated (global): removed: <csv>`
   - `substrate: note: 'remove' only updates enabled deps; it does not uninstall. Run 'substrate world deps current sync' to apply`
@@ -396,7 +398,7 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - Exit codes: `0` success (including no-op); `2` invalid args / invalid YAML; `1` unexpected
 
 #### `substrate world deps global reset [--json]`
-- Resets the global enabled deps patch to inherited defaults by editing only `~/.substrate/config.yaml`.
+- Resets the global enabled deps patch to inherited defaults by editing only `$SUBSTRATE_HOME/config.yaml`.
 - It MUST remove the `world.deps.enabled` key from the global patch (inherit-only).
 - It MUST preserve any comment header in the patch file.
 - On success, it MUST print:
@@ -472,12 +474,12 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 
 #### `substrate world deps global list [available|enabled] [--json]`
 - `available` (default):
-  - Prints the **global inventory patch view** from `~/.substrate/deps/` (or empty if missing) as a table.
+  - Prints the **global inventory patch view** from `$SUBSTRATE_HOME/deps/` (or empty if missing) as a table.
   - Table columns SHOULD include: `kind`, `name`, `runnable`, `method`, `entrypoints`, `platforms`, `description`.
   - It MUST NOT incorporate workspace inventory.
   - It MUST NOT print built-in defaults; use `deps current list available` for the merged view.
 - `enabled`:
-  - Prints the **global enabled deps patch** at `~/.substrate/config.yaml` (or `{}` if missing).
+  - Prints the **global enabled deps patch** at `$SUBSTRATE_HOME/config.yaml` (or `{}` if missing).
 - Exit codes: `0` success; `2` invalid YAML; `1` unexpected.
 
 #### `substrate world deps workspace list [available|enabled] [--json]`

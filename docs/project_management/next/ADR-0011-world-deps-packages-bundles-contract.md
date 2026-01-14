@@ -30,7 +30,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: c5324be3f4af217a6f8567500d9b306c3218aa571b8b6c0fa38111c0075b8e30
+ADR_BODY_SHA256: 73a2e4079901e7cf67c013ebfcd33d753817af59a94ae739cb6c5c3be3d3ad64
 ### Changes (operator-facing)
 - World deps becomes “inventory + enabled patches”
   - Existing: world-deps behavior is anchored on legacy manifest/overlay/selection files (`manager_hooks.yaml`, `world-deps.yaml`, `world-deps.selection.yaml`) with semantics that are easy to misread and hard to reason about across scopes.
@@ -220,6 +220,10 @@ packages: [<package_name>...]
 Contract:
 - For each `wrappers[]` entry, Substrate MUST generate an executable entrypoint at:
   - `/var/lib/substrate/world-deps/bin/<name>`
+- Wrapper generation MUST be deterministic:
+  - The wrapper path is fixed by `<name>`.
+  - The wrapper contents MUST be a stable rendering of the package definition (no timestamps/randomness).
+  - Wrapper generation MUST be idempotent (re-running `sync` does not change wrapper contents unless the definition changes).
 - Wrapper kinds:
   - `bash_function`:
     - The wrapper MUST execute `bash -lc ...` (not `sh`) so it can `source` bash scripts and invoke the function.
@@ -230,6 +234,16 @@ Contract:
     - If `bash` is unavailable, it MUST fail with an actionable error.
   - `sh_env_exec`:
     - The wrapper MUST be a POSIX `sh` script that exports each `env` entry, then `exec <exec> "$@"`.
+
+Observability requirements:
+- On wrapper failure, stderr MUST include:
+  - the wrapper kind (`bash_function|bash_source_exec|sh_env_exec`)
+  - the resolved `bash_source` path when applicable
+  - whether `bash` was found when applicable
+  - a single-line next step (e.g. install `bash`, fix env var, or run `substrate world deps current show <name> --explain`)
+- `substrate world deps current show <name> --explain` MUST surface wrapper details:
+  - wrapper kind and key fields (`bash_source`, `function`/`exec`, env keys)
+  - the exact invocation shape that will be used (e.g. `bash -lc 'source ...; ...'`)
 
 #### Script install sources (`deps/scripts/`)
 For `method: script`, inventory MAY embed scripts inline, but SHOULD use a script path for maintainability.

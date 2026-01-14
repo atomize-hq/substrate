@@ -5,6 +5,19 @@ Keep concise, actionable, and security-focused.
 
 ## Next
 
+- **P0 – In-world process execution tracing parity (match host-level visibility)**
+  - Problem: host execution is richly observable via the shim (per-process exec logging), but world execution is primarily observable at the “one command per world execute” level. This creates blind spots for world-deps installs and wrapper-based tools (e.g. `nvm` wrappers invoking `bash -lc ...`), where internal subprocesses are not recorded as structured events.
+  - Goal: in-world activity is traceable at the same granularity as the host: every spawned process (argv/env redaction/exit code/timing) is captured and attached to spans, so debugging and policy auditing do not depend on stdout/stderr inference.
+  - Work:
+    - Define an in-world execution event schema (align with `crates/common/src/log_schema.rs`) for per-process spawn/exit telemetry emitted by world-agent.
+    - Extend `world-agent` execution paths (`/v1/execute`, `/v1/stream`) to capture process tree events for the executed command (including wrapper-invoked shells like `bash -lc`) and return them to the host.
+    - Plumb the returned process events into `crates/trace` spans so they are persisted alongside existing world fs diffs and policy decisions.
+    - Ensure redaction rules apply consistently (no secrets in argv/env); reuse shared redaction helpers.
+    - Add integration tests that demonstrate parity:
+      - a command that spawns children in-world records child execs,
+      - wrapper-generated entrypoints (e.g. `nvm`) record the inner `bash` invocation and downstream child processes.
+  - Acceptance: `trace.jsonl` contains structured per-process world execution events comparable to shim host events; debug/audit can attribute failures to specific in-world subprocesses without relying on stdout/stderr; wrappers remain deterministic and trace-friendly.
+
 - **P0 – Rename `world_fs.require_world` / `SUBSTRATE_WORLD_REQUIRE_WORLD` to semantic “fail closed” naming (no backwards compatibility)**
   - Problem: the current name reads like “world must be enabled”, but the actual behavior is “allow host fallback when world routing fails vs fail closed”. This causes configuration mistakes and confusion during debugging.
   - Work:
