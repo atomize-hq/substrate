@@ -1,0 +1,14 @@
+version: 1
+name: direnv
+description: direnv CLI via apt (world image install).
+runnable: true
+entrypoints: ["direnv"]
+install:
+  method: apt
+  apt:
+    - name: direnv
+      # Optional pin (only if the exact version is available in the world’s apt sources):
+      # version: "2.34.0-1"
+probe:
+  command: "direnv version"
+

@@ -1,0 +1,20 @@
+version: 1
+name: python-build-deps
+description: OS prerequisites for building CPython from source (non-runnable).
+runnable: false
+install:
+  method: apt
+  apt:
+    - name: build-essential
+    - name: make
+    - name: libssl-dev
+    - name: zlib1g-dev
+    - name: libbz2-dev
+    - name: libreadline-dev
+    - name: libsqlite3-dev
+    - name: xz-utils
+    - name: libffi-dev
+    - name: liblzma-dev
+probe:
+  command: "command -v gcc >/dev/null 2>&1 && command -v make >/dev/null 2>&1"
+

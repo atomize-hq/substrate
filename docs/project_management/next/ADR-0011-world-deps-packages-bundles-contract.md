@@ -30,7 +30,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 3292eeeaa7feb01281e8b379806b702fb01796d4b241506d83c6b474daf49712
+ADR_BODY_SHA256: 4b697ffa4fc725d12e68a5598b3df2addbd8ceae62c7a742e3362cac74df86b4
 ### Changes (operator-facing)
 - World deps becomes “inventory + enabled patches”
   - Existing: world-deps behavior is anchored on legacy manifest/overlay/selection files (`manager_hooks.yaml`, `world-deps.yaml`, `world-deps.selection.yaml`) with semantics that are easy to misread and hard to reason about across scopes.
@@ -517,9 +517,10 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - Hard dependencies (contract-level):
   - Patch-file scope semantics from `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md` (global/workspace patch files; preserve comment headers).
   - World backend availability semantics for commands that query/apply in-world state (exit `3` when backend is unavailable).
-- Reconciliation note:
+- Coexistence note (separate bodies of work):
   - `docs/project_management/next/world_deps_selection_layer/` defines a selection-file-driven contract that conflicts with this ADR’s “enabled patch” model and “legacy selection file paths removed” requirement.
-  - If this ADR is Accepted, `docs/project_management/next/sequencing.json` and any world-deps feature plans/specs MUST be reconciled so only one operator-facing contract is authoritative.
+  - This ADR is a separate/add-on body of work and does not update that planning-pack directory.
+  - If/when we unify the world-deps operator contract, do it via a new planning pack and/or a new cross-cutting ADR under `docs/project_management/next/` (and update `docs/project_management/next/sequencing.json`), without authoring changes inside existing planning-pack directories.
 
 ## Security / Safety Posture
 - Fail-closed vs degrade:

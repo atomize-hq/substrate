@@ -37,6 +37,24 @@ Replacement completeness requirement:
 - **World image** install: mutates OS-managed state in the world (e.g. apt/dpkg under `/usr`, `/var/lib/dpkg`).
 - **World deps prefix** install: installs under `/var/lib/substrate/world-deps` and exposes entrypoints under `/var/lib/substrate/world-deps/bin`.
 
+## World Shell Contract (Why `nvm` Needs a Wrapper)
+Substrate world execution is intentionally conservative and does not behave like an interactive login shell.
+
+Contract:
+- World commands (interactive `substrate>` and non-interactive runs) execute under `/bin/sh -c` in the world (not bash), with no user shell rc sourcing.
+- Therefore, runnable deps MUST expose real executable entrypoints (files) and MUST NOT rely on shell functions, aliases, or `~/.bashrc`-style initialization.
+
+Install-time note:
+- Script-based installs (`install.method=script`) MAY run under `bash -lc` for compatibility with common installer recipes, but that does not change the runtime execution contract above.
+
+Implication for `nvm`-style deps:
+- `nvm` is a shell function defined by sourcing `nvm.sh`. It is not invokable under `/bin/sh -c` unless we provide a wrapper.
+- If we ship a runnable package named `nvm`, its `entrypoints: ["nvm"]` MUST resolve to a real executable in-world (typically a wrapper placed under `/var/lib/substrate/world-deps/bin/nvm`) that:
+  - invokes `bash -lc ...` internally,
+  - sources the installed `nvm.sh`,
+  - then runs `nvm "$@"`,
+  - and fails with an actionable error if `bash` is unavailable.
+
 ## Inventory Model
 ### Item types
 - **Package**: an installable unit (via apt or via a script).
@@ -73,6 +91,28 @@ name: <package_name>                 # required; MUST match the filename (<dep_n
 description: <string optional>
 runnable: <bool>                      # required
 entrypoints: [<string>...]            # required when runnable=true (e.g. ["bun"])
+wrappers:                             # optional; used for function/rc-style tools (e.g. nvm)
+  # Each wrapper declares how Substrate should generate a runnable entrypoint file under:
+  #   /var/lib/substrate/world-deps/bin/<name>
+  #
+  # Use wrappers when the “real” tool is not a stable executable (e.g. it is a shell function),
+  # or when the tool requires sourcing an env script before invocation.
+  - name: <entrypoint_name>           # required; MUST be listed in entrypoints[]
+    kind: bash_function | bash_source_exec | sh_env_exec
+    # bash_function:
+    #   - For tools that are defined as bash functions after sourcing a script (e.g. nvm).
+    #   - Requires bash in-world.
+    bash_source: <string>             # required for bash_* kinds; e.g. "$HOME/.nvm/nvm.sh"
+    function: <string>                # required for kind=bash_function; e.g. "nvm"
+    # bash_source_exec:
+    #   - Source bash_source, then exec a command (useful for env scripts that define PATH).
+    #   - Requires bash in-world.
+    exec: <string>                    # required for kind=bash_source_exec; e.g. "node" or "python"
+    # sh_env_exec:
+    #   - Set env vars, then exec a command. Does not require bash.
+    env:                              # required for kind=sh_env_exec
+      <KEY>: <VALUE>
+    exec: <string>                    # required for kind=sh_env_exec; e.g. "foo"
 platforms: [linux|macos|windows]      # optional allowlist; default: all (host platform)
 install:                              # required
   method: apt | script | manual
@@ -97,6 +137,28 @@ platforms: [linux|macos|windows]      # optional allowlist; default: all (host p
 packages: [<package_name>...]
 ```
 
+### APT install notes (`install.method=apt`)
+- Each `install.apt[]` entry MAY specify `version`.
+- If `version` is omitted, Substrate installs the default candidate (equivalent to `apt-get install <name>`).
+- If `version` is specified, Substrate installs exactly that version (equivalent to `apt-get install <name>=<version>`); if unavailable, the install MUST fail with an actionable error.
+
+### Wrapper generation (`wrappers[]`)
+`wrappers[]` is an optional declarative mechanism to make function/rc-style tools runnable under the world shell contract.
+
+Contract:
+- For each `wrappers[]` entry, Substrate MUST generate an executable entrypoint at:
+  - `/var/lib/substrate/world-deps/bin/<name>`
+- Wrapper kinds:
+  - `bash_function`:
+    - The wrapper MUST execute `bash -lc ...` (not `sh`) so it can `source` bash scripts and invoke the function.
+    - The wrapper MUST source `bash_source`, then invoke `<function> "$@"`.
+    - If `bash` is unavailable, the wrapper MUST fail with an actionable error (`bash is required for <name>; install bash in the world`).
+  - `bash_source_exec`:
+    - The wrapper MUST execute `bash -lc ...`, source `bash_source`, then `exec <exec> "$@"`.
+    - If `bash` is unavailable, it MUST fail with an actionable error.
+  - `sh_env_exec`:
+    - The wrapper MUST be a POSIX `sh` script that exports each `env` entry, then `exec <exec> "$@"`.
+
 ### Script install sources (`deps/scripts/`)
 For `method: script`, inventory MAY embed scripts inline, but SHOULD use a script path for maintainability.
 
@@ -113,11 +175,6 @@ Script path resolution:
 Default probe behavior when `probe.command` is omitted:
 - For `runnable: true`: present iff every `entrypoints[]` is invokable via `command -v <entrypoint>` in the world.
 - For `runnable: false`: present iff the package’s `install` requirements are satisfied (implementation-defined; non-runnable packages SHOULD provide an explicit `probe.command` to keep status deterministic).
-
-APT version pinning:
-- Each `install.apt[]` entry MAY specify `version`.
-- If `version` is omitted, Substrate installs the default candidate (equivalent to `apt-get install <name>`).
-- If `version` is specified, Substrate installs exactly that version (equivalent to `apt-get install <name>=<version>`); if unavailable, the install MUST fail with an actionable error.
 
 ### Inventory sources and merge order
 Inventory is resolved by merging these sources (later layers override earlier):
