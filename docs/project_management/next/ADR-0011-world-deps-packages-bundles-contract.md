@@ -30,7 +30,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 4b697ffa4fc725d12e68a5598b3df2addbd8ceae62c7a742e3362cac74df86b4
+ADR_BODY_SHA256: c5324be3f4af217a6f8567500d9b306c3218aa571b8b6c0fa38111c0075b8e30
 ### Changes (operator-facing)
 - World deps becomes “inventory + enabled patches”
   - Existing: world-deps behavior is anchored on legacy manifest/overlay/selection files (`manager_hooks.yaml`, `world-deps.yaml`, `world-deps.selection.yaml`) with semantics that are easy to misread and hard to reason about across scopes.
@@ -108,6 +108,24 @@ Replacement completeness requirement:
 - **World image** install: mutates OS-managed state in the world (e.g. apt/dpkg under `/usr`, `/var/lib/dpkg`).
 - **World deps prefix** install: installs under `/var/lib/substrate/world-deps` and exposes entrypoints under `/var/lib/substrate/world-deps/bin`.
 
+### World Shell Contract (Why `nvm` Needs a Wrapper)
+Substrate world execution is intentionally conservative and does not behave like an interactive login shell.
+
+Contract:
+- World commands (interactive `substrate>` and non-interactive runs) execute under `/bin/sh -c` in the world (not bash), with no user shell rc sourcing.
+- Therefore, runnable deps MUST expose real executable entrypoints (files) and MUST NOT rely on shell functions, aliases, or `~/.bashrc`-style initialization.
+
+Install-time note:
+- Script-based installs (`install.method=script`) MAY run under `bash -lc` for compatibility with common installer recipes, but that does not change the runtime execution contract above.
+
+Implication for `nvm`-style deps:
+- `nvm` is a shell function defined by sourcing `nvm.sh`. It is not invokable under `/bin/sh -c` unless we provide a wrapper.
+- If we ship a runnable package named `nvm`, its `entrypoints: ["nvm"]` MUST resolve to a real executable in-world (typically a wrapper placed under `/var/lib/substrate/world-deps/bin/nvm`) that:
+  - invokes `bash -lc ...` internally,
+  - sources the installed `nvm.sh`,
+  - then runs `nvm "$@"`,
+  - and fails with an actionable error if `bash` is unavailable.
+
 ### Inventory Model
 
 #### Item types
@@ -145,6 +163,28 @@ name: <package_name>                 # required; MUST match the filename (<dep_n
 description: <string optional>
 runnable: <bool>                      # required
 entrypoints: [<string>...]            # required when runnable=true (e.g. ["bun"])
+wrappers:                             # optional; used for function/rc-style tools (e.g. nvm)
+  # Each wrapper declares how Substrate should generate a runnable entrypoint file under:
+  #   /var/lib/substrate/world-deps/bin/<name>
+  #
+  # Use wrappers when the “real” tool is not a stable executable (e.g. it is a shell function),
+  # or when the tool requires sourcing an env script before invocation.
+  - name: <entrypoint_name>           # required; MUST be listed in entrypoints[]
+    kind: bash_function | bash_source_exec | sh_env_exec
+    # bash_function:
+    #   - For tools that are defined as bash functions after sourcing a script (e.g. nvm).
+    #   - Requires bash in-world.
+    bash_source: <string>             # required for bash_* kinds; e.g. "$HOME/.nvm/nvm.sh"
+    function: <string>                # required for kind=bash_function; e.g. "nvm"
+    # bash_source_exec:
+    #   - Source bash_source, then exec a command (useful for env scripts that define PATH).
+    #   - Requires bash in-world.
+    exec: <string>                    # required for kind=bash_source_exec; e.g. "node" or "python"
+    # sh_env_exec:
+    #   - Set env vars, then exec a command. Does not require bash.
+    env:                              # required for kind=sh_env_exec
+      <KEY>: <VALUE>
+    exec: <string>                    # required for kind=sh_env_exec; e.g. "foo"
 platforms: [linux|macos|windows]      # optional allowlist; default: all (host platform)
 install:                              # required
   method: apt | script | manual
@@ -169,6 +209,28 @@ platforms: [linux|macos|windows]      # optional allowlist; default: all (host p
 packages: [<package_name>...]
 ```
 
+#### APT install notes (`install.method=apt`)
+- Each `install.apt[]` entry MAY specify `version`.
+- If `version` is omitted, Substrate installs the default candidate (equivalent to `apt-get install <name>`).
+- If `version` is specified, Substrate installs exactly that version (equivalent to `apt-get install <name>=<version>`); if unavailable, the install MUST fail with an actionable error.
+
+#### Wrapper generation (`wrappers[]`)
+`wrappers[]` is an optional declarative mechanism to make function/rc-style tools runnable under the world shell contract.
+
+Contract:
+- For each `wrappers[]` entry, Substrate MUST generate an executable entrypoint at:
+  - `/var/lib/substrate/world-deps/bin/<name>`
+- Wrapper kinds:
+  - `bash_function`:
+    - The wrapper MUST execute `bash -lc ...` (not `sh`) so it can `source` bash scripts and invoke the function.
+    - The wrapper MUST source `bash_source`, then invoke `<function> "$@"`.
+    - If `bash` is unavailable, the wrapper MUST fail with an actionable error (`bash is required for <name>; install bash in the world`).
+  - `bash_source_exec`:
+    - The wrapper MUST execute `bash -lc ...`, source `bash_source`, then `exec <exec> "$@"`.
+    - If `bash` is unavailable, it MUST fail with an actionable error.
+  - `sh_env_exec`:
+    - The wrapper MUST be a POSIX `sh` script that exports each `env` entry, then `exec <exec> "$@"`.
+
 #### Script install sources (`deps/scripts/`)
 For `method: script`, inventory MAY embed scripts inline, but SHOULD use a script path for maintainability.
 
@@ -185,11 +247,6 @@ Script path resolution:
 Default probe behavior when `probe.command` is omitted:
 - For `runnable: true`: present iff every `entrypoints[]` is invokable via `command -v <entrypoint>` in the world.
 - For `runnable: false`: present iff the package’s `install` requirements are satisfied (implementation-defined; non-runnable packages SHOULD provide an explicit `probe.command` to keep status deterministic).
-
-APT version pinning:
-- Each `install.apt[]` entry MAY specify `version`.
-- If `version` is omitted, Substrate installs the default candidate (equivalent to `apt-get install <name>`).
-- If `version` is specified, Substrate installs exactly that version (equivalent to `apt-get install <name>=<version>`); if unavailable, the install MUST fail with an actionable error.
 
 #### Inventory sources and merge order
 Inventory is resolved by merging these sources (later layers override earlier):
@@ -238,6 +295,11 @@ Rules:
 - `world.deps.builtins` controls whether Substrate-shipped inventory defaults are visible:
   - `enabled` (default): built-ins participate in inventory merge.
   - `disabled`: built-ins are excluded from inventory merge (only user-provided inventory directories apply).
+- Enabled list merge:
+  - The effective enabled list for `cwd` is computed by concatenating enabled lists from applicable scopes, then de-duplicating in-order:
+    1) global enabled list (`~/.substrate/config.yaml`), then
+    2) workspace enabled list (`<workspace_root>/.substrate/workspace.yaml`, when a workspace exists and is enabled).
+  - A scope can “contribute nothing” by omitting `world.deps.enabled` (inherit-only); it can “contribute an explicit empty list” by setting `world.deps.enabled: []`.
 
 ### Patch File Comment Headers (Examples)
 
@@ -250,7 +312,7 @@ You MAY also edit these files directly; the CLI is a convenience layer over YAML
 # - Update via:
 #   - `substrate world deps global add ...`
 #   - `substrate world deps global remove ...`
-#   - `substrate world deps global reset ...`
+#   - `substrate world deps global reset`
 # - Or edit this file directly (YAML).
 # - Changes do not affect the world until you run:
 #   - `substrate world deps current sync`
@@ -272,7 +334,7 @@ world:
 # - Update via:
 #   - `substrate world deps workspace add ...`
 #   - `substrate world deps workspace remove ...`
-#   - `substrate world deps workspace reset ...`
+#   - `substrate world deps workspace reset`
 # - Or edit this file directly (YAML).
 # - Changes do not affect the world until you run:
 #   - `substrate world deps current sync`
@@ -385,14 +447,13 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - On success, it MUST print:
   - `Enabled deps updated (global): removed: <csv>`
   - `substrate: note: 'remove' only updates enabled deps; it does not uninstall. Run 'substrate world deps current sync' to apply`
+  - If a workspace is active for the current `cwd` and any removed item remains enabled via the workspace enabled list, it MUST also print:
+    - `substrate: note: '<item>' was removed from global enabled deps but is still enabled via workspace; run 'substrate world deps workspace remove <item>' to fully disable it for this workspace`
 - Exit codes: `0` success (including no-op); `2` invalid args / invalid YAML; `1` unexpected
 
-#### `substrate world deps global reset [item_name ...] [--json]`
-- Resets global enabled deps back to defaults by editing only `~/.substrate/config.yaml`.
-- If no `item_name` arguments are provided:
-  - Resets the global enabled deps patch to “unset” (inherit from defaults).
-- If one or more `item_name` arguments are provided:
-  - Removes only those names from the global enabled deps patch.
+#### `substrate world deps global reset [--json]`
+- Resets the global enabled deps patch to inherited defaults by editing only `~/.substrate/config.yaml`.
+- It MUST remove the `world.deps.enabled` key from the global patch (inherit-only).
 - It MUST preserve any comment header in the patch file.
 - On success, it MUST print:
   - `Enabled deps reset (global)`
@@ -418,15 +479,14 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - On success, it MUST print:
   - `Enabled deps updated (workspace): removed: <csv>`
   - `substrate: note: 'remove' only updates enabled deps; it does not uninstall. Run 'substrate world deps current sync' to apply`
+  - If any removed item remains enabled via the global enabled list, it MUST also print:
+    - `substrate: note: '<item>' was removed from workspace enabled deps but is still enabled via global; run 'substrate world deps global remove <item>' to fully disable it`
 - Exit codes: `0` success (including no-op); `2` no workspace root / invalid args / invalid YAML; `1` unexpected
 
-#### `substrate world deps workspace reset [item_name ...] [--json]`
+#### `substrate world deps workspace reset [--json]`
 - Resets workspace enabled deps back to inherited defaults by editing only `<workspace_root>/.substrate/workspace.yaml`.
 - Requires `cwd` is within an enabled workspace.
-- If no `item_name` arguments are provided:
-  - Resets the workspace enabled deps patch to “unset” (inherit from global/defaults).
-- If one or more `item_name` arguments are provided:
-  - Removes only those names from the workspace enabled deps patch.
+- It MUST remove the `world.deps.enabled` key from the workspace patch (inherit-only).
 - It MUST preserve any comment header in the patch file.
 - On success, it MUST print:
   - `Enabled deps reset (workspace)`
