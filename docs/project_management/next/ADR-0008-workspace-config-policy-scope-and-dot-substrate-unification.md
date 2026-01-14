@@ -20,11 +20,13 @@
   - `docs/project_management/next/ADR-0003-policy-and-config-mental-model-simplification.md`
   - `docs/project_management/next/ADR-0005-workspace-config-precedence-over-env.md`
   - `docs/project_management/next/ADR-0006-env-var-taxonomy-and-override-split.md`
+- Follow-on ADRs:
+  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Decision Register: `docs/project_management/next/workspace-config-policy-unification/decision_register.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 5e8c1102f4ba213b1d0dffa4f300ed0d9f7f44fd30b61b5cdb12f8b2599c94c8
+ADR_BODY_SHA256: f67a8678eaddb56ecbc41bd9b73d53f9ab0af2c253e088f8c62a3fff002c2d37
 ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md` after drafting>
 
 ### Changes (operator-facing)
@@ -105,6 +107,8 @@ Config patch header template (global/workspace):
 # - This file is a YAML mapping of overrides at this scope.
 #   - Workspace patch: overrides the global patch + defaults.
 #   - Global patch: overrides defaults.
+# - Merge semantics are schema-defined per key; most keys are `replace`, but some keys may intentionally merge across scopes.
+#   - See `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`.
 # - You may edit this file directly, or use the CLI (recommended) for validated updates:
 #   - Global:    `substrate config global set ...` / `substrate config global reset ...`
 #   - Workspace: `substrate config workspace set ...` / `substrate config workspace reset ...`
@@ -150,7 +154,11 @@ Policy patch header template (global/workspace):
   - A single line notice:
     - `substrate: note: showing effective merged config; use --explain to view per-key sources`
 - `--explain`:
-  - Emits an additional machine-readable provenance map to **stderr** that indicates the source of every effective key:
+  - Emits an additional machine-readable provenance map to **stderr**.
+  - For most keys, provenance indicates a single source layer.
+  - For keys whose effective value is derived from multiple layers (schema-defined merge keys), provenance MUST list all contributing sources deterministically.
+    - See `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`.
+  - Source labels include:
     - `cli_flag`, `override_env`, `workspace_patch`, `global_patch`, `default`, `injected_protected`.
 - Exit codes:
   - Taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -243,7 +251,9 @@ Policy patch header template (global/workspace):
 - Stderr (always):
   - `substrate: note: showing effective merged policy; use --explain to view per-key sources`
 - `--explain`:
-  - Emits a per-key provenance breakdown to stderr (`workspace_patch`, `global_patch`, `default`).
+  - Emits a per-key provenance breakdown to stderr.
+  - If per-key merge strategies are introduced for policy keys, provenance must support multi-source keys as specified in:
+    - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`.
 - Exit codes: `0` success; `2` invalid YAML / invalid policy; `1` unexpected.
 
 #### `substrate policy global show [--json]`
@@ -363,7 +373,10 @@ Policy patch header template (global/workspace):
 #### Schema (config patch keys)
 The config patch is a YAML mapping where keys may be omitted to inherit. Unknown keys are a hard error.
 
-Allowed keys:
+Per-key merge strategies (including multi-layer derived values) are defined by:
+- `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+
+Allowed keys (base allowlist; extended by follow-on ADRs):
 - `world.enabled` (bool)
 - `world.anchor_mode` (`workspace`, `follow-cwd`, `custom`)
 - `world.anchor_path` (string; required when `world.anchor_mode=custom` in the effective config)
