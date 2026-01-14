@@ -223,6 +223,11 @@ Rules:
 - `world.deps.builtins` controls whether Substrate-shipped inventory defaults are visible:
   - `enabled` (default): built-ins participate in inventory merge.
   - `disabled`: built-ins are excluded from inventory merge (only user-provided inventory directories apply).
+- Enabled list merge:
+  - The effective enabled list for `cwd` is computed by concatenating enabled lists from applicable scopes, then de-duplicating in-order:
+    1) global enabled list (`~/.substrate/config.yaml`), then
+    2) workspace enabled list (`<workspace_root>/.substrate/workspace.yaml`, when a workspace exists and is enabled).
+  - A scope can “contribute nothing” by omitting `world.deps.enabled` (inherit-only); it can “contribute an explicit empty list” by setting `world.deps.enabled: []`.
 
 ## Patch File Comment Headers (Examples)
 
@@ -235,7 +240,7 @@ You MAY also edit these files directly; the CLI is a convenience layer over YAML
 # - Update via:
 #   - `substrate world deps global add ...`
 #   - `substrate world deps global remove ...`
-#   - `substrate world deps global reset ...`
+#   - `substrate world deps global reset`
 # - Or edit this file directly (YAML).
 # - Changes do not affect the world until you run:
 #   - `substrate world deps current sync`
@@ -257,7 +262,7 @@ world:
 # - Update via:
 #   - `substrate world deps workspace add ...`
 #   - `substrate world deps workspace remove ...`
-#   - `substrate world deps workspace reset ...`
+#   - `substrate world deps workspace reset`
 # - Or edit this file directly (YAML).
 # - Changes do not affect the world until you run:
 #   - `substrate world deps current sync`
@@ -372,14 +377,13 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - On success, it MUST print:
   - `Enabled deps updated (global): removed: <csv>`
   - `substrate: note: 'remove' only updates enabled deps; it does not uninstall. Run 'substrate world deps current sync' to apply`
+  - If a workspace is active for the current `cwd` and any removed item remains enabled via the workspace enabled list, it MUST also print:
+    - `substrate: note: '<item>' was removed from global enabled deps but is still enabled via workspace; run 'substrate world deps workspace remove <item>' to fully disable it for this workspace`
 - Exit codes: `0` success (including no-op); `2` invalid args / invalid YAML; `1` unexpected
 
-#### `substrate world deps global reset [item_name ...] [--json]`
-- Resets global enabled deps back to defaults by editing only `~/.substrate/config.yaml`.
-- If no `item_name` arguments are provided:
-  - Resets the global enabled deps patch to “unset” (inherit from defaults).
-- If one or more `item_name` arguments are provided:
-  - Removes only those names from the global enabled deps patch.
+#### `substrate world deps global reset [--json]`
+- Resets the global enabled deps patch to inherited defaults by editing only `~/.substrate/config.yaml`.
+- It MUST remove the `world.deps.enabled` key from the global patch (inherit-only).
 - It MUST preserve any comment header in the patch file.
 - On success, it MUST print:
   - `Enabled deps reset (global)`
@@ -405,15 +409,14 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
 - On success, it MUST print:
   - `Enabled deps updated (workspace): removed: <csv>`
   - `substrate: note: 'remove' only updates enabled deps; it does not uninstall. Run 'substrate world deps current sync' to apply`
+  - If any removed item remains enabled via the global enabled list, it MUST also print:
+    - `substrate: note: '<item>' was removed from workspace enabled deps but is still enabled via global; run 'substrate world deps global remove <item>' to fully disable it`
 - Exit codes: `0` success (including no-op); `2` no workspace root / invalid args / invalid YAML; `1` unexpected
 
-#### `substrate world deps workspace reset [item_name ...] [--json]`
+#### `substrate world deps workspace reset [--json]`
 - Resets workspace enabled deps back to inherited defaults by editing only `<workspace_root>/.substrate/workspace.yaml`.
 - Requires `cwd` is within an enabled workspace.
-- If no `item_name` arguments are provided:
-  - Resets the workspace enabled deps patch to “unset” (inherit from global/defaults).
-- If one or more `item_name` arguments are provided:
-  - Removes only those names from the workspace enabled deps patch.
+- It MUST remove the `world.deps.enabled` key from the workspace patch (inherit-only).
 - It MUST preserve any comment header in the patch file.
 - On success, it MUST print:
   - `Enabled deps reset (workspace)`
