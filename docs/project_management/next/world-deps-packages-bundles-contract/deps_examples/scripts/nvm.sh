@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -euo pipefail
 
 # Example script install that fetches nvm into $HOME.
@@ -12,4 +13,3 @@ else
     (cd "${NVM_DIR}" && git pull --ff-only) || true
   fi
 fi
-

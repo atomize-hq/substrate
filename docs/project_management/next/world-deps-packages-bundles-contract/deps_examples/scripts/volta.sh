@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -euo pipefail
 
 # Example script install that installs Volta into the world-deps prefix and exposes:
@@ -22,4 +23,3 @@ else
 fi
 
 ln -sf "${volta_home}/bin/volta" "${world_deps_bin}/volta"
-

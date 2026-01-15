@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -euo pipefail
 
 # Example script install that places the runnable entrypoint under:
@@ -19,4 +20,3 @@ else
 fi
 
 ln -sf "${bun_root}/bin/bun" "${world_deps_bin}/bun"
-
