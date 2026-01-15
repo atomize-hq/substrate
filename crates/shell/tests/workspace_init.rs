@@ -62,16 +62,23 @@ fn workspace_init_creates_expected_inventory_and_gitignore() {
     let substrate_dir = root.join(".substrate");
     let workspace_yaml = substrate_dir.join("workspace.yaml");
     let policy_yaml = substrate_dir.join("policy.yaml");
-    let internal_git = root.join(".substrate-git").join("repo.git");
+    let internal_git = substrate_dir.join("git").join("repo.git");
+    let legacy_internal_git = root.join(".substrate-git");
     assert!(substrate_dir.is_dir());
     assert!(workspace_yaml.is_file());
     assert!(policy_yaml.is_file());
-    assert!(internal_git.is_dir());
+    let internal_git_ok = internal_git.is_dir();
+    let legacy_internal_git_exists = legacy_internal_git.exists();
+    assert!(
+        internal_git_ok && !legacy_internal_git_exists,
+        "workspace init must create internal git at {} and must not create legacy {}; internal_git_ok={internal_git_ok} legacy_internal_git_exists={legacy_internal_git_exists}",
+        internal_git.display(),
+        legacy_internal_git.display(),
+    );
 
     let gitignore = fs::read_to_string(root.join(".gitignore")).expect("read .gitignore");
     for rule in [
-        ".substrate-git/",
-        ".substrate/*",
+        ".substrate/",
         "!.substrate/workspace.yaml",
         "!.substrate/policy.yaml",
     ] {
@@ -80,13 +87,28 @@ fn workspace_init_creates_expected_inventory_and_gitignore() {
             ".gitignore must include rule {rule}\n.gitignore:\n{gitignore}"
         );
     }
+    assert!(
+        !gitignore
+            .lines()
+            .any(|line| line.trim_end() == ".substrate-git/"),
+        ".gitignore must not reference legacy .substrate-git/\n.gitignore:\n{gitignore}"
+    );
 
     let raw = fs::read_to_string(&workspace_yaml).expect("read workspace.yaml");
     let yaml: YamlValue = serde_yaml::from_str(&raw).expect("workspace.yaml should parse");
     let root = yaml.as_mapping().expect("workspace.yaml root mapping");
-    assert!(root.contains_key(YamlValue::String("world".to_string())));
-    assert!(root.contains_key(YamlValue::String("policy".to_string())));
-    assert!(root.contains_key(YamlValue::String("sync".to_string())));
+    assert!(
+        root.is_empty(),
+        "workspace.yaml must be an empty patch mapping by default"
+    );
+
+    let raw = fs::read_to_string(&policy_yaml).expect("read policy.yaml");
+    let yaml: YamlValue = serde_yaml::from_str(&raw).expect("policy.yaml should parse");
+    let root = yaml.as_mapping().expect("policy.yaml root mapping");
+    assert!(
+        root.is_empty(),
+        "policy.yaml must be an empty patch mapping by default"
+    );
 }
 
 #[test]
@@ -112,7 +134,7 @@ fn workspace_init_refuses_nested_workspaces_without_writes() {
     );
     assert!(
         !nested.join(".substrate-git").exists(),
-        "nested init must not create .substrate-git"
+        "nested init must not create legacy .substrate-git"
     );
     assert!(
         !nested.join(".gitignore").exists(),
@@ -135,14 +157,56 @@ fn workspace_discovery_walks_up_to_marker() {
         .command()
         .current_dir(&child)
         .arg("config")
-        .arg("show")
+        .arg("set")
         .arg("--json")
+        .arg("world.enabled=false")
         .output()
-        .expect("run config show");
-
+        .expect("run config set");
     assert!(
         output.status.success(),
-        "config show from child should succeed: {output:?}"
+        "config set from child should succeed: {output:?}"
+    );
+}
+
+#[test]
+fn workspace_disabled_marker_causes_discovery_to_ignore_workspace() {
+    let fixture = WorkspaceFixture::new();
+    let root = fixture._temp.path().join("workspace");
+    fs::create_dir_all(&root).expect("create workspace root");
+    let out = fixture.init_workspace(&root, false);
+    assert!(out.status.success(), "workspace init should succeed");
+
+    let child = root.join("a").join("b");
+    fs::create_dir_all(&child).expect("create child dir");
+
+    let workspace_yaml = root.join(".substrate").join("workspace.yaml");
+    let before = fs::read_to_string(&workspace_yaml).expect("read workspace.yaml");
+
+    fs::write(
+        root.join(".substrate").join("workspace.disabled"),
+        "disabled\n",
+    )
+    .expect("write workspace.disabled");
+
+    let output = fixture
+        .command()
+        .current_dir(&child)
+        .arg("config")
+        .arg("set")
+        .arg("--json")
+        .arg("world.enabled=false")
+        .output()
+        .expect("run config set");
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "disabled workspace must be ignored for discovery: {output:?}"
+    );
+
+    let after = fs::read_to_string(&workspace_yaml).expect("read workspace.yaml after");
+    assert_eq!(
+        before, after,
+        "disabled workspace must not be mutated via config set"
     );
 }
 
