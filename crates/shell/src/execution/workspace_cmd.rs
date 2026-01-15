@@ -1,11 +1,22 @@
 use crate::execution::cli::{WorkspaceAction, WorkspaceCmd, WorkspaceInitArgs, WorkspacePathArgs};
-use crate::execution::config_model::{default_policy_yaml, SubstrateConfig};
 use crate::execution::workspace;
 use anyhow::{anyhow, Context, Result};
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
+
+const DEFAULT_WORKSPACE_PATCH_YAML: &str = r#"# Substrate workspace config patch (sparse overrides).
+# - This file is a YAML mapping of workspace-scoped overrides.
+# - Omitted keys inherit from global config + defaults.
+{}
+"#;
+
+const DEFAULT_POLICY_PATCH_YAML: &str = r#"# Substrate workspace policy patch (sparse overrides).
+# - This file is a YAML mapping of workspace-scoped overrides.
+# - Omitted keys inherit from global policy + defaults.
+{}
+"#;
 
 pub(crate) fn handle_workspace_command(cmd: &WorkspaceCmd) -> i32 {
     let result = match &cmd.action {
@@ -71,13 +82,13 @@ fn run_workspace_init(args: &WorkspaceInitArgs) -> Result<()> {
 
     let workspace_yaml = workspace::workspace_marker_path(&target);
     if !workspace_yaml.exists() {
-        write_atomic_yaml(&workspace_yaml, &SubstrateConfig::default())
+        write_atomic_bytes(&workspace_yaml, DEFAULT_WORKSPACE_PATCH_YAML.as_bytes())
             .with_context(|| format!("failed to write {}", workspace_yaml.display()))?;
     }
 
     let policy_yaml = workspace::workspace_policy_path(&target);
     if !policy_yaml.exists() {
-        write_atomic_bytes(&policy_yaml, default_policy_yaml().as_bytes())
+        write_atomic_bytes(&policy_yaml, DEFAULT_POLICY_PATCH_YAML.as_bytes())
             .with_context(|| format!("failed to write {}", policy_yaml.display()))?;
     }
 
@@ -233,16 +244,17 @@ fn ensure_example_files(workspace_root: &Path) -> Result<()> {
     let policy_example = substrate_dir.join("policy.example.yaml");
 
     if !workspace_example.exists() {
-        write_atomic_yaml(&workspace_example, &SubstrateConfig::default()).with_context(|| {
-            format!(
-                "failed to write workspace example file {}",
-                workspace_example.display()
-            )
-        })?;
+        write_atomic_bytes(&workspace_example, DEFAULT_WORKSPACE_PATCH_YAML.as_bytes())
+            .with_context(|| {
+                format!(
+                    "failed to write workspace example file {}",
+                    workspace_example.display()
+                )
+            })?;
     }
 
     if !policy_example.exists() {
-        write_atomic_bytes(&policy_example, default_policy_yaml().as_bytes()).with_context(
+        write_atomic_bytes(&policy_example, DEFAULT_POLICY_PATCH_YAML.as_bytes()).with_context(
             || {
                 format!(
                     "failed to write policy example file {}",
@@ -252,23 +264,6 @@ fn ensure_example_files(workspace_root: &Path) -> Result<()> {
         )?;
     }
 
-    Ok(())
-}
-
-fn write_atomic_yaml<T: serde::Serialize>(path: &Path, value: &T) -> Result<()> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| anyhow!("path {} has no parent", path.display()))?;
-    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
-    let mut tmp = NamedTempFile::new_in(parent)
-        .with_context(|| format!("failed to create temp file near {}", path.display()))?;
-    let body = serde_yaml::to_string(value)
-        .with_context(|| format!("failed to serialize {}", path.display()))?;
-    tmp.write_all(body.as_bytes())
-        .with_context(|| format!("failed to write {}", path.display()))?;
-    tmp.flush()?;
-    tmp.persist(path)
-        .map_err(|err| anyhow!("failed to persist {}: {}", path.display(), err.error))?;
     Ok(())
 }
 

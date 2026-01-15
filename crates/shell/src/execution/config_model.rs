@@ -43,7 +43,7 @@ pub(crate) fn is_user_error(err: &anyhow::Error) -> bool {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub(crate) struct SubstrateConfig {
     pub world: WorldConfig,
     pub policy: PolicyConfig,
@@ -51,7 +51,7 @@ pub(crate) struct SubstrateConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub(crate) struct WorldConfig {
     pub enabled: bool,
     pub anchor_mode: WorldRootMode,
@@ -104,7 +104,7 @@ impl PolicyMode {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub(crate) struct PolicyConfig {
     pub mode: PolicyMode,
 }
@@ -160,7 +160,7 @@ impl SyncConflictPolicy {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub(crate) struct SyncConfig {
     pub auto_sync: bool,
     pub direction: SyncDirection,

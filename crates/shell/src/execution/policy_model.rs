@@ -56,7 +56,21 @@ pub(crate) fn load_effective_policy(cwd: &Path) -> Result<(Policy, PolicySource)
 }
 
 pub(crate) fn parse_policy_yaml(path: &Path, raw: &str) -> Result<Policy> {
-    let parsed: Policy = serde_yaml::from_str(raw).map_err(|err| {
+    let value: serde_yaml::Value = serde_yaml::from_str(raw).map_err(|err| {
+        config_model::user_error(format!(
+            "invalid YAML in {}: {}",
+            path.display(),
+            err.to_string().trim()
+        ))
+    })?;
+
+    match &value {
+        serde_yaml::Value::Null => return Ok(Policy::default()),
+        serde_yaml::Value::Mapping(map) if map.is_empty() => return Ok(Policy::default()),
+        _ => {}
+    }
+
+    let parsed: Policy = serde_yaml::from_value(value).map_err(|err| {
         config_model::user_error(format!(
             "invalid YAML in {}: {}",
             path.display(),
