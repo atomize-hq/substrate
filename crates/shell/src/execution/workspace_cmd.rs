@@ -1,4 +1,4 @@
-use crate::execution::cli::{WorkspaceAction, WorkspaceCmd, WorkspaceInitArgs};
+use crate::execution::cli::{WorkspaceAction, WorkspaceCmd, WorkspaceInitArgs, WorkspacePathArgs};
 use crate::execution::config_model::{default_policy_yaml, SubstrateConfig};
 use crate::execution::workspace;
 use anyhow::{anyhow, Context, Result};
@@ -10,6 +10,8 @@ use tempfile::NamedTempFile;
 pub(crate) fn handle_workspace_command(cmd: &WorkspaceCmd) -> i32 {
     let result = match &cmd.action {
         WorkspaceAction::Init(args) => run_workspace_init(args),
+        WorkspaceAction::Disable(args) => run_workspace_disable(args),
+        WorkspaceAction::Enable(args) => run_workspace_enable(args),
     };
 
     match result {
@@ -79,6 +81,10 @@ fn run_workspace_init(args: &WorkspaceInitArgs) -> Result<()> {
             .with_context(|| format!("failed to write {}", policy_yaml.display()))?;
     }
 
+    if args.examples {
+        ensure_example_files(&target)?;
+    }
+
     ensure_gitignore_rules(&target).context("failed to update .gitignore")?;
 
     if args.force {
@@ -91,6 +97,73 @@ fn run_workspace_init(args: &WorkspaceInitArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn run_workspace_disable(args: &WorkspacePathArgs) -> Result<()> {
+    let start = resolve_search_root(args, "workspace disable")?;
+    let workspace_root = require_workspace_root_any(&start, "workspace disable")?;
+    let marker = workspace::workspace_disabled_marker_path(&workspace_root);
+
+    if !marker.exists() {
+        write_atomic_bytes(&marker, b"")
+            .with_context(|| format!("failed to write {}", marker.display()))?;
+    }
+
+    println!(
+        "substrate: workspace disabled at {}",
+        workspace_root.display()
+    );
+    Ok(())
+}
+
+fn run_workspace_enable(args: &WorkspacePathArgs) -> Result<()> {
+    let start = resolve_search_root(args, "workspace enable")?;
+    let workspace_root = require_workspace_root_any(&start, "workspace enable")?;
+    let marker = workspace::workspace_disabled_marker_path(&workspace_root);
+
+    match fs::remove_file(&marker) {
+        Ok(()) => {}
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        Err(err) => return Err(anyhow!("failed to remove {}: {err}", marker.display())),
+    }
+
+    println!(
+        "substrate: workspace enabled at {}",
+        workspace_root.display()
+    );
+    Ok(())
+}
+
+fn resolve_search_root(args: &WorkspacePathArgs, verb: &str) -> Result<PathBuf> {
+    let target = args
+        .path
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .canonicalize()
+        .with_context(|| format!("invalid PATH for {verb}"))
+        .map_err(|err| actionable(err.to_string()))?;
+
+    if target.is_dir() {
+        return Ok(target);
+    }
+    if target.is_file() {
+        if let Some(parent) = target.parent() {
+            return Ok(parent.to_path_buf());
+        }
+    }
+
+    Err(actionable(format!(
+        "substrate: invalid PATH for {verb}: {}",
+        target.display()
+    )))
+}
+
+fn require_workspace_root_any(start: &Path, verb: &str) -> Result<PathBuf> {
+    workspace::find_workspace_root_any(start).ok_or_else(|| {
+        actionable(format!(
+            "substrate: not in a workspace for {verb}; run `substrate workspace init`"
+        ))
+    })
 }
 
 fn ensure_not_nested_workspace(target: &Path) -> Result<()> {
@@ -117,17 +190,34 @@ fn ensure_gitignore_rules(root: &Path) -> Result<()> {
         Err(err) => return Err(anyhow!("failed to read {}: {err}", gitignore.display())),
     };
 
-    let required = [
-        ".substrate-git/",
-        ".substrate/*",
-        "!.substrate/workspace.yaml",
-        "!.substrate/policy.yaml",
-    ];
+    let substrate_ignore = ".substrate/";
+    let workspace_allow = "!.substrate/workspace.yaml";
+    let policy_allow = "!.substrate/policy.yaml";
 
-    for rule in required {
-        if !existing.iter().any(|line| line.trim_end() == rule) {
-            existing.push(rule.to_string());
-        }
+    if !existing
+        .iter()
+        .any(|line| line.trim_end() == substrate_ignore)
+    {
+        existing.push(substrate_ignore.to_string());
+    }
+
+    let last_substrate_ignore_idx = existing
+        .iter()
+        .rposition(|line| line.trim_end() == substrate_ignore)
+        .expect("substrate_ignore must exist");
+
+    let has_workspace_allow_after = existing[last_substrate_ignore_idx + 1..]
+        .iter()
+        .any(|line| line.trim_end() == workspace_allow);
+    let has_policy_allow_after = existing[last_substrate_ignore_idx + 1..]
+        .iter()
+        .any(|line| line.trim_end() == policy_allow);
+
+    if !has_workspace_allow_after {
+        existing.push(workspace_allow.to_string());
+    }
+    if !has_policy_allow_after {
+        existing.push(policy_allow.to_string());
     }
 
     let mut body = existing.join("\n");
@@ -135,6 +225,34 @@ fn ensure_gitignore_rules(root: &Path) -> Result<()> {
         body.push('\n');
     }
     write_atomic_bytes(&gitignore, body.as_bytes())
+}
+
+fn ensure_example_files(workspace_root: &Path) -> Result<()> {
+    let substrate_dir = workspace_root.join(workspace::SUBSTRATE_DIR_NAME);
+    let workspace_example = substrate_dir.join("workspace.example.yaml");
+    let policy_example = substrate_dir.join("policy.example.yaml");
+
+    if !workspace_example.exists() {
+        write_atomic_yaml(&workspace_example, &SubstrateConfig::default()).with_context(|| {
+            format!(
+                "failed to write workspace example file {}",
+                workspace_example.display()
+            )
+        })?;
+    }
+
+    if !policy_example.exists() {
+        write_atomic_bytes(&policy_example, default_policy_yaml().as_bytes()).with_context(
+            || {
+                format!(
+                    "failed to write policy example file {}",
+                    policy_example.display()
+                )
+            },
+        )?;
+    }
+
+    Ok(())
 }
 
 fn write_atomic_yaml<T: serde::Serialize>(path: &Path, value: &T) -> Result<()> {

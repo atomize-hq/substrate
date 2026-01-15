@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use substrate_common::paths as substrate_paths;
 use substrate_common::WorldRootMode;
 
-pub(crate) const PROTECTED_EXCLUDES: [&str; 3] = [".git/**", ".substrate/**", ".substrate-git/**"];
+pub(crate) const PROTECTED_EXCLUDES: [&str; 2] = [".git/**", ".substrate/**"];
 
 #[derive(Debug)]
 pub(crate) struct UserError {

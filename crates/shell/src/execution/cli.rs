@@ -313,6 +313,10 @@ pub struct WorkspaceCmd {
 pub enum WorkspaceAction {
     /// Initialize a workspace at PATH (defaults to .)
     Init(WorkspaceInitArgs),
+    /// Disable workspace discovery at PATH (defaults to .)
+    Disable(WorkspacePathArgs),
+    /// Enable workspace discovery at PATH (defaults to .)
+    Enable(WorkspacePathArgs),
 }
 
 #[derive(Args, Debug)]
@@ -323,6 +327,16 @@ pub struct WorkspaceInitArgs {
     /// Repair missing directories/files without overwriting existing files
     #[arg(long)]
     pub force: bool,
+    /// Create .substrate/workspace.example.yaml and .substrate/policy.example.yaml
+    #[arg(long)]
+    pub examples: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct WorkspacePathArgs {
+    /// Path within the workspace (defaults to .)
+    #[arg(value_name = "PATH")]
+    pub path: Option<PathBuf>,
 }
 
 #[derive(Subcommand, Debug)]
