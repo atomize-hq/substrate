@@ -186,7 +186,7 @@ fn print_config(cfg: &SubstrateConfig, json: bool) -> Result<()> {
     if json {
         println!(
             "{}",
-            serde_json::to_string_pretty(cfg).context("failed to serialize JSON")?
+            serde_json::to_string(cfg).context("failed to serialize JSON")?
         );
         return Ok(());
     }
