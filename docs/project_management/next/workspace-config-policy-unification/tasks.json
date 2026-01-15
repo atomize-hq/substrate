@@ -16,7 +16,7 @@
       "name": "Execution preflight gate (feature start)",
       "type": "ops",
       "phase": "F0",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Run the feature start gate to confirm the Planning Pack is runnable and Phase A/B gates are explicitly covered before starting execution triads.",
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",

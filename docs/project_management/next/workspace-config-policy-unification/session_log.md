@@ -142,3 +142,13 @@
   - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → exit `0`
 - Blockers:
   - `NONE`
+
+## START — 2026-01-15T15:52:02Z — execution — F0-exec-preflight
+- Feature: `docs/project_management/next/workspace-config-policy-unification/`
+- Branch: `feat/workspace-config-policy-unification`
+- Goal: Run the feature-level execution preflight gate before starting any triad work.
+- Commands planned:
+  - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification"`
+  - Review the Planning Pack end-to-end (ADRs, gates, plan, tasks, integration map, playbook, smoke scripts)
+  - Fill `execution_preflight_report.md` with ACCEPT/REVISE and any required fixes
+  - Update `tasks.json` status and commit docs
