@@ -10,11 +10,11 @@ Feature directory:
 
 ## Recommendation
 
-RECOMMENDATION: **REVISE**
+RECOMMENDATION: ACCEPT
 
 ## Inputs Reviewed
 
-- [ ] Planning quality gate is `ACCEPT` (`docs/project_management/next/workspace-config-policy-unification/quality_gate_report.md`)
+- [x] Planning quality gate is `ACCEPT` (`docs/project_management/next/workspace-config-policy-unification/quality_gate_report.md`)
 - [x] ADR-0008 still matches intent:
   - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - [x] ADR-0012 still matches intent:
@@ -70,7 +70,7 @@ Smoke ↔ manual parity notes (map manual steps to smoke assertions):
   - Assertions: `-=` is exact-match removal; `reset` removes the key from the patch mapping and global still contributes.
 
 Gaps (must fix before execution begins):
-- Planning quality gate report is not in `ACCEPT` state; execution must not begin until it is updated to `ACCEPT` (or the defects are re-validated and explicitly accepted).
+- None.
 
 ## 3) CI Dispatch Path Is Runnable (if applicable)
 - Feature smoke dispatch commands embedded in integration task end_checklists are runnable:
@@ -82,4 +82,4 @@ Run ids/URLs (if executed during preflight):
 - Windows smoke:
 
 ## 4) Required Fixes Before Starting WCU1 (if any)
-- Update `docs/project_management/next/workspace-config-policy-unification/quality_gate_report.md` to reflect current evidence and a concrete `ACCEPT`/`FLAG` decision so this execution preflight gate can be re-run cleanly under the standard.
+- None.
