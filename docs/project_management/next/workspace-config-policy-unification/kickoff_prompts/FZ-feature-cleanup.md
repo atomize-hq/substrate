@@ -8,6 +8,10 @@
 
 Do not edit planning docs inside the worktree.
 
+## Start Checklist
+1. Verify you are on the orchestration branch `feat/workspace-config-policy-unification` and the worktree is clean.
+2. Read: `docs/project_management/next/workspace-config-policy-unification/tasks.json` and `docs/project_management/next/workspace-config-policy-unification/session_log.md`.
+
 ## Preconditions
 - All tasks for this feature are completed and any required merges are done.
 - Orchestration worktree is clean (no uncommitted changes).

@@ -71,3 +71,10 @@ This Planning Pack must complete:
 
 Explicit gate file:
 - `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
+
+## Slice specs (authoritative)
+- WCU1: `docs/project_management/next/workspace-config-policy-unification/WCU1-spec.md`
+- WCU2: `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
+- WCU3: `docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md`
+- WCU4: `docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md`
+- WCU5: `docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md`

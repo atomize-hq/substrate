@@ -196,3 +196,96 @@ Rules:
   - Simplest behavior and cleanest output.
 - **Cons:**
   - Operators may confuse `{}` with “no config/policy exists” or “Substrate is broken” without a hint.
+
+---
+
+## DR-0011 — Per-key merge strategy is schema-defined vs hardcoded key list
+
+### Option A (selected): Schema-defined per key
+- **Decision:** The config schema registry stores an explicit `merge_strategy` per key (defaulting to `replace` when unspecified).
+- **Pros:**
+  - Auditable, explicit behavior; avoids ad-hoc special cases.
+  - Enables `--explain` to report merge strategy mechanically for every key.
+- **Cons:**
+  - Requires schema plumbing changes even for a small number of merge keys.
+
+### Option B: Hardcode merge keys in resolver
+- **Pros:**
+  - Minimal code changes for the first merge key.
+- **Cons:**
+  - Not auditable; encourages drift and one-off exceptions.
+  - Makes `--explain` incomplete or misleading for merge behavior.
+
+---
+
+## DR-0012 — `config current show --explain` provenance payload format
+
+### Option A (selected): JSON on stderr with stable, parseable schema
+- **Decision:** `--explain` emits a machine-readable JSON object to stderr using a versioned `kind` and a `keys` map keyed by dotpath.
+- **Pros:**
+  - Scriptable and testable; supports golden files.
+  - Deterministic by construction (sorted keys + stable source ordering).
+- **Cons:**
+  - Less human-friendly than formatted text when reading stderr directly.
+
+### Option B: Human-formatted text on stderr
+- **Pros:**
+  - Easier to read in terminals.
+- **Cons:**
+  - Harder to test/golden; prone to whitespace and formatting drift.
+  - Encourages parsing-by-regex, which is brittle.
+
+---
+
+## DR-0013 — Config editor list mutation syntax for merge keys
+
+### Option A (selected): `set <key>+=<item>`
+- **Decision:** List merge keys are mutated with the operator syntax `+=` as part of `set`, e.g. `substrate config workspace set world.deps.enabled+=bun`.
+- **Pros:**
+  - Minimal new CLI surface; consistent with existing `set` usage.
+  - Easy to use in automation; works for both scopes symmetrically.
+- **Cons:**
+  - Requires parser support for operator-style assignments.
+
+### Option B: Dedicated subcommands (`add` / `remove`)
+- **Pros:**
+  - More explicit semantics than operator syntax.
+- **Cons:**
+  - Adds new CLI verbs; larger surface area and more docs/testing.
+
+---
+
+## DR-0014 — De-duplication policy for ordered-set merges
+
+### Option A (selected): First occurrence wins
+- **Decision:** `concat_dedupe_ordered_set` keeps the first occurrence of an item across concatenated layers and drops later duplicates.
+- **Pros:**
+  - Deterministic and stable; preserves lower-precedence intent ordering.
+  - Matches ADR-0012’s ordered-set semantics.
+- **Cons:**
+  - Higher-precedence layers cannot “re-order” an item without removing it from lower layers (not supported).
+
+### Option B: Last occurrence wins
+- **Pros:**
+  - Allows higher-precedence layers to implicitly re-order by re-adding.
+- **Cons:**
+  - Less intuitive for “enabled set” semantics; surprises operators.
+  - Harder to reason about provenance and ordering stability.
+
+---
+
+## DR-0015 — Patch file representation for “explicit empty list” vs omitted key
+
+### Option A (selected): Preserve the difference (`[]` is explicit; omitted is inherit)
+- **Decision:** For list merge keys, a key present with value `[]` is treated as explicitly set at that scope and is visible in patch views and `--explain` sources; an omitted key contributes nothing.
+- **Pros:**
+  - Auditable: file reflects operator intent (“I explicitly set this empty”).
+  - Improves provenance fidelity for `--explain`.
+- **Cons:**
+  - Requires explaining the difference in docs and `--explain`.
+
+### Option B: Treat `[]` the same as omitted
+- **Pros:**
+  - Fewer edge cases; simpler mental model.
+- **Cons:**
+  - Loses operator intent; makes patch views and provenance less trustworthy.

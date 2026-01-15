@@ -131,16 +131,28 @@ This section validates the ADR-0012 requirements that are intentionally implemen
 1. Ensure global + workspace patches exist:
    - `substrate config global init --force`
    - `substrate workspace init .` (if not already initialized)
-2. Add one enabled dep at global scope and one at workspace scope (via the config editor):
-   - `substrate config global set world.deps.enabled+=bun`
-   - `substrate config workspace set world.deps.enabled+=node-runtime`
-3. Verify effective merged value contains both items:
-   - `substrate config current show --json | jq -e '.world.deps.enabled | index(\"bun\")!=null and index(\"node-runtime\")!=null' >/dev/null`
-4. Verify `--explain` indicates a merge strategy and multi-source provenance (stderr):
-   - `substrate config current show --json --explain >/dev/null 2> /tmp/wcu-explain.txt`
-   - `rg -n 'concat_dedupe_ordered_set' /tmp/wcu-explain.txt`
-   - `rg -n 'global_patch' /tmp/wcu-explain.txt`
-   - `rg -n 'workspace_patch' /tmp/wcu-explain.txt`
-5. Reset key at workspace scope and confirm it remains enabled via global:
+2. Add enabled deps at both scopes (include a deliberate duplicate across scopes):
+   - `substrate config global set world.deps.enabled+=bun world.deps.enabled+=node-runtime`
+   - `substrate config workspace set world.deps.enabled+=node-runtime world.deps.enabled+=deno`
+3. Verify effective merged value contains all items and preserves ordered-set behavior (global then workspace; duplicate de-duped):
+   - `substrate config current show --json | jq -e '\n      .world.deps.enabled as $a |\n      ($a|index(\"bun\")) as $i_bun |\n      ($a|index(\"node-runtime\")) as $i_node |\n      ($a|index(\"deno\")) as $i_deno |\n      ($i_bun!=null and $i_node!=null and $i_deno!=null and $i_bun < $i_node and $i_node < $i_deno)\n    ' >/dev/null`
+4. Verify `--explain` indicates merge strategy + multi-source provenance and is deterministic/idempotent:
+   - `substrate config current show --json > /tmp/wcu-effective.1.json`
+   - `substrate config current show --json > /tmp/wcu-effective.2.json`
+   - `diff -u /tmp/wcu-effective.1.json /tmp/wcu-effective.2.json` (expected: no differences)
+   - `substrate config current show --json --explain >/dev/null 2> /tmp/wcu-explain.1.json`
+   - `substrate config current show --json --explain >/dev/null 2> /tmp/wcu-explain.2.json`
+   - `diff -u /tmp/wcu-explain.1.json /tmp/wcu-explain.2.json` (expected: no differences)
+   - `rg -n 'concat_dedupe_ordered_set' /tmp/wcu-explain.1.json`
+   - `rg -n 'global_patch' /tmp/wcu-explain.1.json`
+   - `rg -n 'workspace_patch' /tmp/wcu-explain.1.json`
+5. Validate workspace disabled marker ignores workspace contribution for this merge key:
+   - `substrate workspace disable .`
+   - `substrate config current show --json | jq -e '.world.deps.enabled | index(\"deno\")==null' >/dev/null`
+   - `substrate config current show --json --explain >/dev/null 2> /tmp/wcu-explain.disabled.json`
+   - `rg -n 'global_patch' /tmp/wcu-explain.disabled.json`
+   - `rg -n 'workspace_patch' /tmp/wcu-explain.disabled.json` (expected: no matches)
+   - `substrate workspace enable .`
+6. Reset key at workspace scope and confirm it remains enabled via global (inherit-only reset):
    - `substrate config workspace reset world.deps.enabled`
-   - `substrate config current show --json | jq -e '.world.deps.enabled | index(\"bun\")!=null' >/dev/null`
+   - `substrate config current show --json | jq -e '.world.deps.enabled | index(\"bun\")!=null and index(\"deno\")==null' >/dev/null`

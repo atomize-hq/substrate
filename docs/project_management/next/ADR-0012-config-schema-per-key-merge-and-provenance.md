@@ -24,8 +24,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 2f2164b8a8ec3e2a97d84b88fd530550c7ec9e2fc819239c8feaf91d49a89410
-
+ADR_BODY_SHA256: 7c10d96c4bf46beccd3aa36c10275ec2ce3bbf713743ab7b88928fed6aeafe74
 ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md` after drafting>
 
 ### Changes (operator-facing)

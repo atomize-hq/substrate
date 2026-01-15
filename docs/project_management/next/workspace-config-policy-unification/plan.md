@@ -48,6 +48,13 @@ Slices:
 - WCU4: Installer/dev env cleanup (stop exporting `SUBSTRATE_OVERRIDE_*` by default)
 - WCU5: Docs + smoke + playbook alignment (including Phase A/B validation coverage)
 
+Slice specs (authoritative per-slice contracts):
+- WCU1: `docs/project_management/next/workspace-config-policy-unification/WCU1-spec.md`
+- WCU2: `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
+- WCU3: `docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md`
+- WCU4: `docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md`
+- WCU5: `docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md`
+
 ## Validation artifacts (required)
 - Manual playbook:
   - `docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md`
@@ -55,6 +62,9 @@ Slices:
   - `docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
   - `docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
   - `docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
+
+## Decision register (auditable A/B decisions)
+- `docs/project_management/next/workspace-config-policy-unification/decision_register.md`
 
 ## Execution gates (enabled)
 - Feature start gate:

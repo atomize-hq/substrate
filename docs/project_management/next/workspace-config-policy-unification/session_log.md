@@ -42,3 +42,63 @@
   - `NONE`
 - Next steps:
   - Planning agent: fill slice specs and tighten acceptance criteria; then run the planning quality gate and update `quality_gate_report.md`.
+
+## START — 2026-01-15T00:00:00Z — planning — ADR-0008 pack tightening (Phase A/B enforceability)
+- Feature: `docs/project_management/next/workspace-config-policy-unification/`
+- Branch: `feat/workspace-config-policy-unification`
+- Goal: Make the Planning Pack execution-ready with mechanically enforceable Phase A/B (ADR-0012) ownership, specs, smoke/playbook parity, and triad prompts.
+- Inputs read:
+  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
+  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
+  - `docs/project_management/next/sequencing.json`
+  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
+- Commands planned:
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification"`
+
+## END — 2026-01-15T00:00:00Z — planning — ADR-0008 pack tightening (Phase A/B enforceability)
+- Summary of changes (exhaustive):
+  - Added per-slice specs (WCU1–WCU5) and referenced them from tasks/prompts/integration map.
+  - Tightened Phase A/B ownership and acceptance criteria (WCU2/WCU3) and made smoke dispatch mechanically explicit via `make feature-smoke`.
+  - Expanded manual playbook + smoke scripts to validate `world.deps.enabled` merge semantics, workspace disabled marker behavior, and determinism/idempotence for both effective output and `--explain`.
+  - Updated decision register with ADR-0012 implementation decisions (A/B + selection) and removed planning-lint hard-ban wording.
+- Files created/modified:
+  - `docs/project_management/next/workspace-config-policy-unification/WCU1-spec.md`
+  - `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
+  - `docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md`
+  - `docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md`
+  - `docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md`
+  - `docs/project_management/next/workspace-config-policy-unification/decision_register.md`
+  - `docs/project_management/next/workspace-config-policy-unification/plan.md`
+  - `docs/project_management/next/workspace-config-policy-unification/tasks.json`
+  - `docs/project_management/next/workspace-config-policy-unification/integration_map.md`
+  - `docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md`
+  - `docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
+  - `docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
+  - `docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU2-integ.md`
+  - `docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU3-code.md`
+  - `docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU3-test.md`
+  - `docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU3-integ.md`
+  - `docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU4-code.md`
+  - `docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU4-test.md`
+  - `docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU4-integ.md`
+  - `docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU5-code.md`
+  - `docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU5-test.md`
+  - `docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU5-integ.md`
+  - `docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/FZ-feature-cleanup.md`
+  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md` (exec summary hash fix for planning-lint parity)
+- Rubric checks run (with results):
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification"` → `0` → `PASS`
+- Sequencing alignment:
+  - `sequencing.json` reviewed: `YES` (sequence WCU1 → WCU5 matches task dependencies)
+  - Changes required: `NONE`
+- Blockers:
+  - `NONE`
+- Next steps:
+  - Run the Planning Quality Gate (`make planning-validate FEATURE_DIR=...`) and fill `docs/project_management/next/workspace-config-policy-unification/quality_gate_report.md`.

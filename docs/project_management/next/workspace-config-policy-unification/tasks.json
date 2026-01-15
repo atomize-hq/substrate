@@ -59,6 +59,7 @@
       "description": "Implement the canonical `<workspace_root>/.substrate/` layout, internal git under `.substrate/git/repo.git/`, and workspace disable marker handling.",
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/next/workspace-config-policy-unification/WCU1-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
         "docs/project_management/next/workspace-config-policy-unification/tasks.json",
         "docs/project_management/next/workspace-config-policy-unification/session_log.md",
@@ -98,6 +99,7 @@
       "description": "Add tests for workspace root discovery, disable marker behavior, and `.substrate/` directory layout invariants.",
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/next/workspace-config-policy-unification/WCU1-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
         "docs/project_management/next/workspace-config-policy-unification/tasks.json",
         "docs/project_management/next/workspace-config-policy-unification/session_log.md",
@@ -136,14 +138,15 @@
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
         "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
+        "docs/project_management/next/workspace-config-policy-unification/WCU1-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
         "docs/project_management/next/workspace-config-policy-unification/tasks.json",
         "docs/project_management/next/workspace-config-policy-unification/session_log.md",
         "docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md",
         "docs/project_management/next/workspace-config-policy-unification/WCU1-closeout_report.md",
-        "smoke/linux-smoke.sh",
-        "smoke/macos-smoke.sh",
-        "smoke/windows-smoke.ps1"
+        "docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh",
+        "docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh",
+        "docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"
       ],
       "acceptance_criteria": [
         "Slice behavior matches ADR-0008 contract for workspace discovery and layout",
@@ -160,7 +163,8 @@
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
         "make integ-checks",
-        "Run feature smoke for behavior platforms and record run ids/URLs in WCU1-closeout_report.md",
+        "Run: make feature-smoke FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" PLATFORM=behavior WORKFLOW_REF=\"feat/workspace-config-policy-unification\"",
+        "Record smoke run ids/URLs in WCU1-closeout_report.md",
         "Set status to completed; complete WCU1-closeout_report.md; commit docs",
         "From inside the worktree: make triad-task-finish TASK_ID=\"WCU1-integ\""
       ],
@@ -185,13 +189,14 @@
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
         "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
+        "docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
         "docs/project_management/next/workspace-config-policy-unification/integration_map.md",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Config effective resolution supports schema-defined merge strategies: replace and concat_dedupe_ordered_set",
-        "`config current show --explain` supports multi-source provenance for merge keys with deterministic ordering"
+        "Config schema assigns merge_strategy per key (default=replace; `world.deps.enabled`=concat_dedupe_ordered_set)",
+        "`config current show --explain` emits deterministic JSON on stderr with per-key merge_strategy and sources[] (replace: exactly one source; merge keys: multi-source in application order)"
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -222,12 +227,13 @@
       "references": [
         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
         "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
+        "docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Tests cover replace and concat_dedupe_ordered_set effective outputs",
-        "Tests cover deterministic multi-source provenance for merge keys in `--explain` output"
+        "Unit tests cover replace (single-source provenance) and concat_dedupe_ordered_set (concat+dedupe ordered-set output + multi-source provenance ordering)",
+        "Determinism test(s) prove `--explain` stderr JSON bytes are identical for identical inputs"
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -259,13 +265,16 @@
         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
         "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
         "docs/project_management/next/workspace-config-policy-unification/WCU2-closeout_report.md",
-        "smoke/linux-smoke.sh",
-        "smoke/macos-smoke.sh",
-        "smoke/windows-smoke.ps1"
+        "docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md",
+        "docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md",
+        "docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh",
+        "docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh",
+        "docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"
       ],
       "acceptance_criteria": [
-        "Phase A requirements are satisfied and evidenced by tests and `--explain` output",
-        "WCU2-closeout_report.md is completed with smoke/manual parity evidence"
+        "Phase A requirements are satisfied and evidenced by unit + integration tests and `--explain` goldens (including workspace disabled marker coverage)",
+        "Feature smoke validates `world.deps.enabled` merge + provenance + determinism/idempotence and is in parity with manual_testing_playbook.md",
+        "WCU2-closeout_report.md is completed with evidence"
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -278,7 +287,8 @@
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
         "make integ-checks",
-        "Run feature smoke for behavior platforms and record run ids/URLs in WCU2-closeout_report.md",
+        "Run: make feature-smoke FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" PLATFORM=behavior WORKFLOW_REF=\"feat/workspace-config-policy-unification\"",
+        "Record smoke run ids/URLs in WCU2-closeout_report.md",
         "Set status to completed; complete WCU2-closeout_report.md; commit docs",
         "From inside the worktree: make triad-task-finish TASK_ID=\"WCU2-integ\""
       ],
@@ -303,12 +313,13 @@
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
         "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
+        "docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md"
       ],
       "acceptance_criteria": [
-        "Config schema allowlist includes `world.deps.enabled` and treats it as valid",
-        "Config set/reset supports adding/removing `world.deps.enabled` at global and workspace scopes",
-        "`config current show --explain` reports merge_strategy and multi-source provenance for `world.deps.enabled` when both scopes contribute"
+        "Config schema allowlist includes `world.deps.enabled` (type list[string], merge_strategy=concat_dedupe_ordered_set)",
+        "Config editor supports `world.deps.enabled+=<item>` and `reset world.deps.enabled` at both global and workspace scopes (patch list write-time de-dupe; reset removes the key from the patch mapping)",
+        "`config current show --explain` reports merge_strategy and sources[] (includes both `global_patch` and `workspace_patch` when both scopes contribute)"
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -339,11 +350,13 @@
       "references": [
         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
         "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
+        "docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md",
         "docs/project_management/next/world_deps_packages_bundles_contract.md"
       ],
       "acceptance_criteria": [
-        "Tests cover global + workspace edits to `world.deps.enabled` and effective concat+dedupe behavior",
-        "Tests cover `--explain` output includes merge strategy and both contributing sources"
+        "Integration tests cover global + workspace edits to `world.deps.enabled` and effective concat+dedupe ordered-set behavior (including a deliberate duplicate across scopes)",
+        "Integration tests cover workspace disabled marker ignores workspace contribution for `world.deps.enabled`",
+        "`--explain` goldens cover merge_strategy and multi-source sources[] ordering for `world.deps.enabled`"
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -375,13 +388,16 @@
         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
         "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
         "docs/project_management/next/workspace-config-policy-unification/WCU3-closeout_report.md",
-        "smoke/linux-smoke.sh",
-        "smoke/macos-smoke.sh",
-        "smoke/windows-smoke.ps1"
+        "docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md",
+        "docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md",
+        "docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh",
+        "docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh",
+        "docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"
       ],
       "acceptance_criteria": [
-        "Phase B requirements are satisfied and evidenced by tests and smoke validation",
-        "WCU3-closeout_report.md is completed with smoke/manual parity evidence"
+        "Phase B requirements are satisfied and evidenced by integration tests and smoke validation for `world.deps.enabled` editing + merged provenance",
+        "Feature smoke validates `world.deps.enabled` merge + provenance + determinism/idempotence and is in parity with manual_testing_playbook.md",
+        "WCU3-closeout_report.md is completed with evidence"
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -394,7 +410,8 @@
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
         "make integ-checks",
-        "Run feature smoke for behavior platforms and record run ids/URLs in WCU3-closeout_report.md",
+        "Run: make feature-smoke FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" PLATFORM=behavior WORKFLOW_REF=\"feat/workspace-config-policy-unification\"",
+        "Record smoke run ids/URLs in WCU3-closeout_report.md",
         "Set status to completed; complete WCU3-closeout_report.md; commit docs",
         "From inside the worktree: make triad-task-finish TASK_ID=\"WCU3-integ\""
       ],
@@ -418,6 +435,7 @@
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
+        "docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
@@ -453,6 +471,7 @@
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
+        "docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
@@ -487,9 +506,10 @@
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
         "docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md",
-        "smoke/linux-smoke.sh",
-        "smoke/macos-smoke.sh",
-        "smoke/windows-smoke.ps1"
+        "docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md",
+        "docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh",
+        "docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh",
+        "docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"
       ],
       "acceptance_criteria": [
         "Installer/dev env behavior matches ADR-0008 contract",
@@ -506,7 +526,8 @@
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
         "make integ-checks",
-        "Run feature smoke for behavior platforms and record run ids/URLs in WCU4-closeout_report.md",
+        "Run: make feature-smoke FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" PLATFORM=behavior WORKFLOW_REF=\"feat/workspace-config-policy-unification\"",
+        "Record smoke run ids/URLs in WCU4-closeout_report.md",
         "Set status to completed; complete WCU4-closeout_report.md; commit docs",
         "From inside the worktree: make triad-task-finish TASK_ID=\"WCU4-integ\""
       ],
@@ -530,6 +551,7 @@
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md",
         "docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh",
         "docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh",
@@ -568,6 +590,7 @@
       "references": [
         "docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md",
         "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
+        "docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
@@ -602,9 +625,10 @@
       "references": [
         "docs/project_management/next/workspace-config-policy-unification/WCU5-closeout_report.md",
         "docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md",
-        "smoke/linux-smoke.sh",
-        "smoke/macos-smoke.sh",
-        "smoke/windows-smoke.ps1"
+        "docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md",
+        "docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh",
+        "docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh",
+        "docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"
       ],
       "acceptance_criteria": [
         "Feature smoke scripts pass and remain in parity with manual_testing_playbook.md",
@@ -621,7 +645,8 @@
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests",
         "make integ-checks",
-        "Run feature smoke for behavior platforms and record run ids/URLs in WCU5-closeout_report.md",
+        "Run: make feature-smoke FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" PLATFORM=behavior WORKFLOW_REF=\"feat/workspace-config-policy-unification\"",
+        "Record smoke run ids/URLs in WCU5-closeout_report.md",
         "Set status to completed; complete WCU5-closeout_report.md; commit docs",
         "From inside the worktree: make triad-task-finish TASK_ID=\"WCU5-integ\""
       ],
@@ -664,4 +689,3 @@
     }
   ]
 }
-
