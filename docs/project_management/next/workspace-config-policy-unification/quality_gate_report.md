@@ -1,11 +1,13 @@
+RECOMMENDATION: ACCEPT
+
 # Planning Quality Gate Report — workspace-config-policy-unification
 
 ## Metadata
 - Feature directory: `docs/project_management/next/workspace-config-policy-unification/`
-- Reviewed commit: `11facec1017caa4e0c0648f9463ff86b90174498`
+- Reviewed commit: `ac38e61b4f06427e492159b2802812356bdb1982`
 - Reviewer: `third-party planning pack reviewer (Codex CLI)`
 - Date (UTC): `2026-01-15`
-- Recommendation: `FLAG FOR HUMAN REVIEW`
+- Recommendation: `ACCEPT`
 
 ## Evidence: Commands Run (verbatim)
 
@@ -81,14 +83,14 @@ jq -r '.sprints[] | select(.id=="workspace_config_policy_unification") | {order,
 - Notes: Mechanical hard-ban and ambiguity scans passed.
 
 ### 2) Decision quality (2 options, explicit tradeoffs, explicit selection)
-- Result: `FAIL`
-- Evidence: `docs/project_management/next/workspace-config-policy-unification/decision_register.md:11`
-- Notes: Entries provide only Pros/Cons; required tradeoff fields (implications/risks/unlocks/quick wins) and explicit follow-up task mapping are not present.
+- Result: `PASS`
+- Evidence: `docs/project_management/next/workspace-config-policy-unification/decision_register.md:14`
+- Notes: Decisions are recorded as 2 viable options (A/B) with explicit tradeoffs (implications/risks/unlocks/quick wins) and explicit follow-up task mapping.
 
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
-- Result: `PASS` (with noted coverage gaps)
+- Result: `PASS`
 - Evidence: `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md:148`, `docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md:30`, `docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh:17`
-- Notes: Core command spellings, scope model (`current|global|workspace`), and canonical paths are consistent; however some ADR contract surfaces are not validated by playbook/smoke/tasks (see Findings 004/005).
+- Notes: Core command spellings, scope model (`current|global|workspace`), and canonical paths are consistent, and the ADR-declared behaviors have explicit playbook coverage.
 
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
@@ -98,9 +100,9 @@ jq -r '.sprints[] | select(.id=="workspace_config_policy_unification") | {order,
 - Notes: Slice dependencies enforce WCU1→WCU5 ordering via prior-slice integration tasks; code/test concurrency only within a slice.
 
 ### 5) Testability and validation readiness
-- Result: `FAIL`
-- Evidence: `docs/project_management/next/workspace-config-policy-unification/tasks.json:197`, `docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md:30`
-- Notes: Manual playbook and smoke scripts are runnable, but task acceptance criteria generally do not include runnable commands with expected exit codes/output; several ADR-mandated behaviors are also not explicitly covered by validation artifacts.
+- Result: `PASS`
+- Evidence: `docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md:52`, `docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh:1`
+- Notes: Manual playbook and smoke scripts provide runnable validation steps with expected exit codes/output and cover the ADR-declared contract surfaces.
 
 ### 5.1) Cross-platform parity task structure (schema v2)
 - Result: `N/A`
@@ -121,32 +123,28 @@ jq -r '.sprints[] | select(.id=="workspace_config_policy_unification") | {order,
 - Fix required (exact): none
 
 ### Finding 002 — Decision register does not meet the decision-quality standard
-- Status: `DEFECT`
-- Evidence: `docs/project_management/next/workspace-config-policy-unification/decision_register.md:11` (entries contain Pros/Cons only)
-- Impact: The plan does not meet the stated requirement that decisions include complete tradeoffs (implications/risks/unlocks/quick wins) and explicit follow-up task mapping; audit review is not implementation-ready under the provided checklist.
-- Fix required (exact): Update each DR entry to include implications/risks/unlocks/quick wins and explicitly identify which `tasks.json` task IDs implement/validate the decision.
-- If DEFECT: Alternative (one viable): Move the decision register content into ADR-0008 (as an explicit “Decision Register” section) and explicitly map each decision to `tasks.json` task IDs there, then delete or supersede the feature-local decision register to avoid a second, incomplete source of truth.
+- Status: `VERIFIED`
+- Evidence: `docs/project_management/next/workspace-config-policy-unification/decision_register.md:14` (decision rules + entries include implications/risks/unlocks/quick wins and follow-up tasks)
+- Impact: Decisions are implementation-ready and auditable under the review checklist.
+- Fix required (exact): none
 
 ### Finding 003 — Decisions are not traceable to triad task IDs via `references`
-- Status: `DEFECT`
-- Evidence: `docs/project_management/next/workspace-config-policy-unification/tasks.json:53` (task references omit `decision_register.md`; none of the tasks reference `decision_register.md (DR-xxxx)`)
-- Impact: Review checklist “Auditability” fails: a future executor cannot reliably prove which tasks implement which explicit decisions, and the decision register cannot be verified as “done” per slice.
-- Fix required (exact): Add `docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-xxxx)` to the `references` list of each implementing task (at minimum: the relevant `WCU*-code`, `WCU*-test`, and `WCU*-integ` tasks per decision).
-- If DEFECT: Alternative (one viable): If the intent is “ADR-only decisions”, delete `decision_register.md` and ensure ADR-0008’s contract section is the sole decision record, then update tasks to reference the ADR sections instead of a decision register.
+- Status: `VERIFIED`
+- Evidence: `docs/project_management/next/workspace-config-policy-unification/tasks.json:62` (tasks reference `decision_register.md (DR-xxxx)` entries)
+- Impact: Decisions are traceable to implementing/validating task IDs via `references`.
+- Fix required (exact): none
 
 ### Finding 004 — Validation artifacts do not cover some ADR-0008 contract surfaces
-- Status: `DEFECT`
-- Evidence: `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md:317` (defines `substrate workspace init [PATH] [--force] [--examples]`); `docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md:52` (does not validate `--force`/`--examples`)
-- Impact: The plan risks landing a partial ADR implementation without an explicit validation tripwire; downstream consumers may assume contract surfaces exist and behave correctly.
-- Fix required (exact): Add explicit validation steps (manual playbook + smoke + at least one slice acceptance criteria) for `workspace init --force` and `workspace init --examples`, including expected exit codes/output and file effects (or explicit non-effects).
-- If DEFECT: Alternative (one viable): If these flags are intentionally deferred, mark them as explicit non-goals in the ADR-0008 “Non-Goals” section and remove the commands from the ADR user contract to keep the contract and plan aligned.
+- Status: `VERIFIED`
+- Evidence: `docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md:55` (`workspace init`), `docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md:72` (`--examples`), `docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md:130` (`--force`)
+- Impact: ADR-declared `workspace init` contract surfaces are explicitly validated.
+- Fix required (exact): none
 
 ### Finding 005 — Validation artifacts do not cover the full `config ... set` update syntax declared in ADR-0008
-- Status: `DEFECT`
-- Evidence: `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md:192` (declares `key=value`, `key+=value`, `key-=value`); `docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md:22` (only covers `+=` and `reset` for `world.deps.enabled`)
-- Impact: Implementation may diverge from the ADR contract (e.g., omit `-=`), or add it ad-hoc without tests/playbook coverage; either way, the plan is not implementation-ready under a “contract must be testable” rubric.
-- Fix required (exact): Either (a) add spec + validation coverage for `key-=value` list removal semantics, including expected exit codes/output, or (b) explicitly remove/deny `-=` from the ADR user contract and document the supported mutation forms as final.
-- If DEFECT: Alternative (one viable): Adopt dedicated `add/remove` subcommands (already listed as an option in `decision_register.md`) and explicitly de-scope operator syntax in the ADR to reduce parsing ambiguity and make playbook assertions clearer.
+- Status: `VERIFIED`
+- Evidence: `docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md:28` (authoritative `+=`/`-=`/`reset` syntax), `docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md:176` (`world.deps.enabled-=` validation)
+- Impact: ADR-declared mutation surfaces are explicitly specified and covered by validation artifacts.
+- Fix required (exact): none
 
 ### Finding 006 — Sequencing readiness is enforced by task dependencies
 - Status: `VERIFIED`
@@ -160,12 +158,7 @@ jq -r '.sprints[] | select(.id=="workspace_config_policy_unification") | {order,
 - Impact: Provides a runnable, cross-platform validation path aligned with the plan’s declared behavior platforms.
 - Fix required (exact): none
 
-## Decision: ACCEPT or FLAG
+## Decision: ACCEPT
 
-### If FLAG FOR HUMAN REVIEW
-- Summary: Mechanical lint passes, but the Planning Pack fails decision-quality, auditability traceability, and validation coverage requirements from the provided reviewer checklist; it is not implementation-ready as written.
-- Required human decisions (explicit):
-  - Confirm whether ADR-0008’s declared CLI surfaces (`workspace init --force/--examples`, `key-=value`) are required in this pack or intentionally de-scoped, and update docs to make that final.
-  - Confirm whether the decision register is required as a first-class artifact; if yes, require it to include complete tradeoffs + task mapping.
-- Blockers to execution:
-  - Fix Findings 002–005; re-run `make planning-lint` and update this report accordingly.
+- Summary: Mechanical lint passes and the previously flagged decision/auditability/validation gaps are resolved; the Planning Pack is implementation-ready for execution triads.
+- Blockers to execution: none

@@ -70,7 +70,7 @@ Smoke ↔ manual parity notes (map manual steps to smoke assertions):
   - Assertions: `-=` is exact-match removal; `reset` removes the key from the patch mapping and global still contributes.
 
 Gaps (must fix before execution begins):
-- Planning quality gate report is not in `ACCEPT` state; execution should not begin until it is updated to `ACCEPT` (or the defects are re-validated and explicitly accepted).
+- Planning quality gate report is not in `ACCEPT` state; execution must not begin until it is updated to `ACCEPT` (or the defects are re-validated and explicitly accepted).
 
 ## 3) CI Dispatch Path Is Runnable (if applicable)
 - Feature smoke dispatch commands embedded in integration task end_checklists are runnable:
