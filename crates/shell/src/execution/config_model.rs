@@ -57,6 +57,7 @@ pub(crate) struct WorldConfig {
     pub anchor_mode: WorldRootMode,
     pub anchor_path: String,
     pub caged: bool,
+    pub deps: WorldDepsConfig,
 }
 
 impl Default for WorldConfig {
@@ -66,6 +67,61 @@ impl Default for WorldConfig {
             anchor_mode: WorldRootMode::Project,
             anchor_path: String::new(),
             caged: true,
+            deps: WorldDepsConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct WorldDepsConfig {
+    pub enabled: Vec<String>,
+    pub inventory_mode: WorldDepsInventoryMode,
+    pub builtins: WorldDepsBuiltinsMode,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WorldDepsInventoryMode {
+    Merged,
+    WorkspaceOnly,
+}
+
+impl Default for WorldDepsInventoryMode {
+    fn default() -> Self {
+        Self::Merged
+    }
+}
+
+impl WorldDepsInventoryMode {
+    pub(crate) fn parse_insensitive(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "merged" => Some(Self::Merged),
+            "workspace_only" => Some(Self::WorkspaceOnly),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WorldDepsBuiltinsMode {
+    Enabled,
+    Disabled,
+}
+
+impl Default for WorldDepsBuiltinsMode {
+    fn default() -> Self {
+        Self::Enabled
+    }
+}
+
+impl WorldDepsBuiltinsMode {
+    pub(crate) fn parse_insensitive(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "enabled" => Some(Self::Enabled),
+            "disabled" => Some(Self::Disabled),
+            _ => None,
         }
     }
 }
@@ -176,6 +232,113 @@ pub(crate) struct CliConfigOverrides {
     pub caged: Option<bool>,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct SubstrateConfigPatch {
+    #[serde(skip_serializing_if = "WorldConfigPatch::is_empty")]
+    pub world: WorldConfigPatch,
+    #[serde(skip_serializing_if = "PolicyConfigPatch::is_empty")]
+    pub policy: PolicyConfigPatch,
+    #[serde(skip_serializing_if = "SyncConfigPatch::is_empty")]
+    pub sync: SyncConfigPatch,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct WorldConfigPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub anchor_mode: Option<WorldRootMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub anchor_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub caged: Option<bool>,
+    #[serde(skip_serializing_if = "WorldDepsConfigPatch::is_empty")]
+    pub deps: WorldDepsConfigPatch,
+}
+
+impl WorldConfigPatch {
+    fn is_empty(&self) -> bool {
+        self.enabled.is_none()
+            && self.anchor_mode.is_none()
+            && self.anchor_path.is_none()
+            && self.caged.is_none()
+            && self.deps.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct WorldDepsConfigPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inventory_mode: Option<WorldDepsInventoryMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub builtins: Option<WorldDepsBuiltinsMode>,
+}
+
+impl WorldDepsConfigPatch {
+    fn is_empty(&self) -> bool {
+        self.enabled.is_none() && self.inventory_mode.is_none() && self.builtins.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct PolicyConfigPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<PolicyMode>,
+}
+
+impl PolicyConfigPatch {
+    fn is_empty(&self) -> bool {
+        self.mode.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct SyncConfigPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_sync: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub direction: Option<SyncDirection>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conflict_policy: Option<SyncConflictPolicy>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exclude: Option<Vec<String>>,
+}
+
+impl SyncConfigPatch {
+    fn is_empty(&self) -> bool {
+        self.auto_sync.is_none()
+            && self.direction.is_none()
+            && self.conflict_policy.is_none()
+            && self.exclude.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct ConfigExplainV1 {
+    pub kind: String,
+    pub keys: std::collections::BTreeMap<String, ConfigExplainKey>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct ConfigExplainKey {
+    pub merge_strategy: String,
+    pub sources: Vec<ConfigExplainSource>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct ConfigExplainSource {
+    pub layer: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum UpdateOp {
     Set,
@@ -194,19 +357,48 @@ pub(crate) fn global_config_path() -> Result<PathBuf> {
     substrate_paths::config_file()
 }
 
-pub(crate) fn read_global_config_or_defaults() -> Result<(SubstrateConfig, bool)> {
+pub(crate) fn read_global_config_patch_or_empty() -> Result<(SubstrateConfigPatch, bool)> {
     let path = global_config_path()?;
     match fs::read_to_string(&path) {
-        Ok(raw) => Ok((parse_config_yaml(&path, &raw)?, true)),
+        Ok(raw) => Ok((parse_config_patch_yaml(&path, &raw)?, true)),
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            Ok((SubstrateConfig::default(), false))
+            Ok((SubstrateConfigPatch::default(), false))
         }
         Err(err) => Err(anyhow!("failed to read {}: {err}", path.display())),
     }
 }
 
+pub(crate) fn read_global_config_or_defaults() -> Result<(SubstrateConfig, bool)> {
+    let (patch, existed) = read_global_config_patch_or_empty()?;
+    let cfg = resolve_effective_from_layers(
+        &patch,
+        &global_config_path()?,
+        None,
+        &EnvOverrides::default(),
+        &CliConfigOverrides::default(),
+        false,
+        false,
+    )?
+    .0;
+    Ok((cfg, existed))
+}
+
 pub(crate) fn parse_config_yaml(path: &Path, raw: &str) -> Result<SubstrateConfig> {
-    let parsed: SubstrateConfig = serde_yaml::from_str(raw).map_err(|err| {
+    let value: serde_yaml::Value = serde_yaml::from_str(raw).map_err(|err| {
+        user_error(format!(
+            "invalid YAML in {}: {}",
+            path.display(),
+            err.to_string().trim()
+        ))
+    })?;
+
+    match &value {
+        serde_yaml::Value::Null => return Ok(SubstrateConfig::default()),
+        serde_yaml::Value::Mapping(map) if map.is_empty() => return Ok(SubstrateConfig::default()),
+        _ => {}
+    }
+
+    let parsed: SubstrateConfig = serde_yaml::from_value(value).map_err(|err| {
         user_error(format!(
             "invalid YAML in {}: {}",
             path.display(),
@@ -217,51 +409,489 @@ pub(crate) fn parse_config_yaml(path: &Path, raw: &str) -> Result<SubstrateConfi
     Ok(parsed)
 }
 
+pub(crate) fn parse_config_patch_yaml(path: &Path, raw: &str) -> Result<SubstrateConfigPatch> {
+    let value: serde_yaml::Value = serde_yaml::from_str(raw).map_err(|err| {
+        user_error(format!(
+            "invalid YAML in {}: {}",
+            path.display(),
+            err.to_string().trim()
+        ))
+    })?;
+
+    match &value {
+        serde_yaml::Value::Null => return Ok(SubstrateConfigPatch::default()),
+        serde_yaml::Value::Mapping(map) if map.is_empty() => {
+            return Ok(SubstrateConfigPatch::default())
+        }
+        _ => {}
+    }
+
+    let parsed: SubstrateConfigPatch = serde_yaml::from_value(value).map_err(|err| {
+        user_error(format!(
+            "invalid YAML in {}: {}",
+            path.display(),
+            err.to_string().trim()
+        ))
+    })?;
+    Ok(parsed)
+}
+
+pub(crate) fn resolve_global_effective_config() -> Result<SubstrateConfig> {
+    Ok(resolve_global_effective_config_with_explain(false)?.0)
+}
+
+pub(crate) fn resolve_global_effective_config_with_explain(
+    explain: bool,
+) -> Result<(SubstrateConfig, Option<ConfigExplainV1>)> {
+    let (global_patch, _) = read_global_config_patch_or_empty()?;
+    let global_path = global_config_path()?;
+    resolve_effective_from_layers(
+        &global_patch,
+        &global_path,
+        None,
+        &EnvOverrides::default(),
+        &CliConfigOverrides::default(),
+        explain,
+        false,
+    )
+}
+
 pub(crate) fn resolve_effective_config(
     cwd: &Path,
     cli: &CliConfigOverrides,
 ) -> Result<SubstrateConfig> {
-    let (mut effective, _) = read_global_config_or_defaults()?;
+    Ok(resolve_effective_config_with_explain(cwd, cli, false)?.0)
+}
+
+pub(crate) fn resolve_effective_config_with_explain(
+    cwd: &Path,
+    cli: &CliConfigOverrides,
+    explain: bool,
+) -> Result<(SubstrateConfig, Option<ConfigExplainV1>)> {
     let env_overrides = parse_env_overrides()?;
+    let (global_patch, _) = read_global_config_patch_or_empty()?;
+    let global_path = global_config_path()?;
 
     let workspace_root = workspace::find_workspace_root(cwd);
-    if let Some(root) = &workspace_root {
+    let workspace_layer = if let Some(root) = &workspace_root {
         let legacy = workspace::workspace_legacy_settings_path(root);
         if legacy.exists() {
             return Err(user_error(format!(
-                "substrate: unsupported legacy workspace config detected:\n  - {}\nConfig is now read from:\n  - {}\nNext steps:\n  - Delete the legacy file and use `substrate config set ...`\n",
+                "substrate: unsupported legacy workspace config detected:\n  - {}\nConfig is now read from:\n  - {}\nNext steps:\n  - Delete the legacy file and use `substrate config workspace set ...`\n",
                 legacy.display(),
                 workspace::workspace_marker_path(root).display()
             )));
         }
-
         let workspace_path = workspace::workspace_marker_path(root);
         let raw = fs::read_to_string(&workspace_path)
             .with_context(|| format!("failed to read {}", workspace_path.display()))?;
-        effective = parse_config_yaml(&workspace_path, &raw)?;
+        let patch = parse_config_patch_yaml(&workspace_path, &raw)?;
+        Some((patch, workspace_path))
     } else {
-        apply_parsed_env_overrides(&mut effective, &env_overrides);
-    }
+        None
+    };
 
-    apply_cli_overrides(&mut effective, cli);
-    apply_protected_excludes(&mut effective.sync.exclude);
+    let workspace_ref = workspace_layer
+        .as_ref()
+        .map(|(p, path)| (p, path.as_path()));
 
-    Ok(effective)
+    resolve_effective_from_layers(
+        &global_patch,
+        &global_path,
+        workspace_ref,
+        &env_overrides,
+        cli,
+        explain,
+        true,
+    )
 }
 
-fn apply_cli_overrides(cfg: &mut SubstrateConfig, cli: &CliConfigOverrides) {
-    if let Some(enabled) = cli.world_enabled {
-        cfg.world.enabled = enabled;
+fn resolve_effective_from_layers(
+    global_patch: &SubstrateConfigPatch,
+    global_path: &Path,
+    workspace_patch: Option<(&SubstrateConfigPatch, &Path)>,
+    env_overrides: &EnvOverrides,
+    cli_overrides: &CliConfigOverrides,
+    explain: bool,
+    inject_protected_excludes: bool,
+) -> Result<(SubstrateConfig, Option<ConfigExplainV1>)> {
+    let mut effective = SubstrateConfig::default();
+    let mut explain_keys = if explain {
+        Some(std::collections::BTreeMap::<String, ConfigExplainKey>::new())
+    } else {
+        None
+    };
+
+    let workspace_enabled = workspace_patch.is_some();
+    let workspace_path = workspace_patch.map(|(_, p)| p);
+
+    // Helper for replace keys.
+    #[derive(Clone, Copy)]
+    enum ReplaceSource {
+        CliFlag,
+        OverrideEnv,
+        WorkspacePatch,
+        GlobalPatch,
+        Default,
     }
-    if let Some(mode) = cli.anchor_mode {
-        cfg.world.anchor_mode = mode;
+
+    fn explain_source(
+        source: ReplaceSource,
+        global_path: &Path,
+        workspace_path: Option<&Path>,
+    ) -> ConfigExplainSource {
+        match source {
+            ReplaceSource::CliFlag => ConfigExplainSource {
+                layer: "cli_flag".to_string(),
+                path: None,
+            },
+            ReplaceSource::OverrideEnv => ConfigExplainSource {
+                layer: "override_env".to_string(),
+                path: None,
+            },
+            ReplaceSource::WorkspacePatch => ConfigExplainSource {
+                layer: "workspace_patch".to_string(),
+                path: workspace_path.map(|p| p.display().to_string()),
+            },
+            ReplaceSource::GlobalPatch => ConfigExplainSource {
+                layer: "global_patch".to_string(),
+                path: Some(global_path.display().to_string()),
+            },
+            ReplaceSource::Default => ConfigExplainSource {
+                layer: "default".to_string(),
+                path: None,
+            },
+        }
     }
-    if let Some(path) = &cli.anchor_path {
-        cfg.world.anchor_path = path.clone();
+
+    fn resolve_replace<T: Clone>(
+        default: T,
+        global: Option<T>,
+        workspace: Option<T>,
+        env: Option<T>,
+        cli: Option<T>,
+        workspace_enabled: bool,
+    ) -> (T, ReplaceSource) {
+        if let Some(v) = cli {
+            return (v, ReplaceSource::CliFlag);
+        }
+        if workspace_enabled {
+            if let Some(v) = workspace {
+                return (v, ReplaceSource::WorkspacePatch);
+            }
+        } else if let Some(v) = env {
+            // Preserve historical behavior: env overrides apply only when no workspace exists.
+            return (v, ReplaceSource::OverrideEnv);
+        }
+        if let Some(v) = global {
+            return (v, ReplaceSource::GlobalPatch);
+        }
+        (default, ReplaceSource::Default)
     }
-    if let Some(caged) = cli.caged {
-        cfg.world.caged = caged;
+
+    // world.enabled
+    let (world_enabled, world_enabled_src) = resolve_replace(
+        effective.world.enabled,
+        global_patch.world.enabled,
+        workspace_patch
+            .map(|(p, _)| p.world.enabled)
+            .unwrap_or(None),
+        env_overrides.world_enabled,
+        cli_overrides.world_enabled,
+        workspace_enabled,
+    );
+    effective.world.enabled = world_enabled;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "world.enabled".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    world_enabled_src,
+                    global_path,
+                    workspace_path,
+                )],
+            },
+        );
     }
+
+    // world.anchor_mode
+    let (anchor_mode, anchor_mode_src) = resolve_replace(
+        effective.world.anchor_mode,
+        global_patch.world.anchor_mode,
+        workspace_patch
+            .map(|(p, _)| p.world.anchor_mode)
+            .unwrap_or(None),
+        env_overrides.anchor_mode,
+        cli_overrides.anchor_mode,
+        workspace_enabled,
+    );
+    effective.world.anchor_mode = anchor_mode;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "world.anchor_mode".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(anchor_mode_src, global_path, workspace_path)],
+            },
+        );
+    }
+
+    // world.anchor_path
+    let (anchor_path, anchor_path_src) = resolve_replace(
+        effective.world.anchor_path.clone(),
+        global_patch.world.anchor_path.clone(),
+        workspace_patch
+            .map(|(p, _)| p.world.anchor_path.clone())
+            .unwrap_or(None),
+        env_overrides.anchor_path.clone(),
+        cli_overrides.anchor_path.clone(),
+        workspace_enabled,
+    );
+    effective.world.anchor_path = anchor_path;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "world.anchor_path".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(anchor_path_src, global_path, workspace_path)],
+            },
+        );
+    }
+
+    // world.caged
+    let (caged, caged_src) = resolve_replace(
+        effective.world.caged,
+        global_patch.world.caged,
+        workspace_patch.map(|(p, _)| p.world.caged).unwrap_or(None),
+        env_overrides.caged,
+        cli_overrides.caged,
+        workspace_enabled,
+    );
+    effective.world.caged = caged;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "world.caged".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(caged_src, global_path, workspace_path)],
+            },
+        );
+    }
+
+    // policy.mode (from config.yaml/workspace.yaml, not policy.yaml)
+    let (policy_mode, policy_mode_src) = resolve_replace(
+        effective.policy.mode,
+        global_patch.policy.mode,
+        workspace_patch.map(|(p, _)| p.policy.mode).unwrap_or(None),
+        env_overrides.policy_mode,
+        None,
+        workspace_enabled,
+    );
+    effective.policy.mode = policy_mode;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "policy.mode".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(policy_mode_src, global_path, workspace_path)],
+            },
+        );
+    }
+
+    // sync.auto_sync
+    let (auto_sync, auto_sync_src) = resolve_replace(
+        effective.sync.auto_sync,
+        global_patch.sync.auto_sync,
+        workspace_patch
+            .map(|(p, _)| p.sync.auto_sync)
+            .unwrap_or(None),
+        env_overrides.sync_auto_sync,
+        None,
+        workspace_enabled,
+    );
+    effective.sync.auto_sync = auto_sync;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "sync.auto_sync".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(auto_sync_src, global_path, workspace_path)],
+            },
+        );
+    }
+
+    // sync.direction
+    let (sync_direction, sync_direction_src) = resolve_replace(
+        effective.sync.direction,
+        global_patch.sync.direction,
+        workspace_patch
+            .map(|(p, _)| p.sync.direction)
+            .unwrap_or(None),
+        env_overrides.sync_direction,
+        None,
+        workspace_enabled,
+    );
+    effective.sync.direction = sync_direction;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "sync.direction".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    sync_direction_src,
+                    global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    // sync.conflict_policy
+    let (conflict_policy, conflict_policy_src) = resolve_replace(
+        effective.sync.conflict_policy,
+        global_patch.sync.conflict_policy,
+        workspace_patch
+            .map(|(p, _)| p.sync.conflict_policy)
+            .unwrap_or(None),
+        env_overrides.sync_conflict_policy,
+        None,
+        workspace_enabled,
+    );
+    effective.sync.conflict_policy = conflict_policy;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "sync.conflict_policy".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    conflict_policy_src,
+                    global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    // sync.exclude (replace semantics; protected excludes are injected later)
+    let (exclude, exclude_src) = resolve_replace(
+        effective.sync.exclude.clone(),
+        global_patch.sync.exclude.clone(),
+        workspace_patch
+            .map(|(p, _)| p.sync.exclude.clone())
+            .unwrap_or(None),
+        env_overrides.sync_exclude.clone(),
+        None,
+        workspace_enabled,
+    );
+    effective.sync.exclude = exclude;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "sync.exclude".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(exclude_src, global_path, workspace_path)],
+            },
+        );
+    }
+
+    // world.deps.enabled (concat_dedupe_ordered_set)
+    let mut enabled_sources = Vec::new();
+    let mut layers = Vec::new();
+    if let Some(list) = &global_patch.world.deps.enabled {
+        enabled_sources.push(ConfigExplainSource {
+            layer: "global_patch".to_string(),
+            path: Some(global_path.display().to_string()),
+        });
+        layers.push(list.clone());
+    }
+    if workspace_enabled {
+        if let Some(list) = workspace_patch.and_then(|(p, _)| p.world.deps.enabled.as_ref()) {
+            enabled_sources.push(ConfigExplainSource {
+                layer: "workspace_patch".to_string(),
+                path: workspace_path.map(|p| p.display().to_string()),
+            });
+            layers.push(list.clone());
+        }
+    }
+    effective.world.deps.enabled = concat_dedupe_ordered_set(&layers);
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "world.deps.enabled".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "concat_dedupe_ordered_set".to_string(),
+                sources: enabled_sources,
+            },
+        );
+    }
+
+    // world.deps.inventory_mode (replace)
+    let (inv_mode, inv_mode_src) = resolve_replace(
+        effective.world.deps.inventory_mode,
+        global_patch.world.deps.inventory_mode,
+        workspace_patch
+            .map(|(p, _)| p.world.deps.inventory_mode)
+            .unwrap_or(None),
+        None,
+        None,
+        workspace_enabled,
+    );
+    effective.world.deps.inventory_mode = inv_mode;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "world.deps.inventory_mode".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(inv_mode_src, global_path, workspace_path)],
+            },
+        );
+    }
+
+    // world.deps.builtins (replace)
+    let (builtins, builtins_src) = resolve_replace(
+        effective.world.deps.builtins,
+        global_patch.world.deps.builtins,
+        workspace_patch
+            .map(|(p, _)| p.world.deps.builtins)
+            .unwrap_or(None),
+        None,
+        None,
+        workspace_enabled,
+    );
+    effective.world.deps.builtins = builtins;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "world.deps.builtins".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(builtins_src, global_path, workspace_path)],
+            },
+        );
+    }
+
+    if inject_protected_excludes {
+        apply_protected_excludes(&mut effective.sync.exclude);
+    }
+
+    validate_config(&effective)?;
+
+    let explain = explain_keys.map(|keys| ConfigExplainV1 {
+        kind: "substrate.config.explain.v1".to_string(),
+        keys,
+    });
+    Ok((effective, explain))
+}
+
+fn concat_dedupe_ordered_set(layers: &[Vec<String>]) -> Vec<String> {
+    let mut out = Vec::new();
+    for layer in layers {
+        for item in layer {
+            if !out.iter().any(|existing| existing == item) {
+                out.push(item.clone());
+            }
+        }
+    }
+    out
 }
 
 #[derive(Debug, Default)]
@@ -386,36 +1016,6 @@ fn parse_env_overrides() -> Result<EnvOverrides> {
     Ok(overrides)
 }
 
-fn apply_parsed_env_overrides(cfg: &mut SubstrateConfig, overrides: &EnvOverrides) {
-    if let Some(enabled) = overrides.world_enabled {
-        cfg.world.enabled = enabled;
-    }
-    if let Some(mode) = overrides.anchor_mode {
-        cfg.world.anchor_mode = mode;
-    }
-    if let Some(path) = &overrides.anchor_path {
-        cfg.world.anchor_path = path.clone();
-    }
-    if let Some(caged) = overrides.caged {
-        cfg.world.caged = caged;
-    }
-    if let Some(mode) = overrides.policy_mode {
-        cfg.policy.mode = mode;
-    }
-    if let Some(auto_sync) = overrides.sync_auto_sync {
-        cfg.sync.auto_sync = auto_sync;
-    }
-    if let Some(direction) = overrides.sync_direction {
-        cfg.sync.direction = direction;
-    }
-    if let Some(policy) = overrides.sync_conflict_policy {
-        cfg.sync.conflict_policy = policy;
-    }
-    if let Some(exclude) = &overrides.sync_exclude {
-        cfg.sync.exclude = exclude.clone();
-    }
-}
-
 pub(crate) fn apply_protected_excludes(excludes: &mut Vec<String>) {
     excludes.retain(|item| !PROTECTED_EXCLUDES.contains(&item.as_str()));
     for (idx, item) in PROTECTED_EXCLUDES.iter().enumerate() {
@@ -453,43 +1053,70 @@ fn parse_update(raw: &str) -> Result<ConfigUpdate> {
     })
 }
 
-pub(crate) fn apply_updates(cfg: &mut SubstrateConfig, updates: &[ConfigUpdate]) -> Result<bool> {
+pub(crate) fn apply_updates_to_patch(
+    patch: &mut SubstrateConfigPatch,
+    updates: &[ConfigUpdate],
+) -> Result<bool> {
     let mut changed = false;
     for update in updates {
-        changed |= apply_update(cfg, update)?;
+        changed |= apply_update_to_patch(patch, update)?;
     }
-    validate_config(cfg)?;
+    Ok(changed)
+}
+
+pub(crate) fn reset_patch_keys(patch: &mut SubstrateConfigPatch, keys: &[String]) -> Result<bool> {
+    let mut changed = false;
+    for key in keys {
+        changed |= reset_patch_key(patch, key)?;
+    }
     Ok(changed)
 }
 
 fn validate_config(cfg: &SubstrateConfig) -> Result<()> {
     if cfg.world.anchor_mode == WorldRootMode::Custom && cfg.world.anchor_path.trim().is_empty() {
         return Err(user_error(
-            "world.anchor_path is required when world.anchor_mode=custom",
+            "anchor_mode=custom requires world.anchor_path to be non-empty",
         ));
     }
     Ok(())
 }
 
-fn apply_update(cfg: &mut SubstrateConfig, update: &ConfigUpdate) -> Result<bool> {
+fn apply_update_to_patch(patch: &mut SubstrateConfigPatch, update: &ConfigUpdate) -> Result<bool> {
     match update.key.as_str() {
-        "world.enabled" => apply_bool(&mut cfg.world.enabled, &update.op, &update.value),
+        "world.enabled" => apply_bool_opt(&mut patch.world.enabled, &update.op, &update.value),
         "world.anchor_mode" => {
-            apply_enum_anchor_mode(&mut cfg.world.anchor_mode, &update.op, &update.value)
+            apply_enum_anchor_mode_opt(&mut patch.world.anchor_mode, &update.op, &update.value)
         }
-        "world.anchor_path" => apply_string(&mut cfg.world.anchor_path, &update.op, &update.value),
-        "world.caged" => apply_bool(&mut cfg.world.caged, &update.op, &update.value),
-        "policy.mode" => apply_enum_policy_mode(&mut cfg.policy.mode, &update.op, &update.value),
-        "sync.auto_sync" => apply_bool(&mut cfg.sync.auto_sync, &update.op, &update.value),
-        "sync.direction" => {
-            apply_enum_sync_direction(&mut cfg.sync.direction, &update.op, &update.value)
+        "world.anchor_path" => {
+            apply_string_opt(&mut patch.world.anchor_path, &update.op, &update.value)
         }
-        "sync.conflict_policy" => apply_enum_sync_conflict_policy(
-            &mut cfg.sync.conflict_policy,
+        "world.caged" => apply_bool_opt(&mut patch.world.caged, &update.op, &update.value),
+
+        "world.deps.enabled" => apply_string_list_opt(&mut patch.world.deps.enabled, update),
+        "world.deps.inventory_mode" => apply_enum_inventory_mode_opt(
+            &mut patch.world.deps.inventory_mode,
             &update.op,
             &update.value,
         ),
-        "sync.exclude" => apply_list_exclude(&mut cfg.sync.exclude, update),
+        "world.deps.builtins" => {
+            apply_enum_builtins_opt(&mut patch.world.deps.builtins, &update.op, &update.value)
+        }
+
+        "policy.mode" => {
+            apply_enum_policy_mode_opt(&mut patch.policy.mode, &update.op, &update.value)
+        }
+
+        "sync.auto_sync" => apply_bool_opt(&mut patch.sync.auto_sync, &update.op, &update.value),
+        "sync.direction" => {
+            apply_enum_sync_direction_opt(&mut patch.sync.direction, &update.op, &update.value)
+        }
+        "sync.conflict_policy" => apply_enum_sync_conflict_policy_opt(
+            &mut patch.sync.conflict_policy,
+            &update.op,
+            &update.value,
+        ),
+        "sync.exclude" => apply_string_list_opt(&mut patch.sync.exclude, update),
+
         _ => Err(user_error(format!(
             "unsupported config key '{}'",
             update.key
@@ -497,7 +1124,35 @@ fn apply_update(cfg: &mut SubstrateConfig, update: &ConfigUpdate) -> Result<bool
     }
 }
 
-fn apply_bool(target: &mut bool, op: &UpdateOp, raw: &str) -> Result<bool> {
+fn reset_patch_key(patch: &mut SubstrateConfigPatch, key: &str) -> Result<bool> {
+    match key {
+        "world.enabled" => reset_opt(&mut patch.world.enabled),
+        "world.anchor_mode" => reset_opt(&mut patch.world.anchor_mode),
+        "world.anchor_path" => reset_opt(&mut patch.world.anchor_path),
+        "world.caged" => reset_opt(&mut patch.world.caged),
+
+        "world.deps.enabled" => reset_opt(&mut patch.world.deps.enabled),
+        "world.deps.inventory_mode" => reset_opt(&mut patch.world.deps.inventory_mode),
+        "world.deps.builtins" => reset_opt(&mut patch.world.deps.builtins),
+
+        "policy.mode" => reset_opt(&mut patch.policy.mode),
+
+        "sync.auto_sync" => reset_opt(&mut patch.sync.auto_sync),
+        "sync.direction" => reset_opt(&mut patch.sync.direction),
+        "sync.conflict_policy" => reset_opt(&mut patch.sync.conflict_policy),
+        "sync.exclude" => reset_opt(&mut patch.sync.exclude),
+
+        _ => Err(user_error(format!("unsupported config key '{}'", key))),
+    }
+}
+
+fn reset_opt<T>(target: &mut Option<T>) -> Result<bool> {
+    let changed = target.is_some();
+    *target = None;
+    Ok(changed)
+}
+
+fn apply_bool_opt(target: &mut Option<bool>, op: &UpdateOp, raw: &str) -> Result<bool> {
     if *op != UpdateOp::Set {
         return Err(user_error("unsupported operator for boolean key"));
     }
@@ -507,12 +1162,16 @@ fn apply_bool(target: &mut bool, op: &UpdateOp, raw: &str) -> Result<bool> {
             raw
         ))
     })?;
-    let changed = *target != next;
-    *target = next;
+    let changed = *target != Some(next);
+    *target = Some(next);
     Ok(changed)
 }
 
-fn apply_enum_anchor_mode(target: &mut WorldRootMode, op: &UpdateOp, raw: &str) -> Result<bool> {
+fn apply_enum_anchor_mode_opt(
+    target: &mut Option<WorldRootMode>,
+    op: &UpdateOp,
+    raw: &str,
+) -> Result<bool> {
     if *op != UpdateOp::Set {
         return Err(user_error("unsupported operator for enum key"));
     }
@@ -522,12 +1181,16 @@ fn apply_enum_anchor_mode(target: &mut WorldRootMode, op: &UpdateOp, raw: &str) 
             raw
         ))
     })?;
-    let changed = *target != next;
-    *target = next;
+    let changed = *target != Some(next);
+    *target = Some(next);
     Ok(changed)
 }
 
-fn apply_enum_policy_mode(target: &mut PolicyMode, op: &UpdateOp, raw: &str) -> Result<bool> {
+fn apply_enum_policy_mode_opt(
+    target: &mut Option<PolicyMode>,
+    op: &UpdateOp,
+    raw: &str,
+) -> Result<bool> {
     if *op != UpdateOp::Set {
         return Err(user_error("unsupported operator for enum key"));
     }
@@ -537,12 +1200,16 @@ fn apply_enum_policy_mode(target: &mut PolicyMode, op: &UpdateOp, raw: &str) -> 
             raw
         ))
     })?;
-    let changed = *target != next;
-    *target = next;
+    let changed = *target != Some(next);
+    *target = Some(next);
     Ok(changed)
 }
 
-fn apply_enum_sync_direction(target: &mut SyncDirection, op: &UpdateOp, raw: &str) -> Result<bool> {
+fn apply_enum_sync_direction_opt(
+    target: &mut Option<SyncDirection>,
+    op: &UpdateOp,
+    raw: &str,
+) -> Result<bool> {
     if *op != UpdateOp::Set {
         return Err(user_error("unsupported operator for enum key"));
     }
@@ -552,13 +1219,13 @@ fn apply_enum_sync_direction(target: &mut SyncDirection, op: &UpdateOp, raw: &st
             raw
         ))
     })?;
-    let changed = *target != next;
-    *target = next;
+    let changed = *target != Some(next);
+    *target = Some(next);
     Ok(changed)
 }
 
-fn apply_enum_sync_conflict_policy(
-    target: &mut SyncConflictPolicy,
+fn apply_enum_sync_conflict_policy_opt(
+    target: &mut Option<SyncConflictPolicy>,
     op: &UpdateOp,
     raw: &str,
 ) -> Result<bool> {
@@ -571,41 +1238,86 @@ fn apply_enum_sync_conflict_policy(
             raw
         ))
     })?;
-    let changed = *target != next;
-    *target = next;
+    let changed = *target != Some(next);
+    *target = Some(next);
     Ok(changed)
 }
 
-fn apply_string(target: &mut String, op: &UpdateOp, raw: &str) -> Result<bool> {
+fn apply_enum_inventory_mode_opt(
+    target: &mut Option<WorldDepsInventoryMode>,
+    op: &UpdateOp,
+    raw: &str,
+) -> Result<bool> {
+    if *op != UpdateOp::Set {
+        return Err(user_error("unsupported operator for enum key"));
+    }
+    let next = WorldDepsInventoryMode::parse_insensitive(raw).ok_or_else(|| {
+        user_error(format!(
+            "invalid world.deps.inventory_mode '{}'; expected merged or workspace_only",
+            raw
+        ))
+    })?;
+    let changed = *target != Some(next);
+    *target = Some(next);
+    Ok(changed)
+}
+
+fn apply_enum_builtins_opt(
+    target: &mut Option<WorldDepsBuiltinsMode>,
+    op: &UpdateOp,
+    raw: &str,
+) -> Result<bool> {
+    if *op != UpdateOp::Set {
+        return Err(user_error("unsupported operator for enum key"));
+    }
+    let next = WorldDepsBuiltinsMode::parse_insensitive(raw).ok_or_else(|| {
+        user_error(format!(
+            "invalid world.deps.builtins '{}'; expected enabled or disabled",
+            raw
+        ))
+    })?;
+    let changed = *target != Some(next);
+    *target = Some(next);
+    Ok(changed)
+}
+
+fn apply_string_opt(target: &mut Option<String>, op: &UpdateOp, raw: &str) -> Result<bool> {
     if *op != UpdateOp::Set {
         return Err(user_error("unsupported operator for string key"));
     }
-    let changed = target != raw;
-    *target = raw.to_string();
+    let changed = target.as_deref() != Some(raw);
+    *target = Some(raw.to_string());
     Ok(changed)
 }
 
-fn apply_list_exclude(target: &mut Vec<String>, update: &ConfigUpdate) -> Result<bool> {
+fn apply_string_list_opt(target: &mut Option<Vec<String>>, update: &ConfigUpdate) -> Result<bool> {
     match update.op {
         UpdateOp::Set => {
             let parsed: Vec<String> = serde_yaml::from_str(&update.value).map_err(|_| {
                 user_error(format!(
-                    "sync.exclude with '=' must be a YAML list literal (e.g., [] or [\"a\",\"b\"]); got '{}'",
-                    update.value
+                    "{} with '=' must be a YAML list literal (e.g., [] or [\"a\",\"b\"]); got '{}'",
+                    update.key, update.value
                 ))
             })?;
-            let changed = *target != parsed;
-            *target = parsed;
+            let changed = target.as_ref() != Some(&parsed);
+            *target = Some(parsed);
             Ok(changed)
         }
         UpdateOp::Append => {
-            target.push(update.value.clone());
+            let list = target.get_or_insert_with(Vec::new);
+            if list.iter().any(|item| item == &update.value) {
+                return Ok(false);
+            }
+            list.push(update.value.clone());
             Ok(true)
         }
         UpdateOp::Remove => {
-            let before = target.len();
-            target.retain(|item| item != &update.value);
-            Ok(before != target.len())
+            let Some(list) = target.as_mut() else {
+                return Ok(false);
+            };
+            let before = list.len();
+            list.retain(|item| item != &update.value);
+            Ok(before != list.len())
         }
     }
 }

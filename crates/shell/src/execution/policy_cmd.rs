@@ -1,6 +1,6 @@
 use crate::execution::cli::{
-    Cli, PolicyAction, PolicyCmd, PolicyGlobalAction, PolicyGlobalCmd, PolicyInitArgs,
-    PolicySetArgs, PolicyShowArgs,
+    Cli, PolicyAction, PolicyCmd, PolicyCurrentAction, PolicyGlobalAction, PolicyGlobalCmd,
+    PolicyInitArgs, PolicySetArgs, PolicyShowArgs,
 };
 use crate::execution::config_model;
 use crate::execution::config_model::default_policy_yaml;
@@ -13,6 +13,9 @@ use tempfile::NamedTempFile;
 
 pub(crate) fn handle_policy_command(cmd: &PolicyCmd, _cli: &Cli) -> i32 {
     let result = match &cmd.action {
+        PolicyAction::Current(cmd) => match &cmd.action {
+            PolicyCurrentAction::Show(args) => run_current_show(args),
+        },
         PolicyAction::Init(args) => run_workspace_init(args),
         PolicyAction::Show(args) => run_workspace_show(args),
         PolicyAction::Set(args) => run_workspace_set(args),
@@ -161,6 +164,13 @@ fn run_workspace_show(args: &PolicyShowArgs) -> Result<()> {
     require_workspace(&cwd)?;
     let (policy, _) = policy_model::load_effective_policy(&cwd)?;
 
+    print_policy(&policy, args.json)?;
+    Ok(())
+}
+
+fn run_current_show(args: &PolicyShowArgs) -> Result<()> {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let (policy, _) = policy_model::load_effective_policy(&cwd)?;
     print_policy(&policy, args.json)?;
     Ok(())
 }

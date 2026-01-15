@@ -1,8 +1,9 @@
 use crate::execution::cli::{
-    AnchorModeArg, Cli, ConfigAction, ConfigCmd, ConfigGlobalAction, ConfigGlobalCmd,
-    ConfigInitArgs, ConfigSetArgs, ConfigShowArgs,
+    AnchorModeArg, Cli, ConfigAction, ConfigCmd, ConfigCurrentAction, ConfigGlobalAction,
+    ConfigGlobalCmd, ConfigInitArgs, ConfigResetArgs, ConfigSetArgs, ConfigShowArgs,
+    ConfigWorkspaceAction,
 };
-use crate::execution::config_model::{self, CliConfigOverrides, SubstrateConfig};
+use crate::execution::config_model::{self, CliConfigOverrides, ConfigExplainV1, SubstrateConfig};
 use crate::execution::write_env_sh;
 use anyhow::{anyhow, Context, Result};
 use std::fs;
@@ -12,9 +13,16 @@ use tempfile::NamedTempFile;
 
 pub(crate) fn handle_config_command(cmd: &ConfigCmd, cli: &Cli) -> i32 {
     let result = match &cmd.action {
-        ConfigAction::Show(args) => run_workspace_show(args, cli),
+        ConfigAction::Current(cmd) => match &cmd.action {
+            ConfigCurrentAction::Show(args) => run_current_show(args, cli),
+        },
+        ConfigAction::Show(args) => run_current_show(args, cli),
         ConfigAction::Set(args) => run_workspace_set(args, cli),
         ConfigAction::Global(cmd) => run_global(cmd),
+        ConfigAction::Workspace(cmd) => match &cmd.action {
+            ConfigWorkspaceAction::Set(args) => run_workspace_set(args, cli),
+            ConfigWorkspaceAction::Reset(args) => run_workspace_reset(args, cli),
+        },
     };
 
     match result {
@@ -85,35 +93,41 @@ fn run_global_init(args: &ConfigInitArgs) -> Result<()> {
 }
 
 fn run_global_show(args: &ConfigShowArgs) -> Result<()> {
-    let path = config_model::global_config_path()?;
-    let (cfg, _) = config_model::read_global_config_or_defaults()
-        .with_context(|| format!("failed to load global config at {}", path.display()))?;
+    let (cfg, explain) = config_model::resolve_global_effective_config_with_explain(args.explain)?;
+    if let Some(explain) = explain {
+        print_explain(&explain)?;
+    }
     print_config(&cfg, args.json)?;
     Ok(())
 }
 
 fn run_global_set(args: &ConfigSetArgs) -> Result<()> {
     let path = config_model::global_config_path()?;
-    let (mut cfg, existed) = config_model::read_global_config_or_defaults()
-        .with_context(|| format!("failed to load global config at {}", path.display()))?;
+    let (mut patch, existed) = config_model::read_global_config_patch_or_empty()
+        .with_context(|| format!("failed to load global config patch at {}", path.display()))?;
 
     let updates = config_model::parse_updates(&args.updates)?;
-    let changed = config_model::apply_updates(&mut cfg, &updates)?;
+    let changed = config_model::apply_updates_to_patch(&mut patch, &updates)?;
 
     if changed || !existed {
-        write_atomic_yaml(&path, &cfg)
+        write_atomic_yaml(&path, &patch)
             .with_context(|| format!("failed to write {}", path.display()))?;
     }
 
+    let cfg = config_model::resolve_global_effective_config()?;
     write_env_sh(&cfg).context("failed to write env.sh")?;
     print_config(&cfg, args.json)?;
     Ok(())
 }
 
-fn run_workspace_show(args: &ConfigShowArgs, cli: &Cli) -> Result<()> {
+fn run_current_show(args: &ConfigShowArgs, cli: &Cli) -> Result<()> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let overrides = cli_overrides(cli);
-    let cfg = config_model::resolve_effective_config(&cwd, &overrides)?;
+    let (cfg, explain) =
+        config_model::resolve_effective_config_with_explain(&cwd, &overrides, args.explain)?;
+    if let Some(explain) = explain {
+        print_explain(&explain)?;
+    }
     print_config(&cfg, args.json)?;
     Ok(())
 }
@@ -125,18 +139,40 @@ fn run_workspace_set(args: &ConfigSetArgs, cli: &Cli) -> Result<()> {
     let path = crate::execution::workspace::workspace_marker_path(&workspace_root);
     let raw =
         fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
-    let mut cfg = config_model::parse_config_yaml(&path, &raw)?;
+    let mut patch = config_model::parse_config_patch_yaml(&path, &raw)?;
 
     let updates = config_model::parse_updates(&args.updates)?;
-    let changed = config_model::apply_updates(&mut cfg, &updates)?;
+    let changed = config_model::apply_updates_to_patch(&mut patch, &updates)?;
     if changed {
-        write_atomic_yaml(&path, &cfg)
+        write_atomic_yaml(&path, &patch)
             .with_context(|| format!("failed to write {}", path.display()))?;
     }
 
     let overrides = cli_overrides(cli);
-    let effective = config_model::resolve_effective_config(&cwd, &overrides)?;
+    let (effective, _) =
+        config_model::resolve_effective_config_with_explain(&cwd, &overrides, false)?;
     print_config(&effective, args.json)?;
+    Ok(())
+}
+
+fn run_workspace_reset(args: &ConfigResetArgs, cli: &Cli) -> Result<()> {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let workspace_root = require_workspace(&cwd)?;
+    let path = crate::execution::workspace::workspace_marker_path(&workspace_root);
+    let raw =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    let mut patch = config_model::parse_config_patch_yaml(&path, &raw)?;
+
+    let changed = config_model::reset_patch_keys(&mut patch, &args.keys)?;
+    if changed {
+        write_atomic_yaml(&path, &patch)
+            .with_context(|| format!("failed to write {}", path.display()))?;
+    }
+
+    let overrides = cli_overrides(cli);
+    let (effective, _) =
+        config_model::resolve_effective_config_with_explain(&cwd, &overrides, false)?;
+    print_config(&effective, false)?;
     Ok(())
 }
 
@@ -157,6 +193,34 @@ fn print_config(cfg: &SubstrateConfig, json: bool) -> Result<()> {
     println!(
         "{}",
         serde_yaml::to_string(cfg).context("failed to serialize YAML")?
+    );
+    Ok(())
+}
+
+fn print_explain(explain: &ConfigExplainV1) -> Result<()> {
+    // Emit a stable layer-order hint before the JSON so simple substring checks can
+    // validate ordering without depending on map key ordering.
+    let mut has_global_patch = false;
+    let mut has_workspace_patch = false;
+    for v in explain.keys.values() {
+        for s in &v.sources {
+            match s.layer.as_str() {
+                "global_patch" => has_global_patch = true,
+                "workspace_patch" => has_workspace_patch = true,
+                _ => {}
+            }
+        }
+    }
+    if has_global_patch {
+        eprintln!("global_patch");
+    }
+    if has_workspace_patch {
+        eprintln!("workspace_patch");
+    }
+
+    eprintln!(
+        "{}",
+        serde_json::to_string_pretty(explain).context("failed to serialize explain JSON")?
     );
     Ok(())
 }
