@@ -87,7 +87,7 @@ flowchart TD
     CORE_CI_TEST["Dispatch CI Testing (mode=quick) via scripts/ci/dispatch_ci_testing.sh (throwaway branch at HEAD)"]
     CORE_IDENTIFY["Identify failing platforms from smoke + CI Testing results"]
     CORE_START_PF["Start failing platform-fix tasks (use from-smoke-run when smoke was a single dispatch; else explicit PLATFORMS=...)"]
-    CORE_START_FINAL["After fixes are green: start final aggregator (make triad-task-start-integ-final SLICE_ID=X)"]
+    CORE_START_FINAL["After fixes are green: start final aggregator (make triad-task-start-integ-final SLICE_ID=X; task id is X-integ)"]
   end
 
   CODE --> MERGE
@@ -182,7 +182,7 @@ flowchart TD
     CORE_CI_TEST["Dispatch CI Testing (mode=quick) via scripts/ci/dispatch_ci_testing.sh (throwaway branch at HEAD)"]
     CORE_IDENTIFY["Identify failing platforms from smoke + CI Testing results"]
     CORE_START_PF["Start failing platform-fix tasks (use from-smoke-run when smoke was a single dispatch; else explicit PLATFORMS=...)"]
-    CORE_START_FINAL["After fixes are green: start final aggregator (make triad-task-start-integ-final SLICE_ID=X)"]
+    CORE_START_FINAL["After fixes are green: start final aggregator (make triad-task-start-integ-final SLICE_ID=X; task id is X-integ)"]
   end
 
   CODE --> CORE

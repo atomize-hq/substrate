@@ -130,6 +130,7 @@ If smoke fails, start only the failing platform-fix tasks:
 
 After all failing platform-fix tasks are green, start the final aggregator:
 - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="C0" LAUNCH_CODEX=1`
+  - Note: the final aggregator task id is `C0-integ` (the command name contains `integ-final`).
 
 Finish integration from inside the worktree:
 - `make triad-task-finish TASK_ID="C0-integ"`

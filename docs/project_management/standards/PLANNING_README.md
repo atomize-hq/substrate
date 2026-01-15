@@ -144,10 +144,13 @@ Required interoperability rules:
   - **Behavior platforms**: run the feature-local smoke script via CI (`make feature-smoke`) when `FEATURE_DIR/smoke/` exists.
   - **CI parity platforms**: run cross-platform compile parity (and CI Testing when required by the slice/workflow); smoke is not required for CI parity-only platforms.
   - For cross-platform smoke, prefer GitHub Actions + self-hosted runners via `make feature-smoke` (see `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`).
-  - If you opt into the platform-fix integration model, set `meta.schema_version: 2` and declare both scopes in `tasks.json` (P3-008):
-    - `meta.behavior_platforms_required: [...]` (smoke scripts required here)
-    - `meta.ci_parity_platforms_required: [...]` (platform-fix tasks required here; legacy: `meta.platforms_required`)
-    - Create `X-integ-core`, `X-integ-<platform>`, and `X-integ` tasks per slice (see `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`).
+  - **Cross-platform Planning Packs are required to use the platform-fix integration model** (not optional):
+    - Set `meta.schema_version >= 2` and `meta.cross_platform: true`.
+    - Declare both scopes in `tasks.json` (P3-008):
+      - `meta.behavior_platforms_required: [...]` (smoke scripts required here)
+      - `meta.ci_parity_platforms_required: [...]` (platform-fix tasks required here; legacy: `meta.platforms_required`)
+    - Per slice, create the full task shape: `X-integ-core`, `X-integ-<platform>` (for each CI parity platform), and `X-integ` (final aggregator).
+    - This is enforced mechanically by `make planning-validate` (via `scripts/planning/validate_tasks_json.py`).
   - If WSL coverage is required, use `meta.wsl_required: true` and `meta.wsl_task_mode: "bundled"|"separate"` (do not add `"wsl"` to `meta.behavior_platforms_required` or `meta.ci_parity_platforms_required`).
   - Preferred smoke dispatch examples:
     - Behavior platforms (preferred): `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior WORKFLOW_REF="feat/<feature>"`

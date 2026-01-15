@@ -60,9 +60,26 @@ Platform task inclusion rules (P3-008):
 - Include platform-fix integration tasks for **CI parity platforms** (`meta.ci_parity_platforms_required` / legacy `meta.platforms_required`), because CI failures on those platforms are blocking.
 - Smoke scripts are required only for **behavior platforms** (`meta.behavior_platforms_required`); do not force smoke scripts for CI parity-only platforms.
 
+## Slice-scoped smoke (recommended)
+
+When a Planning Pack is executed slice-by-slice, feature smoke should be able to run at earlier slices without requiring later-slice functionality.
+
+Mechanism:
+- When dispatching smoke for a given slice, pass `SMOKE_SLICE_ID="<slice>"` to `make feature-smoke`.
+- The workflow exports this as `SUBSTRATE_SMOKE_SLICE_ID` for smoke scripts.
+- Smoke scripts should use `SUBSTRATE_SMOKE_SLICE_ID` to run only the checks that are expected to be present at that slice (and treat an empty value as “full feature smoke”).
+
+## Smoke script hygiene (recommended)
+
+To avoid “CI-only” failures caused by script brittleness:
+- Use a unique scratch dir per run (Linux/macOS: `mktemp -d`; Windows: `New-Item -ItemType Directory` under `$env:TEMP`) and ensure cleanup is safe.
+- Avoid relying on raw JSON string formatting; when comparing JSON, normalize (e.g., `jq -cS` on Unix; `ConvertFrom-Json | ConvertTo-Json -Compress` on PowerShell).
+- Avoid PowerShell string interpolation edge cases (`"${var}"` when adjacent to `:` or other tokens).
+
 ## Planning Pack requirement (schema v2)
 
-If a planning pack opts into the platform-fix model, encode it in `tasks.json`:
+Cross-platform Planning Packs are required to use the platform-fix model. Encode it in `tasks.json`:
+- `meta.cross_platform: true`
 - `meta.schema_version: 2` (or `3` when automation is enabled)
 - Declare both scopes (P3-008):
   - `meta.behavior_platforms_required: [...]` (platforms with behavior guarantees; smoke scripts required here)
@@ -74,7 +91,7 @@ If a planning pack opts into the platform-fix model, encode it in `tasks.json`:
     - `"bundled"` (default/recommended): run WSL as part of `X-integ-linux` by dispatching with `--run-wsl`
     - `"separate"`: add `X-integ-wsl` as its own platform-fix task
 
-The mechanical tasks validator enforces the required task shape when `meta.schema_version >= 2` and `meta.ci_parity_platforms_required` (or legacy `meta.platforms_required`) is present:
+The mechanical tasks validator enforces the required task shape when `meta.cross_platform=true`:
 - `make planning-validate FEATURE_DIR="docs/project_management/next/<feature>"`
 
 ## WSL task rubric (bundled vs separate)

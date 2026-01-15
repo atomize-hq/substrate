@@ -13,6 +13,8 @@ Notes:
 - Run this from the **orchestration checkout** (repo root), not inside any task worktree.
 - This wrapper assumes an automation-enabled Planning Pack (`tasks.json` meta: `schema_version >= 3` and `meta.automation.enabled=true`).
 - This wrapper does not assume you are editing `tasks.json`/`session_log.md`, but **`make triad-task-start-integ-final` requires `depends_on` tasks are `status=completed`**. If CI smoke is green and platform-fix tasks were no-ops, the operator must still mark them `completed` on the orchestration branch to unblock the final aggregator.
+- Naming note: the final aggregator task id is `${SLICE_ID}-integ` (started via `make triad-task-start-integ-final ...`), not `${SLICE_ID}-integ-final`.
+- `CODEX_LAST_MESSAGE_PATH` is the final Codex message for that task run only; if additional manual work happens after Codex exits, record it separately (closeout report/session log), not by trusting the stale Codex summary.
 - Dispatch runs from the orchestration/task ref (not `main`/`testing`). GitHub only allows `workflow_dispatch` for a workflow file if that workflow is registered on the default branch; when workflows change, land workflow-file-only changes on `main` to register them before relying on dispatch.
 
 ## Copy/Paste Prompt Template

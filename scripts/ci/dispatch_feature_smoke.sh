@@ -8,6 +8,7 @@ Usage:
     --feature-dir docs/project_management/next/<feature> \
     [--runner-kind github-hosted|self-hosted] \
     --platform behavior|linux|macos|windows|wsl|all \
+    [--smoke-slice-id <slice>] \
     [--run-wsl] \
     [--run-integ-checks] \
     [--workflow .github/workflows/feature-smoke.yml] \
@@ -31,6 +32,7 @@ Stdout contract (machine-parseable):
   RUN_ID=<id>
   RUN_URL=<url or empty>
   CONCLUSION=<conclusion>
+  SMOKE_SLICE_ID=<slice or empty>
   SMOKE_PASSED_PLATFORMS=<csv or empty>
   SMOKE_FAILED_PLATFORMS=<csv or empty>
   RUNNER_MISPROVISIONED=0|1
@@ -105,6 +107,7 @@ PLATFORM=""
 RUNNER_KIND="self-hosted"
 RUN_WSL=0
 RUN_INTEG_CHECKS=0
+SMOKE_SLICE_ID=""
 WORKFLOW=".github/workflows/feature-smoke.yml"
 WORKFLOW_REF=""
 REMOTE="origin"
@@ -136,6 +139,7 @@ emit_summary() {
     emit_kv "RUN_ID" "${RUN_ID}"
     emit_kv "RUN_URL" "${RUN_URL}"
     emit_kv "CONCLUSION" "${CONCLUSION}"
+    emit_kv "SMOKE_SLICE_ID" "${SMOKE_SLICE_ID}"
     emit_kv "SMOKE_PASSED_PLATFORMS" "${SMOKE_PASSED_PLATFORMS}"
     emit_kv "SMOKE_FAILED_PLATFORMS" "${SMOKE_FAILED_PLATFORMS}"
     emit_kv "RUNNER_MISPROVISIONED" "${RUNNER_MISPROVISIONED}"
@@ -172,6 +176,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --platform)
             PLATFORM="${2:-}"
+            shift 2
+            ;;
+        --smoke-slice-id)
+            SMOKE_SLICE_ID="${2:-}"
             shift 2
             ;;
         --run-wsl)
@@ -299,6 +307,7 @@ if ! run_with_timeout "${GH_TIMEOUT_SECS}" gh workflow run "${WORKFLOW}" --ref "
     -f checkout_ref="${TEMP_BRANCH}" \
     -f runner_kind="${RUNNER_KIND}" \
     -f platform="${PLATFORM}" \
+    -f smoke_slice_id="${SMOKE_SLICE_ID}" \
     -f run_wsl="${run_wsl_flag}" \
     -f run_integ_checks="${run_integ_checks_flag}"; then
     ERROR_KIND="dispatch_failed"

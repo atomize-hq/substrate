@@ -25,7 +25,7 @@ flowchart TD
 
   P["Planning agent reads: docs/project_management/standards/PLANNING_README.md"]
   PACK[Planning Pack created under docs/project_management/next/**FEATURE_NAME**/]
-  PP["Platform parity plan (schema v2/v3)\n- meta.schema_version\n- v2: cross-platform model fields\n- v3: meta.automation.enabled=true\n- meta.behavior_platforms_required\n- meta.ci_parity_platforms_required (legacy: meta.platforms_required)\n- meta.wsl_required + meta.wsl_task_mode (if needed)\n- X-integ-core / X-integ-<platform> / X-integ"]
+  PP["Platform parity plan (schema v2/v3; required when meta.cross_platform=true)\n- meta.schema_version\n- v3: meta.automation.enabled=true\n- meta.behavior_platforms_required\n- meta.ci_parity_platforms_required (legacy: meta.platforms_required)\n- meta.wsl_required + meta.wsl_task_mode (if needed)\n- X-integ-core / X-integ-<platform> / X-integ (per slice)"]
 
   Q["Quality gate reviewer reads: docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md"]
   LINT["Run mechanical checks: docs/project_management/standards/PLANNING_LINT_CHECKLIST.md"]

@@ -84,11 +84,10 @@ Planning outputs must be directly executable under the triad workflow. Therefore
 
 If the work requires cross-platform parity (Linux/macOS/Windows and optionally WSL):
 - The planning pack must explicitly state the required platform set and the parity guarantees (in ADR/specs/contract).
-- The planning pack must choose an integration task model:
-  - validation-only, or
-  - platform-fix when needed (recommended for any feature that could plausibly diverge by platform).
-- If using platform-fix when needed, encode it mechanically in `tasks.json`:
-  - `meta.schema_version: 2`
+- The planning pack must use the platform-fix integration task model (not optional; cross-platform drift is expected even for “platform-neutral” changes).
+- Encode the cross-platform task model mechanically in `tasks.json`:
+  - `meta.schema_version >= 2`
+  - `meta.cross_platform: true`
   - Declare **both** platform sets (P3-008):
     - `meta.behavior_platforms_required: [...]` (platforms with behavior guarantees; smoke scripts required here)
     - `meta.ci_parity_platforms_required: [...]` (platforms that must be green in CI parity gates; platform-fix tasks required here)

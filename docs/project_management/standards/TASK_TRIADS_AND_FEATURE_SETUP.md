@@ -159,6 +159,7 @@ Optional: start only the failing platform-fix integration tasks (after smoke res
 
 Optional: start the final aggregator integration task for a slice (requires its deps are completed):
 - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/next/<feature>" SLICE_ID="<slice>" LAUNCH_CODEX=1`
+  - Note: the final aggregator task id is `<slice>-integ` (the command name contains `integ-final`).
 
 End (code/test):
 1. Run required commands (code: fmt/clippy; test: fmt + targeted tests). Capture outputs.
@@ -211,9 +212,9 @@ Automation wrapper:
       - Debugging single platform: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux RUN_WSL=1 WORKFLOW_REF="feat/<feature>"`
     - Use direct local execution only when the platform matches the current machine (e.g., `bash "$FEATURE_DIR/smoke/linux-smoke.sh"` on Linux).
 
-## Cross-platform integration task model (platform-fix when needed)
+## Cross-platform integration task model (platform-fix)
 
-When a slice requires cross-platform parity, use this integration task structure (see also `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`):
+For cross-platform Planning Packs (`tasks.json` meta: `cross_platform: true`), use this integration task structure for every slice (see also `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`):
 - `X-integ-core`: merges `X-code` + `X-test`, gets primary-platform green, runs compile parity gating, then dispatches smoke for behavior platforms.
 - `X-integ-linux|macos|windows` (and optional `X-integ-wsl`): platform-fix tasks that:
   - validate via `make feature-smoke` for the platform when it is a behavior platform (dispatch from the orchestration/task ref; never from `main`/`testing`),

@@ -41,10 +41,16 @@ on:
         required: false
         type: boolean
         default: false
+      smoke_slice_id:
+        description: "Optional slice id (e.g., WCU1) passed to smoke scripts as SUBSTRATE_SMOKE_SLICE_ID."
+        required: false
+        type: string
+        default: ""
 
 env:
   CARGO_TERM_COLOR: always
   RUST_TOOLCHAIN: 1.89.0
+  SUBSTRATE_SMOKE_SLICE_ID: ${{ inputs.smoke_slice_id }}
 
 permissions:
   contents: read

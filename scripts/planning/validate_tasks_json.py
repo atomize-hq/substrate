@@ -502,9 +502,14 @@ def _validate_platform_integ_model(
     feature_dir: str, tasks: List[Dict[str, Any]], meta: Dict[str, Any], errors: List[ValidationError], path: str
 ) -> None:
     """
-    Enforce the cross-platform integration structure only when the planning pack opts in via:
-      - meta.schema_version >= 2, and
-      - meta.ci_parity_platforms_required is present (legacy: meta.platforms_required).
+    Enforce the cross-platform (platform-fix) integration structure for cross-platform planning packs.
+
+    Trigger:
+      - meta.cross_platform == true
+
+    Requirements:
+      - meta.schema_version >= 2
+      - meta.ci_parity_platforms_required must be present (legacy: meta.platforms_required)
 
     Model (per slice X):
       - X-integ-core (integration): merges code+tests and gets primary-platform green
@@ -512,12 +517,24 @@ def _validate_platform_integ_model(
       - X-integ (integration): final aggregator merges any platform fixes and records results
     """
     schema_version = meta.get("schema_version", DEFAULT_SCHEMA_VERSION)
+    cross_platform = meta.get("cross_platform") is True
+    if not cross_platform:
+        return
+
     if not isinstance(schema_version, int) or schema_version < 2:
+        _error(
+            errors,
+            f"{path}: meta.cross_platform=true requires meta.schema_version >= 2 (schema v2+ cross-platform task model)",
+        )
         return
 
     # Platform-fix integration model is keyed off CI parity platforms (not behavioral scope).
     ci_parity_platforms = meta.get("ci_parity_platforms_required") or meta.get("platforms_required")
     if not isinstance(ci_parity_platforms, list) or not ci_parity_platforms:
+        _error(
+            errors,
+            f"{path}: meta.cross_platform=true requires meta.ci_parity_platforms_required (or legacy meta.platforms_required) to be a non-empty array",
+        )
         return
 
     wsl_required = meta.get("wsl_required") is True
@@ -528,38 +545,47 @@ def _validate_platform_integ_model(
         effective_platform_tasks.append("wsl")
 
     tasks_by_id: Dict[str, Dict[str, Any]] = {t.get("id"): t for t in tasks if isinstance(t.get("id"), str)}
+    automation_enabled = isinstance(meta.get("automation"), dict) and meta.get("automation", {}).get("enabled") is True
 
-    # Determine slices present by looking for platform integ task ids.
-    slices: Dict[str, Set[str]] = {}
+    # Determine slices present by looking for final aggregator integration tasks (X-integ).
+    # This makes the validator fail loudly when a cross-platform pack only defines a single
+    # per-slice integration task and omits the required core + per-platform tasks.
+    slices: Set[str] = set()
     for task_id, task in tasks_by_id.items():
-        if not isinstance(task_id, str):
-            continue
         if task.get("type") != "integration":
             continue
-        for platform in effective_platform_tasks:
-            suffix = f"-integ-{platform}"
-            if task_id.endswith(suffix):
-                slice_id = task_id[: -len(suffix)]
-                slices.setdefault(slice_id, set()).add(platform)
-                break
+        if not isinstance(task_id, str) or not task_id.endswith("-integ"):
+            continue
+        if task_id.endswith("-integ-core"):
+            continue
+        # Exclude platform-fix tasks which are *not* final aggregators.
+        if any(task_id.endswith(f"-integ-{p}") for p in effective_platform_tasks):
+            continue
+        slices.add(task_id[: -len("-integ")])
 
     if not slices:
         _error(
             errors,
-            f"{path}: meta.schema_version>=2 and CI parity platforms set, but no '*-integ-<platform>' integration tasks found",
+            f"{path}: meta.cross_platform=true requires per-slice integration tasks with ids '*-integ' (final aggregators), plus '*-integ-core' and '*-integ-<platform>' for each CI parity platform",
         )
         return
 
-    for slice_id, platforms_present in sorted(slices.items()):
-        missing = sorted(set(effective_platform_tasks) - platforms_present)
-        if missing:
-            _error(
-                errors,
-                f"{path}: slice {slice_id!r} missing required platform integration task(s): {', '.join(missing)}",
-            )
-
+    for slice_id in sorted(slices):
         core_id = f"{slice_id}-integ-core"
         final_id = f"{slice_id}-integ"
+
+        code_id = f"{slice_id}-code"
+        test_id = f"{slice_id}-test"
+        code_task = tasks_by_id.get(code_id)
+        test_task = tasks_by_id.get(test_id)
+        if code_task is None:
+            _error(errors, f"{path}: cross-platform slice {slice_id!r} missing required code task: {code_id!r}")
+        elif code_task.get("type") != "code":
+            _error(errors, f"{path}: {code_id!r} must have type='code'")
+        if test_task is None:
+            _error(errors, f"{path}: cross-platform slice {slice_id!r} missing required test task: {test_id!r}")
+        elif test_task.get("type") != "test":
+            _error(errors, f"{path}: {test_id!r} must have type='test'")
 
         core = tasks_by_id.get(core_id)
         if core is None:
@@ -577,6 +603,30 @@ def _validate_platform_integ_model(
         if core is None or final is None:
             continue
 
+        # Triad wiring: code/test land into integ-core for cross-platform packs.
+        if code_task is not None:
+            if code_task.get("integration_task") != core_id:
+                _error(errors, f"{path}: {code_id!r} integration_task must be {core_id!r} for cross-platform packs")
+        if test_task is not None:
+            if test_task.get("integration_task") != core_id:
+                _error(errors, f"{path}: {test_id!r} integration_task must be {core_id!r} for cross-platform packs")
+
+        core_deps = core.get("depends_on")
+        if not isinstance(core_deps, list):
+            _error(errors, f"{path}: {core_id!r} depends_on must be an array")
+        else:
+            if code_id not in core_deps:
+                _error(errors, f"{path}: {core_id!r} depends_on must include {code_id!r}")
+            if test_id not in core_deps:
+                _error(errors, f"{path}: {core_id!r} depends_on must include {test_id!r}")
+
+        if automation_enabled:
+            # Merge-back rules (automation packs): only the final aggregator merges to orchestration.
+            if core.get("merge_to_orchestration") is not False:
+                _error(errors, f"{path}: {core_id!r} merge_to_orchestration must be false")
+            if final.get("merge_to_orchestration") is not True:
+                _error(errors, f"{path}: {final_id!r} merge_to_orchestration must be true")
+
         if wsl_required and wsl_task_mode == "bundled":
             wsl_id = f"{slice_id}-integ-wsl"
             if wsl_id in tasks_by_id:
@@ -585,16 +635,21 @@ def _validate_platform_integ_model(
                     f"{path}: {wsl_id!r} exists but meta.wsl_task_mode='bundled' (remove the task or set meta.wsl_task_mode='separate')",
                 )
 
+        platforms_present: Set[str] = set()
         for platform in effective_platform_tasks:
             platform_id = f"{slice_id}-integ-{platform}"
             platform_task = tasks_by_id.get(platform_id)
             if platform_task is None:
+                _error(errors, f"{path}: slice {slice_id!r} missing required platform integration task: {platform_id!r}")
                 continue
+            platforms_present.add(platform)
             if platform_task.get("type") != "integration":
                 _error(errors, f"{path}: {platform_id!r} must have type=integration")
                 continue
             if platform_task.get("platform") != platform:
                 _error(errors, f"{path}: {platform_id!r} must set platform={platform!r}")
+            if automation_enabled and platform_task.get("merge_to_orchestration") is not False:
+                _error(errors, f"{path}: {platform_id!r} merge_to_orchestration must be false")
 
             depends_on = platform_task.get("depends_on")
             if not isinstance(depends_on, list) or core_id not in depends_on:
