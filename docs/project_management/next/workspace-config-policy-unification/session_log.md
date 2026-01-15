@@ -102,3 +102,43 @@
   - `NONE`
 - Next steps:
   - Run the Planning Quality Gate (`make planning-validate FEATURE_DIR=...`) and fill `docs/project_management/next/workspace-config-policy-unification/quality_gate_report.md`.
+
+## START — 2026-01-15T04:44:55Z — planning — Planning Quality Gate remediation
+- Feature: `docs/project_management/next/workspace-config-policy-unification/`
+- Branch: `feat/workspace-config-policy-unification`
+- Goal: Resolve Planning Quality Gate `DEFECT` findings so the Planning Pack is implementation-ready.
+- Defects addressed (Finding IDs):
+  - Finding 002
+  - Finding 003
+  - Finding 004
+  - Finding 005
+- Commands planned:
+  - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
+  - `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
+
+## END — 2026-01-15T04:45:23Z — planning — Planning Quality Gate remediation
+- Summary of changes (exhaustive):
+  - Updated decision register entries to include complete A/B tradeoffs, explicit selections, and explicit follow-up task mapping.
+  - Added decision traceability by wiring `decision_register.md (DR-xxxx)` into task `references` for implementing triads.
+  - Added validation coverage for `workspace init --force`, `workspace init --examples`, and `key-=value` list removal semantics across specs, playbook, smoke scripts, and task acceptance criteria.
+  - Removed a hard-ban token from the existing quality gate report without changing findings.
+- Files modified:
+  - `docs/project_management/next/workspace-config-policy-unification/decision_register.md`
+  - `docs/project_management/next/workspace-config-policy-unification/tasks.json`
+  - `docs/project_management/next/workspace-config-policy-unification/WCU1-spec.md`
+  - `docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md`
+  - `docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md`
+  - `docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
+  - `docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
+  - `docs/project_management/next/workspace-config-policy-unification/quality_gate_report.md`
+- Commands run (with results):
+  - `export FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification"`
+  - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → exit `0`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → exit `0`
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → exit `2` (hard-ban match in `quality_gate_report.md`, fixed)
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → exit `0`
+  - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → exit `0`
+- Blockers:
+  - `NONE`

@@ -25,6 +25,10 @@ The config editor MUST support the following mutation forms (exact spellings):
   - `substrate config global set world.deps.enabled+=<item>`
 - Append item (workspace):
   - `substrate config workspace set world.deps.enabled+=<item>`
+- Remove item (global):
+  - `substrate config global set world.deps.enabled-=<item>`
+- Remove item (workspace):
+  - `substrate config workspace set world.deps.enabled-=<item>`
 - Reset key (global; inherit-only):
   - `substrate config global reset world.deps.enabled`
 - Reset key (workspace; inherit-only):
@@ -33,6 +37,9 @@ The config editor MUST support the following mutation forms (exact spellings):
 Rules:
 - `+=<item>` appends `<item>` to the patch list for that scope.
 - The patch list MUST be de-duplicated in-order at write time (re-appending an existing item is a no-op for the on-disk patch list).
+- `-=<item>` removes `<item>` from the patch list for that scope (exact match).
+  - If `<item>` is not present: no-op (exit `0`).
+  - If the resulting list is empty: the key remains present with value `[]` (explicit empty list; see DR-0015).
 - `reset <key>` removes `<key>` from the patch mapping at that scope (does not write an explicit null/empty sentinel).
 
 ## `config current show --explain` visibility (Phase B; authoritative)
@@ -47,6 +54,7 @@ Use `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`.
 ## Validation requirements (authoritative; Phase B evidence)
 - Integration tests MUST cover:
   - global and workspace appends to `world.deps.enabled` via `+=`
+  - global and workspace removals from `world.deps.enabled` via `-=`
   - global/workspace `reset world.deps.enabled` removes the key from the patch mapping
   - effective view reflects concat+dedupe semantics
   - `--explain` includes `merge_strategy` and both contributing sources when both scopes contribute

@@ -39,6 +39,18 @@ When a workspace exists, the canonical paths are:
 - Nested workspace refusal:
   - If any parent directory of `<path>` contains `.substrate/workspace.yaml`, `workspace init` exits `2` and performs no writes outside `<path>/.substrate/` and `<path>/.gitignore`.
 
+#### `--force` (repair mode)
+- Repairs missing workspace entries only.
+- It MUST NOT overwrite existing non-empty patch files:
+  - `<path>/.substrate/workspace.yaml`
+  - `<path>/.substrate/policy.yaml`
+
+#### `--examples`
+- Creates these template files under the workspace root:
+  - `<path>/.substrate/workspace.example.yaml`
+  - `<path>/.substrate/policy.example.yaml`
+- Substrate MUST NOT read these example files for any behavior.
+
 ### `substrate workspace disable <path>` / `enable`
 - `disable` creates `<workspace_root>/.substrate/workspace.disabled` (idempotent).
 - `enable` removes `<workspace_root>/.substrate/workspace.disabled` if present (idempotent).

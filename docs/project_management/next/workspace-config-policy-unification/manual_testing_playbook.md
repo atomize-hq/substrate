@@ -52,7 +52,7 @@ Smoke scripts (automated counterpart; must remain in parity with this playbook):
 ## 2) Workspace initialization and directory layout
 
 1. Initialize workspace:
-   - `substrate workspace init .`
+   - `substrate workspace init .` (expected exit: `0`)
 2. Confirm the canonical `.substrate` directory and required files exist:
    - `test -f .substrate/workspace.yaml`
    - `test -f .substrate/policy.yaml`
@@ -66,7 +66,18 @@ Smoke scripts (automated counterpart; must remain in parity with this playbook):
    - `rg -n '^\\.substrate/$' .gitignore`
    - `rg -n '^!\\.substrate/workspace\\.yaml$' .gitignore`
    - `rg -n '^!\\.substrate/policy\\.yaml$' .gitignore`
-5. Confirm nested workspace creation is refused:
+5. `--examples` creates non-active template files:
+   - `test ! -e .substrate/workspace.example.yaml`
+   - `test ! -e .substrate/policy.example.yaml`
+   - `substrate workspace init . --examples` (expected exit: `0`)
+   - `test -f .substrate/workspace.example.yaml`
+   - `test -f .substrate/policy.example.yaml`
+   - Prove Substrate does not read example files for behavior:
+     - `printf ':\n' > .substrate/workspace.example.yaml`
+     - `printf ':\n' > .substrate/policy.example.yaml`
+     - `substrate config current show --json >/dev/null` (expected exit: `0`)
+     - `substrate policy current show --json >/dev/null` (expected exit: `0`)
+6. Confirm nested workspace creation is refused:
    - `mkdir -p nested_ws`
    - `(cd nested_ws && substrate workspace init .); test $? -eq 2`
 
@@ -112,13 +123,21 @@ Smoke scripts (automated counterpart; must remain in parity with this playbook):
 
 1. Ensure workspace has overrides:
    - `substrate config workspace set world.caged=false`
-2. Workspace reset clears overrides but preserves internal git:
+2. `workspace init --force` repairs missing entries only and does not overwrite non-empty patch files:
+   - `cp -a .substrate/workspace.yaml /tmp/wcu-workspace.yaml.before`
+   - `rm -rf .substrate/git/repo.git`
+   - `rm -f .substrate/policy.yaml`
+   - `substrate workspace init . --force` (expected exit: `0`)
+   - `test -d .substrate/git/repo.git`
+   - `test -f .substrate/policy.yaml`
+   - `diff -u /tmp/wcu-workspace.yaml.before .substrate/workspace.yaml` (expected: no differences)
+3. Workspace reset clears overrides but preserves internal git:
    - `substrate workspace reset .`
    - `substrate config workspace show` (expected: empty mapping)
    - `rg -n '^# Substrate config patch' .substrate/workspace.yaml` (expected: header preserved)
    - `rg -n '^# Substrate policy patch' .substrate/policy.yaml` (expected: header preserved)
    - `test -d .substrate/git/repo.git`
-3. Workspace remove deletes the entire `.substrate/` directory and leaves `.gitignore` unchanged:
+4. Workspace remove deletes the entire `.substrate/` directory and leaves `.gitignore` unchanged:
    - `cp -a .gitignore .gitignore.before`
    - `substrate workspace remove .`
    - `test ! -d .substrate`
@@ -153,6 +172,9 @@ This section validates the ADR-0012 requirements that are intentionally implemen
    - `rg -n 'global_patch' /tmp/wcu-explain.disabled.json`
    - `rg -n 'workspace_patch' /tmp/wcu-explain.disabled.json` (expected: no matches)
    - `substrate workspace enable .`
-6. Reset key at workspace scope and confirm it remains enabled via global (inherit-only reset):
+6. Validate list removal mutation syntax (`-=`) for this merge key:
+   - `substrate config workspace set world.deps.enabled-=deno` (expected exit: `0`)
+   - `substrate config current show --json | jq -e '.world.deps.enabled | index(\"deno\")==null' >/dev/null`
+7. Reset key at workspace scope and confirm it remains enabled via global (inherit-only reset):
    - `substrate config workspace reset world.deps.enabled`
    - `substrate config current show --json | jq -e '.world.deps.enabled | index(\"bun\")!=null and index(\"deno\")==null' >/dev/null`

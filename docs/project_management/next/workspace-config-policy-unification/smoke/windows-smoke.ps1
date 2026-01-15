@@ -19,6 +19,26 @@ try {
   substrate policy global init --force | Out-Null
   substrate workspace init . | Out-Null
 
+  # Workspace init flags: `--examples` creates non-active templates and Substrate does not read them for behavior.
+  substrate workspace init . --examples | Out-Null
+  if (-not (Test-Path ".substrate\\workspace.example.yaml")) { throw "missing .substrate\\workspace.example.yaml" }
+  if (-not (Test-Path ".substrate\\policy.example.yaml")) { throw "missing .substrate\\policy.example.yaml" }
+  Set-Content -Path ".substrate\\workspace.example.yaml" -Value ":\n"
+  Set-Content -Path ".substrate\\policy.example.yaml" -Value ":\n"
+  substrate config current show --json | Out-Null
+  substrate policy current show --json | Out-Null
+
+  # Workspace init flags: `--force` repairs missing entries and does not overwrite existing non-empty patch files.
+  substrate config workspace set world.caged=false | Out-Null
+  $workspaceYamlHashBefore = (Get-FileHash ".substrate\\workspace.yaml" -Algorithm SHA256).Hash
+  Remove-Item -Recurse -Force ".substrate\\git\\repo.git" -ErrorAction SilentlyContinue
+  Remove-Item -Force ".substrate\\policy.yaml" -ErrorAction SilentlyContinue
+  substrate workspace init . --force | Out-Null
+  if (-not (Test-Path ".substrate\\git\\repo.git")) { throw "missing .substrate\\git\\repo.git after --force repair" }
+  if (-not (Test-Path ".substrate\\policy.yaml")) { throw "missing .substrate\\policy.yaml after --force repair" }
+  $workspaceYamlHashAfter = (Get-FileHash ".substrate\\workspace.yaml" -Algorithm SHA256).Hash
+  if ($workspaceYamlHashAfter -ne $workspaceYamlHashBefore) { throw "expected .substrate\\workspace.yaml unchanged by workspace init --force" }
+
   # Phase B (ADR-0012): edit `world.deps.enabled` via config editor at both scopes (include a deliberate duplicate across scopes).
   substrate config global set world.deps.enabled+=bun world.deps.enabled+=node-runtime | Out-Null
   substrate config workspace set world.deps.enabled+=node-runtime world.deps.enabled+=deno | Out-Null
@@ -72,6 +92,12 @@ try {
   if ($stderrDisabled -notmatch "global_patch") { throw "missing global_patch when workspace is disabled" }
   if ($stderrDisabled -match "workspace_patch") { throw "expected workspace_patch absent when workspace is disabled" }
   substrate workspace enable . | Out-Null
+
+  # List removal operator syntax (`-=`) removes the exact item from the patch list.
+  substrate config workspace set world.deps.enabled-=deno | Out-Null
+  $afterRemoveJson = substrate config current show --json
+  $afterRemove = $afterRemoveJson | ConvertFrom-Json
+  if ($afterRemove.world.deps.enabled -contains "deno") { throw "expected deno removed via -=" }
 
   # Workspace reset must remove the key from the workspace patch (inherit-only) while global still contributes.
   substrate config workspace reset world.deps.enabled | Out-Null

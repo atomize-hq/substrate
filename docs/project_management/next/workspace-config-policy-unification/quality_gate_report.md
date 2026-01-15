@@ -150,7 +150,7 @@ jq -r '.sprints[] | select(.id=="workspace_config_policy_unification") | {order,
 
 ### Finding 006 — Sequencing readiness is enforced by task dependencies
 - Status: `VERIFIED`
-- Evidence: `docs/project_management/next/workspace-config-policy-unification/tasks.json:215` (WCU2 depends on WCU1-integ; WCU3 depends on WCU2-integ; etc.)
+- Evidence: `docs/project_management/next/workspace-config-policy-unification/tasks.json:215` (WCU2 depends on WCU1-integ; WCU3 depends on WCU2-integ; WCU4 depends on WCU3-integ; WCU5 depends on WCU4-integ.)
 - Impact: Prevents starting a slice before prerequisites are integrated, reducing integration churn and contract drift.
 - Fix required (exact): none
 

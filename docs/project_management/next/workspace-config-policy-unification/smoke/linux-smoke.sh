@@ -18,6 +18,26 @@ substrate config global init --force
 substrate policy global init --force
 substrate workspace init .
 
+# Workspace init flags: `--examples` creates non-active templates and Substrate does not read them for behavior.
+substrate workspace init . --examples
+test -f .substrate/workspace.example.yaml
+test -f .substrate/policy.example.yaml
+printf ':\n' > .substrate/workspace.example.yaml
+printf ':\n' > .substrate/policy.example.yaml
+substrate config current show --json >/dev/null
+substrate policy current show --json >/dev/null
+
+# Workspace init flags: `--force` repairs missing entries and does not overwrite existing non-empty patch files.
+substrate config workspace set world.caged=false >/dev/null
+workspace_yaml_before="$(mktemp)"
+cp -a .substrate/workspace.yaml "${workspace_yaml_before}"
+rm -rf .substrate/git/repo.git
+rm -f .substrate/policy.yaml
+substrate workspace init . --force
+test -d .substrate/git/repo.git
+test -f .substrate/policy.yaml
+diff -u "${workspace_yaml_before}" .substrate/workspace.yaml >/dev/null
+
 # Phase B (ADR-0012): edit `world.deps.enabled` via config editor at both scopes (include a deliberate duplicate across scopes).
 substrate config global set world.deps.enabled+=bun world.deps.enabled+=node-runtime
 substrate config workspace set world.deps.enabled+=node-runtime world.deps.enabled+=deno
@@ -71,6 +91,13 @@ if rg -n "workspace_patch" "${explain_disabled}" >/dev/null; then
 fi
 substrate workspace enable .
 
+# List removal operator syntax (`-=`) removes the exact item from the patch list.
+substrate config workspace set world.deps.enabled-=deno
+substrate config current show --json | jq -e '
+  (.world.deps.enabled | index("bun") != null) and
+  (.world.deps.enabled | index("deno") == null)
+' >/dev/null
+
 # Workspace reset must remove the key from the workspace patch (inherit-only) while global still contributes.
 substrate config workspace reset world.deps.enabled
 substrate config current show --json | jq -e '
@@ -78,5 +105,5 @@ substrate config current show --json | jq -e '
   (.world.deps.enabled | index("deno") == null)
 ' >/dev/null
 
-rm -f "${effective_1}" "${effective_2}" "${explain_1}" "${explain_2}" "${explain_disabled}"
+rm -f "${effective_1}" "${effective_2}" "${explain_1}" "${explain_2}" "${explain_disabled}" "${workspace_yaml_before}"
 echo "OK: ${feature_dir} linux smoke passed"

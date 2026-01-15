@@ -59,6 +59,11 @@
       "description": "Implement the canonical `<workspace_root>/.substrate/` layout, internal git under `.substrate/git/repo.git/`, and workspace disable marker handling.",
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0004)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0005)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0006)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0008)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0009)",
         "docs/project_management/next/workspace-config-policy-unification/WCU1-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
         "docs/project_management/next/workspace-config-policy-unification/tasks.json",
@@ -99,6 +104,10 @@
       "description": "Add tests for workspace root discovery, disable marker behavior, and `.substrate/` directory layout invariants.",
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0004)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0005)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0006)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0008)",
         "docs/project_management/next/workspace-config-policy-unification/WCU1-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
         "docs/project_management/next/workspace-config-policy-unification/tasks.json",
@@ -137,6 +146,11 @@
       "description": "Merge WCU1 code+tests, make the slice green, run smoke for behavior platforms, and complete the slice closeout report.",
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0004)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0005)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0006)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0008)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0009)",
         "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
         "docs/project_management/next/workspace-config-policy-unification/WCU1-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
@@ -150,6 +164,8 @@
       ],
       "acceptance_criteria": [
         "Slice behavior matches ADR-0008 contract for workspace discovery and layout",
+        "`substrate workspace init --force` repairs missing entries without overwriting existing non-empty patch files",
+        "`substrate workspace init --examples` creates example template files and Substrate does not read them for behavior",
         "Closeout report is completed and references smoke/manual validation evidence"
       ],
       "start_checklist": [
@@ -188,6 +204,12 @@
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0001)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0002)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0011)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0012)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0014)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0015)",
         "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
         "docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
@@ -226,6 +248,12 @@
       "description": "Add tests for per-key merge strategies and multi-source provenance output required by ADR-0012.",
       "references": [
         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0001)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0002)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0011)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0012)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0014)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0015)",
         "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
         "docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
@@ -263,6 +291,12 @@
       "description": "Merge WCU2 code+tests, run smoke, and complete closeout evidence for ADR-0012 Phase A requirements.",
       "references": [
         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0001)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0002)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0011)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0012)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0014)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0015)",
         "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
         "docs/project_management/next/workspace-config-policy-unification/WCU2-closeout_report.md",
         "docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md",
@@ -312,13 +346,18 @@
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0002)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0003)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0009)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0010)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0013)",
         "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
         "docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md"
       ],
       "acceptance_criteria": [
         "Config schema allowlist includes `world.deps.enabled` (type list[string], merge_strategy=concat_dedupe_ordered_set)",
-        "Config editor supports `world.deps.enabled+=<item>` and `reset world.deps.enabled` at both global and workspace scopes (patch list write-time de-dupe; reset removes the key from the patch mapping)",
+        "Config editor supports `world.deps.enabled+=<item>`, `world.deps.enabled-=<item>`, and `reset world.deps.enabled` at both global and workspace scopes (patch list write-time de-dupe; `-=` is exact-match removal; reset removes the key from the patch mapping)",
         "`config current show --explain` reports merge_strategy and sources[] (includes both `global_patch` and `workspace_patch` when both scopes contribute)"
       ],
       "start_checklist": [
@@ -349,12 +388,17 @@
       "description": "Add tests proving config editor support for `world.deps.enabled` and `--explain` provenance for a multi-layer merged key.",
       "references": [
         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0002)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0003)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0009)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0010)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0013)",
         "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
         "docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md",
         "docs/project_management/next/world_deps_packages_bundles_contract.md"
       ],
       "acceptance_criteria": [
-        "Integration tests cover global + workspace edits to `world.deps.enabled` and effective concat+dedupe ordered-set behavior (including a deliberate duplicate across scopes)",
+        "Integration tests cover global + workspace `+=` and `-=` edits to `world.deps.enabled` and effective concat+dedupe ordered-set behavior (including a deliberate duplicate across scopes)",
         "Integration tests cover workspace disabled marker ignores workspace contribution for `world.deps.enabled`",
         "`--explain` goldens cover merge_strategy and multi-source sources[] ordering for `world.deps.enabled`"
       ],
@@ -386,6 +430,11 @@
       "description": "Merge WCU3 code+tests, run smoke, and complete closeout evidence for ADR-0012 Phase B requirements.",
       "references": [
         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0002)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0003)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0009)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0010)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0013)",
         "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
         "docs/project_management/next/workspace-config-policy-unification/WCU3-closeout_report.md",
         "docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md",
@@ -396,6 +445,7 @@
       ],
       "acceptance_criteria": [
         "Phase B requirements are satisfied and evidenced by integration tests and smoke validation for `world.deps.enabled` editing + merged provenance",
+        "Feature smoke validates `world.deps.enabled-=<item>` exact-match removal semantics",
         "Feature smoke validates `world.deps.enabled` merge + provenance + determinism/idempotence and is in parity with manual_testing_playbook.md",
         "WCU3-closeout_report.md is completed with evidence"
       ],
@@ -434,6 +484,7 @@
       "description": "Update install/dev scripts to stop exporting `SUBSTRATE_OVERRIDE_*` by default and align with patch-file semantics.",
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0007)",
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
         "docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
@@ -470,6 +521,7 @@
       "description": "Add/adjust tests for installer/env-script behavior so override exports are not required for correctness.",
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0007)",
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
         "docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
@@ -505,6 +557,7 @@
       "description": "Merge WCU4 code+tests, run smoke, and complete closeout evidence for installer/dev env cleanup.",
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0007)",
         "docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md",
         "docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh",
@@ -551,6 +604,11 @@
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0002)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0006)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0009)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0012)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0013)",
         "docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md",
         "docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh",
@@ -589,6 +647,11 @@
       "description": "Add/adjust tests required to keep documentation, smoke scripts, and manual playbook assertions in parity with shipped behavior.",
       "references": [
         "docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0002)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0006)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0009)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0012)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0013)",
         "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
         "docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
@@ -625,6 +688,11 @@
       "references": [
         "docs/project_management/next/workspace-config-policy-unification/WCU5-closeout_report.md",
         "docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0002)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0006)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0009)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0012)",
+        "docs/project_management/next/workspace-config-policy-unification/decision_register.md (DR-0013)",
         "docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh",
         "docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh",
