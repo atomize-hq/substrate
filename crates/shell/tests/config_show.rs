@@ -227,9 +227,13 @@ fn config_show_resolves_effective_config_with_precedence() {
         .collect::<Option<Vec<_>>>()
         .expect("sync.exclude should be string array");
     assert_eq!(
-        &items[..3],
-        [".git/**", ".substrate/**", ".substrate-git/**"],
+        &items[..2],
+        [".git/**", ".substrate/**"],
         "protected excludes must be present and leading"
+    );
+    assert!(
+        !items.contains(&".substrate-git/**"),
+        "legacy .substrate-git exclude must be removed: {items:?}"
     );
     assert!(items.contains(&"workspace-only"));
     assert!(!items.contains(&"global-only"));

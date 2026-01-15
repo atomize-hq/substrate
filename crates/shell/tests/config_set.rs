@@ -147,9 +147,10 @@ fn config_set_updates_workspace_and_prints_effective_config() {
         .map(|v| v.as_str())
         .collect::<Option<Vec<_>>>()
         .expect("sync.exclude string array");
-    assert_eq!(
-        &items[..3],
-        [".git/**", ".substrate/**", ".substrate-git/**"]
+    assert_eq!(&items[..2], [".git/**", ".substrate/**"]);
+    assert!(
+        !items.contains(&".substrate-git/**"),
+        "legacy .substrate-git exclude must be removed: {items:?}"
     );
     assert!(items.contains(&"user"));
 
@@ -284,9 +285,13 @@ fn protected_excludes_are_always_present_in_effective_config() {
         .collect::<Option<Vec<_>>>()
         .expect("sync.exclude string array");
     assert_eq!(
-        &items[..3],
-        [".git/**", ".substrate/**", ".substrate-git/**"],
+        &items[..2],
+        [".git/**", ".substrate/**"],
         "protected excludes must always be present"
+    );
+    assert!(
+        !items.contains(&".substrate-git/**"),
+        "legacy .substrate-git exclude must be removed: {items:?}"
     );
     assert!(items.contains(&"user"));
 }
