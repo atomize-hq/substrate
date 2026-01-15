@@ -196,19 +196,61 @@ pub struct ConfigCmd {
 }
 
 #[derive(Args, Debug)]
+pub struct ConfigCurrentCmd {
+    #[command(subcommand)]
+    pub action: ConfigCurrentAction,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ConfigCurrentAction {
+    /// Print the effective config for the current directory (YAML by default, JSON with --json)
+    Show(ConfigShowArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct ConfigWorkspaceCmd {
+    #[command(subcommand)]
+    pub action: ConfigWorkspaceAction,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ConfigWorkspaceAction {
+    /// Update the workspace config via dotted updates (key=value, key+=value, key-=value)
+    Set(ConfigSetArgs),
+    /// Remove keys from the workspace config patch (restore inheritance from global+defaults)
+    Reset(ConfigResetArgs),
+}
+
+#[derive(Args, Debug)]
 pub struct PolicyCmd {
     #[command(subcommand)]
     pub action: PolicyAction,
 }
 
+#[derive(Args, Debug)]
+pub struct PolicyCurrentCmd {
+    #[command(subcommand)]
+    pub action: PolicyCurrentAction,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum PolicyCurrentAction {
+    /// Print the effective policy for the current workspace (YAML by default, JSON with --json)
+    Show(PolicyShowArgs),
+}
+
 #[derive(Subcommand, Debug)]
 pub enum ConfigAction {
+    /// Config commands scoped to the current directory/workspace (alias for `show`)
+    Current(ConfigCurrentCmd),
     /// Print the effective config for the current directory (YAML by default, JSON with --json)
     Show(ConfigShowArgs),
     /// Update the workspace config via dotted updates (key=value, key+=value, key-=value)
     Set(ConfigSetArgs),
     /// Global config commands ($SUBSTRATE_HOME/config.yaml)
     Global(ConfigGlobalCmd),
+    /// Workspace-scoped config patch commands (<workspace_root>/.substrate/workspace.yaml)
+    Workspace(ConfigWorkspaceCmd),
 }
 
 #[derive(Args, Debug)]
@@ -239,6 +281,9 @@ pub struct ConfigShowArgs {
     /// Emit JSON instead of YAML
     #[arg(long)]
     pub json: bool,
+    /// Emit deterministic explain JSON on stderr (Phase A/Phase B provenance)
+    #[arg(long)]
+    pub explain: bool,
 }
 
 #[derive(Args, Debug)]
@@ -251,8 +296,17 @@ pub struct ConfigSetArgs {
     pub updates: Vec<String>,
 }
 
+#[derive(Args, Debug)]
+pub struct ConfigResetArgs {
+    /// One or more dotted keys to remove from the patch file (e.g., world.deps.enabled)
+    #[arg(value_name = "KEY", required = true)]
+    pub keys: Vec<String>,
+}
+
 #[derive(Subcommand, Debug)]
 pub enum PolicyAction {
+    /// Policy commands scoped to the current directory/workspace (alias for `show`)
+    Current(PolicyCurrentCmd),
     /// Initialize <workspace_root>/.substrate/policy.yaml (creates if missing; overwrites with --force)
     Init(PolicyInitArgs),
     /// Print the effective policy for the current workspace (YAML by default, JSON with --json)
