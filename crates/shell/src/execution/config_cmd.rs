@@ -138,8 +138,8 @@ fn run_workspace_set(args: &ConfigSetArgs, cli: &Cli) -> Result<()> {
     let workspace_root = require_workspace(&cwd)?;
 
     let path = crate::execution::workspace::workspace_marker_path(&workspace_root);
-    let raw = fs::read_to_string(&path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
+    let raw =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
     let mut patch = config_model::parse_config_patch_yaml(&path, &raw)?;
 
     let updates = config_model::parse_updates(&args.updates)?;
@@ -160,8 +160,8 @@ fn run_workspace_reset(args: &ConfigResetArgs, cli: &Cli) -> Result<()> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let workspace_root = require_workspace(&cwd)?;
     let path = crate::execution::workspace::workspace_marker_path(&workspace_root);
-    let raw = fs::read_to_string(&path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
+    let raw =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
     let mut patch = config_model::parse_config_patch_yaml(&path, &raw)?;
 
     let changed = config_model::reset_patch_keys(&mut patch, &args.keys)?;

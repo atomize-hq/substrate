@@ -371,7 +371,9 @@ pub(crate) fn read_global_config_patch_or_empty() -> Result<(SubstrateConfigPatc
     let path = global_config_path()?;
     match fs::read_to_string(&path) {
         Ok(raw) => Ok((parse_config_patch_yaml(&path, &raw)?, true)),
-        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok((SubstrateConfigPatch::default(), false)),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            Ok((SubstrateConfigPatch::default(), false))
+        }
         Err(err) => Err(anyhow!("failed to read {}: {err}", path.display())),
     }
 }
@@ -427,7 +429,9 @@ pub(crate) fn parse_config_patch_yaml(path: &Path, raw: &str) -> Result<Substrat
 
     match &value {
         serde_yaml::Value::Null => return Ok(SubstrateConfigPatch::default()),
-        serde_yaml::Value::Mapping(map) if map.is_empty() => return Ok(SubstrateConfigPatch::default()),
+        serde_yaml::Value::Mapping(map) if map.is_empty() => {
+            return Ok(SubstrateConfigPatch::default())
+        }
         _ => {}
     }
 
@@ -595,7 +599,9 @@ fn resolve_effective_from_layers(
     let (world_enabled, world_enabled_src) = resolve_replace(
         effective.world.enabled,
         global_patch.world.enabled,
-        workspace_patch.map(|(p, _)| p.world.enabled).unwrap_or(None),
+        workspace_patch
+            .map(|(p, _)| p.world.enabled)
+            .unwrap_or(None),
         env_overrides.world_enabled,
         cli_overrides.world_enabled,
         workspace_enabled,
@@ -606,7 +612,11 @@ fn resolve_effective_from_layers(
             "world.enabled".to_string(),
             ConfigExplainKey {
                 merge_strategy: "replace".to_string(),
-                sources: vec![explain_source(world_enabled_src, global_path, workspace_path)],
+                sources: vec![explain_source(
+                    world_enabled_src,
+                    global_path,
+                    workspace_path,
+                )],
             },
         );
     }
@@ -699,7 +709,9 @@ fn resolve_effective_from_layers(
     let (auto_sync, auto_sync_src) = resolve_replace(
         effective.sync.auto_sync,
         global_patch.sync.auto_sync,
-        workspace_patch.map(|(p, _)| p.sync.auto_sync).unwrap_or(None),
+        workspace_patch
+            .map(|(p, _)| p.sync.auto_sync)
+            .unwrap_or(None),
         env_overrides.sync_auto_sync,
         None,
         workspace_enabled,
@@ -719,7 +731,9 @@ fn resolve_effective_from_layers(
     let (sync_direction, sync_direction_src) = resolve_replace(
         effective.sync.direction,
         global_patch.sync.direction,
-        workspace_patch.map(|(p, _)| p.sync.direction).unwrap_or(None),
+        workspace_patch
+            .map(|(p, _)| p.sync.direction)
+            .unwrap_or(None),
         env_overrides.sync_direction,
         None,
         workspace_enabled,
@@ -730,7 +744,11 @@ fn resolve_effective_from_layers(
             "sync.direction".to_string(),
             ConfigExplainKey {
                 merge_strategy: "replace".to_string(),
-                sources: vec![explain_source(sync_direction_src, global_path, workspace_path)],
+                sources: vec![explain_source(
+                    sync_direction_src,
+                    global_path,
+                    workspace_path,
+                )],
             },
         );
     }
@@ -752,7 +770,11 @@ fn resolve_effective_from_layers(
             "sync.conflict_policy".to_string(),
             ConfigExplainKey {
                 merge_strategy: "replace".to_string(),
-                sources: vec![explain_source(conflict_policy_src, global_path, workspace_path)],
+                sources: vec![explain_source(
+                    conflict_policy_src,
+                    global_path,
+                    workspace_path,
+                )],
             },
         );
     }
@@ -790,9 +812,7 @@ fn resolve_effective_from_layers(
         layers.push(list.clone());
     }
     if workspace_enabled {
-        if let Some(list) = workspace_patch
-            .and_then(|(p, _)| p.world.deps.enabled.as_ref())
-        {
+        if let Some(list) = workspace_patch.and_then(|(p, _)| p.world.deps.enabled.as_ref()) {
             enabled_sources.push(ConfigExplainSource {
                 layer: "workspace_patch".to_string(),
                 path: workspace_path.map(|p| p.display().to_string()),
@@ -1069,11 +1089,9 @@ fn validate_config(cfg: &SubstrateConfig) -> Result<()> {
 fn apply_update_to_patch(patch: &mut SubstrateConfigPatch, update: &ConfigUpdate) -> Result<bool> {
     match update.key.as_str() {
         "world.enabled" => apply_bool_opt(&mut patch.world.enabled, &update.op, &update.value),
-        "world.anchor_mode" => apply_enum_anchor_mode_opt(
-            &mut patch.world.anchor_mode,
-            &update.op,
-            &update.value,
-        ),
+        "world.anchor_mode" => {
+            apply_enum_anchor_mode_opt(&mut patch.world.anchor_mode, &update.op, &update.value)
+        }
         "world.anchor_path" => {
             apply_string_opt(&mut patch.world.anchor_path, &update.op, &update.value)
         }
@@ -1085,20 +1103,18 @@ fn apply_update_to_patch(patch: &mut SubstrateConfigPatch, update: &ConfigUpdate
             &update.op,
             &update.value,
         ),
-        "world.deps.builtins" => apply_enum_builtins_opt(
-            &mut patch.world.deps.builtins,
-            &update.op,
-            &update.value,
-        ),
+        "world.deps.builtins" => {
+            apply_enum_builtins_opt(&mut patch.world.deps.builtins, &update.op, &update.value)
+        }
 
-        "policy.mode" => apply_enum_policy_mode_opt(&mut patch.policy.mode, &update.op, &update.value),
+        "policy.mode" => {
+            apply_enum_policy_mode_opt(&mut patch.policy.mode, &update.op, &update.value)
+        }
 
         "sync.auto_sync" => apply_bool_opt(&mut patch.sync.auto_sync, &update.op, &update.value),
-        "sync.direction" => apply_enum_sync_direction_opt(
-            &mut patch.sync.direction,
-            &update.op,
-            &update.value,
-        ),
+        "sync.direction" => {
+            apply_enum_sync_direction_opt(&mut patch.sync.direction, &update.op, &update.value)
+        }
         "sync.conflict_policy" => apply_enum_sync_conflict_policy_opt(
             &mut patch.sync.conflict_policy,
             &update.op,
