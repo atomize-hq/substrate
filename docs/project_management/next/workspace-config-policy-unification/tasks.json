@@ -1,0 +1,667 @@
+{
+  "meta": {
+    "schema_version": 3,
+    "feature": "workspace_config_policy_unification",
+    "cross_platform": true,
+    "behavior_platforms_required": ["linux", "macos", "windows"],
+    "execution_gates": true,
+    "automation": {
+      "enabled": true,
+      "orchestration_branch": "feat/workspace-config-policy-unification"
+    }
+  },
+  "tasks": [
+    {
+      "id": "F0-exec-preflight",
+      "name": "Execution preflight gate (feature start)",
+      "type": "ops",
+      "phase": "F0",
+      "status": "pending",
+      "description": "Run the feature start gate to confirm the Planning Pack is runnable and Phase A/B gates are explicitly covered before starting execution triads.",
+      "references": [
+        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
+        "docs/project_management/next/workspace-config-policy-unification/plan.md",
+        "docs/project_management/next/workspace-config-policy-unification/tasks.json",
+        "docs/project_management/next/workspace-config-policy-unification/session_log.md",
+        "docs/project_management/next/workspace-config-policy-unification/integration_map.md",
+        "docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md",
+        "docs/project_management/next/workspace-config-policy-unification/execution_preflight_report.md",
+        "docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "execution_preflight_report.md records ACCEPT or REVISE with explicit required fixes",
+        "Phase A/B gates (ADR-0012) are explicitly verified as covered by slice acceptance criteria and validation artifacts"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
+        "Read: ADR-0008, ADR-0012, PHASE_A_B_GATES, plan.md, tasks.json, session_log.md, integration_map.md, manual_testing_playbook.md",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "end_checklist": [
+        "Fill execution_preflight_report.md with a concrete recommendation and required fixes (if any)",
+        "Set status to completed; add END entry; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/F0-exec-preflight.md",
+      "depends_on": [],
+      "concurrent_with": []
+    },
+
+    {
+      "id": "WCU1-code",
+      "name": "WCU1 — Workspace directory + internal git unification (code)",
+      "type": "code",
+      "phase": "WCU1",
+      "status": "pending",
+      "description": "Implement the canonical `<workspace_root>/.substrate/` layout, internal git under `.substrate/git/repo.git/`, and workspace disable marker handling.",
+      "references": [
+        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/next/workspace-config-policy-unification/plan.md",
+        "docs/project_management/next/workspace-config-policy-unification/tasks.json",
+        "docs/project_management/next/workspace-config-policy-unification/session_log.md",
+        "docs/project_management/next/workspace-config-policy-unification/integration_map.md",
+        "docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "Workspace root discovery uses `.substrate/workspace.yaml` and ignores disabled workspaces via `.substrate/workspace.disabled`",
+        "Internal git is located at `.substrate/git/repo.git/` and `.substrate-git/` is not used"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
+        "Read: plan.md, tasks.json, session_log.md, ADR-0008, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" SLICE_ID=\"WCU1\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WCU1-code\""
+      ],
+      "worktree": "wt/workspace_config_policy_unification-wcu1-code",
+      "integration_task": "WCU1-integ",
+      "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU1-code.md",
+      "depends_on": ["F0-exec-preflight"],
+      "concurrent_with": ["WCU1-test"],
+      "git_branch": "workspace_config_policy_unification-wcu1-code",
+      "required_make_targets": ["triad-code-checks"]
+    },
+    {
+      "id": "WCU1-test",
+      "name": "WCU1 — Workspace directory + internal git unification (test)",
+      "type": "test",
+      "phase": "WCU1",
+      "status": "pending",
+      "description": "Add tests for workspace root discovery, disable marker behavior, and `.substrate/` directory layout invariants.",
+      "references": [
+        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/next/workspace-config-policy-unification/plan.md",
+        "docs/project_management/next/workspace-config-policy-unification/tasks.json",
+        "docs/project_management/next/workspace-config-policy-unification/session_log.md",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover workspace discovery and disable marker behavior",
+        "Tests cover `.substrate/` directory layout invariants (including internal git path)"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
+        "Read: plan.md, tasks.json, session_log.md, ADR-0008, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" SLICE_ID=\"WCU1\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run targeted tests you add/touch",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WCU1-test\""
+      ],
+      "worktree": "wt/workspace_config_policy_unification-wcu1-test",
+      "integration_task": "WCU1-integ",
+      "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU1-test.md",
+      "depends_on": ["F0-exec-preflight"],
+      "concurrent_with": ["WCU1-code"],
+      "git_branch": "workspace_config_policy_unification-wcu1-test",
+      "required_make_targets": ["triad-test-checks"]
+    },
+    {
+      "id": "WCU1-integ",
+      "name": "WCU1 — Workspace directory + internal git unification (integration)",
+      "type": "integration",
+      "phase": "WCU1",
+      "status": "pending",
+      "description": "Merge WCU1 code+tests, make the slice green, run smoke for behavior platforms, and complete the slice closeout report.",
+      "references": [
+        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
+        "docs/project_management/next/workspace-config-policy-unification/plan.md",
+        "docs/project_management/next/workspace-config-policy-unification/tasks.json",
+        "docs/project_management/next/workspace-config-policy-unification/session_log.md",
+        "docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md",
+        "docs/project_management/next/workspace-config-policy-unification/WCU1-closeout_report.md",
+        "smoke/linux-smoke.sh",
+        "smoke/macos-smoke.sh",
+        "smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "Slice behavior matches ADR-0008 contract for workspace discovery and layout",
+        "Closeout report is completed and references smoke/manual validation evidence"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
+        "Read: plan.md, tasks.json, session_log.md, ADR-0008, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" TASK_ID=\"WCU1-integ\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "Run feature smoke for behavior platforms and record run ids/URLs in WCU1-closeout_report.md",
+        "Set status to completed; complete WCU1-closeout_report.md; commit docs",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WCU1-integ\""
+      ],
+      "worktree": "wt/workspace_config_policy_unification-wcu1-integ",
+      "integration_task": "WCU1-integ",
+      "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU1-integ.md",
+      "depends_on": ["WCU1-code", "WCU1-test"],
+      "concurrent_with": [],
+      "git_branch": "workspace_config_policy_unification-wcu1-integ",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": true
+    },
+
+    {
+      "id": "WCU2-code",
+      "name": "WCU2 — Patch parsing + merge (ADR-0012 Phase A) (code)",
+      "type": "code",
+      "phase": "WCU2",
+      "status": "pending",
+      "description": "Implement schema-defined per-key merge strategies and multi-source provenance support required by ADR-0012.",
+      "references": [
+        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
+        "docs/project_management/next/workspace-config-policy-unification/plan.md",
+        "docs/project_management/next/workspace-config-policy-unification/integration_map.md",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "Config effective resolution supports schema-defined merge strategies: replace and concat_dedupe_ordered_set",
+        "`config current show --explain` supports multi-source provenance for merge keys with deterministic ordering"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
+        "Read: ADR-0008, ADR-0012, PHASE_A_B_GATES, plan.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" SLICE_ID=\"WCU2\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WCU2-code\""
+      ],
+      "worktree": "wt/workspace_config_policy_unification-wcu2-code",
+      "integration_task": "WCU2-integ",
+      "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU2-code.md",
+      "depends_on": ["WCU1-integ"],
+      "concurrent_with": ["WCU2-test"],
+      "git_branch": "workspace_config_policy_unification-wcu2-code",
+      "required_make_targets": ["triad-code-checks"]
+    },
+    {
+      "id": "WCU2-test",
+      "name": "WCU2 — Patch parsing + merge (ADR-0012 Phase A) (test)",
+      "type": "test",
+      "phase": "WCU2",
+      "status": "pending",
+      "description": "Add tests for per-key merge strategies and multi-source provenance output required by ADR-0012.",
+      "references": [
+        "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
+        "docs/project_management/next/workspace-config-policy-unification/plan.md",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover replace and concat_dedupe_ordered_set effective outputs",
+        "Tests cover deterministic multi-source provenance for merge keys in `--explain` output"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
+        "Read: ADR-0012, PHASE_A_B_GATES, plan.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" SLICE_ID=\"WCU2\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run targeted tests you add/touch",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WCU2-test\""
+      ],
+      "worktree": "wt/workspace_config_policy_unification-wcu2-test",
+      "integration_task": "WCU2-integ",
+      "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU2-test.md",
+      "depends_on": ["WCU1-integ"],
+      "concurrent_with": ["WCU2-code"],
+      "git_branch": "workspace_config_policy_unification-wcu2-test",
+      "required_make_targets": ["triad-test-checks"]
+    },
+    {
+      "id": "WCU2-integ",
+      "name": "WCU2 — Patch parsing + merge (ADR-0012 Phase A) (integration)",
+      "type": "integration",
+      "phase": "WCU2",
+      "status": "pending",
+      "description": "Merge WCU2 code+tests, run smoke, and complete closeout evidence for ADR-0012 Phase A requirements.",
+      "references": [
+        "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
+        "docs/project_management/next/workspace-config-policy-unification/WCU2-closeout_report.md",
+        "smoke/linux-smoke.sh",
+        "smoke/macos-smoke.sh",
+        "smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "Phase A requirements are satisfied and evidenced by tests and `--explain` output",
+        "WCU2-closeout_report.md is completed with smoke/manual parity evidence"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
+        "Read: ADR-0012, PHASE_A_B_GATES, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" TASK_ID=\"WCU2-integ\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "Run feature smoke for behavior platforms and record run ids/URLs in WCU2-closeout_report.md",
+        "Set status to completed; complete WCU2-closeout_report.md; commit docs",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WCU2-integ\""
+      ],
+      "worktree": "wt/workspace_config_policy_unification-wcu2-integ",
+      "integration_task": "WCU2-integ",
+      "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU2-integ.md",
+      "depends_on": ["WCU2-code", "WCU2-test"],
+      "concurrent_with": [],
+      "git_branch": "workspace_config_policy_unification-wcu2-integ",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": true
+    },
+
+    {
+      "id": "WCU3-code",
+      "name": "WCU3 — CLI scopes + reset semantics + explain (ADR-0012 Phase B) (code)",
+      "type": "code",
+      "phase": "WCU3",
+      "status": "pending",
+      "description": "Ensure config editor allowlists and edits `world.deps.enabled` and that `--explain` surfaces merge strategy and contributing sources per ADR-0012.",
+      "references": [
+        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
+        "docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md"
+      ],
+      "acceptance_criteria": [
+        "Config schema allowlist includes `world.deps.enabled` and treats it as valid",
+        "Config set/reset supports adding/removing `world.deps.enabled` at global and workspace scopes",
+        "`config current show --explain` reports merge_strategy and multi-source provenance for `world.deps.enabled` when both scopes contribute"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
+        "Read: ADR-0008, ADR-0012, PHASE_A_B_GATES, manual_testing_playbook.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" SLICE_ID=\"WCU3\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WCU3-code\""
+      ],
+      "worktree": "wt/workspace_config_policy_unification-wcu3-code",
+      "integration_task": "WCU3-integ",
+      "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU3-code.md",
+      "depends_on": ["WCU2-integ"],
+      "concurrent_with": ["WCU3-test"],
+      "git_branch": "workspace_config_policy_unification-wcu3-code",
+      "required_make_targets": ["triad-code-checks"]
+    },
+    {
+      "id": "WCU3-test",
+      "name": "WCU3 — CLI scopes + reset semantics + explain (ADR-0012 Phase B) (test)",
+      "type": "test",
+      "phase": "WCU3",
+      "status": "pending",
+      "description": "Add tests proving config editor support for `world.deps.enabled` and `--explain` provenance for a multi-layer merged key.",
+      "references": [
+        "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
+        "docs/project_management/next/world_deps_packages_bundles_contract.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover global + workspace edits to `world.deps.enabled` and effective concat+dedupe behavior",
+        "Tests cover `--explain` output includes merge strategy and both contributing sources"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
+        "Read: ADR-0012, PHASE_A_B_GATES, world_deps_packages_bundles_contract.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" SLICE_ID=\"WCU3\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run targeted tests you add/touch",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WCU3-test\""
+      ],
+      "worktree": "wt/workspace_config_policy_unification-wcu3-test",
+      "integration_task": "WCU3-integ",
+      "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU3-test.md",
+      "depends_on": ["WCU2-integ"],
+      "concurrent_with": ["WCU3-code"],
+      "git_branch": "workspace_config_policy_unification-wcu3-test",
+      "required_make_targets": ["triad-test-checks"]
+    },
+    {
+      "id": "WCU3-integ",
+      "name": "WCU3 — CLI scopes + reset semantics + explain (ADR-0012 Phase B) (integration)",
+      "type": "integration",
+      "phase": "WCU3",
+      "status": "pending",
+      "description": "Merge WCU3 code+tests, run smoke, and complete closeout evidence for ADR-0012 Phase B requirements.",
+      "references": [
+        "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
+        "docs/project_management/next/workspace-config-policy-unification/WCU3-closeout_report.md",
+        "smoke/linux-smoke.sh",
+        "smoke/macos-smoke.sh",
+        "smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "Phase B requirements are satisfied and evidenced by tests and smoke validation",
+        "WCU3-closeout_report.md is completed with smoke/manual parity evidence"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
+        "Read: PHASE_A_B_GATES, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" TASK_ID=\"WCU3-integ\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "Run feature smoke for behavior platforms and record run ids/URLs in WCU3-closeout_report.md",
+        "Set status to completed; complete WCU3-closeout_report.md; commit docs",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WCU3-integ\""
+      ],
+      "worktree": "wt/workspace_config_policy_unification-wcu3-integ",
+      "integration_task": "WCU3-integ",
+      "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU3-integ.md",
+      "depends_on": ["WCU3-code", "WCU3-test"],
+      "concurrent_with": [],
+      "git_branch": "workspace_config_policy_unification-wcu3-integ",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": true
+    },
+
+    {
+      "id": "WCU4-code",
+      "name": "WCU4 — Installer/dev env cleanup (code)",
+      "type": "code",
+      "phase": "WCU4",
+      "status": "pending",
+      "description": "Update install/dev scripts to stop exporting `SUBSTRATE_OVERRIDE_*` by default and align with patch-file semantics.",
+      "references": [
+        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/next/workspace-config-policy-unification/plan.md",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "Install/dev scripts do not export `SUBSTRATE_OVERRIDE_*` by default",
+        "Installer writes global config patch as a patch file (header + sparse overrides only)"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
+        "Read: ADR-0008, plan.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" SLICE_ID=\"WCU4\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WCU4-code\""
+      ],
+      "worktree": "wt/workspace_config_policy_unification-wcu4-code",
+      "integration_task": "WCU4-integ",
+      "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU4-code.md",
+      "depends_on": ["WCU3-integ"],
+      "concurrent_with": ["WCU4-test"],
+      "git_branch": "workspace_config_policy_unification-wcu4-code",
+      "required_make_targets": ["triad-code-checks"]
+    },
+    {
+      "id": "WCU4-test",
+      "name": "WCU4 — Installer/dev env cleanup (test)",
+      "type": "test",
+      "phase": "WCU4",
+      "status": "pending",
+      "description": "Add/adjust tests for installer/env-script behavior so override exports are not required for correctness.",
+      "references": [
+        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/next/workspace-config-policy-unification/plan.md",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "Tests prove effective config does not require `SUBSTRATE_OVERRIDE_*` exports to behave correctly"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
+        "Read: ADR-0008, plan.md, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" SLICE_ID=\"WCU4\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run targeted tests you add/touch",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WCU4-test\""
+      ],
+      "worktree": "wt/workspace_config_policy_unification-wcu4-test",
+      "integration_task": "WCU4-integ",
+      "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU4-test.md",
+      "depends_on": ["WCU3-integ"],
+      "concurrent_with": ["WCU4-code"],
+      "git_branch": "workspace_config_policy_unification-wcu4-test",
+      "required_make_targets": ["triad-test-checks"]
+    },
+    {
+      "id": "WCU4-integ",
+      "name": "WCU4 — Installer/dev env cleanup (integration)",
+      "type": "integration",
+      "phase": "WCU4",
+      "status": "pending",
+      "description": "Merge WCU4 code+tests, run smoke, and complete closeout evidence for installer/dev env cleanup.",
+      "references": [
+        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/next/workspace-config-policy-unification/WCU4-closeout_report.md",
+        "smoke/linux-smoke.sh",
+        "smoke/macos-smoke.sh",
+        "smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "Installer/dev env behavior matches ADR-0008 contract",
+        "WCU4-closeout_report.md is completed with evidence"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
+        "Read: kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" TASK_ID=\"WCU4-integ\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "Run feature smoke for behavior platforms and record run ids/URLs in WCU4-closeout_report.md",
+        "Set status to completed; complete WCU4-closeout_report.md; commit docs",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WCU4-integ\""
+      ],
+      "worktree": "wt/workspace_config_policy_unification-wcu4-integ",
+      "integration_task": "WCU4-integ",
+      "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU4-integ.md",
+      "depends_on": ["WCU4-code", "WCU4-test"],
+      "concurrent_with": [],
+      "git_branch": "workspace_config_policy_unification-wcu4-integ",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": true
+    },
+
+    {
+      "id": "WCU5-code",
+      "name": "WCU5 — Docs + smoke + playbook alignment (code)",
+      "type": "code",
+      "phase": "WCU5",
+      "status": "pending",
+      "description": "Apply remaining code-level polish required for docs/validation parity, including deterministic `--explain` output and patch header preservation.",
+      "references": [
+        "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
+        "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
+        "docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md",
+        "docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh",
+        "docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh",
+        "docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "Manual playbook and smoke scripts remain valid and reflect shipped behavior",
+        "`--explain` output is deterministic for identical inputs"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
+        "Read: ADR-0008, ADR-0012, manual_testing_playbook.md, smoke scripts, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" SLICE_ID=\"WCU5\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WCU5-code\""
+      ],
+      "worktree": "wt/workspace_config_policy_unification-wcu5-code",
+      "integration_task": "WCU5-integ",
+      "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU5-code.md",
+      "depends_on": ["WCU4-integ"],
+      "concurrent_with": ["WCU5-test"],
+      "git_branch": "workspace_config_policy_unification-wcu5-code",
+      "required_make_targets": ["triad-code-checks"]
+    },
+    {
+      "id": "WCU5-test",
+      "name": "WCU5 — Docs + smoke + playbook alignment (test)",
+      "type": "test",
+      "phase": "WCU5",
+      "status": "pending",
+      "description": "Add/adjust tests required to keep documentation, smoke scripts, and manual playbook assertions in parity with shipped behavior.",
+      "references": [
+        "docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md",
+        "docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover smoke assertions and manual playbook steps for Phase A/B gates"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
+        "Read: manual_testing_playbook.md, PHASE_A_B_GATES, kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" SLICE_ID=\"WCU5\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "Run targeted tests you add/touch",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WCU5-test\""
+      ],
+      "worktree": "wt/workspace_config_policy_unification-wcu5-test",
+      "integration_task": "WCU5-integ",
+      "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU5-test.md",
+      "depends_on": ["WCU4-integ"],
+      "concurrent_with": ["WCU5-code"],
+      "git_branch": "workspace_config_policy_unification-wcu5-test",
+      "required_make_targets": ["triad-test-checks"]
+    },
+    {
+      "id": "WCU5-integ",
+      "name": "WCU5 — Docs + smoke + playbook alignment (integration)",
+      "type": "integration",
+      "phase": "WCU5",
+      "status": "pending",
+      "description": "Merge WCU5 code+tests, run smoke, and complete closeout evidence for docs/validation parity.",
+      "references": [
+        "docs/project_management/next/workspace-config-policy-unification/WCU5-closeout_report.md",
+        "docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md",
+        "smoke/linux-smoke.sh",
+        "smoke/macos-smoke.sh",
+        "smoke/windows-smoke.ps1"
+      ],
+      "acceptance_criteria": [
+        "Feature smoke scripts pass and remain in parity with manual_testing_playbook.md",
+        "WCU5-closeout_report.md is completed with evidence"
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
+        "Read: kickoff prompt",
+        "Set status to in_progress; add START entry; commit docs",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" TASK_ID=\"WCU5-integ\""
+      ],
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests",
+        "make integ-checks",
+        "Run feature smoke for behavior platforms and record run ids/URLs in WCU5-closeout_report.md",
+        "Set status to completed; complete WCU5-closeout_report.md; commit docs",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"WCU5-integ\""
+      ],
+      "worktree": "wt/workspace_config_policy_unification-wcu5-integ",
+      "integration_task": "WCU5-integ",
+      "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU5-integ.md",
+      "depends_on": ["WCU5-code", "WCU5-test"],
+      "concurrent_with": [],
+      "git_branch": "workspace_config_policy_unification-wcu5-integ",
+      "required_make_targets": ["integ-checks"],
+      "merge_to_orchestration": true
+    },
+
+    {
+      "id": "FZ-feature-cleanup",
+      "name": "Feature cleanup (remove worktrees)",
+      "type": "ops",
+      "phase": "FZ",
+      "status": "pending",
+      "description": "Remove retained worktrees and finish the feature lifecycle.",
+      "references": [
+        "docs/project_management/next/workspace-config-policy-unification/tasks.json",
+        "docs/project_management/next/workspace-config-policy-unification/session_log.md",
+        "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "acceptance_criteria": ["All feature worktrees removed (or dry-run recorded)"],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
+        "Set status to in_progress; add START entry; commit docs"
+      ],
+      "end_checklist": [
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Set status to completed; add END entry; commit docs"
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/FZ-feature-cleanup.md",
+      "depends_on": ["WCU5-integ"],
+      "concurrent_with": []
+    }
+  ]
+}
+

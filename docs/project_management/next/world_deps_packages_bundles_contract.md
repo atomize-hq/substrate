@@ -245,6 +245,13 @@ Rules:
     2) workspace enabled list (`<workspace_root>/.substrate/workspace.yaml`, when a workspace exists and is enabled).
   - A scope can “contribute nothing” by omitting `world.deps.enabled` (inherit-only); it can “contribute an explicit empty list” by setting `world.deps.enabled: []`.
 
+### Implementation dependency: shared config model (Phase C)
+`world deps` reads and edits the same config patch files defined by `ADR-0008`, and it MUST be implemented against the shared config schema/merge/editor model (`ADR-0008` + `ADR-0012`), not bespoke YAML patch handling.
+
+Requirements:
+- `world deps ... add|remove|reset` MUST mutate patch files via the shared config editor so allowlisting, type validation, per-key merge semantics, and comment-header preservation are consistent across the CLI surface.
+- `world deps current` MUST read effective `world.deps.*` keys via the shared per-key merge engine, with `world.deps.enabled` using the concat-then-in-order-dedupe semantics in this contract (`ADR-0012`: `concat_dedupe_ordered_set`).
+
 ## Patch File Comment Headers (Examples)
 
 World deps uses the same “patch file” concept as `ADR-0008`: the file at a scope contains only overrides for that scope, and commands MUST preserve any existing comment header.

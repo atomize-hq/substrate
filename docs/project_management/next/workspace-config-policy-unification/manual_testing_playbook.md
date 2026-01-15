@@ -2,8 +2,14 @@
 
 This playbook validates the operator-facing contract in:
 - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md` (Phase A/B gates)
 
 All steps are written to be run in a scratch workspace directory and must not mutate any real project.
+
+Smoke scripts (automated counterpart; must remain in parity with this playbook):
+- Linux: `docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
 
 ## 0) Setup (all platforms)
 
@@ -117,3 +123,24 @@ All steps are written to be run in a scratch workspace directory and must not mu
    - `substrate workspace remove .`
    - `test ! -d .substrate`
    - `diff -u .gitignore.before .gitignore` (expected: no differences)
+
+## 7) ADR-0012 Phase A/B — `world.deps.enabled` merge + multi-source provenance
+
+This section validates the ADR-0012 requirements that are intentionally implemented as part of ADR-0008.
+
+1. Ensure global + workspace patches exist:
+   - `substrate config global init --force`
+   - `substrate workspace init .` (if not already initialized)
+2. Add one enabled dep at global scope and one at workspace scope (via the config editor):
+   - `substrate config global set world.deps.enabled+=bun`
+   - `substrate config workspace set world.deps.enabled+=node-runtime`
+3. Verify effective merged value contains both items:
+   - `substrate config current show --json | jq -e '.world.deps.enabled | index(\"bun\")!=null and index(\"node-runtime\")!=null' >/dev/null`
+4. Verify `--explain` indicates a merge strategy and multi-source provenance (stderr):
+   - `substrate config current show --json --explain >/dev/null 2> /tmp/wcu-explain.txt`
+   - `rg -n 'concat_dedupe_ordered_set' /tmp/wcu-explain.txt`
+   - `rg -n 'global_patch' /tmp/wcu-explain.txt`
+   - `rg -n 'workspace_patch' /tmp/wcu-explain.txt`
+5. Reset key at workspace scope and confirm it remains enabled via global:
+   - `substrate config workspace reset world.deps.enabled`
+   - `substrate config current show --json | jq -e '.world.deps.enabled | index(\"bun\")!=null' >/dev/null`
