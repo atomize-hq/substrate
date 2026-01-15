@@ -152,3 +152,17 @@
   - Review the Planning Pack end-to-end (ADRs, gates, plan, tasks, integration map, playbook, smoke scripts)
   - Fill `execution_preflight_report.md` with ACCEPT/REVISE and any required fixes
   - Update `tasks.json` status and commit docs
+
+## END — 2026-01-15T15:55:29Z — execution — F0-exec-preflight
+- Outcome:
+  - `execution_preflight_report.md`: `REVISE` (planning quality gate report is not in `ACCEPT` state)
+  - Verified: Phase A/B gates are explicitly owned by slice acceptance criteria and validation artifacts (WCU2/WCU3) and integration tasks reference smoke scripts + closeout reports.
+  - Verified: feature smoke scripts contain real contract assertions and cover the ADR-0012 world-deps journey (merge strategy + provenance + determinism/idempotence + invalid-enum no-write behavior + workspace-disable fallbacks).
+- Files modified:
+  - `docs/project_management/next/workspace-config-policy-unification/tasks.json`
+  - `docs/project_management/next/workspace-config-policy-unification/session_log.md`
+  - `docs/project_management/next/workspace-config-policy-unification/execution_preflight_report.md`
+- Commands run (with results):
+  - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification"` → exit `0`
+- Blockers:
+  - Update `docs/project_management/next/workspace-config-policy-unification/quality_gate_report.md` to reflect current evidence and a concrete `ACCEPT`/`FLAG` decision; do not start execution triads until it is `ACCEPT`.
