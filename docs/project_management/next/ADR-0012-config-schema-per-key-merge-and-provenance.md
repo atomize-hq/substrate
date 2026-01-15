@@ -1,7 +1,7 @@
 # ADR-0012 — Config Schema: Per-key Merge Strategies + Multi-source Provenance
 
 ## Status
-- Status: Draft
+- Status: Approved
 - Date (UTC): 2026-01-14
 - Owner(s): Shell maintainers
 

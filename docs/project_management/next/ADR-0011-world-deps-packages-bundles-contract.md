@@ -1,7 +1,7 @@
 # ADR-0011 — World Deps Packages/Bundles Inventory + Enabled Contract
 
 ## Status
-- Status: Draft
+- Status: Approved
 - Date (UTC): 2026-01-13
 - Owner(s): Shell / World maintainers
 
