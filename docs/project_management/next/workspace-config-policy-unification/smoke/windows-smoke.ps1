@@ -91,13 +91,13 @@ try {
 	  if ($jsonStart -lt 0) { throw "failed to locate JSON object in --explain stderr" }
 	  $explainJson = $stderr.Substring($jsonStart)
 	  $explain = $explainJson | ConvertFrom-Json
-	  function Assert-ReplaceKeyProvenance($explainObj, $key, $expectedLayer) {
-	    $entry = $explainObj.keys.$key
-	    if ($null -eq $entry) { throw "missing key in --explain: $key" }
-	    if ($entry.merge_strategy -ne "replace") { throw "$key: expected merge_strategy=replace" }
-	    if ($entry.sources.Count -ne 1) { throw "$key: expected exactly 1 source" }
-	    if ($entry.sources[0].layer -ne $expectedLayer) { throw "$key: expected source layer $expectedLayer" }
-	  }
+		  function Assert-ReplaceKeyProvenance($explainObj, $key, $expectedLayer) {
+		    $entry = $explainObj.keys.$key
+		    if ($null -eq $entry) { throw "missing key in --explain: $key" }
+		    if ($entry.merge_strategy -ne "replace") { throw "${key}: expected merge_strategy=replace" }
+		    if ($entry.sources.Count -ne 1) { throw "${key}: expected exactly 1 source" }
+		    if ($entry.sources[0].layer -ne $expectedLayer) { throw "${key}: expected source layer ${expectedLayer}" }
+		  }
 	  Assert-ReplaceKeyProvenance $explain 'world.deps.inventory_mode' 'workspace_patch'
 	  Assert-ReplaceKeyProvenance $explain 'world.deps.builtins' 'workspace_patch'
 

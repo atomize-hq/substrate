@@ -3,11 +3,11 @@ set -euo pipefail
 
 feature_dir="docs/project_management/next/workspace-config-policy-unification"
 
-scratch_root="${TMPDIR:-/tmp}/substrate-wcu-smoke"
+scratch_root="$(mktemp -d "${TMPDIR:-/tmp}/substrate-wcu-smoke.XXXXXX")"
 workspace="${scratch_root}/ws"
 home_dir="${scratch_root}/home"
 
-rm -rf "${scratch_root}"
+trap 'rm -rf "${scratch_root}"' EXIT
 mkdir -p "${workspace}" "${home_dir}"
 
 export SUBSTRATE_HOME="${home_dir}"
