@@ -72,6 +72,26 @@ This Planning Pack must complete:
 Explicit gate file:
 - `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 
+## Platform parity plan (authoritative)
+Source of truth: `docs/project_management/next/workspace-config-policy-unification/tasks.json` (`meta.cross_platform=true`).
+
+### Required behavior platforms (smoke required)
+- Linux, macOS, Windows
+- Smoke scripts:
+  - `docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
+  - `docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
+  - `docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
+
+### CI dispatch mechanism (required for integration tasks)
+Integration tasks (WCU*-integ) MUST dispatch feature smoke via CI using:
+- `make feature-smoke FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" PLATFORM=behavior WORKFLOW_REF="feat/workspace-config-policy-unification"`
+
+Evidence requirements:
+- Record run ids/URLs and outcomes in the slice closeout report (`WCU*-closeout_report.md`).
+
+### CI parity platforms
+- None declared for this pack (all required platforms are treated as behavior platforms).
+
 ## Slice specs (authoritative)
 - WCU1: `docs/project_management/next/workspace-config-policy-unification/WCU1-spec.md`
 - WCU2: `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
