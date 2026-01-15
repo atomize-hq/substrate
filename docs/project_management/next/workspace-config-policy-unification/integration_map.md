@@ -15,6 +15,9 @@ Non-negotiable gate file for this Planning Pack:
   - schema-defined per-key merge strategies
   - multi-source provenance in `config current show --explain`
   - config editor allowlisting/edit support for `world.deps.enabled`
+  - schema allowlisting + strict enum validation + editor set/reset + replace-key provenance for:
+    - `world.deps.inventory_mode` (`merged|workspace_only`)
+    - `world.deps.builtins` (`enabled|disabled`)
 - Reference:
   - `docs/project_management/next/world_deps_packages_bundles_contract.md`
 

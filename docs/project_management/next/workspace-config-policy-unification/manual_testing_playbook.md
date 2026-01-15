@@ -178,3 +178,40 @@ This section validates the ADR-0012 requirements that are intentionally implemen
 7. Reset key at workspace scope and confirm it remains enabled via global (inherit-only reset):
    - `substrate config workspace reset world.deps.enabled`
    - `substrate config current show --json | jq -e '.world.deps.enabled | index(\"bun\")!=null and index(\"deno\")==null' >/dev/null`
+
+## 8) World-deps enum keys — replace precedence + strict enum validation
+
+This section validates contract parity for:
+- `world.deps.inventory_mode` (`merged|workspace_only`, `merge_strategy=replace`)
+- `world.deps.builtins` (`enabled|disabled`, `merge_strategy=replace`)
+
+1. Ensure global + workspace patches exist and workspace is enabled:
+   - `substrate config global init --force`
+   - `substrate workspace init .` (if not already initialized)
+   - `substrate workspace enable .`
+2. Set global values for both keys:
+   - `substrate config global set world.deps.inventory_mode=merged world.deps.builtins=enabled`
+3. Set workspace values for both keys to different values (replace precedence when workspace is enabled):
+   - `substrate config workspace set world.deps.inventory_mode=workspace_only world.deps.builtins=disabled`
+4. Assert effective values use the workspace values when workspace is enabled:
+   - `substrate config current show --json | jq -e '.world.deps.inventory_mode==\"workspace_only\" and .world.deps.builtins==\"disabled\"' >/dev/null`
+5. Capture `--explain` and assert `merge_strategy=replace` and exactly one contributing source (`workspace_patch`) for both keys:
+   - `substrate config current show --json --explain >/dev/null 2> /tmp/wcu-explain.enums.workspace.txt`
+   - `python -c 'import json; p="/tmp/wcu-explain.enums.workspace.txt"; text=open(p,"r",encoding="utf-8").read(); i=text.find("{"); assert i!=-1; obj=json.loads(text[i:]); def chk(k,layer): e=obj["keys"][k]; assert e["merge_strategy"]=="replace"; s=e["sources"]; assert len(s)==1 and s[0]["layer"]==layer; chk("world.deps.inventory_mode","workspace_patch"); chk("world.deps.builtins","workspace_patch"); print("OK: enum keys replace provenance (workspace_patch)")'`
+6. Disable workspace and assert effective values fall back to global, and `--explain` source switches to `global_patch`:
+   - `substrate workspace disable .`
+   - `substrate config current show --json | jq -e '.world.deps.inventory_mode==\"merged\" and .world.deps.builtins==\"enabled\"' >/dev/null`
+   - `substrate config current show --json --explain >/dev/null 2> /tmp/wcu-explain.enums.disabled.txt`
+   - `python -c 'import json; p="/tmp/wcu-explain.enums.disabled.txt"; text=open(p,"r",encoding="utf-8").read(); i=text.find("{"); assert i!=-1; obj=json.loads(text[i:]); def chk(k,layer): e=obj["keys"][k]; assert e["merge_strategy"]=="replace"; s=e["sources"]; assert len(s)==1 and s[0]["layer"]==layer; chk("world.deps.inventory_mode","global_patch"); chk("world.deps.builtins","global_patch"); print("OK: enum keys replace provenance (global_patch when workspace disabled)")'`
+   - `substrate workspace enable .`
+7. Invalid enum value is exit `2` and performs no writes (patch bytes unchanged; comment header preserved):
+   - Global patch invalid value (`world.deps.builtins=bogus`):
+     - `cp -a "$SUBSTRATE_HOME/config.yaml" /tmp/wcu-config.enums.before.yaml`
+     - `(substrate config global set world.deps.builtins=bogus >/dev/null); test $? -eq 2`
+     - `diff -u /tmp/wcu-config.enums.before.yaml "$SUBSTRATE_HOME/config.yaml"` (expected: no differences)
+     - `rg -n '^# Substrate config patch' "$SUBSTRATE_HOME/config.yaml"` (expected: header preserved)
+   - Workspace patch invalid value (`world.deps.inventory_mode=nope`):
+     - `cp -a .substrate/workspace.yaml /tmp/wcu-workspace.enums.before.yaml`
+     - `(substrate config workspace set world.deps.inventory_mode=nope >/dev/null); test $? -eq 2`
+     - `diff -u /tmp/wcu-workspace.enums.before.yaml .substrate/workspace.yaml` (expected: no differences)
+     - `rg -n '^# Substrate config patch' .substrate/workspace.yaml` (expected: header preserved)

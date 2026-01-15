@@ -36,6 +36,8 @@ The config schema MUST support, at minimum:
 ## Phase A key assignment (authoritative)
 The schema MUST assign:
 - `world.deps.enabled`: type `list[string]`, `merge_strategy=concat_dedupe_ordered_set`.
+- `world.deps.inventory_mode`: type `enum[string]` (or equivalent “string with allowed set”), allowed values exactly `merged` and `workspace_only`, `merge_strategy=replace`.
+- `world.deps.builtins`: type `enum[string]` (or equivalent “string with allowed set”), allowed values exactly `enabled` and `disabled`, `merge_strategy=replace`.
 
 ## `config current show --explain` provenance contract (authoritative)
 
@@ -68,6 +70,12 @@ Rules:
 - Each `sources[]` entry MUST include:
   - `layer`: one of the ADR-0012 required labels (`cli_flag`, `override_env`, `workspace_patch`, `global_patch`, `default`, `injected_protected`)
   - `path`: present only for patch-file layers (`global_patch`, `workspace_patch`), and equal to the resolved file path.
+
+Replace-key provenance requirements (authoritative):
+- For `world.deps.inventory_mode` and `world.deps.builtins` (both `merge_strategy=replace`), `sources` MUST contain exactly one entry in the effective view:
+  - `workspace_patch` when the workspace patch provides the effective value (workspace exists and is enabled),
+  - otherwise `global_patch` when the global patch provides the effective value,
+  - otherwise `default`.
 
 ## Exit codes (authoritative)
 Use `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`.

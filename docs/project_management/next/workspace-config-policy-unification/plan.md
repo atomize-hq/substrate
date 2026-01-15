@@ -34,6 +34,10 @@ Phase A/B from ADR-0012 must be completed in this body of work (not deferred):
 - Phase A: per-key merge strategies + multi-source provenance
 - Phase B: config editor supports `world.deps.enabled` (list merge key)
 
+Additionally, this pack MUST align to `docs/project_management/next/world_deps_packages_bundles_contract.md` for these world-deps config keys (schema allowlisting + editor set/reset + deterministic `--explain` provenance):
+- `world.deps.inventory_mode` (`merged|workspace_only`, `merge_strategy=replace`)
+- `world.deps.builtins` (`enabled|disabled`, `merge_strategy=replace`)
+
 See:
 - `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
 

@@ -218,6 +218,7 @@
       ],
       "acceptance_criteria": [
         "Config schema assigns merge_strategy per key (default=replace; `world.deps.enabled`=concat_dedupe_ordered_set)",
+        "Config schema allowlists `world.deps.inventory_mode` (enum; allowed values exactly `merged|workspace_only`) and `world.deps.builtins` (enum; allowed values exactly `enabled|disabled`), both with merge_strategy=replace",
         "`config current show --explain` emits deterministic JSON on stderr with per-key merge_strategy and sources[] (replace: exactly one source; merge keys: multi-source in application order)"
       ],
       "start_checklist": [
@@ -261,6 +262,7 @@
       ],
       "acceptance_criteria": [
         "Unit tests cover replace (single-source provenance) and concat_dedupe_ordered_set (concat+dedupe ordered-set output + multi-source provenance ordering)",
+        "Unit tests cover enum validation for `world.deps.inventory_mode` and `world.deps.builtins` (invalid value is exit 2; no writes)",
         "Determinism test(s) prove `--explain` stderr JSON bytes are identical for identical inputs"
       ],
       "start_checklist": [
@@ -306,8 +308,8 @@
         "docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"
       ],
       "acceptance_criteria": [
-        "Phase A requirements are satisfied and evidenced by unit + integration tests and `--explain` goldens (including workspace disabled marker coverage)",
-        "Feature smoke validates `world.deps.enabled` merge + provenance + determinism/idempotence and is in parity with manual_testing_playbook.md",
+        "Phase A requirements are satisfied and evidenced by unit + integration tests and `--explain` goldens (including replace-key provenance for `world.deps.inventory_mode` and `world.deps.builtins`, plus workspace disabled marker coverage)",
+        "Feature smoke validates `world.deps.enabled` merge + provenance + determinism/idempotence and validates replace-key behavior for `world.deps.inventory_mode` and `world.deps.builtins` (set/reset, invalid-value exit 2 no writes, workspace-disable fallback)",
         "WCU2-closeout_report.md is completed with evidence"
       ],
       "start_checklist": [
@@ -358,6 +360,9 @@
       "acceptance_criteria": [
         "Config schema allowlist includes `world.deps.enabled` (type list[string], merge_strategy=concat_dedupe_ordered_set)",
         "Config editor supports `world.deps.enabled+=<item>`, `world.deps.enabled-=<item>`, and `reset world.deps.enabled` at both global and workspace scopes (patch list write-time de-dupe; `-=` is exact-match removal; reset removes the key from the patch mapping)",
+        "Config editor supports `world.deps.inventory_mode=<merged|workspace_only>` and `world.deps.builtins=<enabled|disabled>` at both global and workspace scopes, and `reset` removes each key from the patch mapping (inherit-only)",
+        "Invalid enum values for `world.deps.inventory_mode` and `world.deps.builtins` are exit 2 and perform no writes (patch bytes unchanged; comment header preserved)",
+        "Workspace disabled marker ignores workspace patch contribution for `world.deps.inventory_mode` and `world.deps.builtins` (effective values and `--explain` provenance fall back to global/default)",
         "`config current show --explain` reports merge_strategy and sources[] (includes both `global_patch` and `workspace_patch` when both scopes contribute)"
       ],
       "start_checklist": [
@@ -400,6 +405,9 @@
       "acceptance_criteria": [
         "Integration tests cover global + workspace `+=` and `-=` edits to `world.deps.enabled` and effective concat+dedupe ordered-set behavior (including a deliberate duplicate across scopes)",
         "Integration tests cover workspace disabled marker ignores workspace contribution for `world.deps.enabled`",
+        "Integration tests cover global + workspace `set`/`reset` for `world.deps.inventory_mode` and `world.deps.builtins` with replace precedence and single-source provenance",
+        "Integration tests cover invalid enum values for `world.deps.inventory_mode` and `world.deps.builtins` are exit 2 and perform no writes (patch bytes unchanged; comment header preserved)",
+        "Integration tests cover workspace disabled marker ignores workspace contribution for `world.deps.inventory_mode` and `world.deps.builtins` (effective values and `--explain` provenance fall back to global/default)",
         "`--explain` goldens cover merge_strategy and multi-source sources[] ordering for `world.deps.enabled`"
       ],
       "start_checklist": [
@@ -444,9 +452,9 @@
         "docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"
       ],
       "acceptance_criteria": [
-        "Phase B requirements are satisfied and evidenced by integration tests and smoke validation for `world.deps.enabled` editing + merged provenance",
+        "Phase B requirements are satisfied and evidenced by integration tests and smoke validation for `world.deps.enabled` editing + merged provenance, and for enum keys `world.deps.inventory_mode` and `world.deps.builtins` (set/reset, invalid-value exit 2 no writes, workspace-disable fallback)",
         "Feature smoke validates `world.deps.enabled-=<item>` exact-match removal semantics",
-        "Feature smoke validates `world.deps.enabled` merge + provenance + determinism/idempotence and is in parity with manual_testing_playbook.md",
+        "Feature smoke validates `world.deps.enabled` merge + provenance + determinism/idempotence and validates replace-key behavior for `world.deps.inventory_mode` and `world.deps.builtins` (replace precedence, single-source provenance, invalid-value no-write behavior, workspace-disable fallback)",
         "WCU3-closeout_report.md is completed with evidence"
       ],
       "start_checklist": [
@@ -616,7 +624,7 @@
         "docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"
       ],
       "acceptance_criteria": [
-        "Manual playbook and smoke scripts remain valid and reflect shipped behavior",
+        "Manual playbook and smoke scripts remain valid and reflect shipped behavior (including `world.deps.enabled`, `world.deps.inventory_mode`, and `world.deps.builtins`)",
         "`--explain` output is deterministic for identical inputs"
       ],
       "start_checklist": [
@@ -657,7 +665,7 @@
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Tests cover smoke assertions and manual playbook steps for Phase A/B gates"
+        "Tests cover smoke assertions and manual playbook steps for Phase A/B gates, including replace-key enum validation and workspace-disable fallback for `world.deps.inventory_mode` and `world.deps.builtins`"
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -699,7 +707,7 @@
         "docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"
       ],
       "acceptance_criteria": [
-        "Feature smoke scripts pass and remain in parity with manual_testing_playbook.md",
+        "Feature smoke scripts pass and remain in parity with manual_testing_playbook.md (including `world.deps.inventory_mode` and `world.deps.builtins` replace-key behavior and strict invalid-enum no-write behavior)",
         "WCU5-closeout_report.md is completed with evidence"
       ],
       "start_checklist": [

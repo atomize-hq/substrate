@@ -21,10 +21,15 @@ References:
 The smoke scripts MUST implement a minimal viable subset of the manual playbook that:
 - uses a scratch workspace directory and a scratch `SUBSTRATE_HOME`,
 - performs config editor mutations at both global and workspace scopes for `world.deps.enabled`,
+- performs config editor mutations at both global and workspace scopes for:
+  - `world.deps.inventory_mode` (`merged|workspace_only`, `merge_strategy=replace`)
+  - `world.deps.builtins` (`enabled|disabled`, `merge_strategy=replace`)
 - validates:
   - concat+dedupe ordered-set behavior (including a deliberate duplicate across scopes),
   - `--explain` includes `merge_strategy` and multi-source provenance,
+  - `--explain` includes `merge_strategy=replace` and exactly one contributing source layer for the enum keys,
   - workspace disabled marker causes workspace contribution to be ignored (and provenance excludes `workspace_patch`),
+  - strict invalid-enum value behavior (exit `2`, no writes; patch bytes unchanged),
   - determinism/idempotence: re-running the `current show` + `--explain` commands without changes yields identical outputs.
 
 ## Validation requirements (authoritative)
