@@ -188,7 +188,7 @@
 	      "branch": "feat/world_deps_selection_layer",
 	      "directory": "docs/project_management/next/world_deps_selection_layer",
 	      "plan": "docs/project_management/next/world_deps_selection_layer/plan.md",
-	      "status": "not_started",
+	      "status": "completed",
 	      "sequence": [
 	        { "id": "WDL0", "spec": "docs/project_management/next/world_deps_selection_layer/S0-spec-selection-config-and-ux.md" },
 	        { "id": "WDL1", "spec": "docs/project_management/next/world_deps_selection_layer/S1-spec-install-classes.md" },
