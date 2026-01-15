@@ -166,3 +166,10 @@
   - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification"` → exit `0`
 - Blockers:
   - Update `docs/project_management/next/workspace-config-policy-unification/quality_gate_report.md` to reflect current evidence and a concrete `ACCEPT`/`FLAG` decision; do not start execution triads until it is `ACCEPT`.
+
+## START — 2026-01-15T16:10:35Z — code — WCU1-code
+- Worktree: `wt/workspace_config_policy_unification-wcu1-code`
+- Branch: `workspace_config_policy_unification-wcu1-code`
+- Orchestration branch: `feat/workspace-config-policy-unification`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" SLICE_ID="WCU1" LAUNCH_CODEX=1`
