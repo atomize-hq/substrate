@@ -357,16 +357,6 @@ pub(crate) fn global_config_path() -> Result<PathBuf> {
     substrate_paths::config_file()
 }
 
-const DEFAULT_GLOBAL_CONFIG_PATCH_YAML: &str = r#"# Substrate global config patch (sparse overrides).
-# - This file is a YAML mapping of global-scoped overrides.
-# - Omitted keys inherit from defaults.
-{}
-"#;
-
-pub(crate) fn default_config_patch_yaml() -> &'static str {
-    DEFAULT_GLOBAL_CONFIG_PATCH_YAML
-}
-
 pub(crate) fn read_global_config_patch_or_empty() -> Result<(SubstrateConfigPatch, bool)> {
     let path = global_config_path()?;
     match fs::read_to_string(&path) {
@@ -386,6 +376,7 @@ pub(crate) fn read_global_config_or_defaults() -> Result<(SubstrateConfig, bool)
         None,
         &EnvOverrides::default(),
         &CliConfigOverrides::default(),
+        false,
         false,
     )?
     .0;
@@ -461,6 +452,7 @@ pub(crate) fn resolve_global_effective_config_with_explain(
         &EnvOverrides::default(),
         &CliConfigOverrides::default(),
         explain,
+        false,
     )
 }
 
@@ -510,6 +502,7 @@ pub(crate) fn resolve_effective_config_with_explain(
         &env_overrides,
         cli,
         explain,
+        true,
     )
 }
 
@@ -520,6 +513,7 @@ fn resolve_effective_from_layers(
     env_overrides: &EnvOverrides,
     cli_overrides: &CliConfigOverrides,
     explain: bool,
+    inject_protected_excludes: bool,
 ) -> Result<(SubstrateConfig, Option<ConfigExplainV1>)> {
     let mut effective = SubstrateConfig::default();
     let mut explain_keys = if explain {
@@ -581,13 +575,13 @@ fn resolve_effective_from_layers(
         if let Some(v) = cli {
             return (v, ReplaceSource::CliFlag);
         }
-        if let Some(v) = env {
-            return (v, ReplaceSource::OverrideEnv);
-        }
         if workspace_enabled {
             if let Some(v) = workspace {
                 return (v, ReplaceSource::WorkspacePatch);
             }
+        } else if let Some(v) = env {
+            // Preserve historical behavior: env overrides apply only when no workspace exists.
+            return (v, ReplaceSource::OverrideEnv);
         }
         if let Some(v) = global {
             return (v, ReplaceSource::GlobalPatch);
@@ -875,8 +869,9 @@ fn resolve_effective_from_layers(
         );
     }
 
-    // Apply protected excludes after all layered resolution.
-    apply_protected_excludes(&mut effective.sync.exclude);
+    if inject_protected_excludes {
+        apply_protected_excludes(&mut effective.sync.exclude);
+    }
 
     validate_config(&effective)?;
 
@@ -1080,7 +1075,7 @@ pub(crate) fn reset_patch_keys(patch: &mut SubstrateConfigPatch, keys: &[String]
 fn validate_config(cfg: &SubstrateConfig) -> Result<()> {
     if cfg.world.anchor_mode == WorldRootMode::Custom && cfg.world.anchor_path.trim().is_empty() {
         return Err(user_error(
-            "world.anchor_path is required when world.anchor_mode=custom",
+            "anchor_mode=custom requires world.anchor_path to be non-empty",
         ));
     }
     Ok(())

@@ -77,10 +77,9 @@ fn run_global_init(args: &ConfigInitArgs) -> Result<()> {
         return Ok(());
     }
 
-    let patch_yaml = config_model::default_config_patch_yaml();
-    write_atomic_bytes(&path, patch_yaml.as_bytes())
+    let cfg = SubstrateConfig::default();
+    write_atomic_yaml(&path, &cfg)
         .with_context(|| format!("failed to write {}", path.display()))?;
-    let cfg = config_model::resolve_global_effective_config()?;
     write_env_sh(&cfg).context("failed to write env.sh")?;
     if existed {
         println!(
@@ -236,21 +235,6 @@ fn write_atomic_yaml<T: serde::Serialize>(path: &Path, value: &T) -> Result<()> 
     let body = serde_yaml::to_string(value)
         .with_context(|| format!("failed to serialize {}", path.display()))?;
     tmp.write_all(body.as_bytes())
-        .with_context(|| format!("failed to write {}", path.display()))?;
-    tmp.flush()?;
-    tmp.persist(path)
-        .map_err(|err| anyhow!("failed to persist {}: {}", path.display(), err.error))?;
-    Ok(())
-}
-
-fn write_atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| anyhow!("path {} has no parent", path.display()))?;
-    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
-    let mut tmp = NamedTempFile::new_in(parent)
-        .with_context(|| format!("failed to create temp file near {}", path.display()))?;
-    tmp.write_all(bytes)
         .with_context(|| format!("failed to write {}", path.display()))?;
     tmp.flush()?;
     tmp.persist(path)
