@@ -55,7 +55,7 @@
       "name": "WCU1 — Workspace directory + internal git unification (code)",
       "type": "code",
       "phase": "WCU1",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Implement the canonical `<workspace_root>/.substrate/` layout, internal git under `.substrate/git/repo.git/`, and workspace disable marker handling.",
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
@@ -100,7 +100,7 @@
       "name": "WCU1 — Workspace directory + internal git unification (test)",
       "type": "test",
       "phase": "WCU1",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add tests for workspace root discovery, disable marker behavior, and `.substrate/` directory layout invariants.",
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",

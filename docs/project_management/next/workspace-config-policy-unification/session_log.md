@@ -180,3 +180,41 @@
 - Orchestration branch: `feat/workspace-config-policy-unification`
 - Dispatch:
   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" SLICE_ID="WCU1" LAUNCH_CODEX=1`
+
+## END — 2026-01-15T16:34:57Z — code — WCU1-code
+- Worktree: `/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu1-code`
+- Branch: `workspace_config_policy_unification-wcu1-code`
+- HEAD: `63d374c472decb3cd59d158550b92191631762a1`
+- Codex: `CODEX_CODE_EXIT=0`
+- Finisher summary:
+  - `TASK_BRANCH=workspace_config_policy_unification-wcu1-code`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu1-code`
+  - `HEAD=63d374c472decb3cd59d158550b92191631762a1`
+  - `COMMITS=1`
+  - `CHECKS=verify-only`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=`
+- Artifacts:
+  - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU1-code/last_message.md`
+  - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU1-code/events.jsonl`
+  - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU1-code/stderr.log`
+- Blockers: `NONE`
+
+## END — 2026-01-15T16:34:57Z — test — WCU1-test
+- Worktree: `/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu1-test`
+- Branch: `workspace_config_policy_unification-wcu1-test`
+- HEAD: `3cf4edbb130d441e7693579bd59b6a4ef5352629`
+- Codex: `CODEX_TEST_EXIT=0`
+- Finisher summary:
+  - `TASK_BRANCH=workspace_config_policy_unification-wcu1-test`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu1-test`
+  - `HEAD=3cf4edbb130d441e7693579bd59b6a4ef5352629`
+  - `COMMITS=1`
+  - `CHECKS=verify-only`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=`
+- Artifacts:
+  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU1-test/last_message.md`
+  - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU1-test/events.jsonl`
+  - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU1-test/stderr.log`
+- Blockers: `NONE`
