@@ -103,9 +103,9 @@
   - `SMOKE_RUN=`
   - `MERGED_TO_ORCH=`
 - Artifacts:
-  - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL0-code/last_message.md`
-  - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL0-code/events.jsonl`
-  - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL0-code/stderr.log`
+  - `CODEX_CODE_LAST_MESSAGE_PATH=docs/project_management/next/world_deps_selection_layer/logs/WDL0/code/last_message.md`
+  - `CODEX_CODE_EVENTS_PATH=docs/project_management/next/world_deps_selection_layer/logs/WDL0/code/events.jsonl`
+  - `CODEX_CODE_STDERR_PATH=docs/project_management/next/world_deps_selection_layer/logs/WDL0/code/stderr.log`
 - Blockers: `NONE`
 
 ## END — 2026-01-11T19:40:44Z — test — WDL0-test
@@ -122,9 +122,9 @@
   - `SMOKE_RUN=`
   - `MERGED_TO_ORCH=`
 - Artifacts:
-  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL0-test/last_message.md`
-  - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL0-test/events.jsonl`
-  - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL0-test/stderr.log`
+  - `CODEX_TEST_LAST_MESSAGE_PATH=docs/project_management/next/world_deps_selection_layer/logs/WDL0/test/last_message.md`
+  - `CODEX_TEST_EVENTS_PATH=docs/project_management/next/world_deps_selection_layer/logs/WDL0/test/events.jsonl`
+  - `CODEX_TEST_STDERR_PATH=docs/project_management/next/world_deps_selection_layer/logs/WDL0/test/stderr.log`
 - Blockers: `crates/shell/tests/world_deps_selection.rs` currently fails until WDL0-code behavior is integrated
 
 ## START — 2026-01-11T22:39:58Z — code — WDL1-code
@@ -155,9 +155,9 @@
   - `SMOKE_RUN=`
   - `MERGED_TO_ORCH=`
 - Artifacts:
-  - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL1-code/last_message.md`
-  - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL1-code/events.jsonl`
-  - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL1-code/stderr.log`
+  - `CODEX_CODE_LAST_MESSAGE_PATH=docs/project_management/next/world_deps_selection_layer/logs/WDL1/code/last_message.md`
+  - `CODEX_CODE_EVENTS_PATH=docs/project_management/next/world_deps_selection_layer/logs/WDL1/code/events.jsonl`
+  - `CODEX_CODE_STDERR_PATH=docs/project_management/next/world_deps_selection_layer/logs/WDL1/code/stderr.log`
 - Blockers: `Codex last_message missing; CODEX_CODE_EXIT not captured (start command timed out; stale codex.pid)`
 
 ## END — 2026-01-11T23:07:15Z — test — WDL1-test
@@ -174,9 +174,9 @@
   - `SMOKE_RUN=`
   - `MERGED_TO_ORCH=`
 - Artifacts:
-  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL1-test/last_message.md`
-  - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL1-test/events.jsonl`
-  - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL1-test/stderr.log`
+  - `CODEX_TEST_LAST_MESSAGE_PATH=docs/project_management/next/world_deps_selection_layer/logs/WDL1/test/last_message.md`
+  - `CODEX_TEST_EVENTS_PATH=docs/project_management/next/world_deps_selection_layer/logs/WDL1/test/events.jsonl`
+  - `CODEX_TEST_STDERR_PATH=docs/project_management/next/world_deps_selection_layer/logs/WDL1/test/stderr.log`
 - Blockers: `Codex last_message missing; CODEX_TEST_EXIT not captured (start command timed out; stale codex.pid)`
 
 ## START — 2026-01-12T04:31:19Z — code — WDL2-code
@@ -207,9 +207,9 @@
   - `SMOKE_RUN=`
   - `MERGED_TO_ORCH=`
 - Artifacts:
-  - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL2-code/last_message.md`
-  - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL2-code/events.jsonl`
-  - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL2-code/stderr.log`
+  - `CODEX_CODE_LAST_MESSAGE_PATH=docs/project_management/next/world_deps_selection_layer/logs/WDL2/code/last_message.md`
+  - `CODEX_CODE_EVENTS_PATH=docs/project_management/next/world_deps_selection_layer/logs/WDL2/code/events.jsonl`
+  - `CODEX_CODE_STDERR_PATH=docs/project_management/next/world_deps_selection_layer/logs/WDL2/code/stderr.log`
 - Blockers: `NONE`
 
 ## END — 2026-01-12T04:47:25Z — test — WDL2-test
@@ -226,7 +226,7 @@
   - `SMOKE_RUN=`
   - `MERGED_TO_ORCH=`
 - Artifacts:
-  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL2-test/last_message.md`
-  - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL2-test/events.jsonl`
-  - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/world_deps_selection_layer/codex/WDL2-test/stderr.log`
+  - `CODEX_TEST_LAST_MESSAGE_PATH=docs/project_management/next/world_deps_selection_layer/logs/WDL2/test/last_message.md`
+  - `CODEX_TEST_EVENTS_PATH=docs/project_management/next/world_deps_selection_layer/logs/WDL2/test/events.jsonl`
+  - `CODEX_TEST_STDERR_PATH=docs/project_management/next/world_deps_selection_layer/logs/WDL2/test/stderr.log`
 - Blockers: `NONE`

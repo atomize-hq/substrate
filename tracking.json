@@ -348,7 +348,7 @@
                             "Write/update a feature registry file (e.g., `docs/project_management/next/<feature>/.worktrees.json`) listing all known task worktrees/branches, last updated UTC, and whether each worktree is clean.",
                             "task_start registers; task_finish updates status; feature_cleanup consumes the registry."
                         ],
-                        "notes": "If a feature directory should remain pure-docs, store the registry in `target/triad/<feature>/.worktrees.json` and link it from the feature docs. Decide and document one canonical location."
+                        "notes": "If a feature directory should remain pure-docs, store the registry under the git common dir (e.g., `.git/triad/features/<feature>/worktrees.json`) and link it from the feature docs. Decide and document one canonical location."
                     },
                     "guardrails": [
                         "Refuse to operate if git status is dirty in the wrong place (orchestration vs worktree).",
@@ -448,7 +448,7 @@
                 "ci_testing_pre_final": {
                     "run_id": "20763974819",
                     "run_url": "https://github.com/atomize-hq/substrate/actions/runs/20763974819",
-                    "summary_file": "target/triad/orch-wrapper/WO0-ci-testing-pre-final.log",
+                    "summary_file": "docs/project_management/_archived/world-overlayfs-enumeration/logs/WO0/ci-testing-pre-final.log",
                     "symptoms": [
                         "macOS + Windows builds failed while Linux passed",
                         "Example errors include: error[E0599] (missing mount_kernel_only/mount_fuse_only), error[E0277] ([u8] unsized)"
@@ -481,8 +481,8 @@
                 ]
             },
             "sources": [
-                "target/triad/orch-wrapper/WO0-ci-testing-pre-final.log",
-                "target/triad/orch-wrapper/WO0-ci-testing-pre-final.from-integ-core.log",
+                "docs/project_management/_archived/world-overlayfs-enumeration/logs/WO0/ci-testing-pre-final.log",
+                "docs/project_management/_archived/world-overlayfs-enumeration/logs/WO0/ci-testing-pre-final.from-integ-core.log",
                 "scripts/ci/dispatch_ci_testing.sh"
             ]
         },
@@ -511,11 +511,11 @@
                 },
                 "codex_logs": [
                     {
-                        "file": "target/triad/world-overlayfs-enumeration/codex/WO0-integ-core/stderr.log",
+                        "file": "docs/project_management/_archived/world-overlayfs-enumeration/logs/WO0/integ-core/stderr.log",
                         "example_excerpt_lines": "See lines ~430-460 for dispatch output and RUN_ID; see later occurrences of Permission denied for linux_self_hosted job failures."
                     },
                     {
-                        "file": "target/triad/world-overlayfs-enumeration/codex/WO0-integ-linux/last_message.md",
+                        "file": "docs/project_management/_archived/world-overlayfs-enumeration/logs/WO0/integ-linux/last_message.md",
                         "note": "Contains operator handoff guidance pointing to runner group membership + socket perms."
                     }
                 ]
@@ -553,7 +553,7 @@
             "sources": [
                 ".github/workflows/feature-smoke.yml",
                 "scripts/ci/dispatch_feature_smoke.sh",
-                "target/triad/orch-wrapper/WO0-platform-fixes-from-smoke.make.log"
+                "docs/project_management/_archived/world-overlayfs-enumeration/logs/WO0/platform-fixes-from-smoke.make.log"
             ]
         },
         {
@@ -565,7 +565,7 @@
             "evidence": {
                 "feature": "world-overlayfs-enumeration",
                 "codex_log": {
-                    "file": "target/triad/world-overlayfs-enumeration/codex/WO0-integ-core/stderr.log",
+                    "file": "docs/project_management/_archived/world-overlayfs-enumeration/logs/WO0/integ-core/stderr.log",
                     "excerpt": [
                         "make feature-smoke ... exited 2",
                         "RUN_ID=20764342990",
@@ -614,7 +614,7 @@
             "related_friction": {
                 "gh_json_field_drift": {
                     "symptom": "gh run view JSON field mismatch (`htmlURL` invalid) caused a dead-end command attempt",
-                    "evidence": "target/triad/world-overlayfs-enumeration/codex/WO0-integ-core/stderr.log (Unknown JSON field: \"htmlURL\")",
+                    "evidence": "docs/project_management/_archived/world-overlayfs-enumeration/logs/WO0/integ-core/stderr.log (Unknown JSON field: \"htmlURL\")",
                     "idea": "Prefer stable `url` field and/or wrap gh calls in a repo script so agents don't guess field names."
                 }
             },
@@ -622,7 +622,7 @@
                 "scripts/ci/dispatch_feature_smoke.sh",
                 "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md",
                 "docs/project_management/standards/templates/kickoff_integ_core.md.tmpl",
-                "target/triad/world-overlayfs-enumeration/codex/WO0-integ-core/stderr.log"
+                "docs/project_management/_archived/world-overlayfs-enumeration/logs/WO0/integ-core/stderr.log"
             ]
         },
         {
@@ -678,7 +678,7 @@
             "problem": "Kickoff prompts used bare filenames (plan.md/tasks.json/session_log.md) which fail when executed from repo root worktrees, causing agents to waste time locating the correct paths.",
             "evidence": {
                 "codex_log": {
-                    "file": "target/triad/world-overlayfs-enumeration/codex/WO0-integ-linux/stderr.log",
+                    "file": "docs/project_management/_archived/world-overlayfs-enumeration/logs/WO0/integ-linux/stderr.log",
                     "excerpt": [
                         "sed: can't read plan.md: No such file or directory",
                         "cat: tasks.json: No such file or directory",
@@ -712,7 +712,7 @@
                 ]
             },
             "sources": [
-                "target/triad/world-overlayfs-enumeration/codex/WO0-integ-linux/stderr.log",
+                "docs/project_management/_archived/world-overlayfs-enumeration/logs/WO0/integ-linux/stderr.log",
                 "docs/project_management/_archived/world-overlayfs-enumeration/kickoff_prompts/"
             ]
         },
@@ -724,7 +724,7 @@
             "problem": "Integration final hit merge conflicts in planning artifacts (tasks.json), contrary to the expectation that planning docs are edited only on orchestration branch and should be identical across branches.",
             "evidence": {
                 "codex_log": {
-                    "file": "target/triad/world-overlayfs-enumeration/codex/WO0-integ/stderr.log",
+                    "file": "docs/project_management/_archived/world-overlayfs-enumeration/logs/WO0/integ/stderr.log",
                     "excerpt": [
                         "Auto-merging docs/project_management/_archived/world-overlayfs-enumeration/tasks.json",
                         "CONFLICT (content): Merge conflict in docs/project_management/_archived/world-overlayfs-enumeration/tasks.json"
@@ -762,7 +762,7 @@
                 }
             },
             "sources": [
-                "target/triad/world-overlayfs-enumeration/codex/WO0-integ/stderr.log",
+                "docs/project_management/_archived/world-overlayfs-enumeration/logs/WO0/integ/stderr.log",
                 "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
             ]
         },
@@ -1098,9 +1098,9 @@
             "evidence": {
                 "ci_testing_run_id": "20763974819",
                 "ci_testing_failed_oses": ["macos-14", "windows-2022"],
-                "orchestration_log": "target/triad/orch-wrapper/WO0-ci-testing-pre-final.log",
+                "orchestration_log": "docs/project_management/_archived/world-overlayfs-enumeration/logs/WO0/ci-testing-pre-final.log",
                 "how_to_retrieve_logs": [
-                    "cat target/triad/orch-wrapper/WO0-ci-testing-pre-final.log",
+                    "cat docs/project_management/_archived/world-overlayfs-enumeration/logs/WO0/ci-testing-pre-final.log",
                     "gh run view 20763974819 --repo atomize-hq/substrate --log-failed",
                     "gh run view 20763974819 --repo atomize-hq/substrate --log-failed | rg -n 'error\\[E0599\\]|mount_kernel_only|mount_fuse_only|error\\[E0277\\]|\\[u8\\]'"
                 ],
@@ -1128,7 +1128,7 @@
                 "Wrapper-driven integration runs stop early (with a clear remediation path) when compile parity fails."
             ],
             "sources": [
-                "target/triad/orch-wrapper/WO0-ci-testing-pre-final.log",
+                "docs/project_management/_archived/world-overlayfs-enumeration/logs/WO0/ci-testing-pre-final.log",
                 "docs/project_management/standards/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md",
                 "docs/project_management/standards/TRIAD_INTEGRATION_WRAPPER_PROMPT.md",
                 "docs/project_management/standards/templates/kickoff_integ_core.md.tmpl",

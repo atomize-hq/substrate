@@ -195,9 +195,9 @@
   - `SMOKE_RUN=`
   - `MERGED_TO_ORCH=`
 - Artifacts:
-  - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU1-code/last_message.md`
-  - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU1-code/events.jsonl`
-  - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU1-code/stderr.log`
+  - `CODEX_CODE_LAST_MESSAGE_PATH=docs/project_management/next/workspace-config-policy-unification/logs/WCU1/code/last_message.md`
+  - `CODEX_CODE_EVENTS_PATH=docs/project_management/next/workspace-config-policy-unification/logs/WCU1/code/events.jsonl`
+  - `CODEX_CODE_STDERR_PATH=docs/project_management/next/workspace-config-policy-unification/logs/WCU1/code/stderr.log`
 - Blockers: `NONE`
 
 ## END — 2026-01-15T16:34:57Z — test — WCU1-test
@@ -214,9 +214,9 @@
   - `SMOKE_RUN=`
   - `MERGED_TO_ORCH=`
 - Artifacts:
-  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU1-test/last_message.md`
-  - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU1-test/events.jsonl`
-  - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU1-test/stderr.log`
+  - `CODEX_TEST_LAST_MESSAGE_PATH=docs/project_management/next/workspace-config-policy-unification/logs/WCU1/test/last_message.md`
+  - `CODEX_TEST_EVENTS_PATH=docs/project_management/next/workspace-config-policy-unification/logs/WCU1/test/events.jsonl`
+  - `CODEX_TEST_STDERR_PATH=docs/project_management/next/workspace-config-policy-unification/logs/WCU1/test/stderr.log`
 - Blockers: `NONE`
 
 ## START — 2026-01-16T00:16:00Z — code — WCU2-code
@@ -247,9 +247,9 @@
   - `SMOKE_RUN=`
   - `MERGED_TO_ORCH=`
 - Artifacts:
-  - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU2-code/last_message.md`
-  - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU2-code/events.jsonl`
-  - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU2-code/stderr.log`
+  - `CODEX_CODE_LAST_MESSAGE_PATH=docs/project_management/next/workspace-config-policy-unification/logs/WCU2/code/last_message.md`
+  - `CODEX_CODE_EVENTS_PATH=docs/project_management/next/workspace-config-policy-unification/logs/WCU2/code/events.jsonl`
+  - `CODEX_CODE_STDERR_PATH=docs/project_management/next/workspace-config-policy-unification/logs/WCU2/code/stderr.log`
 - Blockers: `NONE`
 
 ## END — 2026-01-16T00:30:09Z — test — WCU2-test
@@ -266,9 +266,9 @@
   - `SMOKE_RUN=`
   - `MERGED_TO_ORCH=`
 - Artifacts:
-  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU2-test/last_message.md`
-  - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU2-test/events.jsonl`
-  - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU2-test/stderr.log`
+  - `CODEX_TEST_LAST_MESSAGE_PATH=docs/project_management/next/workspace-config-policy-unification/logs/WCU2/test/last_message.md`
+  - `CODEX_TEST_EVENTS_PATH=docs/project_management/next/workspace-config-policy-unification/logs/WCU2/test/events.jsonl`
+  - `CODEX_TEST_STDERR_PATH=docs/project_management/next/workspace-config-policy-unification/logs/WCU2/test/stderr.log`
 - Blockers: `NONE`
 
 ## START — 2026-01-16T02:41:14Z — code — WCU3-code
@@ -299,9 +299,9 @@
   - `SMOKE_RUN=`
   - `MERGED_TO_ORCH=`
 - Artifacts:
-  - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU3-code/last_message.md`
-  - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU3-code/events.jsonl`
-  - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU3-code/stderr.log`
+  - `CODEX_CODE_LAST_MESSAGE_PATH=docs/project_management/next/workspace-config-policy-unification/logs/WCU3/code/last_message.md`
+  - `CODEX_CODE_EVENTS_PATH=docs/project_management/next/workspace-config-policy-unification/logs/WCU3/code/events.jsonl`
+  - `CODEX_CODE_STDERR_PATH=docs/project_management/next/workspace-config-policy-unification/logs/WCU3/code/stderr.log`
 - Blockers: `Artifacts missing on disk at the expected paths (last_message/events/stderr)`
 
 ## END — 2026-01-16T03:09:36Z — test — WCU3-test
@@ -318,9 +318,9 @@
   - `SMOKE_RUN=`
   - `MERGED_TO_ORCH=`
 - Artifacts:
-  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU3-test/last_message.md`
-  - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU3-test/events.jsonl`
-  - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU3-test/stderr.log`
+  - `CODEX_TEST_LAST_MESSAGE_PATH=docs/project_management/next/workspace-config-policy-unification/logs/WCU3/test/last_message.md`
+  - `CODEX_TEST_EVENTS_PATH=docs/project_management/next/workspace-config-policy-unification/logs/WCU3/test/events.jsonl`
+  - `CODEX_TEST_STDERR_PATH=docs/project_management/next/workspace-config-policy-unification/logs/WCU3/test/stderr.log`
 - Blockers: `Artifacts missing on disk at the expected paths (last_message/events/stderr)`
 
 ## START — 2026-01-16T04:31:03Z — integration — WCU3-integ
