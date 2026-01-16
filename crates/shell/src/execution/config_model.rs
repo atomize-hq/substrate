@@ -1369,3 +1369,285 @@ limits:
 metadata: {}
 "#
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+    use std::ffi::OsString;
+    use std::fs;
+    use tempfile::TempDir;
+
+    struct EnvGuard {
+        key: &'static str,
+        prev: Option<OsString>,
+    }
+
+    impl EnvGuard {
+        fn set(key: &'static str, value: &std::path::Path) -> Self {
+            let prev = std::env::var_os(key);
+            std::env::set_var(key, value);
+            Self { key, prev }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match self.prev.take() {
+                Some(v) => std::env::set_var(self.key, v),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
+    fn write_file(path: &Path, body: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(path, body).unwrap();
+    }
+
+    #[test]
+    #[serial]
+    fn test_phase_a_concat_dedupe_and_replace_provenance() {
+        let tmp = TempDir::new().unwrap();
+        let substrate_home = tmp.path().join(".substrate");
+        fs::create_dir_all(&substrate_home).unwrap();
+        let _guard = EnvGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let global_path = global_config_path().unwrap();
+        write_file(
+            &global_path,
+            r#"
+world:
+  deps:
+    enabled: ["a", "b"]
+    inventory_mode: merged
+"#,
+        );
+
+        let workspace_root = tmp.path().join("ws");
+        let workspace_yaml = crate::execution::workspace::workspace_marker_path(&workspace_root);
+        write_file(
+            &workspace_yaml,
+            r#"
+world:
+  deps:
+    enabled: ["b", "c"]
+    inventory_mode: workspace_only
+"#,
+        );
+
+        let (effective, explain) = resolve_effective_config_with_explain(
+            &workspace_root,
+            &CliConfigOverrides::default(),
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(effective.world.deps.enabled, vec!["a", "b", "c"]);
+        assert_eq!(
+            effective.world.deps.inventory_mode,
+            WorldDepsInventoryMode::WorkspaceOnly
+        );
+
+        let explain = explain.unwrap();
+        assert_eq!(explain.kind, "substrate.config.explain.v1");
+
+        let enabled = explain.keys.get("world.deps.enabled").unwrap();
+        assert_eq!(enabled.merge_strategy, "concat_dedupe_ordered_set");
+        assert_eq!(enabled.sources.len(), 2);
+        let expected_global_path = global_path.display().to_string();
+        let expected_workspace_path = workspace_yaml.display().to_string();
+        assert_eq!(enabled.sources[0].layer, "global_patch");
+        assert_eq!(
+            enabled.sources[0].path.as_deref(),
+            Some(expected_global_path.as_str())
+        );
+        assert_eq!(enabled.sources[1].layer, "workspace_patch");
+        assert_eq!(
+            enabled.sources[1].path.as_deref(),
+            Some(expected_workspace_path.as_str())
+        );
+
+        let inv = explain.keys.get("world.deps.inventory_mode").unwrap();
+        assert_eq!(inv.merge_strategy, "replace");
+        assert_eq!(inv.sources.len(), 1);
+        assert_eq!(inv.sources[0].layer, "workspace_patch");
+        assert_eq!(
+            inv.sources[0].path.as_deref(),
+            Some(expected_workspace_path.as_str())
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_phase_a_explicit_empty_list_counts_as_source() {
+        let tmp = TempDir::new().unwrap();
+        let substrate_home = tmp.path().join(".substrate");
+        fs::create_dir_all(&substrate_home).unwrap();
+        let _guard = EnvGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let global_path = global_config_path().unwrap();
+        write_file(
+            &global_path,
+            r#"
+world:
+  deps:
+    enabled: ["a"]
+"#,
+        );
+
+        let workspace_root = tmp.path().join("ws");
+        let workspace_yaml = crate::execution::workspace::workspace_marker_path(&workspace_root);
+        write_file(
+            &workspace_yaml,
+            r#"
+world:
+  deps:
+    enabled: []
+"#,
+        );
+
+        let (effective, explain) = resolve_effective_config_with_explain(
+            &workspace_root,
+            &CliConfigOverrides::default(),
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(effective.world.deps.enabled, vec!["a"]);
+
+        let explain = explain.unwrap();
+        let enabled = explain.keys.get("world.deps.enabled").unwrap();
+        assert_eq!(enabled.sources.len(), 2);
+        assert_eq!(enabled.sources[0].layer, "global_patch");
+        assert_eq!(enabled.sources[1].layer, "workspace_patch");
+    }
+
+    #[test]
+    #[serial]
+    fn test_phase_a_workspace_disabled_ignores_workspace_patch() {
+        let tmp = TempDir::new().unwrap();
+        let substrate_home = tmp.path().join(".substrate");
+        fs::create_dir_all(&substrate_home).unwrap();
+        let _guard = EnvGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let global_path = global_config_path().unwrap();
+        write_file(
+            &global_path,
+            r#"
+world:
+  deps:
+    enabled: ["a"]
+    inventory_mode: merged
+"#,
+        );
+
+        let workspace_root = tmp.path().join("ws");
+        let workspace_yaml = crate::execution::workspace::workspace_marker_path(&workspace_root);
+        write_file(
+            &workspace_yaml,
+            r#"
+world:
+  deps:
+    enabled: ["b"]
+    inventory_mode: workspace_only
+"#,
+        );
+        let disabled_marker =
+            crate::execution::workspace::workspace_disabled_marker_path(&workspace_root);
+        write_file(&disabled_marker, "disabled\n");
+
+        let (effective, explain) = resolve_effective_config_with_explain(
+            &workspace_root,
+            &CliConfigOverrides::default(),
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(effective.world.deps.enabled, vec!["a"]);
+        assert_eq!(
+            effective.world.deps.inventory_mode,
+            WorldDepsInventoryMode::Merged
+        );
+
+        let explain = explain.unwrap();
+        let enabled = explain.keys.get("world.deps.enabled").unwrap();
+        assert_eq!(enabled.sources.len(), 1);
+        assert_eq!(enabled.sources[0].layer, "global_patch");
+
+        let inv = explain.keys.get("world.deps.inventory_mode").unwrap();
+        assert_eq!(inv.sources.len(), 1);
+        assert_eq!(inv.sources[0].layer, "global_patch");
+        let expected_global_path = global_path.display().to_string();
+        assert_eq!(
+            inv.sources[0].path.as_deref(),
+            Some(expected_global_path.as_str())
+        );
+    }
+
+    #[test]
+    fn test_enum_validation_rejects_invalid_values_without_mutation() {
+        let before = SubstrateConfigPatch::default();
+
+        let mut patch = before.clone();
+        let updates = parse_updates(&["world.deps.inventory_mode=bogus".to_string()]).unwrap();
+        let err = apply_updates_to_patch(&mut patch, &updates).unwrap_err();
+        assert!(is_user_error(&err));
+        assert_eq!(patch, before);
+
+        let mut patch = before.clone();
+        let updates = parse_updates(&["world.deps.builtins=bogus".to_string()]).unwrap();
+        let err = apply_updates_to_patch(&mut patch, &updates).unwrap_err();
+        assert!(is_user_error(&err));
+        assert_eq!(patch, before);
+    }
+
+    #[test]
+    #[serial]
+    fn test_explain_json_bytes_are_deterministic_for_identical_inputs() {
+        let tmp = TempDir::new().unwrap();
+        let substrate_home = tmp.path().join(".substrate");
+        fs::create_dir_all(&substrate_home).unwrap();
+        let _guard = EnvGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let global_path = global_config_path().unwrap();
+        write_file(
+            &global_path,
+            r#"
+world:
+  deps:
+    enabled: ["a", "b"]
+"#,
+        );
+
+        let workspace_root = tmp.path().join("ws");
+        let workspace_yaml = crate::execution::workspace::workspace_marker_path(&workspace_root);
+        write_file(
+            &workspace_yaml,
+            r#"
+world:
+  deps:
+    enabled: ["b", "c"]
+"#,
+        );
+
+        let (_, explain_1) = resolve_effective_config_with_explain(
+            &workspace_root,
+            &CliConfigOverrides::default(),
+            true,
+        )
+        .unwrap();
+        let (_, explain_2) = resolve_effective_config_with_explain(
+            &workspace_root,
+            &CliConfigOverrides::default(),
+            true,
+        )
+        .unwrap();
+
+        let bytes_1 = serde_json::to_vec_pretty(&explain_1.unwrap()).unwrap();
+        let bytes_2 = serde_json::to_vec_pretty(&explain_2.unwrap()).unwrap();
+        assert_eq!(bytes_1, bytes_2);
+    }
+}
