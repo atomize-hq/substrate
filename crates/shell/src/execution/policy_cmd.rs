@@ -1,15 +1,29 @@
 use crate::execution::cli::{
-    Cli, PolicyAction, PolicyCmd, PolicyCurrentAction, PolicyGlobalAction, PolicyGlobalCmd,
-    PolicyInitArgs, PolicySetArgs, PolicyShowArgs,
+    Cli, ConfigResetArgs, PolicyAction, PolicyCmd, PolicyCurrentAction, PolicyGlobalAction,
+    PolicyGlobalCmd, PolicyInitArgs, PolicySetArgs, PolicyShowArgs, PolicyWorkspaceAction,
+    PolicyWorkspaceCmd,
 };
 use crate::execution::config_model;
-use crate::execution::config_model::default_policy_yaml;
-use crate::execution::policy_model;
+use crate::execution::policy_model::{PolicyExplainV1, PolicyPatch};
+use crate::execution::{policy_model, workspace};
 use anyhow::{anyhow, Context, Result};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use substrate_broker::Policy;
 use tempfile::NamedTempFile;
+
+const DEFAULT_GLOBAL_POLICY_PATCH_HEADER: &str = r#"# Substrate policy patch (sparse overrides; scope=global).
+# - This file is a YAML mapping of global-scoped policy overrides.
+# - Omitted keys inherit from defaults (and from workspace overrides when applicable).
+# - View the effective merged policy with: `substrate policy current show --explain`
+"#;
+
+const DEFAULT_WORKSPACE_POLICY_PATCH_HEADER: &str = r#"# Substrate policy patch (sparse overrides; scope=workspace).
+# - This file is a YAML mapping of workspace-scoped policy overrides.
+# - Omitted keys inherit from global policy + defaults.
+# - View the effective merged policy with: `substrate policy current show --explain`
+"#;
 
 pub(crate) fn handle_policy_command(cmd: &PolicyCmd, _cli: &Cli) -> i32 {
     let result = match &cmd.action {
@@ -17,9 +31,10 @@ pub(crate) fn handle_policy_command(cmd: &PolicyCmd, _cli: &Cli) -> i32 {
             PolicyCurrentAction::Show(args) => run_current_show(args),
         },
         PolicyAction::Init(args) => run_workspace_init(args),
-        PolicyAction::Show(args) => run_workspace_show(args),
+        PolicyAction::Show(args) => run_current_show(args),
         PolicyAction::Set(args) => run_workspace_set(args),
         PolicyAction::Global(cmd) => run_global(cmd),
+        PolicyAction::Workspace(cmd) => run_workspace(cmd),
     };
 
     match result {
@@ -59,6 +74,15 @@ fn run_global(cmd: &PolicyGlobalCmd) -> Result<()> {
         PolicyGlobalAction::Init(args) => run_global_init(args),
         PolicyGlobalAction::Show(args) => run_global_show(args),
         PolicyGlobalAction::Set(args) => run_global_set(args),
+        PolicyGlobalAction::Reset(args) => run_global_reset(args),
+    }
+}
+
+fn run_workspace(cmd: &PolicyWorkspaceCmd) -> Result<()> {
+    match &cmd.action {
+        PolicyWorkspaceAction::Show(args) => run_workspace_show(args),
+        PolicyWorkspaceAction::Set(args) => run_workspace_set(args),
+        PolicyWorkspaceAction::Reset(args) => run_workspace_reset(args),
     }
 }
 
@@ -67,68 +91,96 @@ fn run_global_init(args: &PolicyInitArgs) -> Result<()> {
     let existed = path.exists();
 
     if existed && !args.force {
-        println!(
-            "substrate: policy already exists at {}; use --force to overwrite",
-            path.display()
-        );
+        let raw = fs::read_to_string(&path)
+            .with_context(|| format!("failed to read {}", path.display()))?;
+        let _ = policy_model::parse_policy_patch_yaml(&path, &raw)?;
         return Ok(());
     }
 
-    write_atomic_bytes(&path, default_policy_yaml().as_bytes())
+    let patch = PolicyPatch::default();
+    write_atomic_patch_yaml(&path, DEFAULT_GLOBAL_POLICY_PATCH_HEADER, None, &patch)
         .with_context(|| format!("failed to write {}", path.display()))?;
+
     if existed {
         println!(
-            "substrate: overwrote policy at {} (--force)",
+            "substrate: overwrote policy patch at {} (--force)",
             path.display()
         );
     } else {
-        println!("substrate: wrote default policy to {}", path.display());
+        println!("substrate: wrote global policy patch to {}", path.display());
     }
+
     Ok(())
 }
 
 fn run_global_show(args: &PolicyShowArgs) -> Result<()> {
-    if let Ok(cwd) = std::env::current_dir() {
-        if let Some(workspace_root) = crate::execution::workspace::find_workspace_root(&cwd) {
-            let workspace_policy = policy_model::workspace_policy_path(&workspace_root);
-            if workspace_policy.exists() {
-                eprintln!(
-                    "substrate: note: workspace policy {} overrides global policy here; use `substrate policy show` to view the effective policy",
-                    workspace_policy.display()
-                );
-            }
-        }
+    if args.explain {
+        return Err(config_model::user_error(
+            "--explain is only supported for `substrate policy current show`",
+        ));
     }
-    let (policy, _) = policy_model::load_global_policy_or_defaults()?;
-    print_policy(&policy, args.json)?;
+
+    let (patch, _) = policy_model::read_global_policy_patch_or_empty()?;
+    if patch.is_empty() {
+        eprintln!("substrate: note: global policy patch is empty (no overrides); run 'substrate policy current show --explain' to view the effective policy for this directory");
+    }
+    print_patch(&patch, args.json)?;
     Ok(())
 }
 
 fn run_global_set(args: &PolicySetArgs) -> Result<()> {
-    if let Ok(cwd) = std::env::current_dir() {
-        if let Some(workspace_root) = crate::execution::workspace::find_workspace_root(&cwd) {
-            let workspace_policy = policy_model::workspace_policy_path(&workspace_root);
-            if workspace_policy.exists() {
-                eprintln!(
-                    "substrate: note: workspace policy {} overrides global policy here; use `substrate policy set ...` to modify the effective policy",
-                    workspace_policy.display()
-                );
-            }
-        }
-    }
     let path = policy_model::global_policy_path()?;
-    let (mut policy, existed) = policy_model::load_global_policy_or_defaults()
-        .with_context(|| format!("failed to load global policy at {}", path.display()))?;
+    let (mut patch, existed) = policy_model::read_global_policy_patch_or_empty()
+        .with_context(|| format!("failed to load global policy patch at {}", path.display()))?;
 
     let updates = config_model::parse_updates(&args.updates)?;
-    let changed = policy_model::apply_updates(&mut policy, &updates)?;
+    let changed = policy_model::apply_updates_to_policy_patch(&mut patch, &updates)?;
 
     if changed || !existed {
-        write_atomic_yaml(&path, &policy)
-            .with_context(|| format!("failed to write {}", path.display()))?;
+        let header = if existed {
+            Some(read_comment_header_prefix(&path)?)
+        } else {
+            None
+        };
+        write_atomic_patch_yaml(
+            &path,
+            DEFAULT_GLOBAL_POLICY_PATCH_HEADER,
+            header.as_deref(),
+            &patch,
+        )
+        .with_context(|| format!("failed to write {}", path.display()))?;
     }
 
-    print_policy(&policy, args.json)?;
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let (effective, _) = policy_model::resolve_effective_policy_with_explain(&cwd, false)?;
+    print_policy(&effective, args.json)?;
+    Ok(())
+}
+
+fn run_global_reset(args: &ConfigResetArgs) -> Result<()> {
+    let path = policy_model::global_policy_path()?;
+    let (mut patch, existed) = policy_model::read_global_policy_patch_or_empty()
+        .with_context(|| format!("failed to load global policy patch at {}", path.display()))?;
+    let changed = policy_model::reset_policy_patch_keys(&mut patch, &args.keys)?;
+
+    if changed || !existed {
+        let header = if existed {
+            Some(read_comment_header_prefix(&path)?)
+        } else {
+            None
+        };
+        write_atomic_patch_yaml(
+            &path,
+            DEFAULT_GLOBAL_POLICY_PATCH_HEADER,
+            header.as_deref(),
+            &patch,
+        )
+        .with_context(|| format!("failed to write {}", path.display()))?;
+    }
+
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let (effective, _) = policy_model::resolve_effective_policy_with_explain(&cwd, false)?;
+    print_policy(&effective, false)?;
     Ok(())
 }
 
@@ -139,38 +191,75 @@ fn run_workspace_init(args: &PolicyInitArgs) -> Result<()> {
     let existed = path.exists();
 
     if existed && !args.force {
-        println!(
-            "substrate: policy already exists at {}; use --force to overwrite",
-            path.display()
-        );
+        let raw = fs::read_to_string(&path)
+            .with_context(|| format!("failed to read {}", path.display()))?;
+        let _ = policy_model::parse_policy_patch_yaml(&path, &raw)?;
         return Ok(());
     }
 
-    write_atomic_bytes(&path, default_policy_yaml().as_bytes())
-        .with_context(|| format!("failed to write {}", path.display()))?;
+    let patch = PolicyPatch::default();
+    write_atomic_patch_yaml(
+        &path,
+        DEFAULT_WORKSPACE_POLICY_PATCH_HEADER,
+        (if existed {
+            Some(read_comment_header_prefix(&path)?)
+        } else {
+            None
+        })
+        .as_deref(),
+        &patch,
+    )
+    .with_context(|| format!("failed to write {}", path.display()))?;
+
     if existed {
         println!(
-            "substrate: overwrote policy at {} (--force)",
+            "substrate: overwrote workspace policy patch at {} (--force)",
             path.display()
         );
     } else {
-        println!("substrate: wrote default policy to {}", path.display());
+        println!(
+            "substrate: wrote workspace policy patch to {}",
+            path.display()
+        );
     }
+
     Ok(())
 }
 
 fn run_workspace_show(args: &PolicyShowArgs) -> Result<()> {
+    if args.explain {
+        return Err(config_model::user_error(
+            "--explain is only supported for `substrate policy current show`",
+        ));
+    }
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    require_workspace(&cwd)?;
-    let (policy, _) = policy_model::load_effective_policy(&cwd)?;
+    let workspace_root = require_workspace(&cwd)?;
+    let path = policy_model::workspace_policy_path(&workspace_root);
 
-    print_policy(&policy, args.json)?;
+    let raw = fs::read_to_string(&path).with_context(|| {
+        format!(
+            "failed to read {}; run `substrate workspace init --force` to repair the workspace",
+            path.display()
+        )
+    })?;
+    let patch = policy_model::parse_policy_patch_yaml(&path, &raw)?;
+    if patch.is_empty() {
+        eprintln!("substrate: note: workspace policy patch is empty (no overrides); run 'substrate policy current show --explain' to view the effective policy for this directory");
+    }
+    print_patch(&patch, args.json)?;
     Ok(())
 }
 
 fn run_current_show(args: &PolicyShowArgs) -> Result<()> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let (policy, _) = policy_model::load_effective_policy(&cwd)?;
+    eprintln!(
+        "substrate: note: showing effective merged policy; use --explain to view per-key sources"
+    );
+    let (policy, explain) =
+        policy_model::resolve_effective_policy_with_explain(&cwd, args.explain)?;
+    if let Some(explain) = explain {
+        print_explain(&explain)?;
+    }
     print_policy(&policy, args.json)?;
     Ok(())
 }
@@ -180,37 +269,63 @@ fn run_workspace_set(args: &PolicySetArgs) -> Result<()> {
     let workspace_root = require_workspace(&cwd)?;
     let path = policy_model::workspace_policy_path(&workspace_root);
 
-    let (mut policy, existed) = match fs::read_to_string(&path) {
-        Ok(raw) => (policy_model::parse_policy_yaml(&path, &raw)?, true),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            (substrate_broker::Policy::default(), false)
-        }
-        Err(err) => return Err(anyhow!("failed to read {}: {err}", path.display())),
-    };
+    let raw = fs::read_to_string(&path).with_context(|| {
+        format!(
+            "failed to read {}; run `substrate workspace init --force` to repair the workspace",
+            path.display()
+        )
+    })?;
+    let header = read_comment_header_prefix_from_raw(&raw);
+    let mut patch = policy_model::parse_policy_patch_yaml(&path, &raw)?;
 
     let updates = config_model::parse_updates(&args.updates)?;
-    let changed = policy_model::apply_updates(&mut policy, &updates)?;
-
-    if changed || !existed {
-        write_atomic_yaml(&path, &policy)
+    let changed = policy_model::apply_updates_to_policy_patch(&mut patch, &updates)?;
+    if changed {
+        write_atomic_patch_yaml(&path, "", Some(&header), &patch)
             .with_context(|| format!("failed to write {}", path.display()))?;
     }
 
-    print_policy(&policy, args.json)?;
+    let (effective, _) = policy_model::resolve_effective_policy_with_explain(&cwd, false)?;
+    print_policy(&effective, args.json)?;
+    Ok(())
+}
+
+fn run_workspace_reset(args: &ConfigResetArgs) -> Result<()> {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let workspace_root = require_workspace(&cwd)?;
+    let path = policy_model::workspace_policy_path(&workspace_root);
+
+    let raw = fs::read_to_string(&path).with_context(|| {
+        format!(
+            "failed to read {}; run `substrate workspace init --force` to repair the workspace",
+            path.display()
+        )
+    })?;
+    let header = read_comment_header_prefix_from_raw(&raw);
+    let mut patch = policy_model::parse_policy_patch_yaml(&path, &raw)?;
+
+    let changed = policy_model::reset_policy_patch_keys(&mut patch, &args.keys)?;
+    if changed {
+        write_atomic_patch_yaml(&path, "", Some(&header), &patch)
+            .with_context(|| format!("failed to write {}", path.display()))?;
+    }
+
+    let (effective, _) = policy_model::resolve_effective_policy_with_explain(&cwd, false)?;
+    print_policy(&effective, false)?;
     Ok(())
 }
 
 fn require_workspace(cwd: &Path) -> Result<PathBuf> {
-    crate::execution::workspace::find_workspace_root(cwd).ok_or_else(|| {
+    workspace::find_workspace_root(cwd).ok_or_else(|| {
         actionable("substrate: not in a workspace; run `substrate workspace init`".to_string())
     })
 }
 
-fn print_policy(policy: &substrate_broker::Policy, json: bool) -> Result<()> {
+fn print_policy(policy: &Policy, json: bool) -> Result<()> {
     if json {
         println!(
             "{}",
-            serde_json::to_string_pretty(policy).context("failed to serialize JSON")?
+            serde_json::to_string(policy).context("failed to serialize JSON")?
         );
         return Ok(());
     }
@@ -221,31 +336,79 @@ fn print_policy(policy: &substrate_broker::Policy, json: bool) -> Result<()> {
     Ok(())
 }
 
-fn write_atomic_yaml<T: serde::Serialize>(path: &Path, value: &T) -> Result<()> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| anyhow!("path {} has no parent", path.display()))?;
-    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
-    let mut tmp = NamedTempFile::new_in(parent)
-        .with_context(|| format!("failed to create temp file near {}", path.display()))?;
-    let body = serde_yaml::to_string(value)
-        .with_context(|| format!("failed to serialize {}", path.display()))?;
-    tmp.write_all(body.as_bytes())
-        .with_context(|| format!("failed to write {}", path.display()))?;
-    tmp.flush()?;
-    tmp.persist(path)
-        .map_err(|err| anyhow!("failed to persist {}: {}", path.display(), err.error))?;
+fn print_patch(patch: &PolicyPatch, json: bool) -> Result<()> {
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string(patch).context("failed to serialize JSON")?
+        );
+        return Ok(());
+    }
+    println!(
+        "{}",
+        serde_yaml::to_string(patch).context("failed to serialize YAML")?
+    );
     Ok(())
 }
 
-fn write_atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
+fn print_explain(explain: &PolicyExplainV1) -> Result<()> {
+    eprintln!(
+        "{}",
+        serde_json::to_string(explain).context("failed to serialize explain JSON")?
+    );
+    Ok(())
+}
+
+fn read_comment_header_prefix(path: &Path) -> Result<String> {
+    let raw =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    Ok(read_comment_header_prefix_from_raw(&raw))
+}
+
+fn read_comment_header_prefix_from_raw(raw: &str) -> String {
+    let mut out = String::new();
+    for line in raw.split_inclusive('\n') {
+        let check = line.trim_end_matches('\n');
+        let check = check.trim_start();
+        if check.is_empty() || check.starts_with('#') {
+            out.push_str(line);
+            continue;
+        }
+        break;
+    }
+    out
+}
+
+fn write_atomic_patch_yaml<T: serde::Serialize>(
+    path: &Path,
+    default_header: &str,
+    existing_header: Option<&str>,
+    patch: &T,
+) -> Result<()> {
+    let header = existing_header.unwrap_or(default_header);
+    let mut body = serde_yaml::to_string(patch)
+        .with_context(|| format!("failed to serialize {}", path.display()))?;
+    if let Some(rest) = body.strip_prefix("---\n") {
+        body = rest.to_string();
+    }
+
+    let mut out = String::new();
+    out.push_str(header);
+    if !out.is_empty() && !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str(&body);
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+
     let parent = path
         .parent()
         .ok_or_else(|| anyhow!("path {} has no parent", path.display()))?;
     fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
     let mut tmp = NamedTempFile::new_in(parent)
         .with_context(|| format!("failed to create temp file near {}", path.display()))?;
-    tmp.write_all(bytes)
+    tmp.write_all(out.as_bytes())
         .with_context(|| format!("failed to write {}", path.display()))?;
     tmp.flush()?;
     tmp.persist(path)

@@ -13,9 +13,10 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 
-const DEFAULT_GLOBAL_PATCH_HEADER: &str = r#"# Substrate global config patch (sparse overrides).
-# - This file is a YAML mapping of global-scoped overrides.
-# - Omitted keys inherit from defaults.
+const DEFAULT_GLOBAL_PATCH_HEADER: &str = r#"# Substrate config patch (sparse overrides; scope=global).
+# - This file is a YAML mapping of global-scoped config overrides.
+# - Omitted keys inherit from defaults (and from workspace overrides when applicable).
+# - View the effective merged config with: `substrate config current show --explain`
 "#;
 
 pub(crate) fn handle_config_command(cmd: &ConfigCmd, cli: &Cli) -> i32 {
@@ -27,6 +28,7 @@ pub(crate) fn handle_config_command(cmd: &ConfigCmd, cli: &Cli) -> i32 {
         ConfigAction::Set(args) => run_workspace_set(args, cli),
         ConfigAction::Global(cmd) => run_global(cmd),
         ConfigAction::Workspace(cmd) => match &cmd.action {
+            ConfigWorkspaceAction::Show(args) => run_workspace_show(args),
             ConfigWorkspaceAction::Set(args) => run_workspace_set(args, cli),
             ConfigWorkspaceAction::Reset(args) => run_workspace_reset(args, cli),
         },
@@ -78,10 +80,9 @@ fn run_global_init(args: &ConfigInitArgs) -> Result<()> {
     let existed = path.exists();
 
     if existed && !args.force {
-        println!(
-            "substrate: config already exists at {}; use --force to overwrite",
-            path.display()
-        );
+        let raw = fs::read_to_string(&path)
+            .with_context(|| format!("failed to read {}", path.display()))?;
+        let _ = config_model::parse_config_patch_yaml(&path, &raw)?;
         return Ok(());
     }
 
@@ -102,11 +103,16 @@ fn run_global_init(args: &ConfigInitArgs) -> Result<()> {
 }
 
 fn run_global_show(args: &ConfigShowArgs) -> Result<()> {
-    let (cfg, explain) = config_model::resolve_global_effective_config_with_explain(args.explain)?;
-    if let Some(explain) = explain {
-        print_explain(&explain)?;
+    if args.explain {
+        return Err(config_model::user_error(
+            "--explain is only supported for `substrate config current show`",
+        ));
     }
-    print_config(&cfg, args.json)?;
+    let (patch, _) = config_model::read_global_config_patch_or_empty()?;
+    if patch.is_empty() {
+        eprintln!("substrate: note: global config patch is empty (no overrides); run 'substrate config current show --explain' to view the effective config for this directory");
+    }
+    print_patch(&patch, args.json)?;
     Ok(())
 }
 
@@ -118,7 +124,7 @@ fn run_global_set(args: &ConfigSetArgs) -> Result<()> {
     let updates = config_model::parse_updates(&args.updates)?;
     let changed = config_model::apply_updates_to_patch(&mut patch, &updates)?;
 
-    if changed {
+    if changed || !existed {
         let header = if existed {
             Some(read_comment_header_prefix(&path)?)
         } else {
@@ -133,7 +139,12 @@ fn run_global_set(args: &ConfigSetArgs) -> Result<()> {
         .with_context(|| format!("failed to write {}", path.display()))?;
     }
 
-    let cfg = config_model::resolve_global_effective_config()?;
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let (cfg, _) = config_model::resolve_effective_config_with_explain(
+        &cwd,
+        &CliConfigOverrides::default(),
+        false,
+    )?;
     write_env_sh(&cfg).context("failed to write env.sh")?;
     print_config(&cfg, args.json)?;
     Ok(())
@@ -143,9 +154,15 @@ fn run_global_reset(args: &ConfigResetArgs) -> Result<()> {
     let path = config_model::global_config_path()?;
     let (mut patch, existed) = config_model::read_global_config_patch_or_empty()
         .with_context(|| format!("failed to load global config patch at {}", path.display()))?;
-    let changed = config_model::reset_patch_keys(&mut patch, &args.keys)?;
+    let changed = if args.keys.is_empty() {
+        let was_empty = patch.is_empty();
+        patch = SubstrateConfigPatch::default();
+        !was_empty
+    } else {
+        config_model::reset_patch_keys(&mut patch, &args.keys)?
+    };
 
-    if changed {
+    if changed || !existed {
         let header = if existed {
             Some(read_comment_header_prefix(&path)?)
         } else {
@@ -160,7 +177,12 @@ fn run_global_reset(args: &ConfigResetArgs) -> Result<()> {
         .with_context(|| format!("failed to write {}", path.display()))?;
     }
 
-    let cfg = config_model::resolve_global_effective_config()?;
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let (cfg, _) = config_model::resolve_effective_config_with_explain(
+        &cwd,
+        &CliConfigOverrides::default(),
+        false,
+    )?;
     write_env_sh(&cfg).context("failed to write env.sh")?;
     print_config(&cfg, false)?;
     Ok(())
@@ -169,12 +191,34 @@ fn run_global_reset(args: &ConfigResetArgs) -> Result<()> {
 fn run_current_show(args: &ConfigShowArgs, cli: &Cli) -> Result<()> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let overrides = cli_overrides(cli);
+    eprintln!(
+        "substrate: note: showing effective merged config; use --explain to view per-key sources"
+    );
     let (cfg, explain) =
         config_model::resolve_effective_config_with_explain(&cwd, &overrides, args.explain)?;
     if let Some(explain) = explain {
         print_explain(&explain)?;
     }
     print_config(&cfg, args.json)?;
+    Ok(())
+}
+
+fn run_workspace_show(args: &ConfigShowArgs) -> Result<()> {
+    if args.explain {
+        return Err(config_model::user_error(
+            "--explain is only supported for `substrate config current show`",
+        ));
+    }
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let workspace_root = require_workspace(&cwd)?;
+    let path = crate::execution::workspace::workspace_marker_path(&workspace_root);
+    let raw =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    let patch = config_model::parse_config_patch_yaml(&path, &raw)?;
+    if patch.is_empty() {
+        eprintln!("substrate: note: workspace config patch is empty (no overrides); run 'substrate config current show --explain' to view the effective config for this directory");
+    }
+    print_patch(&patch, args.json)?;
     Ok(())
 }
 
@@ -211,7 +255,13 @@ fn run_workspace_reset(args: &ConfigResetArgs, cli: &Cli) -> Result<()> {
     let header = read_comment_header_prefix_from_raw(&raw);
     let mut patch = config_model::parse_config_patch_yaml(&path, &raw)?;
 
-    let changed = config_model::reset_patch_keys(&mut patch, &args.keys)?;
+    let changed = if args.keys.is_empty() {
+        let was_empty = patch.is_empty();
+        patch = SubstrateConfigPatch::default();
+        !was_empty
+    } else {
+        config_model::reset_patch_keys(&mut patch, &args.keys)?
+    };
     if changed {
         write_atomic_patch_yaml(&path, "", Some(&header), &patch)
             .with_context(|| format!("failed to write {}", path.display()))?;
@@ -241,6 +291,21 @@ fn print_config(cfg: &SubstrateConfig, json: bool) -> Result<()> {
     println!(
         "{}",
         serde_yaml::to_string(cfg).context("failed to serialize YAML")?
+    );
+    Ok(())
+}
+
+fn print_patch(patch: &SubstrateConfigPatch, json: bool) -> Result<()> {
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string(patch).context("failed to serialize JSON")?
+        );
+        return Ok(());
+    }
+    println!(
+        "{}",
+        serde_yaml::to_string(patch).context("failed to serialize YAML")?
     );
     Ok(())
 }

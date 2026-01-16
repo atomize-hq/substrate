@@ -245,6 +245,12 @@ pub(crate) struct SubstrateConfigPatch {
     pub sync: SyncConfigPatch,
 }
 
+impl SubstrateConfigPatch {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.world.is_empty() && self.policy.is_empty() && self.sync.is_empty()
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct WorldConfigPatch {
@@ -488,26 +494,6 @@ pub(crate) fn parse_config_patch_yaml(path: &Path, raw: &str) -> Result<Substrat
         ))
     })?;
     Ok(parsed)
-}
-
-pub(crate) fn resolve_global_effective_config() -> Result<SubstrateConfig> {
-    Ok(resolve_global_effective_config_with_explain(false)?.0)
-}
-
-pub(crate) fn resolve_global_effective_config_with_explain(
-    explain: bool,
-) -> Result<(SubstrateConfig, Option<ConfigExplainV1>)> {
-    let (global_patch, _) = read_global_config_patch_or_empty()?;
-    let global_path = global_config_path()?;
-    resolve_effective_from_layers(
-        &global_patch,
-        &global_path,
-        None,
-        &EnvOverrides::default(),
-        &CliConfigOverrides::default(),
-        explain,
-        false,
-    )
 }
 
 pub(crate) fn resolve_effective_config(
@@ -1407,41 +1393,6 @@ fn dedupe_ordered_set_in_place(items: &mut Vec<String>) {
         }
     }
     *items = out;
-}
-
-pub(crate) fn default_policy_yaml() -> &'static str {
-    // PCM0 requires workspace init to write the built-in default policy file inventory.
-    // The policy schema and CLI are implemented in PCM1.
-    r#"id: "default"
-name: "Default Policy"
-
-world_fs:
-  mode: writable
-  isolation: workspace
-  require_world: false
-  read_allowlist: ["*"]
-  write_allowlist: []
-
-net_allowed: []
-
-cmd_allowed: []
-cmd_denied:
-  - "rm -rf *"
-  - "curl * | bash"
-  - "wget * | bash"
-cmd_isolated: []
-
-require_approval: false
-allow_shell_operators: true
-
-limits:
-  max_memory_mb: null
-  max_cpu_percent: null
-  max_runtime_ms: null
-  max_egress_bytes: null
-
-metadata: {}
-"#
 }
 
 #[cfg(test)]
