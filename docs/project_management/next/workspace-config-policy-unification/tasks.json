@@ -1235,7 +1235,7 @@
       "name": "WCU4 \u2014 Integration core",
       "type": "integration",
       "phase": "WCU4",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge WCU4 code+tests, reconcile to spec/ADR, and make the slice green on the primary dev platform.",
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
@@ -1292,7 +1292,7 @@
       "name": "WCU4 \u2014 Integration Linux (platform-fix)",
       "type": "integration",
       "phase": "WCU4",
-      "status": "pending",
+      "status": "completed",
       "description": "Linux platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
@@ -1339,7 +1339,7 @@
       "name": "WCU4 \u2014 Integration macOS (platform-fix)",
       "type": "integration",
       "phase": "WCU4",
-      "status": "pending",
+      "status": "completed",
       "description": "macOS platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
@@ -1386,7 +1386,7 @@
       "name": "WCU4 \u2014 Integration Windows (platform-fix)",
       "type": "integration",
       "phase": "WCU4",
-      "status": "pending",
+      "status": "completed",
       "description": "Windows platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
