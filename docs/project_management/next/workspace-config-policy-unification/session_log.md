@@ -364,3 +364,41 @@
 - Orchestration branch: `feat/workspace-config-policy-unification`
 - Dispatch:
   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" SLICE_ID="WCU4" LAUNCH_CODEX=1`
+
+## END — 2026-01-16T14:33:07Z — code — WCU4-code
+- Worktree: `/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code`
+- Branch: `workspace_config_policy_unification-wcu4-code`
+- HEAD: `6336ad8e3a600912ea24ae84e2cceb120171dea8`
+- Codex: `CODEX_CODE_EXIT=0`
+- Finisher summary:
+  - `TASK_BRANCH=workspace_config_policy_unification-wcu4-code`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-code`
+  - `HEAD=6336ad8e3a600912ea24ae84e2cceb120171dea8`
+  - `COMMITS=1`
+  - `CHECKS=verify-only`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=`
+- Artifacts:
+  - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/code/last_message.md`
+  - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/code/events.jsonl`
+  - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/code/stderr.log`
+- Blockers: `NONE`
+
+## END — 2026-01-16T14:33:07Z — test — WCU4-test
+- Worktree: `/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test`
+- Branch: `workspace_config_policy_unification-wcu4-test`
+- HEAD: `46579219fb12003558ba9a6fa95ad72a3c7c5de3`
+- Codex: `CODEX_TEST_EXIT=0`
+- Finisher summary:
+  - `TASK_BRANCH=workspace_config_policy_unification-wcu4-test`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-test`
+  - `HEAD=46579219fb12003558ba9a6fa95ad72a3c7c5de3`
+  - `COMMITS=1`
+  - `CHECKS=verify-only`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=`
+- Artifacts:
+  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/last_message.md`
+  - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
+  - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
+- Blockers: `NONE`
