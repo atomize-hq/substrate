@@ -402,3 +402,31 @@
   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/events.jsonl`
   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/workspace-config-policy-unification/logs/WCU4/test/stderr.log`
 - Blockers: `NONE`
+
+## START — 2026-01-16T15:10:32Z — integration — WCU4-integ
+- Worktree: `wt/workspace_config_policy_unification-wcu4-integ`
+- Branch: `workspace_config_policy_unification-wcu4-integ`
+- Orchestration branch: `feat/workspace-config-policy-unification`
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" TASK_ID="WCU4-integ"`
+
+## END — 2026-01-16T15:28:48Z — integration — WCU4-integ
+- Worktree: `/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ`
+- Branch: `workspace_config_policy_unification-wcu4-integ`
+- HEAD: `c7fb28bf1ea09e87d23887709321a7a4f7f7d0e1`
+- Summary:
+  - Merged: `workspace_config_policy_unification-wcu4-integ-core` → `workspace_config_policy_unification-wcu4-integ`
+  - Platform-fix branches: none present to merge (linux/macos/windows tasks were no-op)
+- Checks run (with results):
+  - `make integ-checks` → exit `0`
+- Cross-platform smoke:
+  - Run `21071405891` (`success`) — https://github.com/atomize-hq/substrate/actions/runs/21071405891
+- Finisher summary:
+  - `TASK_BRANCH=workspace_config_policy_unification-wcu4-integ`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu4-integ`
+  - `HEAD=c7fb28bf1ea09e87d23887709321a7a4f7f7d0e1`
+  - `COMMITS=5`
+  - `CHECKS=make integ-checks`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=true`
+- Blockers: `NONE`
