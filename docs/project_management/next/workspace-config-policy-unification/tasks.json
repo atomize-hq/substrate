@@ -1582,7 +1582,7 @@
       "name": "WCU5 \u2014 Integration core",
       "type": "integration",
       "phase": "WCU5",
-      "status": "pending",
+    "status": "completed",
       "description": "Merge WCU5 code+tests, reconcile to spec/ADRs, and make the slice green on the primary dev platform.",
       "references": [
         "docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md",
