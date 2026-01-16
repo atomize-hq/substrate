@@ -948,7 +948,7 @@
       "name": "WCU3 \u2014 Integration Linux (platform-fix)",
       "type": "integration",
       "phase": "WCU3",
-      "status": "pending",
+      "status": "completed",
       "description": "Linux platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
@@ -995,7 +995,7 @@
       "name": "WCU3 \u2014 Integration macOS (platform-fix)",
       "type": "integration",
       "phase": "WCU3",
-      "status": "pending",
+      "status": "completed",
       "description": "macOS platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
@@ -1042,7 +1042,7 @@
       "name": "WCU3 \u2014 Integration Windows (platform-fix)",
       "type": "integration",
       "phase": "WCU3",
-      "status": "pending",
+      "status": "completed",
       "description": "Windows platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
