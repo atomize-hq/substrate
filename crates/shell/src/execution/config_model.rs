@@ -1439,6 +1439,19 @@ mod tests {
         fs::write(path, body).unwrap();
     }
 
+    fn canonicalize_for_compare(path: &Path) -> PathBuf {
+        path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+    }
+
+    fn assert_same_path(actual: Option<&String>, expected: &Path) {
+        let actual = actual
+            .map(PathBuf::from)
+            .unwrap_or_else(|| panic!("expected path, got None"));
+        let actual = canonicalize_for_compare(&actual);
+        let expected = canonicalize_for_compare(expected);
+        assert_eq!(actual, expected);
+    }
+
     #[test]
     #[serial]
     fn test_phase_a_concat_dedupe_and_replace_provenance() {
@@ -1490,26 +1503,19 @@ world:
         assert_eq!(enabled.merge_strategy, "concat_dedupe_ordered_set");
         assert_eq!(enabled.sources.len(), 2);
         let expected_global_path = global_path.display().to_string();
-        let expected_workspace_path = workspace_yaml.display().to_string();
         assert_eq!(enabled.sources[0].layer, "global_patch");
         assert_eq!(
             enabled.sources[0].path.as_deref(),
             Some(expected_global_path.as_str())
         );
         assert_eq!(enabled.sources[1].layer, "workspace_patch");
-        assert_eq!(
-            enabled.sources[1].path.as_deref(),
-            Some(expected_workspace_path.as_str())
-        );
+        assert_same_path(enabled.sources[1].path.as_ref(), &workspace_yaml);
 
         let inv = explain.keys.get("world.deps.inventory_mode").unwrap();
         assert_eq!(inv.merge_strategy, "replace");
         assert_eq!(inv.sources.len(), 1);
         assert_eq!(inv.sources[0].layer, "workspace_patch");
-        assert_eq!(
-            inv.sources[0].path.as_deref(),
-            Some(expected_workspace_path.as_str())
-        );
+        assert_same_path(inv.sources[0].path.as_ref(), &workspace_yaml);
     }
 
     #[test]
