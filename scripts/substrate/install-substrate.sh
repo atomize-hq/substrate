@@ -920,11 +920,11 @@ write_env_sh_script() {
   cat > "${ENV_SH_PATH}.tmp" <<EOF
 #!/usr/bin/env bash
 export SUBSTRATE_HOME=${substrate_home_literal}
-export SUBSTRATE_OVERRIDE_WORLD=${world_literal}
-export SUBSTRATE_OVERRIDE_CAGED=1
-export SUBSTRATE_OVERRIDE_ANCHOR_MODE=${anchor_mode_literal}
-export SUBSTRATE_OVERRIDE_ANCHOR_PATH=${anchor_path_literal}
-export SUBSTRATE_OVERRIDE_POLICY_MODE=${policy_mode_literal}
+export SUBSTRATE_WORLD=${world_literal}
+export SUBSTRATE_CAGED=1
+export SUBSTRATE_ANCHOR_MODE=${anchor_mode_literal}
+export SUBSTRATE_ANCHOR_PATH=${anchor_path_literal}
+export SUBSTRATE_POLICY_MODE=${policy_mode_literal}
 EOF
   mv "${ENV_SH_PATH}.tmp" "${ENV_SH_PATH}"
   chmod 0644 "${ENV_SH_PATH}" || true
@@ -932,33 +932,31 @@ EOF
 
 write_install_config() {
   local enabled="$1"
-  local flag="false"
-  if [[ "${enabled}" -eq 1 ]]; then
-    flag="true"
-  fi
 
   if [[ "${DRY_RUN}" -eq 1 ]]; then
-    printf '[%s][dry-run] Write install metadata to %s (world_enabled=%s)\n' "${INSTALLER_NAME}" "${INSTALL_CONFIG_PATH}" "${flag}" >&2
+    local enabled_flag="false"
+    if [[ "${enabled}" -eq 1 ]]; then
+      enabled_flag="true"
+    fi
+    printf '[%s][dry-run] Write install metadata to %s (world_enabled=%s)\n' "${INSTALLER_NAME}" "${INSTALL_CONFIG_PATH}" "${enabled_flag}" >&2
     return
   fi
 
   local config_dir
   config_dir="$(dirname "${INSTALL_CONFIG_PATH}")"
   mkdir -p "${config_dir}"
-  cat > "${INSTALL_CONFIG_PATH}.tmp" <<EOF
-world:
-  enabled: ${flag}
-  anchor_mode: workspace
-  anchor_path: ""
-  caged: true
-policy:
-  mode: observe
-sync:
-  auto_sync: false
-  direction: from_world
-  conflict_policy: prefer_host
-  exclude: []
+
+  cat > "${INSTALL_CONFIG_PATH}.tmp" <<'EOF'
+# Substrate global config patch (sparse overrides).
+# - This file is a YAML mapping of global-scoped overrides.
+# - Omitted keys inherit from defaults.
 EOF
+  if [[ "${enabled}" -eq 1 ]]; then
+    printf '{}\n' >> "${INSTALL_CONFIG_PATH}.tmp"
+  else
+    printf 'world:\n  enabled: false\n' >> "${INSTALL_CONFIG_PATH}.tmp"
+  fi
+
   mv "${INSTALL_CONFIG_PATH}.tmp" "${INSTALL_CONFIG_PATH}"
   chmod 0644 "${INSTALL_CONFIG_PATH}" || true
 }

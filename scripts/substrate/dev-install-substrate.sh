@@ -48,42 +48,70 @@ run_privileged() {
 
 write_install_metadata() {
   local enabled="$1"
-  local flag="false"
-  if [[ "${enabled}" -eq 1 ]]; then
-    flag="true"
-  fi
 
   local legacy_config="${PREFIX%/}/config.toml"
   if [[ -f "${legacy_config}" ]]; then
     fatal "Unsupported legacy TOML config detected at ${legacy_config}. YAML config is now required at ${INSTALL_CONFIG_PATH}. Delete the TOML file and re-run dev-install."
   fi
 
-  local caged_yaml="false"
-  if [[ "${WORLD_CAGED}" -eq 1 ]]; then
-    caged_yaml="true"
+  mkdir -p "$(dirname "${INSTALL_CONFIG_PATH}")"
+
+  local default_anchor_mode="workspace"
+  local default_anchor_path=""
+  local default_caged=1
+
+  local need_world_patch=0
+  local patch_world_enabled=""
+  local patch_anchor_mode=""
+  local patch_anchor_path_yaml=""
+  local patch_caged=""
+
+  if [[ "${enabled}" -ne 1 ]]; then
+    need_world_patch=1
+    patch_world_enabled="false"
   fi
 
-  local anchor_path_yaml='""'
-  if [[ -n "${ANCHOR_PATH}" ]]; then
+  if [[ "${ANCHOR_MODE}" != "${default_anchor_mode}" ]]; then
+    need_world_patch=1
+    patch_anchor_mode="${ANCHOR_MODE}"
+  fi
+
+  if [[ "${ANCHOR_PATH}" != "${default_anchor_path}" ]]; then
+    need_world_patch=1
     local escaped_anchor_path
     escaped_anchor_path="$(printf '%s' "${ANCHOR_PATH}" | sed "s/'/''/g")"
-    anchor_path_yaml="'${escaped_anchor_path}'"
+    patch_anchor_path_yaml="'${escaped_anchor_path}'"
+  fi
+
+  if [[ "${WORLD_CAGED}" -ne "${default_caged}" ]]; then
+    need_world_patch=1
+    patch_caged="false"
   fi
 
   cat > "${INSTALL_CONFIG_PATH}.tmp" <<EOF
-world:
-  enabled: ${flag}
-  anchor_mode: ${ANCHOR_MODE}
-  anchor_path: ${anchor_path_yaml}
-  caged: ${caged_yaml}
-policy:
-  mode: observe
-sync:
-  auto_sync: false
-  direction: from_world
-  conflict_policy: prefer_host
-  exclude: []
+# Substrate global config patch (sparse overrides).
+# - This file is a YAML mapping of global-scoped overrides.
+# - Omitted keys inherit from defaults.
 EOF
+
+  if [[ "${need_world_patch}" -eq 0 ]]; then
+    printf '{}\n' >> "${INSTALL_CONFIG_PATH}.tmp"
+  else
+    printf 'world:\n' >> "${INSTALL_CONFIG_PATH}.tmp"
+    if [[ -n "${patch_world_enabled}" ]]; then
+      printf '  enabled: %s\n' "${patch_world_enabled}" >> "${INSTALL_CONFIG_PATH}.tmp"
+    fi
+    if [[ -n "${patch_anchor_mode}" ]]; then
+      printf '  anchor_mode: %s\n' "${patch_anchor_mode}" >> "${INSTALL_CONFIG_PATH}.tmp"
+    fi
+    if [[ -n "${patch_anchor_path_yaml}" ]]; then
+      printf '  anchor_path: %s\n' "${patch_anchor_path_yaml}" >> "${INSTALL_CONFIG_PATH}.tmp"
+    fi
+    if [[ -n "${patch_caged}" ]]; then
+      printf '  caged: %s\n' "${patch_caged}" >> "${INSTALL_CONFIG_PATH}.tmp"
+    fi
+  fi
+
   mv "${INSTALL_CONFIG_PATH}.tmp" "${INSTALL_CONFIG_PATH}"
   chmod 0644 "${INSTALL_CONFIG_PATH}" || true
 }
@@ -153,11 +181,11 @@ write_env_sh_script() {
   cat > "${ENV_SH_PATH}.tmp" <<EOF
 #!/usr/bin/env bash
 export SUBSTRATE_HOME=${substrate_home_literal}
-export SUBSTRATE_OVERRIDE_WORLD=${world_literal}
-export SUBSTRATE_OVERRIDE_CAGED=${caged_literal}
-export SUBSTRATE_OVERRIDE_ANCHOR_MODE=${anchor_mode_literal}
-export SUBSTRATE_OVERRIDE_ANCHOR_PATH=${anchor_path_literal}
-export SUBSTRATE_OVERRIDE_POLICY_MODE=${policy_mode_literal}
+export SUBSTRATE_WORLD=${world_literal}
+export SUBSTRATE_CAGED=${caged_literal}
+export SUBSTRATE_ANCHOR_MODE=${anchor_mode_literal}
+export SUBSTRATE_ANCHOR_PATH=${anchor_path_literal}
+export SUBSTRATE_POLICY_MODE=${policy_mode_literal}
 EOF
   mv "${ENV_SH_PATH}.tmp" "${ENV_SH_PATH}"
   chmod 0644 "${ENV_SH_PATH}" || true
