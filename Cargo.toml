@@ -25,6 +25,10 @@ env_logger = "0.11"
 substrate-shell = { version = "0.2.5", path = "crates/shell" }
 substrate-shim = { version = "0.2.5", path = "crates/shim" }
 
+[dev-dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { workspace = true }
+
 [package.metadata.dist]
 dist = true
 display = false

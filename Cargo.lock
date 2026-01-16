@@ -3210,6 +3210,8 @@ version = "0.2.5"
 dependencies = [
  "anyhow",
  "env_logger",
+ "serde",
+ "serde_json",
  "substrate-shell",
  "substrate-shim",
 ]

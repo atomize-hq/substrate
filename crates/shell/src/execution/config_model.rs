@@ -3,6 +3,7 @@ use crate::execution::workspace;
 use anyhow::{anyhow, Context, Result};
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::env;
 use std::error::Error as StdError;
 use std::fmt;
@@ -341,20 +342,16 @@ pub(crate) struct ConfigExplainSource {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(crate) struct OrderedExplainKeys(Vec<(String, ConfigExplainKey)>);
+pub(crate) struct OrderedExplainKeys(BTreeMap<String, ConfigExplainKey>);
 
 impl OrderedExplainKeys {
     fn insert(&mut self, key: String, value: ConfigExplainKey) {
-        if let Some((_, existing)) = self.0.iter_mut().find(|(k, _)| k == &key) {
-            *existing = value;
-            return;
-        }
-        self.0.push((key, value));
+        self.0.insert(key, value);
     }
 
     #[cfg(test)]
     fn get(&self, key: &str) -> Option<&ConfigExplainKey> {
-        self.0.iter().find(|(k, _)| k == key).map(|(_, v)| v)
+        self.0.get(key)
     }
 }
 
@@ -363,8 +360,9 @@ impl Serialize for OrderedExplainKeys {
     where
         S: serde::Serializer,
     {
+        // ADR-0012 requires lexicographic (dotpath) ordering for deterministic bytes.
         let mut map = serializer.serialize_map(Some(self.0.len()))?;
-        for (key, value) in &self.0 {
+        for (key, value) in self.0.iter() {
             map.serialize_entry(key, value)?;
         }
         map.end()
