@@ -2,6 +2,8 @@ RECOMMENDATION: ACCEPT
 
 # Planning Quality Gate Report — workspace-config-policy-unification
 
+NOTE: This pack was updated after the initial quality gate to declare CI parity platforms and adopt the mandatory cross-platform integration task shape; see Addendum.
+
 ## Metadata
 - Feature directory: `docs/project_management/next/workspace-config-policy-unification/`
 - Reviewed commit: `ac38e61b4f06427e492159b2802812356bdb1982`
@@ -105,9 +107,9 @@ jq -r '.sprints[] | select(.id=="workspace_config_policy_unification") | {order,
 - Notes: Manual playbook and smoke scripts provide runnable validation steps with expected exit codes/output and cover the ADR-declared contract surfaces.
 
 ### 5.1) Cross-platform parity task structure (schema v2)
-- Result: `N/A`
+- Result: `PASS`
 - Evidence: `docs/project_management/next/workspace-config-policy-unification/tasks.json:2`
-- Notes: `meta.schema_version=3` but this pack does not declare `meta.ci_parity_platforms_required` (or legacy `meta.platforms_required`), so the `X-integ-core` / `X-integ-<platform>` / `X-integ` structure is not required by the mechanical standard.
+- Notes: The pack now declares `meta.ci_parity_platforms_required=["linux","macos","windows"]` and includes the required `WCU*-integ-core` / `WCU*-integ-<platform>` / `WCU*-integ` task shape.
 
 ### 6) Triad interoperability (execution workflow)
 - Result: `PASS`
@@ -162,3 +164,8 @@ jq -r '.sprints[] | select(.id=="workspace_config_policy_unification") | {order,
 
 - Summary: Mechanical lint passes and the previously flagged decision/auditability/validation gaps are resolved; the Planning Pack is implementation-ready for execution triads.
 - Blockers to execution: none
+
+## Addendum (post-gate updates)
+- Updated commit: `e643074bf210876eb0269b9bc05da19c08204fac`
+- Change: Declared CI parity platforms and added cross-platform integration tasks/prompts + slice-aware smoke gating for early slices (WCU1/WCU2).
+- Validation: `make planning-validate FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification"` and `make planning-lint FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification"` both exit `0` at the updated commit.

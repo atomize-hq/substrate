@@ -20,6 +20,15 @@ Non-negotiable additional gating for this pack:
   - planning docs (`plan.md`, `tasks.json`, `session_log.md`, specs, prompts) are edited only on the orchestration branch
   - do not edit planning docs inside worktrees
 
+### Cross-platform integration task model (required)
+This pack is cross-platform (`tasks.json` → `meta.cross_platform=true`) and uses the mandatory integration shape:
+- Per slice:
+  - `WCU*-integ-core` (core integration / merge prep; no merge-to-orchestration)
+  - `WCU*-integ-{linux,macos,windows}` (platform-fix tasks; may be no-ops if already green)
+  - `WCU*-integ` (final aggregator; the only integration task that merges to orchestration)
+- Slice-scoped smoke:
+  - integration tasks dispatch smoke via CI with `SMOKE_SLICE_ID="<WCUx>"` (sets `SUBSTRATE_SMOKE_SLICE_ID` for the smoke scripts)
+
 ## Hard requirements (operator contract)
 - Patch files are sparse YAML mappings; omitted keys mean “inherit”.
 - Scopes are explicit and symmetric for config and policy:

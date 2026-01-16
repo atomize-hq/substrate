@@ -1,7 +1,7 @@
-# Kickoff: WCU5-integ (integration)
+# Kickoff: WCU5-integ (integration final — cross-platform merge)
 
 ## Scope
-- Merge code + tests, resolve drift to spec, and make the slice green.
+- Merge platform-fix branches (if any) and finalize WCU5 with an auditable cross-platform green state.
 - Spec: `docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md`
 - ADRs:
   - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
@@ -17,9 +17,10 @@ Do not edit planning docs inside the worktree.
    - `make triad-task-start FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" TASK_ID="WCU5-integ"`
 
 ## Requirements
+- Merge `WCU5-integ-core` and any platform-fix branches for WCU5 that produced commits.
 - Run: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make integ-checks`.
 - Dispatch feature smoke for behavior platforms and record evidence:
-  - `make feature-smoke FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" PLATFORM=behavior WORKFLOW_REF="feat/workspace-config-policy-unification"`
+  - `make feature-smoke FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" PLATFORM=behavior SMOKE_SLICE_ID="WCU5" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/workspace-config-policy-unification" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
 
 ## End Checklist
 1. Complete `WCU5-closeout_report.md` with evidence and smoke results.

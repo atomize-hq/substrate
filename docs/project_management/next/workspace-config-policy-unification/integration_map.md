@@ -87,13 +87,17 @@ Source of truth: `docs/project_management/next/workspace-config-policy-unificati
 
 ### CI dispatch mechanism (required for integration tasks)
 Integration tasks (WCU*-integ) MUST dispatch feature smoke via CI using:
-- `make feature-smoke FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" PLATFORM=behavior WORKFLOW_REF="feat/workspace-config-policy-unification"`
+- `make feature-smoke FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" PLATFORM=behavior SMOKE_SLICE_ID="<WCUx>" WORKFLOW_REF="feat/workspace-config-policy-unification"`
 
 Evidence requirements:
 - Record run ids/URLs and outcomes in the slice closeout report (`WCU*-closeout_report.md`).
 
 ### CI parity platforms
-- None declared for this pack (all required platforms are treated as behavior platforms).
+- Linux, macOS, Windows (declared via `tasks.json` → `meta.ci_parity_platforms_required`).
+- Per-slice cross-platform integration task model:
+  - core integration: `WCU*-integ-core`
+  - platform-fix tasks: `WCU*-integ-linux`, `WCU*-integ-macos`, `WCU*-integ-windows`
+  - final aggregator (merge-to-orchestration): `WCU*-integ`
 
 ## Slice specs (authoritative)
 - WCU1: `docs/project_management/next/workspace-config-policy-unification/WCU1-spec.md`

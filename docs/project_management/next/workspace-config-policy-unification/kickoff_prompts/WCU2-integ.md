@@ -1,7 +1,7 @@
-# Kickoff: WCU2-integ (integration)
+# Kickoff: WCU2-integ (integration final — cross-platform merge)
 
 ## Scope
-- Merge code + tests, resolve drift to spec, and make the slice green.
+- Merge platform-fix branches (if any) and finalize WCU2 with an auditable cross-platform green state.
 - Spec: `docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md`
 - ADR: `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Gate file: `docs/project_management/next/workspace-config-policy-unification/PHASE_A_B_GATES_ADR_0012.md`
@@ -17,9 +17,10 @@ Do not edit planning docs inside the worktree.
 
 ## Requirements
 - Reconcile code/tests to ADR-0012 (ADR wins).
+- Merge `WCU2-integ-core` and any platform-fix branches for WCU2 that produced commits.
 - Run: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, then `make integ-checks`.
 - Dispatch feature smoke for behavior platforms and record evidence:
-  - `make feature-smoke FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" PLATFORM=behavior WORKFLOW_REF="feat/workspace-config-policy-unification"`
+  - `make feature-smoke FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" PLATFORM=behavior SMOKE_SLICE_ID="WCU2" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/workspace-config-policy-unification" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
 
 ## End Checklist
 1. Complete `WCU2-closeout_report.md` with Phase A evidence and smoke results.
