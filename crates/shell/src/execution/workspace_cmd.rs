@@ -6,15 +6,17 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 
-const DEFAULT_WORKSPACE_PATCH_YAML: &str = r#"# Substrate workspace config patch (sparse overrides).
-# - This file is a YAML mapping of workspace-scoped overrides.
+const DEFAULT_WORKSPACE_PATCH_YAML: &str = r#"# Substrate config patch (sparse overrides; scope=workspace).
+# - This file is a YAML mapping of workspace-scoped config overrides.
 # - Omitted keys inherit from global config + defaults.
+# - View the effective merged config with: `substrate config current show --explain`
 {}
 "#;
 
-const DEFAULT_POLICY_PATCH_YAML: &str = r#"# Substrate workspace policy patch (sparse overrides).
-# - This file is a YAML mapping of workspace-scoped overrides.
+const DEFAULT_POLICY_PATCH_YAML: &str = r#"# Substrate policy patch (sparse overrides; scope=workspace).
+# - This file is a YAML mapping of workspace-scoped policy overrides.
 # - Omitted keys inherit from global policy + defaults.
+# - View the effective merged policy with: `substrate policy current show --explain`
 {}
 "#;
 
