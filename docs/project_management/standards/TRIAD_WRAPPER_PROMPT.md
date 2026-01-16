@@ -40,7 +40,7 @@ SLICE_ID="<SET_ME>"      # e.g. PCP0
      - `make triad-orch-ensure FEATURE_DIR="$FEATURE_DIR"`
      - `git status --porcelain=v1` must be empty (if not, stop; do not start triads from a dirty orchestration checkout).
    - Ensure no other headless Codex run is still active (avoid overlapping runs mutating state):
-     - `find target/triad -name codex.pid -print -exec cat {} \\;` should print nothing (or only stale PIDs you’ve verified are not running).
+     - `find "$FEATURE_DIR/logs" -name codex.pid -print -exec cat {} \\;` should print nothing (or only stale PIDs you’ve verified are not running).
 
 1) START bookkeeping (orchestration branch)
    - Compute task ids:

@@ -27,8 +27,8 @@ Operational notes (important for correct orchestration):
   - Use `mode=quick` for automation selection (skip docs/cross-build) before deciding “no-op platform fixes”.
   - Use `mode=full` (default) as the final CI gate on the final `X-integ` commit before merging to `testing`.
 - The dispatch scripts are hardened with timeouts to avoid indefinite hangs; default max wait is **2 hours**. If you hit infra slowness, you can override via `FEATURE_SMOKE_WATCH_TIMEOUT_SECS` / `CI_TESTING_WATCH_TIMEOUT_SECS` (see `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`).
-- Headless Codex runs write a PID file while running: `target/triad/<feature>/codex/<task>/codex.pid`. If an orchestration session is interrupted, check for stale PID files before starting new runs.
-- Orchestration wrappers should always emit their stdout contract (including `CODEX_EXIT`) even when Codex fails; if you see missing keys, treat it as an automation bug and capture the command output + `target/triad/...` artifact paths for follow-up.
+- Headless Codex runs write a PID file while running: `<feature_dir>/logs/<slice>/<task-kind>/codex.pid`. If an orchestration session is interrupted, check for stale PID files before starting new runs.
+- Orchestration wrappers should always emit their stdout contract (including `CODEX_EXIT`) even when Codex fails; if you see missing keys, treat it as an automation bug and capture the command output + `<feature_dir>/logs/...` artifact paths for follow-up.
 
 ## Task Granularity (Keep Triad Slices Small)
 

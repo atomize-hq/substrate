@@ -39,6 +39,7 @@ Notes:
   - Runs from the orchestration worktree (or repo root) and uses:
     - `scripts/triad/orch_ensure.sh`
     - `scripts/triad/task_start.sh`
+  - Codex artifacts are written under <feature_dir>/logs/<slice>/<task-kind>/ to avoid being deleted by `cargo clean`.
   - This wrapper does not edit tasks.json; it only sets up branches/worktrees and optionally launches Codex.
 USAGE
 }
@@ -335,18 +336,24 @@ for task_id in "${selected_task_ids[@]}"; do
     worktree="$(parse_kv WORKTREE "${out}")"
     branch="$(parse_kv TASK_BRANCH "${out}")"
     kickoff="$(parse_kv KICKOFF_PROMPT "${out}")"
+    out_dir="$(parse_kv CODEX_OUT_DIR "${out}")"
+    last_message="$(parse_kv CODEX_LAST_MESSAGE_PATH "${out}")"
+    events="$(parse_kv CODEX_EVENTS_PATH "${out}")"
+    stderr="$(parse_kv CODEX_STDERR_PATH "${out}")"
     if [[ -z "${worktree}" || -z "${branch}" || -z "${kickoff}" ]]; then
         die "Failed to parse task_start output for ${task_id}"
+    fi
+    if [[ -z "${out_dir}" || -z "${last_message}" || -z "${events}" || -z "${stderr}" ]]; then
+        die "Failed to parse CODEX_* paths from task_start output for ${task_id}"
     fi
     task_worktree["${task_id}"]="${worktree}"
     task_branch["${task_id}"]="${branch}"
     task_kickoff["${task_id}"]="${kickoff}"
 
-    out_dir="${REPO_ROOT}/target/triad/${FEATURE_NAME}/codex/${task_id}"
     task_codex_out_dir["${task_id}"]="${out_dir}"
-    task_codex_last_message["${task_id}"]="${out_dir}/last_message.md"
-    task_codex_events["${task_id}"]="${out_dir}/events.jsonl"
-    task_codex_stderr["${task_id}"]="${out_dir}/stderr.log"
+    task_codex_last_message["${task_id}"]="${last_message}"
+    task_codex_events["${task_id}"]="${events}"
+    task_codex_stderr["${task_id}"]="${stderr}"
 done
 
 declare -A codex_exit=()

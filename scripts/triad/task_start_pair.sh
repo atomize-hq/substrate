@@ -42,6 +42,7 @@ Notes:
   - Uses the same underlying automation scripts as single-task start:
     - `scripts/triad/orch_ensure.sh`
     - `scripts/triad/task_start.sh`
+  - Codex artifacts are written under <feature_dir>/logs/<slice>/<task-kind>/ to avoid being deleted by `cargo clean`.
   - Worktrees are retained until feature cleanup (FZ-feature-cleanup).
 USAGE
 }
@@ -294,14 +295,27 @@ CODEX_CODE_EXIT=""
 CODEX_TEST_EXIT=""
 CODEX_PAIR_FAILED=0
 
-CODEX_CODE_OUT_DIR="${REPO_ROOT}/target/triad/${FEATURE_NAME}/codex/${CODE_TASK_ID}"
-CODEX_TEST_OUT_DIR="${REPO_ROOT}/target/triad/${FEATURE_NAME}/codex/${TEST_TASK_ID}"
-CODEX_CODE_LAST_MESSAGE_PATH="${CODEX_CODE_OUT_DIR}/last_message.md"
-CODEX_TEST_LAST_MESSAGE_PATH="${CODEX_TEST_OUT_DIR}/last_message.md"
-CODEX_CODE_EVENTS_PATH="${CODEX_CODE_OUT_DIR}/events.jsonl"
-CODEX_TEST_EVENTS_PATH="${CODEX_TEST_OUT_DIR}/events.jsonl"
-CODEX_CODE_STDERR_PATH="${CODEX_CODE_OUT_DIR}/stderr.log"
-CODEX_TEST_STDERR_PATH="${CODEX_TEST_OUT_DIR}/stderr.log"
+CODEX_CODE_OUT_DIR="$(parse_kv CODEX_OUT_DIR "${code_out}")"
+CODEX_TEST_OUT_DIR="$(parse_kv CODEX_OUT_DIR "${test_out}")"
+CODEX_CODE_LAST_MESSAGE_PATH="$(parse_kv CODEX_LAST_MESSAGE_PATH "${code_out}")"
+CODEX_TEST_LAST_MESSAGE_PATH="$(parse_kv CODEX_LAST_MESSAGE_PATH "${test_out}")"
+CODEX_CODE_EVENTS_PATH="$(parse_kv CODEX_EVENTS_PATH "${code_out}")"
+CODEX_TEST_EVENTS_PATH="$(parse_kv CODEX_EVENTS_PATH "${test_out}")"
+CODEX_CODE_STDERR_PATH="$(parse_kv CODEX_STDERR_PATH "${code_out}")"
+CODEX_TEST_STDERR_PATH="$(parse_kv CODEX_STDERR_PATH "${test_out}")"
+
+if [[ -z "${CODEX_CODE_OUT_DIR}" || -z "${CODEX_TEST_OUT_DIR}" ]]; then
+    die "Failed to parse CODEX_OUT_DIR from task_start output"
+fi
+if [[ -z "${CODEX_CODE_LAST_MESSAGE_PATH}" || -z "${CODEX_TEST_LAST_MESSAGE_PATH}" ]]; then
+    die "Failed to parse CODEX_LAST_MESSAGE_PATH from task_start output"
+fi
+if [[ -z "${CODEX_CODE_EVENTS_PATH}" || -z "${CODEX_TEST_EVENTS_PATH}" ]]; then
+    die "Failed to parse CODEX_EVENTS_PATH from task_start output"
+fi
+if [[ -z "${CODEX_CODE_STDERR_PATH}" || -z "${CODEX_TEST_STDERR_PATH}" ]]; then
+    die "Failed to parse CODEX_STDERR_PATH from task_start output"
+fi
 
 launch_codex_one() {
     local worktree="$1"

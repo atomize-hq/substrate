@@ -35,6 +35,7 @@ Notes:
   - Codex invocation always uses: --dangerously-bypass-approvals-and-sandbox (do not use --sandbox/--add-dir here).
   - Feature registry location is deterministic and shared across worktrees:
     <git-common-dir>/triad/features/<feature>/worktrees.json
+  - Codex artifacts are written under <feature_dir>/logs/<slice>/<task-kind>/ to avoid being deleted by `cargo clean`.
 USAGE
 }
 
@@ -78,6 +79,17 @@ utc_now() {
 
 shell_escape() {
     printf '%q' "$1"
+}
+
+task_logs_dir_for() {
+    local task_id="$1"
+    local slice="${task_id%%-*}"
+    local kind="${task_id#${slice}-}"
+    if [[ -z "${slice}" || -z "${kind}" || "${slice}" == "${task_id}" || "${kind}" == "${task_id}" ]]; then
+        slice="${task_id}"
+        kind="task"
+    fi
+    printf '%s/logs/%s/%s\n' "${FEATURE_DIR_ABS}" "${slice}" "${kind}"
 }
 
 FEATURE_DIR=""
@@ -585,7 +597,7 @@ if [[ -n "${CODEX_MODEL}" ]]; then
     codex_cmd="${codex_cmd} --model \"${CODEX_MODEL}\""
 fi
 
-codex_out_dir="${REPO_ROOT}/target/triad/${FEATURE_NAME}/codex/${TASK_ID}"
+codex_out_dir="$(task_logs_dir_for "${TASK_ID}")"
 codex_last_message="${codex_out_dir}/last_message.md"
 codex_events="${codex_out_dir}/events.jsonl"
 codex_stderr="${codex_out_dir}/stderr.log"
@@ -617,7 +629,7 @@ printf 'NEXT=%s\n' "${next_cmd}"
 
 if [[ "${LAUNCH_CODEX}" -eq 1 ]]; then
     require_cmd codex
-    log "Launching Codex headless (output captured under target/triad/${FEATURE_NAME}/codex/${TASK_ID}/)"
+    log "Launching Codex headless (output captured under: ${codex_out_dir})"
     if [[ "${DRY_RUN}" -eq 1 ]]; then
         printf 'CODEX_EXIT=%s\n' "dry-run"
         exit 0

@@ -32,7 +32,7 @@ SLICE_ID="<SET_ME>"      # e.g. PCP0
 
 ## Non-negotiables
 - Run from the orchestration checkout (repo root), not from a task worktree.
-- Prefer triad automation scripts (`make triad-task-start*`) and capture Codex artifacts from `target/triad/...`.
+- Prefer triad automation scripts (`make triad-task-start*`) and capture Codex artifacts from `<feature_dir>/logs/<slice>/<task-kind>/...` (survives `cargo clean`).
 - Do not edit planning docs inside any task worktree.
 
 ## What to do
