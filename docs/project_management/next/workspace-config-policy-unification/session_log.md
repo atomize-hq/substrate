@@ -350,3 +350,17 @@
   - `SMOKE_RUN=`
   - `MERGED_TO_ORCH=true`
 - Blockers: `NONE`
+
+## START — 2026-01-16T14:19:03Z — code — WCU4-code
+- Worktree: `wt/workspace_config_policy_unification-wcu4-code`
+- Branch: `workspace_config_policy_unification-wcu4-code`
+- Orchestration branch: `feat/workspace-config-policy-unification`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" SLICE_ID="WCU4" LAUNCH_CODEX=1`
+
+## START — 2026-01-16T14:19:03Z — test — WCU4-test
+- Worktree: `wt/workspace_config_policy_unification-wcu4-test`
+- Branch: `workspace_config_policy_unification-wcu4-test`
+- Orchestration branch: `feat/workspace-config-policy-unification`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" SLICE_ID="WCU4" LAUNCH_CODEX=1`
