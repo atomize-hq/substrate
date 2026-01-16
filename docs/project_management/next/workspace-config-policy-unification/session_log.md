@@ -225,3 +225,10 @@
 - Orchestration branch: `feat/workspace-config-policy-unification`
 - Dispatch:
   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" SLICE_ID="WCU2" LAUNCH_CODEX=1`
+
+## START — 2026-01-16T00:16:00Z — test — WCU2-test
+- Worktree: `wt/workspace_config_policy_unification-wcu2-test`
+- Branch: `workspace_config_policy_unification-wcu2-test`
+- Orchestration branch: `feat/workspace-config-policy-unification`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" SLICE_ID="WCU2" LAUNCH_CODEX=1`
