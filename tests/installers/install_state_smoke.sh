@@ -669,6 +669,7 @@ run_metadata_scenario() (
       fatal "metadata install failed (see ${install_log})"
     }
 
+  assert_env_sh_has_no_override_exports "${prefix}" "${HOST_PATH}"
   assert_metadata_file "${state_path}" "${fake_user}" "true" "true" "no"
 
   # Simulate legacy metadata and rerun install to ensure upgrade path rewrites it.
@@ -698,6 +699,7 @@ EOF_STUB
       fatal "metadata upgrade install failed (see ${install_log})"
     }
 
+  assert_env_sh_has_no_override_exports "${prefix}" "${HOST_PATH}"
   assert_metadata_upgraded "${state_path}" "${fake_user}"
 
   log "Metadata scenario completed (state: ${state_path})"
@@ -785,6 +787,24 @@ EOF_STUB
   assert_cleanup_logs "${group_log}" "${linger_log}" "${uninstall_log}"
   log "Cleanup scenario completed (state: ${state_path})"
 )
+
+assert_env_sh_has_no_override_exports() {
+  local prefix="$1"
+  local host_path="$2"
+  local env_sh="${prefix}/env.sh"
+  if [[ ! -f "${env_sh}" ]]; then
+    fatal "env.sh missing after install: ${env_sh}"
+  fi
+  if grep -Eq '^export[[:space:]]+SUBSTRATE_OVERRIDE_' "${env_sh}"; then
+    log "env.sh contains SUBSTRATE_OVERRIDE_* exports:"
+    sed -n '1,120p' "${env_sh}" >&2 || true
+    fatal "env.sh must not export SUBSTRATE_OVERRIDE_* by default (WCU4)"
+  fi
+  if env -i PATH="${host_path}" bash -lc "source \"${env_sh}\"; env | grep -q '^SUBSTRATE_OVERRIDE_'" >/dev/null 2>&1; then
+    fatal "Sourcing env.sh must not export SUBSTRATE_OVERRIDE_* (WCU4)"
+  fi
+  log "Verified env.sh does not export SUBSTRATE_OVERRIDE_* (${env_sh})"
+}
 
 run_missing_metadata_scenario() (
   local work_root
