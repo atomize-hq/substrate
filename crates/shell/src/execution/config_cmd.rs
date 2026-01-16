@@ -198,29 +198,9 @@ fn print_config(cfg: &SubstrateConfig, json: bool) -> Result<()> {
 }
 
 fn print_explain(explain: &ConfigExplainV1) -> Result<()> {
-    // Emit a stable layer-order hint before the JSON so simple substring checks can
-    // validate ordering without depending on map key ordering.
-    let mut has_global_patch = false;
-    let mut has_workspace_patch = false;
-    for v in explain.keys.values() {
-        for s in &v.sources {
-            match s.layer.as_str() {
-                "global_patch" => has_global_patch = true,
-                "workspace_patch" => has_workspace_patch = true,
-                _ => {}
-            }
-        }
-    }
-    if has_global_patch {
-        eprintln!("global_patch");
-    }
-    if has_workspace_patch {
-        eprintln!("workspace_patch");
-    }
-
     eprintln!(
         "{}",
-        serde_json::to_string_pretty(explain).context("failed to serialize explain JSON")?
+        serde_json::to_string(explain).context("failed to serialize explain JSON")?
     );
     Ok(())
 }
@@ -270,4 +250,116 @@ fn cli_overrides(cli: &Cli) -> CliConfigOverrides {
     }
 
     overrides
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::execution::cli::{Cli as RootCli, SubCommands};
+    use clap::Parser;
+    use serial_test::serial;
+    use std::fs;
+    use tempfile::TempDir;
+
+    struct CwdGuard {
+        prev: std::path::PathBuf,
+    }
+
+    impl CwdGuard {
+        fn set(path: &Path) -> Self {
+            let prev = std::env::current_dir().unwrap();
+            std::env::set_current_dir(path).unwrap();
+            Self { prev }
+        }
+    }
+
+    impl Drop for CwdGuard {
+        fn drop(&mut self) {
+            let _ = std::env::set_current_dir(&self.prev);
+        }
+    }
+
+    fn write_workspace_yaml(root: &Path, body: &[u8]) -> PathBuf {
+        let workspace_yaml = crate::execution::workspace::workspace_marker_path(root);
+        fs::create_dir_all(workspace_yaml.parent().unwrap()).unwrap();
+        fs::write(&workspace_yaml, body).unwrap();
+        workspace_yaml
+    }
+
+    fn run_cli(args: &[&str]) -> i32 {
+        let cli = RootCli::parse_from(args);
+        let Some(SubCommands::Config(cmd)) = &cli.sub else {
+            panic!("expected config command");
+        };
+        handle_config_command(cmd, &cli)
+    }
+
+    #[test]
+    #[serial]
+    fn test_invalid_enum_inventory_mode_is_exit_2_and_no_workspace_writes() {
+        let tmp = TempDir::new().unwrap();
+        let workspace_root = tmp.path().join("ws");
+        fs::create_dir_all(&workspace_root).unwrap();
+        let _cwd = CwdGuard::set(&workspace_root);
+
+        let initial = b"# workspace patch\n";
+        let workspace_yaml = write_workspace_yaml(&workspace_root, initial);
+        let before = fs::read(&workspace_yaml).unwrap();
+
+        let code = run_cli(&[
+            "substrate",
+            "config",
+            "workspace",
+            "set",
+            "world.deps.inventory_mode=bogus",
+        ]);
+        assert_eq!(code, 2);
+
+        let after = fs::read(&workspace_yaml).unwrap();
+        assert_eq!(after, before);
+    }
+
+    #[test]
+    #[serial]
+    fn test_invalid_enum_builtins_is_exit_2_and_no_workspace_writes() {
+        let tmp = TempDir::new().unwrap();
+        let workspace_root = tmp.path().join("ws");
+        fs::create_dir_all(&workspace_root).unwrap();
+        let _cwd = CwdGuard::set(&workspace_root);
+
+        let initial = b"# workspace patch\n";
+        let workspace_yaml = write_workspace_yaml(&workspace_root, initial);
+        let before = fs::read(&workspace_yaml).unwrap();
+
+        let code = run_cli(&[
+            "substrate",
+            "config",
+            "workspace",
+            "set",
+            "world.deps.builtins=bogus",
+        ]);
+        assert_eq!(code, 2);
+
+        let after = fs::read(&workspace_yaml).unwrap();
+        assert_eq!(after, before);
+    }
+
+    #[test]
+    #[serial]
+    fn test_unknown_key_is_exit_2_and_no_workspace_writes() {
+        let tmp = TempDir::new().unwrap();
+        let workspace_root = tmp.path().join("ws");
+        fs::create_dir_all(&workspace_root).unwrap();
+        let _cwd = CwdGuard::set(&workspace_root);
+
+        let initial = b"# workspace patch\n";
+        let workspace_yaml = write_workspace_yaml(&workspace_root, initial);
+        let before = fs::read(&workspace_yaml).unwrap();
+
+        let code = run_cli(&["substrate", "config", "workspace", "set", "nope.nope=1"]);
+        assert_eq!(code, 2);
+
+        let after = fs::read(&workspace_yaml).unwrap();
+        assert_eq!(after, before);
+    }
 }

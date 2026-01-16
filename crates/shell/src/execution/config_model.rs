@@ -1,6 +1,7 @@
 use crate::execution::value_parse::parse_bool_flag;
 use crate::execution::workspace;
 use anyhow::{anyhow, Context, Result};
+use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::error::Error as StdError;
@@ -320,23 +321,54 @@ impl SyncConfigPatch {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub(crate) struct ConfigExplainV1 {
     pub kind: String,
-    pub keys: std::collections::BTreeMap<String, ConfigExplainKey>,
+    pub keys: OrderedExplainKeys,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub(crate) struct ConfigExplainKey {
     pub merge_strategy: String,
     pub sources: Vec<ConfigExplainSource>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub(crate) struct ConfigExplainSource {
     pub layer: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct OrderedExplainKeys(Vec<(String, ConfigExplainKey)>);
+
+impl OrderedExplainKeys {
+    fn insert(&mut self, key: String, value: ConfigExplainKey) {
+        if let Some((_, existing)) = self.0.iter_mut().find(|(k, _)| k == &key) {
+            *existing = value;
+            return;
+        }
+        self.0.push((key, value));
+    }
+
+    #[cfg(test)]
+    fn get(&self, key: &str) -> Option<&ConfigExplainKey> {
+        self.0.iter().find(|(k, _)| k == key).map(|(_, v)| v)
+    }
+}
+
+impl Serialize for OrderedExplainKeys {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(self.0.len()))?;
+        for (key, value) in &self.0 {
+            map.serialize_entry(key, value)?;
+        }
+        map.end()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -517,7 +549,7 @@ fn resolve_effective_from_layers(
 ) -> Result<(SubstrateConfig, Option<ConfigExplainV1>)> {
     let mut effective = SubstrateConfig::default();
     let mut explain_keys = if explain {
-        Some(std::collections::BTreeMap::<String, ConfigExplainKey>::new())
+        Some(OrderedExplainKeys::default())
     } else {
         None
     };
@@ -796,8 +828,21 @@ fn resolve_effective_from_layers(
     }
 
     // world.deps.enabled (concat_dedupe_ordered_set)
+    let default_list = effective.world.deps.enabled.clone();
     let mut enabled_sources = Vec::new();
     let mut layers = Vec::new();
+    let has_any_patch = global_patch.world.deps.enabled.is_some()
+        || (workspace_enabled
+            && workspace_patch
+                .and_then(|(p, _)| p.world.deps.enabled.as_ref())
+                .is_some());
+    if !default_list.is_empty() || !has_any_patch {
+        enabled_sources.push(ConfigExplainSource {
+            layer: "default".to_string(),
+            path: None,
+        });
+        layers.push(default_list);
+    }
     if let Some(list) = &global_patch.world.deps.enabled {
         enabled_sources.push(ConfigExplainSource {
             layer: "global_patch".to_string(),
@@ -1355,4 +1400,292 @@ limits:
 
 metadata: {}
 "#
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+    use std::ffi::OsString;
+    use std::fs;
+    use tempfile::TempDir;
+
+    struct EnvGuard {
+        key: &'static str,
+        prev: Option<OsString>,
+    }
+
+    impl EnvGuard {
+        fn set(key: &'static str, value: &std::path::Path) -> Self {
+            let prev = std::env::var_os(key);
+            std::env::set_var(key, value);
+            Self { key, prev }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match self.prev.take() {
+                Some(v) => std::env::set_var(self.key, v),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
+    fn write_file(path: &Path, body: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(path, body).unwrap();
+    }
+
+    fn canonicalize_for_compare(path: &Path) -> PathBuf {
+        path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+    }
+
+    fn assert_same_path(actual: Option<&String>, expected: &Path) {
+        let actual = actual
+            .map(PathBuf::from)
+            .unwrap_or_else(|| panic!("expected path, got None"));
+        let actual = canonicalize_for_compare(&actual);
+        let expected = canonicalize_for_compare(expected);
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    #[serial]
+    fn test_phase_a_concat_dedupe_and_replace_provenance() {
+        let tmp = TempDir::new().unwrap();
+        let substrate_home = tmp.path().join(".substrate");
+        fs::create_dir_all(&substrate_home).unwrap();
+        let _guard = EnvGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let global_path = global_config_path().unwrap();
+        write_file(
+            &global_path,
+            r#"
+world:
+  deps:
+    enabled: ["a", "b"]
+    inventory_mode: merged
+"#,
+        );
+
+        let workspace_root = tmp.path().join("ws");
+        let workspace_yaml = crate::execution::workspace::workspace_marker_path(&workspace_root);
+        write_file(
+            &workspace_yaml,
+            r#"
+world:
+  deps:
+    enabled: ["b", "c"]
+    inventory_mode: workspace_only
+"#,
+        );
+
+        let (effective, explain) = resolve_effective_config_with_explain(
+            &workspace_root,
+            &CliConfigOverrides::default(),
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(effective.world.deps.enabled, vec!["a", "b", "c"]);
+        assert_eq!(
+            effective.world.deps.inventory_mode,
+            WorldDepsInventoryMode::WorkspaceOnly
+        );
+
+        let explain = explain.unwrap();
+        assert_eq!(explain.kind, "substrate.config.explain.v1");
+
+        let enabled = explain.keys.get("world.deps.enabled").unwrap();
+        assert_eq!(enabled.merge_strategy, "concat_dedupe_ordered_set");
+        assert_eq!(enabled.sources.len(), 2);
+        let expected_global_path = global_path.display().to_string();
+        assert_eq!(enabled.sources[0].layer, "global_patch");
+        assert_eq!(
+            enabled.sources[0].path.as_deref(),
+            Some(expected_global_path.as_str())
+        );
+        assert_eq!(enabled.sources[1].layer, "workspace_patch");
+        assert_same_path(enabled.sources[1].path.as_ref(), &workspace_yaml);
+
+        let inv = explain.keys.get("world.deps.inventory_mode").unwrap();
+        assert_eq!(inv.merge_strategy, "replace");
+        assert_eq!(inv.sources.len(), 1);
+        assert_eq!(inv.sources[0].layer, "workspace_patch");
+        assert_same_path(inv.sources[0].path.as_ref(), &workspace_yaml);
+    }
+
+    #[test]
+    #[serial]
+    fn test_phase_a_explicit_empty_list_counts_as_source() {
+        let tmp = TempDir::new().unwrap();
+        let substrate_home = tmp.path().join(".substrate");
+        fs::create_dir_all(&substrate_home).unwrap();
+        let _guard = EnvGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let global_path = global_config_path().unwrap();
+        write_file(
+            &global_path,
+            r#"
+world:
+  deps:
+    enabled: ["a"]
+"#,
+        );
+
+        let workspace_root = tmp.path().join("ws");
+        let workspace_yaml = crate::execution::workspace::workspace_marker_path(&workspace_root);
+        write_file(
+            &workspace_yaml,
+            r#"
+world:
+  deps:
+    enabled: []
+"#,
+        );
+
+        let (effective, explain) = resolve_effective_config_with_explain(
+            &workspace_root,
+            &CliConfigOverrides::default(),
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(effective.world.deps.enabled, vec!["a"]);
+
+        let explain = explain.unwrap();
+        let enabled = explain.keys.get("world.deps.enabled").unwrap();
+        assert_eq!(enabled.sources.len(), 2);
+        assert_eq!(enabled.sources[0].layer, "global_patch");
+        assert_eq!(enabled.sources[1].layer, "workspace_patch");
+    }
+
+    #[test]
+    #[serial]
+    fn test_phase_a_workspace_disabled_ignores_workspace_patch() {
+        let tmp = TempDir::new().unwrap();
+        let substrate_home = tmp.path().join(".substrate");
+        fs::create_dir_all(&substrate_home).unwrap();
+        let _guard = EnvGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let global_path = global_config_path().unwrap();
+        write_file(
+            &global_path,
+            r#"
+world:
+  deps:
+    enabled: ["a"]
+    inventory_mode: merged
+"#,
+        );
+
+        let workspace_root = tmp.path().join("ws");
+        let workspace_yaml = crate::execution::workspace::workspace_marker_path(&workspace_root);
+        write_file(
+            &workspace_yaml,
+            r#"
+world:
+  deps:
+    enabled: ["b"]
+    inventory_mode: workspace_only
+"#,
+        );
+        let disabled_marker =
+            crate::execution::workspace::workspace_disabled_marker_path(&workspace_root);
+        write_file(&disabled_marker, "disabled\n");
+
+        let (effective, explain) = resolve_effective_config_with_explain(
+            &workspace_root,
+            &CliConfigOverrides::default(),
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(effective.world.deps.enabled, vec!["a"]);
+        assert_eq!(
+            effective.world.deps.inventory_mode,
+            WorldDepsInventoryMode::Merged
+        );
+
+        let explain = explain.unwrap();
+        let enabled = explain.keys.get("world.deps.enabled").unwrap();
+        assert_eq!(enabled.sources.len(), 1);
+        assert_eq!(enabled.sources[0].layer, "global_patch");
+
+        let inv = explain.keys.get("world.deps.inventory_mode").unwrap();
+        assert_eq!(inv.sources.len(), 1);
+        assert_eq!(inv.sources[0].layer, "global_patch");
+        let expected_global_path = global_path.display().to_string();
+        assert_eq!(
+            inv.sources[0].path.as_deref(),
+            Some(expected_global_path.as_str())
+        );
+    }
+
+    #[test]
+    fn test_enum_validation_rejects_invalid_values_without_mutation() {
+        let before = SubstrateConfigPatch::default();
+
+        let mut patch = before.clone();
+        let updates = parse_updates(&["world.deps.inventory_mode=bogus".to_string()]).unwrap();
+        let err = apply_updates_to_patch(&mut patch, &updates).unwrap_err();
+        assert!(is_user_error(&err));
+        assert_eq!(patch, before);
+
+        let mut patch = before.clone();
+        let updates = parse_updates(&["world.deps.builtins=bogus".to_string()]).unwrap();
+        let err = apply_updates_to_patch(&mut patch, &updates).unwrap_err();
+        assert!(is_user_error(&err));
+        assert_eq!(patch, before);
+    }
+
+    #[test]
+    #[serial]
+    fn test_explain_json_bytes_are_deterministic_for_identical_inputs() {
+        let tmp = TempDir::new().unwrap();
+        let substrate_home = tmp.path().join(".substrate");
+        fs::create_dir_all(&substrate_home).unwrap();
+        let _guard = EnvGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let global_path = global_config_path().unwrap();
+        write_file(
+            &global_path,
+            r#"
+world:
+  deps:
+    enabled: ["a", "b"]
+"#,
+        );
+
+        let workspace_root = tmp.path().join("ws");
+        let workspace_yaml = crate::execution::workspace::workspace_marker_path(&workspace_root);
+        write_file(
+            &workspace_yaml,
+            r#"
+world:
+  deps:
+    enabled: ["b", "c"]
+"#,
+        );
+
+        let (_, explain_1) = resolve_effective_config_with_explain(
+            &workspace_root,
+            &CliConfigOverrides::default(),
+            true,
+        )
+        .unwrap();
+        let (_, explain_2) = resolve_effective_config_with_explain(
+            &workspace_root,
+            &CliConfigOverrides::default(),
+            true,
+        )
+        .unwrap();
+
+        let bytes_1 = serde_json::to_vec_pretty(&explain_1.unwrap()).unwrap();
+        let bytes_2 = serde_json::to_vec_pretty(&explain_2.unwrap()).unwrap();
+        assert_eq!(bytes_1, bytes_2);
+    }
 }
