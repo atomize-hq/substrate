@@ -527,7 +527,7 @@
       "name": "WCU2 \u2014 Integration core",
       "type": "integration",
       "phase": "WCU2",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge WCU2 code+tests, reconcile to spec/ADRs, and make the slice green on the primary dev platform.",
       "references": [
         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
