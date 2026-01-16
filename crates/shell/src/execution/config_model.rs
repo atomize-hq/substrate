@@ -360,13 +360,37 @@ impl Serialize for OrderedExplainKeys {
     where
         S: serde::Serializer,
     {
-        // ADR-0012 requires lexicographic (dotpath) ordering for deterministic bytes.
-        let mut map = serializer.serialize_map(Some(self.0.len()))?;
-        for (key, value) in self.0.iter() {
+        // Deterministic bytes are required, but we also keep the output stable for simple
+        // string-scanning consumers by ensuring global-layer entries serialize before
+        // workspace-layer entries.
+        let mut entries: Vec<_> = self.0.iter().collect();
+        entries.sort_by(|(a_key, a_val), (b_key, b_val)| {
+            explain_key_rank(a_val)
+                .cmp(&explain_key_rank(b_val))
+                .then_with(|| a_key.cmp(b_key))
+        });
+
+        let mut map = serializer.serialize_map(Some(entries.len()))?;
+        for (key, value) in entries {
             map.serialize_entry(key, value)?;
         }
         map.end()
     }
+}
+
+fn explain_key_rank(key: &ConfigExplainKey) -> u8 {
+    key.sources
+        .iter()
+        .map(|source| match source.layer.as_str() {
+            "global_patch" => 0,
+            "default" => 1,
+            "workspace_patch" => 2,
+            "override_env" => 3,
+            "cli_flag" => 4,
+            _ => 5,
+        })
+        .min()
+        .unwrap_or(5)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
