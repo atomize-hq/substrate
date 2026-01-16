@@ -1536,7 +1536,7 @@
       "name": "WCU5 \u2014 Docs + smoke + playbook alignment (test)",
       "type": "test",
       "phase": "WCU5",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add/adjust tests required to keep documentation, smoke scripts, and manual playbook assertions in parity with shipped behavior.",
       "references": [
         "docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md",
