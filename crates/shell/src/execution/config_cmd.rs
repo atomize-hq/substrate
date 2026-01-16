@@ -198,29 +198,9 @@ fn print_config(cfg: &SubstrateConfig, json: bool) -> Result<()> {
 }
 
 fn print_explain(explain: &ConfigExplainV1) -> Result<()> {
-    // Emit a stable layer-order hint before the JSON so simple substring checks can
-    // validate ordering without depending on map key ordering.
-    let mut has_global_patch = false;
-    let mut has_workspace_patch = false;
-    for v in explain.keys.values() {
-        for s in &v.sources {
-            match s.layer.as_str() {
-                "global_patch" => has_global_patch = true,
-                "workspace_patch" => has_workspace_patch = true,
-                _ => {}
-            }
-        }
-    }
-    if has_global_patch {
-        eprintln!("global_patch");
-    }
-    if has_workspace_patch {
-        eprintln!("workspace_patch");
-    }
-
     eprintln!(
         "{}",
-        serde_json::to_string_pretty(explain).context("failed to serialize explain JSON")?
+        serde_json::to_string(explain).context("failed to serialize explain JSON")?
     );
     Ok(())
 }

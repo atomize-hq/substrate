@@ -796,8 +796,21 @@ fn resolve_effective_from_layers(
     }
 
     // world.deps.enabled (concat_dedupe_ordered_set)
+    let default_list = effective.world.deps.enabled.clone();
     let mut enabled_sources = Vec::new();
     let mut layers = Vec::new();
+    let has_any_patch = global_patch.world.deps.enabled.is_some()
+        || (workspace_enabled
+            && workspace_patch
+                .and_then(|(p, _)| p.world.deps.enabled.as_ref())
+                .is_some());
+    if !default_list.is_empty() || !has_any_patch {
+        enabled_sources.push(ConfigExplainSource {
+            layer: "default".to_string(),
+            path: None,
+        });
+        layers.push(default_list);
+    }
     if let Some(list) = &global_patch.world.deps.enabled {
         enabled_sources.push(ConfigExplainSource {
             layer: "global_patch".to_string(),
