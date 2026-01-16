@@ -173,14 +173,14 @@ impl WorldDepsConfigFixture {
     }
 }
 
-fn yaml_mapping<'a>(value: &'a YamlValue) -> &'a serde_yaml::Mapping {
+fn yaml_mapping(value: &YamlValue) -> &serde_yaml::Mapping {
     value
         .as_mapping()
         .unwrap_or_else(|| panic!("expected YAML mapping, got {value:?}"))
 }
 
 fn yaml_get<'a>(root: &'a YamlValue, key: &str) -> Option<&'a YamlValue> {
-    yaml_mapping(root).get(&YamlValue::String(key.to_string()))
+    yaml_mapping(root).get(YamlValue::String(key.to_string()))
 }
 
 fn parse_explain(stderr: &[u8]) -> JsonValue {
