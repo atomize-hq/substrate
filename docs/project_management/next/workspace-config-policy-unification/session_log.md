@@ -430,3 +430,10 @@
   - `SMOKE_RUN=`
   - `MERGED_TO_ORCH=true`
 - Blockers: `NONE`
+
+## START — 2026-01-16T17:05:41Z — code — WCU5-code
+- Worktree: `wt/workspace_config_policy_unification-wcu5-code`
+- Branch: `workspace_config_policy_unification-wcu5-code`
+- Orchestration branch: `feat/workspace-config-policy-unification`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" SLICE_ID="WCU5" LAUNCH_CODEX=1`
