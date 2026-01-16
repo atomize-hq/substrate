@@ -3,13 +3,20 @@ use crate::execution::cli::{
     ConfigGlobalCmd, ConfigInitArgs, ConfigResetArgs, ConfigSetArgs, ConfigShowArgs,
     ConfigWorkspaceAction,
 };
-use crate::execution::config_model::{self, CliConfigOverrides, ConfigExplainV1, SubstrateConfig};
+use crate::execution::config_model::{
+    self, CliConfigOverrides, ConfigExplainV1, SubstrateConfig, SubstrateConfigPatch,
+};
 use crate::execution::write_env_sh;
 use anyhow::{anyhow, Context, Result};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
+
+const DEFAULT_GLOBAL_PATCH_HEADER: &str = r#"# Substrate global config patch (sparse overrides).
+# - This file is a YAML mapping of global-scoped overrides.
+# - Omitted keys inherit from defaults.
+"#;
 
 pub(crate) fn handle_config_command(cmd: &ConfigCmd, cli: &Cli) -> i32 {
     let result = match &cmd.action {
@@ -62,6 +69,7 @@ fn run_global(cmd: &ConfigGlobalCmd) -> Result<()> {
         ConfigGlobalAction::Init(args) => run_global_init(args),
         ConfigGlobalAction::Show(args) => run_global_show(args),
         ConfigGlobalAction::Set(args) => run_global_set(args),
+        ConfigGlobalAction::Reset(args) => run_global_reset(args),
     }
 }
 
@@ -77,9 +85,10 @@ fn run_global_init(args: &ConfigInitArgs) -> Result<()> {
         return Ok(());
     }
 
-    let cfg = SubstrateConfig::default();
-    write_atomic_yaml(&path, &cfg)
+    let patch = SubstrateConfigPatch::default();
+    write_atomic_patch_yaml(&path, DEFAULT_GLOBAL_PATCH_HEADER, None, &patch)
         .with_context(|| format!("failed to write {}", path.display()))?;
+    let cfg = SubstrateConfig::default();
     write_env_sh(&cfg).context("failed to write env.sh")?;
     if existed {
         println!(
@@ -109,14 +118,51 @@ fn run_global_set(args: &ConfigSetArgs) -> Result<()> {
     let updates = config_model::parse_updates(&args.updates)?;
     let changed = config_model::apply_updates_to_patch(&mut patch, &updates)?;
 
-    if changed || !existed {
-        write_atomic_yaml(&path, &patch)
-            .with_context(|| format!("failed to write {}", path.display()))?;
+    if changed {
+        let header = if existed {
+            Some(read_comment_header_prefix(&path)?)
+        } else {
+            None
+        };
+        write_atomic_patch_yaml(
+            &path,
+            DEFAULT_GLOBAL_PATCH_HEADER,
+            header.as_deref(),
+            &patch,
+        )
+        .with_context(|| format!("failed to write {}", path.display()))?;
     }
 
     let cfg = config_model::resolve_global_effective_config()?;
     write_env_sh(&cfg).context("failed to write env.sh")?;
     print_config(&cfg, args.json)?;
+    Ok(())
+}
+
+fn run_global_reset(args: &ConfigResetArgs) -> Result<()> {
+    let path = config_model::global_config_path()?;
+    let (mut patch, existed) = config_model::read_global_config_patch_or_empty()
+        .with_context(|| format!("failed to load global config patch at {}", path.display()))?;
+    let changed = config_model::reset_patch_keys(&mut patch, &args.keys)?;
+
+    if changed {
+        let header = if existed {
+            Some(read_comment_header_prefix(&path)?)
+        } else {
+            None
+        };
+        write_atomic_patch_yaml(
+            &path,
+            DEFAULT_GLOBAL_PATCH_HEADER,
+            header.as_deref(),
+            &patch,
+        )
+        .with_context(|| format!("failed to write {}", path.display()))?;
+    }
+
+    let cfg = config_model::resolve_global_effective_config()?;
+    write_env_sh(&cfg).context("failed to write env.sh")?;
+    print_config(&cfg, false)?;
     Ok(())
 }
 
@@ -139,12 +185,13 @@ fn run_workspace_set(args: &ConfigSetArgs, cli: &Cli) -> Result<()> {
     let path = crate::execution::workspace::workspace_marker_path(&workspace_root);
     let raw =
         fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    let header = read_comment_header_prefix_from_raw(&raw);
     let mut patch = config_model::parse_config_patch_yaml(&path, &raw)?;
 
     let updates = config_model::parse_updates(&args.updates)?;
     let changed = config_model::apply_updates_to_patch(&mut patch, &updates)?;
     if changed {
-        write_atomic_yaml(&path, &patch)
+        write_atomic_patch_yaml(&path, "", Some(&header), &patch)
             .with_context(|| format!("failed to write {}", path.display()))?;
     }
 
@@ -161,11 +208,12 @@ fn run_workspace_reset(args: &ConfigResetArgs, cli: &Cli) -> Result<()> {
     let path = crate::execution::workspace::workspace_marker_path(&workspace_root);
     let raw =
         fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    let header = read_comment_header_prefix_from_raw(&raw);
     let mut patch = config_model::parse_config_patch_yaml(&path, &raw)?;
 
     let changed = config_model::reset_patch_keys(&mut patch, &args.keys)?;
     if changed {
-        write_atomic_yaml(&path, &patch)
+        write_atomic_patch_yaml(&path, "", Some(&header), &patch)
             .with_context(|| format!("failed to write {}", path.display()))?;
     }
 
@@ -205,16 +253,56 @@ fn print_explain(explain: &ConfigExplainV1) -> Result<()> {
     Ok(())
 }
 
-fn write_atomic_yaml<T: serde::Serialize>(path: &Path, value: &T) -> Result<()> {
+fn read_comment_header_prefix(path: &Path) -> Result<String> {
+    let raw =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    Ok(read_comment_header_prefix_from_raw(&raw))
+}
+
+fn read_comment_header_prefix_from_raw(raw: &str) -> String {
+    let mut out = String::new();
+    for line in raw.split_inclusive('\n') {
+        let check = line.trim_end_matches('\n');
+        let check = check.trim_start();
+        if check.is_empty() || check.starts_with('#') {
+            out.push_str(line);
+            continue;
+        }
+        break;
+    }
+    out
+}
+
+fn write_atomic_patch_yaml(
+    path: &Path,
+    default_header: &str,
+    existing_header: Option<&str>,
+    patch: &SubstrateConfigPatch,
+) -> Result<()> {
+    let header = existing_header.unwrap_or(default_header);
+    let mut body = serde_yaml::to_string(patch)
+        .with_context(|| format!("failed to serialize {}", path.display()))?;
+    if let Some(rest) = body.strip_prefix("---\n") {
+        body = rest.to_string();
+    }
+
+    let mut out = String::new();
+    out.push_str(header);
+    if !out.is_empty() && !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str(&body);
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+
     let parent = path
         .parent()
         .ok_or_else(|| anyhow!("path {} has no parent", path.display()))?;
     fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
     let mut tmp = NamedTempFile::new_in(parent)
         .with_context(|| format!("failed to create temp file near {}", path.display()))?;
-    let body = serde_yaml::to_string(value)
-        .with_context(|| format!("failed to serialize {}", path.display()))?;
-    tmp.write_all(body.as_bytes())
+    tmp.write_all(out.as_bytes())
         .with_context(|| format!("failed to write {}", path.display()))?;
     tmp.flush()?;
     tmp.persist(path)

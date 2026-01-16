@@ -267,6 +267,8 @@ pub enum ConfigGlobalAction {
     Show(ConfigShowArgs),
     /// Update $SUBSTRATE_HOME/config.yaml via dotted updates (key=value, key+=value, key-=value)
     Set(ConfigSetArgs),
+    /// Remove keys from the global config patch (restore inheritance from defaults)
+    Reset(ConfigResetArgs),
 }
 
 #[derive(Args, Debug)]
