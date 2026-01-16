@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+HOST_PATH="${PATH}"
 
 log() {
   printf '[install-smoke] %s\n' "$*" >&2
@@ -694,6 +695,22 @@ assert_manifest_present() {
   log "Verified manager manifest at ${manifest}"
 }
 
+assert_env_sh_has_no_override_exports() {
+  local env_sh="${PREFIX}/env.sh"
+  if [[ ! -f "${env_sh}" ]]; then
+    fatal "env.sh missing after install: ${env_sh}"
+  fi
+  if grep -Eq '^export[[:space:]]+SUBSTRATE_OVERRIDE_' "${env_sh}"; then
+    log "env.sh contains SUBSTRATE_OVERRIDE_* exports:"
+    sed -n '1,120p' "${env_sh}" >&2 || true
+    fatal "env.sh must not export SUBSTRATE_OVERRIDE_* by default (WCU4)"
+  fi
+  if env -i PATH="${HOST_PATH}" bash -lc "source \"${env_sh}\"; env | grep -q '^SUBSTRATE_OVERRIDE_'" >/dev/null 2>&1; then
+    fatal "Sourcing env.sh must not export SUBSTRATE_OVERRIDE_* (WCU4)"
+  fi
+  log "Verified env.sh does not export SUBSTRATE_OVERRIDE_* (${env_sh})"
+}
+
 run_health_smoke() {
   local substrate_bin="${PREFIX}/bin/substrate"
   local output
@@ -794,14 +811,15 @@ assert_config_init_hint_logged() {
 prepare_stub_bin
 reset_systemctl_log
 
-if [[ "${SCENARIO_KIND}" == "prod" ]]; then
-  build_fake_release
-  run_prod_install
-  install_systemctl_log="$(capture_systemctl_log install)"
-  assert_config_init_hint_logged
-  assert_install_config
-  assert_manifest_present
-  run_health_smoke
+  if [[ "${SCENARIO_KIND}" == "prod" ]]; then
+    build_fake_release
+    run_prod_install
+    assert_env_sh_has_no_override_exports
+    install_systemctl_log="$(capture_systemctl_log install)"
+    assert_config_init_hint_logged
+    assert_install_config
+    assert_manifest_present
+    run_health_smoke
   if [[ "${SCENARIO_WORLD_ENABLED}" -eq 1 ]]; then
     assert_systemctl_log "install" "${install_systemctl_log}" 1
   else
@@ -810,13 +828,14 @@ if [[ "${SCENARIO_KIND}" == "prod" ]]; then
   run_prod_uninstall
   uninstall_systemctl_log="$(capture_systemctl_log uninstall)"
   assert_systemctl_log "uninstall" "${uninstall_systemctl_log}" 1
-elif [[ "${SCENARIO_KIND}" == "dev" ]]; then
-  run_dev_install
-  install_systemctl_log="$(capture_systemctl_log install)"
-  assert_systemctl_log "install" "${install_systemctl_log}" 1
-else
-  fatal "Unsupported scenario kind: ${SCENARIO_KIND}"
-fi
+  elif [[ "${SCENARIO_KIND}" == "dev" ]]; then
+    run_dev_install
+    assert_env_sh_has_no_override_exports
+    install_systemctl_log="$(capture_systemctl_log install)"
+    assert_systemctl_log "install" "${install_systemctl_log}" 1
+  else
+    fatal "Unsupported scenario kind: ${SCENARIO_KIND}"
+  fi
 
 log "Scenario ${SCENARIO} completed using PREFIX=${PREFIX}"
 log "Temp root: ${WORK_ROOT}"
