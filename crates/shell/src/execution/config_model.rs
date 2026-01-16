@@ -1,6 +1,7 @@
 use crate::execution::value_parse::parse_bool_flag;
 use crate::execution::workspace;
 use anyhow::{anyhow, Context, Result};
+use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::error::Error as StdError;
@@ -320,23 +321,54 @@ impl SyncConfigPatch {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub(crate) struct ConfigExplainV1 {
     pub kind: String,
-    pub keys: std::collections::BTreeMap<String, ConfigExplainKey>,
+    pub keys: OrderedExplainKeys,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub(crate) struct ConfigExplainKey {
     pub merge_strategy: String,
     pub sources: Vec<ConfigExplainSource>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub(crate) struct ConfigExplainSource {
     pub layer: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct OrderedExplainKeys(Vec<(String, ConfigExplainKey)>);
+
+impl OrderedExplainKeys {
+    fn insert(&mut self, key: String, value: ConfigExplainKey) {
+        if let Some((_, existing)) = self.0.iter_mut().find(|(k, _)| k == &key) {
+            *existing = value;
+            return;
+        }
+        self.0.push((key, value));
+    }
+
+    #[cfg(test)]
+    fn get(&self, key: &str) -> Option<&ConfigExplainKey> {
+        self.0.iter().find(|(k, _)| k == key).map(|(_, v)| v)
+    }
+}
+
+impl Serialize for OrderedExplainKeys {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(self.0.len()))?;
+        for (key, value) in &self.0 {
+            map.serialize_entry(key, value)?;
+        }
+        map.end()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -517,7 +549,7 @@ fn resolve_effective_from_layers(
 ) -> Result<(SubstrateConfig, Option<ConfigExplainV1>)> {
     let mut effective = SubstrateConfig::default();
     let mut explain_keys = if explain {
-        Some(std::collections::BTreeMap::<String, ConfigExplainKey>::new())
+        Some(OrderedExplainKeys::default())
     } else {
         None
     };
