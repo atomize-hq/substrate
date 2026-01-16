@@ -787,7 +787,7 @@
       "name": "WCU3 \u2014 CLI scopes + reset semantics + explain (ADR-0012 Phase B) (code)",
       "type": "code",
       "phase": "WCU3",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Ensure config editor allowlists and edits `world.deps.enabled` and that `--explain` surfaces merge strategy and contributing sources per ADR-0012.",
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",

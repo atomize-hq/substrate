@@ -270,3 +270,10 @@
   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU2-test/events.jsonl`
   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU2-test/stderr.log`
 - Blockers: `NONE`
+
+## START — 2026-01-16T02:41:14Z — code — WCU3-code
+- Worktree: `wt/workspace_config_policy_unification-wcu3-code`
+- Branch: `workspace_config_policy_unification-wcu3-code`
+- Orchestration branch: `feat/workspace-config-policy-unification`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" LAUNCH_CODEX=1`
