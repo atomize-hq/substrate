@@ -232,3 +232,22 @@
 - Orchestration branch: `feat/workspace-config-policy-unification`
 - Dispatch:
   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" SLICE_ID="WCU2" LAUNCH_CODEX=1`
+
+## END — 2026-01-16T00:29:42Z — code — WCU2-code
+- Worktree: `/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu2-code`
+- Branch: `workspace_config_policy_unification-wcu2-code`
+- HEAD: `9106e2b24beab69b500981b1f259b2b639a72006`
+- Codex: `CODEX_CODE_EXIT=0`
+- Finisher summary:
+  - `TASK_BRANCH=workspace_config_policy_unification-wcu2-code`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu2-code`
+  - `HEAD=9106e2b24beab69b500981b1f259b2b639a72006`
+  - `COMMITS=1`
+  - `CHECKS=verify-only`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=`
+- Artifacts:
+  - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU2-code/last_message.md`
+  - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU2-code/events.jsonl`
+  - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU2-code/stderr.log`
+- Blockers: `NONE`

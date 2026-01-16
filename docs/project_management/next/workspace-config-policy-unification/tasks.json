@@ -377,7 +377,7 @@
       "name": "WCU2 — Patch parsing + merge (ADR-0012 Phase A) (code)",
       "type": "code",
       "phase": "WCU2",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Implement schema-defined per-key merge strategies and multi-source provenance support required by ADR-0012.",
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
