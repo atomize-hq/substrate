@@ -3,8 +3,16 @@
     "schema_version": 3,
     "feature": "workspace_config_policy_unification",
     "cross_platform": true,
-    "behavior_platforms_required": ["linux", "macos", "windows"],
-    "ci_parity_platforms_required": ["linux", "macos", "windows"],
+    "behavior_platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
+    "ci_parity_platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
     "execution_gates": true,
     "automation": {
       "enabled": true,
@@ -50,10 +58,9 @@
       "depends_on": [],
       "concurrent_with": []
     },
-
     {
       "id": "WCU1-code",
-      "name": "WCU1 — Workspace directory + internal git unification (code)",
+      "name": "WCU1 \u2014 Workspace directory + internal git unification (code)",
       "type": "code",
       "phase": "WCU1",
       "status": "completed",
@@ -91,14 +98,20 @@
       "worktree": "wt/workspace_config_policy_unification-wcu1-code",
       "integration_task": "WCU1-integ-core",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU1-code.md",
-      "depends_on": ["F0-exec-preflight"],
-      "concurrent_with": ["WCU1-test"],
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
+      "concurrent_with": [
+        "WCU1-test"
+      ],
       "git_branch": "workspace_config_policy_unification-wcu1-code",
-      "required_make_targets": ["triad-code-checks"]
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
     },
     {
       "id": "WCU1-test",
-      "name": "WCU1 — Workspace directory + internal git unification (test)",
+      "name": "WCU1 \u2014 Workspace directory + internal git unification (test)",
       "type": "test",
       "phase": "WCU1",
       "status": "completed",
@@ -133,14 +146,20 @@
       "worktree": "wt/workspace_config_policy_unification-wcu1-test",
       "integration_task": "WCU1-integ-core",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU1-test.md",
-      "depends_on": ["F0-exec-preflight"],
-      "concurrent_with": ["WCU1-code"],
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
+      "concurrent_with": [
+        "WCU1-code"
+      ],
       "git_branch": "workspace_config_policy_unification-wcu1-test",
-      "required_make_targets": ["triad-test-checks"]
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
     },
     {
       "id": "WCU1-integ-core",
-      "name": "WCU1 — Integration core",
+      "name": "WCU1 \u2014 Integration core",
       "type": "integration",
       "phase": "WCU1",
       "status": "completed",
@@ -185,15 +204,20 @@
       "worktree": "wt/workspace_config_policy_unification-wcu1-integ-core",
       "integration_task": "WCU1-integ-core",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU1-integ-core.md",
-      "depends_on": ["WCU1-code", "WCU1-test"],
+      "depends_on": [
+        "WCU1-code",
+        "WCU1-test"
+      ],
       "concurrent_with": [],
       "git_branch": "workspace_config_policy_unification-wcu1-integ-core",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "WCU1-integ-linux",
-      "name": "WCU1 — Integration Linux (platform-fix)",
+      "name": "WCU1 \u2014 Integration Linux (platform-fix)",
       "type": "integration",
       "phase": "WCU1",
       "status": "completed",
@@ -205,7 +229,9 @@
         "docs/project_management/next/workspace-config-policy-unification/WCU1-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh"
       ],
-      "acceptance_criteria": ["Linux smoke is green for this slice"],
+      "acceptance_criteria": [
+        "Linux smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on linux host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -223,18 +249,22 @@
       "worktree": "wt/workspace_config_policy_unification-wcu1-integ-linux",
       "integration_task": "WCU1-integ-linux",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU1-integ-linux.md",
-      "depends_on": ["WCU1-integ-core"],
+      "depends_on": [
+        "WCU1-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "linux",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "workspace_config_policy_unification-wcu1-integ-linux",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "WCU1-integ-macos",
-      "name": "WCU1 — Integration macOS (platform-fix)",
+      "name": "WCU1 \u2014 Integration macOS (platform-fix)",
       "type": "integration",
       "phase": "WCU1",
       "status": "completed",
@@ -246,7 +276,9 @@
         "docs/project_management/next/workspace-config-policy-unification/WCU1-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh"
       ],
-      "acceptance_criteria": ["macOS smoke is green for this slice"],
+      "acceptance_criteria": [
+        "macOS smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on macos host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -264,18 +296,22 @@
       "worktree": "wt/workspace_config_policy_unification-wcu1-integ-macos",
       "integration_task": "WCU1-integ-macos",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU1-integ-macos.md",
-      "depends_on": ["WCU1-integ-core"],
+      "depends_on": [
+        "WCU1-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "macos",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "workspace_config_policy_unification-wcu1-integ-macos",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "WCU1-integ-windows",
-      "name": "WCU1 — Integration Windows (platform-fix)",
+      "name": "WCU1 \u2014 Integration Windows (platform-fix)",
       "type": "integration",
       "phase": "WCU1",
       "status": "completed",
@@ -287,7 +323,9 @@
         "docs/project_management/next/workspace-config-policy-unification/WCU1-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"
       ],
-      "acceptance_criteria": ["Windows smoke is green for this slice"],
+      "acceptance_criteria": [
+        "Windows smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on windows host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -305,18 +343,22 @@
       "worktree": "wt/workspace_config_policy_unification-wcu1-integ-windows",
       "integration_task": "WCU1-integ-windows",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU1-integ-windows.md",
-      "depends_on": ["WCU1-integ-core"],
+      "depends_on": [
+        "WCU1-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "windows",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "workspace_config_policy_unification-wcu1-integ-windows",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "WCU1-integ",
-      "name": "WCU1 — Workspace directory + internal git unification (integration)",
+      "name": "WCU1 \u2014 Workspace directory + internal git unification (integration)",
       "type": "integration",
       "phase": "WCU1",
       "status": "completed",
@@ -365,19 +407,25 @@
       "worktree": "wt/workspace_config_policy_unification-wcu1-integ",
       "integration_task": "WCU1-integ",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU1-integ.md",
-      "depends_on": ["WCU1-integ-core", "WCU1-integ-linux", "WCU1-integ-macos", "WCU1-integ-windows"],
+      "depends_on": [
+        "WCU1-integ-core",
+        "WCU1-integ-linux",
+        "WCU1-integ-macos",
+        "WCU1-integ-windows"
+      ],
       "concurrent_with": [],
       "git_branch": "workspace_config_policy_unification-wcu1-integ",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": true
     },
-
     {
       "id": "WCU2-code",
-      "name": "WCU2 — Patch parsing + merge (ADR-0012 Phase A) (code)",
+      "name": "WCU2 \u2014 Patch parsing + merge (ADR-0012 Phase A) (code)",
       "type": "code",
       "phase": "WCU2",
-      "status": "pending",
+      "status": "completed",
       "description": "Implement schema-defined per-key merge strategies and multi-source provenance support required by ADR-0012.",
       "references": [
         "docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md",
@@ -413,17 +461,23 @@
       "worktree": "wt/workspace_config_policy_unification-wcu2-code",
       "integration_task": "WCU2-integ-core",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU2-code.md",
-      "depends_on": ["WCU1-integ"],
-      "concurrent_with": ["WCU2-test"],
+      "depends_on": [
+        "WCU1-integ"
+      ],
+      "concurrent_with": [
+        "WCU2-test"
+      ],
       "git_branch": "workspace_config_policy_unification-wcu2-code",
-      "required_make_targets": ["triad-code-checks"]
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
     },
     {
       "id": "WCU2-test",
-      "name": "WCU2 — Patch parsing + merge (ADR-0012 Phase A) (test)",
+      "name": "WCU2 \u2014 Patch parsing + merge (ADR-0012 Phase A) (test)",
       "type": "test",
       "phase": "WCU2",
-      "status": "pending",
+      "status": "completed",
       "description": "Add tests for per-key merge strategies and multi-source provenance output required by ADR-0012.",
       "references": [
         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
@@ -457,17 +511,23 @@
       "worktree": "wt/workspace_config_policy_unification-wcu2-test",
       "integration_task": "WCU2-integ-core",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU2-test.md",
-      "depends_on": ["WCU1-integ"],
-      "concurrent_with": ["WCU2-code"],
+      "depends_on": [
+        "WCU1-integ"
+      ],
+      "concurrent_with": [
+        "WCU2-code"
+      ],
       "git_branch": "workspace_config_policy_unification-wcu2-test",
-      "required_make_targets": ["triad-test-checks"]
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
     },
     {
       "id": "WCU2-integ-core",
-      "name": "WCU2 — Integration core",
+      "name": "WCU2 \u2014 Integration core",
       "type": "integration",
       "phase": "WCU2",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge WCU2 code+tests, reconcile to spec/ADRs, and make the slice green on the primary dev platform.",
       "references": [
         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
@@ -509,18 +569,23 @@
       "worktree": "wt/workspace_config_policy_unification-wcu2-integ-core",
       "integration_task": "WCU2-integ-core",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU2-integ-core.md",
-      "depends_on": ["WCU2-code", "WCU2-test"],
+      "depends_on": [
+        "WCU2-code",
+        "WCU2-test"
+      ],
       "concurrent_with": [],
       "git_branch": "workspace_config_policy_unification-wcu2-integ-core",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "WCU2-integ-linux",
-      "name": "WCU2 — Integration Linux (platform-fix)",
+      "name": "WCU2 \u2014 Integration Linux (platform-fix)",
       "type": "integration",
       "phase": "WCU2",
-      "status": "pending",
+      "status": "completed",
       "description": "Linux platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
@@ -529,7 +594,9 @@
         "docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh"
       ],
-      "acceptance_criteria": ["Linux smoke is green for this slice"],
+      "acceptance_criteria": [
+        "Linux smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on linux host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -547,21 +614,25 @@
       "worktree": "wt/workspace_config_policy_unification-wcu2-integ-linux",
       "integration_task": "WCU2-integ-linux",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU2-integ-linux.md",
-      "depends_on": ["WCU2-integ-core"],
+      "depends_on": [
+        "WCU2-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "linux",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "workspace_config_policy_unification-wcu2-integ-linux",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "WCU2-integ-macos",
-      "name": "WCU2 — Integration macOS (platform-fix)",
+      "name": "WCU2 \u2014 Integration macOS (platform-fix)",
       "type": "integration",
       "phase": "WCU2",
-      "status": "pending",
+      "status": "completed",
       "description": "macOS platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
@@ -570,7 +641,9 @@
         "docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh"
       ],
-      "acceptance_criteria": ["macOS smoke is green for this slice"],
+      "acceptance_criteria": [
+        "macOS smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on macos host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -588,21 +661,25 @@
       "worktree": "wt/workspace_config_policy_unification-wcu2-integ-macos",
       "integration_task": "WCU2-integ-macos",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU2-integ-macos.md",
-      "depends_on": ["WCU2-integ-core"],
+      "depends_on": [
+        "WCU2-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "macos",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "workspace_config_policy_unification-wcu2-integ-macos",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "WCU2-integ-windows",
-      "name": "WCU2 — Integration Windows (platform-fix)",
+      "name": "WCU2 \u2014 Integration Windows (platform-fix)",
       "type": "integration",
       "phase": "WCU2",
-      "status": "pending",
+      "status": "completed",
       "description": "Windows platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/workspace-config-policy-unification/plan.md",
@@ -611,7 +688,9 @@
         "docs/project_management/next/workspace-config-policy-unification/WCU2-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"
       ],
-      "acceptance_criteria": ["Windows smoke is green for this slice"],
+      "acceptance_criteria": [
+        "Windows smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on windows host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -629,18 +708,22 @@
       "worktree": "wt/workspace_config_policy_unification-wcu2-integ-windows",
       "integration_task": "WCU2-integ-windows",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU2-integ-windows.md",
-      "depends_on": ["WCU2-integ-core"],
+      "depends_on": [
+        "WCU2-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "windows",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "workspace_config_policy_unification-wcu2-integ-windows",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "WCU2-integ",
-      "name": "WCU2 — Patch parsing + merge (ADR-0012 Phase A) (integration)",
+      "name": "WCU2 \u2014 Patch parsing + merge (ADR-0012 Phase A) (integration)",
       "type": "integration",
       "phase": "WCU2",
       "status": "pending",
@@ -686,16 +769,22 @@
       "worktree": "wt/workspace_config_policy_unification-wcu2-integ",
       "integration_task": "WCU2-integ",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU2-integ.md",
-      "depends_on": ["WCU2-integ-core", "WCU2-integ-linux", "WCU2-integ-macos", "WCU2-integ-windows"],
+      "depends_on": [
+        "WCU2-integ-core",
+        "WCU2-integ-linux",
+        "WCU2-integ-macos",
+        "WCU2-integ-windows"
+      ],
       "concurrent_with": [],
       "git_branch": "workspace_config_policy_unification-wcu2-integ",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": true
     },
-
     {
       "id": "WCU3-code",
-      "name": "WCU3 — CLI scopes + reset semantics + explain (ADR-0012 Phase B) (code)",
+      "name": "WCU3 \u2014 CLI scopes + reset semantics + explain (ADR-0012 Phase B) (code)",
       "type": "code",
       "phase": "WCU3",
       "status": "pending",
@@ -734,14 +823,20 @@
       "worktree": "wt/workspace_config_policy_unification-wcu3-code",
       "integration_task": "WCU3-integ-core",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU3-code.md",
-      "depends_on": ["WCU2-integ"],
-      "concurrent_with": ["WCU3-test"],
+      "depends_on": [
+        "WCU2-integ"
+      ],
+      "concurrent_with": [
+        "WCU3-test"
+      ],
       "git_branch": "workspace_config_policy_unification-wcu3-code",
-      "required_make_targets": ["triad-code-checks"]
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
     },
     {
       "id": "WCU3-test",
-      "name": "WCU3 — CLI scopes + reset semantics + explain (ADR-0012 Phase B) (test)",
+      "name": "WCU3 \u2014 CLI scopes + reset semantics + explain (ADR-0012 Phase B) (test)",
       "type": "test",
       "phase": "WCU3",
       "status": "pending",
@@ -779,14 +874,20 @@
       "worktree": "wt/workspace_config_policy_unification-wcu3-test",
       "integration_task": "WCU3-integ-core",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU3-test.md",
-      "depends_on": ["WCU2-integ"],
-      "concurrent_with": ["WCU3-code"],
+      "depends_on": [
+        "WCU2-integ"
+      ],
+      "concurrent_with": [
+        "WCU3-code"
+      ],
       "git_branch": "workspace_config_policy_unification-wcu3-test",
-      "required_make_targets": ["triad-test-checks"]
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
     },
     {
       "id": "WCU3-integ-core",
-      "name": "WCU3 — Integration core",
+      "name": "WCU3 \u2014 Integration core",
       "type": "integration",
       "phase": "WCU3",
       "status": "pending",
@@ -831,15 +932,20 @@
       "worktree": "wt/workspace_config_policy_unification-wcu3-integ-core",
       "integration_task": "WCU3-integ-core",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU3-integ-core.md",
-      "depends_on": ["WCU3-code", "WCU3-test"],
+      "depends_on": [
+        "WCU3-code",
+        "WCU3-test"
+      ],
       "concurrent_with": [],
       "git_branch": "workspace_config_policy_unification-wcu3-integ-core",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "WCU3-integ-linux",
-      "name": "WCU3 — Integration Linux (platform-fix)",
+      "name": "WCU3 \u2014 Integration Linux (platform-fix)",
       "type": "integration",
       "phase": "WCU3",
       "status": "pending",
@@ -851,7 +957,9 @@
         "docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh"
       ],
-      "acceptance_criteria": ["Linux smoke is green for this slice"],
+      "acceptance_criteria": [
+        "Linux smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on linux host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -869,18 +977,22 @@
       "worktree": "wt/workspace_config_policy_unification-wcu3-integ-linux",
       "integration_task": "WCU3-integ-linux",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU3-integ-linux.md",
-      "depends_on": ["WCU3-integ-core"],
+      "depends_on": [
+        "WCU3-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "linux",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "workspace_config_policy_unification-wcu3-integ-linux",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "WCU3-integ-macos",
-      "name": "WCU3 — Integration macOS (platform-fix)",
+      "name": "WCU3 \u2014 Integration macOS (platform-fix)",
       "type": "integration",
       "phase": "WCU3",
       "status": "pending",
@@ -892,7 +1004,9 @@
         "docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh"
       ],
-      "acceptance_criteria": ["macOS smoke is green for this slice"],
+      "acceptance_criteria": [
+        "macOS smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on macos host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -910,18 +1024,22 @@
       "worktree": "wt/workspace_config_policy_unification-wcu3-integ-macos",
       "integration_task": "WCU3-integ-macos",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU3-integ-macos.md",
-      "depends_on": ["WCU3-integ-core"],
+      "depends_on": [
+        "WCU3-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "macos",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "workspace_config_policy_unification-wcu3-integ-macos",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "WCU3-integ-windows",
-      "name": "WCU3 — Integration Windows (platform-fix)",
+      "name": "WCU3 \u2014 Integration Windows (platform-fix)",
       "type": "integration",
       "phase": "WCU3",
       "status": "pending",
@@ -933,7 +1051,9 @@
         "docs/project_management/next/workspace-config-policy-unification/WCU3-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"
       ],
-      "acceptance_criteria": ["Windows smoke is green for this slice"],
+      "acceptance_criteria": [
+        "Windows smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on windows host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -951,18 +1071,22 @@
       "worktree": "wt/workspace_config_policy_unification-wcu3-integ-windows",
       "integration_task": "WCU3-integ-windows",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU3-integ-windows.md",
-      "depends_on": ["WCU3-integ-core"],
+      "depends_on": [
+        "WCU3-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "windows",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "workspace_config_policy_unification-wcu3-integ-windows",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "WCU3-integ",
-      "name": "WCU3 — CLI scopes + reset semantics + explain (ADR-0012 Phase B) (integration)",
+      "name": "WCU3 \u2014 CLI scopes + reset semantics + explain (ADR-0012 Phase B) (integration)",
       "type": "integration",
       "phase": "WCU3",
       "status": "pending",
@@ -1008,16 +1132,22 @@
       "worktree": "wt/workspace_config_policy_unification-wcu3-integ",
       "integration_task": "WCU3-integ",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU3-integ.md",
-      "depends_on": ["WCU3-integ-core", "WCU3-integ-linux", "WCU3-integ-macos", "WCU3-integ-windows"],
+      "depends_on": [
+        "WCU3-integ-core",
+        "WCU3-integ-linux",
+        "WCU3-integ-macos",
+        "WCU3-integ-windows"
+      ],
       "concurrent_with": [],
       "git_branch": "workspace_config_policy_unification-wcu3-integ",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": true
     },
-
     {
       "id": "WCU4-code",
-      "name": "WCU4 — Installer/dev env cleanup (code)",
+      "name": "WCU4 \u2014 Installer/dev env cleanup (code)",
       "type": "code",
       "phase": "WCU4",
       "status": "pending",
@@ -1047,14 +1177,20 @@
       "worktree": "wt/workspace_config_policy_unification-wcu4-code",
       "integration_task": "WCU4-integ-core",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU4-code.md",
-      "depends_on": ["WCU3-integ"],
-      "concurrent_with": ["WCU4-test"],
+      "depends_on": [
+        "WCU3-integ"
+      ],
+      "concurrent_with": [
+        "WCU4-test"
+      ],
       "git_branch": "workspace_config_policy_unification-wcu4-code",
-      "required_make_targets": ["triad-code-checks"]
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
     },
     {
       "id": "WCU4-test",
-      "name": "WCU4 — Installer/dev env cleanup (test)",
+      "name": "WCU4 \u2014 Installer/dev env cleanup (test)",
       "type": "test",
       "phase": "WCU4",
       "status": "pending",
@@ -1083,14 +1219,20 @@
       "worktree": "wt/workspace_config_policy_unification-wcu4-test",
       "integration_task": "WCU4-integ-core",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU4-test.md",
-      "depends_on": ["WCU3-integ"],
-      "concurrent_with": ["WCU4-code"],
+      "depends_on": [
+        "WCU3-integ"
+      ],
+      "concurrent_with": [
+        "WCU4-code"
+      ],
       "git_branch": "workspace_config_policy_unification-wcu4-test",
-      "required_make_targets": ["triad-test-checks"]
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
     },
     {
       "id": "WCU4-integ-core",
-      "name": "WCU4 — Integration core",
+      "name": "WCU4 \u2014 Integration core",
       "type": "integration",
       "phase": "WCU4",
       "status": "pending",
@@ -1134,15 +1276,20 @@
       "worktree": "wt/workspace_config_policy_unification-wcu4-integ-core",
       "integration_task": "WCU4-integ-core",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU4-integ-core.md",
-      "depends_on": ["WCU4-code", "WCU4-test"],
+      "depends_on": [
+        "WCU4-code",
+        "WCU4-test"
+      ],
       "concurrent_with": [],
       "git_branch": "workspace_config_policy_unification-wcu4-integ-core",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "WCU4-integ-linux",
-      "name": "WCU4 — Integration Linux (platform-fix)",
+      "name": "WCU4 \u2014 Integration Linux (platform-fix)",
       "type": "integration",
       "phase": "WCU4",
       "status": "pending",
@@ -1154,7 +1301,9 @@
         "docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh"
       ],
-      "acceptance_criteria": ["Linux smoke is green for this slice"],
+      "acceptance_criteria": [
+        "Linux smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on linux host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -1172,18 +1321,22 @@
       "worktree": "wt/workspace_config_policy_unification-wcu4-integ-linux",
       "integration_task": "WCU4-integ-linux",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU4-integ-linux.md",
-      "depends_on": ["WCU4-integ-core"],
+      "depends_on": [
+        "WCU4-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "linux",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "workspace_config_policy_unification-wcu4-integ-linux",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "WCU4-integ-macos",
-      "name": "WCU4 — Integration macOS (platform-fix)",
+      "name": "WCU4 \u2014 Integration macOS (platform-fix)",
       "type": "integration",
       "phase": "WCU4",
       "status": "pending",
@@ -1195,7 +1348,9 @@
         "docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh"
       ],
-      "acceptance_criteria": ["macOS smoke is green for this slice"],
+      "acceptance_criteria": [
+        "macOS smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on macos host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -1213,18 +1368,22 @@
       "worktree": "wt/workspace_config_policy_unification-wcu4-integ-macos",
       "integration_task": "WCU4-integ-macos",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU4-integ-macos.md",
-      "depends_on": ["WCU4-integ-core"],
+      "depends_on": [
+        "WCU4-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "macos",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "workspace_config_policy_unification-wcu4-integ-macos",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "WCU4-integ-windows",
-      "name": "WCU4 — Integration Windows (platform-fix)",
+      "name": "WCU4 \u2014 Integration Windows (platform-fix)",
       "type": "integration",
       "phase": "WCU4",
       "status": "pending",
@@ -1236,7 +1395,9 @@
         "docs/project_management/next/workspace-config-policy-unification/WCU4-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"
       ],
-      "acceptance_criteria": ["Windows smoke is green for this slice"],
+      "acceptance_criteria": [
+        "Windows smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on windows host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -1254,18 +1415,22 @@
       "worktree": "wt/workspace_config_policy_unification-wcu4-integ-windows",
       "integration_task": "WCU4-integ-windows",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU4-integ-windows.md",
-      "depends_on": ["WCU4-integ-core"],
+      "depends_on": [
+        "WCU4-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "windows",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "workspace_config_policy_unification-wcu4-integ-windows",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "WCU4-integ",
-      "name": "WCU4 — Installer/dev env cleanup (integration)",
+      "name": "WCU4 \u2014 Installer/dev env cleanup (integration)",
       "type": "integration",
       "phase": "WCU4",
       "status": "pending",
@@ -1303,16 +1468,22 @@
       "worktree": "wt/workspace_config_policy_unification-wcu4-integ",
       "integration_task": "WCU4-integ",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU4-integ.md",
-      "depends_on": ["WCU4-integ-core", "WCU4-integ-linux", "WCU4-integ-macos", "WCU4-integ-windows"],
+      "depends_on": [
+        "WCU4-integ-core",
+        "WCU4-integ-linux",
+        "WCU4-integ-macos",
+        "WCU4-integ-windows"
+      ],
       "concurrent_with": [],
       "git_branch": "workspace_config_policy_unification-wcu4-integ",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": true
     },
-
     {
       "id": "WCU5-code",
-      "name": "WCU5 — Docs + smoke + playbook alignment (code)",
+      "name": "WCU5 \u2014 Docs + smoke + playbook alignment (code)",
       "type": "code",
       "phase": "WCU5",
       "status": "pending",
@@ -1349,14 +1520,20 @@
       "worktree": "wt/workspace_config_policy_unification-wcu5-code",
       "integration_task": "WCU5-integ-core",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU5-code.md",
-      "depends_on": ["WCU4-integ"],
-      "concurrent_with": ["WCU5-test"],
+      "depends_on": [
+        "WCU4-integ"
+      ],
+      "concurrent_with": [
+        "WCU5-test"
+      ],
       "git_branch": "workspace_config_policy_unification-wcu5-code",
-      "required_make_targets": ["triad-code-checks"]
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
     },
     {
       "id": "WCU5-test",
-      "name": "WCU5 — Docs + smoke + playbook alignment (test)",
+      "name": "WCU5 \u2014 Docs + smoke + playbook alignment (test)",
       "type": "test",
       "phase": "WCU5",
       "status": "pending",
@@ -1389,14 +1566,20 @@
       "worktree": "wt/workspace_config_policy_unification-wcu5-test",
       "integration_task": "WCU5-integ-core",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU5-test.md",
-      "depends_on": ["WCU4-integ"],
-      "concurrent_with": ["WCU5-code"],
+      "depends_on": [
+        "WCU4-integ"
+      ],
+      "concurrent_with": [
+        "WCU5-code"
+      ],
       "git_branch": "workspace_config_policy_unification-wcu5-test",
-      "required_make_targets": ["triad-test-checks"]
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
     },
     {
       "id": "WCU5-integ-core",
-      "name": "WCU5 — Integration core",
+      "name": "WCU5 \u2014 Integration core",
       "type": "integration",
       "phase": "WCU5",
       "status": "pending",
@@ -1440,15 +1623,20 @@
       "worktree": "wt/workspace_config_policy_unification-wcu5-integ-core",
       "integration_task": "WCU5-integ-core",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU5-integ-core.md",
-      "depends_on": ["WCU5-code", "WCU5-test"],
+      "depends_on": [
+        "WCU5-code",
+        "WCU5-test"
+      ],
       "concurrent_with": [],
       "git_branch": "workspace_config_policy_unification-wcu5-integ-core",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "WCU5-integ-linux",
-      "name": "WCU5 — Integration Linux (platform-fix)",
+      "name": "WCU5 \u2014 Integration Linux (platform-fix)",
       "type": "integration",
       "phase": "WCU5",
       "status": "pending",
@@ -1460,7 +1648,9 @@
         "docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh"
       ],
-      "acceptance_criteria": ["Linux smoke is green for this slice"],
+      "acceptance_criteria": [
+        "Linux smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on linux host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -1478,18 +1668,22 @@
       "worktree": "wt/workspace_config_policy_unification-wcu5-integ-linux",
       "integration_task": "WCU5-integ-linux",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU5-integ-linux.md",
-      "depends_on": ["WCU5-integ-core"],
+      "depends_on": [
+        "WCU5-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "linux",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "workspace_config_policy_unification-wcu5-integ-linux",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "WCU5-integ-macos",
-      "name": "WCU5 — Integration macOS (platform-fix)",
+      "name": "WCU5 \u2014 Integration macOS (platform-fix)",
       "type": "integration",
       "phase": "WCU5",
       "status": "pending",
@@ -1501,7 +1695,9 @@
         "docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh"
       ],
-      "acceptance_criteria": ["macOS smoke is green for this slice"],
+      "acceptance_criteria": [
+        "macOS smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on macos host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -1519,18 +1715,22 @@
       "worktree": "wt/workspace_config_policy_unification-wcu5-integ-macos",
       "integration_task": "WCU5-integ-macos",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU5-integ-macos.md",
-      "depends_on": ["WCU5-integ-core"],
+      "depends_on": [
+        "WCU5-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "macos",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "workspace_config_policy_unification-wcu5-integ-macos",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "WCU5-integ-windows",
-      "name": "WCU5 — Integration Windows (platform-fix)",
+      "name": "WCU5 \u2014 Integration Windows (platform-fix)",
       "type": "integration",
       "phase": "WCU5",
       "status": "pending",
@@ -1542,7 +1742,9 @@
         "docs/project_management/next/workspace-config-policy-unification/WCU5-spec.md",
         "docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1"
       ],
-      "acceptance_criteria": ["Windows smoke is green for this slice"],
+      "acceptance_criteria": [
+        "Windows smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on windows host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
@@ -1560,18 +1762,22 @@
       "worktree": "wt/workspace_config_policy_unification-wcu5-integ-windows",
       "integration_task": "WCU5-integ-windows",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU5-integ-windows.md",
-      "depends_on": ["WCU5-integ-core"],
+      "depends_on": [
+        "WCU5-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "windows",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "workspace_config_policy_unification-wcu5-integ-windows",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
     {
       "id": "WCU5-integ",
-      "name": "WCU5 — Docs + smoke + playbook alignment (integration)",
+      "name": "WCU5 \u2014 Docs + smoke + playbook alignment (integration)",
       "type": "integration",
       "phase": "WCU5",
       "status": "pending",
@@ -1613,13 +1819,19 @@
       "worktree": "wt/workspace_config_policy_unification-wcu5-integ",
       "integration_task": "WCU5-integ",
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/WCU5-integ.md",
-      "depends_on": ["WCU5-integ-core", "WCU5-integ-linux", "WCU5-integ-macos", "WCU5-integ-windows"],
+      "depends_on": [
+        "WCU5-integ-core",
+        "WCU5-integ-linux",
+        "WCU5-integ-macos",
+        "WCU5-integ-windows"
+      ],
       "concurrent_with": [],
       "git_branch": "workspace_config_policy_unification-wcu5-integ",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": true
     },
-
     {
       "id": "FZ-feature-cleanup",
       "name": "Feature cleanup (remove worktrees)",
@@ -1632,7 +1844,9 @@
         "docs/project_management/next/workspace-config-policy-unification/session_log.md",
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
-      "acceptance_criteria": ["All feature worktrees removed (or dry-run recorded)"],
+      "acceptance_criteria": [
+        "All feature worktrees removed (or dry-run recorded)"
+      ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/workspace-config-policy-unification\"",
         "Set status to in_progress; add START entry; commit docs"
@@ -1644,7 +1858,9 @@
       "worktree": null,
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/workspace-config-policy-unification/kickoff_prompts/FZ-feature-cleanup.md",
-      "depends_on": ["WCU5-integ"],
+      "depends_on": [
+        "WCU5-integ"
+      ],
       "concurrent_with": []
     }
   ]
