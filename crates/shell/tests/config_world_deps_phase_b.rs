@@ -184,7 +184,11 @@ fn yaml_get<'a>(root: &'a YamlValue, key: &str) -> Option<&'a YamlValue> {
 }
 
 fn parse_explain(stderr: &[u8]) -> JsonValue {
-    serde_json::from_slice(stderr).expect("explain JSON should parse from stderr")
+    let text = String::from_utf8_lossy(stderr);
+    let start = text
+        .find('{')
+        .unwrap_or_else(|| panic!("failed to locate JSON object in --explain stderr: {text}"));
+    serde_json::from_str(&text[start..]).expect("explain JSON should parse from stderr JSON object")
 }
 
 fn explain_key<'a>(explain: &'a JsonValue, key: &str) -> &'a JsonValue {

@@ -178,6 +178,7 @@ fn policy_workspace_scope_requires_workspace_root() {
         .command()
         .current_dir(fixture._temp.path())
         .arg("policy")
+        .arg("workspace")
         .arg("show")
         .output()
         .expect("run substrate policy show");
