@@ -1089,7 +1089,7 @@
       "name": "WCU3 \u2014 CLI scopes + reset semantics + explain (ADR-0012 Phase B) (integration)",
       "type": "integration",
       "phase": "WCU3",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge platform-fix branches (if any) and finalize WCU3 with a clean, auditable cross-platform green state.",
       "references": [
         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",

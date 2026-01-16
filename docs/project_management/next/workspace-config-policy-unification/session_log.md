@@ -322,3 +322,31 @@
   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU3-test/events.jsonl`
   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/target/triad/workspace_config_policy_unification/codex/WCU3-test/stderr.log`
 - Blockers: `Artifacts missing on disk at the expected paths (last_message/events/stderr)`
+
+## START — 2026-01-16T04:31:03Z — integration — WCU3-integ
+- Worktree: `wt/workspace_config_policy_unification-wcu3-integ`
+- Branch: `workspace_config_policy_unification-wcu3-integ`
+- Orchestration branch: `feat/workspace-config-policy-unification`
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="docs/project_management/next/workspace-config-policy-unification" TASK_ID="WCU3-integ"`
+
+## END — 2026-01-16T04:45:56Z — integration — WCU3-integ
+- Worktree: `/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ`
+- Branch: `workspace_config_policy_unification-wcu3-integ`
+- HEAD: `7ba0d1245ac83d4e746db608a2b645f29018c8e5`
+- Summary:
+  - Merged: `workspace_config_policy_unification-wcu3-integ-core` → `workspace_config_policy_unification-wcu3-integ`
+  - Platform-fix branches: none present to merge (linux/macos/windows tasks were no-op)
+- Checks run (with results):
+  - `make integ-checks` → exit `0`
+- Cross-platform smoke:
+  - Run `21055761993` (`success`) — https://github.com/atomize-hq/substrate/actions/runs/21055761993
+- Finisher summary:
+  - `TASK_BRANCH=workspace_config_policy_unification-wcu3-integ`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/workspace_config_policy_unification-wcu3-integ`
+  - `HEAD=7ba0d1245ac83d4e746db608a2b645f29018c8e5`
+  - `COMMITS=8`
+  - `CHECKS=make integ-checks`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=true`
+- Blockers: `NONE`
