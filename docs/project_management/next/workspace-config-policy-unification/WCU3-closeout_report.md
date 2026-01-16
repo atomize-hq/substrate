@@ -39,6 +39,10 @@ Slice spec:
 
 ## Cross-Platform Smoke (if applicable)
 - Run: `21055761993` (`success`) — https://github.com/atomize-hq/substrate/actions/runs/21055761993
+- Linux: pass
+- macOS: pass
+- Windows: pass
+- Run: `21055761993` (`success`) — https://github.com/atomize-hq/substrate/actions/runs/21055761993
 - Linux: `linux_self_hosted` (`success`)
 - macOS: `macos_self_hosted` (`success`)
 - Windows: `windows_self_hosted` (`success`)

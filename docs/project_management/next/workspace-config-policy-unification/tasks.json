@@ -1780,7 +1780,7 @@
       "name": "WCU5 \u2014 Docs + smoke + playbook alignment (integration)",
       "type": "integration",
       "phase": "WCU5",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge platform-fix branches (if any) and finalize WCU5 with a clean, auditable cross-platform green state.",
       "references": [
         "docs/project_management/next/workspace-config-policy-unification/WCU5-closeout_report.md",
