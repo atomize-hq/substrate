@@ -184,7 +184,11 @@ fn yaml_get<'a>(root: &'a YamlValue, key: &str) -> Option<&'a YamlValue> {
 }
 
 fn parse_explain(stderr: &[u8]) -> JsonValue {
-    serde_json::from_slice(stderr).expect("explain JSON should parse from stderr")
+    let text = String::from_utf8_lossy(stderr);
+    let start = text
+        .find('{')
+        .unwrap_or_else(|| panic!("failed to locate JSON object in --explain stderr: {text}"));
+    serde_json::from_str(&text[start..]).expect("explain JSON should parse from stderr JSON object")
 }
 
 fn explain_key<'a>(explain: &'a JsonValue, key: &str) -> &'a JsonValue {
@@ -618,5 +622,123 @@ fn config_global_reset_removes_world_deps_keys_from_global_patch_mapping() {
     assert!(
         removed,
         "expected world.deps keys removed from global patch, got: {after:?}"
+    );
+}
+
+#[test]
+fn config_current_show_outputs_are_deterministic_without_changes() {
+    let fixture = WorldDepsConfigFixture::new();
+    fixture.init_workspace();
+
+    let global = fixture.config_global_set_json(
+        &fixture.workspace_root,
+        &[
+            "world.deps.enabled+=a",
+            "world.deps.enabled+=b",
+            "world.deps.inventory_mode=merged",
+            "world.deps.builtins=enabled",
+        ],
+    );
+    assert!(
+        global.status.success(),
+        "global set should succeed: {global:?}"
+    );
+
+    let workspace = fixture.config_workspace_set_json(
+        &fixture.workspace_root,
+        &[
+            "world.deps.enabled+=b",
+            "world.deps.enabled+=c",
+            "world.deps.inventory_mode=workspace_only",
+            "world.deps.builtins=disabled",
+        ],
+    );
+    assert!(
+        workspace.status.success(),
+        "workspace set should succeed: {workspace:?}"
+    );
+
+    let current_1 = fixture.config_current_show_json(&fixture.workspace_root, false);
+    assert!(
+        current_1.status.success(),
+        "config current show should succeed: {current_1:?}"
+    );
+    let current_2 = fixture.config_current_show_json(&fixture.workspace_root, false);
+    assert!(
+        current_2.status.success(),
+        "config current show should succeed: {current_2:?}"
+    );
+    assert_eq!(
+        current_1.stdout, current_2.stdout,
+        "config current show --json stdout must be deterministic for identical inputs"
+    );
+    assert_eq!(
+        current_1.stderr, current_2.stderr,
+        "config current show --json stderr must be deterministic for identical inputs"
+    );
+
+    let explain_1 = fixture.config_current_show_json(&fixture.workspace_root, true);
+    assert!(
+        explain_1.status.success(),
+        "config current show --explain should succeed: {explain_1:?}"
+    );
+    let explain_2 = fixture.config_current_show_json(&fixture.workspace_root, true);
+    assert!(
+        explain_2.status.success(),
+        "config current show --explain should succeed: {explain_2:?}"
+    );
+    assert_eq!(
+        explain_1.stdout, explain_2.stdout,
+        "config current show --json --explain stdout must be deterministic for identical inputs"
+    );
+    assert_eq!(
+        explain_1.stderr, explain_2.stderr,
+        "config current show --json --explain stderr must be deterministic for identical inputs"
+    );
+}
+
+#[test]
+fn config_world_deps_enabled_explain_reports_only_contributing_layers() {
+    let fixture = WorldDepsConfigFixture::new();
+    fixture.init_workspace();
+
+    let global =
+        fixture.config_global_set_json(&fixture.workspace_root, &["world.deps.enabled+=a"]);
+    assert!(
+        global.status.success(),
+        "global set should succeed: {global:?}"
+    );
+    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
+    assert!(
+        current.status.success(),
+        "config current show should succeed: {current:?}"
+    );
+    let explain = parse_explain(&current.stderr);
+    assert_eq!(
+        explain_layers(explain_key(&explain, "world.deps.enabled")),
+        vec!["global_patch"]
+    );
+
+    let reset = fixture.config_global_reset(&fixture.workspace_root, &["world.deps.enabled"]);
+    assert!(
+        reset.status.success(),
+        "global reset should succeed: {reset:?}"
+    );
+
+    let workspace =
+        fixture.config_workspace_set_json(&fixture.workspace_root, &["world.deps.enabled+=b"]);
+    assert!(
+        workspace.status.success(),
+        "workspace set should succeed: {workspace:?}"
+    );
+    let current = fixture.config_current_show_json(&fixture.workspace_root, true);
+    assert!(
+        current.status.success(),
+        "config current show should succeed: {current:?}"
+    );
+    let explain = parse_explain(&current.stderr);
+    assert_eq!(
+        explain_layers(explain_key(&explain, "world.deps.enabled")),
+        vec!["workspace_patch"]
     );
 }

@@ -215,6 +215,8 @@ pub struct ConfigWorkspaceCmd {
 
 #[derive(Subcommand, Debug)]
 pub enum ConfigWorkspaceAction {
+    /// Print the workspace config patch (<workspace_root>/.substrate/workspace.yaml)
+    Show(ConfigShowArgs),
     /// Update the workspace config via dotted updates (key=value, key+=value, key-=value)
     Set(ConfigSetArgs),
     /// Remove keys from the workspace config patch (restore inheritance from global+defaults)
@@ -263,7 +265,7 @@ pub struct ConfigGlobalCmd {
 pub enum ConfigGlobalAction {
     /// Initialize $SUBSTRATE_HOME/config.yaml (creates if missing; overwrites with --force)
     Init(ConfigInitArgs),
-    /// Print $SUBSTRATE_HOME/config.yaml if present; otherwise print built-in defaults
+    /// Print the global config patch ($SUBSTRATE_HOME/config.yaml)
     Show(ConfigShowArgs),
     /// Update $SUBSTRATE_HOME/config.yaml via dotted updates (key=value, key+=value, key-=value)
     Set(ConfigSetArgs),
@@ -300,8 +302,8 @@ pub struct ConfigSetArgs {
 
 #[derive(Args, Debug)]
 pub struct ConfigResetArgs {
-    /// One or more dotted keys to remove from the patch file (e.g., world.deps.enabled)
-    #[arg(value_name = "KEY", required = true)]
+    /// One or more dotted keys to remove from the patch file (e.g., world.deps.enabled); omit to reset the entire patch to {}
+    #[arg(value_name = "KEY")]
     pub keys: Vec<String>,
 }
 
@@ -311,12 +313,30 @@ pub enum PolicyAction {
     Current(PolicyCurrentCmd),
     /// Initialize <workspace_root>/.substrate/policy.yaml (creates if missing; overwrites with --force)
     Init(PolicyInitArgs),
-    /// Print the effective policy for the current workspace (YAML by default, JSON with --json)
+    /// Print the effective policy for the current directory/workspace (alias for `current show`)
     Show(PolicyShowArgs),
-    /// Update <workspace_root>/.substrate/policy.yaml via dotted updates (key=value, key+=value, key-=value)
+    /// Update the workspace policy patch via dotted updates (alias for `workspace set`)
     Set(PolicySetArgs),
     /// Global policy commands ($SUBSTRATE_HOME/policy.yaml)
     Global(PolicyGlobalCmd),
+    /// Workspace-scoped policy patch commands (<workspace_root>/.substrate/policy.yaml)
+    Workspace(PolicyWorkspaceCmd),
+}
+
+#[derive(Args, Debug)]
+pub struct PolicyWorkspaceCmd {
+    #[command(subcommand)]
+    pub action: PolicyWorkspaceAction,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum PolicyWorkspaceAction {
+    /// Print the workspace policy patch (<workspace_root>/.substrate/policy.yaml)
+    Show(PolicyShowArgs),
+    /// Update the workspace policy patch via dotted updates (key=value, key+=value, key-=value)
+    Set(PolicySetArgs),
+    /// Remove keys from the workspace policy patch (restore inheritance from global+defaults)
+    Reset(ConfigResetArgs),
 }
 
 #[derive(Args, Debug)]
@@ -329,10 +349,12 @@ pub struct PolicyGlobalCmd {
 pub enum PolicyGlobalAction {
     /// Initialize $SUBSTRATE_HOME/policy.yaml (creates if missing; overwrites with --force)
     Init(PolicyInitArgs),
-    /// Print $SUBSTRATE_HOME/policy.yaml if present; otherwise print built-in defaults
+    /// Print the global policy patch ($SUBSTRATE_HOME/policy.yaml)
     Show(PolicyShowArgs),
     /// Update $SUBSTRATE_HOME/policy.yaml via dotted updates (key=value, key+=value, key-=value)
     Set(PolicySetArgs),
+    /// Remove keys from the global policy patch (restore inheritance from defaults)
+    Reset(ConfigResetArgs),
 }
 
 #[derive(Args, Debug)]
@@ -347,6 +369,9 @@ pub struct PolicyShowArgs {
     /// Emit JSON instead of YAML
     #[arg(long)]
     pub json: bool,
+    /// Emit deterministic explain JSON on stderr (per-key provenance)
+    #[arg(long)]
+    pub explain: bool,
 }
 
 #[derive(Args, Debug)]

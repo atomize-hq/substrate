@@ -77,7 +77,7 @@ impl GlobalConfigFixture {
 }
 
 #[test]
-fn config_global_show_prints_defaults_when_missing() {
+fn config_global_show_prints_empty_patch_when_missing() {
     let fixture = GlobalConfigFixture::new();
     assert!(
         !fixture.config_path().exists(),
@@ -85,45 +85,10 @@ fn config_global_show_prints_defaults_when_missing() {
     );
 
     let json = fixture.global_show_json();
-    assert_eq!(
-        json.pointer("/world/enabled").and_then(|v| v.as_bool()),
-        Some(true)
-    );
-    assert_eq!(
-        json.pointer("/world/anchor_mode").and_then(|v| v.as_str()),
-        Some("workspace")
-    );
-    assert_eq!(
-        json.pointer("/world/anchor_path").and_then(|v| v.as_str()),
-        Some("")
-    );
-    assert_eq!(
-        json.pointer("/world/caged").and_then(|v| v.as_bool()),
-        Some(true)
-    );
-    assert_eq!(
-        json.pointer("/policy/mode").and_then(|v| v.as_str()),
-        Some("observe")
-    );
-    assert_eq!(
-        json.pointer("/sync/auto_sync").and_then(|v| v.as_bool()),
-        Some(false)
-    );
-    assert_eq!(
-        json.pointer("/sync/direction").and_then(|v| v.as_str()),
-        Some("from_world")
-    );
-    assert_eq!(
-        json.pointer("/sync/conflict_policy")
-            .and_then(|v| v.as_str()),
-        Some("prefer_host")
-    );
-    assert_eq!(
-        json.pointer("/sync/exclude")
-            .and_then(|v| v.as_array())
-            .map(|v| v.len()),
-        Some(0)
-    );
+    let patch = json
+        .as_object()
+        .expect("config global show --json should return a JSON object");
+    assert!(patch.is_empty(), "expected empty patch JSON, got: {json}");
 }
 
 #[test]
@@ -142,7 +107,7 @@ fn config_global_init_writes_empty_patch_yaml() {
 
     let raw = fixture.read_raw_config();
     assert!(
-        raw.starts_with("# Substrate global config patch (sparse overrides)."),
+        raw.starts_with("# Substrate config patch (sparse overrides; scope=global)."),
         "expected patch header, got:\n{raw}"
     );
 
@@ -213,7 +178,7 @@ fn config_global_set_creates_file_and_applies_updates() {
         json.pointer("/sync/exclude")
             .and_then(|v| v.as_array())
             .and_then(|v| v.iter().map(|x| x.as_str()).collect::<Option<Vec<_>>>()),
-        Some(vec!["a", "b"])
+        Some(vec![".git/**", ".substrate/**", "a", "b"])
     );
 }
 
@@ -259,16 +224,8 @@ fn config_global_init_force_overwrites_existing_config() {
     );
 
     let json = fixture.global_show_json();
-    assert_eq!(
-        json.pointer("/world/enabled").and_then(|v| v.as_bool()),
-        Some(true)
-    );
-    assert_eq!(
-        json.pointer("/world/anchor_mode").and_then(|v| v.as_str()),
-        Some("workspace")
-    );
-    assert_eq!(
-        json.pointer("/policy/mode").and_then(|v| v.as_str()),
-        Some("observe")
-    );
+    let patch = json
+        .as_object()
+        .expect("config global show --json should return a JSON object");
+    assert!(patch.is_empty(), "expected empty patch JSON, got: {json}");
 }

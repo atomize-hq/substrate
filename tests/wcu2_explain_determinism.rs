@@ -84,7 +84,11 @@ fn run_current_show_json_explain(
     substrate_home: &Path,
 ) -> (Vec<u8>, Vec<u8>, ExplainV1) {
     let out = run_current_show_output(workspace_root, substrate_home);
-    let explain: ExplainV1 = serde_json::from_slice(&out.stderr).unwrap();
+    let stderr_text = String::from_utf8_lossy(&out.stderr);
+    let json_start = stderr_text.find('{').unwrap_or_else(|| {
+        panic!("failed to locate JSON object in --explain stderr:\n{stderr_text}")
+    });
+    let explain: ExplainV1 = serde_json::from_str(&stderr_text[json_start..]).unwrap();
     (out.stdout, out.stderr, explain)
 }
 
