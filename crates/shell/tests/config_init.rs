@@ -50,10 +50,6 @@ impl GlobalConfigFixture {
         fs::read_to_string(self.config_path()).expect("read config.yaml")
     }
 
-    fn read_yaml_config(&self) -> YamlValue {
-        serde_yaml::from_str(&self.read_raw_config()).expect("config.yaml should parse as YAML")
-    }
-
     fn global_init(&self, force: bool) -> std::process::Output {
         let mut cmd = self.command();
         cmd.arg("config").arg("global").arg("init");
@@ -131,7 +127,7 @@ fn config_global_show_prints_defaults_when_missing() {
 }
 
 #[test]
-fn config_global_init_writes_default_config_yaml() {
+fn config_global_init_writes_empty_patch_yaml() {
     let fixture = GlobalConfigFixture::new();
     let output = fixture.global_init(false);
     assert!(
@@ -144,11 +140,18 @@ fn config_global_init_writes_default_config_yaml() {
         fixture.config_path().display()
     );
 
-    let yaml = fixture.read_yaml_config();
+    let raw = fixture.read_raw_config();
+    assert!(
+        raw.starts_with("# Substrate global config patch (sparse overrides)."),
+        "expected patch header, got:\n{raw}"
+    );
+
+    let yaml: YamlValue = serde_yaml::from_str(&raw).expect("config.yaml should parse as YAML");
     let root = yaml.as_mapping().expect("yaml root mapping");
-    assert!(root.contains_key(YamlValue::String("world".to_string())));
-    assert!(root.contains_key(YamlValue::String("policy".to_string())));
-    assert!(root.contains_key(YamlValue::String("sync".to_string())));
+    assert!(
+        root.is_empty(),
+        "expected empty patch mapping, got: {yaml:?}"
+    );
 }
 
 #[test]
