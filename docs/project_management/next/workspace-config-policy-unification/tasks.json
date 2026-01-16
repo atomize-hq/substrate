@@ -423,7 +423,7 @@
       "name": "WCU2 — Patch parsing + merge (ADR-0012 Phase A) (test)",
       "type": "test",
       "phase": "WCU2",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add tests for per-key merge strategies and multi-source provenance output required by ADR-0012.",
       "references": [
         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
