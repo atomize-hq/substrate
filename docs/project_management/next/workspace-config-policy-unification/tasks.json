@@ -839,7 +839,7 @@
       "name": "WCU3 \u2014 CLI scopes + reset semantics + explain (ADR-0012 Phase B) (test)",
       "type": "test",
       "phase": "WCU3",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add tests proving config editor support for `world.deps.enabled` and `--explain` provenance for a multi-layer merged key.",
       "references": [
         "docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md",
