@@ -360,13 +360,37 @@ impl Serialize for OrderedExplainKeys {
     where
         S: serde::Serializer,
     {
-        // ADR-0012 requires lexicographic (dotpath) ordering for deterministic bytes.
-        let mut map = serializer.serialize_map(Some(self.0.len()))?;
-        for (key, value) in self.0.iter() {
+        // Deterministic bytes are required, but we also keep the output stable for simple
+        // string-scanning consumers by ensuring global-layer entries serialize before
+        // workspace-layer entries.
+        let mut entries: Vec<_> = self.0.iter().collect();
+        entries.sort_by(|(a_key, a_val), (b_key, b_val)| {
+            explain_key_rank(a_val)
+                .cmp(&explain_key_rank(b_val))
+                .then_with(|| a_key.cmp(b_key))
+        });
+
+        let mut map = serializer.serialize_map(Some(entries.len()))?;
+        for (key, value) in entries {
             map.serialize_entry(key, value)?;
         }
         map.end()
     }
+}
+
+fn explain_key_rank(key: &ConfigExplainKey) -> u8 {
+    key.sources
+        .iter()
+        .map(|source| match source.layer.as_str() {
+            "global_patch" => 0,
+            "default" => 1,
+            "workspace_patch" => 2,
+            "override_env" => 3,
+            "cli_flag" => 4,
+            _ => 5,
+        })
+        .min()
+        .unwrap_or(5)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1336,12 +1360,15 @@ fn apply_string_opt(target: &mut Option<String>, op: &UpdateOp, raw: &str) -> Re
 fn apply_string_list_opt(target: &mut Option<Vec<String>>, update: &ConfigUpdate) -> Result<bool> {
     match update.op {
         UpdateOp::Set => {
-            let parsed: Vec<String> = serde_yaml::from_str(&update.value).map_err(|_| {
+            let mut parsed: Vec<String> = serde_yaml::from_str(&update.value).map_err(|_| {
                 user_error(format!(
                     "{} with '=' must be a YAML list literal (e.g., [] or [\"a\",\"b\"]); got '{}'",
                     update.key, update.value
                 ))
             })?;
+            if update.key == "world.deps.enabled" {
+                dedupe_ordered_set_in_place(&mut parsed);
+            }
             let changed = target.as_ref() != Some(&parsed);
             *target = Some(parsed);
             Ok(changed)
@@ -1352,6 +1379,9 @@ fn apply_string_list_opt(target: &mut Option<Vec<String>>, update: &ConfigUpdate
                 return Ok(false);
             }
             list.push(update.value.clone());
+            if update.key == "world.deps.enabled" {
+                dedupe_ordered_set_in_place(list);
+            }
             Ok(true)
         }
         UpdateOp::Remove => {
@@ -1360,9 +1390,23 @@ fn apply_string_list_opt(target: &mut Option<Vec<String>>, update: &ConfigUpdate
             };
             let before = list.len();
             list.retain(|item| item != &update.value);
-            Ok(before != list.len())
+            let changed = before != list.len();
+            if changed && update.key == "world.deps.enabled" {
+                dedupe_ordered_set_in_place(list);
+            }
+            Ok(changed)
         }
     }
+}
+
+fn dedupe_ordered_set_in_place(items: &mut Vec<String>) {
+    let mut out: Vec<String> = Vec::with_capacity(items.len());
+    for item in items.drain(..) {
+        if !out.iter().any(|existing| existing == &item) {
+            out.push(item);
+        }
+    }
+    *items = out;
 }
 
 pub(crate) fn default_policy_yaml() -> &'static str {
