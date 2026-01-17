@@ -193,3 +193,65 @@ jq -r '.sprints[] | select(.directory=="docs/project_management/next/policy-patc
 - Blockers to execution:
   - Fill the validation coverage gap in Finding 004.
   - Make docs alignment auditable in tasks/criteria per Finding 005.
+
+---
+
+# Planning Quality Gate Report — policy-patch-only-broker-effective-resolution (Re-review Pass 2)
+
+RECOMMENDATION: ACCEPT
+
+## Metadata
+- Feature directory: `docs/project_management/next/policy-patch-only-broker-effective-resolution/`
+- Reviewed commit: `19c2e853e602c0713a6dd4028df88a95e0bfff19`
+- Reviewer: third-party reviewer (Codex)
+- Date (UTC): `2026-01-17`
+- Recommendation: `ACCEPT`
+
+## Evidence: Commands Run (verbatim)
+
+```bash
+export FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"
+
+jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
+# exit: 0
+
+jq -e . docs/project_management/next/sequencing.json >/dev/null
+# exit: 0
+
+make planning-validate FEATURE_DIR="$FEATURE_DIR"
+# exit: 0
+
+make planning-lint FEATURE_DIR="$FEATURE_DIR"
+# exit: 0
+```
+
+## Findings (delta vs prior pass)
+
+### Finding 004 — Validation covers shim + world-agent (C1)
+- Status: `VERIFIED`
+- Evidence:
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md` (“Additional required validation (C1 only): shim + world-agent” section)
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json` task `C1-integ-core` acceptance criteria + end_checklist include:
+    - `cargo test -p substrate-shim -- --nocapture`
+    - `cargo test -p world-agent -- --nocapture`
+- Impact: C1 acceptance criteria is runnable and auditable beyond the `--no-world` CLI smoke subset.
+- Fix required (exact): none
+
+### Finding 005 — `docs/CONFIGURATION.md` update is explicitly tracked
+- Status: `VERIFIED`
+- Evidence:
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json` tasks `C1-integ-core` and `C1-integ` include `docs/CONFIGURATION.md` in `references` and as an explicit acceptance criterion.
+- Impact: Required docs deliverable is owned by a task and cannot be silently skipped.
+- Fix required (exact): none
+
+### Finding 006 — ADR validation pointers match this feature’s playbook/smoke scripts
+- Status: `VERIFIED`
+- Evidence: `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` (Validation Plan references this feature’s `manual_testing_playbook.md` and `smoke/*`)
+- Impact: Operators/CI are pointed at the correct validation assets.
+- Fix required (exact): none
+
+## Decision: ACCEPT or FLAG
+
+### If ACCEPT
+- Summary: Mechanical checks are green and prior DEFECT findings are resolved with explicit, runnable validation wiring.
+- Next step: Execution triads may begin after `F0-exec-preflight` is completed.

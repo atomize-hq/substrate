@@ -145,3 +145,20 @@
   - `make planning-validate FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"` → `0`
   - `jq -e . "docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json" >/dev/null` → `0`
   - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`
+
+## START — 2026-01-17T04:16:30Z — remediation — quality gate re-run (verification only)
+- Feature: `docs/project_management/next/policy-patch-only-broker-effective-resolution/`
+- Goal: Re-run required mechanical checks and append a new quality gate pass if green.
+- Commands planned:
+  - `export FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"`
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
+  - `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
+  - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
+
+## END — 2026-01-17T04:16:30Z — remediation — quality gate re-run (verification only)
+- Commands run (with exit codes):
+  - `jq -e . "docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json" >/dev/null` → `0`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"` → `0`
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"` → `0`
