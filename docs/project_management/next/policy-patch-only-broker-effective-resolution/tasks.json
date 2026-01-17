@@ -3,8 +3,16 @@
     "schema_version": 3,
     "feature": "policy-patch-only-broker-effective-resolution",
     "cross_platform": true,
-    "behavior_platforms_required": ["linux", "macos", "windows"],
-    "ci_parity_platforms_required": ["linux", "macos", "windows"],
+    "behavior_platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
+    "ci_parity_platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
     "execution_gates": true,
     "automation": {
       "enabled": true,
@@ -29,7 +37,9 @@
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md",
         "docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md"
       ],
-      "acceptance_criteria": ["Execution preflight recommendation recorded (ACCEPT or REVISE)"],
+      "acceptance_criteria": [
+        "Execution preflight recommendation recorded (ACCEPT or REVISE)"
+      ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/policy-patch-only-broker-effective-resolution\"",
         "Read plan.md, tasks.json, session_log.md, C0 spec, kickoff prompt",
@@ -45,10 +55,9 @@
       "depends_on": [],
       "concurrent_with": []
     },
-
     {
       "id": "C0-code",
-      "name": "C0 — Broker canonical resolver + CLI delegation (code)",
+      "name": "C0 \u2014 Broker canonical resolver + CLI delegation (code)",
       "type": "code",
       "phase": "C0",
       "status": "completed",
@@ -64,7 +73,7 @@
         "docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Broker resolves effective policy by patch merge (defaults → global → workspace)",
+        "Broker resolves effective policy by patch merge (defaults \u2192 global \u2192 workspace)",
         "Workspace disabled marker prevents workspace policy discovery",
         "Policy current show delegates effective resolution to broker"
       ],
@@ -83,15 +92,20 @@
       "worktree": "wt/policy-patch-only-broker-effective-resolution-c0-code",
       "integration_task": "C0-integ-core",
       "kickoff_prompt": "docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C0-code.md",
-      "depends_on": ["F0-exec-preflight"],
-      "concurrent_with": ["C0-test"],
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
+      "concurrent_with": [
+        "C0-test"
+      ],
       "git_branch": "policy-patch-only-broker-effective-resolution-c0-code",
-      "required_make_targets": ["triad-code-checks"]
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
     },
-
     {
       "id": "C0-test",
-      "name": "C0 — Broker canonical resolver + CLI delegation (test)",
+      "name": "C0 \u2014 Broker canonical resolver + CLI delegation (test)",
       "type": "test",
       "phase": "C0",
       "status": "completed",
@@ -123,18 +137,23 @@
       "worktree": "wt/policy-patch-only-broker-effective-resolution-c0-test",
       "integration_task": "C0-integ-core",
       "kickoff_prompt": "docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C0-test.md",
-      "depends_on": ["F0-exec-preflight"],
-      "concurrent_with": ["C0-code"],
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
+      "concurrent_with": [
+        "C0-code"
+      ],
       "git_branch": "policy-patch-only-broker-effective-resolution-c0-test",
-      "required_make_targets": ["triad-test-checks"]
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
     },
-
     {
       "id": "C0-integ-core",
-      "name": "C0 — Integration core",
+      "name": "C0 \u2014 Integration core",
       "type": "integration",
       "phase": "C0",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge C0 code+tests, reconcile to spec, and get a primary-platform green state before cross-platform dispatch.",
       "references": [
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md",
@@ -172,19 +191,23 @@
       "worktree": "wt/policy-patch-only-broker-effective-resolution-c0-integ-core",
       "integration_task": "C0-integ-core",
       "kickoff_prompt": "docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C0-integ-core.md",
-      "depends_on": ["C0-code", "C0-test"],
+      "depends_on": [
+        "C0-code",
+        "C0-test"
+      ],
       "concurrent_with": [],
       "git_branch": "policy-patch-only-broker-effective-resolution-c0-integ-core",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": false
     },
-
     {
       "id": "C0-integ-linux",
-      "name": "C0 — Integration platform-fix: linux",
+      "name": "C0 \u2014 Integration platform-fix: linux",
       "type": "integration",
       "phase": "C0",
-      "status": "pending",
+      "status": "completed",
       "description": "Linux platform-fix task: ensure Linux smoke is green for this slice and record run id/URL.",
       "references": [
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md",
@@ -193,7 +216,9 @@
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md",
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh"
       ],
-      "acceptance_criteria": ["Linux smoke is green for this slice"],
+      "acceptance_criteria": [
+        "Linux smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on Linux host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/policy-patch-only-broker-effective-resolution\"",
@@ -211,22 +236,25 @@
       "worktree": "wt/policy-patch-only-broker-effective-resolution-c0-integ-linux",
       "integration_task": "C0-integ-linux",
       "kickoff_prompt": "docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C0-integ-linux.md",
-      "depends_on": ["C0-integ-core"],
+      "depends_on": [
+        "C0-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "linux",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "policy-patch-only-broker-effective-resolution-c0-integ-linux",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
-
     {
       "id": "C0-integ-macos",
-      "name": "C0 — Integration platform-fix: macos",
+      "name": "C0 \u2014 Integration platform-fix: macos",
       "type": "integration",
       "phase": "C0",
-      "status": "pending",
+      "status": "completed",
       "description": "macOS platform-fix task: ensure macOS smoke is green for this slice and record run id/URL.",
       "references": [
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md",
@@ -235,7 +263,9 @@
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md",
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh"
       ],
-      "acceptance_criteria": ["macOS smoke is green for this slice"],
+      "acceptance_criteria": [
+        "macOS smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on macOS host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/policy-patch-only-broker-effective-resolution\"",
@@ -253,22 +283,25 @@
       "worktree": "wt/policy-patch-only-broker-effective-resolution-c0-integ-macos",
       "integration_task": "C0-integ-macos",
       "kickoff_prompt": "docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C0-integ-macos.md",
-      "depends_on": ["C0-integ-core"],
+      "depends_on": [
+        "C0-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "macos",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "policy-patch-only-broker-effective-resolution-c0-integ-macos",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
-
     {
       "id": "C0-integ-windows",
-      "name": "C0 — Integration platform-fix: windows",
+      "name": "C0 \u2014 Integration platform-fix: windows",
       "type": "integration",
       "phase": "C0",
-      "status": "pending",
+      "status": "completed",
       "description": "Windows platform-fix task: ensure Windows smoke is green for this slice and record run id/URL.",
       "references": [
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md",
@@ -277,7 +310,9 @@
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md",
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1"
       ],
-      "acceptance_criteria": ["Windows smoke is green for this slice"],
+      "acceptance_criteria": [
+        "Windows smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on Windows host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/policy-patch-only-broker-effective-resolution\"",
@@ -295,19 +330,22 @@
       "worktree": "wt/policy-patch-only-broker-effective-resolution-c0-integ-windows",
       "integration_task": "C0-integ-windows",
       "kickoff_prompt": "docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C0-integ-windows.md",
-      "depends_on": ["C0-integ-core"],
+      "depends_on": [
+        "C0-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "windows",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "policy-patch-only-broker-effective-resolution-c0-integ-windows",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
-
     {
       "id": "C0-integ",
-      "name": "C0 — Final integration (aggregator)",
+      "name": "C0 \u2014 Final integration (aggregator)",
       "type": "integration",
       "phase": "C0",
       "status": "pending",
@@ -350,16 +388,22 @@
       "worktree": "wt/policy-patch-only-broker-effective-resolution-c0-integ",
       "integration_task": "C0-integ",
       "kickoff_prompt": "docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C0-integ.md",
-      "depends_on": ["C0-integ-core", "C0-integ-linux", "C0-integ-macos", "C0-integ-windows"],
+      "depends_on": [
+        "C0-integ-core",
+        "C0-integ-linux",
+        "C0-integ-macos",
+        "C0-integ-windows"
+      ],
       "concurrent_with": [],
       "git_branch": "policy-patch-only-broker-effective-resolution-c0-integ",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": true
     },
-
     {
       "id": "C1-code",
-      "name": "C1 — Fail-closed execution + docs alignment (code)",
+      "name": "C1 \u2014 Fail-closed execution + docs alignment (code)",
       "type": "code",
       "phase": "C1",
       "status": "pending",
@@ -392,15 +436,20 @@
       "worktree": "wt/policy-patch-only-broker-effective-resolution-c1-code",
       "integration_task": "C1-integ-core",
       "kickoff_prompt": "docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C1-code.md",
-      "depends_on": ["C0-integ"],
-      "concurrent_with": ["C1-test"],
+      "depends_on": [
+        "C0-integ"
+      ],
+      "concurrent_with": [
+        "C1-test"
+      ],
       "git_branch": "policy-patch-only-broker-effective-resolution-c1-code",
-      "required_make_targets": ["triad-code-checks"]
+      "required_make_targets": [
+        "triad-code-checks"
+      ]
     },
-
     {
       "id": "C1-test",
-      "name": "C1 — Fail-closed execution + docs alignment (test)",
+      "name": "C1 \u2014 Fail-closed execution + docs alignment (test)",
       "type": "test",
       "phase": "C1",
       "status": "pending",
@@ -431,15 +480,20 @@
       "worktree": "wt/policy-patch-only-broker-effective-resolution-c1-test",
       "integration_task": "C1-integ-core",
       "kickoff_prompt": "docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C1-test.md",
-      "depends_on": ["C0-integ"],
-      "concurrent_with": ["C1-code"],
+      "depends_on": [
+        "C0-integ"
+      ],
+      "concurrent_with": [
+        "C1-code"
+      ],
       "git_branch": "policy-patch-only-broker-effective-resolution-c1-test",
-      "required_make_targets": ["triad-test-checks"]
+      "required_make_targets": [
+        "triad-test-checks"
+      ]
     },
-
     {
       "id": "C1-integ-core",
-      "name": "C1 — Integration core",
+      "name": "C1 \u2014 Integration core",
       "type": "integration",
       "phase": "C1",
       "status": "pending",
@@ -485,16 +539,20 @@
       "worktree": "wt/policy-patch-only-broker-effective-resolution-c1-integ-core",
       "integration_task": "C1-integ-core",
       "kickoff_prompt": "docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C1-integ-core.md",
-      "depends_on": ["C1-code", "C1-test"],
+      "depends_on": [
+        "C1-code",
+        "C1-test"
+      ],
       "concurrent_with": [],
       "git_branch": "policy-patch-only-broker-effective-resolution-c1-integ-core",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": false
     },
-
     {
       "id": "C1-integ-linux",
-      "name": "C1 — Integration platform-fix: linux",
+      "name": "C1 \u2014 Integration platform-fix: linux",
       "type": "integration",
       "phase": "C1",
       "status": "pending",
@@ -506,7 +564,9 @@
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md",
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh"
       ],
-      "acceptance_criteria": ["Linux smoke is green for this slice"],
+      "acceptance_criteria": [
+        "Linux smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on Linux host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/policy-patch-only-broker-effective-resolution\"",
@@ -524,19 +584,22 @@
       "worktree": "wt/policy-patch-only-broker-effective-resolution-c1-integ-linux",
       "integration_task": "C1-integ-linux",
       "kickoff_prompt": "docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C1-integ-linux.md",
-      "depends_on": ["C1-integ-core"],
+      "depends_on": [
+        "C1-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "linux",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "policy-patch-only-broker-effective-resolution-c1-integ-linux",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
-
     {
       "id": "C1-integ-macos",
-      "name": "C1 — Integration platform-fix: macos",
+      "name": "C1 \u2014 Integration platform-fix: macos",
       "type": "integration",
       "phase": "C1",
       "status": "pending",
@@ -548,7 +611,9 @@
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md",
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh"
       ],
-      "acceptance_criteria": ["macOS smoke is green for this slice"],
+      "acceptance_criteria": [
+        "macOS smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on macOS host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/policy-patch-only-broker-effective-resolution\"",
@@ -566,19 +631,22 @@
       "worktree": "wt/policy-patch-only-broker-effective-resolution-c1-integ-macos",
       "integration_task": "C1-integ-macos",
       "kickoff_prompt": "docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C1-integ-macos.md",
-      "depends_on": ["C1-integ-core"],
+      "depends_on": [
+        "C1-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "macos",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "policy-patch-only-broker-effective-resolution-c1-integ-macos",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
-
     {
       "id": "C1-integ-windows",
-      "name": "C1 — Integration platform-fix: windows",
+      "name": "C1 \u2014 Integration platform-fix: windows",
       "type": "integration",
       "phase": "C1",
       "status": "pending",
@@ -590,7 +658,9 @@
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md",
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1"
       ],
-      "acceptance_criteria": ["Windows smoke is green for this slice"],
+      "acceptance_criteria": [
+        "Windows smoke is green for this slice"
+      ],
       "start_checklist": [
         "Run on Windows host if possible",
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/policy-patch-only-broker-effective-resolution\"",
@@ -608,19 +678,22 @@
       "worktree": "wt/policy-patch-only-broker-effective-resolution-c1-integ-windows",
       "integration_task": "C1-integ-windows",
       "kickoff_prompt": "docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C1-integ-windows.md",
-      "depends_on": ["C1-integ-core"],
+      "depends_on": [
+        "C1-integ-core"
+      ],
       "concurrent_with": [],
       "platform": "windows",
       "runner": "github-actions",
       "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "policy-patch-only-broker-effective-resolution-c1-integ-windows",
-      "required_make_targets": ["triad-code-checks"],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
       "merge_to_orchestration": false
     },
-
     {
       "id": "C1-integ",
-      "name": "C1 — Final integration (aggregator)",
+      "name": "C1 \u2014 Final integration (aggregator)",
       "type": "integration",
       "phase": "C1",
       "status": "pending",
@@ -668,13 +741,19 @@
       "worktree": "wt/policy-patch-only-broker-effective-resolution-c1-integ",
       "integration_task": "C1-integ",
       "kickoff_prompt": "docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C1-integ.md",
-      "depends_on": ["C1-integ-core", "C1-integ-linux", "C1-integ-macos", "C1-integ-windows"],
+      "depends_on": [
+        "C1-integ-core",
+        "C1-integ-linux",
+        "C1-integ-macos",
+        "C1-integ-windows"
+      ],
       "concurrent_with": [],
       "git_branch": "policy-patch-only-broker-effective-resolution-c1-integ",
-      "required_make_targets": ["integ-checks"],
+      "required_make_targets": [
+        "integ-checks"
+      ],
       "merge_to_orchestration": true
     },
-
     {
       "id": "FZ-feature-cleanup",
       "name": "Feature cleanup (worktrees + branches)",
@@ -688,7 +767,9 @@
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md",
         "scripts/triad/feature_cleanup.sh"
       ],
-      "acceptance_criteria": ["All worktrees removed (or intentionally retained) and cleanup summary recorded in session_log.md"],
+      "acceptance_criteria": [
+        "All worktrees removed (or intentionally retained) and cleanup summary recorded in session_log.md"
+      ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/next/policy-patch-only-broker-effective-resolution\"",
         "Confirm all tasks are completed and merged as intended",
@@ -702,7 +783,9 @@
       "worktree": null,
       "integration_task": null,
       "kickoff_prompt": "docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/FZ-feature-cleanup.md",
-      "depends_on": ["C1-integ"],
+      "depends_on": [
+        "C1-integ"
+      ],
       "concurrent_with": []
     }
   ]
