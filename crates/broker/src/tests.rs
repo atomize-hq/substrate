@@ -520,12 +520,21 @@ mod c0_policy_patch_only_broker_effective_resolution {
     fn ensure_substrate_built() {
         static BUILD_ONCE: OnceLock<()> = OnceLock::new();
         BUILD_ONCE.get_or_init(|| {
+            let target_dir = c0_target_dir();
             let status = Command::new("cargo")
                 .args(["build", "-p", "substrate"])
+                .env("CARGO_TARGET_DIR", &target_dir)
                 .status()
                 .expect("failed to invoke cargo build -p substrate");
             assert!(status.success(), "cargo build -p substrate failed");
         });
+    }
+
+    fn c0_target_dir() -> PathBuf {
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/tests-tmp/c0-policy-patch-only-cargo-target");
+        std::fs::create_dir_all(&base).expect("failed to create C0 cargo target dir");
+        base
     }
 
     fn substrate_binary_path() -> PathBuf {
@@ -535,16 +544,7 @@ mod c0_policy_patch_only_broker_effective_resolution {
             "substrate"
         };
 
-        if let Ok(workspace_dir) = std::env::var("CARGO_WORKSPACE_DIR") {
-            PathBuf::from(workspace_dir)
-                .join("target")
-                .join("debug")
-                .join(binary_name)
-        } else {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../../target/debug")
-                .join(binary_name)
-        }
+        c0_target_dir().join("debug").join(binary_name)
     }
 
     fn substrate_cmd(tmpdir: &Path) -> Command {
