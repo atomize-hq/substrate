@@ -195,3 +195,24 @@
   - `make -n ci-compile-parity CI_WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" CI_REMOTE=origin CI_CLEANUP=1` → `0`
   - `make -n feature-smoke FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution" PLATFORM=behavior SMOKE_SLICE_ID="C0" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1` → `0`
   - `git ls-remote --heads origin feat/policy-patch-only-broker-effective-resolution` → `0` (no refs found)
+
+## START — 2026-01-17T04:46:56Z — execution — F0 execution preflight gate (re-run after fixes)
+- Feature: `docs/project_management/next/policy-patch-only-broker-effective-resolution/`
+- Branch: `feat/policy-patch-only-broker-effective-resolution`
+- Goal: Approve ADR-0013, ensure orchestration branch exists on `origin`, and re-run the execution preflight gate to a final ACCEPT/REVISE.
+- Fixes applied:
+  - ADR-0013 status set to `Approved`: `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - Pushed orchestration branch to remote: `feat/policy-patch-only-broker-effective-resolution` → `origin/feat/policy-patch-only-broker-effective-resolution`
+- Commands planned:
+  - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"`
+  - `git ls-remote --heads origin feat/policy-patch-only-broker-effective-resolution`
+  - `make -n ci-compile-parity CI_WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" CI_REMOTE=origin CI_CLEANUP=1`
+  - `make -n feature-smoke FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution" PLATFORM=behavior SMOKE_SLICE_ID="C0" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+
+## END — 2026-01-17T04:47:35Z — execution — F0 execution preflight gate (re-run after fixes)
+- Outcome: `RECOMMENDATION: ACCEPT`
+- Commands run (with exit codes):
+  - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"` → `0`
+  - `git ls-remote --heads origin feat/policy-patch-only-broker-effective-resolution` → `0` (ref exists)
+  - `make -n ci-compile-parity CI_WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" CI_REMOTE=origin CI_CLEANUP=1` → `0`
+  - `make -n feature-smoke FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution" PLATFORM=behavior SMOKE_SLICE_ID="C0" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1` → `0`

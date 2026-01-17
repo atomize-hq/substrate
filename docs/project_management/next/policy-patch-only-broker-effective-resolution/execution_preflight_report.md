@@ -1,6 +1,6 @@
 # Execution Preflight Gate Report — policy-patch-only-broker-effective-resolution
 
-Date (UTC): 2026-01-17T04:39:32Z
+Date (UTC): 2026-01-17T04:46:56Z
 
 Standard:
 - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
@@ -10,12 +10,12 @@ Feature directory:
 
 ## Recommendation
 
-RECOMMENDATION: REVISE
+RECOMMENDATION: ACCEPT
 
 ## Inputs Reviewed
 
 - Planning quality gate is `ACCEPT` (`docs/project_management/next/policy-patch-only-broker-effective-resolution/quality_gate_report.md`): VERIFIED
-- ADR accepted and still matches intent (`docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`): NOT VERIFIED (Status: Draft)
+- ADR accepted and still matches intent (`docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`): VERIFIED (Status: Approved)
 - Planning Pack complete (`plan.md`, `tasks.json`, `session_log.md`, specs, kickoff prompts): VERIFIED
 - Triad sizing is appropriate (each slice is one behavior delta; no “grab bag” slices): VERIFIED
 - Required planning artifacts exist (`integration_map.md`, `manual_testing_playbook.md`): VERIFIED
@@ -68,10 +68,10 @@ Runner labels (workflow contract; runner availability not validated in this pref
 - macOS self-hosted: `[self-hosted, macOS]` (`.github/workflows/feature-smoke.yml`)
 - Windows self-hosted: `[self-hosted, Windows]` (`.github/workflows/feature-smoke.yml`)
 
-Blocking issue:
-- `git ls-remote --heads origin feat/policy-patch-only-broker-effective-resolution` returns no refs, so dispatching with `WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution"` will fail until the branch is pushed.
+Verified:
+- `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"` → exit `0`
+- `git ls-remote --heads origin feat/policy-patch-only-broker-effective-resolution` → non-empty (branch exists on remote)
 
 ## 4) Required Fixes Before Starting C0 (if any)
 
-- Approve ADR-0013 (update `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` status to `Approved`, or otherwise record acceptance) and re-run this preflight.
-- Push the orchestration branch ref to `origin` so `WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution"` CI dispatch commands are runnable (e.g., `git push -u origin feat/policy-patch-only-broker-effective-resolution`), then re-run this preflight.
+- None.
