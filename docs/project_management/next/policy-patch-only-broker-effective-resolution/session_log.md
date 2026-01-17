@@ -268,3 +268,17 @@
   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C0/test/events.jsonl`
   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C0/test/stderr.log`
 - Blockers: `NONE`
+
+## START — 2026-01-17T16:51:49Z — code — C1-code
+- Worktree: `wt/policy-patch-only-broker-effective-resolution-c1-code`
+- Branch: `policy-patch-only-broker-effective-resolution-c1-code`
+- Orchestration branch: `feat/policy-patch-only-broker-effective-resolution`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution" SLICE_ID="C1" LAUNCH_CODEX=1`
+
+## START — 2026-01-17T16:51:49Z — test — C1-test
+- Worktree: `wt/policy-patch-only-broker-effective-resolution-c1-test`
+- Branch: `policy-patch-only-broker-effective-resolution-c1-test`
+- Orchestration branch: `feat/policy-patch-only-broker-effective-resolution`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution" SLICE_ID="C1" LAUNCH_CODEX=1`

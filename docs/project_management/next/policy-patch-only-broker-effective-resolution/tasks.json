@@ -406,7 +406,7 @@
       "name": "C1 \u2014 Fail-closed execution + docs alignment (code)",
       "type": "code",
       "phase": "C1",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Implement fail-closed policy resolution across broker-dependent execution paths per C1 (production code only).",
       "references": [
         "docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md",
@@ -452,7 +452,7 @@
       "name": "C1 \u2014 Fail-closed execution + docs alignment (test)",
       "type": "test",
       "phase": "C1",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add/modify tests for fail-closed policy resolution behavior per C1 (tests only).",
       "references": [
         "docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md",
