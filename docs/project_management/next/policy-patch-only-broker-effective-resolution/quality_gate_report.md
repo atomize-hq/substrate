@@ -1,13 +1,11 @@
 # Planning Quality Gate Report — policy-patch-only-broker-effective-resolution
 
-RECOMMENDATION: ACCEPT
-
 ## Metadata
 - Feature directory: `docs/project_management/next/policy-patch-only-broker-effective-resolution/`
-- Reviewed commit: `ff5018f6832f59e905c4e8cdd0195ad22e011f5e` (branch `testing`, includes uncommitted Planning Pack changes)
-- Reviewer: `codex (planning agent)`
+- Reviewed commit: `19c2e853e602c0713a6dd4028df88a95e0bfff19`
+- Reviewer: third-party reviewer (Codex)
 - Date (UTC): `2026-01-17`
-- Recommendation: `ACCEPT`
+- Recommendation: `FLAG FOR HUMAN REVIEW`
 
 ## Evidence: Commands Run (verbatim)
 
@@ -29,7 +27,7 @@ import json, os
 feature_dir=os.environ["FEATURE_DIR"]
 path=os.path.join(feature_dir,"tasks.json")
 data=json.load(open(path,"r",encoding="utf-8"))
-tasks=data["tasks"]
+tasks=data["tasks"] if isinstance(data,dict) and "tasks" in data else data
 required=[
   "id","name","type","phase","status","description",
   "references","acceptance_criteria","start_checklist","end_checklist",
@@ -61,6 +59,13 @@ make planning-lint FEATURE_DIR="$FEATURE_DIR"
 # exit: 0
 ```
 
+### Additional review commands (if any)
+
+```bash
+jq -r '.sprints[] | select(.directory=="docs/project_management/next/policy-patch-only-broker-effective-resolution") | {order,id,branch,status,sequence}' \
+  docs/project_management/next/sequencing.json
+```
+
 ## Required Inputs Read End-to-End (checklist)
 - ADR(s): `YES` (`docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`, `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`)
 - `plan.md`: `YES`
@@ -81,75 +86,110 @@ make planning-lint FEATURE_DIR="$FEATURE_DIR"
 
 ### 1) Zero-ambiguity contracts
 - Result: `PASS`
-- Evidence: `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
-- Notes: `make planning-lint` ambiguity scan passed.
+- Evidence: `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md` (inputs/contract/exit codes)
+- Notes: Contracts for patch-only policy + broker canonical resolution are singular and testable.
 
 ### 2) Decision quality (2 options, explicit tradeoffs, explicit selection)
 - Result: `PASS`
 - Evidence: `docs/project_management/next/policy-patch-only-broker-effective-resolution/decision_register.md` (DR-0001)
-- Notes: Two options (A/B) with explicit selection and follow-up tasks mapped to `C0-*` tasks.
+- Notes: Two viable options (A/B) with explicit selection and tradeoffs.
 
 ### 3) Cross-doc consistency (CLI/config/exit codes/paths)
-- Result: `PASS`
+- Result: `FAIL`
 - Evidence:
-  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
-  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
-  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md`
-- Notes: Exit codes reference the canonical taxonomy; policy paths and precedence are singular and consistent.
+  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` (“Manual validation” section points to a different playbook/smoke location)
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md` (feature-local playbook + smoke list)
+- Notes: Validation pointers disagree (ADR vs feature pack), increasing the risk of running the wrong validation set.
 
 ### 4) Sequencing and dependency alignment
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/sequencing.json` entry for `docs/project_management/next/policy-patch-only-broker-effective-resolution`
-  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json` deps are internal and start from `F0-exec-preflight`
-- Notes: `make planning-lint` sequencing alignment check passed.
+  - `docs/project_management/next/sequencing.json` sprint `policy_patch_only_broker_effective_resolution` lists `C0` then `C1`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json` has `C1-*` depending on `C0-integ`
+- Notes: No task begins before its prerequisites.
 
 ### 5) Testability and validation readiness
-- Result: `PASS`
+- Result: `FAIL`
 - Evidence:
-  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md`
-  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh`
-  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh`
-  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1`
-- Notes: Manual playbook references all required smoke scripts; smoke scripts encode deterministic assertions and exit non-zero on failure.
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md` (acceptance criteria include shim + world-agent fail-closed)
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh` (C1 runs `--command "echo …"` only)
+  - `scripts/dev/substrate_shell_driver` (forces `--no-world` by default)
+- Notes: The current smoke/manual set does not provide a runnable check for world-agent and is not clearly exercising the shim interception path.
 
 ### 5.1) Cross-platform parity task structure (schema v2+)
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json` meta: `schema_version=3`, `cross_platform=true`, `behavior_platforms_required`, `ci_parity_platforms_required`
-  - C0 tasks: `C0-integ-core`, `C0-integ-linux`, `C0-integ-macos`, `C0-integ-windows`, `C0-integ`
-  - C1 tasks: `C1-integ-core`, `C1-integ-linux`, `C1-integ-macos`, `C1-integ-windows`, `C1-integ`
-- Notes: `make planning-validate` passed.
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json` meta: `schema_version=3`, `behavior_platforms_required`, `ci_parity_platforms_required`
+  - Per slice tasks exist: `X-integ-core`, `X-integ-<platform>`, `X-integ`
+- Notes: Matches the required platform-fix integration model.
 
 ### 6) Triad interoperability (execution workflow)
 - Result: `PASS`
 - Evidence:
-  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json` required fields present
-  - kickoff prompts contain the sentinel “Do not edit planning docs inside the worktree.”
-- Notes: `make planning-lint` kickoff prompt sentinel check passed.
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json` required fields present (script audited)
+  - Kickoff prompts include “Do not edit planning docs inside the worktree.”
+- Notes: Mechanical interoperability checks pass.
 
-## Findings (exhaustive)
+## Findings (must be exhaustive)
 
-### Finding 001 — Mechanical lint passes
+### Finding 001 — Mechanical planning lint passes
 - Status: `VERIFIED`
-- Evidence: `make planning-lint FEATURE_DIR="$FEATURE_DIR"` exit `0`
-- Impact: Planning Pack is mechanically valid and can be executed under the triad workflow.
+- Evidence: `make planning-lint FEATURE_DIR="$FEATURE_DIR"` exit `0` (see “Evidence: Commands Run”)
+- Impact: Planning Pack is mechanically valid.
 - Fix required (exact): none
 
-### Finding 002 — Cross-platform integration model is complete (P3-008)
+### Finding 002 — Decision register meets the “two viable options” rule
 - Status: `VERIFIED`
-- Evidence: `docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json`
-- Impact: CI parity and behavioral smoke can be owned and re-tried per platform without blocking the final aggregator.
+- Evidence: `docs/project_management/next/policy-patch-only-broker-effective-resolution/decision_register.md` (DR-0001)
+- Impact: The main architectural placement choice is reviewable and auditable.
 - Fix required (exact): none
 
-### Finding 003 — Work is split into smaller slices (C0/C1)
+### Finding 003 — Sequencing and task dependencies are aligned
 - Status: `VERIFIED`
-- Evidence: `docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json` and `docs/project_management/next/sequencing.json`
-- Impact: Integration risk is reduced by landing broker resolver + CLI delegation before enforcing fail-closed behavior across execution paths and updating operator docs.
+- Evidence:
+  - `docs/project_management/next/sequencing.json` sprint `policy_patch_only_broker_effective_resolution`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json` (`C1-*` depends on `C0-integ`)
+- Impact: Work can proceed without dependency violations.
 - Fix required (exact): none
+
+### Finding 004 — Validation set does not fully cover C1 acceptance criteria (shim + world-agent)
+- Status: `DEFECT`
+- Evidence:
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md` (“Acceptance criteria” includes shim + world-agent)
+  - `scripts/dev/substrate_shell_driver` (adds `--no-world` by default)
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh` (`run_c1` uses `--command "echo …"` only)
+- Impact: The plan cannot currently be validated end-to-end against its stated cross-component scope; regressions in shim/world-agent fail-closed behavior can slip through.
+- Fix required (exact):
+  - Add explicit, runnable validation for shim interception and world-agent behavior to either:
+    - `docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md` + `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/*`, or
+    - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md` + `docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json` (list exact required test commands that cover shim + world-agent).
+- Alternative (one viable): If smoke must remain `--no-world`, require explicit `cargo test -p world-agent …` and `cargo test -p substrate-shim …` commands in C1 integration checklists and closeout report evidence to cover the missing surfaces.
+
+### Finding 005 — Docs alignment is required by spec but not explicitly tracked in task references/acceptance
+- Status: `DEFECT`
+- Evidence:
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md` (requires updating `docs/CONFIGURATION.md`)
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json` (no `docs/CONFIGURATION.md` in task `references` / acceptance criteria)
+- Impact: A required deliverable can be missed without failing any task acceptance criteria, reducing auditability.
+- Fix required (exact): Add `docs/CONFIGURATION.md` to `references` and add an explicit acceptance criterion to `C1-integ` (or `C1-code`) stating `docs/CONFIGURATION.md` is updated per `C1-spec.md`.
+- Alternative (one viable): Add a dedicated `C1-docs` task (type `code` or `ops`) that updates `docs/CONFIGURATION.md` and is required by `C1-integ` (only if the team wants to keep docs changes out of code/integration tasks).
+
+### Finding 006 — ADR-0013 validation pointers disagree with this feature’s playbook/smoke locations
+- Status: `DEFECT`
+- Evidence:
+  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` (“Manual validation” / “Smoke scripts” point to `workspace-config-policy-unification/*`)
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md` (points to this feature’s `smoke/*`)
+- Impact: Validators may run the wrong smoke scripts, undermining cross-platform parity confidence and CI automation.
+- Fix required (exact): Update `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` to reference this feature’s `manual_testing_playbook.md` and `smoke/*` paths (or explicitly state both are required and why).
+- Alternative (one viable): If the intention is to centralize validation in the ADR-0008 feature directory, remove/redirect this feature’s playbook/smoke paths and point tasks.json to the centralized ones.
 
 ## Decision: ACCEPT or FLAG
 
-### If ACCEPT
-- Summary: Planning Pack is mechanically valid, contracts are singular/testable, cross-platform structure is complete, and execution tasks are ready to start after preflight.
-- Next step: Execution triads may begin after `F0-exec-preflight` is completed.
+### If FLAG FOR HUMAN REVIEW
+- Summary: Mechanical lint passes and the core contract is clear, but the validation/auditability wiring is incomplete for the stated C1 scope (shim/world-agent) and required docs alignment.
+- Required human decisions (explicit):
+  - Where shim/world-agent validation lives (smoke vs explicit test suites) for this feature.
+  - Whether ADR-0013 should point validation at this feature directory or at `workspace-config-policy-unification/`.
+- Blockers to execution:
+  - Fill the validation coverage gap in Finding 004.
+  - Make docs alignment auditable in tasks/criteria per Finding 005.

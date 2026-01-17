@@ -113,3 +113,35 @@
   - `NONE`
 - Next steps:
   - Complete `F0-exec-preflight`, then execute slice `C0`, then slice `C1`.
+
+## START — 2026-01-17T04:12:26Z — remediation — fix Planning Quality Gate DEFECT findings
+- Feature: `docs/project_management/next/policy-patch-only-broker-effective-resolution/`
+- Goal: Remove blocking defects so the Planning Pack is re-reviewable to `RECOMMENDATION: ACCEPT`.
+- Defects addressed (Finding IDs):
+  - Finding 004
+  - Finding 005
+  - Finding 006
+- Commands planned:
+  - `export FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"`
+  - `make adr-fix ADR=docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
+  - `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
+  - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null`
+
+## END — 2026-01-17T04:12:26Z — remediation — fix Planning Quality Gate DEFECT findings
+- Defects addressed (Finding IDs):
+  - Finding 004: Added explicit shim + world-agent validation commands to the manual playbook and C1 integration task checklists/acceptance criteria.
+  - Finding 005: Wired `docs/CONFIGURATION.md` into C1 integration task references and acceptance criteria as an explicit deliverable.
+  - Finding 006: Updated ADR-0013 validation pointers to reference this feature directory’s playbook/smoke scripts.
+- Files modified:
+  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md`
+- Commands run (with exit codes):
+  - `make adr-fix ADR=docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` → `0`
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"` → `0`
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"` → `0`
+  - `jq -e . "docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json" >/dev/null` → `0`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`

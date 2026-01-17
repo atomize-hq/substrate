@@ -449,13 +449,17 @@
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json",
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md",
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md",
+        "docs/CONFIGURATION.md",
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md",
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh",
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh",
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1"
       ],
       "acceptance_criteria": [
-        "Local integration gates are green (fmt, clippy -D warnings, relevant tests, integ-checks)",
+        "docs/CONFIGURATION.md is updated per docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md",
+        "`cargo test -p substrate-shim -- --nocapture` passes (exit 0)",
+        "`cargo test -p world-agent -- --nocapture` passes (exit 0)",
+        "Local integration gates are green (fmt, clippy -D warnings, integ-checks)",
         "Cross-platform validation dispatch is recorded (run ids/URLs) in session_log.md"
       ],
       "start_checklist": [
@@ -469,7 +473,8 @@
         "Merge code+test branches into this worktree; reconcile drift to spec",
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
-        "Run relevant tests",
+        "Run: cargo test -p substrate-shim -- --nocapture",
+        "Run: cargo test -p world-agent -- --nocapture",
         "make integ-checks",
         "Dispatch CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/policy-patch-only-broker-effective-resolution\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
         "Dispatch behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/policy-patch-only-broker-effective-resolution\" PLATFORM=behavior SMOKE_SLICE_ID=\"C1\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/policy-patch-only-broker-effective-resolution\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
@@ -625,6 +630,7 @@
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json",
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md",
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md",
+        "docs/CONFIGURATION.md",
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-closeout_report.md",
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md",
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh",
@@ -633,6 +639,9 @@
       ],
       "acceptance_criteria": [
         "All required platforms are green (smoke + CI parity) for this slice",
+        "docs/CONFIGURATION.md is updated per docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md",
+        "`cargo test -p substrate-shim -- --nocapture` passes (exit 0)",
+        "`cargo test -p world-agent -- --nocapture` passes (exit 0)",
         "C1-closeout_report.md is completed with run ids/URLs and evidence",
         "Final integration is merged back to the orchestration branch"
       ],
@@ -647,7 +656,8 @@
         "Merge platform-fix branches (if any) + resolve conflicts",
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
-        "Run relevant tests",
+        "Run: cargo test -p substrate-shim -- --nocapture",
+        "Run: cargo test -p world-agent -- --nocapture",
         "make integ-checks",
         "Re-run CI compile parity: make ci-compile-parity CI_WORKFLOW_REF=\"feat/policy-patch-only-broker-effective-resolution\" CI_REMOTE=origin CI_CLEANUP=1 (record run id/URL)",
         "Re-run behavioral smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/policy-patch-only-broker-effective-resolution\" PLATFORM=behavior SMOKE_SLICE_ID=\"C1\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/policy-patch-only-broker-effective-resolution\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",

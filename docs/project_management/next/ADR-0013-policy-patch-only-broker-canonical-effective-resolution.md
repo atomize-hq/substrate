@@ -27,7 +27,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 0d0e5fa68c4f735dffe951260a303ba4695b96824bfab5ba794c81f7368a5926
+ADR_BODY_SHA256: a49f73cdb2f8536432dcc9695f5ab84bbeeaebebb1076e1784a38da10a9236b9
 Run `make adr-fix ADR=docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` after drafting.
 
 ### Changes (operator-facing)
@@ -171,12 +171,12 @@ Run `make adr-fix ADR=docs/project_management/next/ADR-0013-policy-patch-only-br
     - world-agent full isolation paths (`crates/world-agent`)
 
 ### Manual validation
-- Manual playbook (update/extend): `docs/project_management/next/workspace-config-policy-unification/manual_testing_playbook.md`
+- Manual playbook: `docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md`
 
 ### Smoke scripts
-- Linux: `docs/project_management/next/workspace-config-policy-unification/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/next/workspace-config-policy-unification/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/next/workspace-config-policy-unification/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed.

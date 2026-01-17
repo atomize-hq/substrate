@@ -26,6 +26,18 @@ Inputs created in a scratch directory:
   - `.substrate/policy.yaml` (workspace patch)
   - optional `.substrate/workspace.disabled` (disabled marker)
 
+## Additional required validation (C1 only): shim + world-agent
+
+The smoke scripts run the Substrate CLI via `scripts/dev/substrate_shell_driver`, which injects `--no-world` when neither `--world` nor `--no-world` is provided.
+The smoke scripts do not validate world-agent execution.
+
+Run (C1):
+- `cargo test -p substrate-shim -- --nocapture`
+- `cargo test -p world-agent -- --nocapture`
+
+Expected:
+- Exit `0`.
+
 ## Linux
 
 Run (C0):
