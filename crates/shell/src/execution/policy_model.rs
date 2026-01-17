@@ -2,13 +2,12 @@ use crate::execution::config_model::{self, ConfigUpdate, UpdateOp};
 use crate::execution::value_parse::parse_bool_flag;
 use crate::execution::workspace;
 use anyhow::{anyhow, Result};
-use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use substrate_broker::{Policy, WorldFsIsolation};
+use substrate_broker::{Policy, PolicyExplainV1, WorldFsIsolation};
 use substrate_common::WorldFsMode;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -101,67 +100,6 @@ impl ResourceLimitsPatch {
     }
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub(crate) struct PolicyExplainV1 {
-    pub kind: String,
-    pub keys: OrderedExplainKeys,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub(crate) struct PolicyExplainKey {
-    pub merge_strategy: String,
-    pub sources: Vec<PolicyExplainSource>,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub(crate) struct PolicyExplainSource {
-    pub layer: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub path: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(crate) struct OrderedExplainKeys(BTreeMap<String, PolicyExplainKey>);
-
-impl OrderedExplainKeys {
-    fn insert(&mut self, key: String, value: PolicyExplainKey) {
-        self.0.insert(key, value);
-    }
-}
-
-impl Serialize for OrderedExplainKeys {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut entries: Vec<_> = self.0.iter().collect();
-        entries.sort_by(|(a_key, a_val), (b_key, b_val)| {
-            explain_key_rank(a_val)
-                .cmp(&explain_key_rank(b_val))
-                .then_with(|| a_key.cmp(b_key))
-        });
-
-        let mut map = serializer.serialize_map(Some(entries.len()))?;
-        for (key, value) in entries {
-            map.serialize_entry(key, value)?;
-        }
-        map.end()
-    }
-}
-
-fn explain_key_rank(key: &PolicyExplainKey) -> u8 {
-    key.sources
-        .iter()
-        .map(|source| match source.layer.as_str() {
-            "global_patch" => 0,
-            "default" => 1,
-            "workspace_patch" => 2,
-            _ => 5,
-        })
-        .min()
-        .unwrap_or(5)
-}
-
 pub(crate) fn global_policy_path() -> Result<PathBuf> {
     substrate_common::paths::policy_file()
 }
@@ -240,10 +178,14 @@ pub(crate) fn reset_policy_patch_keys(patch: &mut PolicyPatch, keys: &[String]) 
     Ok(changed)
 }
 
+#[allow(dead_code)]
 pub(crate) fn resolve_effective_policy_with_explain(
     cwd: &Path,
     explain: bool,
 ) -> Result<(Policy, Option<PolicyExplainV1>)> {
+    substrate_broker::resolve_effective_policy_with_explain(cwd, explain)
+        .map_err(|err| config_model::user_error(err.to_string()))
+    /*
     let (global_patch, _) = read_global_policy_patch_or_empty()?;
     let global_path = global_policy_path()?;
 
@@ -705,6 +647,7 @@ pub(crate) fn resolve_effective_policy_with_explain(
     });
 
     Ok((effective, explain))
+    */
 }
 
 fn btree_to_hashmap(map: &BTreeMap<String, String>) -> HashMap<String, String> {

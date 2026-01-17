@@ -35,13 +35,11 @@ impl ProfileDetector {
         let mut depth = 0;
 
         loop {
-            let marker = current
-                .join(substrate_paths::SUBSTRATE_DIR_NAME)
-                .join("workspace.yaml");
-            if marker.is_file() {
-                let workspace_policy = current
-                    .join(substrate_paths::SUBSTRATE_DIR_NAME)
-                    .join("policy.yaml");
+            let substrate_dir = current.join(substrate_paths::SUBSTRATE_DIR_NAME);
+            let marker = substrate_dir.join("workspace.yaml");
+            let disabled = substrate_dir.join("workspace.disabled");
+            if marker.is_file() && !disabled.exists() {
+                let workspace_policy = substrate_dir.join("policy.yaml");
                 if workspace_policy.is_file() {
                     info!("Found workspace policy at {:?}", workspace_policy);
                     self.cache

@@ -659,29 +659,12 @@ pub fn needs_shell(cmd: &str) -> bool {
 }
 
 fn shim_status_world_fs_mode() -> substrate_common::WorldFsMode {
-    use substrate_broker::{Policy, ProfileDetector};
     use substrate_common::WorldFsMode;
-
-    let mut detector = ProfileDetector::new();
-
     if let Ok(cwd) = std::env::current_dir() {
-        if let Ok(Some(profile_path)) = detector.find_profile(&cwd) {
-            if let Ok(content) = std::fs::read_to_string(&profile_path) {
-                if let Ok(policy) = serde_yaml::from_str::<Policy>(&content) {
-                    return policy.world_fs_mode;
-                }
-            }
-        }
-    }
-
-    if let Ok(home) = substrate_paths::substrate_home() {
-        let policy_path = home.join("policy.yaml");
-        if policy_path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&policy_path) {
-                if let Ok(policy) = serde_yaml::from_str::<Policy>(&content) {
-                    return policy.world_fs_mode;
-                }
-            }
+        if let Ok((policy, _)) =
+            substrate_broker::resolve_effective_policy_with_explain(&cwd, false)
+        {
+            return policy.world_fs_mode;
         }
     }
 

@@ -4,13 +4,13 @@ use crate::execution::cli::{
     PolicyWorkspaceCmd,
 };
 use crate::execution::config_model;
-use crate::execution::policy_model::{PolicyExplainV1, PolicyPatch};
+use crate::execution::policy_model::PolicyPatch;
 use crate::execution::{policy_model, workspace};
 use anyhow::{anyhow, Context, Result};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use substrate_broker::Policy;
+use substrate_broker::{Policy, PolicyExplainV1};
 use tempfile::NamedTempFile;
 
 const DEFAULT_GLOBAL_POLICY_PATCH_HEADER: &str = r#"# Substrate policy patch (sparse overrides; scope=global).
@@ -152,7 +152,8 @@ fn run_global_set(args: &PolicySetArgs) -> Result<()> {
     }
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let (effective, _) = policy_model::resolve_effective_policy_with_explain(&cwd, false)?;
+    let (effective, _) = substrate_broker::resolve_effective_policy_with_explain(&cwd, false)
+        .map_err(|err| config_model::user_error(err.to_string()))?;
     print_policy(&effective, args.json)?;
     Ok(())
 }
@@ -179,7 +180,8 @@ fn run_global_reset(args: &ConfigResetArgs) -> Result<()> {
     }
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let (effective, _) = policy_model::resolve_effective_policy_with_explain(&cwd, false)?;
+    let (effective, _) = substrate_broker::resolve_effective_policy_with_explain(&cwd, false)
+        .map_err(|err| config_model::user_error(err.to_string()))?;
     print_policy(&effective, false)?;
     Ok(())
 }
@@ -252,11 +254,14 @@ fn run_workspace_show(args: &PolicyShowArgs) -> Result<()> {
 
 fn run_current_show(args: &PolicyShowArgs) -> Result<()> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    eprintln!(
-        "substrate: note: showing effective merged policy; use --explain to view per-key sources"
-    );
+    if !args.explain {
+        eprintln!(
+            "substrate: note: showing effective merged policy; use --explain to view per-key sources"
+        );
+    }
     let (policy, explain) =
-        policy_model::resolve_effective_policy_with_explain(&cwd, args.explain)?;
+        substrate_broker::resolve_effective_policy_with_explain(&cwd, args.explain)
+            .map_err(|err| config_model::user_error(err.to_string()))?;
     if let Some(explain) = explain {
         print_explain(&explain)?;
     }
@@ -285,7 +290,8 @@ fn run_workspace_set(args: &PolicySetArgs) -> Result<()> {
             .with_context(|| format!("failed to write {}", path.display()))?;
     }
 
-    let (effective, _) = policy_model::resolve_effective_policy_with_explain(&cwd, false)?;
+    let (effective, _) = substrate_broker::resolve_effective_policy_with_explain(&cwd, false)
+        .map_err(|err| config_model::user_error(err.to_string()))?;
     print_policy(&effective, args.json)?;
     Ok(())
 }
@@ -310,7 +316,8 @@ fn run_workspace_reset(args: &ConfigResetArgs) -> Result<()> {
             .with_context(|| format!("failed to write {}", path.display()))?;
     }
 
-    let (effective, _) = policy_model::resolve_effective_policy_with_explain(&cwd, false)?;
+    let (effective, _) = substrate_broker::resolve_effective_policy_with_explain(&cwd, false)
+        .map_err(|err| config_model::user_error(err.to_string()))?;
     print_policy(&effective, false)?;
     Ok(())
 }

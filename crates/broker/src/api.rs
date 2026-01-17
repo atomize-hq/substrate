@@ -3,6 +3,7 @@
 use crate::handle::BrokerHandle;
 use crate::mode::PolicyMode;
 use crate::policy::Decision;
+use crate::policy::Policy;
 use crate::policy::WorldFsPolicy;
 use anyhow::Result;
 use std::path::Path;
@@ -54,6 +55,13 @@ pub fn detect_profile(cwd: &Path) -> Result<()> {
 pub fn reload_policy(path: &Path) -> Result<()> {
     let broker = global_broker()?;
     broker.load_policy(path)
+}
+
+pub fn resolve_effective_policy_with_explain(
+    cwd: &Path,
+    explain: bool,
+) -> Result<(Policy, Option<crate::PolicyExplainV1>)> {
+    crate::effective_policy::resolve_effective_policy_with_explain(cwd, explain)
 }
 
 pub fn set_observe_only(observe: bool) {
