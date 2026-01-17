@@ -230,3 +230,22 @@
 - Orchestration branch: `feat/policy-patch-only-broker-effective-resolution`
 - Dispatch:
   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution" SLICE_ID="C0" LAUNCH_CODEX=1`
+
+## END — 2026-01-17T05:19:24Z — code — C0-code
+- Worktree: `/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-code`
+- Branch: `policy-patch-only-broker-effective-resolution-c0-code`
+- HEAD: `29a5755d5983dadf4d0853ad9e8d0c7549afb34c`
+- Codex: `CODEX_CODE_EXIT=0`
+- Finisher summary:
+  - `TASK_BRANCH=policy-patch-only-broker-effective-resolution-c0-code`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-code`
+  - `HEAD=29a5755d5983dadf4d0853ad9e8d0c7549afb34c`
+  - `COMMITS=2`
+  - `CHECKS=verify-only`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=`
+- Artifacts:
+  - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C0/code/last_message.md`
+  - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C0/code/events.jsonl`
+  - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C0/code/stderr.log`
+- Blockers: `NONE`

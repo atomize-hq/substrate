@@ -51,7 +51,7 @@
       "name": "C0 — Broker canonical resolver + CLI delegation (code)",
       "type": "code",
       "phase": "C0",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Implement broker-canonical patch-only policy resolution and CLI delegation per C0 (production code only).",
       "references": [
         "docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md",
