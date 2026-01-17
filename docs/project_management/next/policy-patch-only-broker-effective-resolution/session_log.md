@@ -320,3 +320,28 @@
   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C1/test/events.jsonl`
   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C1/test/stderr.log`
 - Blockers: `NONE`
+
+## START — 2026-01-17T21:36:16Z — integration — C1-integ-core
+- Worktree: `wt/policy-patch-only-broker-effective-resolution-c1-integ-core`
+- Branch: `policy-patch-only-broker-effective-resolution-c1-integ-core`
+- Orchestration branch: `feat/policy-patch-only-broker-effective-resolution`
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution" TASK_ID="C1-integ-core" LAUNCH_CODEX=1`
+
+## END — 2026-01-17T21:36:16Z — integration — C1-integ-core
+- Worktree: `/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-integ-core`
+- Branch: `policy-patch-only-broker-effective-resolution-c1-integ-core`
+- HEAD: `67665bbd458341ea34d99c54290b9c34a7214737`
+- Codex: `CODEX_EXIT=0`
+- Local behavioral smoke preflight (linux): `0` (`docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh`)
+- CI dispatch (agent-reported):
+  - Compile parity: `https://github.com/atomize-hq/substrate/actions/runs/21100960903`
+  - Feature smoke (behavior): `https://github.com/atomize-hq/substrate/actions/runs/21100994166`
+- CI dispatch (wrapper re-run):
+  - Compile parity: `https://github.com/atomize-hq/substrate/actions/runs/21101093791`
+  - CI testing (quick): `https://github.com/atomize-hq/substrate/actions/runs/21101130130`
+- Artifacts:
+  - `CODEX_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C1/integ-core/last_message.md`
+  - `CODEX_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C1/integ-core/events.jsonl`
+  - `CODEX_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C1/integ-core/stderr.log`
+- Blockers: `NONE`

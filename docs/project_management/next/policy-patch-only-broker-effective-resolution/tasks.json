@@ -492,11 +492,11 @@
       ]
     },
     {
-      "id": "C1-integ-core",
+  "id": "C1-integ-core",
       "name": "C1 \u2014 Integration core",
       "type": "integration",
       "phase": "C1",
-      "status": "pending",
+  "status": "completed",
       "description": "Merge C1 code+tests, reconcile to spec, and get a primary-platform green state before cross-platform dispatch.",
       "references": [
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md",
