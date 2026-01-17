@@ -330,9 +330,17 @@ fn require_workspace(cwd: &Path) -> Result<PathBuf> {
 
 fn print_policy(policy: &Policy, json: bool) -> Result<()> {
     if json {
+        let mut value = serde_json::to_value(policy).context("failed to serialize JSON")?;
+        if let Some(require_world) = value
+            .get("world_fs")
+            .and_then(|fs| fs.get("require_world"))
+            .and_then(|v| v.as_bool())
+        {
+            value["world_fs_require_world"] = serde_json::Value::Bool(require_world);
+        }
         println!(
             "{}",
-            serde_json::to_string(policy).context("failed to serialize JSON")?
+            serde_json::to_string(&value).context("failed to serialize JSON")?
         );
         return Ok(());
     }
