@@ -162,3 +162,36 @@
   - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0`
   - `make planning-validate FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"` → `0`
   - `make planning-lint FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"` → `0`
+
+## START — 2026-01-17T04:39:32Z — execution — F0 execution preflight gate
+- Feature: `docs/project_management/next/policy-patch-only-broker-effective-resolution/`
+- Branch: `feat/policy-patch-only-broker-effective-resolution`
+- Goal: Run execution preflight gate per `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md` and record ACCEPT/REVISE.
+- Inputs to read end-to-end:
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/integration_map.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/execution_preflight_report.md`
+  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+- Commands planned:
+  - `export FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"`
+  - `make triad-orch-ensure FEATURE_DIR="$FEATURE_DIR"`
+  - `make -n ci-compile-parity CI_WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" CI_REMOTE=origin CI_CLEANUP=1`
+  - `make -n feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior SMOKE_SLICE_ID="C0" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
+  - `git ls-remote --heads origin feat/policy-patch-only-broker-effective-resolution`
+
+## END — 2026-01-17T04:40:20Z — execution — F0 execution preflight gate
+- Outcome: `RECOMMENDATION: REVISE`
+- Blockers (must fix before starting `C0`):
+  - Approve ADR-0013 (`docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`: set status to `Approved`, or otherwise record acceptance)
+  - Push `feat/policy-patch-only-broker-effective-resolution` to `origin` so CI dispatch using `WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution"` is runnable
+- Commands run (with exit codes):
+  - `make triad-orch-ensure FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"` → `0`
+  - `make -n ci-compile-parity CI_WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" CI_REMOTE=origin CI_CLEANUP=1` → `0`
+  - `make -n feature-smoke FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution" PLATFORM=behavior SMOKE_SLICE_ID="C0" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1` → `0`
+  - `git ls-remote --heads origin feat/policy-patch-only-broker-effective-resolution` → `0` (no refs found)
