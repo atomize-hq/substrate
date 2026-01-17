@@ -348,7 +348,7 @@
       "name": "C0 \u2014 Final integration (aggregator)",
       "type": "integration",
       "phase": "C0",
-      "status": "pending",
+      "status": "completed",
       "description": "Final integration: merge any platform fixes and confirm behavioral smoke + CI parity are green.",
       "references": [
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md",
