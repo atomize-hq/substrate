@@ -477,3 +477,345 @@ metadata: {}
         assert_eq!(policy.world_fs_isolation, WorldFsIsolation::Workspace);
     }
 }
+
+mod c0_policy_patch_only_broker_effective_resolution {
+    use serial_test::serial;
+    use std::ffi::OsString;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+    use std::sync::OnceLock;
+    use tempfile::{Builder, TempDir};
+
+    struct EnvVarGuard {
+        key: &'static str,
+        prev: Option<OsString>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: impl AsRef<Path>) -> Self {
+            let prev = std::env::var_os(key);
+            std::env::set_var(key, value.as_ref());
+            Self { key, prev }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            match &self.prev {
+                Some(prev) => std::env::set_var(self.key, prev),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
+    fn ensure_substrate_built() {
+        static BUILD_ONCE: OnceLock<()> = OnceLock::new();
+        BUILD_ONCE.get_or_init(|| {
+            let status = Command::new("cargo")
+                .args(["build", "-p", "substrate"])
+                .status()
+                .expect("failed to invoke cargo build -p substrate");
+            assert!(status.success(), "cargo build -p substrate failed");
+        });
+    }
+
+    fn substrate_binary_path() -> PathBuf {
+        let binary_name = if cfg!(windows) {
+            "substrate.exe"
+        } else {
+            "substrate"
+        };
+
+        if let Ok(workspace_dir) = std::env::var("CARGO_WORKSPACE_DIR") {
+            PathBuf::from(workspace_dir)
+                .join("target")
+                .join("debug")
+                .join(binary_name)
+        } else {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../target/debug")
+                .join(binary_name)
+        }
+    }
+
+    fn substrate_cmd(tmpdir: &Path) -> Command {
+        ensure_substrate_built();
+
+        let mut cmd = Command::new(substrate_binary_path());
+        cmd.env("TMPDIR", tmpdir);
+        cmd.env_remove("SHIM_ORIGINAL_PATH");
+        cmd.env_remove("SUBSTRATE_WORLD");
+        cmd.env_remove("SUBSTRATE_WORLD_ENABLED");
+        cmd.env("SUBSTRATE_OVERRIDE_WORLD", "disabled");
+        cmd.env_remove("SUBSTRATE_WORLD_ID");
+        cmd
+    }
+
+    fn temp_dir(prefix: &str) -> TempDir {
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/tests-tmp");
+        std::fs::create_dir_all(&base).expect("failed to create shared TMPDIR");
+        Builder::new()
+            .prefix(prefix)
+            .tempdir_in(base)
+            .expect("failed to allocate integration test temp dir")
+    }
+
+    struct Fixture {
+        _temp: TempDir,
+        home: PathBuf,
+        substrate_home: PathBuf,
+        workspace_root: PathBuf,
+    }
+
+    impl Fixture {
+        fn new() -> Self {
+            let temp = temp_dir("c0-policy-patch-only-");
+            let home = temp.path().join("home");
+            std::fs::create_dir_all(&home).expect("create HOME fixture");
+            let substrate_home = temp.path().join("substrate-home");
+            std::fs::create_dir_all(&substrate_home).expect("create SUBSTRATE_HOME fixture");
+            let workspace_root = temp.path().join("workspace");
+            std::fs::create_dir_all(&workspace_root).expect("create workspace root");
+
+            std::fs::create_dir_all(workspace_root.join(".substrate"))
+                .expect("create .substrate dir");
+
+            Self {
+                _temp: temp,
+                home,
+                substrate_home,
+                workspace_root,
+            }
+        }
+
+        fn workspace_marker_path(&self) -> PathBuf {
+            self.workspace_root
+                .join(".substrate")
+                .join("workspace.yaml")
+        }
+
+        fn workspace_disabled_marker_path(&self) -> PathBuf {
+            self.workspace_root
+                .join(".substrate")
+                .join("workspace.disabled")
+        }
+
+        fn workspace_policy_path(&self) -> PathBuf {
+            self.workspace_root.join(".substrate").join("policy.yaml")
+        }
+
+        fn global_policy_path(&self) -> PathBuf {
+            self.substrate_home.join("policy.yaml")
+        }
+
+        fn child_dir(&self) -> PathBuf {
+            let child = self.workspace_root.join("a/b");
+            std::fs::create_dir_all(&child).expect("create child dir");
+            child
+        }
+
+        fn write_workspace_marker(&self) {
+            std::fs::write(self.workspace_marker_path(), "schema_version: 1\n")
+                .expect("write workspace.yaml marker");
+        }
+
+        fn write_workspace_disabled(&self) {
+            std::fs::write(self.workspace_disabled_marker_path(), "")
+                .expect("write workspace.disabled marker");
+        }
+
+        fn write_global_policy(&self, yaml: &str) {
+            std::fs::write(self.global_policy_path(), yaml).expect("write global policy.yaml");
+        }
+
+        fn write_workspace_policy(&self, yaml: &str) {
+            std::fs::write(self.workspace_policy_path(), yaml)
+                .expect("write workspace policy.yaml");
+        }
+
+        fn run_substrate(&self, cwd: &Path, args: &[&str]) -> std::process::Output {
+            let mut cmd = substrate_cmd(self._temp.path());
+            cmd.current_dir(cwd);
+            cmd.env("HOME", &self.home);
+            cmd.env("USERPROFILE", &self.home);
+            cmd.env("SUBSTRATE_HOME", &self.substrate_home);
+            cmd.args(args);
+            cmd.output().expect("run substrate command")
+        }
+    }
+
+    fn full_policy_yaml_with_cmd_allowed(policy_id: &str, cmd_allowed: &[&str]) -> String {
+        let cmd_allowed_yaml = cmd_allowed
+            .iter()
+            .map(|s| format!("  - {s}\n"))
+            .collect::<String>();
+        format!(
+            r#"id: "{policy_id}"
+name: "{policy_id}"
+world_fs:
+  mode: writable
+  isolation: workspace
+  require_world: false
+  read_allowlist: ["*"]
+  write_allowlist: []
+net_allowed: []
+cmd_allowed:
+{cmd_allowed_yaml}cmd_denied: []
+cmd_isolated: []
+require_approval: false
+allow_shell_operators: true
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+metadata: {{}}
+"#
+        )
+    }
+
+    #[test]
+    #[serial]
+    fn c0_cli_policy_current_show_explain_emits_single_json_object_on_stderr() {
+        let fixture = Fixture::new();
+        fixture.write_workspace_marker();
+
+        let cwd = fixture.child_dir();
+        let output =
+            fixture.run_substrate(&cwd, &["policy", "current", "show", "--json", "--explain"]);
+        assert!(
+            output.status.success(),
+            "expected `substrate policy current show --explain` to succeed: {output:?}"
+        );
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let explain: serde_json::Value =
+            serde_json::from_slice(&output.stderr).unwrap_or_else(|err| {
+                panic!(
+                    "expected stderr to be a single JSON object (no extra note lines); parse error: {err}; stderr was: {stderr}"
+                )
+            });
+        assert_eq!(
+            explain.get("kind").and_then(|v| v.as_str()),
+            Some("substrate.policy.explain.v1"),
+            "unexpected explain kind: {explain}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn c0_broker_merges_sparse_global_and_workspace_patches() {
+        let fixture = Fixture::new();
+        fixture.write_workspace_marker();
+
+        fixture.write_global_policy(
+            r#"
+cmd_allowed:
+  - global-allowed
+"#,
+        );
+        fixture.write_workspace_policy(
+            r#"
+metadata:
+  workspace: "true"
+"#,
+        );
+
+        let cwd = fixture.child_dir();
+        let _env = EnvVarGuard::set("SUBSTRATE_HOME", &fixture.substrate_home);
+        let (policy, _source) = crate::policy_loader::load_effective_policy_for_cwd(&cwd)
+            .expect("broker should resolve effective policy via patch merge");
+
+        assert_eq!(policy.cmd_allowed, vec!["global-allowed".to_string()]);
+        assert_eq!(
+            policy.metadata.get("workspace").map(String::as_str),
+            Some("true")
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn c0_broker_workspace_disabled_ignores_workspace_patch() {
+        let fixture = Fixture::new();
+        fixture.write_workspace_marker();
+        fixture.write_workspace_disabled();
+
+        fixture.write_global_policy(&full_policy_yaml_with_cmd_allowed(
+            "global",
+            &["global-allowed"],
+        ));
+        fixture.write_workspace_policy(&full_policy_yaml_with_cmd_allowed(
+            "workspace",
+            &["workspace-allowed"],
+        ));
+
+        let cwd = fixture.child_dir();
+        let _env = EnvVarGuard::set("SUBSTRATE_HOME", &fixture.substrate_home);
+        let (policy, _source) = crate::policy_loader::load_effective_policy_for_cwd(&cwd)
+            .expect("broker should resolve policy for cwd");
+
+        assert_eq!(
+            policy.cmd_allowed,
+            vec!["global-allowed".to_string()],
+            "workspace.disabled should prevent workspace policy from affecting broker effective policy"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn c0_effective_policy_is_identical_across_broker_and_cli_show_and_explain() {
+        let fixture = Fixture::new();
+        fixture.write_workspace_marker();
+
+        fixture.write_global_policy(
+            r#"
+cmd_allowed:
+  - global-allowed
+"#,
+        );
+        fixture.write_workspace_policy(
+            r#"
+metadata:
+  workspace: "true"
+"#,
+        );
+
+        let cwd = fixture.child_dir();
+
+        let _env = EnvVarGuard::set("SUBSTRATE_HOME", &fixture.substrate_home);
+        let (broker_policy, _source) = crate::policy_loader::load_effective_policy_for_cwd(&cwd)
+            .expect("broker should resolve effective policy via patch merge");
+        let broker_json = serde_json::to_value(&broker_policy).expect("serialize broker policy");
+
+        let show = fixture.run_substrate(&cwd, &["policy", "current", "show", "--json"]);
+        assert!(
+            show.status.success(),
+            "expected `substrate policy current show` to succeed: {show:?}"
+        );
+        assert!(
+            String::from_utf8_lossy(&show.stderr).contains("effective merged policy"),
+            "expected merged-policy note on stderr, got: {}",
+            String::from_utf8_lossy(&show.stderr)
+        );
+        let cli_show_json: serde_json::Value =
+            serde_json::from_slice(&show.stdout).expect("policy show should output JSON");
+
+        let explain =
+            fixture.run_substrate(&cwd, &["policy", "current", "show", "--json", "--explain"]);
+        assert!(
+            explain.status.success(),
+            "expected `substrate policy current show --explain` to succeed: {explain:?}"
+        );
+        let cli_explain_json: serde_json::Value = serde_json::from_slice(&explain.stdout)
+            .expect("policy show --explain should output JSON");
+
+        assert_eq!(
+            cli_show_json, cli_explain_json,
+            "stdout policy must match with/without --explain"
+        );
+        assert_eq!(
+            cli_show_json, broker_json,
+            "effective policy must match across broker and CLI"
+        );
+    }
+}
