@@ -555,7 +555,7 @@
       "name": "C1 \u2014 Integration platform-fix: linux",
       "type": "integration",
       "phase": "C1",
-      "status": "pending",
+      "status": "completed",
       "description": "Linux platform-fix task: ensure Linux smoke is green for this slice and record run id/URL.",
       "references": [
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md",
@@ -602,7 +602,7 @@
       "name": "C1 \u2014 Integration platform-fix: macos",
       "type": "integration",
       "phase": "C1",
-      "status": "pending",
+      "status": "completed",
       "description": "macOS platform-fix task: ensure macOS smoke is green for this slice and record run id/URL.",
       "references": [
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md",
@@ -649,7 +649,7 @@
       "name": "C1 \u2014 Integration platform-fix: windows",
       "type": "integration",
       "phase": "C1",
-      "status": "pending",
+      "status": "completed",
       "description": "Windows platform-fix task: ensure Windows smoke is green for this slice and record run id/URL.",
       "references": [
         "docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md",
