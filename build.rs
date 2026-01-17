@@ -150,5 +150,4 @@ fn main() -> ExitCode {
     }
 
     let _ = std::fs::remove_file(&driver_path);
-    std::fs::rename(&exe_path, &driver_path).expect("rename substrate_shell_driver.exe");
 }
