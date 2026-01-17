@@ -483,19 +483,28 @@ mod c0_policy_patch_only_broker_effective_resolution {
     use std::ffi::OsString;
     use std::path::{Path, PathBuf};
     use std::process::Command;
+    use std::sync::MutexGuard;
     use std::sync::OnceLock;
     use tempfile::{Builder, TempDir};
 
     struct EnvVarGuard {
+        _lock: MutexGuard<'static, ()>,
         key: &'static str,
         prev: Option<OsString>,
     }
 
     impl EnvVarGuard {
         fn set(key: &'static str, value: impl AsRef<Path>) -> Self {
+            let lock = crate::test_utils::env_lock()
+                .lock()
+                .unwrap_or_else(|err| err.into_inner());
             let prev = std::env::var_os(key);
             std::env::set_var(key, value.as_ref());
-            Self { key, prev }
+            Self {
+                _lock: lock,
+                key,
+                prev,
+            }
         }
     }
 

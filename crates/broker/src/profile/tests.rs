@@ -17,7 +17,9 @@ fn write_workspace_policy(root: &Path, contents: &str) -> PathBuf {
 }
 
 fn with_substrate_home<T>(home: &Path, f: impl FnOnce() -> T) -> T {
-    let _lock = crate::test_utils::env_lock().lock().unwrap();
+    let _lock = crate::test_utils::env_lock()
+        .lock()
+        .unwrap_or_else(|err| err.into_inner());
     let previous = std::env::var_os("SUBSTRATE_HOME");
     std::env::set_var("SUBSTRATE_HOME", home);
     let result = f();
