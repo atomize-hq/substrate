@@ -723,7 +723,7 @@ metadata:
 
         let cwd = fixture.child_dir();
         let _env = EnvVarGuard::set("SUBSTRATE_HOME", &fixture.substrate_home);
-        let (policy, _source) = crate::policy_loader::load_effective_policy_for_cwd(&cwd)
+        let (policy, _source) = crate::effective_policy::load_effective_policy_for_cwd(&cwd)
             .expect("broker should resolve effective policy via patch merge");
 
         assert_eq!(policy.cmd_allowed, vec!["global-allowed".to_string()]);
@@ -751,7 +751,7 @@ metadata:
 
         let cwd = fixture.child_dir();
         let _env = EnvVarGuard::set("SUBSTRATE_HOME", &fixture.substrate_home);
-        let (policy, _source) = crate::policy_loader::load_effective_policy_for_cwd(&cwd)
+        let (policy, _source) = crate::effective_policy::load_effective_policy_for_cwd(&cwd)
             .expect("broker should resolve policy for cwd");
 
         assert_eq!(
@@ -783,7 +783,7 @@ metadata:
         let cwd = fixture.child_dir();
 
         let _env = EnvVarGuard::set("SUBSTRATE_HOME", &fixture.substrate_home);
-        let (broker_policy, _source) = crate::policy_loader::load_effective_policy_for_cwd(&cwd)
+        let (broker_policy, _source) = crate::effective_policy::load_effective_policy_for_cwd(&cwd)
             .expect("broker should resolve effective policy via patch merge");
         let broker_json = serde_json::to_value(&broker_policy).expect("serialize broker policy");
 
