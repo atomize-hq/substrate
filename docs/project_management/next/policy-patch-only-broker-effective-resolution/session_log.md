@@ -216,3 +216,17 @@
   - `git ls-remote --heads origin feat/policy-patch-only-broker-effective-resolution` → `0` (ref exists)
   - `make -n ci-compile-parity CI_WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" CI_REMOTE=origin CI_CLEANUP=1` → `0`
   - `make -n feature-smoke FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution" PLATFORM=behavior SMOKE_SLICE_ID="C0" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/policy-patch-only-broker-effective-resolution" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1` → `0`
+
+## START — 2026-01-17T04:52:57Z — code — C0-code
+- Worktree: `wt/policy-patch-only-broker-effective-resolution-c0-code`
+- Branch: `policy-patch-only-broker-effective-resolution-c0-code`
+- Orchestration branch: `feat/policy-patch-only-broker-effective-resolution`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution" SLICE_ID="C0" LAUNCH_CODEX=1`
+
+## START — 2026-01-17T04:52:57Z — test — C0-test
+- Worktree: `wt/policy-patch-only-broker-effective-resolution-c0-test`
+- Branch: `policy-patch-only-broker-effective-resolution-c0-test`
+- Orchestration branch: `feat/policy-patch-only-broker-effective-resolution`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution" SLICE_ID="C0" LAUNCH_CODEX=1`
