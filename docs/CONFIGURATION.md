@@ -161,7 +161,7 @@ Unknown keys and extra tables are preserved for future expansion.
 ### World filesystem mode
 
 Policies control whether the world filesystem is writable (overlay/copy-diff) or forced to
-`read_only` via `world_fs.mode` in the active policy file.
+`read_only` via `world_fs.mode` in the effective policy (resolved from policy patches).
 
 - `world_fs.mode: writable` (default): project writes land in the world overlay.
 - `world_fs.mode: read_only`: the project is remounted read-only so both relative and absolute
@@ -171,41 +171,43 @@ The shell exports `SUBSTRATE_WORLD_FS_MODE` with the resolved value for telemetr
 surfaces it in `substrate host doctor --json` and `substrate world doctor --json` so policy
 enforcement is visible without extra flags.
 
-### Policy files (`world_fs` schema)
+### Policy patches (`policy.yaml`)
 
-Substrate loads a YAML policy from one of these locations (first match wins):
+Substrate policy files on disk are always *patch-only*: a sparse YAML mapping where omitted keys mean
+“inherit”. The broker resolves a single effective policy for the current directory and all execution
+paths (shell/shim/world-agent) consume that same resolved policy.
 
-- Per-project: `.substrate-profile` (or `.substrate-profile.d/{default,policy}.{yaml,yml}`)
-- Repo-local: `.substrate/policy.yaml` or `.substrate-policy.yaml`
-- Global: `~/.substrate/policy.yaml`
+Effective policy resolution order:
 
-The policy schema is strict (unknown keys are rejected). The required top-level keys are `id`,
-`name`, and the `world_fs` block:
+1. Defaults (built-in)
+2. Global policy patch: `$SUBSTRATE_HOME/policy.yaml` (usually `~/.substrate/policy.yaml`)
+3. Workspace policy patch: `<workspace_root>/.substrate/policy.yaml` (only when a workspace exists and is enabled)
+
+Workspace discovery and the disabled marker:
+
+- A workspace root is any directory with `<workspace_root>/.substrate/workspace.yaml`.
+- If `<workspace_root>/.substrate/workspace.disabled` exists, that workspace is treated as non-existent for
+  policy discovery and effective policy resolution (so the workspace patch is ignored).
+
+Patch schema and failure behavior:
+
+- The patch file must be a YAML mapping (`{}`) or `null` (treated as an empty patch).
+- The patch schema is strict: unknown keys, type mismatches, invariant violations, and unreadable-but-present
+  patch files are policy resolution errors and block broker-dependent execution (exit code `2`).
+- Per-key merge strategy is `replace` when a key is present in a patch layer (including lists like `cmd_denied`).
+
+Minimal patch example (workspace or global):
 
 ```yaml
-id: default
-name: Default Policy
 world_fs:
-  mode: writable            # writable | read_only
-  isolation: workspace      # workspace | full
-  require_world: false      # true = no host fallback when world is unavailable
-  read_allowlist:
-    - "*"                   # required, must be non-empty
-  write_allowlist: []       # required, can be empty
+  require_world: true
 ```
 
-Notes:
+Policy patch management (CLI):
 
-- `world_fs.require_world` is the single “fail closed” knob for world availability. If `true` and
-  the world backend is unavailable (or disabled via `--no-world`/`SUBSTRATE_WORLD=disabled`),
-  Substrate errors instead of falling back to host execution.
-- `world_fs.isolation=full` is the strong host-path isolation mode (Linux mount namespace + `pivot_root`)
-  and requires `world_fs.require_world=true` (validated by the broker).
-- `world_fs.mode=read_only` requires `world_fs.require_world=true` (validated by the broker).
-- `world_fs.write_allowlist` is only used in `world_fs.isolation=full` and `world_fs.mode=writable` to
-  remount project *prefixes* read-write inside the cage; patterns outside the project root are ignored.
-- `world.caged` / `SUBSTRATE_CAGED` is a *shell cwd guard* (prevents `cd` escapes). It is independent
-  of `world_fs.isolation`, which controls filesystem isolation in the world backend.
+- Global: `substrate policy global init|show|set|reset`
+- Workspace: `substrate policy workspace show|set|reset` (and `substrate policy init` to create the workspace patch)
+- Effective policy: `substrate policy current show --explain`
 
 For a minimal end-to-end verification run, see `scripts/linux/agent-hub-isolation-verify.sh`.
 
