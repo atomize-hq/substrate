@@ -42,7 +42,7 @@ fn substrate_bin(repo_root: &Path, override_bin: Option<OsString>) -> Option<Pat
         return Some(PathBuf::from(bin));
     }
 
-    if let Ok(bin) = std::env::var_os("SUBSTRATE_BIN") {
+    if let Some(bin) = std::env::var_os("SUBSTRATE_BIN") {
         if !bin.is_empty() {
             return Some(PathBuf::from(bin));
         }
