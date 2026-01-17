@@ -345,3 +345,26 @@
   - `CODEX_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C1/integ-core/events.jsonl`
   - `CODEX_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C1/integ-core/stderr.log`
 - Blockers: `NONE`
+
+## START — 2026-01-17T21:36:55Z — integration — C1-integ
+- Worktree: `wt/policy-patch-only-broker-effective-resolution-c1-integ`
+- Branch: `policy-patch-only-broker-effective-resolution-c1-integ`
+- Orchestration branch: `feat/policy-patch-only-broker-effective-resolution`
+- Scope: merge platform fixes (none for C1), re-run integration gates, update `docs/CONFIGURATION.md`, and complete the C1 closeout report.
+
+## END — 2026-01-17T22:06:07Z — integration — C1-integ
+- Worktree: `/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-integ`
+- Branch: `policy-patch-only-broker-effective-resolution-c1-integ`
+- HEAD: `79ebe0f21792ea463be2a1e900df0572d3be27b0`
+- Checks:
+  - `cargo fmt`: pass
+  - `cargo clippy --workspace --all-targets -- -D warnings`: pass
+  - `cargo test -p substrate-shim -- --nocapture`: pass
+  - `cargo test -p world-agent -- --nocapture`: pass
+  - `make integ-checks`: pass
+- CI dispatch (re-run):
+  - Compile parity: `https://github.com/atomize-hq/substrate/actions/runs/21101437126`
+  - Feature smoke (behavior, C1): `https://github.com/atomize-hq/substrate/actions/runs/21101466339`
+- Notes:
+  - Platform-fix tasks were noop for C1; no platform branches to merge.
+- Blockers: `NONE`
