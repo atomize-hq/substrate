@@ -1,7 +1,7 @@
 # ADR-0013 — Policy Patch-only Format + Broker-Canonical Effective Resolution
 
 ## Status
-- Status: Draft
+- Status: Approved
 - Date (UTC): 2026-01-17
 - Owner(s): Shell/Broker maintainers
 
