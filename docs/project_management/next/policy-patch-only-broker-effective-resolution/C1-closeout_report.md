@@ -36,14 +36,14 @@ Slice spec:
 - `make integ-checks`: pass
 
 CI compile-parity (Evidence):
-- Run: `21101331430` — `https://github.com/atomize-hq/substrate/actions/runs/21101331430` (ubuntu-24.04, macos-14, windows-2022: success)
+- Run: `21101437126` — `https://github.com/atomize-hq/substrate/actions/runs/21101437126` (ubuntu-24.04, macos-14, windows-2022: success)
 
 ## Cross-Platform Smoke (if applicable)
 
 Record run ids/URLs for required platforms:
-- Linux: `21101364814` — `https://github.com/atomize-hq/substrate/actions/runs/21101364814` (linux_self_hosted: success)
-- macOS: `21101364814` — `https://github.com/atomize-hq/substrate/actions/runs/21101364814` (macos_self_hosted: success)
-- Windows: `21101364814` — `https://github.com/atomize-hq/substrate/actions/runs/21101364814` (windows_self_hosted: success)
+- Linux: `21101466339` — `https://github.com/atomize-hq/substrate/actions/runs/21101466339` (linux_self_hosted: success)
+- macOS: `21101466339` — `https://github.com/atomize-hq/substrate/actions/runs/21101466339` (macos_self_hosted: success)
+- Windows: `21101466339` — `https://github.com/atomize-hq/substrate/actions/runs/21101466339` (windows_self_hosted: success)
 - WSL: N/A (not required for C1)
 
 ## Smoke ↔ Manual Parity
