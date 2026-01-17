@@ -22,9 +22,11 @@ pub(super) fn update_manager_env_exports(path: &Path, enabled: bool) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use tempfile::tempdir;
 
     #[test]
+    #[serial]
     fn update_manager_env_exports_writes_env_sh_format() {
         let temp = tempdir().unwrap();
         let home = temp.path().join("substrate-home");

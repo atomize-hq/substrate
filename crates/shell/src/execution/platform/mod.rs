@@ -210,11 +210,14 @@ pub(crate) fn handle_health_command(cmd: &HealthCmd, cli: &Cli) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::fs;
     use tempfile::tempdir;
 
     #[test]
+    #[serial]
     fn world_enable_exports_policy_fs_mode() {
+        let _env_guard = crate::execution::world_env_guard();
         let _ = substrate_broker::set_global_broker(substrate_broker::BrokerHandle::new());
 
         let temp = tempdir().expect("tempdir");

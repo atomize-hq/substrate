@@ -273,6 +273,7 @@ pub(crate) fn verify_process_group(_pid: Option<u32>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::sync::atomic::Ordering;
 
     struct EnvGuard {
@@ -352,6 +353,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn terminal_size_uses_non_zero_dimensions() {
         let _env_guard = EnvGuard::new();
         std::env::set_var("LINES", "30");

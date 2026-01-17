@@ -739,6 +739,7 @@ echo pass
     #[cfg(test)]
     mod tests {
         use super::*;
+        use serial_test::serial;
         use std::collections::VecDeque;
 
         use std::cell::RefCell;
@@ -871,6 +872,7 @@ echo pass
         }
 
         #[test]
+        #[serial]
         fn doctor_ok_json() {
             let vm_json = r#"{"status":"Running"}"#;
             let temp = tempfile::tempdir().expect("tempdir");
