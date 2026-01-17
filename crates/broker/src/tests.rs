@@ -794,7 +794,15 @@ metadata:
         let _env = EnvVarGuard::set("SUBSTRATE_HOME", &fixture.substrate_home);
         let (broker_policy, _source) = crate::effective_policy::load_effective_policy_for_cwd(&cwd)
             .expect("broker should resolve effective policy via patch merge");
-        let broker_json = serde_json::to_value(&broker_policy).expect("serialize broker policy");
+        let mut broker_json =
+            serde_json::to_value(&broker_policy).expect("serialize broker policy");
+        if let Some(require_world) = broker_json
+            .get("world_fs")
+            .and_then(|fs| fs.get("require_world"))
+            .and_then(|v| v.as_bool())
+        {
+            broker_json["world_fs_require_world"] = serde_json::Value::Bool(require_world);
+        }
 
         let show = fixture.run_substrate(&cwd, &["policy", "current", "show", "--json"]);
         assert!(
