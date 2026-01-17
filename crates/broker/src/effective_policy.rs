@@ -1,18 +1,21 @@
-use crate::execution::config_model::{self, ConfigUpdate, UpdateOp};
-use crate::execution::value_parse::parse_bool_flag;
-use crate::execution::workspace;
-use anyhow::{anyhow, Result};
+use crate::policy::{Policy, WorldFsIsolation};
+use anyhow::{anyhow, Context, Result};
+use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use substrate_broker::{Policy, PolicyExplainV1, WorldFsIsolation};
+use substrate_common::paths as substrate_paths;
 use substrate_common::WorldFsMode;
+
+const WORKSPACE_MARKER_FILENAME: &str = "workspace.yaml";
+const WORKSPACE_DISABLED_FILENAME: &str = "workspace.disabled";
+const WORKSPACE_POLICY_FILENAME: &str = "policy.yaml";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
-pub(crate) struct PolicyPatch {
+pub struct PolicyPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -38,6 +41,7 @@ pub(crate) struct PolicyPatch {
 }
 
 impl PolicyPatch {
+    #[allow(dead_code)]
     pub(crate) fn is_empty(&self) -> bool {
         self.id.is_none()
             && self.name.is_none()
@@ -55,7 +59,7 @@ impl PolicyPatch {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
-pub(crate) struct WorldFsPatch {
+pub struct WorldFsPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mode: Option<WorldFsMode>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -80,7 +84,7 @@ impl WorldFsPatch {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
-pub(crate) struct ResourceLimitsPatch {
+pub struct ResourceLimitsPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_memory_mb: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -100,30 +104,98 @@ impl ResourceLimitsPatch {
     }
 }
 
-pub(crate) fn global_policy_path() -> Result<PathBuf> {
-    substrate_common::paths::policy_file()
+#[derive(Debug, Clone)]
+pub struct EffectivePolicySources {
+    pub global_patch_path: Option<PathBuf>,
+    pub workspace_patch_path: Option<PathBuf>,
 }
 
-pub(crate) fn workspace_policy_path(workspace_root: &Path) -> PathBuf {
-    workspace::workspace_policy_path(workspace_root)
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct PolicyExplainV1 {
+    pub kind: String,
+    pub keys: OrderedExplainKeys,
 }
 
-pub(crate) fn read_global_policy_patch_or_empty() -> Result<(PolicyPatch, bool)> {
-    let path = global_policy_path()?;
-    match fs::read_to_string(&path) {
-        Ok(raw) => Ok((parse_policy_patch_yaml(&path, &raw)?, true)),
-        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok((PolicyPatch::default(), false)),
-        Err(err) => Err(anyhow!("failed to read {}: {err}", path.display())),
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct PolicyExplainKey {
+    pub merge_strategy: String,
+    pub sources: Vec<PolicyExplainSource>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct PolicyExplainSource {
+    pub layer: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct OrderedExplainKeys(BTreeMap<String, PolicyExplainKey>);
+
+impl OrderedExplainKeys {
+    fn insert(&mut self, key: String, value: PolicyExplainKey) {
+        self.0.insert(key, value);
     }
 }
 
-pub(crate) fn parse_policy_patch_yaml(path: &Path, raw: &str) -> Result<PolicyPatch> {
+impl Serialize for OrderedExplainKeys {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut entries: Vec<_> = self.0.iter().collect();
+        entries.sort_by(|(a_key, a_val), (b_key, b_val)| {
+            explain_key_rank(a_val)
+                .cmp(&explain_key_rank(b_val))
+                .then_with(|| a_key.cmp(b_key))
+        });
+
+        let mut map = serializer.serialize_map(Some(entries.len()))?;
+        for (key, value) in entries {
+            map.serialize_entry(key, value)?;
+        }
+        map.end()
+    }
+}
+
+fn explain_key_rank(key: &PolicyExplainKey) -> u8 {
+    key.sources
+        .iter()
+        .map(|source| match source.layer.as_str() {
+            "global_patch" => 0,
+            "default" => 1,
+            "workspace_patch" => 2,
+            _ => 5,
+        })
+        .min()
+        .unwrap_or(5)
+}
+
+pub(crate) fn find_workspace_root(start: &Path) -> Option<PathBuf> {
+    let mut start = start;
+    if start.is_file() {
+        start = start.parent()?;
+    }
+    let start = start.canonicalize().unwrap_or_else(|_| start.to_path_buf());
+
+    for dir in start.ancestors() {
+        let substrate_dir = dir.join(substrate_paths::SUBSTRATE_DIR_NAME);
+        let marker = substrate_dir.join(WORKSPACE_MARKER_FILENAME);
+        let disabled = substrate_dir.join(WORKSPACE_DISABLED_FILENAME);
+        if marker.is_file() && !disabled.exists() {
+            return Some(dir.to_path_buf());
+        }
+    }
+    None
+}
+
+pub fn parse_policy_patch_yaml(path: &Path, raw: &str) -> Result<PolicyPatch> {
     let value: serde_yaml::Value = serde_yaml::from_str(raw).map_err(|err| {
-        config_model::user_error(format!(
+        anyhow!(
             "invalid YAML in {}: {}",
             path.display(),
             err.to_string().trim()
-        ))
+        )
     })?;
 
     match &value {
@@ -133,65 +205,81 @@ pub(crate) fn parse_policy_patch_yaml(path: &Path, raw: &str) -> Result<PolicyPa
     }
 
     let parsed: PolicyPatch = serde_yaml::from_value(value).map_err(|err| {
-        config_model::user_error(format!(
+        anyhow!(
             "invalid YAML in {}: {}",
             path.display(),
             err.to_string().trim()
-        ))
+        )
     })?;
+
     Ok(parsed)
 }
 
-pub(crate) fn apply_updates_to_policy_patch(
-    patch: &mut PolicyPatch,
-    updates: &[ConfigUpdate],
-) -> Result<bool> {
-    let before = patch.clone();
-    let mut changed = false;
-    for update in updates {
-        changed |= apply_update_to_patch(patch, update)?;
+pub fn read_policy_patch_or_empty(path: &Path) -> Result<(PolicyPatch, bool)> {
+    match fs::read_to_string(path) {
+        Ok(raw) => Ok((parse_policy_patch_yaml(path, &raw)?, true)),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok((PolicyPatch::default(), false)),
+        Err(err) => Err(anyhow!("failed to read {}: {err}", path.display())),
     }
-
-    // Validate the patch by applying it on defaults and enforcing policy invariants.
-    let mut effective = Policy::default();
-    apply_policy_patch_over(&mut effective, patch);
-    validate_policy(&effective)?;
-
-    if !changed && before != *patch {
-        changed = true;
-    }
-
-    Ok(changed)
 }
 
-pub(crate) fn reset_policy_patch_keys(patch: &mut PolicyPatch, keys: &[String]) -> Result<bool> {
-    if keys.is_empty() {
-        let was_empty = patch.is_empty();
-        *patch = PolicyPatch::default();
-        return Ok(!was_empty);
-    }
+pub fn load_policy_from_path(path: &Path) -> Result<Policy> {
+    let raw =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    let patch = parse_policy_patch_yaml(path, &raw)?;
 
-    let mut changed = false;
-    for key in keys {
-        changed |= reset_policy_patch_key(patch, key)?;
-    }
-    Ok(changed)
+    let mut policy = Policy::default();
+    apply_policy_patch_over(&mut policy, &patch);
+    validate_effective_policy(&policy)?;
+    Ok(policy)
 }
 
-#[allow(dead_code)]
-pub(crate) fn resolve_effective_policy_with_explain(
+pub fn load_effective_policy_for_cwd(cwd: &Path) -> Result<(Policy, EffectivePolicySources)> {
+    let global_path = substrate_paths::policy_file()?;
+    let (global_patch, global_exists) = read_policy_patch_or_empty(&global_path)?;
+
+    let workspace_root = find_workspace_root(cwd);
+    let workspace_layer = if let Some(root) = &workspace_root {
+        let path = root
+            .join(substrate_paths::SUBSTRATE_DIR_NAME)
+            .join(WORKSPACE_POLICY_FILENAME);
+        match fs::read_to_string(&path) {
+            Ok(raw) => Some((parse_policy_patch_yaml(&path, &raw)?, path)),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+            Err(err) => return Err(anyhow!("failed to read {}: {err}", path.display())),
+        }
+    } else {
+        None
+    };
+
+    let mut policy = Policy::default();
+    apply_policy_patch_over(&mut policy, &global_patch);
+    if let Some((workspace_patch, _path)) = &workspace_layer {
+        apply_policy_patch_over(&mut policy, workspace_patch);
+    }
+    validate_effective_policy(&policy)?;
+
+    Ok((
+        policy,
+        EffectivePolicySources {
+            global_patch_path: global_exists.then_some(global_path),
+            workspace_patch_path: workspace_layer.as_ref().map(|(_, p)| p.clone()),
+        },
+    ))
+}
+
+pub fn resolve_effective_policy_with_explain(
     cwd: &Path,
     explain: bool,
 ) -> Result<(Policy, Option<PolicyExplainV1>)> {
-    substrate_broker::resolve_effective_policy_with_explain(cwd, explain)
-        .map_err(|err| config_model::user_error(err.to_string()))
-    /*
-    let (global_patch, _) = read_global_policy_patch_or_empty()?;
-    let global_path = global_policy_path()?;
+    let global_path = substrate_paths::policy_file()?;
+    let (global_patch, _global_exists) = read_policy_patch_or_empty(&global_path)?;
 
-    let workspace_root = workspace::find_workspace_root(cwd);
+    let workspace_root = find_workspace_root(cwd);
     let workspace_layer = if let Some(root) = &workspace_root {
-        let path = workspace_policy_path(root);
+        let path = root
+            .join(substrate_paths::SUBSTRATE_DIR_NAME)
+            .join(WORKSPACE_POLICY_FILENAME);
         match fs::read_to_string(&path) {
             Ok(raw) => Some((parse_policy_patch_yaml(&path, &raw)?, path)),
             Err(err) if err.kind() == io::ErrorKind::NotFound => None,
@@ -203,6 +291,7 @@ pub(crate) fn resolve_effective_policy_with_explain(
 
     let workspace_enabled = workspace_layer.is_some();
     let workspace_path = workspace_layer.as_ref().map(|(_, p)| p.as_path());
+    let workspace_patch = workspace_layer.as_ref().map(|(p, _)| p);
 
     #[derive(Clone, Copy)]
     enum ReplaceSource {
@@ -264,8 +353,6 @@ pub(crate) fn resolve_effective_policy_with_explain(
         (default, ReplaceSource::Default)
     }
 
-    let workspace_patch = workspace_layer.as_ref().map(|(p, _)| p);
-
     let mut effective = Policy::default();
     let mut explain_keys = if explain {
         Some(OrderedExplainKeys::default())
@@ -273,7 +360,6 @@ pub(crate) fn resolve_effective_policy_with_explain(
         None
     };
 
-    // id
     let (id, id_src) = resolve_replace(
         effective.id.clone(),
         global_patch.id.clone(),
@@ -291,7 +377,6 @@ pub(crate) fn resolve_effective_policy_with_explain(
         );
     }
 
-    // name
     let (name, name_src) = resolve_replace(
         effective.name.clone(),
         global_patch.name.clone(),
@@ -309,7 +394,6 @@ pub(crate) fn resolve_effective_policy_with_explain(
         );
     }
 
-    // world_fs.mode
     let (fs_mode, fs_mode_src) = resolve_replace(
         effective.world_fs_mode,
         global_patch.world_fs.mode,
@@ -327,7 +411,6 @@ pub(crate) fn resolve_effective_policy_with_explain(
         );
     }
 
-    // world_fs.isolation
     let (fs_iso, fs_iso_src) = resolve_replace(
         effective.world_fs_isolation,
         global_patch.world_fs.isolation,
@@ -345,7 +428,6 @@ pub(crate) fn resolve_effective_policy_with_explain(
         );
     }
 
-    // world_fs.require_world
     let (require_world, require_world_src) = resolve_replace(
         effective.world_fs_require_world,
         global_patch.world_fs.require_world,
@@ -367,7 +449,6 @@ pub(crate) fn resolve_effective_policy_with_explain(
         );
     }
 
-    // world_fs.read_allowlist
     let (read_allow, read_allow_src) = resolve_replace(
         effective.fs_read.clone(),
         global_patch.world_fs.read_allowlist.clone(),
@@ -385,7 +466,6 @@ pub(crate) fn resolve_effective_policy_with_explain(
         );
     }
 
-    // world_fs.write_allowlist
     let (write_allow, write_allow_src) = resolve_replace(
         effective.fs_write.clone(),
         global_patch.world_fs.write_allowlist.clone(),
@@ -407,7 +487,6 @@ pub(crate) fn resolve_effective_policy_with_explain(
         );
     }
 
-    // net_allowed
     let (net_allowed, net_allowed_src) = resolve_replace(
         effective.net_allowed.clone(),
         global_patch.net_allowed.clone(),
@@ -429,7 +508,6 @@ pub(crate) fn resolve_effective_policy_with_explain(
         );
     }
 
-    // cmd_allowed
     let (cmd_allowed, cmd_allowed_src) = resolve_replace(
         effective.cmd_allowed.clone(),
         global_patch.cmd_allowed.clone(),
@@ -451,7 +529,6 @@ pub(crate) fn resolve_effective_policy_with_explain(
         );
     }
 
-    // cmd_denied
     let (cmd_denied, cmd_denied_src) = resolve_replace(
         effective.cmd_denied.clone(),
         global_patch.cmd_denied.clone(),
@@ -469,7 +546,6 @@ pub(crate) fn resolve_effective_policy_with_explain(
         );
     }
 
-    // cmd_isolated
     let (cmd_isolated, cmd_isolated_src) = resolve_replace(
         effective.cmd_isolated.clone(),
         global_patch.cmd_isolated.clone(),
@@ -491,7 +567,6 @@ pub(crate) fn resolve_effective_policy_with_explain(
         );
     }
 
-    // require_approval
     let (require_approval, require_approval_src) = resolve_replace(
         effective.require_approval,
         global_patch.require_approval,
@@ -513,7 +588,6 @@ pub(crate) fn resolve_effective_policy_with_explain(
         );
     }
 
-    // allow_shell_operators
     let (allow_shell_operators, allow_shell_operators_src) = resolve_replace(
         effective.allow_shell_operators,
         global_patch.allow_shell_operators,
@@ -535,7 +609,6 @@ pub(crate) fn resolve_effective_policy_with_explain(
         );
     }
 
-    // limits.*
     let (max_memory_mb, max_memory_mb_src) = resolve_replace_opt(
         effective.limits.max_memory_mb,
         global_patch.limits.max_memory_mb,
@@ -620,15 +693,17 @@ pub(crate) fn resolve_effective_policy_with_explain(
         );
     }
 
-    // metadata
-    let default_meta = effective.metadata.clone();
-    let global_meta = global_patch.metadata.as_ref().map(btree_to_hashmap);
-    let workspace_meta = workspace_patch
-        .and_then(|p| p.metadata.as_ref())
-        .map(btree_to_hashmap);
-    let (metadata, metadata_src) =
-        resolve_replace(default_meta, global_meta, workspace_meta, workspace_enabled);
-    effective.metadata = metadata;
+    let (metadata, metadata_src) = resolve_replace_opt(
+        if effective.metadata.is_empty() {
+            None
+        } else {
+            Some(hashmap_to_btree(&effective.metadata))
+        },
+        global_patch.metadata.clone(),
+        workspace_patch.and_then(|p| p.metadata.clone()),
+        workspace_enabled,
+    );
+    effective.metadata = metadata.as_ref().map(btree_to_hashmap).unwrap_or_default();
     if let Some(keys) = &mut explain_keys {
         keys.insert(
             "metadata".to_string(),
@@ -639,7 +714,7 @@ pub(crate) fn resolve_effective_policy_with_explain(
         );
     }
 
-    validate_policy(&effective)?;
+    validate_effective_policy(&effective)?;
 
     let explain = explain_keys.map(|keys| PolicyExplainV1 {
         kind: "substrate.policy.explain.v1".to_string(),
@@ -647,25 +722,6 @@ pub(crate) fn resolve_effective_policy_with_explain(
     });
 
     Ok((effective, explain))
-    */
-}
-
-fn btree_to_hashmap(map: &BTreeMap<String, String>) -> HashMap<String, String> {
-    map.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
-}
-
-fn validate_policy(policy: &Policy) -> Result<()> {
-    if policy.world_fs_mode == WorldFsMode::ReadOnly && !policy.world_fs_require_world {
-        return Err(config_model::user_error(
-            "world_fs.mode=read_only requires world_fs.require_world=true",
-        ));
-    }
-    if policy.world_fs_isolation == WorldFsIsolation::Full && !policy.world_fs_require_world {
-        return Err(config_model::user_error(
-            "world_fs.isolation=full requires world_fs.require_world=true",
-        ));
-    }
-    Ok(())
 }
 
 fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
@@ -725,291 +781,24 @@ fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
     }
 }
 
-fn reset_policy_patch_key(patch: &mut PolicyPatch, key: &str) -> Result<bool> {
-    match key {
-        "id" => Ok(patch.id.take().is_some()),
-        "name" => Ok(patch.name.take().is_some()),
-
-        "world_fs.mode" => Ok(patch.world_fs.mode.take().is_some()),
-        "world_fs.isolation" => Ok(patch.world_fs.isolation.take().is_some()),
-        "world_fs.require_world" => Ok(patch.world_fs.require_world.take().is_some()),
-        "world_fs.read_allowlist" => Ok(patch.world_fs.read_allowlist.take().is_some()),
-        "world_fs.write_allowlist" => Ok(patch.world_fs.write_allowlist.take().is_some()),
-
-        "net_allowed" => Ok(patch.net_allowed.take().is_some()),
-        "cmd_allowed" => Ok(patch.cmd_allowed.take().is_some()),
-        "cmd_denied" => Ok(patch.cmd_denied.take().is_some()),
-        "cmd_isolated" => Ok(patch.cmd_isolated.take().is_some()),
-
-        "require_approval" => Ok(patch.require_approval.take().is_some()),
-        "allow_shell_operators" => Ok(patch.allow_shell_operators.take().is_some()),
-
-        "limits.max_memory_mb" => Ok(patch.limits.max_memory_mb.take().is_some()),
-        "limits.max_cpu_percent" => Ok(patch.limits.max_cpu_percent.take().is_some()),
-        "limits.max_runtime_ms" => Ok(patch.limits.max_runtime_ms.take().is_some()),
-        "limits.max_egress_bytes" => Ok(patch.limits.max_egress_bytes.take().is_some()),
-
-        "metadata" => Ok(patch.metadata.take().is_some()),
-
-        _ => Err(config_model::user_error(format!(
-            "unknown policy key '{}'",
-            key
-        ))),
-    }
-}
-
-fn apply_update_to_patch(patch: &mut PolicyPatch, update: &ConfigUpdate) -> Result<bool> {
-    match update.key.as_str() {
-        "id" => apply_string_opt(&mut patch.id, &update.op, &update.value),
-        "name" => apply_string_opt(&mut patch.name, &update.op, &update.value),
-
-        "world_fs.mode" => apply_enum_world_fs_mode_opt(&mut patch.world_fs.mode, update),
-        "world_fs.isolation" => {
-            apply_enum_world_fs_isolation_opt(&mut patch.world_fs.isolation, update)
-        }
-        "world_fs.require_world" => {
-            apply_bool_opt(&mut patch.world_fs.require_world, &update.op, &update.value)
-        }
-        "world_fs.read_allowlist" => {
-            apply_string_list_opt(&mut patch.world_fs.read_allowlist, update)
-        }
-        "world_fs.write_allowlist" => {
-            apply_string_list_opt(&mut patch.world_fs.write_allowlist, update)
-        }
-
-        "net_allowed" => apply_string_list_opt(&mut patch.net_allowed, update),
-        "cmd_allowed" => apply_string_list_opt(&mut patch.cmd_allowed, update),
-        "cmd_denied" => apply_string_list_opt(&mut patch.cmd_denied, update),
-        "cmd_isolated" => apply_string_list_opt(&mut patch.cmd_isolated, update),
-
-        "require_approval" => {
-            apply_bool_opt(&mut patch.require_approval, &update.op, &update.value)
-        }
-        "allow_shell_operators" => {
-            apply_bool_opt(&mut patch.allow_shell_operators, &update.op, &update.value)
-        }
-
-        "limits.max_memory_mb" => {
-            apply_u64_opt(&mut patch.limits.max_memory_mb, &update.op, &update.value)
-        }
-        "limits.max_cpu_percent" => {
-            apply_u32_opt(&mut patch.limits.max_cpu_percent, &update.op, &update.value)
-        }
-        "limits.max_runtime_ms" => {
-            apply_u64_opt(&mut patch.limits.max_runtime_ms, &update.op, &update.value)
-        }
-        "limits.max_egress_bytes" => apply_u64_opt(
-            &mut patch.limits.max_egress_bytes,
-            &update.op,
-            &update.value,
-        ),
-
-        "metadata" => apply_metadata_opt(&mut patch.metadata, &update.op, &update.value),
-
-        _ => Err(config_model::user_error(format!(
-            "unknown policy key '{}'",
-            update.key
-        ))),
-    }
-}
-
-fn apply_string_opt(target: &mut Option<String>, op: &UpdateOp, raw: &str) -> Result<bool> {
-    let UpdateOp::Set = op else {
-        return Err(config_model::user_error(
-            "operator += and -= are only valid for list keys",
+fn validate_effective_policy(policy: &Policy) -> Result<()> {
+    if policy.world_fs_mode == WorldFsMode::ReadOnly && !policy.world_fs_require_world {
+        return Err(anyhow!(
+            "world_fs.mode=read_only requires world_fs.require_world=true"
         ));
-    };
-    let next = raw.trim().to_string();
-    let next = Some(next);
-    if *target == next {
-        return Ok(false);
     }
-    *target = next;
-    Ok(true)
-}
-
-fn apply_bool_opt(target: &mut Option<bool>, op: &UpdateOp, raw: &str) -> Result<bool> {
-    let UpdateOp::Set = op else {
-        return Err(config_model::user_error(
-            "operator += and -= are only valid for list keys",
+    if policy.world_fs_isolation == WorldFsIsolation::Full && !policy.world_fs_require_world {
+        return Err(anyhow!(
+            "world_fs.isolation=full requires world_fs.require_world=true"
         ));
-    };
-    let next = parse_bool_flag(raw).ok_or_else(|| {
-        config_model::user_error(format!("invalid boolean value '{}'", raw.trim()))
-    })?;
-    let next = Some(next);
-    if *target == next {
-        return Ok(false);
     }
-    *target = next;
-    Ok(true)
+    Ok(())
 }
 
-fn apply_u64_opt(target: &mut Option<u64>, op: &UpdateOp, raw: &str) -> Result<bool> {
-    let UpdateOp::Set = op else {
-        return Err(config_model::user_error(
-            "operator += and -= are only valid for list keys",
-        ));
-    };
-    let trimmed = raw.trim();
-    let next = trimmed.parse::<u64>().map_err(|_| {
-        config_model::user_error(format!(
-            "invalid integer value '{}' (expected base-10)",
-            trimmed
-        ))
-    })?;
-    let next = Some(next);
-    if *target == next {
-        return Ok(false);
-    }
-    *target = next;
-    Ok(true)
+fn btree_to_hashmap(map: &BTreeMap<String, String>) -> HashMap<String, String> {
+    map.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
 }
 
-fn apply_u32_opt(target: &mut Option<u32>, op: &UpdateOp, raw: &str) -> Result<bool> {
-    let UpdateOp::Set = op else {
-        return Err(config_model::user_error(
-            "operator += and -= are only valid for list keys",
-        ));
-    };
-    let trimmed = raw.trim();
-    let next = trimmed.parse::<u32>().map_err(|_| {
-        config_model::user_error(format!(
-            "invalid integer value '{}' (expected base-10)",
-            trimmed
-        ))
-    })?;
-    let next = Some(next);
-    if *target == next {
-        return Ok(false);
-    }
-    *target = next;
-    Ok(true)
-}
-
-fn apply_enum_world_fs_mode_opt(
-    target: &mut Option<WorldFsMode>,
-    update: &ConfigUpdate,
-) -> Result<bool> {
-    let UpdateOp::Set = update.op else {
-        return Err(config_model::user_error(
-            "operator += and -= are only valid for list keys",
-        ));
-    };
-    let next = match update.value.trim().to_ascii_lowercase().as_str() {
-        "writable" => WorldFsMode::Writable,
-        "read_only" => WorldFsMode::ReadOnly,
-        _ => {
-            return Err(config_model::user_error(format!(
-                "invalid world_fs.mode '{}' (expected writable or read_only)",
-                update.value.trim()
-            )));
-        }
-    };
-    let next = Some(next);
-    if *target == next {
-        return Ok(false);
-    }
-    *target = next;
-    Ok(true)
-}
-
-fn apply_enum_world_fs_isolation_opt(
-    target: &mut Option<WorldFsIsolation>,
-    update: &ConfigUpdate,
-) -> Result<bool> {
-    let UpdateOp::Set = update.op else {
-        return Err(config_model::user_error(
-            "operator += and -= are only valid for list keys",
-        ));
-    };
-    let next = match update.value.trim().to_ascii_lowercase().as_str() {
-        "workspace" | "project" => WorldFsIsolation::Workspace,
-        "full" => WorldFsIsolation::Full,
-        _ => {
-            return Err(config_model::user_error(format!(
-                "invalid world_fs.isolation '{}' (expected workspace or full)",
-                update.value.trim()
-            )));
-        }
-    };
-    let next = Some(next);
-    if *target == next {
-        return Ok(false);
-    }
-    *target = next;
-    Ok(true)
-}
-
-fn apply_string_list_opt(target: &mut Option<Vec<String>>, update: &ConfigUpdate) -> Result<bool> {
-    match update.op {
-        UpdateOp::Set => {
-            let parsed = parse_yaml_string_list(&update.value)?;
-            let next = Some(parsed);
-            if *target == next {
-                return Ok(false);
-            }
-            *target = next;
-            Ok(true)
-        }
-        UpdateOp::Append => {
-            if target.is_none() {
-                *target = Some(Vec::new());
-            }
-            let Some(list) = target.as_mut() else {
-                return Ok(false);
-            };
-            if list.iter().any(|item| item == &update.value) {
-                return Ok(false);
-            }
-            list.push(update.value.clone());
-            Ok(true)
-        }
-        UpdateOp::Remove => {
-            let Some(list) = target.as_mut() else {
-                return Ok(false);
-            };
-            let before = list.len();
-            list.retain(|item| item != &update.value);
-            Ok(before != list.len())
-        }
-    }
-}
-
-fn parse_yaml_string_list(raw: &str) -> Result<Vec<String>> {
-    let parsed: Vec<String> = serde_yaml::from_str(raw).map_err(|err| {
-        config_model::user_error(format!(
-            "invalid YAML list literal '{}': {}",
-            raw.trim(),
-            err.to_string().trim()
-        ))
-    })?;
-    Ok(parsed)
-}
-
-fn apply_metadata_opt(
-    target: &mut Option<BTreeMap<String, String>>,
-    op: &UpdateOp,
-    raw: &str,
-) -> Result<bool> {
-    match op {
-        UpdateOp::Set => {
-            let parsed: BTreeMap<String, String> = serde_yaml::from_str(raw).map_err(|err| {
-                config_model::user_error(format!(
-                    "invalid YAML mapping literal for metadata '{}': {}",
-                    raw.trim(),
-                    err.to_string().trim()
-                ))
-            })?;
-            let next = Some(parsed);
-            if *target == next {
-                return Ok(false);
-            }
-            *target = next;
-            Ok(true)
-        }
-        UpdateOp::Append | UpdateOp::Remove => Err(config_model::user_error(
-            "metadata+= and metadata-= are not allowed (use metadata=... to replace the full mapping)",
-        )),
-    }
+fn hashmap_to_btree(map: &HashMap<String, String>) -> BTreeMap<String, String> {
+    map.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
 }

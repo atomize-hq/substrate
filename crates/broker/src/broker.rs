@@ -1,9 +1,9 @@
 //! Core broker state and policy evaluation logic.
 
 use crate::approval::{self, ApprovalCache, ApprovalContext, ApprovalStatus};
+use crate::effective_policy;
 use crate::mode::PolicyMode;
 use crate::policy::{Decision, Policy, Restriction, RestrictionType, WorldFsPolicy};
-use crate::policy_loader::{load_effective_policy_for_cwd, load_policy_from_path};
 use anyhow::Result;
 use std::path::Path;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -48,7 +48,7 @@ impl Broker {
     }
 
     pub fn load_policy(&self, path: &Path) -> Result<()> {
-        let new_policy = load_policy_from_path(path)?;
+        let new_policy = effective_policy::load_policy_from_path(path)?;
         let mut policy = self
             .policy
             .write()
@@ -60,16 +60,23 @@ impl Broker {
     }
 
     pub fn detect_and_load_policy(&self, cwd: &Path) -> Result<()> {
-        let (policy, source) = load_effective_policy_for_cwd(cwd)?;
+        let (policy, sources) = effective_policy::load_effective_policy_for_cwd(cwd)?;
         let mut guard = self
             .policy
             .write()
             .map_err(|e| anyhow::anyhow!("Failed to acquire policy write lock: {}", e))?;
         *guard = policy;
 
-        if let Some(path) = source {
-            info!("Loaded policy from {:?}", path);
-        } else {
+        let mut loaded_any = false;
+        if let Some(path) = sources.workspace_patch_path {
+            info!("Loaded workspace policy patch from {:?}", path);
+            loaded_any = true;
+        }
+        if let Some(path) = sources.global_patch_path {
+            info!("Loaded global policy patch from {:?}", path);
+            loaded_any = true;
+        }
+        if !loaded_any {
             info!("Loaded built-in default policy");
         }
         Ok(())

@@ -1,3 +1,4 @@
+use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -215,7 +216,26 @@ struct PolicyFileV1<'a> {
 
     limits: &'a ResourceLimits,
 
-    metadata: &'a HashMap<String, String>,
+    metadata: SortedMap<'a>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SortedMap<'a>(&'a HashMap<String, String>);
+
+impl Serialize for SortedMap<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut entries: Vec<_> = self.0.iter().collect();
+        entries.sort_by(|(a_key, _), (b_key, _)| a_key.cmp(b_key));
+
+        let mut map = serializer.serialize_map(Some(entries.len()))?;
+        for (key, value) in entries {
+            map.serialize_entry(key, value)?;
+        }
+        map.end()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -449,7 +469,7 @@ impl Serialize for Policy {
             require_approval: self.require_approval,
             allow_shell_operators: self.allow_shell_operators,
             limits: &self.limits,
-            metadata: &self.metadata,
+            metadata: SortedMap(&self.metadata),
         };
         file.serialize(serializer)
     }

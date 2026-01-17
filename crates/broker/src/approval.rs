@@ -244,46 +244,45 @@ pub fn request_interactive_approval(
 /// Add a command pattern to the policy file's allowed list
 fn add_command_to_policy(cmd: &str, cwd: &str) -> anyhow::Result<()> {
     use std::fs;
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
     use substrate_common::paths as substrate_paths;
 
-    fn find_workspace_root(start: &Path) -> Option<PathBuf> {
-        let start = start.canonicalize().unwrap_or_else(|_| start.to_path_buf());
-
-        for dir in start.ancestors() {
-            let marker = dir.join(".substrate").join("workspace.yaml");
-            if marker.is_file() {
-                return Some(dir.to_path_buf());
-            }
-        }
-        None
-    }
-
     let cwd_path = Path::new(cwd);
-    let target = if let Some(workspace_root) = find_workspace_root(cwd_path) {
-        workspace_root.join(".substrate").join("policy.yaml")
-    } else {
-        substrate_paths::substrate_home()?.join("policy.yaml")
-    };
+    let target =
+        if let Some(workspace_root) = crate::effective_policy::find_workspace_root(cwd_path) {
+            workspace_root
+                .join(substrate_paths::SUBSTRATE_DIR_NAME)
+                .join("policy.yaml")
+        } else {
+            substrate_paths::policy_file()?
+        };
 
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent)?;
     }
 
-    let mut policy = if target.exists() {
-        let content = fs::read_to_string(&target)?;
-        serde_yaml::from_str::<crate::Policy>(&content)?
+    let mut patch = if target.exists() {
+        let raw = fs::read_to_string(&target)?;
+        crate::effective_policy::parse_policy_patch_yaml(&target, &raw)?
     } else {
-        crate::Policy::default()
+        crate::effective_policy::PolicyPatch::default()
     };
 
     // Add command to allowed list if not already present
     let cmd_pattern = simplify_command_pattern(cmd);
-    if !policy.cmd_allowed.contains(&cmd_pattern) {
-        policy.cmd_allowed.push(cmd_pattern);
+    let mut cmd_allowed = patch.cmd_allowed.take().unwrap_or_default();
+    if !cmd_allowed.contains(&cmd_pattern) {
+        cmd_allowed.push(cmd_pattern);
     }
+    patch.cmd_allowed = Some(cmd_allowed);
 
-    let content = serde_yaml::to_string(&policy)?;
+    let mut content = serde_yaml::to_string(&patch)?;
+    if let Some(rest) = content.strip_prefix("---\n") {
+        content = rest.to_string();
+    }
+    if !content.ends_with('\n') {
+        content.push('\n');
+    }
     fs::write(target, content)?;
 
     Ok(())
