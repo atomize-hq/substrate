@@ -27,9 +27,9 @@ inotify = { version = "0.11", optional = true }
 [dev-dependencies]
 tempfile = "3.14"
 tokio = { version = "1.38", features = ["rt", "macros", "test-util"] }
+serial_test = "3.0"
 
 [features]
 default = []
 hot-reload = ["inotify"]
 policy-watcher = []
-

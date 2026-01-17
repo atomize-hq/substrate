@@ -3232,6 +3232,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "serial_test",
  "substrate-common",
  "tempfile",
  "tokio",
