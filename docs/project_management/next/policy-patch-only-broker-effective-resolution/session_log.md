@@ -282,3 +282,41 @@
 - Orchestration branch: `feat/policy-patch-only-broker-effective-resolution`
 - Dispatch:
   - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution" SLICE_ID="C1" LAUNCH_CODEX=1`
+
+## END — 2026-01-17T17:08:29Z — code — C1-code
+- Worktree: `/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-code`
+- Branch: `policy-patch-only-broker-effective-resolution-c1-code`
+- HEAD: `1a5d90d6c08e950d28013666c1fb16696b457253`
+- Codex: `CODEX_CODE_EXIT=0`
+- Finisher summary:
+  - `TASK_BRANCH=policy-patch-only-broker-effective-resolution-c1-code`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-code`
+  - `HEAD=1a5d90d6c08e950d28013666c1fb16696b457253`
+  - `COMMITS=1`
+  - `CHECKS=verify-only`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=`
+- Artifacts:
+  - `CODEX_CODE_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C1/code/last_message.md`
+  - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C1/code/events.jsonl`
+  - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C1/code/stderr.log`
+- Blockers: `NONE`
+
+## END — 2026-01-17T17:08:29Z — test — C1-test
+- Worktree: `/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-test`
+- Branch: `policy-patch-only-broker-effective-resolution-c1-test`
+- HEAD: `4cd080ea4223356960c61fb6ed3992de628a3b10`
+- Codex: `CODEX_TEST_EXIT=0`
+- Finisher summary:
+  - `TASK_BRANCH=policy-patch-only-broker-effective-resolution-c1-test`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c1-test`
+  - `HEAD=4cd080ea4223356960c61fb6ed3992de628a3b10`
+  - `COMMITS=1`
+  - `CHECKS=verify-only`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=`
+- Artifacts:
+  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C1/test/last_message.md`
+  - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C1/test/events.jsonl`
+  - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C1/test/stderr.log`
+- Blockers: `NONE`
