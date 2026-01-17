@@ -249,3 +249,22 @@
   - `CODEX_CODE_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C0/code/events.jsonl`
   - `CODEX_CODE_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C0/code/stderr.log`
 - Blockers: `NONE`
+
+## END — 2026-01-17T05:20:00Z — test — C0-test
+- Worktree: `/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-test`
+- Branch: `policy-patch-only-broker-effective-resolution-c0-test`
+- HEAD: `af0441875a59dd58ed6d05fceaac538270e1f418`
+- Codex: `CODEX_TEST_EXIT=0`
+- Finisher summary:
+  - `TASK_BRANCH=policy-patch-only-broker-effective-resolution-c0-test`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/policy-patch-only-broker-effective-resolution-c0-test`
+  - `HEAD=af0441875a59dd58ed6d05fceaac538270e1f418`
+  - `COMMITS=1`
+  - `CHECKS=verify-only`
+  - `SMOKE_RUN=`
+  - `MERGED_TO_ORCH=`
+- Artifacts:
+  - `CODEX_TEST_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C0/test/last_message.md`
+  - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C0/test/events.jsonl`
+  - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/next/policy-patch-only-broker-effective-resolution/logs/C0/test/stderr.log`
+- Blockers: `NONE`
