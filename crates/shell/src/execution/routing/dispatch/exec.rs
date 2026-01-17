@@ -11,6 +11,7 @@ use super::world_ops::WorldFsStrategyUnavailableError;
 use super::world_ops::{
     collect_world_telemetry, emit_stream_chunk, stream_non_pty_via_agent, AgentStreamOutcome,
 };
+use crate::execution::config_model;
 use crate::execution::config_model::PolicyMode;
 use crate::execution::pty;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -118,12 +119,15 @@ pub(crate) fn execute_command(
 
     // Always refresh policy/profile for this cwd before we read world_fs.
     let cwd_for_profile = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    detect_profile(&cwd_for_profile).with_context(|| {
+    let profile_result = detect_profile(&cwd_for_profile).with_context(|| {
         format!(
             "failed to load Substrate profile for cwd {}",
             cwd_for_profile.display()
         )
-    })?;
+    });
+    if let Err(err) = profile_result {
+        return Err(config_model::user_error(format!("{:#}", err)));
+    }
 
     let world_fs = world_fs_policy();
     let fs_mode = world_fs.mode;

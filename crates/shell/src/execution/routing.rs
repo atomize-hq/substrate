@@ -15,6 +15,7 @@ mod world_env;
 use super::shim_deploy::{DeploymentStatus, ShimDeployer};
 use super::{configure_manager_init, log_manager_init_event, write_manager_env_script};
 use crate::builtins as commands;
+use crate::execution::config_model;
 use crate::repl::async_repl;
 use crate::scripts::write_bash_preexec_script;
 
@@ -333,7 +334,7 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
     // The substrate shell itself should not be considered "active" shimming
     env::remove_var("SHIM_ACTIVE");
 
-    match &config.mode {
+    let result = match &config.mode {
         ShellMode::Interactive { use_pty: _ } => {
             if config.async_repl {
                 async_repl::run_async_repl(&config)
@@ -345,6 +346,15 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
         ShellMode::Wrap(cmd) => run_wrap_mode(&config, cmd),
         ShellMode::Script(path) => run_script_mode(&config, path),
         ShellMode::Pipe => run_pipe_mode(&config),
+    };
+
+    match result {
+        Ok(code) => Ok(code),
+        Err(err) if config_model::is_user_error(&err) => {
+            eprintln!("{err}");
+            Ok(2)
+        }
+        Err(err) => Err(err),
     }
 }
 

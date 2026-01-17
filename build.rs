@@ -130,13 +130,14 @@ fn main() -> ExitCode {
     std::fs::write(&source_path, source).expect("write substrate_shell_driver source");
 
     let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
+    let exe_path = driver_path.with_extension("exe");
     let mut cmd = Command::new(rustc);
     cmd.arg(&source_path)
         .arg("--edition=2021")
         .arg("-C")
         .arg("opt-level=0")
         .arg("-o")
-        .arg(&driver_path);
+        .arg(&exe_path);
 
     let status = cmd
         .status()
@@ -148,8 +149,6 @@ fn main() -> ExitCode {
         );
     }
 
-    let exe_path = driver_path.with_extension("exe");
-    if !driver_path.exists() && exe_path.exists() {
-        std::fs::rename(&exe_path, &driver_path).expect("rename substrate_shell_driver.exe");
-    }
+    let _ = std::fs::remove_file(&driver_path);
+    std::fs::rename(&exe_path, &driver_path).expect("rename substrate_shell_driver.exe");
 }
