@@ -8,6 +8,7 @@ static TEST_POLICY_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 // Helper to run tests with TEST_MODE set
 pub(crate) fn with_test_mode<F: FnOnce()>(f: F) {
+    let _world_env_guard = crate::execution::world_env_guard();
     // Lock the mutex to ensure exclusive access to environment
     let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
 
