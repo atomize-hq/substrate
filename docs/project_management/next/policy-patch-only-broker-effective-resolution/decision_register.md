@@ -61,3 +61,12 @@ Rules:
 **Recommendation**
 - **Selected:** Option A — Broker owns patch schema + merge + validation
 - **Rationale (crisp):** Policy resolution must be canonicalized where policy is enforced; co-locating patch resolution in the broker eliminates shell/broker drift with the smallest governance surface.
+
+**Follow-up tasks (explicit)**
+- `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`: implement broker canonical effective resolution and CLI delegation.
+- `C0-code`: implement broker-owned effective policy resolution and remove shell-side duplication for `policy current show`.
+- `C0-test`: add test coverage for patch-only resolution and disabled workspace semantics.
+- `docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md`: implement fail-closed behavior across broker-dependent execution paths and align operator docs.
+- `C1-code`: remove policy-resolution error swallowing in shell/shim/world-agent and enforce exit-code/user-error behavior.
+- `C1-test`: add regression coverage for blocked execution on policy resolution errors.
+- `C1-integ`: update `docs/CONFIGURATION.md` and run cross-platform smoke to confirm parity.

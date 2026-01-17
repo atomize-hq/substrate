@@ -1,0 +1,115 @@
+## START — 2026-01-17T02:46:54Z — planning — planning pack for ADR-0013 (broker-canonical policy resolution)
+- Feature: `docs/project_management/next/policy-patch-only-broker-effective-resolution/`
+- Branch: `testing`
+- Goal: Produce an execution-ready Planning Pack for ADR-0013 with zero ambiguity.
+- Inputs to read end-to-end:
+  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - `docs/project_management/next/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/project_management/next/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
+  - `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
+  - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md`
+  - `docs/project_management/standards/PLANNING_LINT_CHECKLIST.md`
+  - `docs/project_management/standards/PLANNING_GATE_REPORT_TEMPLATE.md`
+  - `docs/project_management/standards/PLANNING_QUALITY_GATE_PROMPT.md`
+  - `docs/project_management/standards/PLANNING_SESSION_LOG_TEMPLATE.md`
+  - `docs/project_management/standards/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+  - `docs/project_management/next/sequencing.json`
+  - `docs/CONFIGURATION.md`
+- Commands planned (if any):
+  - `export FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"`
+  - `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
+
+## END — 2026-01-17T02:56:34Z — planning — planning pack for ADR-0013 (broker-canonical policy resolution)
+- Summary of changes (exhaustive):
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/`: created full Planning Pack artifacts (plan/spec/tasks/prompts/playbook/smoke).
+  - `docs/project_management/next/sequencing.json`: added sprint entry for this feature directory.
+- Files created/modified:
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/session_log.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/decision_register.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/integration_map.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/execution_preflight_report.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/*`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/quality_gate_report.md`
+  - `docs/project_management/next/sequencing.json`
+- Rubric checks run (with results):
+  - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` → `0` → `OK`
+  - `jq -e . docs/project_management/next/sequencing.json >/dev/null` → `0` → `OK`
+  - `python3 scripts/planning/validate_tasks_json.py --feature-dir "$FEATURE_DIR"` → `0` → `OK`
+  - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0` → `OK`
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0` → `OK`
+- Sequencing alignment:
+  - `sequencing.json` reviewed: `YES`
+  - Changes required: `ADDED feature sprint entry`
+- Blockers:
+  - `NONE`
+- Next steps:
+  - Execute `F0-exec-preflight`, then run triad `C0` (code/test/integ) per `tasks.json`.
+
+## START — 2026-01-17T03:29:35Z — planning — reslice into C0/C1 triads
+- Feature: `docs/project_management/next/policy-patch-only-broker-effective-resolution/`
+- Branch: `testing`
+- Goal: Split the work into smaller slices (C0/C1) to reduce integration risk.
+- Inputs to read end-to-end:
+  - `docs/project_management/next/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/integration_map.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1`
+  - `docs/project_management/next/sequencing.json`
+- Commands planned (if any):
+  - `export FEATURE_DIR="docs/project_management/next/policy-patch-only-broker-effective-resolution"`
+  - `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
+
+## END — 2026-01-17T03:29:35Z — planning — reslice into C0/C1 triads
+- Summary of changes (exhaustive):
+  - Split the feature into two slices (C0/C1) with full cross-platform integration task sets per slice.
+  - Updated smoke scripts to be slice-scoped via `SUBSTRATE_SMOKE_SLICE_ID`.
+- Files created/modified:
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/plan.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/tasks.json`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C0-spec.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-spec.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/C1-closeout_report.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/integration_map.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/execution_preflight_report.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/decision_register.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/linux-smoke.sh`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/macos-smoke.sh`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/smoke/windows-smoke.ps1`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C1-code.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C1-test.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C1-integ-core.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C1-integ-linux.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C1-integ-macos.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C1-integ-windows.md`
+  - `docs/project_management/next/policy-patch-only-broker-effective-resolution/kickoff_prompts/C1-integ.md`
+  - `docs/project_management/next/sequencing.json`
+- Rubric checks run (with results):
+  - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` → `0` → `OK`
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0` → `OK`
+- Sequencing alignment:
+  - `sequencing.json` reviewed: `YES`
+  - Changes required: `UPDATED sprint sequence to include C0 + C1 specs`
+- Blockers:
+  - `NONE`
+- Next steps:
+  - Complete `F0-exec-preflight`, then execute slice `C0`, then slice `C1`.
