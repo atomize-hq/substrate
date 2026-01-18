@@ -1,7 +1,7 @@
 # ADR-0014: World-Agent Policy Resolution and Concurrency
 
 Status: draft  
-Owner: (TBD)  
+Owner: Substrate core team  
 Date: 2026-01-18  
 
 ## Context
@@ -128,12 +128,7 @@ Adopt Option C in stages:
 3. **Security/multi-user:** define and enforce how the world-agent determines the caller identity
    and which policy applies, and ensure policy inputs cannot be spoofed.
 
-## Open Questions
+## Follow-up Decisions (Recorded Elsewhere)
 
-- Should the world-agent be a per-user service (user systemd unit) instead of a system service?
-- If world-agent remains a system service, should it use peer credentials on the Unix socket to map
-  requests to a user-specific policy home?
-- What is the minimal enforcement subset that must be passed to the world-agent (filesystem mode,
-  isolation, allowlists, net allowlist, limits)?
-- How do we version policy snapshots across CLI/world-agent upgrades?
-
+Decisions required to execute this ADR are recorded in the feature Decision Register:
+- `docs/project_management/next/world-agent-policy-snapshot/decision_register.md`

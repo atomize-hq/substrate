@@ -1,0 +1,338 @@
+{
+  "meta": {
+    "schema_version": 1,
+    "feature_dir": "docs/project_management/next/world-agent-policy-snapshot",
+    "source_file": "docs/project_management/next/world-agent-policy-snapshot/decision_register.md",
+    "generated_at_utc": "2026-01-18"
+  },
+  "tasks": [
+    {
+      "id": "WAPS-0001",
+      "title": "Write policy snapshot spec and operator docs",
+      "work_type": "docs",
+      "covers_followups": {
+        "DR-0001": [
+          "Update doctor outputs to include socket ownership/mode and group membership guidance.",
+          "Document that socket ACL is the authorization boundary for world-agent requests."
+        ],
+        "DR-0005": [
+          "Add a deprecation spec that removes legacy local policy resolution in world-agent after a defined release window."
+        ],
+        "DR-0006": [
+          "Define the exact policy cache contract in the spec:\n  - The shell must compute a cache key from: workspace root (or “no workspace”), global policy patch path, workspace policy patch path.\n  - Before each executed command, the shell must `stat` the policy patch file(s) and invalidate the cache when metadata changes (mtime or size).\n  - When `substrate policy global|workspace set|reset|init` runs in the same process, the shell must invalidate the cache after the write completes."
+        ],
+        "DR-0007": [
+          "Update provisioning docs to treat the socket group as the access boundary and to document the implications on multi-user hosts.",
+          "Add an explicit “multi-user posture” section to the policy snapshot spec."
+        ],
+        "DR-0009": [
+          "Update the snapshot spec to explicitly exclude `cmd_*` keys and state where they are enforced.",
+          "Add a manual testing section that demonstrates `cmd_denied` behavior is unchanged by the snapshot work."
+        ],
+        "DR-0010": [
+          "Extend the snapshot spec to include the config refresh contract (global + workspace patch paths, cache keys, and invalidation rules)."
+        ],
+        "DR-0011": [
+          "Add a platform parity section to the snapshot spec that states:\n  - The host must attach a policy snapshot to world-agent requests on every platform where world-agent is used.\n  - The world-agent must ignore local policy resolution for enforcement inputs when a valid snapshot is present.\n  - When a snapshot is missing or invalid, the shell must record `policy_resolution_mode` in trace output and must fail closed if policy requires world execution."
+        ]
+      },
+      "outputs": [
+        "Create `docs/project_management/next/world-agent-policy-snapshot/policy-snapshot-spec.md` defining `PolicySnapshotV1`, enforcement boundary, cache contract, multi-user posture, and cross-platform parity contract.",
+        "Create `docs/project_management/next/world-agent-policy-snapshot/policy-snapshot-deprecation-spec.md` defining legacy mode removal gates, release window, and compatibility rules.",
+        "Update existing operator docs that explain world-agent access boundary and multi-user implications (pick the canonical doc location and link it from the spec).",
+        "Add a manual testing section in `docs/project_management/next/world-agent-policy-snapshot/policy-snapshot-spec.md` that demonstrates host `cmd_denied` enforcement remains active (exit code `126` in enforce mode)."
+      ],
+      "acceptance_criteria": [
+        "Spec defines a single, testable contract for snapshot contents, validation, and enforcement boundaries.",
+        "Spec defines the policy refresh contract and the config refresh contract with deterministic invalidation triggers that preserve next-command visibility.",
+        "Deprecation spec defines a single release window and a single removal gate for legacy local policy resolution in world-agent.",
+        "Docs name the authorization boundary as the world socket ACL and include operator guidance for socket ownership/mode and group membership."
+      ],
+      "references": [
+        "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md",
+        "docs/project_management/next/world-agent-policy-snapshot/decision_register.md",
+        "docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md",
+        "docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md",
+        "docs/WORLD.md",
+        "docs/TRACE.md"
+      ],
+      "kickoff_prompt": "Goal: write the policy snapshot spec and operator docs for the world-agent policy snapshot feature.\n\nRead:\n- docs/project_management/next/world-agent-policy-snapshot/decision_register.md\n- docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md\n- docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md\n- docs/project_management/next/ADR-0011-world-deps-packages-bundles-contract.md\n- docs/WORLD.md\n- docs/TRACE.md\n\nProduce:\n- docs/project_management/next/world-agent-policy-snapshot/policy-snapshot-spec.md\n- docs/project_management/next/world-agent-policy-snapshot/policy-snapshot-deprecation-spec.md\n\nSpec requirements:\n- Define PolicySnapshotV1 fields and validation rules.\n- Define enforcement boundary: host enforces cmd policy; world-agent enforces world_fs + net_allowed + limits.\n- Define policy refresh contract and config refresh contract with deterministic invalidation that preserves next-command visibility after external file edits and in-process set/reset/init.\n- Define multi-user posture and socket ACL boundary with explicit operator guidance.\n- Define cross-platform parity contract (Linux/macOS/WSL) and explicit fallback rules.\n- Define the legacy local policy resolution removal plan with a single release window and a single gating condition.\n\nOutput discipline:\n- Use singular, testable behavior statements.\n- Use exactly two options for any new decision recorded in a DR entry.\n"
+    },
+    {
+      "id": "WAPS-0002",
+      "title": "Add PolicySnapshotV1 to agent API request schema",
+      "work_type": "code",
+      "covers_followups": {
+        "DR-0002": [
+          "Extend `crates/agent-api-types::ExecuteRequest` with a versioned policy snapshot payload."
+        ],
+        "DR-0003": [
+          "Define `PolicySnapshotV1` containing: `world_fs` (mode/isolation/require_world/read_allowlist/write_allowlist), `net_allowed`, `limits`."
+        ],
+        "DR-0004": [
+          "Add snapshot fields for `read_allowlist` and `write_allowlist` patterns (already merged)."
+        ],
+        "DR-0005": [
+          "Extend `agent-api-types` with `PolicySnapshotV1 { schema_version: 1, ... }`."
+        ]
+      },
+      "outputs": [
+        "Update `crates/agent-api-types/src/lib.rs` to add `PolicySnapshotV1` and add `policy_snapshot: Option<PolicySnapshotV1>` to `ExecuteRequest` (serde default + skip when None).",
+        "Update any in-repo `ExecuteRequest { ... }` constructors to include `policy_snapshot: None` until shell/world-agent plumbing is implemented.",
+        "Add serialization tests in `crates/agent-api-types/src/lib.rs` proving schema stability for `policy_snapshot` (absent vs present)."
+      ],
+      "acceptance_criteria": [
+        "`cargo test -p agent-api-types` passes.",
+        "JSON serialization round-trips for ExecuteRequest with and without `policy_snapshot`.",
+        "PolicySnapshotV1 is strict enough for versioning (explicit `schema_version: 1`)."
+      ],
+      "references": [
+        "docs/project_management/next/world-agent-policy-snapshot/decision_register.md",
+        "crates/agent-api-types/src/lib.rs",
+        "crates/shell/src/execution/routing/dispatch/world_ops.rs",
+        "crates/shell/src/execution/platform/linux.rs",
+        "crates/world-agent/tests/fs_mode.rs",
+        "crates/world-agent/tests/full_isolation_nonpty.rs"
+      ],
+      "kickoff_prompt": "Goal: extend the agent API request schema with PolicySnapshotV1.\n\nRead:\n- docs/project_management/next/world-agent-policy-snapshot/decision_register.md\n\nEdit:\n- crates/agent-api-types/src/lib.rs\n\nImplementation steps:\n- Add PolicySnapshotV1 type with schema_version=1 and fields: world_fs (mode, isolation, require_world, read_allowlist, write_allowlist), net_allowed, limits.\n- Add `policy_snapshot: Option<PolicySnapshotV1>` to ExecuteRequest with serde default and skip_serializing_if.\n- Update in-repo ExecuteRequest constructors to compile (set policy_snapshot: None).\n- Add tests that serialize/deserialize ExecuteRequest with and without policy_snapshot.\n\nValidate:\n- cargo test -p agent-api-types\n"
+    },
+    {
+      "id": "WAPS-0003",
+      "title": "Implement host policy snapshot resolver and attach snapshots to world-agent requests",
+      "work_type": "code",
+      "covers_followups": {
+        "DR-0002": [
+          "Update shell routing to attach the snapshot to world-agent requests."
+        ],
+        "DR-0006": [
+          "Add trace fields to record the policy snapshot hash so QA can detect policy drift across executions.",
+          "Add an integration test that edits a policy patch file and proves the change takes effect on the next command without restarting the shell."
+        ],
+        "DR-0010": [
+          "Add an integration test that edits `config.yaml` and `workspace.yaml` and proves the next command reflects the new config without restarting the shell."
+        ],
+        "DR-0011": [
+          "When a snapshot is missing or invalid, the shell must record `policy_resolution_mode` in trace output and must fail closed if policy requires world execution."
+        ]
+      },
+      "outputs": [
+        "Add a host-side resolver that produces `PolicySnapshotV1` from the effective merged policy for the command cwd.",
+        "Attach `policy_snapshot` to `ExecuteRequest` in world-agent request paths (non-PTY + PTY) on every platform that uses world-agent transport.",
+        "Implement policy cache with deterministic invalidation via metadata change detection on global/workspace patch paths, preserving next-command visibility.",
+        "Implement config cache with the same invalidation contract as policy, preserving next-command visibility.",
+        "Record snapshot metadata in trace output: `policy_resolution_mode`, `policy_snapshot_schema`, `policy_snapshot_hash`."
+      ],
+      "acceptance_criteria": [
+        "World-agent requests always include a snapshot payload when world execution is used and a snapshot schema is supported.",
+        "Policy cache invalidation triggers on file metadata changes and after in-process `policy global|workspace set|reset|init` writes complete.",
+        "Config cache invalidation triggers on file metadata changes and after in-process `config global|workspace set|reset|init` writes complete.",
+        "Trace output includes `policy_resolution_mode` and a stable `policy_snapshot_hash` for each executed command."
+      ],
+      "references": [
+        "docs/project_management/next/world-agent-policy-snapshot/decision_register.md",
+        "crates/broker/src/effective_policy.rs",
+        "crates/shell/src/execution/routing/dispatch/exec.rs",
+        "crates/shell/src/execution/routing/dispatch/world_ops.rs",
+        "crates/shell/src/execution/config_model.rs",
+        "crates/shell/src/execution/policy_cmd.rs",
+        "crates/shell/src/execution/config_cmd.rs",
+        "crates/trace/src/span.rs"
+      ],
+      "kickoff_prompt": "Goal: implement host policy snapshot resolution and attach snapshots to every world-agent request.\n\nRead:\n- docs/project_management/next/world-agent-policy-snapshot/decision_register.md\n\nLocate request builders:\n- rg -n \"ExecuteRequest \\{\" crates/shell -S\n\nImplementation steps:\n- Add code in the shell to resolve effective policy for cwd and convert it to PolicySnapshotV1.\n- Add deterministic caching with metadata change detection for policy patch files and config patch files.\n- Invalidate caches after in-process policy/config writes complete.\n- Attach the snapshot to ExecuteRequest in all world-agent request paths.\n- Add trace metadata fields that expose policy_resolution_mode, policy_snapshot_schema, policy_snapshot_hash.\n\nValidate (targeted first):\n- cargo test -p shell\n- cargo test -p trace\n"
+    },
+    {
+      "id": "WAPS-0004",
+      "title": "Update world-agent to enforce snapshots and remove broker state coupling",
+      "work_type": "code",
+      "covers_followups": {
+        "DR-0002": [
+          "Update world-agent to use the snapshot (not process-global broker state) for enforcement inputs."
+        ],
+        "DR-0004": [
+          "Update world-agent code paths to compute prefixes/paths from snapshot patterns, not from broker state."
+        ],
+        "DR-0005": [
+          "Add a world-agent response field or trace metadata indicating `policy_resolution_mode: snapshot_v1 | legacy_local`."
+        ],
+        "DR-0008": [
+          "Extend `GET /v1/doctor/world` and `substrate world doctor --json` to report whether snapshot enforcement is supported and active."
+        ],
+        "DR-0011": [
+          "The world-agent must ignore local policy resolution for enforcement inputs when a valid snapshot is present."
+        ]
+      },
+      "outputs": [
+        "Replace per-request broker calls (`detect_profile`, `world_fs_policy`, `allowed_domains`) with snapshot-driven enforcement inputs when `policy_snapshot` is present and valid.",
+        "Define legacy local policy resolution behavior for missing snapshots during the deprecation window, and record `policy_resolution_mode` deterministically.",
+        "Extend world-agent doctor report to include snapshot capability and active mode information.",
+        "Update world-agent tests that construct `ExecuteRequest` to include `policy_snapshot` as required by the new schema."
+      ],
+      "acceptance_criteria": [
+        "Concurrent world-agent requests do not share policy state when snapshots are present.",
+        "World-agent behavior for world_fs and net allowlist is a deterministic function of snapshot inputs and agent-local canonicalization.",
+        "Doctor report includes snapshot capability and reports the active policy resolution mode.",
+        "`cargo test -p world-agent` passes."
+      ],
+      "references": [
+        "docs/project_management/next/world-agent-policy-snapshot/decision_register.md",
+        "crates/world-agent/src/service.rs",
+        "crates/world-agent/src/pty.rs",
+        "crates/world-agent/src/handlers.rs",
+        "crates/world-agent/src/lib.rs",
+        "crates/world-agent/tests/fs_mode.rs",
+        "crates/world-agent/tests/full_isolation_nonpty.rs",
+        "crates/broker/src/api.rs"
+      ],
+      "kickoff_prompt": "Goal: make world-agent enforcement snapshot-driven and remove coupling to process-global broker state.\n\nRead:\n- docs/project_management/next/world-agent-policy-snapshot/decision_register.md\n\nInspect current broker reads:\n- rg -n \"detect_profile\\(|world_fs_policy\\(|allowed_domains\\(\" crates/world-agent -S\n\nImplementation steps:\n- When ExecuteRequest.policy_snapshot is present and valid, compute enforcement inputs from snapshot fields.\n- Preserve agent-local canonicalization of allowlist patterns using agent-known project_dir.\n- When policy_snapshot is absent, use legacy local policy resolution during the deprecation window and record policy_resolution_mode deterministically.\n- Extend GET /v1/doctor/world response to include snapshot support and the active policy resolution mode.\n- Update world-agent tests to compile with the new ExecuteRequest shape.\n\nValidate:\n- cargo test -p world-agent\n"
+    },
+    {
+      "id": "WAPS-0005",
+      "title": "Extend trace schema for policy snapshot metadata",
+      "work_type": "code",
+      "covers_followups": {
+        "DR-0003": [
+          "Update tracing schema to record snapshot metadata (hash/version) on completion spans."
+        ],
+        "DR-0006": [
+          "Add trace fields to record the policy snapshot hash so QA can detect policy drift across executions."
+        ],
+        "DR-0008": [
+          "Extend trace schema to record snapshot metadata (no raw policy content)."
+        ]
+      },
+      "outputs": [
+        "Add trace fields: `policy_resolution_mode`, `policy_snapshot_schema`, `policy_snapshot_hash` to `crates/trace/src/span.rs` span serialization.",
+        "Update trace emission call sites to populate these fields for host and world spans.",
+        "Update `docs/TRACE.md` to document new fields and redaction posture."
+      ],
+      "acceptance_criteria": [
+        "Trace JSONL includes new snapshot metadata fields on completion spans when snapshots are used.",
+        "Trace does not include raw policy snapshot contents.",
+        "`cargo test -p trace` passes."
+      ],
+      "references": [
+        "docs/project_management/next/world-agent-policy-snapshot/decision_register.md",
+        "crates/trace/src/span.rs",
+        "crates/trace/src/context.rs",
+        "docs/TRACE.md"
+      ],
+      "kickoff_prompt": "Goal: add policy snapshot metadata to the trace schema without logging raw policy content.\n\nRead:\n- docs/project_management/next/world-agent-policy-snapshot/decision_register.md\n- docs/TRACE.md\n\nEdit:\n- crates/trace/src/span.rs\n- crates/trace/src/context.rs\n\nImplementation steps:\n- Add fields: policy_resolution_mode, policy_snapshot_schema, policy_snapshot_hash.\n- Populate fields from shell/world execution paths.\n- Update docs/TRACE.md with the new field contract.\n\nValidate:\n- cargo test -p trace\n"
+    },
+    {
+      "id": "WAPS-0006",
+      "title": "Align doctor output with socket ACL boundary and snapshot enforcement visibility",
+      "work_type": "code",
+      "covers_followups": {
+        "DR-0001": [
+          "Update doctor outputs to include socket ownership/mode and group membership guidance."
+        ],
+        "DR-0008": [
+          "Extend `GET /v1/doctor/world` and `substrate world doctor --json` to report whether snapshot enforcement is supported and active."
+        ],
+        "DR-0011": [
+          "Update doctor outputs to report snapshot support and last-known `policy_resolution_mode`."
+        ]
+      },
+      "outputs": [
+        "Extend `WorldDoctorReportV1` in `crates/agent-api-types/src/lib.rs` to include snapshot support and active mode fields plus socket ACL details where applicable.",
+        "Update `crates/world-agent/src/handlers.rs` doctor implementation to populate snapshot support fields.",
+        "Update shell doctor implementation to include Linux socket ownership/mode and actionable group membership guidance."
+      ],
+      "acceptance_criteria": [
+        "`substrate world doctor --json` output contains socket permission details on Linux and snapshot support/mode on all platforms that use world-agent.",
+        "Doctor output fields are stable and versioned (schema_version increments when adding fields to a schema struct)."
+      ],
+      "references": [
+        "crates/agent-api-types/src/lib.rs",
+        "crates/world-agent/src/handlers.rs",
+        "crates/world-agent/src/lib.rs",
+        "crates/shell/src/execution/platform/linux.rs",
+        "crates/shell/src/execution/platform/macos.rs"
+      ],
+      "kickoff_prompt": "Goal: make doctor output explicitly describe the authorization boundary (socket ACL) and snapshot enforcement status.\n\nRead:\n- docs/project_management/next/world-agent-policy-snapshot/decision_register.md\n\nEdit:\n- crates/agent-api-types/src/lib.rs (WorldDoctorReportV1)\n- crates/world-agent/src/handlers.rs (doctor_world)\n- crates/shell/src/execution/platform/linux.rs (world doctor client + extra socket info)\n\nImplementation steps:\n- Extend doctor report schema with snapshot support fields and active policy_resolution_mode.\n- On Linux, add socket stat details (owner, group, mode) and guidance when access fails.\n- Update shell-side doctor JSON to expose these fields.\n\nValidate:\n- cargo test -p world-agent\n- cargo test -p shell\n"
+    },
+    {
+      "id": "WAPS-0007",
+      "title": "Add regression coverage for cmd_denied enforcement boundary",
+      "work_type": "test",
+      "covers_followups": {
+        "DR-0003": [
+          "Add an integration test that proves `cmd_denied` remains enforced by the host broker before world-agent execution (exit `126` in enforce mode), and that world-agent enforcement remains limited to world/network/limits."
+        ],
+        "DR-0009": [
+          "Add a manual testing section that demonstrates `cmd_denied` behavior is unchanged by the snapshot work."
+        ]
+      },
+      "outputs": [
+        "Add an integration test under `crates/shell/tests/` that runs a denied command in enforce mode and asserts exit code `126` without contacting world-agent.",
+        "Add a manual test snippet in the snapshot spec that demonstrates `cmd_denied` behavior."
+      ],
+      "acceptance_criteria": [
+        "Test fails if command gating is moved into world-agent or bypasses host broker.",
+        "Test passes on Linux where world-agent is available and on Linux where it is unavailable (host enforcement happens before world transport)."
+      ],
+      "references": [
+        "crates/shell/src/execution/routing/dispatch/exec.rs",
+        "crates/shell/tests",
+        "docs/project_management/next/world-agent-policy-snapshot/policy-snapshot-spec.md"
+      ],
+      "kickoff_prompt": "Goal: add regression coverage that proves cmd_denied enforcement remains host-only.\n\nRead:\n- docs/project_management/next/world-agent-policy-snapshot/decision_register.md\n\nLocate enforcement path:\n- rg -n \"exit 126|cmd_denied|policy_violation\" crates/shell -S\n\nImplementation steps:\n- Add an integration test under crates/shell/tests that:\n  - forces policy mode enforce,\n  - configures a policy patch with a cmd_denied rule,\n  - runs a matching command,\n  - asserts exit code 126,\n  - asserts no world-agent request is made.\n- Add a manual test snippet in docs/project_management/next/world-agent-policy-snapshot/policy-snapshot-spec.md that demonstrates the same.\n\nValidate:\n- cargo test -p shell\n"
+    },
+    {
+      "id": "WAPS-0008",
+      "title": "Add regression coverage for policy/config refresh contract",
+      "work_type": "test",
+      "covers_followups": {
+        "DR-0006": [
+          "Add an integration test that edits a policy patch file and proves the change takes effect on the next command without restarting the shell."
+        ],
+        "DR-0010": [
+          "Add an integration test that edits `config.yaml` and `workspace.yaml` and proves the next command reflects the new config without restarting the shell."
+        ]
+      },
+      "outputs": [
+        "Add a shell integration test that edits `$SUBSTRATE_HOME/policy.yaml` (or workspace policy patch) between commands and asserts behavior change on the immediate next command.",
+        "Add a shell integration test that edits `$SUBSTRATE_HOME/config.yaml` and workspace `.substrate/workspace.yaml` between commands and asserts effective config change on the immediate next command."
+      ],
+      "acceptance_criteria": [
+        "Tests fail if policy/config caching causes a change to be applied later than the next executed command.",
+        "Tests isolate filesystem state and do not depend on developer machine policy/config files."
+      ],
+      "references": [
+        "crates/shell/src/execution/policy_cmd.rs",
+        "crates/shell/src/execution/config_cmd.rs",
+        "crates/shell/src/execution/config_model.rs",
+        "crates/broker/src/effective_policy.rs",
+        "crates/shell/tests"
+      ],
+      "kickoff_prompt": "Goal: add integration tests that enforce the next-command visibility contract for policy and config changes.\n\nRead:\n- docs/project_management/next/world-agent-policy-snapshot/decision_register.md\n\nImplementation steps:\n- Add a test that runs two commands in one shell process while editing a policy patch file between them; assert the second command reflects the edit.\n- Add a test that runs two commands in one shell process while editing config.yaml and workspace.yaml between them; assert the second command reflects the edit.\n\nValidate:\n- cargo test -p shell\n"
+    },
+    {
+      "id": "WAPS-0009",
+      "title": "Add cross-platform smoke validation for snapshot parity",
+      "work_type": "integration",
+      "covers_followups": {
+        "DR-0011": [
+          "Add smoke validation that runs on Linux/macOS/WSL and asserts the same policy file produces the same enforcement behavior (filesystem write allowlist, net allowlist, and limits once enforced)."
+        ]
+      },
+      "outputs": [
+        "Create smoke scripts under `docs/project_management/next/world-agent-policy-snapshot/smoke/`:\n  - `linux-smoke.sh`\n  - `macos-smoke.sh`\n  - `windows-wsl-smoke.ps1`",
+        "Scripts create an isolated workspace with a policy patch that exercises: full isolation writable allowlist, net allowlist, and limits (when limits enforcement exists).",
+        "Scripts emit a single JSON summary that includes `policy_resolution_mode`, `policy_snapshot_schema`, `policy_snapshot_hash`, and world_fs strategy values."
+      ],
+      "acceptance_criteria": [
+        "Running the smoke script on each platform yields the same functional result for the same policy patch: writable paths are writable, non-allowlisted paths are read-only, and net allowlist behavior matches.",
+        "Smoke scripts fail with actionable output when snapshot enforcement is unavailable while policy requires world execution."
+      ],
+      "references": [
+        "docs/project_management/next/world-agent-policy-snapshot/decision_register.md",
+        "docs/project_management/next/world-agent-policy-snapshot/policy-snapshot-spec.md",
+        "scripts/linux/world-provision.sh",
+        "scripts/mac/lima-warm.sh",
+        "scripts/windows/wsl-warm.ps1"
+      ],
+      "kickoff_prompt": "Goal: add cross-platform smoke scripts that validate snapshot parity (Linux/macOS/WSL).\n\nRead:\n- docs/project_management/next/world-agent-policy-snapshot/decision_register.md\n- docs/project_management/next/world-agent-policy-snapshot/policy-snapshot-spec.md\n\nCreate:\n- docs/project_management/next/world-agent-policy-snapshot/smoke/linux-smoke.sh\n- docs/project_management/next/world-agent-policy-snapshot/smoke/macos-smoke.sh\n- docs/project_management/next/world-agent-policy-snapshot/smoke/windows-wsl-smoke.ps1\n\nScript requirements:\n- Create a temporary workspace with a workspace policy patch.\n- Run substrate commands that exercise:\n  - full isolation writable: allowlisted writes succeed, non-allowlisted writes fail with read-only filesystem.\n  - net allowlist behavior.\n  - limits behavior when limits enforcement exists.\n- Capture trace output fields policy_resolution_mode and policy_snapshot_hash and emit a JSON summary.\n\nValidate:\n- Run the platform script on a machine with world-agent provisioned for that platform.\n"
+    }
+  ]
+}
