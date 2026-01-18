@@ -222,7 +222,16 @@ ensure_user_in_group "${INVOKING_USER}"
 SERVICE_PATH="/etc/systemd/system/substrate-world-agent.service"
 SOCKET_PATH="/etc/systemd/system/substrate-world-agent.socket"
 
-read -r -d '' SERVICE_UNIT_CONTENT <<'UNIT' || true
+SUBSTRATE_HOME_FOR_AGENT="${SUBSTRATE_HOME:-}"
+if [[ -z "${SUBSTRATE_HOME_FOR_AGENT}" ]]; then
+    INVOKING_HOME="$(getent passwd "${INVOKING_USER}" 2>/dev/null | cut -d: -f6 || true)"
+    if [[ -z "${INVOKING_HOME}" ]]; then
+        INVOKING_HOME="/home/${INVOKING_USER}"
+    fi
+    SUBSTRATE_HOME_FOR_AGENT="${INVOKING_HOME}/.substrate"
+fi
+
+read -r -d '' SERVICE_UNIT_CONTENT <<UNIT || true
 [Unit]
 Description=Substrate World Agent
 After=network-online.target
@@ -236,6 +245,7 @@ RestartSec=5
 Environment=RUST_LOG=info
 Environment=SUBSTRATE_AGENT_TCP_PORT=61337
 Environment=SUBSTRATE_WORLD_SOCKET=/run/substrate.sock
+Environment=SUBSTRATE_HOME=${SUBSTRATE_HOME_FOR_AGENT}
 RuntimeDirectory=substrate
 RuntimeDirectoryMode=0750
 StateDirectory=substrate

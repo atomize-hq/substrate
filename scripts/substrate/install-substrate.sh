@@ -1464,6 +1464,7 @@ RestartSec=5
 Environment=RUST_LOG=info
 Environment=SUBSTRATE_AGENT_TCP_PORT=61337
 Environment=SUBSTRATE_WORLD_SOCKET=/run/substrate.sock
+Environment=SUBSTRATE_HOME=${PREFIX}
 RuntimeDirectory=substrate
 RuntimeDirectoryMode=0750
 StateDirectory=substrate

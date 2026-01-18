@@ -807,14 +807,14 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
     : # world provisioning failed above; skip the remainder of the provisioning block.
   else
   ensure_substrate_group_membership
-  PROVISION_SCRIPT="${REPO_ROOT}/scripts/linux/world-provision.sh"
-  if [[ -x "${PROVISION_SCRIPT}" ]]; then
-    log "Provisioning Linux world-agent service via ${PROVISION_SCRIPT} (sudo may prompt)..."
-    if ! "${PROVISION_SCRIPT}" --profile "${PROFILE}" --skip-build; then
-      WORLD_PROVISION_FAILED=1
-      WORLD_ENABLED=0
-      write_install_metadata "${WORLD_ENABLED}"
-      write_env_sh_script "${WORLD_ENABLED}"
+	  PROVISION_SCRIPT="${REPO_ROOT}/scripts/linux/world-provision.sh"
+	  if [[ -x "${PROVISION_SCRIPT}" ]]; then
+	    log "Provisioning Linux world-agent service via ${PROVISION_SCRIPT} (sudo may prompt)..."
+	    if ! SUBSTRATE_HOME="${PREFIX}" "${PROVISION_SCRIPT}" --profile "${PROFILE}" --skip-build; then
+	      WORLD_PROVISION_FAILED=1
+	      WORLD_ENABLED=0
+	      write_install_metadata "${WORLD_ENABLED}"
+	      write_env_sh_script "${WORLD_ENABLED}"
       write_manager_env_script "${WORLD_ENABLED}"
       warn "world-provision script reported an error; rerun ${PROVISION_SCRIPT} manually to enable the world-agent service."
       warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run `substrate world enable --home \"${PREFIX}\"` to flip it back on."
