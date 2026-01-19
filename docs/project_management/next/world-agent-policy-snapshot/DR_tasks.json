@@ -333,6 +333,112 @@
         "scripts/windows/wsl-warm.ps1"
       ],
       "kickoff_prompt": "Goal: add cross-platform smoke scripts that validate snapshot parity (Linux/macOS/WSL).\n\nRead:\n- docs/project_management/next/world-agent-policy-snapshot/decision_register.md\n- docs/project_management/next/world-agent-policy-snapshot/policy-snapshot-spec.md\n\nCreate:\n- docs/project_management/next/world-agent-policy-snapshot/smoke/linux-smoke.sh\n- docs/project_management/next/world-agent-policy-snapshot/smoke/macos-smoke.sh\n- docs/project_management/next/world-agent-policy-snapshot/smoke/windows-wsl-smoke.ps1\n\nScript requirements:\n- Create a temporary workspace with a workspace policy patch.\n- Run substrate commands that exercise:\n  - full isolation writable: allowlisted writes succeed, non-allowlisted writes fail with read-only filesystem.\n  - net allowlist behavior.\n  - limits behavior when limits enforcement exists.\n- Capture trace output fields policy_resolution_mode and policy_snapshot_hash and emit a JSON summary.\n\nValidate:\n- Run the platform script on a machine with world-agent provisioned for that platform.\n"
+    },
+    {
+      "id": "WAPS-0010",
+      "title": "Update canonical operator docs for world-agent ACL boundary and multi-user posture",
+      "work_type": "docs",
+      "covers_misalignment": [
+        "WAPS-0001 output: Update existing operator docs that explain world-agent access boundary and multi-user implications."
+      ],
+      "outputs": [
+        "Update `docs/WORLD.md` to explicitly state the authorization boundary (socket ACL) and multi-user posture, including expected socket ownership/mode and group membership guidance.",
+        "Update any other canonical operator doc entry points that describe provisioning and doctor flows to link to the WAPS policy snapshot spec for snapshot-specific behavior."
+      ],
+      "acceptance_criteria": [
+        "`docs/WORLD.md` includes: socket path, expected owner/group/mode, and group membership guidance.",
+        "`docs/WORLD.md` includes: a single statement that the socket ACL is the authorization boundary for world-agent requests.",
+        "Operator docs link to `docs/project_management/next/world-agent-policy-snapshot/policy-snapshot-spec.md` for snapshot behavior and trace fields."
+      ],
+      "references": [
+        "docs/WORLD.md",
+        "docs/project_management/next/world-agent-policy-snapshot/policy-snapshot-spec.md",
+        "docs/project_management/next/world-agent-policy-snapshot/decision_register.md",
+        "docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md"
+      ],
+      "kickoff_prompt": "Goal: update canonical operator docs so the socket ACL boundary and multi-user posture are explicitly documented.\n\nRead:\n- docs/project_management/next/world-agent-policy-snapshot/decision_register.md\n- docs/project_management/next/world-agent-policy-snapshot/policy-snapshot-spec.md\n\nEdit:\n- docs/WORLD.md\n\nRequired doc content:\n- State the world-agent authorization boundary as the OS-level socket ACL.\n- Include Linux socket details: `/run/substrate.sock`, expected owner/group/mode, and group membership guidance.\n- Include an explicit pointer to the snapshot spec for `policy_resolution_mode` and snapshot enforcement behavior.\n\nQuality gate:\n- No ambiguous phrasing; use singular, testable statements.\n"
+    },
+    {
+      "id": "WAPS-0011",
+      "title": "Fix WAPS smoke scripts to emit required snapshot metadata fields",
+      "work_type": "integration",
+      "covers_misalignment": [
+        "WAPS-0009 outputs: Scripts emit a JSON summary that includes `policy_resolution_mode`, `policy_snapshot_schema`, `policy_snapshot_hash`, and world fs strategy values."
+      ],
+      "outputs": [
+        "Update `docs/project_management/next/world-agent-policy-snapshot/smoke/linux-smoke.sh` to include `policy_snapshot_schema` and world fs strategy fields in the captured per-test trace metadata.",
+        "Update `docs/project_management/next/world-agent-policy-snapshot/smoke/macos-smoke.sh` to include `policy_snapshot_schema` and world fs strategy fields in the captured per-test trace metadata.",
+        "Update `docs/project_management/next/world-agent-policy-snapshot/smoke/windows-wsl-smoke.ps1` to include `policy_snapshot_schema` and world fs strategy fields in the captured per-test trace metadata.",
+        "Update smoke script assertions to validate `policy_snapshot_schema == 1` when `policy_resolution_mode == snapshot_v1`."
+      ],
+      "acceptance_criteria": [
+        "Smoke summaries include per-test trace metadata with: `policy_resolution_mode`, `policy_snapshot_schema`, `policy_snapshot_hash`, `world_fs_strategy_primary`, `world_fs_strategy_final`, `world_fs_strategy_fallback_reason` when trace output contains them.",
+        "When doctor reports `policy_snapshot_v1_supported=true`, smoke asserts all tests have `policy_resolution_mode == snapshot_v1` and `policy_snapshot_schema == 1` and a non-empty `policy_snapshot_hash`."
+      ],
+      "references": [
+        "docs/project_management/next/world-agent-policy-snapshot/smoke/linux-smoke.sh",
+        "docs/project_management/next/world-agent-policy-snapshot/smoke/macos-smoke.sh",
+        "docs/project_management/next/world-agent-policy-snapshot/smoke/windows-wsl-smoke.ps1",
+        "docs/TRACE.md",
+        "crates/trace/src/span.rs"
+      ],
+      "kickoff_prompt": "Goal: update WAPS smoke scripts to include the required snapshot metadata fields in their JSON summaries.\n\nRead:\n- docs/TRACE.md\n- crates/trace/src/span.rs\n\nEdit:\n- docs/project_management/next/world-agent-policy-snapshot/smoke/linux-smoke.sh\n- docs/project_management/next/world-agent-policy-snapshot/smoke/macos-smoke.sh\n- docs/project_management/next/world-agent-policy-snapshot/smoke/windows-wsl-smoke.ps1\n\nImplementation steps:\n- Extend the trace-meta extraction logic to include: policy_snapshot_schema and world_fs_strategy_* fields.\n- Update the summary JSON and assertions to require policy_snapshot_schema==1 when policy_resolution_mode==snapshot_v1.\n\nValidate:\n- Run the Linux script on Linux and confirm the printed JSON includes policy_snapshot_schema.\n"
+    },
+    {
+      "id": "WAPS-0012",
+      "title": "Bump world doctor report schema_version after additive fields",
+      "work_type": "code",
+      "covers_misalignment": [
+        "WAPS-0006 acceptance: schema_version increments when adding fields to a schema struct."
+      ],
+      "outputs": [
+        "Update world-agent `GET /v1/doctor/world` to return `schema_version: 2` after adding `policy_snapshot_v1_supported` and `policy_resolution_mode`.",
+        "Update any shell-side hardcoded doctor JSON fixtures/stubs to use `schema_version: 2`.",
+        "Update `agent-api-types` tests that assert the doctor schema JSON shape to accept `schema_version: 2`.",
+        "Update `docs/TRACE.md` or the snapshot spec to reflect that doctor report schema_version is now 2."
+      ],
+      "acceptance_criteria": [
+        "`GET /v1/doctor/world` returns `schema_version: 2` and includes `policy_snapshot_v1_supported` and `policy_resolution_mode`.",
+        "`substrate world doctor --json` continues to parse and print doctor output without requiring additional flags.",
+        "`cargo test -p agent-api-types` and `cargo test -p world-agent` pass."
+      ],
+      "references": [
+        "crates/world-agent/src/handlers.rs",
+        "crates/agent-api-types/src/lib.rs",
+        "crates/shell/src/execution/platform/linux.rs",
+        "crates/shell/src/execution/platform/macos.rs",
+        "crates/shell/src/execution/platform/windows.rs",
+        "docs/TRACE.md",
+        "docs/project_management/next/world-agent-policy-snapshot/policy-snapshot-spec.md"
+      ],
+      "kickoff_prompt": "Goal: bump the world doctor report schema_version after adding doctor fields.\n\nRead:\n- docs/project_management/next/world-agent-policy-snapshot/decision_register.md\n\nEdit:\n- crates/world-agent/src/handlers.rs\n- crates/agent-api-types/src/lib.rs\n- crates/shell/src/execution/platform/linux.rs\n- crates/shell/src/execution/platform/macos.rs\n- crates/shell/src/execution/platform/windows.rs\n\nImplementation steps:\n- Update the world-agent doctor response to schema_version=2.\n- Update any shell-side hardcoded doctor JSON fixtures to schema_version=2.\n- Update agent-api-types tests asserting schema_version.\n- Update relevant docs to reflect schema_version=2.\n\nValidate:\n- cargo test -p agent-api-types\n- cargo test -p world-agent\n"
+    },
+    {
+      "id": "WAPS-0013",
+      "title": "Run CI cross-platform runners for WAPS feature smoke and compile parity",
+      "work_type": "integration",
+      "covers_misalignment": [
+        "Missing task: CI cross-platform runner execution via Makefile targets."
+      ],
+      "outputs": [
+        "Run compile-parity CI dispatch using `make ci-compile-parity` and record the workflow run URL(s) in `docs/project_management/next/world-agent-policy-snapshot/ci_runs.md`.",
+        "Run cross-platform feature smoke CI dispatch using `make feature-smoke-all` and record the workflow run URL(s) plus the smoke run id(s) in `docs/project_management/next/world-agent-policy-snapshot/ci_runs.md`."
+      ],
+      "acceptance_criteria": [
+        "`docs/project_management/next/world-agent-policy-snapshot/ci_runs.md` contains: ref used, workflow names, run URLs, platforms executed, and a final PASS/FAIL line for each dispatched run.",
+        "Runs execute on the configured CI runner kind and report completion status."
+      ],
+      "references": [
+        "Makefile",
+        ".github/workflows/ci-testing.yml",
+        ".github/workflows/feature-smoke.yml",
+        "scripts/ci/dispatch_ci_testing.sh",
+        "scripts/ci/dispatch_feature_smoke.sh",
+        "docs/project_management/next/world-agent-policy-snapshot/smoke/linux-smoke.sh",
+        "docs/project_management/next/world-agent-policy-snapshot/smoke/macos-smoke.sh",
+        "docs/project_management/next/world-agent-policy-snapshot/smoke/windows-wsl-smoke.ps1"
+      ],
+      "kickoff_prompt": "Goal: run the CI cross-platform runners for the world-agent policy snapshot feature and record results.\n\nRead:\n- Makefile (targets: ci-testing, ci-compile-parity, feature-smoke, feature-smoke-all)\n\nPreconditions:\n- Run from the repo root.\n- Use a non-main ref for workflow dispatch.\n\nCommands:\n- make ci-compile-parity CI_WORKFLOW_REF=\"$(git branch --show-current)\" CI_REMOTE=origin\n- make feature-smoke-all FEATURE_DIR=\"docs/project_management/next/world-agent-policy-snapshot\" WORKFLOW_REF=\"$(git branch --show-current)\" REMOTE=origin RUNNER_KIND=self-hosted\n\nArtifact:\n- Create or update docs/project_management/next/world-agent-policy-snapshot/ci_runs.md with: ref, date, dispatched targets, workflow run URLs, platforms executed, and PASS/FAIL summary.\n"
     }
   ]
 }
