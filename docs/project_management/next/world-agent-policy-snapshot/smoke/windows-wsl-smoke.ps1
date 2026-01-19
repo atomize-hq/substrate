@@ -121,7 +121,7 @@ function Get-TraceMetaForMarker {
         $policySnapshotHash = $last.policySnapshotHash
     }
 
-    $meta = [ordered]@{
+    $meta = @{
         span_id = $spanId
         exit = $exitCode
         policy_resolution_mode = $policyResolutionMode

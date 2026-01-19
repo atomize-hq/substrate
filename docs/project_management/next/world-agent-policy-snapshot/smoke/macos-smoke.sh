@@ -29,6 +29,21 @@ mktemp_dir() {
   printf '%s\n' "${d}"
 }
 
+mktemp_ws_dir() {
+  local ws_base="${PWD}"
+  if [[ "${ws_base}" == /tmp* || "${ws_base}" == /private/tmp* ]]; then
+    ws_base="${HOST_HOME}"
+  fi
+
+  local ws_root="${ws_base}/.substrate-waps-tmp"
+  mkdir -p "${ws_root}" 2>/dev/null || fail "failed to create ${ws_root}"
+
+  local d=""
+  d="$(mktemp -d "${ws_root}/ws.XXXXXX" 2>/dev/null || true)"
+  [[ -n "${d}" && -d "${d}" ]] || fail "mktemp -d failed under ${ws_root}"
+  printf '%s\n' "${d}"
+}
+
 run_capture() {
   local cmd="$1"
   local out_path="$2"
@@ -73,7 +88,7 @@ fi
 HOST_HOME="${HOME}"
 RUN_ID="waps-$(date +%s)-$$"
 TMP_HOME="$(mktemp_dir)"
-TMP_WS="$(mktemp_dir)"
+TMP_WS="$(mktemp_ws_dir)"
 TRACE_LOG="${TMP_HOME}/trace.jsonl"
 
 cleanup() {
