@@ -33,7 +33,7 @@ use world::LinuxLocalBackend;
 #[cfg(target_os = "linux")]
 use world_api::{ResourceLimits, WorldBackend, WorldSpec};
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn normalize_env_for_linux_guest(env_map: &mut std::collections::HashMap<String, String>) {
     // macOS host PATH often contains directories that are mounted into the guest (e.g. /Users/...),
     // which can lead to confusing behavior where `which node` points at a macOS binary that cannot
@@ -45,13 +45,13 @@ fn normalize_env_for_linux_guest(env_map: &mut std::collections::HashMap<String,
         format!("{WORLD_DEPS_BIN}:{GUEST_BASE_PATH}"),
     );
 
-    // Avoid leaking macOS host HOME into the Linux guest. This both reduces
-    // accidental use of macOS toolchains (nvm/pyenv) and keeps guest-only state
-    // in a predictable location.
-    if env_map
-        .get("HOME")
-        .is_none_or(|home| home.is_empty() || home.starts_with("/Users/"))
-    {
+    // Avoid leaking host HOME into the Linux guest. This both reduces accidental use of host
+    // toolchains and keeps guest-only state in a predictable location.
+    if env_map.get("HOME").is_none_or(|home| {
+        home.is_empty()
+            || !home.starts_with('/')
+            || (cfg!(target_os = "macos") && home.starts_with("/Users/"))
+    }) {
         env_map.insert("HOME".to_string(), "/root".to_string());
     }
 
@@ -944,13 +944,24 @@ fn build_agent_client_and_request_impl(
     let client = windows::build_agent_client()?;
     let cwd = windows::current_dir_wsl()?;
     let host_cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-    let env_map = build_world_env_map();
+    let profile = current_world_request_profile();
+    let mut env_map = build_world_env_map();
+    normalize_env_for_linux_guest(&mut env_map);
+    if profile.as_deref() == Some("world-deps-provision") {
+        env_map.retain(|k, _| {
+            k == "PATH"
+                || k == "HOME"
+                || k.starts_with("SUBSTRATE_")
+                || k.starts_with("WORLD_")
+                || k.starts_with("SHIM_")
+        });
+    }
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
     let policy_snapshot =
         crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&host_cwd)?.snapshot;
 
     let request = ExecuteRequest {
-        profile: current_world_request_profile(),
+        profile,
         cmd: cmd.to_string(),
         cwd: Some(cwd),
         env: Some(env_map),
