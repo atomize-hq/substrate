@@ -1015,10 +1015,13 @@ async fn process_agent_stream(
                 &mut fs_diff,
                 &mut fs_strategy,
             )?;
+            if exit_code.is_some() {
+                break;
+            }
         }
     }
 
-    if !buffer.is_empty() {
+    if exit_code.is_none() && !buffer.is_empty() {
         consume_agent_stream_buffer_with_meta(
             &agent_label,
             &mut buffer,
