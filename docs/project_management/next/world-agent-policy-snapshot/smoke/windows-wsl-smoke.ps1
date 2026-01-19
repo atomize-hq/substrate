@@ -121,30 +121,30 @@ function Get-TraceMetaForMarker {
         $policySnapshotHash = $last.policySnapshotHash
     }
 
-    $meta = @{
-        span_id = $spanId
-        exit = $exitCode
-        policy_resolution_mode = $policyResolutionMode
-        policy_snapshot_hash = $policySnapshotHash
-    }
+    $meta = @{}
+    $meta['span_id'] = $spanId
+    $meta['exit'] = $exitCode
+    $meta['policy_resolution_mode'] = $policyResolutionMode
+    $meta['policy_snapshot_hash'] = $policySnapshotHash
+    $meta['policy_snapshot_schema'] = $null
 
-    if (-not $meta.policy_snapshot_schema -and $meta.policy_resolution_mode -eq 'snapshot_v1') {
-        $meta.policy_snapshot_schema = 1
+    if ($null -eq $meta['policy_snapshot_schema'] -and $meta['policy_resolution_mode'] -eq 'snapshot_v1') {
+        $meta['policy_snapshot_schema'] = 1
     }
 
     if ($last.PSObject.Properties.Match('policy_snapshot_schema').Count -gt 0) {
-        $meta.policy_snapshot_schema = $last.policy_snapshot_schema
+        $meta['policy_snapshot_schema'] = $last.policy_snapshot_schema
     } elseif ($last.PSObject.Properties.Match('policySnapshotSchema').Count -gt 0) {
-        $meta.policy_snapshot_schema = $last.policySnapshotSchema
+        $meta['policy_snapshot_schema'] = $last.policySnapshotSchema
     }
     if ($last.PSObject.Properties.Match('world_fs_strategy_primary').Count -gt 0) {
-        $meta.world_fs_strategy_primary = $last.world_fs_strategy_primary
+        $meta['world_fs_strategy_primary'] = $last.world_fs_strategy_primary
     }
     if ($last.PSObject.Properties.Match('world_fs_strategy_final').Count -gt 0) {
-        $meta.world_fs_strategy_final = $last.world_fs_strategy_final
+        $meta['world_fs_strategy_final'] = $last.world_fs_strategy_final
     }
     if ($last.PSObject.Properties.Match('world_fs_strategy_fallback_reason').Count -gt 0) {
-        $meta.world_fs_strategy_fallback_reason = $last.world_fs_strategy_fallback_reason
+        $meta['world_fs_strategy_fallback_reason'] = $last.world_fs_strategy_fallback_reason
     }
 
     return [pscustomobject]$meta
