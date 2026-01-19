@@ -512,8 +512,6 @@ jobs:
       - name: Warm WSL world (Windows self-hosted; WAPS)
         if: startsWith(inputs.feature_dir, 'docs/project_management/next/world-agent-policy-snapshot')
         shell: pwsh
-        env:
-          SUBSTRATE_FORWARDER_TCP: "1"
         run: pwsh -File scripts/windows/wsl-warm.ps1 -DistroName substrate-wsl -ProjectPath (Resolve-Path .)
 
       - name: Build substrate (debug)
@@ -525,8 +523,6 @@ jobs:
 
       - name: Run Windows smoke
         shell: pwsh
-        env:
-          SUBSTRATE_FORWARDER_TCP: "1"
         run: pwsh -File "${{ inputs.feature_dir }}/smoke/windows-smoke.ps1"
 
   wsl:
