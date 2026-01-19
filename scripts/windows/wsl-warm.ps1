@@ -191,6 +191,31 @@ sudo install -m755 target/release/world-agent /usr/local/bin/substrate-world-age
     }
 } else {
     Write-Info "Agent reports HTTP 200; skipping provision/build/restart"
+
+    # CI safety: even if the agent is reachable, ensure the in-WSL world-agent binary matches the
+    # checked-out repo so transport/back-end fixes take effect on self-hosted runners.
+    $rebuildAgentOnCi = $projectHasCargo -and (Test-Truthy $env:GITHUB_ACTIONS -or Test-Truthy $env:SUBSTRATE_WSL_WARM_FORCE_AGENT_REBUILD)
+    if ($rebuildAgentOnCi) {
+        Write-Info "Rebuilding world-agent (release) inside WSL to match checked-out ref"
+        $projectPathFragment = Convert-ToWslPathFragment $projectPath
+        $projectPathWsl = "/mnt/c/$projectPathFragment"
+        $projectPathQuoted = Quote-ForBash $projectPathWsl
+        $buildScript = @"
+set -euo pipefail
+if [ -f ~/.cargo/env ]; then
+  . ~/.cargo/env
+fi
+cd $projectPathQuoted
+cargo build -p world-agent --release
+sudo install -m755 target/release/world-agent /usr/local/bin/substrate-world-agent
+sudo systemctl restart substrate-world-agent.service
+"@
+        $buildScript = $buildScript -replace "`r", ""
+        & wsl -d $DistroName -- bash -lc $buildScript
+        if ($LASTEXITCODE -ne 0) {
+            Write-ErrorAndExit "Failed to rebuild/restart world-agent inside WSL (CI)"
+        }
+    }
 }
 
 # Build forwarder if needed or use packaged binary
