@@ -202,6 +202,16 @@ try {
     # to execute directly while still validating policy snapshot trace metadata.
     $env:SUBSTRATE_WORLD_EXEC_FORCE_DIRECT = '1'
 
+    # Force the Windows WSL backend to use the named pipe transport (default operational path) even
+    # if the runner machine has TCP bridge env vars set globally.
+    Remove-Item Env:SUBSTRATE_FORWARDER_TCP_ADDR -ErrorAction SilentlyContinue
+    Remove-Item Env:SUBSTRATE_FORWARDER_TCP_HOST -ErrorAction SilentlyContinue
+    Remove-Item Env:SUBSTRATE_FORWARDER_TCP_PORT -ErrorAction SilentlyContinue
+    $env:SUBSTRATE_FORWARDER_TCP = '0'
+    if (-not $env:SUBSTRATE_FORWARDER_PIPE) {
+        $env:SUBSTRATE_FORWARDER_PIPE = '\\.\pipe\substrate-agent'
+    }
+
     Invoke-Substrate -Args @('config', 'global', 'init', '--force') -Cwd $tmpWs | Out-Null
     Invoke-Substrate -Args @('policy', 'global', 'init', '--force') -Cwd $tmpWs | Out-Null
     Invoke-Substrate -Args @('config', 'global', 'set', 'policy.mode=enforce') -Cwd $tmpWs | Out-Null
