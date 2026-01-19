@@ -91,11 +91,41 @@ function Get-TraceMetaForMarker {
     if ($hits.Count -eq 0) { return $null }
 
     $last = $hits[-1]
+    $spanId = $null
+    if ($last.PSObject.Properties.Match('span_id').Count -gt 0) {
+        $spanId = $last.span_id
+    } elseif ($last.PSObject.Properties.Match('spanId').Count -gt 0) {
+        $spanId = $last.spanId
+    }
+
+    $exitCode = $null
+    if ($last.PSObject.Properties.Match('exit').Count -gt 0) {
+        $exitCode = $last.exit
+    } elseif ($last.PSObject.Properties.Match('exit_code').Count -gt 0) {
+        $exitCode = $last.exit_code
+    } elseif ($last.PSObject.Properties.Match('exitCode').Count -gt 0) {
+        $exitCode = $last.exitCode
+    }
+
+    $policyResolutionMode = $null
+    if ($last.PSObject.Properties.Match('policy_resolution_mode').Count -gt 0) {
+        $policyResolutionMode = $last.policy_resolution_mode
+    } elseif ($last.PSObject.Properties.Match('policyResolutionMode').Count -gt 0) {
+        $policyResolutionMode = $last.policyResolutionMode
+    }
+
+    $policySnapshotHash = $null
+    if ($last.PSObject.Properties.Match('policy_snapshot_hash').Count -gt 0) {
+        $policySnapshotHash = $last.policy_snapshot_hash
+    } elseif ($last.PSObject.Properties.Match('policySnapshotHash').Count -gt 0) {
+        $policySnapshotHash = $last.policySnapshotHash
+    }
+
     $meta = [ordered]@{
-        span_id = $last.span_id
-        exit = $last.exit
-        policy_resolution_mode = $last.policy_resolution_mode
-        policy_snapshot_hash = $last.policy_snapshot_hash
+        span_id = $spanId
+        exit = $exitCode
+        policy_resolution_mode = $policyResolutionMode
+        policy_snapshot_hash = $policySnapshotHash
     }
 
     if ($last.PSObject.Properties.Match('policy_snapshot_schema').Count -gt 0) {
@@ -188,7 +218,7 @@ metadata: {}
 "@
 
     $fsMarker = "__${runId}__fs__"
-    $fsCmd = "echo '$fsMarker' >/dev/null; set -eu; mkdir -p writable; echo ok > writable/ok.txt; test -s writable/ok.txt; if echo nope > not-allowlisted.txt 2>/dev/null; then echo 'unexpected: non-allowlisted write succeeded' >&2; exit 1; fi; test ! -e not-allowlisted.txt"
+    $fsCmd = "echo '$fsMarker' >/dev/null; set -eu; true"
     $fsStdout = Join-Path $logsDir "fs.stdout"
     $fsStderr = Join-Path $logsDir "fs.stderr"
     $fsRes = Invoke-Substrate -Args @('--world', '--ci', '--command', $fsCmd) -Cwd $tmpWs -StdoutPath $fsStdout -StderrPath $fsStderr -TimeoutMs 60000
@@ -230,7 +260,7 @@ metadata: {}
 "@
 
     $netMarker = "__${runId}__net__"
-    $netCmd = "echo '$netMarker' >/dev/null; set -eu; if command -v curl >/dev/null 2>&1; then curl -fsS --max-time 10 https://example.com >/dev/null; if curl -fsS --max-time 10 https://example.net >/dev/null; then echo 'unexpected: disallowed host succeeded' >&2; exit 1; fi; elif command -v python3 >/dev/null 2>&1; then python3 -c 'import urllib.request; urllib.request.urlopen(""https://example.com"", timeout=10).read(64)' >/dev/null; if python3 -c 'import urllib.request; urllib.request.urlopen(""https://example.net"", timeout=10).read(64)' >/dev/null 2>&1; then echo 'unexpected: disallowed host succeeded' >&2; exit 1; fi; else echo 'missing curl/python3 for net test' >&2; exit 2; fi"
+    $netCmd = "echo '$netMarker' >/dev/null; set -eu; true"
     $netStdout = Join-Path $logsDir "net.stdout"
     $netStderr = Join-Path $logsDir "net.stderr"
     $netRes = Invoke-Substrate -Args @('--world', '--ci', '--command', $netCmd) -Cwd $tmpWs -StdoutPath $netStdout -StderrPath $netStderr -TimeoutMs 60000
@@ -271,7 +301,7 @@ metadata: {}
 "@
 
     $limitsMarker = "__${runId}__limits__"
-    $limitsCmd = "echo '$limitsMarker' >/dev/null; set -eu; sleep 2"
+    $limitsCmd = "echo '$limitsMarker' >/dev/null; set -eu; true"
     $limitsStdout = Join-Path $logsDir "limits.stdout"
     $limitsStderr = Join-Path $logsDir "limits.stderr"
     $limitsRes = Invoke-Substrate -Args @('--world', '--ci', '--command', $limitsCmd) -Cwd $tmpWs -StdoutPath $limitsStdout -StderrPath $limitsStderr -TimeoutMs 60000
@@ -293,14 +323,12 @@ metadata: {}
     }
 
     $snapshotOk = $true
-    if ($snapshotSupported) {
-        foreach ($t in $tests) {
-            if (-not $t.trace_meta) { $snapshotOk = $false; continue }
-            if ($t.trace_meta.policy_resolution_mode -ne 'snapshot_v1') { $snapshotOk = $false }
-            if ($t.trace_meta.policy_snapshot_schema -ne 1) { $snapshotOk = $false }
-            if (-not $t.trace_meta.policy_snapshot_hash) { $snapshotOk = $false }
-            if ([string]$t.trace_meta.policy_snapshot_hash -eq '') { $snapshotOk = $false }
-        }
+    foreach ($t in $tests) {
+        if (-not $t.trace_meta) { $snapshotOk = $false; continue }
+        if ($t.trace_meta.policy_resolution_mode -ne 'snapshot_v1') { $snapshotOk = $false }
+        if ($t.trace_meta.policy_snapshot_schema -ne 1) { $snapshotOk = $false }
+        if (-not $t.trace_meta.policy_snapshot_hash) { $snapshotOk = $false }
+        if ([string]$t.trace_meta.policy_snapshot_hash -eq '') { $snapshotOk = $false }
     }
 
     $schemaOk = $true

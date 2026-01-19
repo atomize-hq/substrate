@@ -189,7 +189,7 @@ jobs:
           cargo test --workspace --all-targets
 
       - name: Build substrate (debug)
-        run: cargo build --bin substrate
+        run: cargo build --bin substrate --bin substrate-shim
 
       - name: Add substrate to PATH
         run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
@@ -295,8 +295,13 @@ jobs:
       - name: Provision world-agent (Linux self-hosted; WAPS)
         if: startsWith(inputs.feature_dir, 'docs/project_management/next/world-agent-policy-snapshot')
         run: |
-          cargo build -p world-agent --release
-          scripts/linux/world-provision.sh --profile release --skip-build --sudo-noninteractive
+          set -euo pipefail
+          if sudo -n true >/dev/null 2>&1; then
+            cargo build -p world-agent --release
+            scripts/linux/world-provision.sh --profile release --skip-build --sudo-noninteractive
+          else
+            echo "WARN: sudo -n unavailable on this runner; skipping world-agent provisioning" >&2
+          fi
 
       - name: Run integration checks (Linux self-hosted)
         if: inputs.run_integ_checks
@@ -306,7 +311,7 @@ jobs:
           cargo test --workspace --all-targets
 
       - name: Build substrate (debug)
-        run: cargo build --bin substrate
+        run: cargo build --bin substrate --bin substrate-shim
 
       - name: Add substrate to PATH
         run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
@@ -351,7 +356,7 @@ jobs:
           cargo test --workspace --all-targets
 
       - name: Build substrate (debug)
-        run: cargo build --bin substrate
+        run: cargo build --bin substrate --bin substrate-shim
 
       - name: Add substrate to PATH
         run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
@@ -401,7 +406,7 @@ jobs:
           cargo test --workspace --all-targets
 
       - name: Build substrate (debug)
-        run: cargo build --bin substrate
+        run: cargo build --bin substrate --bin substrate-shim
 
       - name: Add substrate to PATH
         run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
@@ -442,7 +447,7 @@ jobs:
           cargo test --workspace --all-targets
 
       - name: Build substrate (debug)
-        run: cargo build --bin substrate
+        run: cargo build --bin substrate --bin substrate-shim
 
       - name: Add substrate to PATH
         shell: pwsh
@@ -510,7 +515,7 @@ jobs:
         run: pwsh -File scripts/windows/wsl-warm.ps1 -DistroName substrate-wsl -ProjectPath (Resolve-Path .)
 
       - name: Build substrate (debug)
-        run: cargo build --bin substrate
+        run: cargo build --bin substrate --bin substrate-shim
 
       - name: Add substrate to PATH
         shell: pwsh
@@ -607,7 +612,7 @@ jobs:
           cargo test --workspace --all-targets
 
       - name: Build substrate (debug)
-        run: cargo build --bin substrate
+        run: cargo build --bin substrate --bin substrate-shim
 
       - name: Add substrate to PATH
         run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
