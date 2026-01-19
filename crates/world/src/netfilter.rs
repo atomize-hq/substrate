@@ -280,15 +280,6 @@ impl NetFilter {
                     Ok(None) => {
                         if start.elapsed() >= timeout {
                             let _ = child.kill();
-                            let _ = child.wait();
-                            let mut stdout = Vec::new();
-                            let mut stderr = Vec::new();
-                            if let Some(mut out) = child.stdout.take() {
-                                let _ = out.read_to_end(&mut stdout);
-                            }
-                            if let Some(mut err) = child.stderr.take() {
-                                let _ = err.read_to_end(&mut stderr);
-                            }
                             return Err(anyhow!(
                                 "nft command timed out after {}ms",
                                 timeout.as_millis()
