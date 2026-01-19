@@ -991,21 +991,19 @@ pub(crate) fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStr
             emit_stream_chunk(&agent_id, &stdout, false);
             emit_stream_chunk(&agent_id, &stderr, true);
 
-            return Ok(AgentStreamOutcome {
+            Ok(AgentStreamOutcome {
                 exit_code: response.exit,
                 scopes_used: response.scopes_used,
                 fs_diff: response.fs_diff,
                 fs_strategy: None,
-            });
+            })
         }
 
         #[cfg(not(target_os = "windows"))]
-        use agent_api_types::ApiError;
-        #[cfg(not(target_os = "windows"))]
-        use http_body_util::BodyExt;
-
-        #[cfg(not(target_os = "windows"))]
         {
+            use agent_api_types::ApiError;
+            use http_body_util::BodyExt;
+
             let response = client.execute_stream(request).await?;
             if !response.status().is_success() {
                 let status = response.status();
@@ -1027,6 +1025,7 @@ pub(crate) fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStr
     })
 }
 
+#[cfg(not(target_os = "windows"))]
 async fn process_agent_stream(
     mut body: hyper::body::Incoming,
     agent_label: String,
