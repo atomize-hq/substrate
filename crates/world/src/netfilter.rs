@@ -196,72 +196,91 @@ impl NetFilter {
 
     #[cfg(target_os = "linux")]
     fn install_rules_linux(&self) -> Result<()> {
+        // IMPORTANT SAFETY PROPERTY:
+        // Never leave a partially-installed output-hook chain behind that could disrupt host networking.
+        // Any error after table/chain creation must roll back the whole table.
+
         // Create nftables table
         let create_table = format!("table inet {}", self.table_name);
         self.run_nft(&["add", &create_table])?;
 
-        // Create base chain for filtering
+        // Create base chain for filtering.
+        //
+        // Use `policy accept` and enforce via an explicit final `drop` rule. This makes partial setup
+        // fail-open (safe) rather than fail-closed (can brick host networking if later rule-adds fail).
         let create_chain = format!(
-            "chain inet {} {} {{ type filter hook output priority 0; policy drop; }}",
+            "chain inet {} {} {{ type filter hook output priority 0; policy accept; }}",
             self.table_name, self.chain_name
         );
-        self.run_nft(&["add", &create_chain])?;
 
-        // Create IPv4/IPv6 sets for allowed destinations (idempotent add)
-        let set_v4 = format!(
-            "set inet {} allowed4 {{ type ipv4_addr; flags interval; }}",
-            self.table_name
-        );
-        let _ = self.run_nft(&["add", &set_v4]);
-        let set_v6 = format!(
-            "set inet {} allowed6 {{ type ipv6_addr; flags interval; }}",
-            self.table_name
-        );
-        let _ = self.run_nft(&["add", &set_v6]);
+        let result: Result<()> = (|| {
+            self.run_nft(&["add", &create_chain])?;
 
-        // Allow loopback traffic
-        let allow_loopback = self.format_rule("oif lo accept");
-        self.run_nft(&["add", &allow_loopback])?;
+            // Create IPv4/IPv6 sets for allowed destinations (idempotent add)
+            let set_v4 = format!(
+                "set inet {} allowed4 {{ type ipv4_addr; flags interval; }}",
+                self.table_name
+            );
+            let _ = self.run_nft(&["add", &set_v4]);
+            let set_v6 = format!(
+                "set inet {} allowed6 {{ type ipv6_addr; flags interval; }}",
+                self.table_name
+            );
+            let _ = self.run_nft(&["add", &set_v6]);
 
-        // Allow established connections
-        let allow_established = self.format_rule("ct state established,related accept");
-        self.run_nft(&["add", &allow_established])?;
+            // Allow loopback traffic
+            let allow_loopback = self.format_rule("oif lo accept");
+            self.run_nft(&["add", &allow_loopback])?;
 
-        // Allow DNS queries
-        let allow_dns = self.format_rule("udp dport 53 accept");
-        self.run_nft(&["add", &allow_dns])?;
+            // Allow established connections
+            let allow_established = self.format_rule("ct state established,related accept");
+            self.run_nft(&["add", &allow_established])?;
 
-        // Populate sets with allowed IPs
-        for ip in &self.allowed_ips {
-            match ip {
-                IpAddr::V4(v4) => {
-                    let add_elem =
-                        format!("add element inet {} allowed4 {{ {} }}", self.table_name, v4);
-                    let _ = self.run_nft(&["add", &add_elem]);
-                }
-                IpAddr::V6(v6) => {
-                    let add_elem =
-                        format!("add element inet {} allowed6 {{ {} }}", self.table_name, v6);
-                    let _ = self.run_nft(&["add", &add_elem]);
+            // Allow DNS queries
+            let allow_dns = self.format_rule("udp dport 53 accept");
+            self.run_nft(&["add", &allow_dns])?;
+
+            // Populate sets with allowed IPs
+            for ip in &self.allowed_ips {
+                match ip {
+                    IpAddr::V4(v4) => {
+                        let add_elem =
+                            format!("add element inet {} allowed4 {{ {} }}", self.table_name, v4);
+                        let _ = self.run_nft(&["add", &add_elem]);
+                    }
+                    IpAddr::V6(v6) => {
+                        let add_elem =
+                            format!("add element inet {} allowed6 {{ {} }}", self.table_name, v6);
+                        let _ = self.run_nft(&["add", &add_elem]);
+                    }
                 }
             }
+
+            // Allow traffic to addresses in sets
+            let allow_v4 = self.format_rule("ip daddr @allowed4 accept");
+            let allow_v6 = self.format_rule("ip6 daddr @allowed6 accept");
+            self.run_nft(&["add", &allow_v4])?;
+            self.run_nft(&["add", &allow_v6])?;
+
+            // Rate-limited LOG + drop for everything else.
+            // (Safe even with `policy accept` because this is an explicit final drop rule.)
+            let log_dropped = self.format_rule(&format!(
+                "limit rate 10/second log prefix \"substrate-dropped-{}:\"",
+                self.world_id
+            ));
+            let drop_rule = self.format_rule("counter drop");
+            self.run_nft(&["add", &log_dropped])?;
+            self.run_nft(&["add", &drop_rule])?;
+
+            Ok(())
+        })();
+
+        if let Err(err) = result {
+            // Best-effort rollback.
+            let delete_table = format!("table inet {}", self.table_name);
+            let _ = self.run_nft(&["delete", &delete_table]);
+            return Err(err);
         }
-
-        // Allow traffic to addresses in sets
-        let allow_v4 = self.format_rule("ip daddr @allowed4 accept");
-        let allow_v6 = self.format_rule("ip6 daddr @allowed6 accept");
-        self.run_nft(&["add", &allow_v4])?;
-        self.run_nft(&["add", &allow_v6])?;
-
-        // Log dropped packets for tracking
-        // Rate-limited LOG + drop for everything else
-        let log_dropped = self.format_rule(&format!(
-            "limit rate 10/second log prefix \"substrate-dropped-{}:\"",
-            self.world_id
-        ));
-        let drop_rule = self.format_rule("counter drop");
-        self.run_nft(&["add", &log_dropped])?;
-        self.run_nft(&["add", &drop_rule])?;
 
         Ok(())
     }
