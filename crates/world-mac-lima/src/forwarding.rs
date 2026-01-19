@@ -162,9 +162,8 @@ fn create_vsock_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
 
 fn create_ssh_uds_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
     // Create socket directory
-    let socket_dir = dirs::home_dir()
-        .ok_or_else(|| anyhow::anyhow!("No home directory"))?
-        .join(".substrate/sock");
+    let home_dir = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("No home directory"))?;
+    let socket_dir = home_dir.join(".substrate/sock");
 
     debug!("Creating socket directory: {}", socket_dir.display());
     std::fs::create_dir_all(&socket_dir).context("Failed to create socket directory")?;
@@ -192,22 +191,38 @@ fn create_ssh_uds_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
     let ssh_config_str = ssh_config.to_string_lossy();
     let socket_forward = format!("{}:/run/substrate.sock", socket_path.display());
     let vm_host = format!("lima-{}", vm_name);
+    let known_hosts_path = home_dir.join(".substrate/lima_known_hosts");
 
-    let ssh_args = vec![
-        "-F",
-        &ssh_config_str,
-        "-o",
-        "ControlMaster=no",
-        "-o",
-        "ControlPath=none",
-        "-o",
-        "ExitOnForwardFailure=yes",
-        "-o",
-        "StreamLocalBindUnlink=yes",
-        "-L",
-        &socket_forward,
-        &vm_host,
-        "-N",
+    // Keep SSH non-interactive and fail-fast so we don't silently hang on prompts.
+    //
+    // `StrictHostKeyChecking=accept-new` avoids requiring a manual `limactl shell` run solely to
+    // accept the VM's host key. Use a Substrate-scoped known_hosts file to avoid mutating the
+    // user's global SSH state.
+    let ssh_args: Vec<String> = vec![
+        "-F".to_string(),
+        ssh_config_str.to_string(),
+        "-o".to_string(),
+        "ControlMaster=no".to_string(),
+        "-o".to_string(),
+        "ControlPath=none".to_string(),
+        "-o".to_string(),
+        "BatchMode=yes".to_string(),
+        "-o".to_string(),
+        "ConnectTimeout=5".to_string(),
+        "-o".to_string(),
+        "ExitOnForwardFailure=yes".to_string(),
+        "-o".to_string(),
+        "StreamLocalBindUnlink=yes".to_string(),
+        "-o".to_string(),
+        "StrictHostKeyChecking=accept-new".to_string(),
+        "-o".to_string(),
+        format!("UserKnownHostsFile={}", known_hosts_path.display()),
+        "-o".to_string(),
+        "GlobalKnownHostsFile=/dev/null".to_string(),
+        "-L".to_string(),
+        socket_forward,
+        vm_host,
+        "-N".to_string(),
     ];
 
     debug!("Running SSH command: ssh {:?}", ssh_args);
