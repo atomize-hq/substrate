@@ -78,23 +78,6 @@ impl SessionWorld {
             self.setup_linux_isolation()
                 .context("setup_linux_isolation failed")?;
 
-            // Create a named network namespace for this session world (best-effort)
-            let ns_name = format!("substrate-{}", self.id);
-            if crate::netns::NetNs::ip_available() {
-                // Create named netns and bring loopback up. Best-effort; ignore failures.
-                tracing::info!("world.setup: creating netns {}", ns_name);
-                let _ = std::process::Command::new("ip")
-                    .args(["netns", "add", &ns_name])
-                    .status();
-                let _ = std::process::Command::new("ip")
-                    .args(["-n", &ns_name, "link", "set", "lo", "up"])
-                    .status();
-                // Record only if it exists afterwards
-                if std::path::Path::new(&format!("/var/run/netns/{}", ns_name)).exists() {
-                    self.net_namespace = Some(ns_name);
-                }
-            }
-
             // Set up network filtering if enabled (scoped to netns when available)
             if self.spec.isolate_network {
                 tracing::info!("world.setup: installing nftables rules");
@@ -118,10 +101,10 @@ impl SessionWorld {
     /// Set up network filtering with nftables.
     #[allow(dead_code)]
     fn setup_network_filter(&mut self) -> Result<()> {
-        // Build NetFilter scoped to named netns when available
         let mut filter =
             crate::netfilter::NetFilter::new(&self.id, self.spec.allowed_domains.clone())?;
-        filter.set_namespace(self.net_namespace.clone());
+        #[cfg(target_os = "linux")]
+        filter.set_cgroup_path(&self.cgroup_path);
         filter.resolve_domains()?;
         filter.install_rules()?;
         self.network_filter = Some(filter);
@@ -201,6 +184,7 @@ impl SessionWorld {
                 },
                 &env,
                 true,
+                Some(self.cgroup_path.as_path()),
             ) {
                 Ok(output) => output,
                 Err(err) => {

@@ -88,7 +88,7 @@ pub enum ClientMessage {
         cwd: PathBuf,
         env: HashMap<String, String>,
         #[serde(default)]
-        policy_snapshot: Option<PolicySnapshotV1>,
+        policy_snapshot: Box<Option<PolicySnapshotV1>>,
         span_id: Option<String>,
         cols: u16,
         rows: u16,
@@ -150,6 +150,7 @@ pub async fn handle_ws_pty(
             }) => {
                 let mut env = env;
                 ensure_xdg_dirs(&mut env);
+                let policy_snapshot = *policy_snapshot;
                 info!(
                     %cmd,
                     cwd = %cwd.display(),
@@ -758,7 +759,7 @@ mod tests {
             cmd: "echo hi".into(),
             cwd: std::env::current_dir().unwrap(),
             env: HashMap::new(),
-            policy_snapshot: None,
+            policy_snapshot: Box::new(None),
             span_id: Some("spn_test".into()),
             cols: 80,
             rows: 24,

@@ -292,6 +292,12 @@ jobs:
             exit 1
           fi
 
+      - name: Provision world-agent (Linux self-hosted; WAPS)
+        if: startsWith(inputs.feature_dir, 'docs/project_management/next/world-agent-policy-snapshot')
+        run: |
+          cargo build -p world-agent --release
+          scripts/linux/world-provision.sh --profile release --skip-build --sudo-noninteractive
+
       - name: Run integration checks (Linux self-hosted)
         if: inputs.run_integ_checks
         run: |
@@ -376,6 +382,10 @@ jobs:
 
       - name: Prevent sleep (macOS self-hosted)
         run: caffeinate -dimsu &
+
+      - name: Warm Lima world (macOS self-hosted; WAPS)
+        if: startsWith(inputs.feature_dir, 'docs/project_management/next/world-agent-policy-snapshot')
+        run: bash scripts/mac/lima-warm.sh "$GITHUB_WORKSPACE"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -493,6 +503,11 @@ jobs:
           cargo fmt --all -- --check
           cargo clippy --workspace --all-targets -- -D warnings
           cargo test --workspace --all-targets
+
+      - name: Warm WSL world (Windows self-hosted; WAPS)
+        if: startsWith(inputs.feature_dir, 'docs/project_management/next/world-agent-policy-snapshot')
+        shell: pwsh
+        run: pwsh -File scripts/windows/wsl-warm.ps1 -DistroName substrate-wsl -ProjectPath (Resolve-Path .)
 
       - name: Build substrate (debug)
         run: cargo build --bin substrate

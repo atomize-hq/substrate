@@ -415,6 +415,7 @@ pub fn execute_with_overlay(
         },
         env,
         true,
+        None,
     ) {
         Ok(output) => output,
         Err(err) => {
@@ -475,6 +476,7 @@ pub fn execute_read_only(
         },
         env,
         true,
+        None,
     ) {
         Ok(output) => output,
         Err(err) => {

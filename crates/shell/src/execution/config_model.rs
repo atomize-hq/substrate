@@ -572,13 +572,7 @@ pub(crate) fn resolve_effective_config_with_explain(
     )
 }
 
-fn load_config_patch_layers_cached(
-    cwd: &Path,
-) -> Result<(
-    SubstrateConfigPatch,
-    PathBuf,
-    Option<(SubstrateConfigPatch, PathBuf)>,
-)> {
+fn load_config_patch_layers_cached(cwd: &Path) -> Result<LoadedConfigPatchLayers> {
     let global_path = global_config_path()?;
     let workspace_root = workspace::find_workspace_root(cwd);
     let workspace_path = workspace_root
@@ -649,6 +643,9 @@ fn load_config_patch_layers_cached(
 
     Ok((global_patch, global_path, workspace_layer))
 }
+
+type ConfigPatchLayer = (SubstrateConfigPatch, PathBuf);
+type LoadedConfigPatchLayers = (SubstrateConfigPatch, PathBuf, Option<ConfigPatchLayer>);
 
 fn resolve_effective_from_layers(
     global_patch: &SubstrateConfigPatch,

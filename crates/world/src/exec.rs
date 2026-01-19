@@ -107,6 +107,15 @@ if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-workspace}" = "full" ]; then
   mkdir -p "$new_root/var/lib/substrate/world-deps"
   mount --rbind /var/lib/substrate/world-deps "$new_root/var/lib/substrate/world-deps"
 
+  # /var/lib/substrate/overlay: required for overlayfs upper/work dirs (root-run worlds).
+  #
+  # In full-isolation mode we pivot_root into a minimal rootfs; without binding the overlay backing
+  # storage into that rootfs, overlayfs writes can fail with EPERM even for allowlisted prefixes.
+  if [ -d /var/lib/substrate/overlay ]; then
+    mkdir -p "$new_root/var/lib/substrate/overlay"
+    mount --rbind /var/lib/substrate/overlay "$new_root/var/lib/substrate/overlay"
+  fi
+
   # Fresh /proc and writable /tmp.
   #
   # Note: /tmp is a tmpfs in full-isolation mode. This must be mounted before binding the project
@@ -224,6 +233,7 @@ pub fn execute_shell_command_with_project_bind_mount(
     mount: ProjectBindMount<'_>,
     env: &HashMap<String, String>,
     login_shell: bool,
+    #[allow(unused_variables)] cgroup_path: Option<&Path>,
 ) -> Result<Output> {
     #[cfg(not(target_os = "linux"))]
     {
@@ -336,6 +346,20 @@ pub fn execute_shell_command_with_project_bind_mount(
             }
         };
 
+        if let Some(cgroup_path) = cgroup_path {
+            let procs = cgroup_path.join("cgroup.procs");
+            if let Err(err) = std::fs::create_dir_all(cgroup_path)
+                .and_then(|_| std::fs::write(&procs, format!("{}\n", child.id())))
+            {
+                warn!(
+                    error = %err,
+                    path = %procs.display(),
+                    pid = child.id(),
+                    "world: failed to attach command to cgroup"
+                );
+            }
+        }
+
         let stdout = child
             .stdout
             .take()
@@ -435,20 +459,21 @@ mod tests {
         let env: HashMap<String, String> = HashMap::new();
         let cmd = r#"touch "$SUBSTRATE_MOUNT_PROJECT_DIR/abs_escape.txt""#;
 
-        let output = match execute_shell_command_with_project_bind_mount(cmd, mount, &env, true) {
-            Ok(output) => output,
-            Err(err) => {
-                let message = err.to_string();
-                if message.contains("Operation not permitted")
-                    || message.contains("EPERM")
-                    || message.contains("unshare")
-                {
-                    println!("Skipping bind-mount caging test: {}", message);
-                    return;
+        let output =
+            match execute_shell_command_with_project_bind_mount(cmd, mount, &env, true, None) {
+                Ok(output) => output,
+                Err(err) => {
+                    let message = err.to_string();
+                    if message.contains("Operation not permitted")
+                        || message.contains("EPERM")
+                        || message.contains("unshare")
+                    {
+                        println!("Skipping bind-mount caging test: {}", message);
+                        return;
+                    }
+                    panic!("unexpected error running bind-mount wrapper: {:#}", err);
                 }
-                panic!("unexpected error running bind-mount wrapper: {:#}", err);
-            }
-        };
+            };
 
         assert!(
             !output.status.success(),

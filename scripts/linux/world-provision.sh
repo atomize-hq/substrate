@@ -13,6 +13,7 @@ set -euo pipefail
 PROFILE=release
 SKIP_BUILD=0
 DRY_RUN=0
+SUDO_NONINTERACTIVE=0
 SUBSTRATE_GROUP="substrate"
 SOCKET_FS_PATH="/run/substrate.sock"
 INVOKING_USER=""
@@ -30,6 +31,14 @@ run_cmd() {
         show_cmd "$@"
     else
         "$@"
+    fi
+}
+
+sudo_cmd() {
+    if [[ ${SUDO_NONINTERACTIVE} -eq 1 ]]; then
+        run_cmd sudo -n "$@"
+    else
+        run_cmd sudo "$@"
     fi
 }
 
@@ -59,7 +68,7 @@ ensure_substrate_group_exists() {
         return
     fi
     echo "==> Creating ${SUBSTRATE_GROUP} group (sudo may prompt)"
-    if run_cmd sudo groupadd --system "${SUBSTRATE_GROUP}"; then
+    if sudo_cmd groupadd --system "${SUBSTRATE_GROUP}"; then
         echo "    Created ${SUBSTRATE_GROUP} group."
     else
         echo "ERROR: Unable to create the ${SUBSTRATE_GROUP} group. Run 'sudo groupadd --system ${SUBSTRATE_GROUP}' manually and rerun this script." >&2
@@ -88,7 +97,7 @@ MSG
         return
     fi
     echo "==> Adding ${user} to ${SUBSTRATE_GROUP} (sudo may prompt)"
-    if run_cmd sudo usermod -aG "${SUBSTRATE_GROUP}" "${user}"; then
+    if sudo_cmd usermod -aG "${SUBSTRATE_GROUP}" "${user}"; then
         echo "    Added ${user} to ${SUBSTRATE_GROUP}. Log out/in or run 'newgrp ${SUBSTRATE_GROUP}' to refresh group membership."
     else
         cat <<MSG
@@ -137,7 +146,7 @@ install_unit() {
     local tmp
     tmp=$(mktemp)
     printf '%s\n' "${content}" >"${tmp}"
-    sudo install -Dm0644 "${tmp}" "${destination}"
+    sudo_cmd install -Dm0644 "${tmp}" "${destination}"
     rm -f "${tmp}"
 }
 
@@ -149,6 +158,7 @@ Options:
   --profile <name>   Cargo profile to build (default: release)
   --skip-build       Assume target/<profile>/world-agent already exists
   --dry-run          Print the provisioning steps without executing them
+  --sudo-noninteractive  Use sudo -n (fail fast if password required)
   -h, --help         Show this help
 USAGE
 }
@@ -165,6 +175,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --dry-run)
             DRY_RUN=1
+            shift
+            ;;
+        --sudo-noninteractive)
+            SUDO_NONINTERACTIVE=1
             shift
             ;;
         -h|--help)
@@ -283,35 +297,35 @@ WantedBy=sockets.target
 UNIT
 
 echo "==> Installing world-agent to /usr/local/bin (sudo will prompt if needed)"
-run_cmd sudo install -Dm0755 "${BIN_PATH}" /usr/local/bin/substrate-world-agent
+sudo_cmd install -Dm0755 "${BIN_PATH}" /usr/local/bin/substrate-world-agent
 
 echo "==> Ensuring runtime directories exist"
-run_cmd sudo install -d -m0750 /run/substrate
-run_cmd sudo install -d -m0750 /var/lib/substrate
+sudo_cmd install -d -m0750 /run/substrate
+sudo_cmd install -d -m0750 /var/lib/substrate
 
 echo "==> Writing systemd units to ${SERVICE_PATH} and ${SOCKET_PATH}"
 install_unit "${SERVICE_PATH}" "${SERVICE_UNIT_CONTENT}"
 install_unit "${SOCKET_PATH}" "${SOCKET_UNIT_CONTENT}"
 
 echo "==> Reloading systemd and enabling socket activation"
-run_cmd sudo systemctl daemon-reload
-run_cmd sudo systemctl enable substrate-world-agent.service
-run_cmd sudo systemctl enable substrate-world-agent.socket
+sudo_cmd systemctl daemon-reload
+sudo_cmd systemctl enable substrate-world-agent.service
+sudo_cmd systemctl enable substrate-world-agent.socket
 
 echo "==> Restarting socket/service to enforce ${SOCKET_FS_PATH} ownership"
-run_cmd sudo systemctl stop substrate-world-agent.service
-run_cmd sudo systemctl stop substrate-world-agent.socket
-run_cmd sudo rm -f "${SOCKET_FS_PATH}"
-run_cmd sudo systemctl start substrate-world-agent.socket
-run_cmd sudo systemctl start substrate-world-agent.service
+sudo_cmd systemctl stop substrate-world-agent.service
+sudo_cmd systemctl stop substrate-world-agent.socket
+sudo_cmd rm -f "${SOCKET_FS_PATH}"
+sudo_cmd systemctl start substrate-world-agent.socket
+sudo_cmd systemctl start substrate-world-agent.service
 
 echo "==> ${SOCKET_FS_PATH} listing (should be root:${SUBSTRATE_GROUP} 0660)"
-run_cmd sudo ls -l "${SOCKET_FS_PATH}"
+sudo_cmd ls -l "${SOCKET_FS_PATH}"
 
 echo "==> substrate-world-agent.socket status (last 10 log lines)"
-run_cmd sudo systemctl status substrate-world-agent.socket --no-pager --lines=10 || true
+sudo_cmd systemctl status substrate-world-agent.socket --no-pager --lines=10 || true
 echo "==> substrate-world-agent.service status (last 10 log lines)"
-run_cmd sudo systemctl status substrate-world-agent.service --no-pager --lines=10 || true
+sudo_cmd systemctl status substrate-world-agent.service --no-pager --lines=10 || true
 
 print_linger_guidance "${INVOKING_USER}"
 
