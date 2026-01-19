@@ -196,6 +196,17 @@ impl NetFilter {
 
     #[cfg(target_os = "linux")]
     fn install_rules_linux(&self) -> Result<()> {
+        // Safety guard: never attach an output-hook chain without scoping.
+        //
+        // A non-scoped output hook affects the entire host, and when paired with a final `drop`
+        // rule can sever host networking for the duration of the session (or longer if cleanup
+        // fails). Require either a dedicated netns or cgroupv2 socket matching.
+        if self.ns_name.is_none() && self.cgroup_clause().is_none() {
+            return Err(anyhow!(
+                "refusing to install nftables output-hook without netns/cgroup scoping"
+            ));
+        }
+
         // IMPORTANT SAFETY PROPERTY:
         // Never leave a partially-installed output-hook chain behind that could disrupt host networking.
         // Any error after table/chain creation must roll back the whole table.
@@ -626,14 +637,48 @@ mod tests {
 
     #[test]
     #[cfg(target_os = "linux")]
+    #[ignore = "requires root + iproute2 + nftables; run with `cargo test -p world -- --ignored`"]
     fn test_nftables_rules() {
-        // This test requires root privileges
+        // This test requires root privileges.
         if !nix::unistd::Uid::current().is_root() {
             println!("Skipping nftables test (requires root)");
             return;
         }
 
         let mut filter = NetFilter::new("test_nft", vec!["github.com".to_string()]).unwrap();
+
+        // Always run inside an isolated netns so we cannot disrupt host networking.
+        let netns_name = format!("substrate_test_nft_{}", std::process::id());
+        let add_status = match Command::new("ip")
+            .args(["netns", "add", &netns_name])
+            .status()
+        {
+            Ok(status) => status,
+            Err(err) => {
+                println!("Skipping nftables test (failed to run `ip netns add`: {err})");
+                return;
+            }
+        };
+        if !add_status.success() {
+            println!("Skipping nftables test (`ip netns add` failed)");
+            return;
+        }
+
+        struct NetnsGuard {
+            name: String,
+        }
+        impl Drop for NetnsGuard {
+            fn drop(&mut self) {
+                let _ = Command::new("ip")
+                    .args(["netns", "delete", &self.name])
+                    .status();
+            }
+        }
+        let _guard = NetnsGuard {
+            name: netns_name.clone(),
+        };
+
+        filter.set_namespace(Some(netns_name));
 
         // Resolve and install rules
         filter.resolve_domains().unwrap();
