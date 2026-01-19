@@ -8,6 +8,7 @@ use common::doctor_fixture::DoctorFixture;
 use common::{binary_path, ensure_substrate_built, shared_tmpdir};
 use serde_json::{json, Value};
 use std::fs;
+use tempfile::TempDir;
 
 fn sample_manifest() -> &'static str {
     r#"version: 2
@@ -837,9 +838,50 @@ fn health_json_surfaces_world_socket_and_landlock_details() {
 fn health_json_is_valid_when_world_deps_falls_back() {
     ensure_substrate_built();
 
+    let substrate_home =
+        TempDir::new().expect("failed to create temp substrate home for health fixtures");
+    let health_dir = substrate_home.path().join("health");
+    fs::create_dir_all(&health_dir).expect("failed to create health fixture dir");
+
+    fs::write(
+        health_dir.join("world_deps.json"),
+        json!({
+            "manifest": {
+                "inventory": {
+                    "base": "/tmp/world_deps_inventory.yml",
+                    "overlay_exists": false
+                },
+                "overlays": {
+                    "installed": "/tmp/world_deps_overlays_installed.yml",
+                    "installed_exists": false,
+                    "user_exists": false
+                },
+                "layers": []
+            },
+            "tools": []
+        })
+        .to_string(),
+    )
+    .expect("failed to write world_deps fixture");
+
+    fs::write(
+        health_dir.join("world_doctor.json"),
+        json!({
+            "ok": false,
+            "platform": "fixture",
+            "details": {
+                "ok": false,
+                "error": "fixture: world doctor unavailable"
+            }
+        })
+        .to_string(),
+    )
+    .expect("failed to write world_doctor fixture");
+
     let mut cmd = Command::new(binary_path());
     cmd.env("TMPDIR", shared_tmpdir());
     cmd.env_remove("SHIM_ORIGINAL_PATH");
+    cmd.env("SUBSTRATE_HOME", substrate_home.path());
     cmd.env("SUBSTRATE_WORLD", "enabled");
     cmd.env("SUBSTRATE_WORLD_ENABLED", "1");
     cmd.env_remove("SUBSTRATE_WORLD_ID");
