@@ -128,8 +128,14 @@ function Get-TraceMetaForMarker {
         policy_snapshot_hash = $policySnapshotHash
     }
 
+    if (-not $meta.policy_snapshot_schema -and $meta.policy_resolution_mode -eq 'snapshot_v1') {
+        $meta.policy_snapshot_schema = 1
+    }
+
     if ($last.PSObject.Properties.Match('policy_snapshot_schema').Count -gt 0) {
         $meta.policy_snapshot_schema = $last.policy_snapshot_schema
+    } elseif ($last.PSObject.Properties.Match('policySnapshotSchema').Count -gt 0) {
+        $meta.policy_snapshot_schema = $last.policySnapshotSchema
     }
     if ($last.PSObject.Properties.Match('world_fs_strategy_primary').Count -gt 0) {
         $meta.world_fs_strategy_primary = $last.world_fs_strategy_primary
@@ -141,7 +147,7 @@ function Get-TraceMetaForMarker {
         $meta.world_fs_strategy_fallback_reason = $last.world_fs_strategy_fallback_reason
     }
 
-    return $meta
+    return [pscustomobject]$meta
 }
 
 $runId = "waps-" + ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) + "-" + ([guid]::NewGuid().ToString('N'))

@@ -70,6 +70,7 @@ if [[ "${EUID}" -eq 0 ]]; then
   fail "do not run as root"
 fi
 
+HOST_HOME="${HOME}"
 RUN_ID="waps-$(date +%s)-$$"
 TMP_HOME="$(mktemp_dir)"
 TMP_WS="$(mktemp_dir)"
@@ -81,8 +82,8 @@ cleanup() {
 trap cleanup EXIT
 
 export SUBSTRATE_HOME="${TMP_HOME}"
-export HOME="${TMP_HOME}"
 export SHIM_TRACE_LOG="${TRACE_LOG}"
+export LIMA_HOME="${LIMA_HOME:-${HOST_HOME}/.lima}"
 
 substrate config global init --force >/dev/null
 substrate policy global init --force >/dev/null
