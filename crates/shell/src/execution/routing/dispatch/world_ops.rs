@@ -801,6 +801,13 @@ fn current_world_fs_mode() -> WorldFsMode {
         .unwrap_or_else(world_fs_mode)
 }
 
+fn current_world_request_profile() -> Option<String> {
+    std::env::var("SUBSTRATE_WORLD_REQUEST_PROFILE")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
 #[cfg(target_os = "linux")]
 fn build_agent_client_and_request_impl(
     cmd: &str,
@@ -824,7 +831,7 @@ fn build_agent_client_and_request_impl(
         crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
 
     let request = ExecuteRequest {
-        profile: None,
+        profile: current_world_request_profile(),
         cmd: cmd.to_string(),
         cwd: Some(cwd),
         env: Some(env_map),
@@ -860,7 +867,7 @@ fn build_agent_client_and_request_impl(
             crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
 
         let request = ExecuteRequest {
-            profile: None,
+            profile: current_world_request_profile(),
             cmd: cmd.to_string(),
             cwd: Some(cwd),
             env: Some(env_map),
@@ -902,7 +909,7 @@ fn build_agent_client_and_request_impl(
         crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
 
     let request = ExecuteRequest {
-        profile: None,
+        profile: current_world_request_profile(),
         cmd: cmd.to_string(),
         cwd: Some(cwd),
         env: Some(env_map),
@@ -943,7 +950,7 @@ fn build_agent_client_and_request_impl(
         crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&host_cwd)?.snapshot;
 
     let request = ExecuteRequest {
-        profile: None,
+        profile: current_world_request_profile(),
         cmd: cmd.to_string(),
         cwd: Some(cwd),
         env: Some(env_map),

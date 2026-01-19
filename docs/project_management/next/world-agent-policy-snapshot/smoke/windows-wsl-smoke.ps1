@@ -175,6 +175,8 @@ try {
     $env:SUBSTRATE_HOME = $tmpHome
     $env:HOME = $tmpHome
     $env:SHIM_TRACE_LOG = $traceLog
+    # Avoid overlayfs + mount-namespace execution on WSL runners; smoke focuses on snapshot trace metadata.
+    $env:SUBSTRATE_WORLD_REQUEST_PROFILE = 'world-deps-provision'
     # WSL runners frequently cannot support the overlayfs + mount-namespace path, so force the world
     # to execute directly while still validating policy snapshot trace metadata.
     $env:SUBSTRATE_WORLD_EXEC_FORCE_DIRECT = '1'
