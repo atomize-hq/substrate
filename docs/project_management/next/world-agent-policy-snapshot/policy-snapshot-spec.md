@@ -38,6 +38,48 @@ Related architecture docs:
   - `limits` (resource limits). (DR-0003)
 - A direct call to world-agent that bypasses the host is outside the command policy enforcement boundary; operators MUST treat world-agent socket access as privileged. (DR-0001)
 
+### Manual regression check: `cmd_denied` enforcement is host-only (exit 126)
+Linux-only sanity check that proves `cmd_denied` is enforced before any world-agent routing is attempted.
+
+```bash
+export SUBSTRATE_HOME="$(mktemp -d)"
+
+cat >"$SUBSTRATE_HOME/config.yaml" <<'YAML'
+world:
+  enabled: true
+  anchor_mode: follow-cwd
+  anchor_path: ""
+  caged: false
+
+policy:
+  mode: enforce
+YAML
+
+cat >"$SUBSTRATE_HOME/policy.yaml" <<'YAML'
+world_fs:
+  mode: writable
+  isolation: workspace
+  require_world: true
+  read_allowlist: ["*"]
+  write_allowlist: []
+
+cmd_denied:
+  - "echo*"
+YAML
+
+export SUBSTRATE_OVERRIDE_WORLD=enabled
+export SUBSTRATE_OVERRIDE_POLICY_MODE=enforce
+export SUBSTRATE_WORLD_SOCKET="/tmp/substrate-waps-0007-nonexistent.sock"
+
+substrate -c 'echo __waps_0007__'
+echo "exit=$?"
+```
+
+Expected:
+- Exit code is `126`.
+- `__waps_0007__` is not printed (command does not execute).
+- The command does not fail with a world backend error despite `require_world=true` and a nonexistent socket path.
+
 ## Authorization Boundary (operator contract)
 - The authorization boundary for world-agent requests MUST be the OS-level transport ACL (Linux: Unix socket ownership/mode). (DR-0001)
 - On Linux, `/run/substrate.sock` MUST be owned by `root:substrate` with mode `0660`. (DR-0001)

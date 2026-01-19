@@ -4,14 +4,14 @@
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value as JsonValue};
 use std::fs;
 use std::io::{Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+    Arc, Mutex,
 };
 use std::thread;
 use std::time::Duration;
@@ -32,6 +32,12 @@ pub enum SocketResponse {
     /// Executes `/v1/execute` and `/v1/execute/stream` requests on the host, using
     /// the request's `cwd` and `env` for a lightweight world-agent simulation.
     CapabilitiesAndHostExecute { scopes: Vec<String> },
+    /// Like `CapabilitiesAndHostExecute`, but also records each `/v1/execute` and
+    /// `/v1/execute/stream` request JSON payload.
+    CapabilitiesAndHostExecuteRecord {
+        scopes: Vec<String>,
+        records: Arc<Mutex<Vec<JsonValue>>>,
+    },
     /// Accepts connections but never returns a response (simulates a stuck
     /// systemd-managed socket where the service failed to start).
     Silent,
@@ -42,6 +48,8 @@ pub enum SocketResponse {
 pub struct AgentSocket {
     path: PathBuf,
     shutdown: Arc<AtomicBool>,
+    connections: Arc<AtomicUsize>,
+    execute_requests: Arc<AtomicUsize>,
     handle: Option<thread::JoinHandle<()>>,
 }
 
@@ -61,16 +69,26 @@ impl AgentSocket {
         let cleanup_path = socket_path.clone();
         let shutdown = Arc::new(AtomicBool::new(false));
         let shutdown_flag = shutdown.clone();
+        let connections = Arc::new(AtomicUsize::new(0));
+        let connections_for_thread = connections.clone();
+        let execute_requests = Arc::new(AtomicUsize::new(0));
+        let execute_requests_for_thread = execute_requests.clone();
 
         let handle = thread::spawn(move || {
             while !shutdown_flag.load(Ordering::SeqCst) {
                 match listener.accept() {
                     Ok((mut stream, _addr)) => {
+                        connections_for_thread.fetch_add(1, Ordering::SeqCst);
                         let request = match read_http_request(&mut stream) {
                             Ok(req) => req,
                             Err(_) => continue,
                         };
                         let first_line = request.header.lines().next().unwrap_or("");
+                        if first_line.starts_with("POST /v1/execute")
+                            || first_line.starts_with("POST /v1/execute/stream")
+                        {
+                            execute_requests_for_thread.fetch_add(1, Ordering::SeqCst);
+                        }
                         match &response {
                             SocketResponse::Capabilities => {
                                 if first_line.starts_with("GET /v1/capabilities") {
@@ -150,6 +168,51 @@ impl AgentSocket {
                                     let _ = stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n");
                                 }
                             }
+                            SocketResponse::CapabilitiesAndHostExecuteRecord {
+                                scopes,
+                                records,
+                            } => {
+                                if first_line.starts_with("GET /v1/capabilities") {
+                                    write_capabilities(&mut stream);
+                                } else if first_line.starts_with("GET /v1/doctor/world") {
+                                    write_world_doctor_report(&mut stream);
+                                } else if first_line.starts_with("POST /v1/execute/stream") {
+                                    record_execute_request(records, &request);
+                                    match handle_host_execute_stream(&request, scopes) {
+                                        Ok(payload) => write_stream_response(&mut stream, &payload),
+                                        Err(err) => {
+                                            let payload = json!({
+                                                "type": "error",
+                                                "message": format!("{:#}", err)
+                                            })
+                                            .to_string();
+                                            write_stream_response(&mut stream, &(payload + "\n"));
+                                        }
+                                    }
+                                } else if first_line.starts_with("POST /v1/execute") {
+                                    record_execute_request(records, &request);
+                                    match handle_host_execute(&request, scopes) {
+                                        Ok(payload) => write_response(&mut stream, &payload),
+                                        Err(err) => {
+                                            let payload = json!({
+                                                "error": "internal",
+                                                "message": format!("{:#}", err)
+                                            })
+                                            .to_string();
+                                            let _ = stream.write_all(
+                                                format!(
+                                                    "HTTP/1.1 500 Internal Server Error\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                                                    payload.len(),
+                                                    payload
+                                                )
+                                                .as_bytes(),
+                                            );
+                                        }
+                                    }
+                                } else {
+                                    let _ = stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n");
+                                }
+                            }
                             SocketResponse::Silent => {
                                 // Read and drop the request to simulate a hung service.
                                 let mut discard = [0u8; 512];
@@ -172,6 +235,8 @@ impl AgentSocket {
         Self {
             path: cleanup_path,
             shutdown,
+            connections,
+            execute_requests,
             handle: Some(handle),
         }
     }
@@ -179,6 +244,16 @@ impl AgentSocket {
     /// Return the on-disk socket path for the stub.
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// Return the number of accepted connections.
+    pub fn connection_count(&self) -> usize {
+        self.connections.load(Ordering::SeqCst)
+    }
+
+    /// Return the number of accepted `/v1/execute*` requests.
+    pub fn execute_request_count(&self) -> usize {
+        self.execute_requests.load(Ordering::SeqCst)
     }
 }
 
@@ -250,6 +325,14 @@ fn write_stream_response(stream: &mut UnixStream, body: &str) {
 struct HttpRequest {
     header: String,
     body: Vec<u8>,
+}
+
+fn record_execute_request(records: &Arc<Mutex<Vec<JsonValue>>>, request: &HttpRequest) {
+    if let Ok(value) = serde_json::from_slice::<JsonValue>(&request.body) {
+        if let Ok(mut guard) = records.lock() {
+            guard.push(value);
+        }
+    }
 }
 
 fn read_http_request(stream: &mut UnixStream) -> std::io::Result<HttpRequest> {

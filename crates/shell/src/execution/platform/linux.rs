@@ -925,7 +925,11 @@ fn lookup_user_by_uid(uid: u32) -> Option<String> {
     let mut result: *mut libc::passwd = ptr::null_mut();
 
     let buf_len = unsafe { libc::sysconf(libc::_SC_GETPW_R_SIZE_MAX) };
-    let buf_len = if buf_len <= 0 { 16 * 1024 } else { buf_len as usize };
+    let buf_len = if buf_len <= 0 {
+        16 * 1024
+    } else {
+        buf_len as usize
+    };
     let mut buf = vec![0u8; buf_len];
 
     let rc = unsafe {
@@ -940,7 +944,9 @@ fn lookup_user_by_uid(uid: u32) -> Option<String> {
     if rc != 0 || result.is_null() || pwd.pw_name.is_null() {
         return None;
     }
-    let name = unsafe { CStr::from_ptr(pwd.pw_name) }.to_string_lossy().into_owned();
+    let name = unsafe { CStr::from_ptr(pwd.pw_name) }
+        .to_string_lossy()
+        .into_owned();
     if name.trim().is_empty() {
         None
     } else {
@@ -956,7 +962,11 @@ fn lookup_group_by_gid(gid: u32) -> Option<String> {
     let mut result: *mut libc::group = ptr::null_mut();
 
     let buf_len = unsafe { libc::sysconf(libc::_SC_GETGR_R_SIZE_MAX) };
-    let buf_len = if buf_len <= 0 { 16 * 1024 } else { buf_len as usize };
+    let buf_len = if buf_len <= 0 {
+        16 * 1024
+    } else {
+        buf_len as usize
+    };
     let mut buf = vec![0u8; buf_len];
 
     let rc = unsafe {
@@ -971,7 +981,9 @@ fn lookup_group_by_gid(gid: u32) -> Option<String> {
     if rc != 0 || result.is_null() || grp.gr_name.is_null() {
         return None;
     }
-    let name = unsafe { CStr::from_ptr(grp.gr_name) }.to_string_lossy().into_owned();
+    let name = unsafe { CStr::from_ptr(grp.gr_name) }
+        .to_string_lossy()
+        .into_owned();
     if name.trim().is_empty() {
         None
     } else {
