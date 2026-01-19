@@ -522,14 +522,28 @@ elif [[ "${REMOVE_WORLD_SERVICE}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
   log "Attempting to remove Lima world-agent service from VM 'substrate'"
   if ! command -v limactl >/dev/null 2>&1; then
     warn "limactl not available; cannot modify Lima world-agent service. Remove manually if desired."
+  elif [[ ! -d "${HOME}/.lima/substrate" ]]; then
+    warn "Lima VM 'substrate' not found under ${HOME}/.lima/substrate; skipping guest cleanup."
   else
-    limactl shell substrate sudo systemctl disable --now substrate-world-agent.socket substrate-world-agent.service >/dev/null 2>&1 || warn "Failed to disable agent units inside Lima VM"
-    limactl shell substrate sudo rm -f /etc/systemd/system/substrate-world-agent.service /etc/systemd/system/substrate-world-agent.socket >/dev/null 2>&1 || true
-    limactl shell substrate sudo systemctl daemon-reload >/dev/null 2>&1 || true
-    limactl shell substrate sudo rm -f /usr/local/bin/substrate-world-agent >/dev/null 2>&1 || true
-    limactl shell substrate sudo rm -f /usr/local/bin/substrate /usr/local/bin/world >/dev/null 2>&1 || true
-    limactl shell substrate sudo rm -rf /var/lib/substrate /run/substrate >/dev/null 2>&1 || true
-    limactl shell substrate sudo rm -f /run/substrate.sock >/dev/null 2>&1 || true
+    # Use sudo -n to avoid hanging on password prompts. If this fails, instruct the user to run the
+    # commands interactively via `limactl shell substrate`.
+    out="$(
+      limactl shell substrate -- bash -lc \
+        'sudo -n systemctl disable --now substrate-world-agent.socket substrate-world-agent.service' 2>&1
+    )" || warn "Failed to disable agent units inside Lima VM. Try: limactl shell substrate, then run: sudo systemctl disable --now substrate-world-agent.socket substrate-world-agent.service. Error: ${out}"
+
+    limactl shell substrate -- bash -lc \
+      'sudo -n rm -f /etc/systemd/system/substrate-world-agent.service /etc/systemd/system/substrate-world-agent.socket' >/dev/null 2>&1 || true
+    limactl shell substrate -- bash -lc \
+      'sudo -n systemctl daemon-reload' >/dev/null 2>&1 || true
+    limactl shell substrate -- bash -lc \
+      'sudo -n rm -f /usr/local/bin/substrate-world-agent' >/dev/null 2>&1 || true
+    limactl shell substrate -- bash -lc \
+      'sudo -n rm -f /usr/local/bin/substrate /usr/local/bin/world' >/dev/null 2>&1 || true
+    limactl shell substrate -- bash -lc \
+      'sudo -n rm -rf /var/lib/substrate /run/substrate' >/dev/null 2>&1 || true
+    limactl shell substrate -- bash -lc \
+      'sudo -n rm -f /run/substrate.sock' >/dev/null 2>&1 || true
     # Clean up host-forwarded socket if present
     host_sock="${HOME}/.substrate/sock/agent.sock"
     if [[ -S "${host_sock}" || -f "${host_sock}" ]]; then
