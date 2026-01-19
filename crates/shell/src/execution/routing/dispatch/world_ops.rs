@@ -968,26 +968,51 @@ pub(crate) fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStr
     let (client, request, agent_id) = build_agent_client_and_request(command)?;
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async move {
-        use agent_api_types::ApiError;
-        use http_body_util::BodyExt;
+        #[cfg(target_os = "windows")]
+        {
+            let response = client.execute(request).await?;
+            let stdout = BASE64
+                .decode(response.stdout_b64.as_bytes())
+                .unwrap_or_else(|_| response.stdout_b64.clone().into_bytes());
+            let stderr = BASE64
+                .decode(response.stderr_b64.as_bytes())
+                .unwrap_or_else(|_| response.stderr_b64.clone().into_bytes());
+            emit_stream_chunk(&agent_id, &stdout, false);
+            emit_stream_chunk(&agent_id, &stderr, true);
 
-        let response = client.execute_stream(request).await?;
-        if !response.status().is_success() {
-            let status = response.status();
-            let body_bytes = response
-                .into_body()
-                .collect()
-                .await
-                .map_err(|e| anyhow::anyhow!("stream read failed: {}", e))?
-                .to_bytes();
-            if let Ok(api_error) = serde_json::from_slice::<ApiError>(&body_bytes) {
-                anyhow::bail!("API error: {}", api_error);
-            }
-            let text = String::from_utf8_lossy(&body_bytes);
-            anyhow::bail!("HTTP {} error: {}", status, text);
+            return Ok(AgentStreamOutcome {
+                exit_code: response.exit,
+                scopes_used: response.scopes_used,
+                fs_diff: response.fs_diff,
+                fs_strategy: None,
+            });
         }
 
-        process_agent_stream(response.into_body(), agent_id).await
+        #[cfg(not(target_os = "windows"))]
+        use agent_api_types::ApiError;
+        #[cfg(not(target_os = "windows"))]
+        use http_body_util::BodyExt;
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let response = client.execute_stream(request).await?;
+            if !response.status().is_success() {
+                let status = response.status();
+                let body_bytes = response
+                    .into_body()
+                    .collect()
+                    .await
+                    .map_err(|e| anyhow::anyhow!("stream read failed: {}", e))?
+                    .to_bytes();
+                if let Ok(api_error) = serde_json::from_slice::<ApiError>(&body_bytes) {
+                    anyhow::bail!("API error: {}", api_error);
+                }
+                let text = String::from_utf8_lossy(&body_bytes);
+                anyhow::bail!("HTTP {} error: {}", status, text);
+            }
+
+            process_agent_stream(response.into_body(), agent_id).await
+        }
     })
 }
 
