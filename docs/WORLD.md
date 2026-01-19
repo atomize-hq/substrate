@@ -24,6 +24,13 @@ Helper scripts (`scripts/mac/lima-*.sh`, `scripts/mac/smoke.sh`) keep the Lima e
 
 `/tmp` is included in the guest unit’s `ReadWritePaths` list so replay and shim flows can surface temp‑file diffs on both platforms. The provisioning script embeds this setting in the unit automatically—no manual tuning needed.
 
+### Authorization boundary and multi-user posture (operator contract)
+
+- The authorization boundary for world-agent requests is the OS-level transport ACL (Linux: Unix socket ownership/mode for `/run/substrate.sock`).
+- On Linux, `/run/substrate.sock` MUST be owned by `root:substrate` with mode `0660` (`srw-rw----`).
+- Access to the socket is granted by membership in the `substrate` group; verify with `id -nG "$USER"`, grant with `sudo usermod -aG substrate <user>`, and re-login so the new group membership takes effect.
+- On multi-user hosts, operators MUST ensure only intended users are members of the `substrate` group.
+
 ---
 
 ## 2) Execution Paths (Linux & macOS)
@@ -225,6 +232,7 @@ Manifests:
 
 ## 7) Logging & Telemetry
 
+- Policy snapshot behavior and the trace fields `policy_resolution_mode`, `policy_snapshot_schema`, and `policy_snapshot_hash` are specified in `docs/project_management/next/world-agent-policy-snapshot/policy-snapshot-spec.md`.
 - Windows spans include an optional `fs_diff.display_path` map pairing canonical WSL paths with native Windows paths for telemetry consumers.
 
 - world-agent (PTY)

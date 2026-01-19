@@ -167,6 +167,8 @@ substrate world doctor --json | jq '{ok, world_enabled, host_ok: .host.ok, world
 (The installer already ran the doctor without the shim directory in PATH, so
 your output should match unless the host environment changed.)
 
+Snapshot-specific behavior (including `policy_resolution_mode` and snapshot-related trace fields) is specified in `docs/project_management/next/world-agent-policy-snapshot/policy-snapshot-spec.md`.
+
 ### Windows
 
 ```powershell
