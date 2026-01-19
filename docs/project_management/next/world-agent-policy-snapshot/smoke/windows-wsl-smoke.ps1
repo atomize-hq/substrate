@@ -256,6 +256,33 @@ try {
         New-Item -ItemType Directory -Force -Path (Split-Path -Parent $policyPath) | Out-Null
     }
 
+    # Preflight policy: ensure the initial world-exec probe is permitted under enforce mode.
+    # Individual tests below rewrite this policy to validate specific behaviors.
+    Set-Content -LiteralPath $policyPath -Encoding UTF8 -Value @"
+id: "waps-smoke"
+name: "waps-smoke preflight"
+world_fs:
+  mode: writable
+  isolation: full
+  require_world: true
+  read_allowlist:
+    - "*"
+  write_allowlist:
+    - "./writable/*"
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+require_approval: false
+allow_shell_operators: true
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+metadata: {}
+"@
+
     $doctorStdout = Join-Path $logsDir "doctor.stdout"
     $doctorStderr = Join-Path $logsDir "doctor.stderr"
     $doctorRaw = Invoke-Substrate -Args @('world', 'doctor', '--json') -Cwd $tmpWs -StdoutPath $doctorStdout -StderrPath $doctorStderr -TimeoutMs 60000
