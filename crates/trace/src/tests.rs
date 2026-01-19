@@ -1,5 +1,5 @@
 use super::*;
-use crate::context::{set_global_trace_context, TraceContext};
+use crate::context::TraceContext;
 use crate::span::SpanBuilder;
 use crate::util::hash_env_vars;
 use chrono::Utc;
@@ -7,10 +7,8 @@ use serde_json::Value;
 use std::sync::{Arc, Barrier};
 use tempfile::TempDir;
 
-fn ensure_trace_context() -> TraceContext {
-    let ctx = TraceContext::default();
-    let _ = set_global_trace_context(ctx.clone());
-    ctx
+fn new_trace_context() -> TraceContext {
+    TraceContext::new()
 }
 
 #[test]
@@ -21,10 +19,9 @@ fn test_span_creation() {
 
 #[test]
 fn test_span_builder() {
-    ensure_trace_context();
-
-    let span = create_span_builder()
-        .unwrap()
+    let ctx = new_trace_context();
+    let span = ctx
+        .create_span_builder()
         .with_command("echo test")
         .with_cwd("/tmp")
         .with_world_id("wld_123")
@@ -40,8 +37,8 @@ fn test_trace_initialization() {
     let tmp_dir = TempDir::new().unwrap();
     let trace_path = tmp_dir.path().join("trace.jsonl");
 
-    ensure_trace_context();
-    let result = init_trace(Some(trace_path.clone()));
+    let ctx = new_trace_context();
+    let result = ctx.init_trace(Some(trace_path.clone()));
     assert!(result.is_ok());
     assert!(trace_path.exists());
 }
@@ -134,11 +131,11 @@ fn test_rotation_on_write() {
     std::env::set_var("TRACE_LOG_MAX_MB", "1");
     std::env::set_var("TRACE_LOG_KEEP", "2");
 
-    let ctx = ensure_trace_context();
+    let ctx = new_trace_context();
     ctx.init_trace(Some(log_path.clone())).unwrap();
 
     let entry = serde_json::json!({"event_type":"test","ts":Utc::now().to_rfc3339()});
-    append_to_trace(&entry).unwrap();
+    ctx.append_to_trace(&entry).unwrap();
 
     // Original should be rotated to .1 and new file should be small
     let rotated = log_path.with_extension("jsonl.1");
@@ -167,7 +164,7 @@ fn test_rotation_retention_policy() {
     std::env::set_var("TRACE_LOG_MAX_MB", "1");
     std::env::set_var("TRACE_LOG_KEEP", "2");
 
-    let ctx = ensure_trace_context();
+    let ctx = new_trace_context();
     ctx.init_trace(Some(log_path.clone())).unwrap();
 
     // After rotation, .2 should become .2 (shifted from .1), and .1 should be the old current
@@ -256,4 +253,100 @@ fn trace_contexts_do_not_share_policy_or_outputs() {
 
     assert_eq!(ctx_a.policy_id(), "policy-a");
     assert_eq!(ctx_b.policy_id(), "policy-b");
+}
+
+#[test]
+fn command_complete_includes_policy_resolution_mode_default() {
+    let tmp_dir = TempDir::new().unwrap();
+    let trace_path = tmp_dir.path().join("trace.jsonl");
+
+    let ctx = new_trace_context();
+    ctx.init_trace(Some(trace_path.clone())).unwrap();
+
+    let span = ctx
+        .create_span_builder()
+        .with_command("echo policy-meta")
+        .with_cwd("/tmp")
+        .start()
+        .unwrap();
+    let span_id = span.get_span_id().to_string();
+    span.finish(0, vec![], None).unwrap();
+
+    let records: Vec<Value> = std::fs::read_to_string(&trace_path)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .collect();
+
+    let completion = records
+        .iter()
+        .find(|value| {
+            value.get("span_id").and_then(|v| v.as_str()) == Some(span_id.as_str())
+                && value.get("event_type").and_then(|v| v.as_str()) == Some("command_complete")
+        })
+        .expect("expected a command_complete record");
+
+    assert_eq!(
+        completion
+            .get("policy_resolution_mode")
+            .and_then(|v| v.as_str()),
+        Some("legacy_local")
+    );
+    assert!(
+        completion.get("policy_snapshot_schema").is_none(),
+        "policy_snapshot_schema should be omitted when not using snapshots"
+    );
+    assert!(
+        completion.get("policy_snapshot_hash").is_none(),
+        "policy_snapshot_hash should be omitted when not using snapshots"
+    );
+}
+
+#[test]
+fn command_complete_includes_policy_snapshot_meta_when_set() {
+    let tmp_dir = TempDir::new().unwrap();
+    let trace_path = tmp_dir.path().join("trace.jsonl");
+
+    let ctx = new_trace_context();
+    ctx.init_trace(Some(trace_path.clone())).unwrap();
+
+    let mut span = ctx
+        .create_span_builder()
+        .with_command("echo policy-snapshot")
+        .with_cwd("/tmp")
+        .start()
+        .unwrap();
+    let span_id = span.get_span_id().to_string();
+
+    span.set_policy_snapshot_meta(1, "deadbeef".to_string());
+    span.finish(0, vec![], None).unwrap();
+
+    let records: Vec<Value> = std::fs::read_to_string(&trace_path)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .collect();
+
+    let completion = records
+        .iter()
+        .find(|value| {
+            value.get("span_id").and_then(|v| v.as_str()) == Some(span_id.as_str())
+                && value.get("event_type").and_then(|v| v.as_str()) == Some("command_complete")
+        })
+        .expect("expected a command_complete record");
+
+    assert_eq!(
+        completion
+            .get("policy_resolution_mode")
+            .and_then(|v| v.as_str()),
+        Some("snapshot_v1")
+    );
+    assert_eq!(
+        completion.get("policy_snapshot_schema").and_then(|v| v.as_u64()),
+        Some(1)
+    );
+    assert_eq!(
+        completion.get("policy_snapshot_hash").and_then(|v| v.as_str()),
+        Some("deadbeef")
+    );
 }

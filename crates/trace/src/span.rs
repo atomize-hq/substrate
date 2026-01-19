@@ -57,10 +57,17 @@ pub struct Span {
     pub graph_edges: Option<Vec<GraphEdge>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub policy_decision: Option<PolicyDecision>,
+    /// Indicates how policy was resolved for this execution.
+    ///
+    /// For `command_complete` spans, this field is always present with a value of
+    /// `snapshot_v1` or `legacy_local`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub policy_resolution_mode: Option<String>,
+    /// Policy snapshot schema version (only present when `policy_resolution_mode == "snapshot_v1"`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub policy_snapshot_schema: Option<u32>,
+    /// SHA-256 hex digest of the serialized policy snapshot (only present when
+    /// `policy_resolution_mode == "snapshot_v1"`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub policy_snapshot_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -55,6 +55,9 @@ jq 'select(.policy_decision.action == "deny")' ~/.substrate/trace.jsonl
   "component": "shell|shim",
   "world_id": "wld_xxx",
   "policy_id": "default",
+  "policy_resolution_mode": "snapshot_v1|legacy_local",
+  "policy_snapshot_schema": 1,
+  "policy_snapshot_hash": "abc123...",
   "agent_id": "human|claude|cursor",
   "cwd": "/projects/foo",
   "cmd": "npm install",
@@ -81,6 +84,14 @@ jq 'select(.policy_decision.action == "deny")' ~/.substrate/trace.jsonl
   }
 }
 ```
+
+### Policy Snapshot Metadata (No Raw Policy Content)
+
+Command completion spans record snapshot metadata without logging raw policy contents:
+
+- `policy_resolution_mode` (string): always present on `command_complete` spans; `snapshot_v1` when the host attached a `PolicySnapshotV1` to a world-agent request, otherwise `legacy_local`.
+- `policy_snapshot_schema` (number, optional): snapshot schema version when `policy_resolution_mode == "snapshot_v1"`.
+- `policy_snapshot_hash` (string, optional): stable SHA-256 hex digest of the serialized snapshot when `policy_resolution_mode == "snapshot_v1"`.
 
 Verbose replay outputs (`--replay-verbose` or JSON mode) print `[replay] scopes: [...]` adjacent
 to the world strategy line so the CLI summary mirrors the `scopes_used` array above. When the

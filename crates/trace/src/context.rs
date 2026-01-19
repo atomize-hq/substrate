@@ -15,6 +15,9 @@ const WORLD_IMAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Per-session tracing context that owns the current trace output and policy metadata.
 ///
+/// Per-command spans may also include policy snapshot metadata (resolution mode/schema/hash)
+/// without recording raw policy content.
+///
 /// ```
 /// use substrate_trace::TraceContext;
 /// use tempfile::TempDir;
