@@ -196,7 +196,8 @@ sudo install -m755 target/release/world-agent /usr/local/bin/substrate-world-age
 # Build forwarder if needed or use packaged binary
 if ($projectHasCargo) {
     $forwarderHostPath = Join-Path $projectPath 'target\\release\\substrate-forwarder.exe'
-    if (-not (Test-Path $forwarderHostPath)) {
+    $forceForwarderRebuild = $forceRebuild -or (Test-Truthy $env:SUBSTRATE_WSL_WARM_FORCE_FORWARDER_REBUILD) -or (Test-Truthy $env:GITHUB_ACTIONS)
+    if ($forceForwarderRebuild -or -not (Test-Path $forwarderHostPath)) {
         Write-Info "Building substrate-forwarder (release)"
         Push-Location $projectPath
         try {
