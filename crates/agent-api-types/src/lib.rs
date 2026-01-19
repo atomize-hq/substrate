@@ -5,6 +5,41 @@ use std::collections::HashMap;
 use substrate_common::agent_events::AgentEvent;
 pub use substrate_common::{FsDiff, WorldFsMode};
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PolicySnapshotWorldFsIsolationV1 {
+    Workspace,
+    Full,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PolicySnapshotWorldFsV1 {
+    pub mode: WorldFsMode,
+    pub isolation: PolicySnapshotWorldFsIsolationV1,
+    pub require_world: bool,
+    pub read_allowlist: Vec<String>,
+    pub write_allowlist: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PolicySnapshotLimitsV1 {
+    pub max_memory_mb: Option<u64>,
+    pub max_cpu_percent: Option<u32>,
+    pub max_runtime_ms: Option<u64>,
+    pub max_egress_bytes: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PolicySnapshotV1 {
+    pub schema_version: u32,
+    pub world_fs: PolicySnapshotWorldFsV1,
+    pub net_allowed: Vec<String>,
+    pub limits: PolicySnapshotLimitsV1,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Budget {
     pub max_execs: Option<u32>,
@@ -21,6 +56,8 @@ pub struct ExecuteRequest {
     pub pty: bool,
     pub agent_id: String,
     pub budget: Option<Budget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_snapshot: Option<PolicySnapshotV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub world_fs_mode: Option<WorldFsMode>,
 }
@@ -169,6 +206,7 @@ mod tests {
             pty: false,
             agent_id: "tester".into(),
             budget: None,
+            policy_snapshot: None,
             world_fs_mode: Some(WorldFsMode::ReadOnly),
         };
 
@@ -177,8 +215,68 @@ mod tests {
             json.contains("read_only"),
             "expected world_fs_mode to serialize"
         );
+        assert!(
+            !json.contains("policy_snapshot"),
+            "expected policy_snapshot to be omitted when None"
+        );
         let back: ExecuteRequest = serde_json::from_str(&json).expect("deserialize request");
         assert_eq!(back.world_fs_mode, Some(WorldFsMode::ReadOnly));
+        assert!(back.policy_snapshot.is_none());
+    }
+
+    #[test]
+    fn execute_request_policy_snapshot_round_trip() {
+        let req = ExecuteRequest {
+            profile: None,
+            cmd: "echo hi".into(),
+            cwd: Some("/tmp".into()),
+            env: None,
+            pty: false,
+            agent_id: "tester".into(),
+            budget: None,
+            policy_snapshot: Some(PolicySnapshotV1 {
+                schema_version: 1,
+                world_fs: PolicySnapshotWorldFsV1 {
+                    mode: WorldFsMode::Writable,
+                    isolation: PolicySnapshotWorldFsIsolationV1::Workspace,
+                    require_world: false,
+                    read_allowlist: vec!["*".to_string()],
+                    write_allowlist: vec!["dist/**".to_string()],
+                },
+                net_allowed: vec!["github.com".to_string()],
+                limits: PolicySnapshotLimitsV1 {
+                    max_memory_mb: Some(4096),
+                    max_cpu_percent: Some(80),
+                    max_runtime_ms: Some(600_000),
+                    max_egress_bytes: Some(1_073_741_824),
+                },
+            }),
+            world_fs_mode: None,
+        };
+
+        let json = serde_json::to_string(&req).expect("serialize request");
+        assert!(
+            json.contains("policy_snapshot"),
+            "expected policy_snapshot to serialize"
+        );
+        let back: ExecuteRequest = serde_json::from_str(&json).expect("deserialize request");
+        let snapshot = back.policy_snapshot.expect("snapshot missing after deserialize");
+        assert_eq!(snapshot.schema_version, 1);
+        assert_eq!(snapshot.world_fs.mode, WorldFsMode::Writable);
+        assert_eq!(
+            snapshot.world_fs.isolation,
+            PolicySnapshotWorldFsIsolationV1::Workspace
+        );
+        assert_eq!(snapshot.world_fs.read_allowlist, vec!["*".to_string()]);
+        assert_eq!(
+            snapshot.world_fs.write_allowlist,
+            vec!["dist/**".to_string()]
+        );
+        assert_eq!(snapshot.net_allowed, vec!["github.com".to_string()]);
+        assert_eq!(snapshot.limits.max_memory_mb, Some(4096));
+        assert_eq!(snapshot.limits.max_cpu_percent, Some(80));
+        assert_eq!(snapshot.limits.max_runtime_ms, Some(600_000));
+        assert_eq!(snapshot.limits.max_egress_bytes, Some(1_073_741_824));
     }
 
     #[test]

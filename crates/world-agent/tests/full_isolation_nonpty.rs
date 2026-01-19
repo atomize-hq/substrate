@@ -54,6 +54,7 @@ fn execute_non_pty(
         pty: false,
         agent_id: "full-isolation-nonpty-test".to_string(),
         budget: None,
+        policy_snapshot: None,
         world_fs_mode: Some(world_fs_mode),
     };
 

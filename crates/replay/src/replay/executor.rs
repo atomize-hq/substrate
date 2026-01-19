@@ -806,6 +806,7 @@ async fn try_agent_backend(
         pty: false,
         agent_id: std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "replay".to_string()),
         budget: None,
+        policy_snapshot: None,
         world_fs_mode: Some(substrate_broker::world_fs_mode()),
     };
 

@@ -272,6 +272,7 @@ impl MacLimaBackend {
             pty: req.pty,
             agent_id: "world-mac-lima".to_string(),
             budget: None,
+            policy_snapshot: None,
             world_fs_mode: Some(fs_mode),
         }
     }

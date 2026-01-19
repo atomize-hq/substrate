@@ -239,6 +239,7 @@ impl WindowsWslBackend {
             pty: req.pty,
             agent_id: self.agent_id.clone(),
             budget: None,
+            policy_snapshot: None,
             world_fs_mode: Some(self.resolve_fs_mode()),
         })
     }

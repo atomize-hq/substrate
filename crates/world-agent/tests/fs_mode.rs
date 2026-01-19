@@ -56,6 +56,7 @@ fn non_pty_read_only_mode_blocks_writes() {
         pty: false,
         agent_id: "fs-mode-test".to_string(),
         budget: None,
+        policy_snapshot: None,
         world_fs_mode: Some(WorldFsMode::ReadOnly),
     };
 
@@ -118,6 +119,7 @@ fn non_pty_read_only_mode_blocks_absolute_project_writes() {
         pty: false,
         agent_id: "fs-mode-test".to_string(),
         budget: None,
+        policy_snapshot: None,
         world_fs_mode: Some(WorldFsMode::ReadOnly),
     };
 
@@ -170,6 +172,7 @@ fn non_pty_writable_mode_records_diffs_for_writes() {
         pty: false,
         agent_id: "fs-mode-test".to_string(),
         budget: None,
+        policy_snapshot: None,
         world_fs_mode: Some(WorldFsMode::Writable),
     };
 
@@ -416,6 +419,7 @@ async fn pty_writable_mode_keeps_writes_in_overlay() {
             pty: false,
             agent_id: "fs-mode-test".to_string(),
             budget: None,
+            policy_snapshot: None,
             world_fs_mode: Some(WorldFsMode::Writable),
         };
 
@@ -472,6 +476,7 @@ async fn pty_and_non_pty_share_overlay_state_across_mode_switch() {
         pty: false,
         agent_id: "fs-mode-test".to_string(),
         budget: None,
+        policy_snapshot: None,
         world_fs_mode: Some(WorldFsMode::Writable),
     };
 
@@ -571,6 +576,7 @@ async fn pty_and_non_pty_share_overlay_state_across_mode_switch() {
         pty: false,
         agent_id: "fs-mode-test".to_string(),
         budget: None,
+        policy_snapshot: None,
         world_fs_mode: Some(WorldFsMode::ReadOnly),
     };
 
