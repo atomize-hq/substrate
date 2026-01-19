@@ -240,7 +240,7 @@ metadata: {}
 "@
 
     $fsMarker = "__${runId}__fs__"
-    $fsCmd = "echo '$fsMarker' >/dev/null; set -eu; true"
+    $fsCmd = "true $fsMarker"
     $fsStdout = Join-Path $logsDir "fs.stdout"
     $fsStderr = Join-Path $logsDir "fs.stderr"
     $fsRes = Invoke-Substrate -Args @('--world', '--ci', '--command', $fsCmd) -Cwd $tmpWs -StdoutPath $fsStdout -StderrPath $fsStderr -TimeoutMs 60000
@@ -282,7 +282,7 @@ metadata: {}
 "@
 
     $netMarker = "__${runId}__net__"
-    $netCmd = "echo '$netMarker' >/dev/null; set -eu; true"
+    $netCmd = "true $netMarker"
     $netStdout = Join-Path $logsDir "net.stdout"
     $netStderr = Join-Path $logsDir "net.stderr"
     $netRes = Invoke-Substrate -Args @('--world', '--ci', '--command', $netCmd) -Cwd $tmpWs -StdoutPath $netStdout -StderrPath $netStderr -TimeoutMs 60000
@@ -323,7 +323,7 @@ metadata: {}
 "@
 
     $limitsMarker = "__${runId}__limits__"
-    $limitsCmd = "echo '$limitsMarker' >/dev/null; set -eu; true"
+    $limitsCmd = "true $limitsMarker"
     $limitsStdout = Join-Path $logsDir "limits.stdout"
     $limitsStderr = Join-Path $logsDir "limits.stderr"
     $limitsRes = Invoke-Substrate -Args @('--world', '--ci', '--command', $limitsCmd) -Cwd $tmpWs -StdoutPath $limitsStdout -StderrPath $limitsStderr -TimeoutMs 60000
