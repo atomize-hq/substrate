@@ -78,8 +78,14 @@ function Get-TraceMetaForMarker {
         try { $obj = $line | ConvertFrom-Json } catch { $obj = $null }
         if (-not $obj) { continue }
         if ($obj.event_type -ne 'command_complete') { continue }
-        if (-not $obj.cmd) { continue }
-        if ($obj.cmd -notlike "*$Marker*") { continue }
+        $cmdValue = $null
+        if ($obj.PSObject.Properties.Match('cmd').Count -gt 0) {
+            $cmdValue = $obj.cmd
+        } elseif ($obj.PSObject.Properties.Match('command').Count -gt 0) {
+            $cmdValue = $obj.command
+        }
+        if (-not $cmdValue) { continue }
+        if ($cmdValue -notlike "*$Marker*") { continue }
         $hits += $obj
     }
     if ($hits.Count -eq 0) { return $null }

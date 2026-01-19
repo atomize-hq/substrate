@@ -107,15 +107,6 @@ if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-workspace}" = "full" ]; then
   mkdir -p "$new_root/var/lib/substrate/world-deps"
   mount --rbind /var/lib/substrate/world-deps "$new_root/var/lib/substrate/world-deps"
 
-  # /var/lib/substrate/overlay: required for overlayfs upper/work dirs (root-run worlds).
-  #
-  # In full-isolation mode we pivot_root into a minimal rootfs; without binding the overlay backing
-  # storage into that rootfs, overlayfs writes can fail with EPERM even for allowlisted prefixes.
-  if [ -d /var/lib/substrate/overlay ]; then
-    mkdir -p "$new_root/var/lib/substrate/overlay"
-    mount --rbind /var/lib/substrate/overlay "$new_root/var/lib/substrate/overlay"
-  fi
-
   # Fresh /proc and writable /tmp.
   #
   # Note: /tmp is a tmpfs in full-isolation mode. This must be mounted before binding the project
@@ -136,6 +127,29 @@ if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-workspace}" = "full" ]; then
 
   mkdir -p "$new_root/project"
   mount --bind "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR" "$new_root/project"
+
+  # Ensure overlayfs backing dirs (upper/work) are visible after pivot_root.
+  #
+  # Overlayfs keeps upper/workdir paths as absolute host paths. In full-isolation mode we pivot_root
+  # into a minimal rootfs (and mount tmpfs on /tmp), so we must bind-mount the backing storage into
+  # the new root before pivot_root or overlayfs writes can fail with EPERM.
+  mount_point="$new_root$SUBSTRATE_MOUNT_PROJECT_DIR"
+  opts="$(awk -v mp="$mount_point" '$2==mp {print $4; exit}' /proc/mounts 2>/dev/null || true)"
+  upperdir=""
+  if [ -n "$opts" ]; then
+    upperdir="$(printf '%s' "$opts" | tr ',' '\n' | sed -n 's/^upperdir=//p' | head -n 1)"
+  fi
+  if [ -n "$upperdir" ]; then
+    state_dir="$upperdir"
+    case "$state_dir" in
+      */upper) state_dir="${state_dir%/upper}" ;;
+      *) state_dir="$(dirname "$state_dir")" ;;
+    esac
+    if [ -d "$state_dir" ]; then
+      mkdir -p "$new_root$state_dir"
+      mount --rbind "$state_dir" "$new_root$state_dir" 2>/dev/null || true
+    fi
+  fi
 
   # Ensure allowlisted writable prefixes exist before we remount the project read-only.
   if [ "${SUBSTRATE_MOUNT_FS_MODE:-writable}" != "read_only" ] && [ -n "${SUBSTRATE_WORLD_FS_WRITE_ALLOWLIST:-}" ]; then

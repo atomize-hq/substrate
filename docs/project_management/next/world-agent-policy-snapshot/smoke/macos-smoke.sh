@@ -309,12 +309,28 @@ else
   snapshot_ok="true"
 fi
 
+dump_failures() {
+  printf '[FAIL] dumping smoke logs (first 200 lines each)\n' >&2
+  printf '%s\n' "${tests_json}" \
+    | jq -r '.[] | select(.ok!=true) | [.name, .stdout_path, .stderr_path] | @tsv' \
+    | while IFS=$'\t' read -r name stdout_path stderr_path; do
+      printf '\n[FAIL] %s\n' "${name}" >&2
+      printf '[FAIL] stderr: %s\n' "${stderr_path}" >&2
+      sed -n '1,200p' "${stderr_path}" >&2 || true
+      printf '[FAIL] stdout: %s\n' "${stdout_path}" >&2
+      sed -n '1,200p' "${stdout_path}" >&2 || true
+    done
+}
+
 if [[ "${overall_ok}" != "true" ]]; then
+  dump_failures
   exit 1
 fi
 if [[ "${schema_ok}" != "true" ]]; then
+  dump_failures
   exit 1
 fi
 if [[ "${snapshot_ok}" != "true" ]]; then
+  dump_failures
   exit 1
 fi
