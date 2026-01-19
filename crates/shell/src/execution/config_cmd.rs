@@ -89,6 +89,7 @@ fn run_global_init(args: &ConfigInitArgs) -> Result<()> {
     let patch = SubstrateConfigPatch::default();
     write_atomic_patch_yaml(&path, DEFAULT_GLOBAL_PATCH_HEADER, None, &patch)
         .with_context(|| format!("failed to write {}", path.display()))?;
+    config_model::invalidate_config_cache();
     let cfg = SubstrateConfig::default();
     write_env_sh(&cfg).context("failed to write env.sh")?;
     if existed {
@@ -137,6 +138,7 @@ fn run_global_set(args: &ConfigSetArgs) -> Result<()> {
             &patch,
         )
         .with_context(|| format!("failed to write {}", path.display()))?;
+        config_model::invalidate_config_cache();
     }
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -175,6 +177,7 @@ fn run_global_reset(args: &ConfigResetArgs) -> Result<()> {
             &patch,
         )
         .with_context(|| format!("failed to write {}", path.display()))?;
+        config_model::invalidate_config_cache();
     }
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -237,6 +240,7 @@ fn run_workspace_set(args: &ConfigSetArgs, cli: &Cli) -> Result<()> {
     if changed {
         write_atomic_patch_yaml(&path, "", Some(&header), &patch)
             .with_context(|| format!("failed to write {}", path.display()))?;
+        config_model::invalidate_config_cache();
     }
 
     let overrides = cli_overrides(cli);
@@ -265,6 +269,7 @@ fn run_workspace_reset(args: &ConfigResetArgs, cli: &Cli) -> Result<()> {
     if changed {
         write_atomic_patch_yaml(&path, "", Some(&header), &patch)
             .with_context(|| format!("failed to write {}", path.display()))?;
+        config_model::invalidate_config_cache();
     }
 
     let overrides = cli_overrides(cli);

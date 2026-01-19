@@ -648,16 +648,21 @@ async fn legacy_world_doctor_report_v1_via_execute(
     client: &AgentClient,
 ) -> anyhow::Result<WorldDoctorReportV1> {
     let landlock = world::landlock::detect_support();
+    let cwd_path = std::path::PathBuf::from("/tmp");
+    let policy_snapshot = crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(
+        &cwd_path,
+    )?
+    .snapshot;
 
     let req = ExecuteRequest {
         profile: None,
         cmd: "sh -lc 'set -e; d=\".substrate_doctor_probe.$$\"; rm -rf \"$d\"; mkdir \"$d\"; cd \"$d\"; rm -f .substrate_enum_probe; touch .substrate_enum_probe; ls -a1; rm -f .substrate_enum_probe; cd ..; rmdir \"$d\"'".to_string(),
-        cwd: Some("/tmp".to_string()),
+        cwd: Some(cwd_path.display().to_string()),
         env: Some(HashMap::new()),
         pty: false,
         agent_id: "doctor-world-probe".to_string(),
         budget: None,
-        policy_snapshot: None,
+        policy_snapshot: Some(policy_snapshot),
         world_fs_mode: Some(WorldFsMode::Writable),
     };
 
@@ -712,6 +717,8 @@ async fn legacy_world_doctor_report_v1_via_execute(
         schema_version: 1,
         ok,
         collected_at_utc: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        policy_snapshot_v1_supported: false,
+        policy_resolution_mode: None,
         landlock,
         world_fs_strategy: WorldDoctorWorldFsStrategyV1 {
             primary: WorldDoctorWorldFsStrategyKindV1::Overlay,

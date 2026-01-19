@@ -12,6 +12,7 @@ use super::world_ops::{
     collect_world_telemetry, emit_stream_chunk, stream_non_pty_via_agent, AgentStreamOutcome,
 };
 use crate::execution::config_model;
+use crate::execution::config_model::CliConfigOverrides;
 use crate::execution::config_model::PolicyMode;
 use crate::execution::pty;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -22,7 +23,7 @@ use crate::execution::routing::telemetry::{log_command_event, SHELL_AGENT_ID};
 use crate::execution::routing::world_transport_to_meta;
 #[cfg(target_os = "linux")]
 use crate::execution::socket_activation;
-use crate::execution::{configure_child_shell_env, needs_shell, ShellConfig, ShellMode};
+use crate::execution::{configure_child_shell_env, needs_shell, update_world_env, ShellConfig, ShellMode};
 use anyhow::{Context, Result};
 use serde_json::json;
 use std::env;
@@ -117,8 +118,35 @@ pub(crate) fn execute_command(
 ) -> Result<ExitStatus> {
     let trimmed = command.trim();
 
-    // Always refresh policy/profile for this cwd before we read world_fs.
     let cwd_for_profile = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
+    // Always refresh config for this cwd so config patch edits are visible on the next command.
+    let cli_world_enabled = if config.cli_world {
+        Some(true)
+    } else if config.cli_no_world {
+        Some(false)
+    } else {
+        None
+    };
+    let effective_config = config_model::resolve_effective_config(
+        &cwd_for_profile,
+        &CliConfigOverrides {
+            world_enabled: cli_world_enabled,
+            ..Default::default()
+        },
+    )?;
+    let policy_mode = effective_config.policy.mode;
+    std::env::set_var("SUBSTRATE_POLICY_MODE", policy_mode.as_str());
+    substrate_broker::set_policy_mode(match policy_mode {
+        PolicyMode::Disabled => substrate_broker::PolicyMode::Disabled,
+        PolicyMode::Observe => substrate_broker::PolicyMode::Observe,
+        PolicyMode::Enforce => substrate_broker::PolicyMode::Enforce,
+    });
+
+    let world_disabled = !effective_config.world.enabled;
+    let world_enabled = !world_disabled;
+
+    // Always refresh policy/profile for this cwd before we read world_fs.
     let profile_result = detect_profile(&cwd_for_profile).with_context(|| {
         format!(
             "failed to load Substrate profile for cwd {}",
@@ -131,12 +159,7 @@ pub(crate) fn execute_command(
 
     let world_fs = world_fs_policy();
     let fs_mode = world_fs.mode;
-    std::env::set_var("SUBSTRATE_WORLD_FS_MODE", fs_mode.as_str());
-    std::env::set_var("SUBSTRATE_WORLD_FS_ISOLATION", world_fs.isolation.as_str());
-    std::env::set_var(
-        "SUBSTRATE_WORLD_REQUIRE_WORLD",
-        if world_fs.require_world { "1" } else { "0" },
-    );
+    update_world_env(world_disabled);
 
     // Prepare redacted command once (used for span + logging)
     let redacted_for_logging = if std::env::var("SHIM_LOG_OPTS").as_deref() == Ok("raw") {
@@ -208,8 +231,6 @@ pub(crate) fn execute_command(
         out.join(" ")
     };
 
-    let policy_mode = config.policy_mode;
-
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let decision = match policy_mode {
         PolicyMode::Disabled => None,
@@ -227,9 +248,6 @@ pub(crate) fn execute_command(
                 || world_fs.mode == substrate_common::WorldFsMode::ReadOnly
                 || world_fs.isolation == substrate_broker::WorldFsIsolation::Full
                 || cmd_isolated_match);
-
-    let world_disabled = config.no_world;
-    let world_enabled = !world_disabled;
 
     let world_required_by_cli = config.cli_world;
     let world_required_by_policy = policy_mode == PolicyMode::Enforce && requires_world_constraint;
@@ -416,6 +434,12 @@ pub(crate) fn execute_command(
                             let mut active_span = active_span;
                             active_span.set_execution_origin(ExecutionOrigin::World);
                             active_span.set_transport(transport_meta);
+                            if let Ok(resolved) = crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_for_profile) {
+                                active_span.set_policy_snapshot_meta(
+                                    resolved.snapshot.schema_version,
+                                    resolved.snapshot_hash,
+                                );
+                            }
                             if let Some(meta) = outcome.fs_strategy {
                                 active_span.set_world_fs_strategy(
                                     meta.primary,
@@ -444,6 +468,12 @@ pub(crate) fn execute_command(
                                 if let Some(mut active_span) = span.take() {
                                     active_span.set_execution_origin(ExecutionOrigin::World);
                                     active_span.set_transport(transport_meta);
+                                    if let Ok(resolved) = crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_for_profile) {
+                                        active_span.set_policy_snapshot_meta(
+                                            resolved.snapshot.schema_version,
+                                            resolved.snapshot_hash,
+                                        );
+                                    }
                                     active_span.set_world_fs_strategy(
                                         WorldFsStrategy::Overlay,
                                         WorldFsStrategy::Fuse,
@@ -517,6 +547,12 @@ pub(crate) fn execute_command(
                                 active_span.set_transport(meta);
                             }
                             active_span.set_execution_origin(ExecutionOrigin::World);
+                            if let Ok(resolved) = crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_for_profile) {
+                                active_span.set_policy_snapshot_meta(
+                                    resolved.snapshot.schema_version,
+                                    resolved.snapshot_hash,
+                                );
+                            }
                             let (scopes_used, fs_diff) =
                                 collect_world_telemetry(active_span.get_span_id());
                             let _ = active_span.finish(code, scopes_used, fs_diff);
@@ -794,6 +830,12 @@ pub(crate) fn execute_command(
                             if let Some(mut active_span) = span.take() {
                                 active_span.set_execution_origin(ExecutionOrigin::World);
                                 active_span.set_transport(transport_meta);
+                                if let Ok(resolved) = crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_for_profile) {
+                                    active_span.set_policy_snapshot_meta(
+                                        resolved.snapshot.schema_version,
+                                        resolved.snapshot_hash,
+                                    );
+                                }
                                 active_span.set_world_fs_strategy(
                                     WorldFsStrategy::Overlay,
                                     WorldFsStrategy::Fuse,
@@ -854,6 +896,14 @@ pub(crate) fn execute_command(
 
     if let Some(outcome) = agent_result {
         if let Some(mut active_span) = span {
+            if let Ok(resolved) =
+                crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_for_profile)
+            {
+                active_span.set_policy_snapshot_meta(
+                    resolved.snapshot.schema_version,
+                    resolved.snapshot_hash,
+                );
+            }
             if let Some(meta) = outcome.fs_strategy {
                 active_span.set_world_fs_strategy(
                     meta.primary,

@@ -58,6 +58,12 @@ pub struct Span {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub policy_decision: Option<PolicyDecision>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy_resolution_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy_snapshot_schema: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy_snapshot_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub world_fs_strategy_primary: Option<WorldFsStrategy>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub world_fs_strategy_final: Option<WorldFsStrategy>,
@@ -181,6 +187,9 @@ impl SpanBuilder {
                 execution_origin: None,
                 graph_edges: None,
                 policy_decision: None,
+                policy_resolution_mode: None,
+                policy_snapshot_schema: None,
+                policy_snapshot_hash: None,
                 world_fs_strategy_primary: None,
                 world_fs_strategy_final: None,
                 world_fs_strategy_fallback_reason: None,
@@ -233,6 +242,9 @@ impl SpanBuilder {
             transport: None,
             execution_origin: Some(ExecutionOrigin::Host),
             context: self.context,
+            policy_resolution_mode: None,
+            policy_snapshot_schema: None,
+            policy_snapshot_hash: None,
             world_fs_strategy_primary: None,
             world_fs_strategy_final: None,
             world_fs_strategy_fallback_reason: None,
@@ -247,6 +259,9 @@ pub struct ActiveSpan {
     transport: Option<TransportMeta>,
     execution_origin: Option<ExecutionOrigin>,
     context: TraceContext,
+    policy_resolution_mode: Option<String>,
+    policy_snapshot_schema: Option<u32>,
+    policy_snapshot_hash: Option<String>,
     world_fs_strategy_primary: Option<WorldFsStrategy>,
     world_fs_strategy_final: Option<WorldFsStrategy>,
     world_fs_strategy_fallback_reason: Option<WorldFsStrategyFallbackReason>,
@@ -263,6 +278,12 @@ impl ActiveSpan {
 
     pub fn set_execution_origin(&mut self, origin: ExecutionOrigin) {
         self.execution_origin = Some(origin);
+    }
+
+    pub fn set_policy_snapshot_meta(&mut self, schema_version: u32, snapshot_hash: String) {
+        self.policy_resolution_mode = Some("snapshot_v1".to_string());
+        self.policy_snapshot_schema = Some(schema_version);
+        self.policy_snapshot_hash = Some(snapshot_hash);
     }
 
     pub fn set_world_fs_strategy(
@@ -290,6 +311,11 @@ impl ActiveSpan {
         let replay_context = self
             .context
             .build_replay_context(self.transport.clone(), origin)?;
+
+        let policy_resolution_mode = Some(
+            self.policy_resolution_mode
+                .unwrap_or_else(|| "legacy_local".to_string()),
+        );
 
         // ADR-0004/WO0 trace contract: these fields must be present on command_complete events,
         // even when the caller did not set them explicitly (e.g., host-only execution paths).
@@ -332,6 +358,9 @@ impl ActiveSpan {
             execution_origin: Some(origin),
             graph_edges: None,
             policy_decision: None,
+            policy_resolution_mode,
+            policy_snapshot_schema: self.policy_snapshot_schema,
+            policy_snapshot_hash: self.policy_snapshot_hash,
             world_fs_strategy_primary,
             world_fs_strategy_final,
             world_fs_strategy_fallback_reason,

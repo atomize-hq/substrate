@@ -359,6 +359,7 @@ fn cd_bounces_when_caged_without_world() {
     config.world_root.path = fs::canonicalize(&root).unwrap();
     config.world_root.caged = true;
     config.no_world = true;
+    config.cli_no_world = true;
 
     let prev_world = set_env("SUBSTRATE_WORLD", "disabled");
     let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "0");
@@ -447,6 +448,7 @@ fn anchor_guard_bounces_chained_cd_when_world_disabled() {
     config.world_root.path = fs::canonicalize(&root).unwrap();
     config.world_root.caged = true;
     config.no_world = true;
+    config.cli_no_world = true;
 
     let prev_world = set_env("SUBSTRATE_WORLD", "disabled");
     let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "0");
@@ -538,6 +540,7 @@ fn cd_allows_uncaged_escape_from_anchor() {
     config.world_root.path = fs::canonicalize(&root).unwrap();
     config.world_root.caged = false;
     config.no_world = true;
+    config.cli_no_world = true;
 
     let prev_world = set_env("SUBSTRATE_WORLD", "disabled");
     let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "0");

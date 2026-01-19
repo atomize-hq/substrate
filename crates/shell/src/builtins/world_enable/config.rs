@@ -73,6 +73,7 @@ pub fn save_install_config(path: &Path, cfg: &InstallConfig) -> Result<()> {
     tmp.flush()?;
     tmp.persist(path)
         .map_err(|e| anyhow!("failed to persist {}: {}", path.display(), e.error))?;
+    crate::execution::config_model::invalidate_config_cache();
     Ok(())
 }
 

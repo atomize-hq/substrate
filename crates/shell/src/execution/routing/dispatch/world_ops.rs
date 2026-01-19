@@ -144,6 +144,8 @@ pub(super) fn execute_world_pty_over_ws(
             cmd
         };
         let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let policy_snapshot =
+            crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd)?.snapshot;
         let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
         #[cfg(target_os = "linux")]
         let (cols, rows) = get_term_size();
@@ -155,6 +157,7 @@ pub(super) fn execute_world_pty_over_ws(
             "cwd": cwd,
             "env": env_map,
             "span_id": span_id,
+            "policy_snapshot": policy_snapshot,
             "cols": cols,
             "rows": rows,
         });
@@ -579,6 +582,8 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
                 cmd
             };
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let policy_snapshot =
+                crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd)?.snapshot;
             let mut env_map = build_world_env_map();
             normalize_env_for_linux_guest(&mut env_map);
             env_map
@@ -600,6 +605,7 @@ pub(super) fn execute_world_pty_over_ws_macos(cmd: &str, span_id: &str) -> anyho
                 "cwd": cwd,
                 "env": env_map,
                 "span_id": span_id,
+                "policy_snapshot": policy_snapshot,
                 "cols": cols,
                 "rows": rows,
             });
@@ -810,12 +816,13 @@ fn build_agent_client_and_request_impl(
         .unwrap_or_else(|| std::path::PathBuf::from("/run/substrate.sock"));
 
     let client = AgentClient::unix_socket(&socket_path)?;
-    let cwd = std::env::current_dir()
-        .unwrap_or_else(|_| std::path::PathBuf::from("."))
-        .display()
-        .to_string();
+    let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let cwd = cwd_path.display().to_string();
     let env_map = build_world_env_map();
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+    let policy_snapshot =
+        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?
+            .snapshot;
 
     let request = ExecuteRequest {
         profile: None,
@@ -825,7 +832,7 @@ fn build_agent_client_and_request_impl(
         pty: false,
         agent_id: agent_id.clone(),
         budget: None,
-        policy_snapshot: None,
+        policy_snapshot: Some(policy_snapshot),
         world_fs_mode: Some(current_world_fs_mode()),
     };
 
@@ -845,13 +852,14 @@ fn build_agent_client_and_request_impl(
     if let Some(socket_path) = std::env::var_os("SUBSTRATE_WORLD_SOCKET") {
         let socket_path = std::path::PathBuf::from(socket_path);
         let client = AgentClient::unix_socket(&socket_path)?;
-        let cwd = std::env::current_dir()
-            .unwrap_or_else(|_| std::path::PathBuf::from("."))
-            .display()
-            .to_string();
+        let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let cwd = cwd_path.display().to_string();
         let mut env_map = build_world_env_map();
         normalize_env_for_linux_guest(&mut env_map);
         let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+        let policy_snapshot =
+            crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?
+                .snapshot;
 
         let request = ExecuteRequest {
             profile: None,
@@ -861,7 +869,7 @@ fn build_agent_client_and_request_impl(
             pty: false,
             agent_id: agent_id.clone(),
             budget: None,
-            policy_snapshot: None,
+            policy_snapshot: Some(policy_snapshot),
             world_fs_mode: Some(current_world_fs_mode()),
         };
 
@@ -887,13 +895,14 @@ fn build_agent_client_and_request_impl(
         pw::WorldTransport::Vsock { port } => AgentClient::tcp("127.0.0.1", *port),
     }?;
 
-    let cwd = std::env::current_dir()
-        .unwrap_or_else(|_| std::path::PathBuf::from("."))
-        .display()
-        .to_string();
+    let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let cwd = cwd_path.display().to_string();
     let mut env_map = build_world_env_map();
     normalize_env_for_linux_guest(&mut env_map);
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+    let policy_snapshot =
+        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?
+            .snapshot;
 
     let request = ExecuteRequest {
         profile: None,
@@ -903,7 +912,7 @@ fn build_agent_client_and_request_impl(
         pty: false,
         agent_id: agent_id.clone(),
         budget: None,
-        policy_snapshot: None,
+        policy_snapshot: Some(policy_snapshot),
         world_fs_mode: Some(current_world_fs_mode()),
     };
 
@@ -930,8 +939,12 @@ fn build_agent_client_and_request_impl(
 
     let client = windows::build_agent_client()?;
     let cwd = windows::current_dir_wsl()?;
+    let host_cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let env_map = build_world_env_map();
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+    let policy_snapshot =
+        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&host_cwd)?
+            .snapshot;
 
     let request = ExecuteRequest {
         profile: None,
@@ -941,7 +954,7 @@ fn build_agent_client_and_request_impl(
         pty: false,
         agent_id: agent_id.clone(),
         budget: None,
-        policy_snapshot: None,
+        policy_snapshot: Some(policy_snapshot),
         world_fs_mode: Some(current_world_fs_mode()),
     };
 

@@ -123,8 +123,21 @@ pub struct WorldDoctorReportV1 {
     pub schema_version: u32,
     pub ok: bool,
     pub collected_at_utc: String,
+    /// Whether the connected world-agent supports ingesting `PolicySnapshotV1` on execution requests.
+    #[serde(default)]
+    pub policy_snapshot_v1_supported: bool,
+    /// The policy resolution mode most recently used by the world-agent (when known).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_resolution_mode: Option<PolicyResolutionModeV1>,
     pub landlock: WorldDoctorLandlockV1,
     pub world_fs_strategy: WorldDoctorWorldFsStrategyV1,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PolicyResolutionModeV1 {
+    SnapshotV1,
+    LegacyLocal,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

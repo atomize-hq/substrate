@@ -82,16 +82,20 @@ fn run_workspace_init(args: &WorkspaceInitArgs) -> Result<()> {
         )
     })?;
 
+    let mut wrote_any = false;
+
     let workspace_yaml = workspace::workspace_marker_path(&target);
     if !workspace_yaml.exists() {
         write_atomic_bytes(&workspace_yaml, DEFAULT_WORKSPACE_PATCH_YAML.as_bytes())
             .with_context(|| format!("failed to write {}", workspace_yaml.display()))?;
+        wrote_any = true;
     }
 
     let policy_yaml = workspace::workspace_policy_path(&target);
     if !policy_yaml.exists() {
         write_atomic_bytes(&policy_yaml, DEFAULT_POLICY_PATCH_YAML.as_bytes())
             .with_context(|| format!("failed to write {}", policy_yaml.display()))?;
+        wrote_any = true;
     }
 
     if args.examples {
@@ -109,6 +113,11 @@ fn run_workspace_init(args: &WorkspaceInitArgs) -> Result<()> {
         println!("substrate: workspace initialized at {}", target.display());
     }
 
+    if wrote_any {
+        crate::execution::config_model::invalidate_config_cache();
+        crate::execution::policy_snapshot::invalidate_policy_snapshot_cache();
+    }
+
     Ok(())
 }
 
@@ -120,6 +129,8 @@ fn run_workspace_disable(args: &WorkspacePathArgs) -> Result<()> {
     if !marker.exists() {
         write_atomic_bytes(&marker, b"")
             .with_context(|| format!("failed to write {}", marker.display()))?;
+        crate::execution::config_model::invalidate_config_cache();
+        crate::execution::policy_snapshot::invalidate_policy_snapshot_cache();
     }
 
     println!(
@@ -139,6 +150,8 @@ fn run_workspace_enable(args: &WorkspacePathArgs) -> Result<()> {
         Err(err) if err.kind() == io::ErrorKind::NotFound => {}
         Err(err) => return Err(anyhow!("failed to remove {}: {err}", marker.display())),
     }
+    crate::execution::config_model::invalidate_config_cache();
+    crate::execution::policy_snapshot::invalidate_policy_snapshot_cache();
 
     println!(
         "substrate: workspace enabled at {}",

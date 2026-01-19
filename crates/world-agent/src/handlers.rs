@@ -47,6 +47,7 @@ pub async fn capabilities() -> Result<ResponseJson<Value>, ApiErrorResponse> {
         "version": "v1",
         "features": [
             "execute",
+            "policy_snapshot_v1",
             "pty_streaming",
             "trace_retrieval",
             "scope_requests"
@@ -57,7 +58,9 @@ pub async fn capabilities() -> Result<ResponseJson<Value>, ApiErrorResponse> {
 }
 
 /// Get agent-reported world enforcement readiness.
-pub async fn doctor_world() -> Result<ResponseJson<WorldDoctorReportV1>, ApiErrorResponse> {
+pub async fn doctor_world(
+    State(service): State<WorldAgentService>,
+) -> Result<ResponseJson<WorldDoctorReportV1>, ApiErrorResponse> {
     let collected_at_utc = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
 
     #[cfg(target_os = "linux")]
@@ -118,6 +121,8 @@ pub async fn doctor_world() -> Result<ResponseJson<WorldDoctorReportV1>, ApiErro
         schema_version: 1,
         ok,
         collected_at_utc,
+        policy_snapshot_v1_supported: service.policy_snapshot_v1_supported(),
+        policy_resolution_mode: service.last_policy_resolution_mode(),
         landlock,
         world_fs_strategy: WorldDoctorWorldFsStrategyV1 {
             primary: WorldDoctorWorldFsStrategyKindV1::Overlay,
@@ -137,7 +142,13 @@ pub async fn execute(
     let response = service
         .execute(req)
         .await
-        .map_err(|e| ApiErrorResponse(ApiError::Internal(e.to_string())))?;
+        .map_err(|e| {
+            if let Some(bad) = e.downcast_ref::<crate::service::BadRequestError>() {
+                ApiErrorResponse(ApiError::BadRequest(bad.message().to_string()))
+            } else {
+                ApiErrorResponse(ApiError::Internal(e.to_string()))
+            }
+        })?;
 
     Ok(ResponseJson(response))
 }
@@ -150,7 +161,13 @@ pub async fn execute_stream(
     service
         .execute_stream(req)
         .await
-        .map_err(|e| ApiErrorResponse(ApiError::Internal(e.to_string())))
+        .map_err(|e| {
+            if let Some(bad) = e.downcast_ref::<crate::service::BadRequestError>() {
+                ApiErrorResponse(ApiError::BadRequest(bad.message().to_string()))
+            } else {
+                ApiErrorResponse(ApiError::Internal(e.to_string()))
+            }
+        })
 }
 
 /// Handle WebSocket upgrade for PTY streaming.

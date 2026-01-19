@@ -10,10 +10,57 @@ use std::fmt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
+use std::time::SystemTime;
 use substrate_common::paths as substrate_paths;
 use substrate_common::WorldRootMode;
 
 pub(crate) const PROTECTED_EXCLUDES: [&str; 2] = [".git/**", ".substrate/**"];
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FileStatKey {
+    exists: bool,
+    mtime: Option<SystemTime>,
+    size: Option<u64>,
+}
+
+impl FileStatKey {
+    fn for_path(path: &Path) -> Result<Self> {
+        match fs::metadata(path) {
+            Ok(meta) => Ok(Self {
+                exists: true,
+                mtime: meta.modified().ok(),
+                size: Some(meta.len()),
+            }),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(Self {
+                exists: false,
+                mtime: None,
+                size: None,
+            }),
+            Err(err) => Err(err).with_context(|| format!("failed to stat {}", path.display())),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ConfigPatchCacheEntry {
+    workspace_root: Option<PathBuf>,
+    global_path: PathBuf,
+    workspace_path: Option<PathBuf>,
+    global_stat: FileStatKey,
+    workspace_stat: Option<FileStatKey>,
+    global_patch: SubstrateConfigPatch,
+    workspace_patch: Option<SubstrateConfigPatch>,
+}
+
+static CONFIG_PATCH_CACHE: OnceLock<Mutex<Option<ConfigPatchCacheEntry>>> = OnceLock::new();
+
+pub(crate) fn invalidate_config_cache() {
+    let cache = CONFIG_PATCH_CACHE.get_or_init(|| Mutex::new(None));
+    if let Ok(mut guard) = cache.lock() {
+        *guard = None;
+    }
+}
 
 #[derive(Debug)]
 pub(crate) struct UserError {
@@ -509,31 +556,8 @@ pub(crate) fn resolve_effective_config_with_explain(
     explain: bool,
 ) -> Result<(SubstrateConfig, Option<ConfigExplainV1>)> {
     let env_overrides = parse_env_overrides()?;
-    let (global_patch, _) = read_global_config_patch_or_empty()?;
-    let global_path = global_config_path()?;
-
-    let workspace_root = workspace::find_workspace_root(cwd);
-    let workspace_layer = if let Some(root) = &workspace_root {
-        let legacy = workspace::workspace_legacy_settings_path(root);
-        if legacy.exists() {
-            return Err(user_error(format!(
-                "substrate: unsupported legacy workspace config detected:\n  - {}\nConfig is now read from:\n  - {}\nNext steps:\n  - Delete the legacy file and use `substrate config workspace set ...`\n",
-                legacy.display(),
-                workspace::workspace_marker_path(root).display()
-            )));
-        }
-        let workspace_path = workspace::workspace_marker_path(root);
-        let raw = fs::read_to_string(&workspace_path)
-            .with_context(|| format!("failed to read {}", workspace_path.display()))?;
-        let patch = parse_config_patch_yaml(&workspace_path, &raw)?;
-        Some((patch, workspace_path))
-    } else {
-        None
-    };
-
-    let workspace_ref = workspace_layer
-        .as_ref()
-        .map(|(p, path)| (p, path.as_path()));
+    let (global_patch, global_path, workspace_layer) = load_config_patch_layers_cached(cwd)?;
+    let workspace_ref = workspace_layer.as_ref().map(|(p, path)| (p, path.as_path()));
 
     resolve_effective_from_layers(
         &global_patch,
@@ -544,6 +568,84 @@ pub(crate) fn resolve_effective_config_with_explain(
         explain,
         true,
     )
+}
+
+fn load_config_patch_layers_cached(
+    cwd: &Path,
+) -> Result<(
+    SubstrateConfigPatch,
+    PathBuf,
+    Option<(SubstrateConfigPatch, PathBuf)>,
+)> {
+    let global_path = global_config_path()?;
+    let workspace_root = workspace::find_workspace_root(cwd);
+    let workspace_path = workspace_root
+        .as_ref()
+        .map(|root| workspace::workspace_marker_path(root));
+
+    if let Some(root) = &workspace_root {
+        let legacy = workspace::workspace_legacy_settings_path(root);
+        if legacy.exists() {
+            return Err(user_error(format!(
+                "substrate: unsupported legacy workspace config detected:\n  - {}\nConfig is now read from:\n  - {}\nNext steps:\n  - Delete the legacy file and use `substrate config workspace set ...`\n",
+                legacy.display(),
+                workspace::workspace_marker_path(root).display()
+            )));
+        }
+    }
+
+    let global_stat = FileStatKey::for_path(&global_path)?;
+    let workspace_stat = workspace_path
+        .as_ref()
+        .map(|path| FileStatKey::for_path(path))
+        .transpose()?;
+
+    let cache = CONFIG_PATCH_CACHE.get_or_init(|| Mutex::new(None));
+    if let Ok(guard) = cache.lock() {
+        if let Some(entry) = guard.as_ref() {
+            if entry.workspace_root == workspace_root
+                && entry.global_path == global_path
+                && entry.workspace_path == workspace_path
+                && entry.global_stat == global_stat
+                && entry.workspace_stat == workspace_stat
+            {
+                let workspace_layer = entry
+                    .workspace_patch
+                    .clone()
+                    .zip(entry.workspace_path.clone());
+                return Ok((entry.global_patch.clone(), global_path, workspace_layer));
+            }
+        }
+    }
+
+    let global_patch = match fs::read_to_string(&global_path) {
+        Ok(raw) => parse_config_patch_yaml(&global_path, &raw)?,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => SubstrateConfigPatch::default(),
+        Err(err) => return Err(anyhow!("failed to read {}: {err}", global_path.display())),
+    };
+
+    let workspace_layer = if let Some(workspace_path) = &workspace_path {
+        let raw = fs::read_to_string(workspace_path)
+            .with_context(|| format!("failed to read {}", workspace_path.display()))?;
+        let patch = parse_config_patch_yaml(workspace_path, &raw)?;
+        Some((patch, workspace_path.clone()))
+    } else {
+        None
+    };
+
+    if let Ok(mut guard) = cache.lock() {
+        *guard = Some(ConfigPatchCacheEntry {
+            workspace_root,
+            global_path: global_path.clone(),
+            workspace_path,
+            global_stat,
+            workspace_stat,
+            global_patch: global_patch.clone(),
+            workspace_patch: workspace_layer.as_ref().map(|(p, _)| p.clone()),
+        });
+    }
+
+    Ok((global_patch, global_path, workspace_layer))
 }
 
 fn resolve_effective_from_layers(

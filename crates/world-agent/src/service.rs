@@ -20,6 +20,7 @@ use std::collections::HashMap;
 #[cfg(target_os = "linux")]
 use std::convert::Infallible;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, RwLock};
 #[cfg(target_os = "linux")]
 use substrate_common::agent_events::{AgentEvent, AgentEventKind};
@@ -52,6 +53,7 @@ pub struct WorldAgentService {
     #[allow(dead_code)]
     worlds: Arc<RwLock<HashMap<String, WorldHandle>>>,
     budgets: Arc<RwLock<HashMap<String, AgentBudgetTracker>>>,
+    last_policy_resolution_mode: Arc<AtomicU8>,
 }
 
 pub struct AgentBudgetTracker {
@@ -101,6 +103,7 @@ impl WorldAgentService {
                 linux_backend,
                 worlds: Arc::new(RwLock::new(HashMap::new())),
                 budgets: Arc::new(RwLock::new(HashMap::new())),
+                last_policy_resolution_mode: Arc::new(AtomicU8::new(0)),
             })
         }
 
@@ -112,6 +115,7 @@ impl WorldAgentService {
                 backend,
                 worlds: Arc::new(RwLock::new(HashMap::new())),
                 budgets: Arc::new(RwLock::new(HashMap::new())),
+                last_policy_resolution_mode: Arc::new(AtomicU8::new(0)),
             })
         }
     }
@@ -168,30 +172,18 @@ impl WorldAgentService {
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
         let env_ref = req.env.as_ref();
         let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
-        let fs_mode = resolve_fs_mode(req.world_fs_mode, env_ref);
-        let isolation_full = is_full_isolation(env_ref);
+        let (policy_resolution_mode, policy_inputs) =
+            resolve_policy_inputs(&req, &cwd, &project_dir)?;
+        self.set_last_policy_resolution_mode(policy_resolution_mode);
 
-        let (write_allowlist_prefixes, landlock_read_paths, landlock_write_paths) =
-            if isolation_full {
-                if let Err(e) = substrate_broker::detect_profile(&cwd) {
-                    tracing::warn!(
-                        error = %e,
-                        cwd = %cwd.display(),
-                        "world-agent: failed to detect policy profile for request"
-                    );
-                }
-                let world_fs = substrate_broker::world_fs_policy();
-                (
-                    resolve_project_write_allowlist_prefixes(
-                        &project_dir,
-                        &world_fs.write_allowlist,
-                    ),
-                    resolve_landlock_allowlist_paths(&project_dir, &world_fs.read_allowlist),
-                    resolve_landlock_allowlist_paths(&project_dir, &world_fs.write_allowlist),
-                )
-            } else {
-                (Vec::new(), Vec::new(), Vec::new())
-            };
+        let PolicyInputs {
+            fs_mode,
+            isolation_full,
+            allowed_domains,
+            write_allowlist_prefixes,
+            landlock_read_paths,
+            landlock_write_paths,
+        } = policy_inputs;
 
         // Create world spec from request
         let spec = WorldSpec {
@@ -199,7 +191,7 @@ impl WorldAgentService {
             isolate_network: true,
             limits: world_api::ResourceLimits::default(),
             enable_preload: false,
-            allowed_domains: substrate_broker::allowed_domains(),
+            allowed_domains,
             project_dir,
             // For agent non-PTY path, prefer consistent fs_diff collection
             // to enable immediate span enrichment in the shell.
@@ -300,38 +292,26 @@ impl WorldAgentService {
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
         let env_ref = req.env.as_ref();
         let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
-        let fs_mode = resolve_fs_mode(req.world_fs_mode, env_ref);
-        let isolation_full = is_full_isolation(env_ref);
-        let always_isolate = should_always_isolate(&req);
+        let (policy_resolution_mode, policy_inputs) =
+            resolve_policy_inputs(&req, &cwd, &project_dir)?;
+        self.set_last_policy_resolution_mode(policy_resolution_mode);
 
-        let (write_allowlist_prefixes, landlock_read_paths, landlock_write_paths) =
-            if isolation_full {
-                if let Err(e) = substrate_broker::detect_profile(&cwd) {
-                    tracing::warn!(
-                        error = %e,
-                        cwd = %cwd.display(),
-                        "world-agent: failed to detect policy profile for request"
-                    );
-                }
-                let world_fs = substrate_broker::world_fs_policy();
-                (
-                    resolve_project_write_allowlist_prefixes(
-                        &project_dir,
-                        &world_fs.write_allowlist,
-                    ),
-                    resolve_landlock_allowlist_paths(&project_dir, &world_fs.read_allowlist),
-                    resolve_landlock_allowlist_paths(&project_dir, &world_fs.write_allowlist),
-                )
-            } else {
-                (Vec::new(), Vec::new(), Vec::new())
-            };
+        let PolicyInputs {
+            fs_mode,
+            isolation_full,
+            allowed_domains,
+            write_allowlist_prefixes,
+            landlock_read_paths,
+            landlock_write_paths,
+        } = policy_inputs;
+        let always_isolate = should_always_isolate(&req);
 
         let spec = WorldSpec {
             reuse_session: true,
             isolate_network: true,
             limits: world_api::ResourceLimits::default(),
             enable_preload: false,
-            allowed_domains: substrate_broker::allowed_domains(),
+            allowed_domains,
             project_dir,
             always_isolate,
             fs_mode,
@@ -504,6 +484,145 @@ fn should_always_isolate(req: &ExecuteRequest) -> bool {
     // which is incompatible with the default cage's write restrictions. Use a request profile to
     // opt out of `always_isolate` for that explicit provisioning workflow.
     !matches!(req.profile.as_deref(), Some("world-deps-provision"))
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("{message}")]
+pub(crate) struct BadRequestError {
+    message: String,
+}
+
+impl BadRequestError {
+    pub(crate) fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+
+    pub(crate) fn message(&self) -> &str {
+        &self.message
+    }
+}
+
+#[derive(Clone, Debug)]
+struct PolicyInputs {
+    fs_mode: WorldFsMode,
+    isolation_full: bool,
+    allowed_domains: Vec<String>,
+    write_allowlist_prefixes: Vec<String>,
+    landlock_read_paths: Vec<String>,
+    landlock_write_paths: Vec<String>,
+}
+
+fn resolve_policy_inputs(
+    req: &ExecuteRequest,
+    cwd: &Path,
+    project_dir: &Path,
+) -> Result<(agent_api_types::PolicyResolutionModeV1, PolicyInputs)> {
+    use agent_api_types::{PolicyResolutionModeV1, PolicySnapshotWorldFsIsolationV1};
+
+    if let Some(snapshot) = req.policy_snapshot.as_ref() {
+        if snapshot.schema_version != 1 {
+            return Err(BadRequestError::new(format!(
+                "unsupported policy_snapshot.schema_version: {}",
+                snapshot.schema_version
+            ))
+            .into());
+        }
+
+        let isolation_full = matches!(
+            snapshot.world_fs.isolation,
+            PolicySnapshotWorldFsIsolationV1::Full
+        );
+
+        let (write_allowlist_prefixes, landlock_read_paths, landlock_write_paths) = if isolation_full
+        {
+            (
+                resolve_project_write_allowlist_prefixes(project_dir, &snapshot.world_fs.write_allowlist),
+                resolve_landlock_allowlist_paths(project_dir, &snapshot.world_fs.read_allowlist),
+                resolve_landlock_allowlist_paths(project_dir, &snapshot.world_fs.write_allowlist),
+            )
+        } else {
+            (Vec::new(), Vec::new(), Vec::new())
+        };
+
+        return Ok((
+            PolicyResolutionModeV1::SnapshotV1,
+            PolicyInputs {
+                fs_mode: snapshot.world_fs.mode,
+                isolation_full,
+                allowed_domains: snapshot.net_allowed.clone(),
+                write_allowlist_prefixes,
+                landlock_read_paths,
+                landlock_write_paths,
+            },
+        ));
+    }
+
+    let isolation_full = is_full_isolation(req.env.as_ref());
+    let fs_mode = resolve_fs_mode(req.world_fs_mode, req.env.as_ref());
+
+    if let Err(e) = substrate_broker::detect_profile(cwd) {
+        tracing::warn!(
+            error = %e,
+            cwd = %cwd.display(),
+            "world-agent: failed to detect policy profile for request"
+        );
+    }
+    let world_fs = substrate_broker::world_fs_policy();
+
+    let (write_allowlist_prefixes, landlock_read_paths, landlock_write_paths) = if isolation_full {
+        (
+            resolve_project_write_allowlist_prefixes(project_dir, &world_fs.write_allowlist),
+            resolve_landlock_allowlist_paths(project_dir, &world_fs.read_allowlist),
+            resolve_landlock_allowlist_paths(project_dir, &world_fs.write_allowlist),
+        )
+    } else {
+        (Vec::new(), Vec::new(), Vec::new())
+    };
+
+    Ok((
+        PolicyResolutionModeV1::LegacyLocal,
+        PolicyInputs {
+            fs_mode,
+            isolation_full,
+            allowed_domains: substrate_broker::allowed_domains(),
+            write_allowlist_prefixes,
+            landlock_read_paths,
+            landlock_write_paths,
+        },
+    ))
+}
+
+impl WorldAgentService {
+    pub(crate) fn policy_snapshot_v1_supported(&self) -> bool {
+        true
+    }
+
+    pub(crate) fn last_policy_resolution_mode(
+        &self,
+    ) -> Option<agent_api_types::PolicyResolutionModeV1> {
+        match self
+            .last_policy_resolution_mode
+            .load(Ordering::Relaxed)
+        {
+            1 => Some(agent_api_types::PolicyResolutionModeV1::SnapshotV1),
+            2 => Some(agent_api_types::PolicyResolutionModeV1::LegacyLocal),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn set_last_policy_resolution_mode(
+        &self,
+        mode: agent_api_types::PolicyResolutionModeV1,
+    ) {
+        let encoded = match mode {
+            agent_api_types::PolicyResolutionModeV1::SnapshotV1 => 1,
+            agent_api_types::PolicyResolutionModeV1::LegacyLocal => 2,
+        };
+        self.last_policy_resolution_mode
+            .store(encoded, Ordering::Relaxed);
+    }
 }
 
 pub(crate) fn resolve_fs_mode(

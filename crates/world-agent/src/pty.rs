@@ -8,6 +8,9 @@ use crate::service::{
     WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV, WORLD_FS_MODE_ENV, WORLD_FS_WRITE_ALLOWLIST_ENV,
 };
 use axum::extract::ws::{Message, WebSocket};
+use agent_api_types::PolicySnapshotV1;
+#[cfg(target_os = "linux")]
+use agent_api_types::{PolicyResolutionModeV1, PolicySnapshotWorldFsIsolationV1};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
@@ -84,6 +87,8 @@ pub enum ClientMessage {
         cmd: String,
         cwd: PathBuf,
         env: HashMap<String, String>,
+        #[serde(default)]
+        policy_snapshot: Option<PolicySnapshotV1>,
         span_id: Option<String>,
         cols: u16,
         rows: u16,
@@ -138,6 +143,7 @@ pub async fn handle_ws_pty(
                 cmd,
                 cwd,
                 env,
+                policy_snapshot,
                 span_id,
                 cols,
                 rows,
@@ -152,7 +158,7 @@ pub async fn handle_ws_pty(
                     rows = rows,
                     "ws_pty: start"
                 );
-                (cmd, cwd, env, span_id, cols, rows)
+                (cmd, cwd, env, policy_snapshot, span_id, cols, rows)
             }
             Ok(_) => {
                 let _ = send_ws_message(
@@ -198,7 +204,9 @@ pub async fn handle_ws_pty(
         None => return, // Connection closed
     };
 
-    let (cmd, cwd, env_map, _span_id, cols, rows) = start_msg;
+    let (cmd, cwd, env_map, policy_snapshot, _span_id, cols, rows) = start_msg;
+    #[cfg(not(target_os = "linux"))]
+    let _policy_snapshot = policy_snapshot;
     #[cfg(target_os = "linux")]
     let mut env = env_map;
     #[cfg(not(target_os = "linux"))]
@@ -254,32 +262,77 @@ pub async fn handle_ws_pty(
                 return;
             }
         };
-        let isolation_full = is_full_isolation(Some(&env));
-        let fs_mode = env
-            .get(WORLD_FS_MODE_ENV)
-            .and_then(|value| WorldFsMode::parse(value))
-            .unwrap_or(WorldFsMode::Writable);
+        let (policy_resolution_mode, isolation_full, fs_mode, allowed_domains) =
+            if let Some(snapshot) = policy_snapshot.as_ref() {
+                if snapshot.schema_version != 1 {
+                    let _ = send_ws_message(
+                        &tx,
+                        &ServerMessage::Error {
+                            message: format!(
+                                "Invalid policy_snapshot.schema_version: {}",
+                                snapshot.schema_version
+                            ),
+                        },
+                    )
+                    .await;
+                    return;
+                }
+
+                let isolation_full = matches!(
+                    snapshot.world_fs.isolation,
+                    PolicySnapshotWorldFsIsolationV1::Full
+                );
+                (
+                    PolicyResolutionModeV1::SnapshotV1,
+                    isolation_full,
+                    snapshot.world_fs.mode,
+                    snapshot.net_allowed.clone(),
+                )
+            } else {
+                let isolation_full = is_full_isolation(Some(&env));
+                let fs_mode = env
+                    .get(WORLD_FS_MODE_ENV)
+                    .and_then(|value| WorldFsMode::parse(value))
+                    .unwrap_or(WorldFsMode::Writable);
+                if let Err(e) = substrate_broker::detect_profile(&cwd) {
+                    warn!(
+                        error = %e,
+                        cwd = %cwd.display(),
+                        "world-agent: failed to detect policy profile for PTY request"
+                    );
+                }
+                (
+                    PolicyResolutionModeV1::LegacyLocal,
+                    isolation_full,
+                    fs_mode,
+                    substrate_broker::allowed_domains(),
+                )
+            };
+
+        service.set_last_policy_resolution_mode(policy_resolution_mode);
 
         if isolation_full {
-            if let Err(e) = substrate_broker::detect_profile(&cwd) {
-                warn!(
-                    error = %e,
-                    cwd = %cwd.display(),
-                    "world-agent: failed to detect policy profile for PTY request"
-                );
-            }
-            let world_fs = substrate_broker::world_fs_policy();
-            let landlock_read_paths =
-                resolve_landlock_allowlist_paths(&project_dir, &world_fs.read_allowlist);
-            let landlock_write_paths =
-                resolve_landlock_allowlist_paths(&project_dir, &world_fs.write_allowlist);
-            let prefixes =
-                resolve_project_write_allowlist_prefixes(&project_dir, &world_fs.write_allowlist);
+            let (prefixes, landlock_read_paths, landlock_write_paths) =
+                if let Some(snapshot) = policy_snapshot.as_ref() {
+                    (
+                        resolve_project_write_allowlist_prefixes(
+                            &project_dir,
+                            &snapshot.world_fs.write_allowlist,
+                        ),
+                        resolve_landlock_allowlist_paths(&project_dir, &snapshot.world_fs.read_allowlist),
+                        resolve_landlock_allowlist_paths(&project_dir, &snapshot.world_fs.write_allowlist),
+                    )
+                } else {
+                    let world_fs = substrate_broker::world_fs_policy();
+                    (
+                        resolve_project_write_allowlist_prefixes(&project_dir, &world_fs.write_allowlist),
+                        resolve_landlock_allowlist_paths(&project_dir, &world_fs.read_allowlist),
+                        resolve_landlock_allowlist_paths(&project_dir, &world_fs.write_allowlist),
+                    )
+                };
+
             if !prefixes.is_empty() {
-                env.insert(
-                    WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(),
-                    prefixes.join("\n"),
-                );
+                env.insert(WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(), prefixes.join("\n"));
             }
             if !landlock_read_paths.is_empty() {
                 env.insert(
@@ -305,7 +358,7 @@ pub async fn handle_ws_pty(
             isolate_network: true,
             limits: ResourceLimits::default(),
             enable_preload: false,
-            allowed_domains: substrate_broker::allowed_domains(),
+            allowed_domains,
             project_dir: project_dir.clone(),
             always_isolate: true,
             fs_mode,
@@ -693,6 +746,7 @@ mod tests {
             cmd: "echo hi".into(),
             cwd: std::env::current_dir().unwrap(),
             env: HashMap::new(),
+            policy_snapshot: None,
             span_id: Some("spn_test".into()),
             cols: 80,
             rows: 24,

@@ -100,6 +100,7 @@ fn run_global_init(args: &PolicyInitArgs) -> Result<()> {
     let patch = PolicyPatch::default();
     write_atomic_patch_yaml(&path, DEFAULT_GLOBAL_POLICY_PATCH_HEADER, None, &patch)
         .with_context(|| format!("failed to write {}", path.display()))?;
+    crate::execution::policy_snapshot::invalidate_policy_snapshot_cache();
 
     if existed {
         println!(
@@ -149,6 +150,7 @@ fn run_global_set(args: &PolicySetArgs) -> Result<()> {
             &patch,
         )
         .with_context(|| format!("failed to write {}", path.display()))?;
+        crate::execution::policy_snapshot::invalidate_policy_snapshot_cache();
     }
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -177,6 +179,7 @@ fn run_global_reset(args: &ConfigResetArgs) -> Result<()> {
             &patch,
         )
         .with_context(|| format!("failed to write {}", path.display()))?;
+        crate::execution::policy_snapshot::invalidate_policy_snapshot_cache();
     }
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -212,6 +215,7 @@ fn run_workspace_init(args: &PolicyInitArgs) -> Result<()> {
         &patch,
     )
     .with_context(|| format!("failed to write {}", path.display()))?;
+    crate::execution::policy_snapshot::invalidate_policy_snapshot_cache();
 
     if existed {
         println!(
@@ -288,6 +292,7 @@ fn run_workspace_set(args: &PolicySetArgs) -> Result<()> {
     if changed {
         write_atomic_patch_yaml(&path, "", Some(&header), &patch)
             .with_context(|| format!("failed to write {}", path.display()))?;
+        crate::execution::policy_snapshot::invalidate_policy_snapshot_cache();
     }
 
     let (effective, _) = substrate_broker::resolve_effective_policy_with_explain(&cwd, false)
@@ -314,6 +319,7 @@ fn run_workspace_reset(args: &ConfigResetArgs) -> Result<()> {
     if changed {
         write_atomic_patch_yaml(&path, "", Some(&header), &patch)
             .with_context(|| format!("failed to write {}", path.display()))?;
+        crate::execution::policy_snapshot::invalidate_policy_snapshot_cache();
     }
 
     let (effective, _) = substrate_broker::resolve_effective_policy_with_explain(&cwd, false)

@@ -12,6 +12,7 @@ mod platform;
 pub(crate) mod platform_world;
 mod policy_cmd;
 pub(crate) mod policy_model;
+pub(crate) mod policy_snapshot;
 mod pty;
 mod routing;
 mod settings;

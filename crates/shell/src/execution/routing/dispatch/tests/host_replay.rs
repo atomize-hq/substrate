@@ -32,6 +32,7 @@ fn async_repl_host_commands_record_replay_context() {
         let temp = TempDir::new().expect("tempdir");
         let mut config = test_shell_config(&temp);
         config.no_world = true;
+        config.cli_no_world = true;
         config.async_repl = true;
         config.shell_path = "/bin/bash".to_string();
 
