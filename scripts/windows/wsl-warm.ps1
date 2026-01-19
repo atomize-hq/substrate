@@ -346,7 +346,8 @@ if ($tcpBridge) {
 
     $text = [System.Text.Encoding]::UTF8.GetString($ms.ToArray())
     if ($text -notmatch '^HTTP/1\\.1 200') {
-        Write-ErrorAndExit ("Forwarder named-pipe probe returned non-200 response (first line): {0}" -f (($text -split \"`r?`n\")[0]))
+        $firstLine = ([regex]::Split($text, "\r?\n") | Select-Object -First 1)
+        Write-ErrorAndExit ("Forwarder named-pipe probe returned non-200 response (first line): {0}" -f $firstLine)
     }
     Write-Info "Forwarder named-pipe probe OK: /v1/capabilities"
 }
