@@ -34,66 +34,6 @@ function Invoke-Substrate {
 
     $exe = Resolve-SubstrateExe
 
-    if ($StdoutPath -or $StderrPath) {
-        if ($StdoutPath) { New-Item -ItemType File -Force -Path $StdoutPath | Out-Null }
-        if ($StderrPath) { New-Item -ItemType File -Force -Path $StderrPath | Out-Null }
-
-        function Quote-WindowsArg {
-            param([Parameter(Mandatory = $true)][string]$Value)
-            if ($Value -notmatch '[\\s"]') { return $Value }
-            $escaped = $Value -replace '"', '\\"'
-            return '"' + $escaped + '"'
-        }
-
-        $argString = ($Args | ForEach-Object { Quote-WindowsArg $_ }) -join ' '
-
-        $procArgs = @{
-            FilePath     = $exe
-            ArgumentList = $argString
-            NoNewWindow  = $true
-            PassThru     = $true
-        }
-        if ($Cwd) { $procArgs.WorkingDirectory = $Cwd }
-        if ($StdoutPath) { $procArgs.RedirectStandardOutput = $StdoutPath }
-        if ($StderrPath) { $procArgs.RedirectStandardError = $StderrPath }
-
-        $p = Start-Process @procArgs
-
-        $completed = $p.WaitForExit($TimeoutMs)
-        if (-not $completed) {
-            try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
-            if ($StdoutPath) {
-                Write-Host ("[TIMEOUT] stdout: {0}" -f $StdoutPath)
-                if (Test-Path -LiteralPath $StdoutPath) {
-                    Get-Content -LiteralPath $StdoutPath -TotalCount 200 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
-                }
-            }
-            if ($StderrPath) {
-                Write-Host ("[TIMEOUT] stderr: {0}" -f $StderrPath)
-                if (Test-Path -LiteralPath $StderrPath) {
-                    Get-Content -LiteralPath $StderrPath -TotalCount 200 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
-                }
-            }
-            Fail "substrate timed out: $($Args -join ' ')"
-        }
-
-        $p.Refresh()
-        $out = ''
-        $err = ''
-        if ($StdoutPath -and (Test-Path -LiteralPath $StdoutPath)) {
-            $out = Get-Content -LiteralPath $StdoutPath -Raw -ErrorAction SilentlyContinue
-        }
-        if ($StderrPath -and (Test-Path -LiteralPath $StderrPath)) {
-            $err = Get-Content -LiteralPath $StderrPath -Raw -ErrorAction SilentlyContinue
-        }
-
-        return @{
-            ExitCode = $p.ExitCode
-            Stdout   = $out
-            Stderr   = $err
-        }
-    }
-
     $si = New-Object System.Diagnostics.ProcessStartInfo
     $si.FileName = $exe
     foreach ($a in $Args) { [void]$si.ArgumentList.Add($a) }
@@ -108,6 +48,25 @@ function Invoke-Substrate {
 
     if (-not $p.WaitForExit($TimeoutMs)) {
         try { $p.Kill() } catch {}
+        try { $p.WaitForExit(5000) | Out-Null } catch {}
+
+        $out = ''
+        $err = ''
+        try { $out = $p.StandardOutput.ReadToEnd() } catch { $out = '' }
+        try { $err = $p.StandardError.ReadToEnd() } catch { $err = '' }
+        if ($StdoutPath) {
+            New-Item -ItemType File -Force -Path $StdoutPath | Out-Null
+            Set-Content -LiteralPath $StdoutPath -Value $out -Encoding UTF8
+            Write-Host ("[TIMEOUT] stdout: {0}" -f $StdoutPath)
+            Write-LogSnippet -Path $StdoutPath
+        }
+        if ($StderrPath) {
+            New-Item -ItemType File -Force -Path $StderrPath | Out-Null
+            Set-Content -LiteralPath $StderrPath -Value $err -Encoding UTF8
+            Write-Host ("[TIMEOUT] stderr: {0}" -f $StderrPath)
+            Write-LogSnippet -Path $StderrPath
+        }
+
         Fail "substrate timed out: $($Args -join ' ')"
     }
 
