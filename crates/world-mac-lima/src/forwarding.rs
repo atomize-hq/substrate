@@ -3,6 +3,7 @@
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::time::Duration;
 use tracing::{debug, info, warn};
 
 /// Forwarding transport kind.
@@ -212,17 +213,18 @@ fn create_ssh_uds_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
     debug!("Running SSH command: ssh {:?}", ssh_args);
 
     // Start SSH forwarding
-    let child = Command::new("ssh")
+    let mut child = Command::new("ssh")
         .args(&ssh_args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
         .context("Failed to start SSH UDS forwarding")?;
 
     debug!("SSH process spawned with PID: {:?}", child.id());
 
     // Wait for socket to appear (up to ~10s)
+    let mut stderr_buf = String::new();
     for i in 0..20 {
         if socket_path.exists() {
             info!(
@@ -234,13 +236,42 @@ fn create_ssh_uds_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
                 child: Some(child),
             });
         }
+
+        // If ssh already exited, surface stderr to make failures actionable.
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if let Some(mut stderr) = child.stderr.take() {
+                    use std::io::Read as _;
+                    let _ = stderr.read_to_string(&mut stderr_buf);
+                }
+                anyhow::bail!(
+                    "SSH UDS forwarding failed (ssh exited: {status})\nSSH command: ssh {args}\nSSH stderr:\n{stderr}",
+                    status = status,
+                    args = ssh_args.join(" "),
+                    stderr = stderr_buf.trim()
+                );
+            }
+            Ok(None) => {}
+            Err(err) => {
+                warn!("Failed to poll SSH forwarding process: {err}");
+            }
+        }
+
         debug!("Waiting for socket to appear... attempt {}/20", i + 1);
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        std::thread::sleep(Duration::from_millis(500));
+    }
+
+    // Best-effort: if ssh is still running but socket never appeared, capture any stderr already emitted.
+    if let Some(mut stderr) = child.stderr.take() {
+        use std::io::Read as _;
+        let _ = stderr.read_to_string(&mut stderr_buf);
     }
 
     anyhow::bail!(
-        "SSH UDS forwarding failed to establish - socket never appeared at {}",
-        socket_path.display()
+        "SSH UDS forwarding failed to establish - socket never appeared at {}\nSSH command: ssh {args}\nSSH stderr:\n{stderr}",
+        socket_path.display(),
+        args = ssh_args.join(" "),
+        stderr = stderr_buf.trim()
     )
 }
 
