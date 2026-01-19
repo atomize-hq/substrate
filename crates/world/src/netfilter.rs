@@ -21,6 +21,51 @@ use std::process::Stdio;
 #[cfg(target_os = "linux")]
 use std::time::{Duration, Instant};
 
+#[cfg(target_os = "linux")]
+fn monitor_timeout() -> Duration {
+    std::env::var("WORLD_NETFILTER_MONITOR_TIMEOUT_MS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .map(Duration::from_millis)
+        .unwrap_or_else(|| Duration::from_millis(1_000))
+}
+
+#[cfg(target_os = "linux")]
+fn output_with_timeout(mut cmd: Command, timeout: Duration) -> Result<std::process::Output> {
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+
+    let mut child = cmd.spawn().context("Failed to spawn command")?;
+    let start = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let mut stdout = Vec::new();
+                let mut stderr = Vec::new();
+                if let Some(mut out) = child.stdout.take() {
+                    let _ = out.read_to_end(&mut stdout);
+                }
+                if let Some(mut err) = child.stderr.take() {
+                    let _ = err.read_to_end(&mut stderr);
+                }
+                return Ok(std::process::Output {
+                    status,
+                    stdout,
+                    stderr,
+                });
+            }
+            Ok(None) => {
+                if start.elapsed() >= timeout {
+                    let _ = child.kill();
+                    return Err(anyhow!("command timed out after {}ms", timeout.as_millis()));
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Err(err) => return Err(anyhow!(err).context("Failed to poll command completion")),
+        }
+    }
+}
+
 /// Network scope tracking for command execution.
 #[derive(Debug, Clone)]
 pub struct NetworkScope {
@@ -385,11 +430,19 @@ impl NetFilter {
 
     #[cfg(target_os = "linux")]
     fn parse_dropped_packets(&mut self) -> Result<()> {
+        // WSL kernel logs can be very large and `dmesg` access/latency can be unpredictable.
+        // Scope monitoring should never block command completion, so skip on WSL.
+        if std::env::var_os("WSL_INTEROP").is_some() {
+            return Ok(());
+        }
+
         // Read kernel log for dropped packets with our prefix
-        let output = Command::new("dmesg")
-            .args(["-t"])
-            .output()
-            .context("Failed to read kernel log")?;
+        let output = {
+            let mut cmd = Command::new("dmesg");
+            cmd.args(["-t"]);
+            output_with_timeout(cmd, monitor_timeout())
+        }
+        .context("Failed to read kernel log")?;
 
         let log = String::from_utf8_lossy(&output.stdout);
         let prefix = format!("substrate-dropped-{}:", self.world_id);
@@ -416,7 +469,15 @@ impl NetFilter {
     #[cfg(target_os = "linux")]
     fn parse_conntrack(&mut self) -> Result<()> {
         // Parse connection tracking table for active connections
-        let output = Command::new("conntrack").args(["-L", "-n"]).output();
+        if std::env::var_os("WSL_INTEROP").is_some() {
+            return Ok(());
+        }
+
+        let output = {
+            let mut cmd = Command::new("conntrack");
+            cmd.args(["-L", "-n"]);
+            output_with_timeout(cmd, monitor_timeout())
+        };
 
         if let Ok(output) = output {
             let conntrack = String::from_utf8_lossy(&output.stdout);
@@ -494,8 +555,15 @@ pub fn apply_network_filter(world_id: &str, allowed_domains: Vec<String>) -> Res
 
 /// Monitor network activity and return scopes used.
 pub fn monitor_network_scopes(filter: &mut NetFilter) -> Result<Vec<String>> {
-    // Parse network activity from various sources
-    filter.parse_network_activity()?;
+    // Best-effort: scope monitoring must never fail the underlying command.
+    if let Err(err) = filter.parse_network_activity() {
+        tracing::debug!(
+            target: "world::netfilter",
+            error = %err,
+            "network scope monitoring failed; returning empty scopes"
+        );
+        return Ok(Vec::new());
+    }
 
     // Return the formatted scope list
     Ok(filter.get_scopes_used())
