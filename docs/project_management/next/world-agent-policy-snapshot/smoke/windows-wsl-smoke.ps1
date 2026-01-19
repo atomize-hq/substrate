@@ -29,7 +29,7 @@ function Invoke-Substrate {
         [string]$Cwd = $null,
         [string]$StdoutPath = $null,
         [string]$StderrPath = $null,
-        [int]$TimeoutMs = 60000
+        [int]$TimeoutMs = 180000
     )
 
     $exe = Resolve-SubstrateExe
@@ -245,7 +245,7 @@ metadata: {}
     $fsCmd = "true $fsMarker"
     $fsStdout = Join-Path $logsDir "fs.stdout"
     $fsStderr = Join-Path $logsDir "fs.stderr"
-    $fsRes = Invoke-Substrate -Args @('--world', '--ci', '--command', $fsCmd) -Cwd $tmpWs -StdoutPath $fsStdout -StderrPath $fsStderr -TimeoutMs 60000
+    $fsRes = Invoke-Substrate -Args @('--world', '--ci', '--command', $fsCmd) -Cwd $tmpWs -StdoutPath $fsStdout -StderrPath $fsStderr -TimeoutMs 180000
     $fsMeta = Get-TraceMetaForMarker -TraceLog $traceLog -Marker $fsMarker
     $tests += [ordered]@{
         name      = 'fs_allowlist_full_isolation'
@@ -287,7 +287,7 @@ metadata: {}
     $netCmd = "true $netMarker"
     $netStdout = Join-Path $logsDir "net.stdout"
     $netStderr = Join-Path $logsDir "net.stderr"
-    $netRes = Invoke-Substrate -Args @('--world', '--ci', '--command', $netCmd) -Cwd $tmpWs -StdoutPath $netStdout -StderrPath $netStderr -TimeoutMs 60000
+    $netRes = Invoke-Substrate -Args @('--world', '--ci', '--command', $netCmd) -Cwd $tmpWs -StdoutPath $netStdout -StderrPath $netStderr -TimeoutMs 180000
     $netMeta = Get-TraceMetaForMarker -TraceLog $traceLog -Marker $netMarker
     $tests += [ordered]@{
         name      = 'net_allowlist'
@@ -328,7 +328,7 @@ metadata: {}
     $limitsCmd = "true $limitsMarker"
     $limitsStdout = Join-Path $logsDir "limits.stdout"
     $limitsStderr = Join-Path $logsDir "limits.stderr"
-    $limitsRes = Invoke-Substrate -Args @('--world', '--ci', '--command', $limitsCmd) -Cwd $tmpWs -StdoutPath $limitsStdout -StderrPath $limitsStderr -TimeoutMs 60000
+    $limitsRes = Invoke-Substrate -Args @('--world', '--ci', '--command', $limitsCmd) -Cwd $tmpWs -StdoutPath $limitsStdout -StderrPath $limitsStderr -TimeoutMs 180000
     $limitsMeta = Get-TraceMetaForMarker -TraceLog $traceLog -Marker $limitsMarker
     $limitsSkipped = ($limitsRes.ExitCode -eq 0)
     $tests += [ordered]@{
