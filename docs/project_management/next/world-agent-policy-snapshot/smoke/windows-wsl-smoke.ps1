@@ -38,9 +38,18 @@ function Invoke-Substrate {
         if ($StdoutPath) { New-Item -ItemType File -Force -Path $StdoutPath | Out-Null }
         if ($StderrPath) { New-Item -ItemType File -Force -Path $StderrPath | Out-Null }
 
+        function Quote-WindowsArg {
+            param([Parameter(Mandatory = $true)][string]$Value)
+            if ($Value -notmatch '[\\s"]') { return $Value }
+            $escaped = $Value -replace '"', '\\"'
+            return '"' + $escaped + '"'
+        }
+
+        $argString = ($Args | ForEach-Object { Quote-WindowsArg $_ }) -join ' '
+
         $procArgs = @{
             FilePath     = $exe
-            ArgumentList = $Args
+            ArgumentList = $argString
             NoNewWindow  = $true
             PassThru     = $true
         }
@@ -50,8 +59,7 @@ function Invoke-Substrate {
 
         $p = Start-Process @procArgs
 
-        $timeoutSec = [math]::Ceiling($TimeoutMs / 1000)
-        $completed = Wait-Process -Id $p.Id -Timeout $timeoutSec -ErrorAction SilentlyContinue
+        $completed = $p.WaitForExit($TimeoutMs)
         if (-not $completed) {
             try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
             if ($StdoutPath) {
