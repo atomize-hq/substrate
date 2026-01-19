@@ -164,11 +164,12 @@ function Write-LogSnippet {
 
 $runId = "waps-" + ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) + "-" + ([guid]::NewGuid().ToString('N'))
 $tmpHome = Join-Path $env:TEMP ("waps-home-" + $runId)
-$tmpWs = Join-Path $env:TEMP ("waps-ws-" + $runId)
+$workspaceRoot = Join-Path (Get-Location).Path ".substrate-waps-tmp"
+$tmpWs = Join-Path $workspaceRoot ("ws-" + $runId)
 $traceLog = Join-Path $tmpHome "trace.jsonl"
 $logsDir = Join-Path $tmpHome "logs"
 
-New-Item -ItemType Directory -Force -Path $tmpHome, $tmpWs, $logsDir | Out-Null
+New-Item -ItemType Directory -Force -Path $tmpHome, $workspaceRoot, $tmpWs, $logsDir | Out-Null
 
 try {
     $env:SUBSTRATE_HOME = $tmpHome
