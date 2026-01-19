@@ -281,9 +281,11 @@ fn write_capabilities(stream: &mut UnixStream) {
 
 fn write_world_doctor_report(stream: &mut UnixStream) {
     let body = json!({
-        "schema_version": 1,
+        "schema_version": 2,
         "ok": true,
         "collected_at_utc": "2026-01-08T00:00:00Z",
+        "policy_snapshot_v1_supported": true,
+        "policy_resolution_mode": null,
         "landlock": {
             "supported": true,
             "abi": 3,

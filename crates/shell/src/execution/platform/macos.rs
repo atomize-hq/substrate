@@ -229,9 +229,11 @@ echo pass
         let ok = landlock_supported && probe_pass;
 
         json!({
-            "schema_version": 1,
+            "schema_version": 2,
             "ok": ok,
             "collected_at_utc": collected_at_utc,
+            "policy_snapshot_v1_supported": true,
+            "policy_resolution_mode": null,
             "landlock": {
                 "supported": landlock_supported,
                 "abi": landlock_abi,
@@ -834,7 +836,7 @@ echo pass
                         } else if first_line.starts_with("GET /v1/doctor/world") {
                             write_response(
                                 &mut stream,
-                                r#"{"schema_version":1,"ok":true,"collected_at_utc":"2026-01-08T00:00:00Z","landlock":{"supported":true,"abi":3,"reason":null},"world_fs_strategy":{"primary":"overlay","fallback":"fuse","probe":{"id":"enumeration_v1","probe_file":".substrate_enum_probe","result":"pass","failure_reason":null}}}"#,
+                                r#"{"schema_version":2,"ok":true,"collected_at_utc":"2026-01-08T00:00:00Z","policy_snapshot_v1_supported":true,"policy_resolution_mode":null,"landlock":{"supported":true,"abi":3,"reason":null},"world_fs_strategy":{"primary":"overlay","fallback":"fuse","probe":{"id":"enumeration_v1","probe_file":".substrate_enum_probe","result":"pass","failure_reason":null}}}"#,
                             );
                         } else {
                             let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n");

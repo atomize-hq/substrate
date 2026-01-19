@@ -154,7 +154,7 @@ pub struct WorldDoctorWorldFsStrategyV1 {
     pub probe: WorldDoctorWorldFsStrategyProbeV1,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum WorldDoctorWorldFsStrategyKindV1 {
     Overlay,
@@ -169,7 +169,7 @@ pub struct WorldDoctorWorldFsStrategyProbeV1 {
     pub failure_reason: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum WorldDoctorWorldFsStrategyProbeResultV1 {
     Pass,
@@ -179,7 +179,6 @@ pub enum WorldDoctorWorldFsStrategyProbeResultV1 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde::{Deserialize, Serialize};
 
     #[test]
     fn serialize_stream_frame_roundtrip() {
@@ -296,61 +295,67 @@ mod tests {
 
     #[test]
     fn world_doctor_report_v1_schema_round_trip() {
-        #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-        struct WorldDoctorReportV1 {
-            schema_version: u32,
-            ok: bool,
-            collected_at_utc: String,
-            landlock: LandlockReportV1,
-            world_fs_strategy: WorldFsStrategyReportV1,
-        }
-
-        #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-        struct LandlockReportV1 {
-            supported: bool,
-            abi: Option<u32>,
-            reason: Option<String>,
-        }
-
-        #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-        struct WorldFsStrategyReportV1 {
-            primary: String,
-            fallback: String,
-            probe: WorldFsStrategyProbeV1,
-        }
-
-        #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-        struct WorldFsStrategyProbeV1 {
-            id: String,
-            probe_file: String,
-            result: String,
-            failure_reason: Option<String>,
-        }
-
-        let report = WorldDoctorReportV1 {
-            schema_version: 1,
+        let report = super::WorldDoctorReportV1 {
+            schema_version: 2,
             ok: true,
             collected_at_utc: "2026-01-08T00:00:00Z".to_string(),
-            landlock: LandlockReportV1 {
+            policy_snapshot_v1_supported: true,
+            policy_resolution_mode: Some(super::PolicyResolutionModeV1::SnapshotV1),
+            landlock: super::WorldDoctorLandlockV1 {
                 supported: true,
                 abi: Some(3),
                 reason: None,
             },
-            world_fs_strategy: WorldFsStrategyReportV1 {
-                primary: "overlay".to_string(),
-                fallback: "fuse".to_string(),
-                probe: WorldFsStrategyProbeV1 {
+            world_fs_strategy: super::WorldDoctorWorldFsStrategyV1 {
+                primary: super::WorldDoctorWorldFsStrategyKindV1::Overlay,
+                fallback: super::WorldDoctorWorldFsStrategyKindV1::Fuse,
+                probe: super::WorldDoctorWorldFsStrategyProbeV1 {
                     id: "enumeration_v1".to_string(),
                     probe_file: ".substrate_enum_probe".to_string(),
-                    result: "pass".to_string(),
+                    result: super::WorldDoctorWorldFsStrategyProbeResultV1::Pass,
                     failure_reason: None,
                 },
             },
         };
 
         let json = serde_json::to_string(&report).expect("serialize report");
-        let back: WorldDoctorReportV1 = serde_json::from_str(&json).expect("deserialize report");
-        assert_eq!(back, report);
+        let back: super::WorldDoctorReportV1 =
+            serde_json::from_str(&json).expect("deserialize report");
+        assert_eq!(back.schema_version, report.schema_version);
+        assert_eq!(back.ok, report.ok);
+        assert_eq!(back.collected_at_utc, report.collected_at_utc);
+        assert_eq!(
+            back.policy_snapshot_v1_supported,
+            report.policy_snapshot_v1_supported
+        );
+        assert_eq!(back.policy_resolution_mode, report.policy_resolution_mode);
+        assert_eq!(back.landlock.supported, report.landlock.supported);
+        assert_eq!(back.landlock.abi, report.landlock.abi);
+        assert_eq!(back.landlock.reason, report.landlock.reason);
+        assert_eq!(
+            back.world_fs_strategy.primary,
+            report.world_fs_strategy.primary
+        );
+        assert_eq!(
+            back.world_fs_strategy.fallback,
+            report.world_fs_strategy.fallback
+        );
+        assert_eq!(
+            back.world_fs_strategy.probe.id,
+            report.world_fs_strategy.probe.id
+        );
+        assert_eq!(
+            back.world_fs_strategy.probe.probe_file,
+            report.world_fs_strategy.probe.probe_file
+        );
+        assert_eq!(
+            back.world_fs_strategy.probe.result,
+            report.world_fs_strategy.probe.result
+        );
+        assert_eq!(
+            back.world_fs_strategy.probe.failure_reason,
+            report.world_fs_strategy.probe.failure_reason
+        );
     }
 
     #[test]

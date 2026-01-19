@@ -118,7 +118,7 @@ pub async fn doctor_world(
     let ok =
         landlock.supported && matches!(probe.result, WorldDoctorWorldFsStrategyProbeResultV1::Pass);
     let report = WorldDoctorReportV1 {
-        schema_version: 1,
+        schema_version: 2,
         ok,
         collected_at_utc,
         policy_snapshot_v1_supported: service.policy_snapshot_v1_supported(),

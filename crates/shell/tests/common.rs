@@ -139,9 +139,11 @@ pub mod doctor_fixture {
                 },
                 "world": {
                     "status": "ok",
-                    "schema_version": 1,
+                    "schema_version": 2,
                     "ok": true,
                     "collected_at_utc": "2026-01-08T00:00:00Z",
+                    "policy_snapshot_v1_supported": true,
+                    "policy_resolution_mode": null,
                     "landlock": {
                         "supported": true,
                         "abi": 3,

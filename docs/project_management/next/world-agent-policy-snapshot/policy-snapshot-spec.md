@@ -101,6 +101,27 @@ Expected:
 - `policy_snapshot` MUST be omitted (not present) when the host is not using world-agent for that command.
 - `policy_snapshot` is an additive request field; the host MUST send it only when world-agent capability detection indicates snapshot ingestion support.
 
+### Snapshot support detection (doctor report)
+The host determines snapshot support using agent capability/doctor endpoints. `GET /v1/doctor/world` returns a world enforcement report with `schema_version: 2` and includes snapshot-related fields:
+
+```json
+{
+  "schema_version": 2,
+  "ok": true,
+  "collected_at_utc": "2026-01-08T00:00:00Z",
+  "policy_snapshot_v1_supported": true,
+  "policy_resolution_mode": "snapshot_v1",
+  "landlock": { "supported": true, "abi": 3, "reason": null },
+  "world_fs_strategy": {
+    "primary": "overlay",
+    "fallback": "fuse",
+    "probe": { "id": "enumeration_v1", "probe_file": ".substrate_enum_probe", "result": "pass", "failure_reason": null }
+  }
+}
+```
+
+Legacy world-agents may still return `schema_version: 1` and omit `policy_snapshot_v1_supported` / `policy_resolution_mode`; clients MUST default these fields safely.
+
 ### Schema (JSON shape)
 ```json
 {

@@ -851,7 +851,7 @@ async fn legacy_world_doctor_report_v1_via_execute(
         landlock.supported && matches!(probe.result, WorldDoctorWorldFsStrategyProbeResultV1::Pass);
 
     Ok(WorldDoctorReportV1 {
-        schema_version: 1,
+        schema_version: 2,
         ok,
         collected_at_utc: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         policy_snapshot_v1_supported: false,
