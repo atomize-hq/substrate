@@ -106,7 +106,13 @@ impl SessionWorld {
         #[cfg(target_os = "linux")]
         filter.set_cgroup_path(&self.cgroup_path);
         filter.resolve_domains()?;
-        filter.install_rules()?;
+        let installed = filter.install_rules()?;
+        if !installed {
+            tracing::warn!(
+                target: "world::netfilter",
+                "network filtering requested but nftables rules were not installed (set WORLD_NETFILTER_ENABLE=1 to enable)"
+            );
+        }
         self.network_filter = Some(filter);
         Ok(())
     }

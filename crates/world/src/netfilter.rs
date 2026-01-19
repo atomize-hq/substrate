@@ -105,6 +105,13 @@ struct CgroupMatch {
 }
 
 impl NetFilter {
+    #[cfg(target_os = "linux")]
+    fn netfilter_enabled() -> bool {
+        std::env::var("WORLD_NETFILTER_ENABLE")
+            .ok()
+            .is_some_and(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+    }
+
     /// Create a new network filter for the given world.
     pub fn new(world_id: &str, allowed_domains: Vec<String>) -> Result<Self> {
         let table_name = format!("substrate_{}", world_id);
@@ -174,24 +181,36 @@ impl NetFilter {
     }
 
     /// Install nftables rules for network filtering.
-    pub fn install_rules(&mut self) -> Result<()> {
+    pub fn install_rules(&mut self) -> Result<bool> {
         if self.is_active {
-            return Ok(());
+            return Ok(true);
         }
+
+        let mut installed = false;
 
         #[cfg(target_os = "linux")]
         {
-            self.install_rules_linux()?;
+            if !Self::netfilter_enabled() {
+                tracing::debug!(
+                    target: "world::netfilter",
+                    "WORLD_NETFILTER_ENABLE is not set; skipping nftables rule installation"
+                );
+            } else {
+                self.install_rules_linux()?;
+                self.is_active = true;
+                installed = true;
+            }
         }
 
         #[cfg(not(target_os = "linux"))]
         {
             // Network filtering only works on Linux
             eprintln!("⚠️  Network filtering not available on this platform");
+            self.is_active = true;
+            installed = true;
         }
 
-        self.is_active = true;
-        Ok(())
+        Ok(installed)
     }
 
     #[cfg(target_os = "linux")]
@@ -578,7 +597,7 @@ pub fn apply_network_filter(world_id: &str, allowed_domains: Vec<String>) -> Res
     filter.resolve_domains()?;
 
     // Install filtering rules
-    filter.install_rules()?;
+    let _ = filter.install_rules()?;
 
     Ok(filter)
 }
