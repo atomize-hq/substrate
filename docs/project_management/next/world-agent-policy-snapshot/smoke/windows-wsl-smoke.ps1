@@ -67,6 +67,7 @@ function Invoke-Substrate {
             Write-LogSnippet -Path $StderrPath
         }
 
+        try { Write-WorldDiagnostics } catch {}
         Fail "substrate timed out: $($Args -join ' ')"
     }
 
@@ -182,6 +183,57 @@ function Write-LogSnippet {
     }
 }
 
+function Write-WorldDiagnostics {
+    Write-Host "[DIAG] world transport environment"
+    Write-Host ("[DIAG] SUBSTRATE_FORWARDER_TCP={0}" -f $env:SUBSTRATE_FORWARDER_TCP)
+    Write-Host ("[DIAG] SUBSTRATE_FORWARDER_TCP_ADDR={0}" -f $env:SUBSTRATE_FORWARDER_TCP_ADDR)
+    Write-Host ("[DIAG] SUBSTRATE_FORWARDER_TCP_HOST={0}" -f $env:SUBSTRATE_FORWARDER_TCP_HOST)
+    Write-Host ("[DIAG] SUBSTRATE_FORWARDER_TCP_PORT={0}" -f $env:SUBSTRATE_FORWARDER_TCP_PORT)
+    Write-Host ("[DIAG] SUBSTRATE_FORWARDER_PIPE={0}" -f $env:SUBSTRATE_FORWARDER_PIPE)
+    Write-Host ("[DIAG] SUBSTRATE_FORWARDER_TARGET={0}" -f $env:SUBSTRATE_FORWARDER_TARGET)
+    Write-Host ("[DIAG] SUBSTRATE_WSL_AGENT_EXEC_TIMEOUT_MS={0}" -f $env:SUBSTRATE_WSL_AGENT_EXEC_TIMEOUT_MS)
+
+    if ($env:LOCALAPPDATA) {
+        $forwarderLog = Join-Path $env:LOCALAPPDATA 'Substrate\\logs\\forwarder.log'
+        if (Test-Path -LiteralPath $forwarderLog) {
+            Write-Host ("[DIAG] forwarder log: {0}" -f $forwarderLog)
+            Get-Content -LiteralPath $forwarderLog -Tail 200 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
+        } else {
+            Write-Host ("[DIAG] forwarder log missing: {0}" -f $forwarderLog)
+        }
+    }
+
+    $wslCmd = Get-Command wsl -ErrorAction SilentlyContinue
+    if ($wslCmd) {
+        Write-Host ("[DIAG] WSL agent logs (journalctl) for distro '{0}'" -f $script:DistroName)
+        $si = New-Object System.Diagnostics.ProcessStartInfo
+        $si.FileName = $wslCmd.Path
+        [void]$si.ArgumentList.Add('-d')
+        [void]$si.ArgumentList.Add($script:DistroName)
+        [void]$si.ArgumentList.Add('--')
+        [void]$si.ArgumentList.Add('bash')
+        [void]$si.ArgumentList.Add('-lc')
+        [void]$si.ArgumentList.Add('journalctl -u substrate-world-agent -n 200 --no-pager || true')
+        $si.RedirectStandardOutput = $true
+        $si.RedirectStandardError = $true
+        $si.UseShellExecute = $false
+        $p = New-Object System.Diagnostics.Process
+        $p.StartInfo = $si
+        [void]$p.Start()
+        if ($p.WaitForExit(20000)) {
+            $out = $p.StandardOutput.ReadToEnd()
+            $err = $p.StandardError.ReadToEnd()
+            if ($out) { Write-Host $out }
+            if ($err) { Write-Host $err }
+        } else {
+            try { $p.Kill() } catch {}
+            Write-Host "[DIAG] journalctl timed out after 20s"
+        }
+    } else {
+        Write-Host "[DIAG] wsl.exe not found; skipping WSL diagnostics"
+    }
+}
+
 $runId = "waps-" + ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) + "-" + ([guid]::NewGuid().ToString('N'))
 $tmpHome = Join-Path $env:TEMP ("waps-home-" + $runId)
 $workspaceRoot = Join-Path (Get-Location).Path ".substrate-waps-tmp"
@@ -201,6 +253,8 @@ try {
     # WSL runners frequently cannot support the overlayfs + mount-namespace path, so force the world
     # to execute directly while still validating policy snapshot trace metadata.
     $env:SUBSTRATE_WORLD_EXEC_FORCE_DIRECT = '1'
+    # Ensure the host-side client fails fast with actionable errors instead of hanging indefinitely.
+    if (-not $env:SUBSTRATE_WSL_AGENT_EXEC_TIMEOUT_MS) { $env:SUBSTRATE_WSL_AGENT_EXEC_TIMEOUT_MS = '30000' }
 
     # Force the Windows WSL backend to use the named pipe transport (default operational path) even
     # if the runner machine has TCP bridge env vars set globally.
@@ -274,6 +328,7 @@ metadata: {}
     Write-Host ("[INFO] run_id={0}" -f $runId)
     Write-Host ("[INFO] workspace={0}" -f $tmpWs)
     Write-Host ("[INFO] trace_log={0}" -f $traceLog)
+    Write-WorldDiagnostics
 
     if (-not $doctorOk) {
         Write-Host "[FAIL] world doctor reported ok=false; world execution unavailable"
@@ -281,6 +336,7 @@ metadata: {}
         Write-LogSnippet -Path $doctorStdout
         Write-Host ("[FAIL] doctor stderr: {0}" -f $doctorStderr)
         Write-LogSnippet -Path $doctorStderr
+        Write-WorldDiagnostics
         Fail "WSL world backend unavailable (doctor ok=false)"
     }
 
@@ -307,6 +363,7 @@ metadata: {}
             Write-LogSnippet -Path $preflightStdout
             Write-Host ("[FAIL] preflight stderr: {0}" -f $preflightStderr)
             Write-LogSnippet -Path $preflightStderr
+            Write-WorldDiagnostics
             Fail "preflight missing trace metadata while doctor reports snapshot support"
         }
         if ($preflightMeta.policy_resolution_mode -ne 'snapshot_v1') {

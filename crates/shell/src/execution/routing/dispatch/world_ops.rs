@@ -981,7 +981,32 @@ pub(crate) fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStr
     rt.block_on(async move {
         #[cfg(target_os = "windows")]
         {
-            let response = client.execute(request).await?;
+            use anyhow::Context as _;
+
+            fn parse_timeout_ms(var: &str) -> Option<std::time::Duration> {
+                std::env::var(var)
+                    .ok()
+                    .and_then(|v| v.trim().parse::<u64>().ok())
+                    .map(std::time::Duration::from_millis)
+            }
+
+            let timeout = parse_timeout_ms("SUBSTRATE_WSL_AGENT_EXEC_TIMEOUT_MS")
+                .unwrap_or_else(|| std::time::Duration::from_secs(120));
+
+            let response = tokio::time::timeout(timeout, async {
+                client
+                    .execute(request)
+                    .await
+                    .context("world-agent /v1/execute request failed")
+            })
+            .await
+            .with_context(|| {
+                format!(
+                    "Timed out after {}s waiting for world-agent /v1/execute (transport: {}).\nHint: ensure the Windows named-pipe forwarder is running (\\\\.\\pipe\\substrate-agent) and the WSL agent is healthy (try `pwsh -File scripts/windows/wsl-warm.ps1 -DistroName substrate-wsl`).",
+                    timeout.as_secs(),
+                    client.transport().description()
+                )
+            })??;
             let stdout = BASE64
                 .decode(response.stdout_b64.as_bytes())
                 .unwrap_or_else(|_| response.stdout_b64.clone().into_bytes());

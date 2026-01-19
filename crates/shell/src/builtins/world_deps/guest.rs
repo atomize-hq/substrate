@@ -542,6 +542,8 @@ fn run_world_command_with_overrides(
     profile: Option<&str>,
     world_fs_mode: Option<WorldFsMode>,
 ) -> Result<agent_api_types::ExecuteResponse> {
+    use anyhow::Context as _;
+
     let (client, mut request, _) = build_agent_client_and_request(command)?;
     // On macOS the world backend runs inside a Linux VM (Lima). The host cwd can be a path
     // that is not mounted into the VM (e.g. mktemp under /var/folders), causing world-agent
@@ -557,7 +559,33 @@ fn run_world_command_with_overrides(
         request.world_fs_mode = Some(mode);
     }
     let rt = Runtime::new()?;
-    let response = rt.block_on(async move { client.execute(request).await })?;
+    let timeout = std::env::var("SUBSTRATE_WSL_AGENT_EXEC_TIMEOUT_MS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .map(std::time::Duration::from_millis);
+
+    let response = rt.block_on(async move {
+        match timeout {
+            Some(timeout) => tokio::time::timeout(timeout, async {
+                client
+                    .execute(request)
+                    .await
+                    .context("world-agent /v1/execute request failed")
+            })
+            .await
+            .with_context(|| {
+                format!(
+                    "Timed out after {}s waiting for world-agent /v1/execute (transport: {}).",
+                    timeout.as_secs(),
+                    client.transport().description()
+                )
+            })?,
+            None => client
+                .execute(request)
+                .await
+                .context("world-agent /v1/execute request failed"),
+        }
+    })?;
     Ok(response)
 }
 

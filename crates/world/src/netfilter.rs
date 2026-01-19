@@ -254,7 +254,10 @@ impl NetFilter {
                 .unwrap_or_else(|| Duration::from_millis(2_000))
         }
 
-        fn output_with_timeout(mut cmd: Command, timeout: Duration) -> Result<std::process::Output> {
+        fn output_with_timeout(
+            mut cmd: Command,
+            timeout: Duration,
+        ) -> Result<std::process::Output> {
             cmd.stdout(Stdio::piped());
             cmd.stderr(Stdio::piped());
 
@@ -298,8 +301,12 @@ impl NetFilter {
         let output = if let Some(ref ns) = self.ns_name {
             let mut cmd = Command::new("ip");
             cmd.args(["netns", "exec", ns, "nft"]).args(args);
-            output_with_timeout(cmd, timeout)
-                .with_context(|| format!("Failed to run ip netns exec nft (timeout={}ms)", timeout.as_millis()))?
+            output_with_timeout(cmd, timeout).with_context(|| {
+                format!(
+                    "Failed to run ip netns exec nft (timeout={}ms)",
+                    timeout.as_millis()
+                )
+            })?
         } else {
             let mut cmd = Command::new("nft");
             cmd.args(args);
