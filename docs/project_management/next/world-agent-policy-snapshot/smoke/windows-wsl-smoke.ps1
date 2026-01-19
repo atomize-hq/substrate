@@ -85,12 +85,27 @@ function Get-TraceMetaForMarker {
     if ($hits.Count -eq 0) { return $null }
 
     $last = $hits[-1]
-    return @{
-        span_id               = $last.span_id
-        exit                  = $last.exit
+    $meta = [ordered]@{
+        span_id = $last.span_id
+        exit = $last.exit
         policy_resolution_mode = $last.policy_resolution_mode
-        policy_snapshot_hash  = $last.policy_snapshot_hash
+        policy_snapshot_hash = $last.policy_snapshot_hash
     }
+
+    if ($last.PSObject.Properties.Match('policy_snapshot_schema').Count -gt 0) {
+        $meta.policy_snapshot_schema = $last.policy_snapshot_schema
+    }
+    if ($last.PSObject.Properties.Match('world_fs_strategy_primary').Count -gt 0) {
+        $meta.world_fs_strategy_primary = $last.world_fs_strategy_primary
+    }
+    if ($last.PSObject.Properties.Match('world_fs_strategy_final').Count -gt 0) {
+        $meta.world_fs_strategy_final = $last.world_fs_strategy_final
+    }
+    if ($last.PSObject.Properties.Match('world_fs_strategy_fallback_reason').Count -gt 0) {
+        $meta.world_fs_strategy_fallback_reason = $last.world_fs_strategy_fallback_reason
+    }
+
+    return $meta
 }
 
 $runId = "waps-" + ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) + "-" + ([guid]::NewGuid().ToString('N'))
@@ -125,7 +140,14 @@ try {
     $doctorOk = $false
     $snapshotSupported = $false
     if ($doctor -and $doctor.ok) { $doctorOk = [bool]$doctor.ok }
-    if ($doctor -and $doctor.policy_snapshot_v1_supported) { $snapshotSupported = [bool]$doctor.policy_snapshot_v1_supported }
+    if ($doctor) {
+        if ($doctor.PSObject.Properties.Match('policy_snapshot_v1_supported').Count -gt 0) {
+            $snapshotSupported = [bool]$doctor.policy_snapshot_v1_supported
+        }
+        elseif ($doctor.world -and $doctor.world.PSObject.Properties.Match('policy_snapshot_v1_supported').Count -gt 0) {
+            $snapshotSupported = [bool]$doctor.world.policy_snapshot_v1_supported
+        }
+    }
 
     $tests = @()
 
@@ -269,8 +291,17 @@ metadata: {}
         foreach ($t in $tests) {
             if (-not $t.trace_meta) { $snapshotOk = $false; continue }
             if ($t.trace_meta.policy_resolution_mode -ne 'snapshot_v1') { $snapshotOk = $false }
+            if ($t.trace_meta.policy_snapshot_schema -ne 1) { $snapshotOk = $false }
             if (-not $t.trace_meta.policy_snapshot_hash) { $snapshotOk = $false }
             if ([string]$t.trace_meta.policy_snapshot_hash -eq '') { $snapshotOk = $false }
+        }
+    }
+
+    $schemaOk = $true
+    foreach ($t in $tests) {
+        if (-not $t.trace_meta) { continue }
+        if ($t.trace_meta.policy_resolution_mode -eq 'snapshot_v1' -and $t.trace_meta.policy_snapshot_schema -ne 1) {
+            $schemaOk = $false
         }
     }
 
@@ -290,9 +321,9 @@ metadata: {}
     $summary | ConvertTo-Json -Depth 10 -Compress
 
     if (-not $overallOk) { exit 1 }
+    if (-not $schemaOk) { exit 1 }
     if (-not $snapshotOk) { exit 1 }
 }
 finally {
     Remove-Item -LiteralPath $tmpHome, $tmpWs -Recurse -Force -ErrorAction SilentlyContinue | Out-Null
 }
-

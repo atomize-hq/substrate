@@ -48,6 +48,10 @@ trace_meta_for_marker() {
         policy_resolution_mode,
         policy_snapshot_hash
       }
+    + (if (.policy_snapshot_schema? != null) then { policy_snapshot_schema: .policy_snapshot_schema } else {} end)
+    + (if (.world_fs_strategy_primary? != null) then { world_fs_strategy_primary: .world_fs_strategy_primary } else {} end)
+    + (if (.world_fs_strategy_final? != null) then { world_fs_strategy_final: .world_fs_strategy_final } else {} end)
+    + (if (.world_fs_strategy_fallback_reason? != null) then { world_fs_strategy_fallback_reason: .world_fs_strategy_fallback_reason } else {} end)
   ' "${trace_log}" | tail -n 1
 }
 
@@ -86,7 +90,7 @@ mkdir -p writable
 
 doctor_json="$(substrate world doctor --json 2>/dev/null || true)"
 doctor_ok="$(printf '%s' "${doctor_json:-null}" | jq -r '.ok? // false' 2>/dev/null || printf 'false')"
-doctor_snapshot_supported="$(printf '%s' "${doctor_json:-null}" | jq -r '.policy_snapshot_v1_supported? // false' 2>/dev/null || printf 'false')"
+doctor_snapshot_supported="$(printf '%s' "${doctor_json:-null}" | jq -r '(.policy_snapshot_v1_supported? // .world.policy_snapshot_v1_supported? // false)' 2>/dev/null || printf 'false')"
 
 tests_ndjson="${TMP_HOME}/tests.ndjson"
 : >"${tests_ndjson}"
@@ -295,13 +299,17 @@ summary="$(jq -nc \
 echo "${summary}"
 
 overall_ok="$(printf '%s\n' "${tests_json}" | jq -r 'all(.[]; (.ok==true))')"
+schema_ok="$(printf '%s\n' "${tests_json}" | jq -r 'all(.[]; (.trace_meta.policy_resolution_mode!="snapshot_v1") or (.trace_meta.policy_snapshot_schema==1))')"
 if [[ "${doctor_snapshot_supported}" == "true" ]]; then
-  snapshot_ok="$(printf '%s\n' "${tests_json}" | jq -r 'all(.[]; (.trace_meta.policy_resolution_mode=="snapshot_v1") and ((.trace_meta.policy_snapshot_hash? // "") | length > 0))')"
+  snapshot_ok="$(printf '%s\n' "${tests_json}" | jq -r 'all(.[]; (.trace_meta.policy_resolution_mode=="snapshot_v1") and (.trace_meta.policy_snapshot_schema==1) and ((.trace_meta.policy_snapshot_hash? // "") | length > 0))')"
 else
   snapshot_ok="true"
 fi
 
 if [[ "${overall_ok}" != "true" ]]; then
+  exit 1
+fi
+if [[ "${schema_ok}" != "true" ]]; then
   exit 1
 fi
 if [[ "${snapshot_ok}" != "true" ]]; then
