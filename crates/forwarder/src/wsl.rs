@@ -13,29 +13,67 @@ import os
 import selectors
 import socket
 import sys
+import time
 
 DEFAULT_MODE = "uds"
 DEFAULT_UDS = "/run/substrate.sock"
 DEFAULT_TCP_HOST = "127.0.0.1"
 DEFAULT_TCP_PORT = 61337
+DEFAULT_CONNECT_TIMEOUT_S = 2.0
+DEFAULT_CONNECT_DEADLINE_S = 10.0
+DEFAULT_IDLE_AFTER_STDIN_CLOSE_S = 2.0
+
+
+def _float_env(name, default):
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    raw = raw.strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
 
 
 def connect():
     mode = os.environ.get("SUBSTRATE_FORWARDER_TARGET_MODE", DEFAULT_MODE).lower()
-    if mode == "tcp":
-        host = os.environ.get("SUBSTRATE_FORWARDER_TARGET_HOST", DEFAULT_TCP_HOST)
-        port_value = os.environ.get("SUBSTRATE_FORWARDER_TARGET_PORT")
+    connect_timeout_s = _float_env("SUBSTRATE_FORWARDER_CONNECT_TIMEOUT_S", DEFAULT_CONNECT_TIMEOUT_S)
+    connect_deadline_s = _float_env("SUBSTRATE_FORWARDER_CONNECT_DEADLINE_S", DEFAULT_CONNECT_DEADLINE_S)
+    deadline = time.monotonic() + connect_deadline_s
+
+    while True:
         try:
-            port = int(port_value) if port_value else DEFAULT_TCP_PORT
-        except ValueError as exc:
-            raise RuntimeError(f"invalid tcp port: {port_value!r}") from exc
-        sock = socket.create_connection((host, port))
-    else:
-        path = os.environ.get("SUBSTRATE_FORWARDER_TARGET_ENDPOINT", DEFAULT_UDS)
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.connect(path)
-    sock.setblocking(False)
-    return sock
+            if mode == "tcp":
+                host = os.environ.get("SUBSTRATE_FORWARDER_TARGET_HOST", DEFAULT_TCP_HOST)
+                port_value = os.environ.get("SUBSTRATE_FORWARDER_TARGET_PORT")
+                try:
+                    port = int(port_value) if port_value else DEFAULT_TCP_PORT
+                except ValueError as exc:
+                    raise RuntimeError(f"invalid tcp port: {port_value!r}") from exc
+                sock = socket.create_connection((host, port), timeout=connect_timeout_s)
+            else:
+                path = os.environ.get("SUBSTRATE_FORWARDER_TARGET_ENDPOINT", DEFAULT_UDS)
+                sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                sock.settimeout(connect_timeout_s)
+                sock.connect(path)
+
+            sock.setblocking(False)
+            return sock
+        except Exception as exc:
+            if time.monotonic() >= deadline:
+                raise RuntimeError(
+                    f"timed out connecting to target mode={mode!r} after {connect_deadline_s:.1f}s: {exc}"
+                ) from exc
+            time.sleep(0.25)
+
+
+def idle_after_stdin_close_s():
+    return _float_env(
+        "SUBSTRATE_FORWARDER_IDLE_AFTER_STDIN_CLOSE_S",
+        DEFAULT_IDLE_AFTER_STDIN_CLOSE_S,
+    )
 
 
 def main():
@@ -48,8 +86,26 @@ def main():
     selector.register(sock, selectors.EVENT_READ)
     selector.register(stdin_fd, selectors.EVENT_READ)
 
+    stdin_closed = False
+    last_activity = time.monotonic()
+    idle_deadline = None
+    idle_timeout_s = idle_after_stdin_close_s()
+
     while True:
-        events = selector.select()
+        events = selector.select(timeout=1.0)
+        now = time.monotonic()
+
+        if stdin_closed and idle_deadline is not None and now >= idle_deadline:
+            try:
+                sock.close()
+            except Exception:
+                pass
+            return
+
+        if not events:
+            continue
+
+        last_activity = now
         for key, _ in events:
             if key.fileobj is sock:
                 data = sock.recv(65536)
@@ -63,6 +119,7 @@ def main():
                 except BlockingIOError:
                     continue
                 if not data:
+                    stdin_closed = True
                     try:
                         selector.unregister(stdin_fd)
                     except Exception:
@@ -71,8 +128,12 @@ def main():
                         sock.shutdown(socket.SHUT_WR)
                     except OSError:
                         pass
+                    idle_deadline = last_activity + idle_timeout_s
                 else:
-                    sock.sendall(data)
+                    try:
+                        sock.sendall(data)
+                    except BrokenPipeError:
+                        return
 
 
 if __name__ == "__main__":
@@ -169,7 +230,7 @@ pub async fn spawn(
     // Ensure WSL receives these variables: WSLENV controls env propagation into the Linux environment
     cmd.env(
         "WSLENV",
-        "SUBSTRATE_FORWARDER_TARGET_MODE:SUBSTRATE_FORWARDER_TARGET_HOST:SUBSTRATE_FORWARDER_TARGET_PORT:SUBSTRATE_FORWARDER_TARGET_ENDPOINT",
+        "SUBSTRATE_FORWARDER_TARGET_MODE:SUBSTRATE_FORWARDER_TARGET_HOST:SUBSTRATE_FORWARDER_TARGET_PORT:SUBSTRATE_FORWARDER_TARGET_ENDPOINT:SUBSTRATE_FORWARDER_CONNECT_TIMEOUT_S:SUBSTRATE_FORWARDER_CONNECT_DEADLINE_S:SUBSTRATE_FORWARDER_IDLE_AFTER_STDIN_CLOSE_S",
     );
 
     use std::process::Stdio;

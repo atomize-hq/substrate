@@ -9,6 +9,7 @@ use base64::Engine as _;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use substrate_common::FsDiff;
 use tokio::runtime::{self, Runtime};
 use tracing::{debug, warn};
@@ -37,6 +38,37 @@ pub struct WindowsWslBackend {
 }
 
 impl WindowsWslBackend {
+    fn parse_timeout_ms(var: &str) -> Option<Duration> {
+        std::env::var(var)
+            .ok()
+            .and_then(|v| v.trim().parse::<u64>().ok())
+            .map(Duration::from_millis)
+    }
+
+    fn cap_timeout(&self) -> Duration {
+        Self::parse_timeout_ms("SUBSTRATE_WSL_AGENT_CAP_TIMEOUT_MS")
+            .unwrap_or(Duration::from_secs(10))
+    }
+
+    fn exec_timeout(&self) -> Duration {
+        Self::parse_timeout_ms("SUBSTRATE_WSL_AGENT_EXEC_TIMEOUT_MS")
+            .unwrap_or(Duration::from_secs(120))
+    }
+
+    fn trace_timeout(&self) -> Duration {
+        Self::parse_timeout_ms("SUBSTRATE_WSL_AGENT_TRACE_TIMEOUT_MS")
+            .unwrap_or(Duration::from_secs(20))
+    }
+
+    fn agent_timeout_hint(&self) -> String {
+        let transport = self.agent_transport();
+        format!(
+            "Agent transport: {}\nHint: ensure the Windows forwarder is running and the WSL agent is healthy (try `pwsh -File scripts/windows/wsl-warm.ps1 -DistroName {}`) and inspect forwarder logs under %LOCALAPPDATA%\\Substrate\\logs",
+            transport.description(),
+            self.distro
+        )
+    }
+
     fn discover_warm_project_path(workspace_project_path: &Path) -> PathBuf {
         let script_rel = PathBuf::from("scripts")
             .join("windows")
@@ -155,7 +187,18 @@ impl WindowsWslBackend {
         }
 
         let client = AgentClient::new(self.agent_transport())?;
-        self.block_on(async { client.capabilities().await })
+        let timeout = self.cap_timeout();
+        self.block_on(async move {
+            tokio::time::timeout(timeout, client.capabilities())
+                .await
+                .with_context(|| {
+                    format!(
+                        "Timed out after {}s waiting for agent capabilities.\n{}",
+                        timeout.as_secs(),
+                        self.agent_timeout_hint()
+                    )
+                })?
+        })
     }
 
     fn execute_agent(&self, request: ExecuteRequest) -> Result<ExecuteResponse> {
@@ -165,7 +208,18 @@ impl WindowsWslBackend {
         }
 
         let client = AgentClient::new(self.agent_transport())?;
-        self.block_on(async move { client.execute(request).await })
+        let timeout = self.exec_timeout();
+        self.block_on(async move {
+            tokio::time::timeout(timeout, client.execute(request))
+                .await
+                .with_context(|| {
+                    format!(
+                        "Timed out after {}s waiting for agent execute.\n{}",
+                        timeout.as_secs(),
+                        self.agent_timeout_hint()
+                    )
+                })?
+        })
     }
 
     fn fetch_trace(&self, span_id: &str) -> Result<Value> {
@@ -175,7 +229,19 @@ impl WindowsWslBackend {
         }
 
         let client = AgentClient::new(self.agent_transport())?;
-        self.block_on(async move { client.get_trace(span_id).await })
+        let timeout = self.trace_timeout();
+        let span_id = span_id.to_string();
+        self.block_on(async move {
+            tokio::time::timeout(timeout, client.get_trace(&span_id))
+                .await
+                .with_context(|| {
+                    format!(
+                        "Timed out after {}s waiting for agent trace for span {span_id}.\n{}",
+                        timeout.as_secs(),
+                        self.agent_timeout_hint()
+                    )
+                })?
+        })
     }
 
     fn ensure_agent_ready(&self) -> Result<()> {

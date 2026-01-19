@@ -244,6 +244,21 @@ if ($env:SUBSTRATE_FORWARDER_TCP_ADDR) {
     }
 }
 
+# Ensure the forwarder targets the agent TCP listener inside WSL unless explicitly overridden.
+# This avoids named-pipe-to-UDS permission and socket-activation edge cases on CI runners.
+if (-not $env:SUBSTRATE_FORWARDER_TARGET) {
+    $env:SUBSTRATE_FORWARDER_TARGET = 'tcp:61337'
+}
+if (-not $env:SUBSTRATE_FORWARDER_CONNECT_TIMEOUT_S) {
+    $env:SUBSTRATE_FORWARDER_CONNECT_TIMEOUT_S = '2'
+}
+if (-not $env:SUBSTRATE_FORWARDER_CONNECT_DEADLINE_S) {
+    $env:SUBSTRATE_FORWARDER_CONNECT_DEADLINE_S = '10'
+}
+if (-not $env:SUBSTRATE_FORWARDER_IDLE_AFTER_STDIN_CLOSE_S) {
+    $env:SUBSTRATE_FORWARDER_IDLE_AFTER_STDIN_CLOSE_S = '2'
+}
+
 $args = @("--distro", $DistroName, "--pipe", $pipePath, "--log-dir", $logDir, "--run-as-service")
 if ($tcpBridge) { $args += @("--tcp-bridge", $tcpBridge) }
 $forwarderProcess = Start-Process -FilePath $forwarderHostPath -ArgumentList $args -WindowStyle Hidden -PassThru
@@ -290,5 +305,50 @@ $client.Dispose()
 $stopwatch.Stop()
 Write-Info ("Forwarder pipe accepted probe in {0:N0} ms" -f $stopwatch.Elapsed.TotalMilliseconds)
 Write-Info "Forwarder pipe ready"
+
+# Validate agent round-trip through the forwarder (not just pipe reachability).
+Write-Info "Probing agent capabilities via forwarder"
+$probeTimeoutMs = 10000
+if ($tcpBridge) {
+    try {
+        $uri = "http://$tcpBridge/v1/capabilities"
+        $res = Invoke-WebRequest -Uri $uri -UseBasicParsing -TimeoutSec ([Math]::Ceiling($probeTimeoutMs / 1000)) -ErrorAction Stop
+        if ($res.StatusCode -ne 200) {
+            Write-ErrorAndExit ("Forwarder TCP probe returned HTTP {0} for {1}" -f $res.StatusCode, $uri)
+        }
+        Write-Info ("Forwarder TCP probe OK: {0}" -f $uri)
+    } catch {
+        Write-ErrorAndExit ("Forwarder TCP probe failed for http://{0}/v1/capabilities: {1}" -f $tcpBridge, $_.Exception.Message)
+    }
+} else {
+    $probe = [System.IO.Pipes.NamedPipeClientStream]::new('.', $pipeName, [System.IO.Pipes.PipeDirection]::InOut, [System.IO.Pipes.PipeOptions]::None)
+    $probe.Connect($probeTimeoutMs)
+    $probe.ReadTimeout = $probeTimeoutMs
+    $probe.WriteTimeout = $probeTimeoutMs
+    $req = "GET /v1/capabilities HTTP/1.1`r`nHost: localhost`r`nConnection: close`r`n`r`n"
+    $bytes = [System.Text.Encoding]::ASCII.GetBytes($req)
+    $probe.Write($bytes, 0, $bytes.Length)
+    $probe.Flush()
+
+    $buf = New-Object byte[] 4096
+    $ms = New-Object System.IO.MemoryStream
+    try {
+        while ($true) {
+            $n = $probe.Read($buf, 0, $buf.Length)
+            if ($n -le 0) { break }
+            $ms.Write($buf, 0, $n) | Out-Null
+        }
+    } catch {
+        $probe.Dispose()
+        Write-ErrorAndExit ("Forwarder named-pipe probe timed out or failed while reading response: {0}" -f $_.Exception.Message)
+    }
+    $probe.Dispose()
+
+    $text = [System.Text.Encoding]::UTF8.GetString($ms.ToArray())
+    if ($text -notmatch '^HTTP/1\\.1 200') {
+        Write-ErrorAndExit ("Forwarder named-pipe probe returned non-200 response (first line): {0}" -f (($text -split \"`r?`n\")[0]))
+    }
+    Write-Info "Forwarder named-pipe probe OK: /v1/capabilities"
+}
 
 Write-Info "Warm complete"

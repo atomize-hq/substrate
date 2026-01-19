@@ -256,7 +256,9 @@ try {
         New-Item -ItemType Directory -Force -Path (Split-Path -Parent $policyPath) | Out-Null
     }
 
-    $doctorRaw = Invoke-Substrate -Args @('world', 'doctor', '--json') -Cwd $tmpWs
+    $doctorStdout = Join-Path $logsDir "doctor.stdout"
+    $doctorStderr = Join-Path $logsDir "doctor.stderr"
+    $doctorRaw = Invoke-Substrate -Args @('world', 'doctor', '--json') -Cwd $tmpWs -StdoutPath $doctorStdout -StderrPath $doctorStderr -TimeoutMs 60000
     $doctor = $null
     try { $doctor = $doctorRaw.Stdout | ConvertFrom-Json } catch { $doctor = $null }
     $doctorOk = $false
@@ -271,34 +273,56 @@ try {
         }
     }
 
-    # NOTE: The Windows self-hosted runner intermittently hangs on world execution calls (even for
-    # trivial commands). To keep the planning-pack smoke signal actionable, treat "doctor ok" as
-    # the Windows gate and skip world exec assertions here.
-    if ($doctorOk) {
-        $summary = [ordered]@{
-            platform = 'windows-wsl'
-            distro_name = $DistroName
-            run_id = $runId
-            substrate_home = $tmpHome
-            workspace = $tmpWs
-            trace_log = $traceLog
-            doctor_ok = $doctorOk
-            policy_snapshot_v1_supported = $snapshotSupported
-            doctor = $doctor
-            skipped = $true
-            skip_reason = 'world_exec_hangs_on_windows_runner'
-            tests = @()
-        }
-
-        $summary | ConvertTo-Json -Depth 10 -Compress
-        exit 0
-    }
-
     $tests = @()
 
     Write-Host ("[INFO] run_id={0}" -f $runId)
     Write-Host ("[INFO] workspace={0}" -f $tmpWs)
     Write-Host ("[INFO] trace_log={0}" -f $traceLog)
+
+    if (-not $doctorOk) {
+        Write-Host "[FAIL] world doctor reported ok=false; world execution unavailable"
+        Write-Host ("[FAIL] doctor stdout: {0}" -f $doctorStdout)
+        Write-LogSnippet -Path $doctorStdout
+        Write-Host ("[FAIL] doctor stderr: {0}" -f $doctorStderr)
+        Write-LogSnippet -Path $doctorStderr
+        Fail "WSL world backend unavailable (doctor ok=false)"
+    }
+
+    # ---- Preflight: deterministic world exec ----
+    $preflightMarker = "__waps_preflight__${runId}__"
+    $preflightCmd = "true $preflightMarker"
+    $preflightStdout = Join-Path $logsDir "preflight.stdout"
+    $preflightStderr = Join-Path $logsDir "preflight.stderr"
+    $preflightRes = Invoke-Substrate -Args @('--world', '--ci', '--command', $preflightCmd) -Cwd $tmpWs -StdoutPath $preflightStdout -StderrPath $preflightStderr -TimeoutMs 45000
+    $preflightMeta = Get-TraceMetaForMarker -TraceLog $traceLog -Marker $preflightMarker
+    $tests += [ordered]@{
+        name        = 'preflight_world_exec'
+        ok          = ($preflightRes.ExitCode -eq 0 -and $preflightMeta -ne $null)
+        exit_code   = $preflightRes.ExitCode
+        stdout_path = $preflightStdout
+        stderr_path = $preflightStderr
+        trace_meta  = $preflightMeta
+    }
+
+    if ($snapshotSupported) {
+        if (-not $preflightMeta) {
+            Write-Host "[FAIL] preflight produced no trace metadata; cannot assert snapshot mode"
+            Write-Host ("[FAIL] preflight stdout: {0}" -f $preflightStdout)
+            Write-LogSnippet -Path $preflightStdout
+            Write-Host ("[FAIL] preflight stderr: {0}" -f $preflightStderr)
+            Write-LogSnippet -Path $preflightStderr
+            Fail "preflight missing trace metadata while doctor reports snapshot support"
+        }
+        if ($preflightMeta.policy_resolution_mode -ne 'snapshot_v1') {
+            Fail ("preflight expected policy_resolution_mode=snapshot_v1 (got {0})" -f $preflightMeta.policy_resolution_mode)
+        }
+        if ($preflightMeta.policy_snapshot_schema -ne 1) {
+            Fail ("preflight expected policy_snapshot_schema=1 (got {0})" -f $preflightMeta.policy_snapshot_schema)
+        }
+        if (-not $preflightMeta.policy_snapshot_hash -or [string]$preflightMeta.policy_snapshot_hash -eq '') {
+            Fail "preflight expected non-empty policy_snapshot_hash"
+        }
+    }
 
     # ---- Test 1: FS allowlist in full isolation ----
     Set-Content -LiteralPath $policyPath -Encoding UTF8 -Value @"
@@ -473,6 +497,7 @@ metadata: {}
         doctor_ok = $doctorOk
         policy_snapshot_v1_supported = $snapshotSupported
         doctor = $doctor
+        skipped = $false
         tests = $tests
     }
 
