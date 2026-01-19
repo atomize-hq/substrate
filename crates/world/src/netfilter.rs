@@ -4,14 +4,22 @@
 //! Linux nftables for policy enforcement and scope monitoring.
 
 #[cfg(target_os = "linux")]
+use anyhow::anyhow;
+#[cfg(target_os = "linux")]
 use anyhow::Context;
 use anyhow::Result;
 use std::collections::HashSet;
+#[cfg(target_os = "linux")]
+use std::io::Read;
 use std::net::IpAddr;
 #[cfg(target_os = "linux")]
 use std::path::Path;
 #[cfg(target_os = "linux")]
 use std::process::Command;
+#[cfg(target_os = "linux")]
+use std::process::Stdio;
+#[cfg(target_os = "linux")]
+use std::time::{Duration, Instant};
 
 /// Network scope tracking for command execution.
 #[derive(Debug, Clone)]
@@ -238,17 +246,74 @@ impl NetFilter {
 
     #[cfg(target_os = "linux")]
     fn run_nft(&self, args: &[&str]) -> Result<()> {
+        fn nft_timeout() -> Duration {
+            std::env::var("WORLD_NFT_TIMEOUT_MS")
+                .ok()
+                .and_then(|v| v.trim().parse::<u64>().ok())
+                .map(Duration::from_millis)
+                .unwrap_or_else(|| Duration::from_millis(2_000))
+        }
+
+        fn output_with_timeout(mut cmd: Command, timeout: Duration) -> Result<std::process::Output> {
+            cmd.stdout(Stdio::piped());
+            cmd.stderr(Stdio::piped());
+
+            let mut child = cmd.spawn().context("Failed to spawn nft command")?;
+            let start = Instant::now();
+            loop {
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        let mut stdout = Vec::new();
+                        let mut stderr = Vec::new();
+                        if let Some(mut out) = child.stdout.take() {
+                            let _ = out.read_to_end(&mut stdout);
+                        }
+                        if let Some(mut err) = child.stderr.take() {
+                            let _ = err.read_to_end(&mut stderr);
+                        }
+                        return Ok(std::process::Output {
+                            status,
+                            stdout,
+                            stderr,
+                        });
+                    }
+                    Ok(None) => {
+                        if start.elapsed() >= timeout {
+                            let _ = child.kill();
+                            let _ = child.wait();
+                            let mut stdout = Vec::new();
+                            let mut stderr = Vec::new();
+                            if let Some(mut out) = child.stdout.take() {
+                                let _ = out.read_to_end(&mut stdout);
+                            }
+                            if let Some(mut err) = child.stderr.take() {
+                                let _ = err.read_to_end(&mut stderr);
+                            }
+                            return Err(anyhow!(
+                                "nft command timed out after {}ms",
+                                timeout.as_millis()
+                            ));
+                        }
+                        std::thread::sleep(Duration::from_millis(25));
+                    }
+                    Err(err) => {
+                        return Err(anyhow!(err).context("Failed to poll nft command completion"))
+                    }
+                }
+            }
+        }
+
+        let timeout = nft_timeout();
         let output = if let Some(ref ns) = self.ns_name {
-            Command::new("ip")
-                .args(["netns", "exec", ns, "nft"])
-                .args(args)
-                .output()
-                .context("Failed to run ip netns exec nft command")?
+            let mut cmd = Command::new("ip");
+            cmd.args(["netns", "exec", ns, "nft"]).args(args);
+            output_with_timeout(cmd, timeout)
+                .with_context(|| format!("Failed to run ip netns exec nft (timeout={}ms)", timeout.as_millis()))?
         } else {
-            Command::new("nft")
-                .args(args)
-                .output()
-                .context("Failed to run nft command")?
+            let mut cmd = Command::new("nft");
+            cmd.args(args);
+            output_with_timeout(cmd, timeout)
+                .with_context(|| format!("Failed to run nft (timeout={}ms)", timeout.as_millis()))?
         };
 
         if !output.status.success() {
