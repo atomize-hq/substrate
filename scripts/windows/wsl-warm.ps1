@@ -27,6 +27,13 @@ function Quote-ForBash {
     return "'" + ($Value -replace "'", $singleQuoteEscape) + "'"
 }
 
+function Test-Truthy {
+    param([string]$Value)
+    if (-not $Value) { return $false }
+    $normalized = $Value.Trim().ToLowerInvariant()
+    return $normalized -in @('1', 'true', 'yes', 'y', 'on')
+}
+
 Write-Info "Starting wsl-warm for distro '$DistroName'"
 
 $projectPath = Resolve-Path $ProjectPath | Select-Object -ExpandProperty Path
@@ -133,7 +140,12 @@ try {
     if ($status -eq '200') { $isHealthy = $true }
 } catch {}
 
-if (-not $isHealthy) {
+$forceRebuild = Test-Truthy $env:SUBSTRATE_WSL_WARM_FORCE_REBUILD
+
+if (-not $isHealthy -or $forceRebuild) {
+    if ($forceRebuild -and $isHealthy) {
+        Write-Warn "SUBSTRATE_WSL_WARM_FORCE_REBUILD enabled; reprovisioning even though agent reports HTTP 200"
+    }
     Write-Info "Updating package cache and running provision script"
     $projectPathFragment = Convert-ToWslPathFragment $projectPath
     $projectPathWsl = "/mnt/c/$projectPathFragment"
