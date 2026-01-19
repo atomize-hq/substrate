@@ -23,7 +23,9 @@ use crate::execution::routing::telemetry::{log_command_event, SHELL_AGENT_ID};
 use crate::execution::routing::world_transport_to_meta;
 #[cfg(target_os = "linux")]
 use crate::execution::socket_activation;
-use crate::execution::{configure_child_shell_env, needs_shell, update_world_env, ShellConfig, ShellMode};
+use crate::execution::{
+    configure_child_shell_env, needs_shell, update_world_env, ShellConfig, ShellMode,
+};
 use anyhow::{Context, Result};
 use serde_json::json;
 use std::env;
@@ -434,7 +436,11 @@ pub(crate) fn execute_command(
                             let mut active_span = active_span;
                             active_span.set_execution_origin(ExecutionOrigin::World);
                             active_span.set_transport(transport_meta);
-                            if let Ok(resolved) = crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_for_profile) {
+                            if let Ok(resolved) =
+                                crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(
+                                    &cwd_for_profile,
+                                )
+                            {
                                 active_span.set_policy_snapshot_meta(
                                     resolved.snapshot.schema_version,
                                     resolved.snapshot_hash,
@@ -547,7 +553,11 @@ pub(crate) fn execute_command(
                                 active_span.set_transport(meta);
                             }
                             active_span.set_execution_origin(ExecutionOrigin::World);
-                            if let Ok(resolved) = crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_for_profile) {
+                            if let Ok(resolved) =
+                                crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(
+                                    &cwd_for_profile,
+                                )
+                            {
                                 active_span.set_policy_snapshot_meta(
                                     resolved.snapshot.schema_version,
                                     resolved.snapshot_hash,

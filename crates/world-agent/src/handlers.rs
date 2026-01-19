@@ -139,16 +139,13 @@ pub async fn execute(
     State(service): State<WorldAgentService>,
     Json(req): Json<ExecuteRequest>,
 ) -> Result<ResponseJson<ExecuteResponse>, ApiErrorResponse> {
-    let response = service
-        .execute(req)
-        .await
-        .map_err(|e| {
-            if let Some(bad) = e.downcast_ref::<crate::service::BadRequestError>() {
-                ApiErrorResponse(ApiError::BadRequest(bad.message().to_string()))
-            } else {
-                ApiErrorResponse(ApiError::Internal(e.to_string()))
-            }
-        })?;
+    let response = service.execute(req).await.map_err(|e| {
+        if let Some(bad) = e.downcast_ref::<crate::service::BadRequestError>() {
+            ApiErrorResponse(ApiError::BadRequest(bad.message().to_string()))
+        } else {
+            ApiErrorResponse(ApiError::Internal(e.to_string()))
+        }
+    })?;
 
     Ok(ResponseJson(response))
 }
@@ -158,16 +155,13 @@ pub async fn execute_stream(
     State(service): State<WorldAgentService>,
     Json(req): Json<ExecuteRequest>,
 ) -> Result<Response, ApiErrorResponse> {
-    service
-        .execute_stream(req)
-        .await
-        .map_err(|e| {
-            if let Some(bad) = e.downcast_ref::<crate::service::BadRequestError>() {
-                ApiErrorResponse(ApiError::BadRequest(bad.message().to_string()))
-            } else {
-                ApiErrorResponse(ApiError::Internal(e.to_string()))
-            }
-        })
+    service.execute_stream(req).await.map_err(|e| {
+        if let Some(bad) = e.downcast_ref::<crate::service::BadRequestError>() {
+            ApiErrorResponse(ApiError::BadRequest(bad.message().to_string()))
+        } else {
+            ApiErrorResponse(ApiError::Internal(e.to_string()))
+        }
+    })
 }
 
 /// Handle WebSocket upgrade for PTY streaming.

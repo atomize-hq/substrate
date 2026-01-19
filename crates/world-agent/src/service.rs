@@ -535,16 +535,25 @@ fn resolve_policy_inputs(
             PolicySnapshotWorldFsIsolationV1::Full
         );
 
-        let (write_allowlist_prefixes, landlock_read_paths, landlock_write_paths) = if isolation_full
-        {
-            (
-                resolve_project_write_allowlist_prefixes(project_dir, &snapshot.world_fs.write_allowlist),
-                resolve_landlock_allowlist_paths(project_dir, &snapshot.world_fs.read_allowlist),
-                resolve_landlock_allowlist_paths(project_dir, &snapshot.world_fs.write_allowlist),
-            )
-        } else {
-            (Vec::new(), Vec::new(), Vec::new())
-        };
+        let (write_allowlist_prefixes, landlock_read_paths, landlock_write_paths) =
+            if isolation_full {
+                (
+                    resolve_project_write_allowlist_prefixes(
+                        project_dir,
+                        &snapshot.world_fs.write_allowlist,
+                    ),
+                    resolve_landlock_allowlist_paths(
+                        project_dir,
+                        &snapshot.world_fs.read_allowlist,
+                    ),
+                    resolve_landlock_allowlist_paths(
+                        project_dir,
+                        &snapshot.world_fs.write_allowlist,
+                    ),
+                )
+            } else {
+                (Vec::new(), Vec::new(), Vec::new())
+            };
 
         return Ok((
             PolicyResolutionModeV1::SnapshotV1,
@@ -602,10 +611,7 @@ impl WorldAgentService {
     pub(crate) fn last_policy_resolution_mode(
         &self,
     ) -> Option<agent_api_types::PolicyResolutionModeV1> {
-        match self
-            .last_policy_resolution_mode
-            .load(Ordering::Relaxed)
-        {
+        match self.last_policy_resolution_mode.load(Ordering::Relaxed) {
             1 => Some(agent_api_types::PolicyResolutionModeV1::SnapshotV1),
             2 => Some(agent_api_types::PolicyResolutionModeV1::LegacyLocal),
             _ => None,

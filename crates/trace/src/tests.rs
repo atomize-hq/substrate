@@ -342,11 +342,15 @@ fn command_complete_includes_policy_snapshot_meta_when_set() {
         Some("snapshot_v1")
     );
     assert_eq!(
-        completion.get("policy_snapshot_schema").and_then(|v| v.as_u64()),
+        completion
+            .get("policy_snapshot_schema")
+            .and_then(|v| v.as_u64()),
         Some(1)
     );
     assert_eq!(
-        completion.get("policy_snapshot_hash").and_then(|v| v.as_str()),
+        completion
+            .get("policy_snapshot_hash")
+            .and_then(|v| v.as_str()),
         Some("deadbeef")
     );
 }

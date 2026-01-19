@@ -127,7 +127,7 @@ pub struct WorldDoctorReportV1 {
     #[serde(default)]
     pub policy_snapshot_v1_supported: bool,
     /// The policy resolution mode most recently used by the world-agent (when known).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub policy_resolution_mode: Option<PolicyResolutionModeV1>,
     pub landlock: WorldDoctorLandlockV1,
     pub world_fs_strategy: WorldDoctorWorldFsStrategyV1,
@@ -273,7 +273,9 @@ mod tests {
             "expected policy_snapshot to serialize"
         );
         let back: ExecuteRequest = serde_json::from_str(&json).expect("deserialize request");
-        let snapshot = back.policy_snapshot.expect("snapshot missing after deserialize");
+        let snapshot = back
+            .policy_snapshot
+            .expect("snapshot missing after deserialize");
         assert_eq!(snapshot.schema_version, 1);
         assert_eq!(snapshot.world_fs.mode, WorldFsMode::Writable);
         assert_eq!(
@@ -349,5 +351,31 @@ mod tests {
         let json = serde_json::to_string(&report).expect("serialize report");
         let back: WorldDoctorReportV1 = serde_json::from_str(&json).expect("deserialize report");
         assert_eq!(back, report);
+    }
+
+    #[test]
+    fn world_doctor_report_v1_defaults_snapshot_fields_when_missing() {
+        // Legacy world-agents may omit snapshot fields; the client schema must default safely.
+        let json = r#"{
+            "schema_version": 1,
+            "ok": true,
+            "collected_at_utc": "2026-01-08T00:00:00Z",
+            "landlock": { "supported": true, "abi": 3, "reason": null },
+            "world_fs_strategy": {
+                "primary": "overlay",
+                "fallback": "fuse",
+                "probe": {
+                    "id": "enumeration_v1",
+                    "probe_file": ".substrate_enum_probe",
+                    "result": "pass",
+                    "failure_reason": null
+                }
+            }
+        }"#;
+
+        let report: super::WorldDoctorReportV1 = serde_json::from_str(json).expect("deserialize");
+        assert!(report.ok);
+        assert!(!report.policy_snapshot_v1_supported);
+        assert!(report.policy_resolution_mode.is_none());
     }
 }

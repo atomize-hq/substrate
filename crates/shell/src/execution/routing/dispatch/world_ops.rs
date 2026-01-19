@@ -821,8 +821,7 @@ fn build_agent_client_and_request_impl(
     let env_map = build_world_env_map();
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
     let policy_snapshot =
-        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?
-            .snapshot;
+        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
 
     let request = ExecuteRequest {
         profile: None,
@@ -858,8 +857,7 @@ fn build_agent_client_and_request_impl(
         normalize_env_for_linux_guest(&mut env_map);
         let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
         let policy_snapshot =
-            crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?
-                .snapshot;
+            crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
 
         let request = ExecuteRequest {
             profile: None,
@@ -901,8 +899,7 @@ fn build_agent_client_and_request_impl(
     normalize_env_for_linux_guest(&mut env_map);
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
     let policy_snapshot =
-        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?
-            .snapshot;
+        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
 
     let request = ExecuteRequest {
         profile: None,
@@ -943,8 +940,7 @@ fn build_agent_client_and_request_impl(
     let env_map = build_world_env_map();
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
     let policy_snapshot =
-        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&host_cwd)?
-            .snapshot;
+        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&host_cwd)?.snapshot;
 
     let request = ExecuteRequest {
         profile: None,

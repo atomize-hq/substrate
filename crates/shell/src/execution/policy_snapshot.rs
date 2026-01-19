@@ -1,8 +1,8 @@
-use anyhow::{Context, Result};
 use agent_api_types::{
     PolicySnapshotLimitsV1, PolicySnapshotV1, PolicySnapshotWorldFsIsolationV1,
     PolicySnapshotWorldFsV1,
 };
+use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -115,7 +115,9 @@ pub(crate) fn resolve_policy_snapshot_for_cwd(cwd: &Path) -> Result<ResolvedPoli
 
 fn snapshot_from_policy(policy: &substrate_broker::Policy) -> PolicySnapshotV1 {
     let isolation = match policy.world_fs_isolation {
-        substrate_broker::WorldFsIsolation::Workspace => PolicySnapshotWorldFsIsolationV1::Workspace,
+        substrate_broker::WorldFsIsolation::Workspace => {
+            PolicySnapshotWorldFsIsolationV1::Workspace
+        }
         substrate_broker::WorldFsIsolation::Full => PolicySnapshotWorldFsIsolationV1::Full,
     };
 
@@ -144,4 +146,3 @@ fn compute_snapshot_hash(snapshot: &PolicySnapshotV1) -> Result<String> {
     hasher.update(&bytes);
     Ok(format!("{:x}", hasher.finalize()))
 }
-

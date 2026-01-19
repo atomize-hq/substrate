@@ -10,6 +10,7 @@ use base64::Engine;
 use serde_json::json;
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -119,18 +120,19 @@ pub(crate) fn host_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
     let o_root = overlay_root();
     let c_root = copydiff_root();
 
-    let (socket_probe_ok, socket_probe_error) = if !world_enabled {
+    let (socket_probe_ok, socket_probe_error, socket_probe_error_kind) = if !world_enabled {
         (
             false,
             Some("world disabled by effective config".to_string()),
+            None,
         )
     } else if activation_report.socket_exists {
         match probe_world_socket(&activation_report.socket_path) {
-            Ok(()) => (true, None),
-            Err(err) => (false, Some(err.to_string())),
+            Ok(()) => (true, None, None),
+            Err(err) => (false, Some(err.to_string()), Some(err.kind())),
         }
     } else {
-        (false, None)
+        (false, None, None)
     };
 
     let host_ok = world_enabled
@@ -141,12 +143,42 @@ pub(crate) fn host_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
         && nft;
 
     if json_mode {
+        let (socket_acl, socket_acl_error) = if activation_report.socket_exists {
+            match read_socket_acl_details(&activation_report.socket_path) {
+                Ok(details) => (Some(details), None),
+                Err(err) => (None, Some(err.to_string())),
+            }
+        } else {
+            (None, None)
+        };
+
+        let permission_denied_help = permission_denied_help(
+            socket_probe_error_kind,
+            activation_report.socket_path.as_str(),
+            socket_acl.as_ref(),
+        );
+
         let socket_json = json!({
             "mode": if activation_report.is_socket_activated() { "socket_activation" } else { "manual" },
             "socket_path": activation_report.socket_path,
             "socket_exists": activation_report.socket_exists,
+            "authorization_boundary": {
+                "kind": "unix_socket_acl",
+                "description": "Socket ACL is the caller authorization boundary; any local user that can open the socket can issue world-agent requests."
+            },
+            "socket_acl": socket_acl.as_ref().map(|acl| json!({
+                "is_socket": acl.is_socket,
+                "owner_uid": acl.owner_uid,
+                "owner_user": acl.owner_user.as_deref(),
+                "group_gid": acl.group_gid,
+                "group_name": acl.group_name.as_deref(),
+                "mode_octal": acl.mode_octal.as_str(),
+            })),
+            "socket_acl_error": socket_acl_error,
             "probe_ok": socket_probe_ok,
             "probe_error": socket_probe_error,
+            "probe_error_kind": socket_probe_error_kind.map(|kind| format!("{kind:?}")),
+            "permission_denied_help": permission_denied_help,
             "systemd_error": activation_report.systemd_error,
             "systemd_socket": activation_report.socket_unit.as_ref().map(|unit| json!({
                 "name": unit.name,
@@ -239,7 +271,28 @@ pub(crate) fn host_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
             fs_policy.require_world
         ));
 
+        let socket_acl = if activation_report.socket_exists {
+            read_socket_acl_details(&activation_report.socket_path).ok()
+        } else {
+            None
+        };
+
+        info("authorization boundary: socket ACL (local users with RW access to the socket can issue world-agent requests)");
         if activation_report.socket_exists {
+            if let Some(acl) = &socket_acl {
+                let owner = acl
+                    .owner_user
+                    .clone()
+                    .unwrap_or_else(|| acl.owner_uid.to_string());
+                let group = acl
+                    .group_name
+                    .clone()
+                    .unwrap_or_else(|| acl.group_gid.to_string());
+                info(&format!(
+                    "world-agent socket ACL: owner={owner} group={group} mode={}",
+                    acl.mode_octal,
+                ));
+            }
             match (activation_report.is_socket_activated(), socket_probe_ok) {
                 (true, true) => pass("world-agent socket: systemd-managed and reachable"),
                 (true, false) => fail("world-agent socket: systemd-managed but unreachable"),
@@ -255,6 +308,13 @@ pub(crate) fn host_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
 
         if let Some(err) = &socket_probe_error {
             info(&format!("world_socket.probe_error: {err}"));
+            if let Some(help) = permission_denied_help(
+                socket_probe_error_kind,
+                activation_report.socket_path.as_str(),
+                socket_acl.as_ref(),
+            ) {
+                info(&help);
+            }
         }
     }
 
@@ -364,18 +424,19 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
     let c_root = copydiff_root();
 
     // World doctor short-circuit: no socket probing, no agent calls.
-    let (socket_probe_ok, socket_probe_error) = if !world_enabled {
+    let (socket_probe_ok, socket_probe_error, socket_probe_error_kind) = if !world_enabled {
         (
             false,
             Some("world disabled by effective config".to_string()),
+            None,
         )
     } else if activation_report.socket_exists {
         match probe_world_socket(&activation_report.socket_path) {
-            Ok(()) => (true, None),
-            Err(err) => (false, Some(err.to_string())),
+            Ok(()) => (true, None, None),
+            Err(err) => (false, Some(err.to_string()), Some(err.kind())),
         }
     } else {
-        (false, None)
+        (false, None, None)
     };
 
     let host_ok = world_enabled
@@ -386,12 +447,42 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
         && nft;
 
     let host_value = {
+        let (socket_acl, socket_acl_error) = if activation_report.socket_exists {
+            match read_socket_acl_details(&activation_report.socket_path) {
+                Ok(details) => (Some(details), None),
+                Err(err) => (None, Some(err.to_string())),
+            }
+        } else {
+            (None, None)
+        };
+
+        let permission_denied_help = permission_denied_help(
+            socket_probe_error_kind,
+            activation_report.socket_path.as_str(),
+            socket_acl.as_ref(),
+        );
+
         let socket_json = json!({
             "mode": if activation_report.is_socket_activated() { "socket_activation" } else { "manual" },
             "socket_path": activation_report.socket_path,
             "socket_exists": activation_report.socket_exists,
+            "authorization_boundary": {
+                "kind": "unix_socket_acl",
+                "description": "Socket ACL is the caller authorization boundary; any local user that can open the socket can issue world-agent requests."
+            },
+            "socket_acl": socket_acl.as_ref().map(|acl| json!({
+                "is_socket": acl.is_socket,
+                "owner_uid": acl.owner_uid,
+                "owner_user": acl.owner_user.as_deref(),
+                "group_gid": acl.group_gid,
+                "group_name": acl.group_name.as_deref(),
+                "mode_octal": acl.mode_octal.as_str(),
+            })),
+            "socket_acl_error": socket_acl_error,
             "probe_ok": socket_probe_ok,
             "probe_error": socket_probe_error,
+            "probe_error_kind": socket_probe_error_kind.map(|kind| format!("{kind:?}")),
+            "permission_denied_help": permission_denied_help,
             "systemd_error": activation_report.systemd_error,
             "systemd_socket": activation_report.socket_unit.as_ref().map(|unit| json!({
                 "name": unit.name,
@@ -568,7 +659,28 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
             fs_policy.require_world
         ));
 
+        let socket_acl = if activation_report.socket_exists {
+            read_socket_acl_details(&activation_report.socket_path).ok()
+        } else {
+            None
+        };
+
+        info("authorization boundary: socket ACL (local users with RW access to the socket can issue world-agent requests)");
         if activation_report.socket_exists {
+            if let Some(acl) = &socket_acl {
+                let owner = acl
+                    .owner_user
+                    .clone()
+                    .unwrap_or_else(|| acl.owner_uid.to_string());
+                let group = acl
+                    .group_name
+                    .clone()
+                    .unwrap_or_else(|| acl.group_gid.to_string());
+                info(&format!(
+                    "world-agent socket ACL: owner={owner} group={group} mode={}",
+                    acl.mode_octal
+                ));
+            }
             match (activation_report.is_socket_activated(), socket_probe_ok) {
                 (true, true) => pass("world-agent socket: systemd-managed and reachable"),
                 (true, false) => fail("world-agent socket: systemd-managed but unreachable"),
@@ -584,6 +696,13 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
 
         if let Some(err) = &socket_probe_error {
             info(&format!("world_socket.probe_error: {err}"));
+            if let Some(help) = permission_denied_help(
+                socket_probe_error_kind,
+                activation_report.socket_path.as_str(),
+                socket_acl.as_ref(),
+            ) {
+                info(&help);
+            }
         }
 
         println!("== World ==");
@@ -631,6 +750,26 @@ pub(crate) fn world_doctor_main(json_mode: bool, world_enabled: bool) -> i32 {
                 } else {
                     fail("world fs strategy probe: fail");
                 }
+
+                match world_value
+                    .get("policy_snapshot_v1_supported")
+                    .and_then(serde_json::Value::as_bool)
+                {
+                    Some(true) => pass("policy snapshot v1: supported"),
+                    Some(false) => warn("policy snapshot v1: unsupported"),
+                    None => warn("policy snapshot v1: unknown"),
+                }
+
+                match world_value
+                    .get("policy_resolution_mode")
+                    .and_then(serde_json::Value::as_str)
+                {
+                    Some("snapshot_v1") => pass("policy resolution mode: snapshot_v1"),
+                    Some("legacy_local") => warn("policy resolution mode: legacy_local"),
+                    Some(other) => warn(&format!("policy resolution mode: {other}")),
+                    None => info("policy resolution mode: unknown (no agent executions yet)"),
+                }
+
                 if ok {
                     pass("world doctor: ok");
                 } else {
@@ -649,10 +788,8 @@ async fn legacy_world_doctor_report_v1_via_execute(
 ) -> anyhow::Result<WorldDoctorReportV1> {
     let landlock = world::landlock::detect_support();
     let cwd_path = std::path::PathBuf::from("/tmp");
-    let policy_snapshot = crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(
-        &cwd_path,
-    )?
-    .snapshot;
+    let policy_snapshot =
+        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_path)?.snapshot;
 
     let req = ExecuteRequest {
         profile: None,
@@ -750,4 +887,112 @@ fn probe_world_socket(path: &str) -> io::Result<()> {
         )));
     }
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct SocketAclDetails {
+    owner_uid: u32,
+    owner_user: Option<String>,
+    group_gid: u32,
+    group_name: Option<String>,
+    mode_octal: String,
+    is_socket: bool,
+}
+
+fn read_socket_acl_details(path: &str) -> io::Result<SocketAclDetails> {
+    let metadata = std::fs::symlink_metadata(path)?;
+    let owner_uid = metadata.uid();
+    let group_gid = metadata.gid();
+    let mode = metadata.mode() & 0o7777;
+    let mode_octal = format!("{mode:04o}");
+    let is_socket = metadata.file_type().is_socket();
+
+    Ok(SocketAclDetails {
+        owner_uid,
+        owner_user: lookup_user_by_uid(owner_uid),
+        group_gid,
+        group_name: lookup_group_by_gid(group_gid),
+        mode_octal,
+        is_socket,
+    })
+}
+
+fn lookup_user_by_uid(uid: u32) -> Option<String> {
+    use std::ffi::CStr;
+    use std::ptr;
+
+    let mut pwd: libc::passwd = unsafe { std::mem::zeroed() };
+    let mut result: *mut libc::passwd = ptr::null_mut();
+
+    let buf_len = unsafe { libc::sysconf(libc::_SC_GETPW_R_SIZE_MAX) };
+    let buf_len = if buf_len <= 0 { 16 * 1024 } else { buf_len as usize };
+    let mut buf = vec![0u8; buf_len];
+
+    let rc = unsafe {
+        libc::getpwuid_r(
+            uid as libc::uid_t,
+            &mut pwd,
+            buf.as_mut_ptr() as *mut libc::c_char,
+            buf.len(),
+            &mut result,
+        )
+    };
+    if rc != 0 || result.is_null() || pwd.pw_name.is_null() {
+        return None;
+    }
+    let name = unsafe { CStr::from_ptr(pwd.pw_name) }.to_string_lossy().into_owned();
+    if name.trim().is_empty() {
+        None
+    } else {
+        Some(name)
+    }
+}
+
+fn lookup_group_by_gid(gid: u32) -> Option<String> {
+    use std::ffi::CStr;
+    use std::ptr;
+
+    let mut grp: libc::group = unsafe { std::mem::zeroed() };
+    let mut result: *mut libc::group = ptr::null_mut();
+
+    let buf_len = unsafe { libc::sysconf(libc::_SC_GETGR_R_SIZE_MAX) };
+    let buf_len = if buf_len <= 0 { 16 * 1024 } else { buf_len as usize };
+    let mut buf = vec![0u8; buf_len];
+
+    let rc = unsafe {
+        libc::getgrgid_r(
+            gid as libc::gid_t,
+            &mut grp,
+            buf.as_mut_ptr() as *mut libc::c_char,
+            buf.len(),
+            &mut result,
+        )
+    };
+    if rc != 0 || result.is_null() || grp.gr_name.is_null() {
+        return None;
+    }
+    let name = unsafe { CStr::from_ptr(grp.gr_name) }.to_string_lossy().into_owned();
+    if name.trim().is_empty() {
+        None
+    } else {
+        Some(name)
+    }
+}
+
+fn permission_denied_help(
+    probe_error_kind: Option<io::ErrorKind>,
+    socket_path: &str,
+    socket_acl: Option<&SocketAclDetails>,
+) -> Option<String> {
+    if probe_error_kind != Some(io::ErrorKind::PermissionDenied) {
+        return None;
+    }
+
+    let group = socket_acl
+        .and_then(|acl| acl.group_name.clone())
+        .unwrap_or_else(|| "substrate".to_string());
+
+    Some(format!(
+        "access denied: the socket ACL is the authorization boundary; check `ls -l {socket_path}` and ensure your user is in group '{group}' (re-login required)"
+    ))
 }

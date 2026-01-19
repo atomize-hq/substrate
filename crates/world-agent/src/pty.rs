@@ -7,10 +7,10 @@ use crate::service::{
     resolve_project_write_allowlist_prefixes, WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV,
     WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV, WORLD_FS_MODE_ENV, WORLD_FS_WRITE_ALLOWLIST_ENV,
 };
-use axum::extract::ws::{Message, WebSocket};
 use agent_api_types::PolicySnapshotV1;
 #[cfg(target_os = "linux")]
 use agent_api_types::{PolicyResolutionModeV1, PolicySnapshotWorldFsIsolationV1};
+use axum::extract::ws::{Message, WebSocket};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
@@ -319,20 +319,32 @@ pub async fn handle_ws_pty(
                             &project_dir,
                             &snapshot.world_fs.write_allowlist,
                         ),
-                        resolve_landlock_allowlist_paths(&project_dir, &snapshot.world_fs.read_allowlist),
-                        resolve_landlock_allowlist_paths(&project_dir, &snapshot.world_fs.write_allowlist),
+                        resolve_landlock_allowlist_paths(
+                            &project_dir,
+                            &snapshot.world_fs.read_allowlist,
+                        ),
+                        resolve_landlock_allowlist_paths(
+                            &project_dir,
+                            &snapshot.world_fs.write_allowlist,
+                        ),
                     )
                 } else {
                     let world_fs = substrate_broker::world_fs_policy();
                     (
-                        resolve_project_write_allowlist_prefixes(&project_dir, &world_fs.write_allowlist),
+                        resolve_project_write_allowlist_prefixes(
+                            &project_dir,
+                            &world_fs.write_allowlist,
+                        ),
                         resolve_landlock_allowlist_paths(&project_dir, &world_fs.read_allowlist),
                         resolve_landlock_allowlist_paths(&project_dir, &world_fs.write_allowlist),
                     )
                 };
 
             if !prefixes.is_empty() {
-                env.insert(WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(), prefixes.join("\n"));
+                env.insert(
+                    WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(),
+                    prefixes.join("\n"),
+                );
             }
             if !landlock_read_paths.is_empty() {
                 env.insert(

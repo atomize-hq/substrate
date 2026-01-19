@@ -557,7 +557,9 @@ pub(crate) fn resolve_effective_config_with_explain(
 ) -> Result<(SubstrateConfig, Option<ConfigExplainV1>)> {
     let env_overrides = parse_env_overrides()?;
     let (global_patch, global_path, workspace_layer) = load_config_patch_layers_cached(cwd)?;
-    let workspace_ref = workspace_layer.as_ref().map(|(p, path)| (p, path.as_path()));
+    let workspace_ref = workspace_layer
+        .as_ref()
+        .map(|(p, path)| (p, path.as_path()));
 
     resolve_effective_from_layers(
         &global_patch,
