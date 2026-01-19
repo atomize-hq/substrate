@@ -150,6 +150,18 @@ function Get-TraceMetaForMarker {
     return [pscustomobject]$meta
 }
 
+function Write-LogSnippet {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [int]$MaxLines = 200
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    Get-Content -LiteralPath $Path -TotalCount $MaxLines -ErrorAction SilentlyContinue | ForEach-Object {
+        Write-Host $_
+    }
+}
+
 $runId = "waps-" + ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) + "-" + ([guid]::NewGuid().ToString('N'))
 $tmpHome = Join-Path $env:TEMP ("waps-home-" + $runId)
 $tmpWs = Join-Path $env:TEMP ("waps-ws-" + $runId)
@@ -162,6 +174,9 @@ try {
     $env:SUBSTRATE_HOME = $tmpHome
     $env:HOME = $tmpHome
     $env:SHIM_TRACE_LOG = $traceLog
+    # WSL runners frequently cannot support the overlayfs + mount-namespace path, so force the world
+    # to execute directly while still validating policy snapshot trace metadata.
+    $env:SUBSTRATE_WORLD_EXEC_FORCE_DIRECT = '1'
 
     Invoke-Substrate -Args @('config', 'global', 'init', '--force') -Cwd $tmpWs | Out-Null
     Invoke-Substrate -Args @('policy', 'global', 'init', '--force') -Cwd $tmpWs | Out-Null
@@ -326,6 +341,21 @@ metadata: {}
     $overallOk = $true
     foreach ($t in $tests) {
         if (-not $t.ok) { $overallOk = $false }
+    }
+
+    if (-not $overallOk) {
+        foreach ($t in $tests) {
+            if ($t.ok) { continue }
+            Write-Host ("[FAIL] {0}" -f $t.name)
+            if ($t.stdout_path) {
+                Write-Host ("[FAIL] stdout: {0}" -f $t.stdout_path)
+                Write-LogSnippet -Path $t.stdout_path
+            }
+            if ($t.stderr_path) {
+                Write-Host ("[FAIL] stderr: {0}" -f $t.stderr_path)
+                Write-LogSnippet -Path $t.stderr_path
+            }
+        }
     }
 
     $snapshotOk = $true
