@@ -31,6 +31,7 @@ This file records CI workflow-dispatch runs executed for WAPS cross-platform smo
 | `21127600131` | https://github.com/atomize-hq/substrate/actions/runs/21127600131 | `success` | `ubuntu-24.04`, `macos-14`, `windows-2022` | (none) | PASS (post-smoke fixes) |
 | `21130938721` | https://github.com/atomize-hq/substrate/actions/runs/21130938721 | `failure` | `ubuntu-24.04`, `macos-14` | `windows-2022` | clippy: `process_agent_stream` unused + needless `return` |
 | `21131034869` | https://github.com/atomize-hq/substrate/actions/runs/21131034869 | `success` | `ubuntu-24.04`, `macos-14`, `windows-2022` | (none) | PASS (clippy clean) |
+| `21131179843` | https://github.com/atomize-hq/substrate/actions/runs/21131179843 | `success` | `ubuntu-24.04`, `macos-14`, `windows-2022` | (none) | PASS (final docs update) |
 
 ### `make feature-smoke-all` (Feature Smoke / WAPS)
 
@@ -76,3 +77,4 @@ This file records CI workflow-dispatch runs executed for WAPS cross-platform smo
 | `21130336563` | https://github.com/atomize-hq/substrate/actions/runs/21130336563 | `failure` | `linux`, `macos` | `windows` | Windows: WSL exec timeouts |
 | `21130549796` | https://github.com/atomize-hq/substrate/actions/runs/21130549796 | `failure` | `linux`, `macos` | `windows` | Windows: WSL exec timeouts (TCP forwarder enabled) |
 | `21130859601` | https://github.com/atomize-hq/substrate/actions/runs/21130859601 | `success` | `linux`, `macos`, `windows` | (none) | PASS (Windows smoke gates on doctor OK) |
+| `21131273130` | https://github.com/atomize-hq/substrate/actions/runs/21131273130 | `success` | `linux`, `macos`, `windows` | (none) | PASS (final docs update) |
