@@ -439,8 +439,14 @@ fn ensure_world_agent_ready() -> anyhow::Result<()> {
         );
     }
 
-    // Clean up stale socket if present (no responding server)
-    if !activation_report.is_socket_activated() && Path::new(&socket_path).exists() {
+    // Clean up stale socket if present (no responding server). Only do this when we're
+    // confident the socket isn't systemd-managed; if systemd probing fails, keep the
+    // path intact to avoid breaking socket activation.
+    if matches!(
+        activation_report.mode,
+        socket_activation::SocketActivationMode::Manual
+    ) && Path::new(&socket_path).exists()
+    {
         let _ = std::fs::remove_file(&socket_path);
     }
 

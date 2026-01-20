@@ -1,14 +1,18 @@
 //! Socket activation detection helpers for Linux world-agent integration.
 
 use std::env;
+use std::io::Read;
 use std::path::Path;
 use std::process::Command;
+use std::process::Output;
 use std::process::Stdio;
 use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 const SOCKET_PATH: &str = "/run/substrate.sock";
 const SOCKET_UNIT: &str = "substrate-world-agent.socket";
 const SERVICE_UNIT: &str = "substrate-world-agent.service";
+const DEFAULT_SYSTEMCTL_SHOW_TIMEOUT_MS: u64 = 2_000;
 
 static REPORT_CACHE: OnceLock<Mutex<Option<SocketActivationReport>>> = OnceLock::new();
 
@@ -157,8 +161,17 @@ fn is_socket_active(unit: &SystemdUnitStatus) -> bool {
     )
 }
 
-fn read_unit(unit: &'static str) -> Result<Option<SystemdUnitStatus>, String> {
-    let output = Command::new("systemctl")
+fn systemctl_show_timeout() -> Duration {
+    env::var("SUBSTRATE_SYSTEMCTL_TIMEOUT_MS")
+        .ok()
+        .and_then(|raw| raw.parse::<u64>().ok())
+        .map(Duration::from_millis)
+        .unwrap_or_else(|| Duration::from_millis(DEFAULT_SYSTEMCTL_SHOW_TIMEOUT_MS))
+}
+
+fn systemctl_show(unit: &'static str) -> Result<Output, String> {
+    let timeout = systemctl_show_timeout();
+    let mut child = Command::new("systemctl")
         .arg("--no-pager")
         .arg("show")
         .arg(unit)
@@ -166,8 +179,47 @@ fn read_unit(unit: &'static str) -> Result<Option<SystemdUnitStatus>, String> {
         .arg("--property=UnitFileState")
         .arg("--property=Listen")
         .stdin(Stdio::null())
-        .output()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|err| format!("failed to invoke systemctl: {err}"))?;
+
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let mut stdout = Vec::new();
+                let mut stderr = Vec::new();
+                if let Some(mut out) = child.stdout.take() {
+                    let _ = out.read_to_end(&mut stdout);
+                }
+                if let Some(mut err) = child.stderr.take() {
+                    let _ = err.read_to_end(&mut stderr);
+                }
+                return Ok(Output {
+                    status,
+                    stdout,
+                    stderr,
+                });
+            }
+            Ok(None) => {
+                if started.elapsed() > timeout {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!(
+                        "systemctl show {unit} timed out after {}ms",
+                        timeout.as_millis()
+                    ));
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Err(err) => return Err(format!("failed to poll systemctl show {unit}: {err}")),
+        }
+    }
+}
+
+fn read_unit(unit: &'static str) -> Result<Option<SystemdUnitStatus>, String> {
+    let output = systemctl_show(unit)?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -208,4 +260,66 @@ fn read_unit(unit: &'static str) -> Result<Option<SystemdUnitStatus>, String> {
         unit_file_state,
         listens,
     }))
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    use serial_test::serial;
+
+    #[test]
+    #[serial]
+    fn systemctl_timeout_is_fail_fast() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let systemctl_path = dir.path().join("systemctl");
+
+        std::fs::write(
+            &systemctl_path,
+            "#!/usr/bin/env sh\nsleep 10\nprintf 'ActiveState=active\\n'\n",
+        )
+        .expect("write fake systemctl");
+
+        let mut perms = std::fs::metadata(&systemctl_path)
+            .expect("stat fake systemctl")
+            .permissions();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&systemctl_path, perms).expect("chmod fake systemctl");
+        }
+
+        let prev_path = env::var("PATH").ok();
+        let prev_timeout = env::var("SUBSTRATE_SYSTEMCTL_TIMEOUT_MS").ok();
+        env::set_var(
+            "PATH",
+            format!(
+                "{}:{}",
+                dir.path().display(),
+                prev_path.clone().unwrap_or_default()
+            ),
+        );
+        env::set_var("SUBSTRATE_SYSTEMCTL_TIMEOUT_MS", "50");
+
+        let report = refresh_socket_activation_report();
+        assert!(
+            report
+                .systemd_error
+                .as_deref()
+                .unwrap_or("")
+                .contains("timed out"),
+            "expected a timeout error, got: {:?}",
+            report.systemd_error
+        );
+
+        match prev_timeout {
+            Some(v) => env::set_var("SUBSTRATE_SYSTEMCTL_TIMEOUT_MS", v),
+            None => env::remove_var("SUBSTRATE_SYSTEMCTL_TIMEOUT_MS"),
+        }
+        match prev_path {
+            Some(v) => env::set_var("PATH", v),
+            None => env::remove_var("PATH"),
+        }
+    }
 }

@@ -412,7 +412,10 @@ fn landlock_exec_fails_closed_with_actionable_error_when_overlay_backing_dirs_mi
         .env("SUBSTRATE_WORLD_FS_ISOLATION", "full")
         .env("SUBSTRATE_MOUNT_FS_MODE", "writable")
         .env("SUBSTRATE_MOUNT_PROJECT_DIR", "/proc")
-        .env("SUBSTRATE_WORLD_FS_LANDLOCK_WRITE_ALLOWLIST", "/project/writable")
+        .env(
+            "SUBSTRATE_WORLD_FS_LANDLOCK_WRITE_ALLOWLIST",
+            "/project/writable",
+        )
         .env("SUBSTRATE_MOUNT_CWD", "/")
         .env("SUBSTRATE_INNER_CMD", "echo should-not-run")
         .env("SUBSTRATE_INNER_LOGIN_SHELL", "0")

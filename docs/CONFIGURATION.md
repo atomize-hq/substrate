@@ -96,6 +96,7 @@ Other world-adjacent variables:
 | `SUBSTRATE_WORLD_DEPS_MANIFEST` | Override manifest for `world deps` | `<prefix>/versions/<version>/config/world-deps.yaml` | `/tmp/world_deps.yaml` |
 | `SUBSTRATE_WORLD_REQUEST_PROFILE` | Sets the Agent API request `profile` for world-agent executions (advanced/testing) | *unset* | `world-deps-provision` |
 | `SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE` | Force socket activation mode reporting (`socket_activation`, `manual`, or `unknown`) for diagnostics/tests | auto-detect via systemd | `socket_activation` |
+| `SUBSTRATE_SYSTEMCTL_TIMEOUT_MS` | Timeout (ms) for `systemctl show …` probes used by Linux socket-activation detection; prevents hangs when systemd/dbus is unhealthy | `2000` | `250` |
 
 Legacy environment variables `SUBSTRATE_WORLD_ROOT_MODE` / `SUBSTRATE_WORLD_ROOT_PATH` are still
 parsed for compatibility.
