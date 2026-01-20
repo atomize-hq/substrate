@@ -6,7 +6,7 @@
 - Owner(s): spenser
 
 ## Scope
-- Feature directory: `docs/project_management/next/world-agent-policy-snapshot/`
+- Feature directory: `docs/project_management/next/full-isolation-landlock-overlayfs-compat/`
 - Sequencing spine: `docs/project_management/next/sequencing.json`
 - Standards:
   - `docs/project_management/standards/ADR_STANDARD_AND_TEMPLATE.md`
@@ -14,7 +14,7 @@
 
 ## Related Docs
 - Policy snapshot spec: `docs/project_management/next/world-agent-policy-snapshot/policy-snapshot-spec.md`
-- Decision Register: `docs/project_management/next/world-agent-policy-snapshot/decision_register.md`
+- Decision Register: `docs/project_management/next/full-isolation-landlock-overlayfs-compat/decision_register.md`
 - Related ADRs:
   - `docs/project_management/next/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
 - Grounding code references:
@@ -24,8 +24,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 68d619f9b2f85ee047f727ef45ad80ad54bada415eaaf252e2376dc43e5bea26
-
+ADR_BODY_SHA256: e2e35964543818cb613112ba9325f5b183727aab284ce90a32d1070a7a9aba40
 ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md` after drafting>
 
 ### Changes (operator-facing)
@@ -132,6 +131,5 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0015-fu
 
 ## Decision Summary
 - Decision Register entries:
-  - `docs/project_management/next/world-agent-policy-snapshot/decision_register.md`:
-    - DR-0012
-
+  - `docs/project_management/next/full-isolation-landlock-overlayfs-compat/decision_register.md`:
+    - DR-0001
