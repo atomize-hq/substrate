@@ -97,3 +97,17 @@
   - CI dispatch path is runnable (commands exist + workflows are dispatchable) and runner labels are present:
     - Verified via `scripts/ci/check_self_hosted_runners.sh` (exit `0`).
 - Required fixes before starting C0: none.
+
+## START — 2026-01-20T03:13:13Z — code — C0-code
+- Worktree: `wt/full-isolation-landlock-overlayfs-compat-c0-code`
+- Branch: `full-isolation-landlock-overlayfs-compat-c0-code`
+- Orchestration branch: `feat/full-isolation-landlock-overlayfs-compat`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="C0" LAUNCH_CODEX=1`
+
+## START — 2026-01-20T03:13:13Z — test — C0-test
+- Worktree: `wt/full-isolation-landlock-overlayfs-compat-c0-test`
+- Branch: `full-isolation-landlock-overlayfs-compat-c0-test`
+- Orchestration branch: `feat/full-isolation-landlock-overlayfs-compat`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat" SLICE_ID="C0" LAUNCH_CODEX=1`

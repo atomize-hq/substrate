@@ -62,7 +62,7 @@
       "name": "C0 slice (code)",
       "type": "code",
       "phase": "C0",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Implement C0 spec (production code only).",
       "references": [
         "docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
@@ -108,7 +108,7 @@
       "name": "C0 slice (test)",
       "type": "test",
       "phase": "C0",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add/modify tests for C0 spec (tests only).",
       "references": [
         "docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
