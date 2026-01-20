@@ -76,7 +76,7 @@ fn overlay_backing_dirs_for_mount_point_from_str(
     for opt in super_opts.split(',') {
         if let Some(raw) = opt.strip_prefix("lowerdir=") {
             for p in raw.split(':').filter(|p| !p.trim().is_empty()) {
-                lowerdirs.push(p.to_string());
+                lowerdirs.push(decode_mountinfo_path(p.trim()));
             }
             continue;
         }
@@ -84,7 +84,7 @@ fn overlay_backing_dirs_for_mount_point_from_str(
         if let Some(raw) = opt.strip_prefix("upperdir=") {
             let t = raw.trim();
             if !t.is_empty() {
-                upperdir = Some(t.to_string());
+                upperdir = Some(decode_mountinfo_path(t));
             }
             continue;
         }
@@ -92,7 +92,7 @@ fn overlay_backing_dirs_for_mount_point_from_str(
         if let Some(raw) = opt.strip_prefix("workdir=") {
             let t = raw.trim();
             if !t.is_empty() {
-                workdir = Some(t.to_string());
+                workdir = Some(decode_mountinfo_path(t));
             }
             continue;
         }
@@ -188,6 +188,17 @@ mod tests {
         assert_eq!(dirs.lowerdirs, vec!["/l1", "/l2", "/l3"]);
         assert_eq!(dirs.upperdir.as_deref(), Some("/u"));
         assert_eq!(dirs.workdir.as_deref(), Some("/w"));
+    }
+
+    #[test]
+    fn overlay_backing_dirs_decodes_escaped_backing_dirs() {
+        let mi = "\
+43 33 0:44 / /mnt/project rw,relatime - overlay overlay rw,lowerdir=/l1\\040space:/l2\\134slash,upperdir=/u\\040space,workdir=/w\\040space\n\
+";
+        let dirs = overlay_backing_dirs_for_mount_point_from_str(mi, "/mnt/project").unwrap();
+        assert_eq!(dirs.lowerdirs, vec!["/l1 space", "/l2\\slash"]);
+        assert_eq!(dirs.upperdir.as_deref(), Some("/u space"));
+        assert_eq!(dirs.workdir.as_deref(), Some("/w space"));
     }
 
     #[test]
