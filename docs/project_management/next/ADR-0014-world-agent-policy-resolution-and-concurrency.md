@@ -1,6 +1,6 @@
 # ADR-0014: World-Agent Policy Resolution and Concurrency
 
-Status: draft  
+Status: Approved  
 Owner: Substrate core team  
 Date: 2026-01-18  
 
