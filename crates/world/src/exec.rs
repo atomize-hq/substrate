@@ -136,19 +136,62 @@ if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-workspace}" = "full" ]; then
   mount_point="$new_root$SUBSTRATE_MOUNT_PROJECT_DIR"
   opts="$(awk -v mp="$mount_point" '$2==mp {print $4; exit}' /proc/mounts 2>/dev/null || true)"
   upperdir=""
+  workdir=""
   if [ -n "$opts" ]; then
     upperdir="$(printf '%s' "$opts" | tr ',' '\n' | sed -n 's/^upperdir=//p' | head -n 1)"
+    workdir="$(printf '%s' "$opts" | tr ',' '\n' | sed -n 's/^workdir=//p' | head -n 1)"
   fi
-  if [ -n "$upperdir" ]; then
+  if [ -n "$upperdir" ] || [ -n "$workdir" ]; then
     state_dir="$upperdir"
     case "$state_dir" in
       */upper) state_dir="${state_dir%/upper}" ;;
-      *) state_dir="$(dirname "$state_dir")" ;;
+      */work) state_dir="${state_dir%/work}" ;;
+      '') state_dir="$workdir" ;;
     esac
-    if [ -d "$state_dir" ]; then
-      mkdir -p "$new_root$state_dir"
-      mount --rbind "$state_dir" "$new_root$state_dir" 2>/dev/null || true
+    if [ -n "$state_dir" ]; then
+      case "$state_dir" in
+        */upper) state_dir="${state_dir%/upper}" ;;
+        */work) state_dir="${state_dir%/work}" ;;
+        *) state_dir="$(dirname "$state_dir")" ;;
+      esac
     fi
+
+    if [ -n "$state_dir" ] && [ -d "$state_dir" ]; then
+      upper_sig=""
+      work_sig=""
+      if [ -n "$upperdir" ] && [ -d "$upperdir" ]; then
+        upper_sig="$(stat -c '%d:%i' "$upperdir" 2>/dev/null || true)"
+      fi
+      if [ -n "$workdir" ] && [ -d "$workdir" ]; then
+        work_sig="$(stat -c '%d:%i' "$workdir" 2>/dev/null || true)"
+      fi
+
+      mkdir -p "$new_root$state_dir"
+      if ! mount --rbind "$state_dir" "$new_root$state_dir"; then
+        echo "substrate: error: failed to bind-mount overlay backing dir into isolated root: $state_dir" >&2
+        exit 4
+      fi
+
+      if [ -n "$upper_sig" ] && [ -n "$upperdir" ]; then
+        new_upper_sig="$(stat -c '%d:%i' "$new_root$upperdir" 2>/dev/null || true)"
+        if [ -z "$new_upper_sig" ] || [ "$new_upper_sig" != "$upper_sig" ]; then
+          echo "substrate: error: overlay upperdir is not visible inside isolated root (expected $upperdir)" >&2
+          exit 4
+        fi
+      fi
+      if [ -n "$work_sig" ] && [ -n "$workdir" ]; then
+        new_work_sig="$(stat -c '%d:%i' "$new_root$workdir" 2>/dev/null || true)"
+        if [ -z "$new_work_sig" ] || [ "$new_work_sig" != "$work_sig" ]; then
+          echo "substrate: error: overlay workdir is not visible inside isolated root (expected $workdir)" >&2
+          exit 4
+        fi
+      fi
+    fi
+  fi
+
+  landlock_requested=0
+  if [ -n "${SUBSTRATE_WORLD_FS_LANDLOCK_READ_ALLOWLIST:-}" ] || [ -n "${SUBSTRATE_WORLD_FS_LANDLOCK_WRITE_ALLOWLIST:-}" ]; then
+    landlock_requested=1
   fi
 
   # Ensure allowlisted writable prefixes exist before we remount the project read-only.
@@ -171,37 +214,50 @@ if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-workspace}" = "full" ]; then
     IFS=$oldIFS
   fi
 
-  # Project is read-only by default; remount allowlisted prefixes writable.
-  mount -o remount,bind,ro "$new_root/project"
-  mount -o remount,bind,ro "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR"
+  if [ "$landlock_requested" != "1" ]; then
+    # Project is read-only by default; remount allowlisted prefixes writable.
+    #
+    # Note: on some kernels overlayfs may still deny writes under a bind-mounted subpath when the
+    # overlay superblock is mounted read-only, even if the sub-mount shows `rw` in /proc/mounts.
+    # When Landlock allowlists are in use, we skip this mount-based enforcement and rely on
+    # Landlock instead.
+    mount -o remount,bind,ro "$new_root/project"
+    mount -o remount,bind,ro "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR"
 
-  if [ "${SUBSTRATE_MOUNT_FS_MODE:-writable}" != "read_only" ] && [ -n "${SUBSTRATE_WORLD_FS_WRITE_ALLOWLIST:-}" ]; then
-    oldIFS=$IFS
-    IFS='
+    if [ "${SUBSTRATE_MOUNT_FS_MODE:-writable}" != "read_only" ] && [ -n "${SUBSTRATE_WORLD_FS_WRITE_ALLOWLIST:-}" ]; then
+      oldIFS=$IFS
+      IFS='
 '
-    for rel in $SUBSTRATE_WORLD_FS_WRITE_ALLOWLIST; do
-      [ -z "$rel" ] && continue
-      case "$rel" in
-        /*) continue ;;
-      esac
-      case "/$rel/" in
-        */../*) continue ;;
-      esac
-      if [ "$rel" = "." ]; then
-        mount -o remount,bind,rw "$new_root/project"
-        mount -o remount,bind,rw "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR"
-        continue
-      fi
-      mount --bind "$new_root/project/$rel" "$new_root/project/$rel"
-      mount -o remount,bind,rw "$new_root/project/$rel"
-      mount --bind "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR/$rel" "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR/$rel"
-      mount -o remount,bind,rw "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR/$rel"
-    done
-    IFS=$oldIFS
+      for rel in $SUBSTRATE_WORLD_FS_WRITE_ALLOWLIST; do
+        [ -z "$rel" ] && continue
+        case "$rel" in
+          /*) continue ;;
+        esac
+        case "/$rel/" in
+          */../*) continue ;;
+        esac
+        if [ "$rel" = "." ]; then
+          mount -o remount,bind,rw "$new_root/project"
+          mount -o remount,bind,rw "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR"
+          continue
+        fi
+        mount --bind "$new_root/project/$rel" "$new_root/project/$rel"
+        mount -o remount,bind,rw "$new_root/project/$rel"
+        mount --bind "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR/$rel" "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR/$rel"
+        mount -o remount,bind,rw "$new_root$SUBSTRATE_MOUNT_PROJECT_DIR/$rel"
+      done
+      IFS=$oldIFS
+    fi
   fi
 
   # Optional: bind-mount the host world-agent binary into the isolated rootfs so it can apply Landlock
   # restrictions before executing the command.
+  if [ "$landlock_requested" = "1" ]; then
+    if [ -z "${SUBSTRATE_LANDLOCK_HELPER_SRC:-}" ] || [ ! -e "${SUBSTRATE_LANDLOCK_HELPER_SRC:-}" ]; then
+      echo "substrate: error: landlock allowlists set but SUBSTRATE_LANDLOCK_HELPER_SRC was not available" >&2
+      exit 4
+    fi
+  fi
   if [ -n "${SUBSTRATE_LANDLOCK_HELPER_SRC:-}" ] && [ -e "${SUBSTRATE_LANDLOCK_HELPER_SRC:-}" ]; then
     touch "$new_root/substrate-landlock-helper" 2>/dev/null || true
     mount --bind "$SUBSTRATE_LANDLOCK_HELPER_SRC" "$new_root/substrate-landlock-helper" 2>/dev/null || true

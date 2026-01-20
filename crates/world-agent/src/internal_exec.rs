@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use serde_json::json;
 
 pub const LANDLOCK_EXEC_ARG: &str = "__substrate_world_landlock_exec";
 
@@ -19,6 +20,29 @@ pub fn run_landlock_exec() -> Result<()> {
 
     #[cfg(target_os = "linux")]
     {
+        fn extend_with_overlayfs_backing_dirs(
+            policy: &mut world::landlock::LandlockFilesystemPolicy,
+            mount_point: &str,
+        ) -> Result<()> {
+            let Some(backing) =
+                world::mountinfo::overlay_backing_dirs_for_mount_point(mount_point)?
+            else {
+                return Ok(());
+            };
+
+            if let Some(upper) = backing.upperdir {
+                policy.write_paths.push(upper);
+            }
+            if let Some(work) = backing.workdir {
+                policy.write_paths.push(work);
+            }
+            for lower in backing.lowerdirs {
+                policy.read_paths.push(lower);
+            }
+
+            Ok(())
+        }
+
         let isolation_full = std::env::var(WORLD_FS_ISOLATION_ENV)
             .ok()
             .is_some_and(|raw| raw.trim().eq_ignore_ascii_case("full"));
@@ -54,13 +78,49 @@ pub fn run_landlock_exec() -> Result<()> {
 
                 policy.read_paths.append(&mut read_paths);
                 policy.write_paths.append(&mut write_paths);
+
+                if let Ok(project_dir) = std::env::var(MOUNT_PROJECT_DIR_ENV) {
+                    let project_dir = project_dir.trim();
+                    if !project_dir.is_empty() {
+                        extend_with_overlayfs_backing_dirs(&mut policy, project_dir).with_context(
+                            || format!("failed to derive overlayfs backing dirs for {project_dir}"),
+                        )?;
+                    }
+                }
+
                 policy.read_paths.sort();
                 policy.read_paths.dedup();
                 policy.write_paths.sort();
                 policy.write_paths.dedup();
 
-                let _report = world::landlock::apply_filesystem_policy(&policy);
-                let _ = _report;
+                let report = world::landlock::apply_filesystem_policy(&policy);
+                if report.attempted && !report.applied {
+                    eprintln!(
+                        "substrate: error: landlock apply failed: {}",
+                        serde_json::to_string(&json!({
+                            "supported": report.support.supported,
+                            "abi": report.support.abi,
+                            "attempted": report.attempted,
+                            "applied": report.applied,
+                            "rules_added": report.rules_added,
+                            "reason": report.reason,
+                        }))
+                        .unwrap_or_else(|_| "<unserializable>".to_string())
+                    );
+                    std::process::exit(4);
+                }
+                if !report.support.supported {
+                    eprintln!(
+                        "substrate: error: landlock not supported but full isolation requested: {}",
+                        serde_json::to_string(&json!({
+                            "supported": report.support.supported,
+                            "abi": report.support.abi,
+                            "reason": report.support.reason,
+                        }))
+                        .unwrap_or_else(|_| "<unserializable>".to_string())
+                    );
+                    std::process::exit(4);
+                }
             }
         } else {
             // Workspace isolation keeps host paths readable, but should prevent writes outside the
