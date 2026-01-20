@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OverlayBackingDirs {
@@ -23,6 +23,20 @@ pub fn overlay_backing_dirs_for_mount_point(
         &raw,
         mount_point,
     ))
+}
+
+/// Parse `/proc/self/mountinfo` and derive overlayfs backing dirs for `mount_point`.
+///
+/// This is the strict variant of [`overlay_backing_dirs_for_mount_point`]:
+/// - Errors if no mount entry matches `mount_point`.
+/// - Errors if the matching entry is not `fstype="overlay"`.
+/// - Errors if the overlay `super_options` are missing `upperdir=` or `workdir=`.
+pub fn overlay_backing_dirs_for_mount_point_strict(
+    mount_point: &str,
+) -> Result<OverlayBackingDirs> {
+    let raw = std::fs::read_to_string("/proc/self/mountinfo")
+        .context("failed to read /proc/self/mountinfo")?;
+    overlay_backing_dirs_for_mount_point_strict_from_str(&raw, mount_point)
 }
 
 fn overlay_backing_dirs_for_mount_point_from_str(
@@ -99,6 +113,112 @@ fn overlay_backing_dirs_for_mount_point_from_str(
     }
 
     Some(OverlayBackingDirs {
+        lowerdirs,
+        upperdir,
+        workdir,
+    })
+}
+
+fn overlay_backing_dirs_for_mount_point_strict_from_str(
+    mountinfo: &str,
+    mount_point: &str,
+) -> Result<OverlayBackingDirs> {
+    let mut best_match: Option<(u64, &str)> = None;
+
+    for line in mountinfo.lines() {
+        let Some((pre, post)) = line.split_once(" - ") else {
+            continue;
+        };
+
+        let mut pre_fields = pre.split_whitespace();
+        let Some(mount_id_raw) = pre_fields.next() else {
+            continue;
+        };
+        let mount_id = match mount_id_raw.parse::<u64>() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let _parent_id = pre_fields.next();
+        let _dev = pre_fields.next();
+        let _root = pre_fields.next();
+        let Some(mp) = pre_fields.next() else {
+            continue;
+        };
+
+        let mp = decode_mountinfo_path(mp);
+        if mp != mount_point {
+            continue;
+        }
+
+        match best_match {
+            Some((best_mount_id, _)) if mount_id <= best_mount_id => {}
+            _ => best_match = Some((mount_id, post)),
+        }
+    }
+
+    let (_mount_id, post) = best_match
+        .with_context(|| format!("mountinfo: no mount entry matches mountpoint {mount_point:?}"))?;
+
+    let mut post_fields = post.split_whitespace();
+    let fstype = post_fields
+        .next()
+        .filter(|t| !t.trim().is_empty())
+        .with_context(|| {
+            format!("mountinfo: mountpoint {mount_point:?} missing fs_type field")
+        })?;
+    let _mount_source = post_fields.next().unwrap_or("");
+    let super_opts = post_fields
+        .next()
+        .filter(|t| !t.trim().is_empty())
+        .with_context(|| {
+            format!(
+                "mountinfo: mountpoint {mount_point:?} missing super_options field"
+            )
+        })?;
+
+    if fstype != "overlay" {
+        bail!(
+            "mountinfo: mountpoint {mount_point:?} has fs_type={fstype:?}, expected \"overlay\""
+        );
+    }
+
+    let mut lowerdirs = Vec::new();
+    let mut upperdir = None;
+    let mut workdir = None;
+
+    for opt in super_opts.split(',') {
+        if let Some(raw) = opt.strip_prefix("lowerdir=") {
+            for p in raw.split(':').filter(|p| !p.trim().is_empty()) {
+                lowerdirs.push(decode_mountinfo_path(p.trim()));
+            }
+            continue;
+        }
+
+        if let Some(raw) = opt.strip_prefix("upperdir=") {
+            let t = raw.trim();
+            if !t.is_empty() {
+                upperdir = Some(decode_mountinfo_path(t));
+            }
+            continue;
+        }
+
+        if let Some(raw) = opt.strip_prefix("workdir=") {
+            let t = raw.trim();
+            if !t.is_empty() {
+                workdir = Some(decode_mountinfo_path(t));
+            }
+            continue;
+        }
+    }
+
+    if upperdir.is_none() {
+        bail!("mountinfo: overlay mountpoint {mount_point:?} missing required super_option \"upperdir=\"");
+    }
+    if workdir.is_none() {
+        bail!("mountinfo: overlay mountpoint {mount_point:?} missing required super_option \"workdir=\"");
+    }
+
+    Ok(OverlayBackingDirs {
         lowerdirs,
         upperdir,
         workdir,
@@ -220,5 +340,42 @@ mod tests {
         assert_eq!(dirs.lowerdirs, vec!["/l2"]);
         assert_eq!(dirs.upperdir.as_deref(), Some("/u99"));
         assert_eq!(dirs.workdir.as_deref(), Some("/w99"));
+    }
+
+    #[test]
+    fn strict_overlay_backing_dirs_errors_on_non_overlay_mountpoint() {
+        let mi = "\
+43 33 0:44 / /mnt/project rw,relatime - ext4 /dev/sda1 rw\n\
+";
+        let err =
+            overlay_backing_dirs_for_mount_point_strict_from_str(mi, "/mnt/project").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("/mnt/project"), "{msg}");
+        assert!(msg.contains("fs_type"), "{msg}");
+        assert!(msg.contains("overlay"), "{msg}");
+    }
+
+    #[test]
+    fn strict_overlay_backing_dirs_errors_when_upperdir_missing() {
+        let mi = "\
+43 33 0:44 / /mnt/project rw,relatime - overlay overlay rw,lowerdir=/l,workdir=/w\n\
+";
+        let err =
+            overlay_backing_dirs_for_mount_point_strict_from_str(mi, "/mnt/project").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("/mnt/project"), "{msg}");
+        assert!(msg.contains("upperdir"), "{msg}");
+    }
+
+    #[test]
+    fn strict_overlay_backing_dirs_errors_when_workdir_missing() {
+        let mi = "\
+43 33 0:44 / /mnt/project rw,relatime - overlay overlay rw,lowerdir=/l,upperdir=/u\n\
+";
+        let err =
+            overlay_backing_dirs_for_mount_point_strict_from_str(mi, "/mnt/project").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("/mnt/project"), "{msg}");
+        assert!(msg.contains("workdir"), "{msg}");
     }
 }

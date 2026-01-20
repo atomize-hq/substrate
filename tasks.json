@@ -110,14 +110,17 @@
                 "crates/world-agent/src/pty.rs"
             ],
             "files_to_touch": [
-                "crates/world-agent/src/internal_exec.rs"
+                "crates/world-agent/src/internal_exec.rs",
+                "crates/world/src/mountinfo.rs",
+                "crates/world/src/lib.rs"
             ],
             "acceptance_criteria": [
+                "Mountinfo strict API returns a strict type (upperdir/workdir are non-optional) so callers cannot accidentally ignore required fields.",
                 "When Landlock is supported and allowlists are set for full isolation + writable, mountinfo derivation failure exits 4 with an actionable message (mountpoint + reason).",
                 "When Landlock is unsupported, behavior does not introduce a new failure mode (no fail-closed solely due to lack of Landlock).",
                 "No snapshot schema/hash changes; no new user-facing config keys."
             ],
-            "kickoff_prompt": "Update crates/world-agent/src/internal_exec.rs to compute whether derivation is required per C0-spec (full isolation + writable + Landlock supported + allowlists present). If required, call the strict mountinfo helper and, on error, print a high-signal diagnostic and exit 4 before executing the inner command. Ensure that Landlock unsupported does not create a new failure mode. Keep diagnostics structured (JSON is OK) and do not change policy snapshot behavior.",
+            "kickoff_prompt": "Fold-in note: eliminate the Option footgun by making the strict mountinfo helper return a strict type with non-optional upperdir/workdir. Then update crates/world-agent/src/internal_exec.rs to compute whether derivation is required per C0-spec (full isolation + writable + Landlock supported + allowlists present). If required, call the strict mountinfo helper and, on error, print a high-signal diagnostic and exit 4 before executing the inner command. Ensure that Landlock unsupported does not create a new failure mode. Keep diagnostics structured (JSON is OK) and do not change policy snapshot behavior.",
             "session_log": {
                 "start": "START — <UTC_TIMESTAMP> — FI-004 — <agent_name> — begin internal_exec fail-closed alignment",
                 "end": "END — <UTC_TIMESTAMP> — FI-004 — <agent_name> — summary + commands run + test results"
@@ -182,4 +185,3 @@
         }
     ]
 }
-
