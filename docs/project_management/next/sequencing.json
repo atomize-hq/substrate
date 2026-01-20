@@ -381,6 +381,24 @@
       ]
     },
     {
+      "order": 31,
+      "id": "full_isolation_landlock_overlayfs_compat",
+      "title": "Full isolation Landlock ↔ overlayfs backing dirs compat",
+      "branch": "feat/full-isolation-landlock-overlayfs-compat",
+      "directory": "docs/project_management/next/full-isolation-landlock-overlayfs-compat",
+      "plan": "docs/project_management/next/full-isolation-landlock-overlayfs-compat/plan.md",
+      "status": "not_started",
+      "sequence": [
+        {
+          "id": "C0",
+          "spec": "docs/project_management/next/full-isolation-landlock-overlayfs-compat/C0-spec.md"
+        }
+      ],
+      "notes": [
+        "Implements ADR-0015: restore write_allowlist correctness in full isolation when Landlock is supported and overlayfs is active."
+      ]
+    },
+    {
       "order": 40,
       "id": "json_mode",
       "title": "JSON mode (structured CLI I/O)",
