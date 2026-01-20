@@ -71,3 +71,13 @@
 - Rubric checks run (with results):
   - `make planning-validate FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat"` → `0` → `OK`
   - `make planning-lint FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat"` → `0` → `OK`
+
+## START — 2026-01-20T03:07:08Z — ops — F0-exec-preflight (execution preflight gate)
+- Feature: `docs/project_management/next/full-isolation-landlock-overlayfs-compat/`
+- Branch: `feat/full-isolation-landlock-overlayfs-compat`
+- Goal: Run the execution preflight gate before starting any triad work for C0.
+- Inputs reviewed end-to-end:
+  - Standard: `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+  - ADR: `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
+  - Planning Pack: `plan.md`, `tasks.json`, `session_log.md`, `C0-spec.md`, `decision_register.md`, `integration_map.md`, `manual_testing_playbook.md`, `smoke/*`
+  - CI dispatch plumbing: `Makefile`, `scripts/ci/dispatch_ci_testing.sh`, `scripts/ci/dispatch_feature_smoke.sh`, `.github/workflows/ci-testing.yml`, `.github/workflows/feature-smoke.yml`, `.github/workflows/ci-compile-parity.yml`
