@@ -154,7 +154,7 @@
       "name": "C0 slice (integration core)",
       "type": "integration",
       "phase": "C0",
-      "status": "pending",
+      "status": "completed",
       "description": "Merge C0 code+tests and make the slice green on the primary dev platform.",
       "references": [
         "docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
@@ -212,7 +212,7 @@
       "name": "C0 slice (integration Linux)",
       "type": "integration",
       "phase": "C0",
-      "status": "pending",
+      "status": "completed",
       "description": "Linux platform-fix integration task (may be a no-op if already green).",
       "references": [
         "docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
@@ -262,7 +262,7 @@
       "name": "C0 slice (integration macOS)",
       "type": "integration",
       "phase": "C0",
-      "status": "pending",
+      "status": "completed",
       "description": "macOS platform-fix integration task (smoke-gated when macOS is a behavior platform).",
       "references": [
         "docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
@@ -312,7 +312,7 @@
       "name": "C0 slice (integration CI parity: windows)",
       "type": "integration",
       "phase": "C0",
-      "status": "pending",
+      "status": "completed",
       "description": "windows CI parity fix task (compile/test/lint only; no behavioral smoke required for this platform).",
       "references": [
         "docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
@@ -361,7 +361,7 @@
       "name": "C0 slice (integration final)",
       "type": "integration",
       "phase": "C0",
-      "status": "pending",
+      "status": "completed",
       "description": "Final integration: merge any platform fixes and confirm behavioral smoke + CI parity are green.",
       "references": [
         "docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",

@@ -24,33 +24,40 @@ Slice spec:
 
 ## Spec Parity (No Drift)
 
-- [ ] Acceptance criteria satisfied
-- [ ] Any spec changes during the slice are recorded (with rationale)
+- [x] Acceptance criteria satisfied
+- [x] Any spec changes during the slice are recorded (with rationale)
 
 ## Checks Run (Evidence)
 
-- `cargo fmt`: pass/fail
-- `cargo clippy --workspace --all-targets -- -D warnings`: pass/fail
-- Relevant tests: pass/fail (list suites/commands)
-- `make integ-checks`: pass/fail
+- `cargo fmt`: pass
+- `cargo clippy --workspace --all-targets -- -D warnings`: pass
+- Relevant tests: pass (`cargo test` via `make integ-checks`)
+- `make integ-checks`: pass
+- CI compile parity: `RUN_ID=21173624758` (`https://github.com/atomize-hq/substrate/actions/runs/21173624758`)
 
 ## Cross-Platform Smoke (if applicable)
 
 Record run ids/URLs for required platforms:
 - Linux:
+  - `RUN_ID=21183298683` (`https://github.com/atomize-hq/substrate/actions/runs/21183298683`) — job `linux_self_hosted` succeeded
 - macOS:
-- Windows:
-- WSL:
+  - `RUN_ID=21183298683` (`https://github.com/atomize-hq/substrate/actions/runs/21183298683`) — job `macos_self_hosted` succeeded
+- Windows: n/a for behavior smoke (CI parity covered by `RUN_ID=21173624758`)
+- WSL: n/a
 
 If any platform-fix work was required:
 - What failed:
+  - Feature smoke `RUN_ID=21173728283` (`https://github.com/atomize-hq/substrate/actions/runs/21173728283`) — failed on `linux_self_hosted` + `macos_self_hosted`
+  - Feature smoke `RUN_ID=21183010775` (`https://github.com/atomize-hq/substrate/actions/runs/21183010775`) — failed
 - What was changed:
+  - Fixes landed on `feat/full-isolation-landlock-overlayfs-compat` and smoke reran green (`RUN_ID=21183298683`).
 - Why the change is safe (guards, cfg, feature flags):
+  - Verified by CI compile parity (`RUN_ID=21173624758`) and CI smoke (`RUN_ID=21183298683`) on the required behavior platforms (Linux + macOS).
 
 ## Smoke ↔ Manual Parity
 
-- [ ] Smoke scripts run the same commands/workflows as the manual testing playbook (minimal viable subset)
-- [ ] Smoke scripts validate exit codes and key output (not just “command ran”)
+- [x] Smoke scripts run the same commands/workflows as the manual testing playbook (minimal viable subset)
+- [x] Smoke scripts validate exit codes and key output (not just “command ran”)
 
 Notes:
-- 
+- Feature smoke (passing): `RUN_ID=21183298683` (`https://github.com/atomize-hq/substrate/actions/runs/21183298683`)
