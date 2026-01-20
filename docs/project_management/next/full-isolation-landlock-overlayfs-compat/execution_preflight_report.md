@@ -1,6 +1,6 @@
 # Execution Preflight Gate Report — full-isolation-landlock-overlayfs-compat
 
-Date (UTC): 2026-01-20T01:52:53Z
+Date (UTC): 2026-01-20T03:07:08Z
 
 Standard:
 - `docs/project_management/standards/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
@@ -10,16 +10,16 @@ Feature directory:
 
 ## Recommendation
 
-RECOMMENDATION: REVISE
+RECOMMENDATION: ACCEPT
 
 ## Inputs Reviewed
 
-- [ ] Planning quality gate is `ACCEPT` (`docs/project_management/next/full-isolation-landlock-overlayfs-compat/quality_gate_report.md`)
-- [ ] ADR accepted and still matches intent (`docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`)
-- [ ] Planning Pack complete (`plan.md`, `tasks.json`, `session_log.md`, specs, kickoff prompts)
-- [ ] Triad sizing is one behavior delta (no mixed independent deltas)
-- [ ] Required planning artifacts exist: `decision_register.md`, `integration_map.md`, `manual_testing_playbook.md`, `smoke/*`
-- [ ] Cross-platform plan is explicit (`tasks.json` meta: behavior + CI parity platforms)
+- [x] Planning quality gate is `ACCEPT` (`docs/project_management/next/full-isolation-landlock-overlayfs-compat/quality_gate_report.md`)
+- [x] ADR accepted and still matches intent (`docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`)
+- [x] Planning Pack complete (`plan.md`, `tasks.json`, `session_log.md`, specs, kickoff prompts)
+- [x] Triad sizing is one behavior delta (no mixed independent deltas)
+- [x] Required planning artifacts exist: `decision_register.md`, `integration_map.md`, `manual_testing_playbook.md`, `smoke/*`
+- [x] Cross-platform plan is explicit (`tasks.json` meta: behavior + CI parity platforms)
 
 ## 0) Slice Sizing (one behavior delta each)
 
@@ -33,8 +33,8 @@ RECOMMENDATION: REVISE
 From `docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json` meta:
 - Declared behavior platforms (smoke required): `["linux","macos"]`
 - Declared CI parity platforms (parity required): `["linux","macos","windows"]`
-- WSL required: `false`
-- WSL task mode: N/A
+- WSL required: `false` (not declared; treated as not required)
+- WSL task mode: N/A (not required)
 
 Notes:
 - If WSL coverage is required, confirm `meta.wsl_required=true` and `meta.wsl_task_mode` is set correctly.
@@ -65,7 +65,7 @@ Parity notes (map smoke ↔ manual; include concrete assertions):
   - Output contains `OK: allowlisted write succeeded` and `OK: denied write remained denied`.
 
 Gaps (must fix before execution begins):
-- Complete the Planning Quality Gate report and set `RECOMMENDATION: ACCEPT`.
+- None.
 
 ## 3) CI Dispatch Path Is Runnable (if applicable)
 
@@ -79,6 +79,7 @@ Runner readiness:
 - Required self-hosted runners exist and are labeled correctly:
   - Linux runner (`[self-hosted, Linux, linux-host]`)
   - macOS runner (`[self-hosted, macOS]`)
+  - Verified via: `scripts/ci/check_self_hosted_runners.sh` (exit `0`)
 
 Run ids/URLs (if executed during preflight):
 - CI compile parity:
@@ -94,6 +95,4 @@ Run ids/URLs (if executed during preflight):
 
 ## 4) Required Fixes Before Starting C0 (if any)
 
-- Confirm `docs/project_management/next/full-isolation-landlock-overlayfs-compat/quality_gate_report.md` exists and contains `RECOMMENDATION: ACCEPT`.
-- Confirm the required self-hosted runners exist and are labeled correctly (Linux + macOS).
-- Update this report to `RECOMMENDATION: ACCEPT` once the above are complete.
+- None.

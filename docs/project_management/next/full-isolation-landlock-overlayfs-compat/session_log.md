@@ -81,3 +81,19 @@
   - ADR: `docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
   - Planning Pack: `plan.md`, `tasks.json`, `session_log.md`, `C0-spec.md`, `decision_register.md`, `integration_map.md`, `manual_testing_playbook.md`, `smoke/*`
   - CI dispatch plumbing: `Makefile`, `scripts/ci/dispatch_ci_testing.sh`, `scripts/ci/dispatch_feature_smoke.sh`, `.github/workflows/ci-testing.yml`, `.github/workflows/feature-smoke.yml`, `.github/workflows/ci-compile-parity.yml`
+
+## END — 2026-01-20T03:09:01Z — ops — F0-exec-preflight (execution preflight gate)
+- Recommendation: `ACCEPT`
+- Evidence (minimum):
+  - Planning quality gate report exists and is `RECOMMENDATION: ACCEPT` (`docs/project_management/next/full-isolation-landlock-overlayfs-compat/quality_gate_report.md`).
+  - Cross-platform scope is explicit and matches the spec:
+    - Behavior platforms: `linux,macos`
+    - CI parity platforms: `linux,macos,windows`
+    - WSL: not required
+  - Smoke scripts are non-toy and mirror the manual playbook:
+    - Validate `substrate world doctor --json` `.ok=true`, `.world.landlock.supported=true`, `.world.world_fs_strategy.primary=="overlay"`.
+    - Run an allowlisted write under full isolation (`world_fs.isolation=full`, `world_fs.mode=writable`) and assert it succeeds without mutating the host project dir.
+    - Run a denied write and assert it remains denied without mutating the host project dir.
+  - CI dispatch path is runnable (commands exist + workflows are dispatchable) and runner labels are present:
+    - Verified via `scripts/ci/check_self_hosted_runners.sh` (exit `0`).
+- Required fixes before starting C0: none.

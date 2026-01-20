@@ -24,7 +24,7 @@
       "name": "Execution preflight gate (feature start)",
       "type": "ops",
       "phase": "F0",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Run the execution preflight gate to confirm smoke/manual/CI plans are adequate before starting triads.",
       "references": [
         "docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
