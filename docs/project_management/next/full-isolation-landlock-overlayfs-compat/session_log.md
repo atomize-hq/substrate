@@ -53,3 +53,21 @@
   - `NONE`
 - Next steps:
   - Run the Planning Quality Gate review and produce `docs/project_management/next/full-isolation-landlock-overlayfs-compat/quality_gate_report.md` before starting execution triads.
+
+## START — 2026-01-20T02:55:34Z — planning — quality gate remediation (DR viability + macOS behavior validation)
+- Goal:
+  - Remediate decision register viability findings (DR-0004, DR-0005) and align the Planning Pack to include macOS as a behavior platform (Lima guest path), while keeping Windows CI parity-only.
+- Commands planned:
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat"`
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat"`
+
+## END — 2026-01-20T02:55:34Z — planning — quality gate remediation (DR viability + macOS behavior validation)
+- Summary of changes (exhaustive):
+  - Updated DR-0004 Option B to a viable degrade alternative; kept the selected fail-closed posture unchanged.
+  - Updated DR-0005 to select Linux+macOS behavior platforms (macOS validates via Lima guest) while keeping Windows CI parity-only.
+  - Updated `tasks.json` meta and integration tasks to reflect macOS behavioral smoke.
+  - Replaced macOS smoke no-op with a real smoke script mirroring Linux validation.
+  - Updated manual testing playbook and execution preflight report to match the new behavior platform set.
+- Rubric checks run (with results):
+  - `make planning-validate FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat"` → `0` → `OK`
+  - `make planning-lint FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat"` → `0` → `OK`

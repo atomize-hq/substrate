@@ -14,7 +14,7 @@
 - Any behavior changes for macOS or Windows world backends.
 
 ## Platform scope
-- Behavior platforms (smoke required): Linux.
+- Behavior platforms (smoke required): Linux, macOS.
 - CI parity platforms (compile parity required): Linux, macOS, Windows.
 - WSL coverage: not required.
 

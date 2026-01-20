@@ -31,7 +31,7 @@ RECOMMENDATION: REVISE
 ## 1) Cross-Platform Coverage (explicit and correct)
 
 From `docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json` meta:
-- Declared behavior platforms (smoke required): `["linux"]`
+- Declared behavior platforms (smoke required): `["linux","macos"]`
 - Declared CI parity platforms (parity required): `["linux","macos","windows"]`
 - WSL required: `false`
 - WSL task mode: N/A
@@ -56,8 +56,10 @@ Smoke scripts to validate (only required for behavior platforms; parity-only pla
 Parity notes (map smoke ↔ manual; include concrete assertions):
 - Manual step(s):
   - Run `bash docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh`.
+  - Run `bash docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh`.
 - Smoke command(s):
   - `bash smoke/linux-smoke.sh`
+  - `bash smoke/macos-smoke.sh`
 - Expected output/assertion(s):
   - Exit `0`.
   - Output contains `OK: allowlisted write succeeded` and `OK: denied write remained denied`.
@@ -76,6 +78,7 @@ Integration task dispatch commands (copy verbatim from `tasks.json` integration 
 Runner readiness:
 - Required self-hosted runners exist and are labeled correctly:
   - Linux runner (`[self-hosted, Linux, linux-host]`)
+  - macOS runner (`[self-hosted, macOS]`)
 
 Run ids/URLs (if executed during preflight):
 - CI compile parity:
@@ -83,14 +86,14 @@ Run ids/URLs (if executed during preflight):
 - Linux smoke:
 - Not executed
 - macOS smoke:
-- Not required (Linux-only behavior platform)
+- Not executed
 - Windows smoke:
-- Not required (Linux-only behavior platform)
+- Not required (Windows is CI parity-only for this feature)
 - WSL smoke:
 - Not required
 
 ## 4) Required Fixes Before Starting C0 (if any)
 
-- Complete `docs/project_management/next/full-isolation-landlock-overlayfs-compat/quality_gate_report.md` with `RECOMMENDATION: ACCEPT`.
-- Re-run `make planning-lint FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat"` and record the command + exit code in the quality gate report.
+- Confirm `docs/project_management/next/full-isolation-landlock-overlayfs-compat/quality_gate_report.md` exists and contains `RECOMMENDATION: ACCEPT`.
+- Confirm the required self-hosted runners exist and are labeled correctly (Linux + macOS).
 - Update this report to `RECOMMENDATION: ACCEPT` once the above are complete.

@@ -7,7 +7,7 @@ This playbook must contain runnable commands and expected exit codes/output.
 These scripts define the behavioral platform contract for this feature. Keep them deterministic and fast.
 - Linux: `bash smoke/linux-smoke.sh` (expected exit: 0)
 - macOS: `bash smoke/macos-smoke.sh` (expected exit: 0)
-- Windows: `pwsh -File smoke/windows-smoke.ps1` (expected exit: 0)
+- Windows (CI parity-only; no behavioral assertions for this feature): `pwsh -File smoke/windows-smoke.ps1` (expected exit: 0)
 
 ## CI Parity (compile/test)
 
@@ -35,12 +35,19 @@ Expected:
 
 ## macOS manual validation (local)
 
+Preconditions:
+- The world backend is provisioned and reachable (`substrate world doctor --json` returns exit `0` and `.ok=true`).
+- The kernel supports Landlock (`.world.landlock.supported=true`) in the Lima Linux guest.
+- The world filesystem strategy primary is overlay (`.world.world_fs_strategy.primary=="overlay"`).
+
 Run:
 - `bash docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh`
 
 Expected:
 - Exit `0`.
-- Output contains `OK: macOS smoke is a no-op for this feature`.
+- Output contains:
+  - `OK: allowlisted write succeeded`
+  - `OK: denied write remained denied`
 
 ## Windows manual validation (local)
 
@@ -51,11 +58,11 @@ Expected:
 - Exit `0`.
 - Output contains `OK: Windows smoke is a no-op for this feature`.
 
-## CI behavioral smoke dispatch (required for Linux behavior validation)
+## CI behavioral smoke dispatch (required for Linux + macOS behavior validation)
 
 Run from the integration worktree `HEAD`:
 - `make feature-smoke FEATURE_DIR="docs/project_management/next/full-isolation-landlock-overlayfs-compat" PLATFORM=behavior SMOKE_SLICE_ID="C0" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/full-isolation-landlock-overlayfs-compat" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1`
 
 Expected:
 - The dispatcher prints `DISPATCH_OK=1` and a `RUN_URL=...`.
-- The workflow concludes success for Linux.
+- The workflow concludes success for Linux and macOS.

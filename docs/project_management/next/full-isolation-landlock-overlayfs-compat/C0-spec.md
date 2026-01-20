@@ -7,7 +7,9 @@ Exit codes:
 - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
 
 ## Scope
-- Linux-only.
+- Behavior is Linux-kernel-specific; this slice is validated on:
+  - Linux hosts, and
+  - macOS hosts via the Lima Linux guest (world backend).
 - Restore the operator contract for `world_fs.write_allowlist` in:
   - `world_fs.isolation=full`
   - `world_fs.mode=writable`
@@ -111,11 +113,14 @@ Exit codes:
   - denied writes remain denied
   - the host project directory is not mutated by allowlisted writes (writes remain in overlay backing dirs)
 
-### Smoke (Linux behavior platform)
-- `docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh` MUST:
+### Smoke (behavior platforms: Linux + macOS)
+- Linux smoke (`docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh`) MUST:
   - require that `substrate world doctor --json` reports `world.landlock.supported=true` and `world.world_fs_strategy.primary="overlay"`
   - run an allowlisted write that fails on the pre-fix behavior and succeeds after this slice
   - run a denied write that remains denied
+- macOS smoke (`docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh`) MUST:
+  - require that `substrate world doctor --json` reports `world.landlock.supported=true` and `world.world_fs_strategy.primary="overlay"`
+  - run the same allowlisted write + denied write checks as the Linux smoke, via the macOS host → Lima guest world backend path
 
 ## Out of scope
 - Any changes to how `world_fs.write_allowlist` patterns are interpreted or canonicalized.

@@ -144,13 +144,13 @@ Related ADR:
 - **Unlocks:** Prevents silent “allowlist says writable but runtime denies” drift.
 - **Quick wins / low-hanging fruit:** Treat missing mountinfo data as a missing prerequisite and return early.
 
-**Option B — Degrade by skipping the Landlock extension and proceeding**
-- **Pros:** Avoids new hard failures.
-- **Cons:** Leaves allowlisted writes broken (still `EPERM`), making the system appear inconsistent; can mask the real cause.
-- **Cascading implications:** The wrapper must decide between “apply Landlock” and “skip Landlock”, which complicates security reasoning.
-- **Risks:** Silent drift between mount allowlist semantics and Landlock enforcement persists.
-- **Unlocks:** None for this feature’s contract.
-- **Quick wins / low-hanging fruit:** Keep existing behavior.
+**Option B — Degrade by disabling Landlock for this exec and proceeding with mount-only enforcement**
+- **Pros:** Keeps allowlisted writes working (overlayfs backing dirs are not blocked); avoids introducing a hard failure in unusual mount topologies.
+- **Cons:** Explicitly weakens hardening for this exec: Landlock is not applied even though supported by the kernel.
+- **Cascading implications:** The wrapper must implement a deterministic “Landlock disabled for this exec” path and emit a high-signal warning/trace field so operators can audit the downgrade.
+- **Risks:** Reduces isolation hardening for this exec; must ensure mount-only enforcement remains correct and does not regress deny semantics.
+- **Unlocks:** Provides an availability-first escape hatch while preserving deterministic user-visible behavior (writes succeed/deny as dictated by mount semantics).
+- **Quick wins / low-hanging fruit:** Add a single guarded downgrade path when derivation fails, without broad allowlist expansion.
 
 **Recommendation**
 - **Selected:** Option A — Fail closed
@@ -173,27 +173,27 @@ Related ADR:
 - This feature changes Linux full-isolation behavior because it depends on Linux Landlock and overlayfs mount semantics.
 - The repository still requires compile parity on macOS and Windows.
 
-**Option A — Linux is the only behavior platform; macOS/Windows are CI parity only (selected)**
-- **Pros:** Matches the feature’s Linux-only behavior contract; avoids requiring macOS/Windows runners to validate Linux kernel behavior.
-- **Cons:** Does not run a meaningful behavioral smoke on macOS/Windows for this feature.
+**Option A — Linux is the only behavior platform; macOS/Windows are CI parity only**
+- **Pros:** Smallest behavioral validation surface; requires only a Linux runner to validate the kernel-specific Landlock+overlayfs behavior.
+- **Cons:** Does not validate the macOS host path (Lima guest) for the same behavior; macOS regressions can slip through until later.
 - **Cascading implications:** `tasks.json` uses `behavior_platforms_required=["linux"]` and `ci_parity_platforms_required=["linux","macos","windows"]`.
-- **Risks:** None for this feature’s defined contract; compile parity still guards cross-platform builds.
-- **Unlocks:** Keeps smoke focused on the platform where the behavior exists.
-- **Quick wins / low-hanging fruit:** Use a single Linux smoke script that reproduces the allowlisted-write failure and validates the fix.
+- **Risks:** macOS-specific drift (host → guest plumbing, doctor fields, or config/policy UX) is not caught by smoke for this feature.
+- **Unlocks:** Keeps smoke focused on the simplest environment.
+- **Quick wins / low-hanging fruit:** Use the existing Linux smoke script only.
 
-**Option B — Treat Linux/macOS/Windows as behavior platforms**
-- **Pros:** Forces smoke runs on all host OSes.
-- **Cons:** The relevant Landlock+overlayfs behavior runs in a Linux kernel; macOS and Windows jobs cannot validate the Linux-only behavior without additional backend/provisioning scope.
-- **Cascading implications:** Requires meaningful smoke scripts on all three platforms, which is not aligned with the feature’s scope.
-- **Risks:** Adds noise and false confidence if non-Linux smoke scripts do not exercise the behavior.
-- **Unlocks:** None for this feature.
-- **Quick wins / low-hanging fruit:** None.
+**Option B — Linux + macOS are behavior platforms; Windows is CI parity only (selected)**
+- **Pros:** Validates the same kernel behavior on the macOS host path (via the Lima Linux guest) while keeping Windows as compile parity-only where the feature’s kernel behavior is not directly validated.
+- **Cons:** Requires a macOS smoke script that exercises the Linux guest behavior and a self-hosted macOS runner (or an explicitly approved hosted fallback) to run it.
+- **Cascading implications:** `tasks.json` uses `behavior_platforms_required=["linux","macos"]` and `ci_parity_platforms_required=["linux","macos","windows"]`; macOS platform-fix task becomes smoke-gated.
+- **Risks:** Runner provisioning/availability becomes a gating dependency for this feature’s execution; mitigated by preflight runner checks.
+- **Unlocks:** Catches regressions in the macOS host→guest world execution path for full isolation.
+- **Quick wins / low-hanging fruit:** Replace the macOS no-op smoke with a real smoke that mirrors Linux validation via `substrate --world ...`.
 
 **Recommendation**
-- **Selected:** Option A — Linux is the only behavior platform; macOS/Windows are CI parity only
-- **Rationale (crisp):** The behavior change is Linux-kernel-specific; cross-platform validation is compile parity only.
+- **Selected:** Option B — Linux + macOS are behavior platforms; Windows is CI parity only
+- **Rationale (crisp):** The behavior is Linux-kernel-specific, but macOS runs the Linux world via Lima; smoke should validate the macOS host→guest path while keeping Windows as compile parity-only.
 
 **Follow-up tasks (explicit)**
-- `docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json`: keep `meta.behavior_platforms_required=["linux"]` and `meta.ci_parity_platforms_required=["linux","macos","windows"]`.
-- `docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh`: exit `0` as a defined no-op.
+- `docs/project_management/next/full-isolation-landlock-overlayfs-compat/tasks.json`: set `meta.behavior_platforms_required=["linux","macos"]` and keep `meta.ci_parity_platforms_required=["linux","macos","windows"]`.
+- `docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh`: replace the no-op with a real smoke that mirrors the Linux validation.
 - `docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/windows-smoke.ps1`: exit `0` as a defined no-op.

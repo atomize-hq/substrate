@@ -9,7 +9,8 @@
       "orchestration_branch": "feat/full-isolation-landlock-overlayfs-compat"
     },
     "behavior_platforms_required": [
-      "linux"
+      "linux",
+      "macos"
     ],
     "ci_parity_platforms_required": [
       "linux",
@@ -165,12 +166,13 @@
         "docs/project_management/next/full-isolation-landlock-overlayfs-compat/integration_map.md",
         "docs/project_management/next/full-isolation-landlock-overlayfs-compat/manual_testing_playbook.md",
         "docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/linux-smoke.sh",
+        "docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh",
         "docs/project_management/standards/PLATFORM_INTEGRATION_AND_CI.md"
       ],
       "acceptance_criteria": [
         "Core slice is green under make integ-checks and matches the spec",
         "CI compile parity dispatch is recorded (run id/URL) in session_log.md",
-        "Linux behavioral smoke dispatch is recorded (run id/URL) in session_log.md"
+        "Behavioral smoke dispatch is recorded (run id/URL) in session_log.md"
       ],
       "start_checklist": [
         "git checkout feat/full-isolation-landlock-overlayfs-compat && git pull --ff-only",
@@ -257,11 +259,11 @@
     },
     {
       "id": "C0-integ-macos",
-      "name": "C0 slice (integration CI parity: macos)",
+      "name": "C0 slice (integration macOS)",
       "type": "integration",
       "phase": "C0",
       "status": "pending",
-      "description": "macos CI parity fix task (compile/test/lint only; no behavioral smoke required for this platform).",
+      "description": "macOS platform-fix integration task (smoke-gated when macOS is a behavior platform).",
       "references": [
         "docs/project_management/next/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md",
         "docs/project_management/next/full-isolation-landlock-overlayfs-compat/plan.md",
@@ -269,10 +271,11 @@
         "docs/project_management/next/full-isolation-landlock-overlayfs-compat/session_log.md",
         "docs/project_management/next/full-isolation-landlock-overlayfs-compat/C0-spec.md",
         "docs/project_management/next/full-isolation-landlock-overlayfs-compat/decision_register.md (DR-0005)",
+        "docs/project_management/next/full-isolation-landlock-overlayfs-compat/manual_testing_playbook.md",
         "docs/project_management/next/full-isolation-landlock-overlayfs-compat/smoke/macos-smoke.sh"
       ],
       "acceptance_criteria": [
-        "macos CI parity is green for this slice (no behavioral smoke required)"
+        "macos smoke is green for this slice"
       ],
       "start_checklist": [
         "Run on macos host if possible",
@@ -282,9 +285,9 @@
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/next/full-isolation-landlock-overlayfs-compat\" TASK_ID=\"C0-integ-macos\""
       ],
       "end_checklist": [
-        "Dispatch CI parity via: make ci-compile-parity CI_WORKFLOW_REF=\"feat/full-isolation-landlock-overlayfs-compat\" CI_REMOTE=origin CI_CLEANUP=1",
+        "Dispatch macos smoke via CI: make feature-smoke FEATURE_DIR=\"docs/project_management/next/full-isolation-landlock-overlayfs-compat\" PLATFORM=macos SMOKE_SLICE_ID=\"C0\" RUNNER_KIND=self-hosted WORKFLOW_REF=\"feat/full-isolation-landlock-overlayfs-compat\" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1 (record run id/URL)",
         "If needed: fix + fmt/clippy + targeted tests",
-        "Ensure CI parity is green; record run id/URL",
+        "Ensure smoke is green; record run id/URL",
         "From inside the worktree: make triad-task-finish TASK_ID=\"C0-integ-macos\"",
         "Update tasks/session_log on orchestration branch; do not delete worktrees (feature cleanup removes worktrees at feature end)"
       ],
@@ -297,7 +300,7 @@
       "concurrent_with": [],
       "platform": "macos",
       "runner": "github-actions",
-      "workflow": ".github/workflows/ci-compile-parity.yml",
+      "workflow": ".github/workflows/feature-smoke.yml",
       "git_branch": "full-isolation-landlock-overlayfs-compat-c0-integ-macos",
       "required_make_targets": [
         "triad-code-checks"
