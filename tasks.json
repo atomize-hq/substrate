@@ -111,6 +111,8 @@
             ],
             "files_to_touch": [
                 "crates/world-agent/src/internal_exec.rs",
+                "crates/world-agent/src/service.rs",
+                "crates/world-agent/src/pty.rs",
                 "crates/world/src/mountinfo.rs",
                 "crates/world/src/lib.rs"
             ],

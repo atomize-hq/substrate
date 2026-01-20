@@ -216,22 +216,32 @@ impl WorldAgentService {
                 write_allowlist_prefixes.join("\n"),
             );
         }
-        if isolation_full && !landlock_read_paths.is_empty() {
-            env_map.insert(
-                WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string(),
-                landlock_read_paths.join("\n"),
-            );
-        }
-        if isolation_full && !landlock_write_paths.is_empty() {
-            env_map.insert(
-                WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV.to_string(),
-                landlock_write_paths.join("\n"),
-            );
-        }
-        if let Ok(exe) = std::env::current_exe() {
-            env_map
-                .entry(LANDLOCK_HELPER_SRC_ENV.to_string())
-                .or_insert_with(|| exe.display().to_string());
+        #[cfg(target_os = "linux")]
+        let landlock_supported = world::landlock::detect_support().supported;
+        #[cfg(not(target_os = "linux"))]
+        let landlock_supported = false;
+
+        let landlock_env_needed = isolation_full
+            && landlock_supported
+            && (!landlock_read_paths.is_empty() || !landlock_write_paths.is_empty());
+        if landlock_env_needed {
+            if !landlock_read_paths.is_empty() {
+                env_map.insert(
+                    WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string(),
+                    landlock_read_paths.join("\n"),
+                );
+            }
+            if !landlock_write_paths.is_empty() {
+                env_map.insert(
+                    WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV.to_string(),
+                    landlock_write_paths.join("\n"),
+                );
+            }
+            if let Ok(exe) = std::env::current_exe() {
+                env_map
+                    .entry(LANDLOCK_HELPER_SRC_ENV.to_string())
+                    .or_insert_with(|| exe.display().to_string());
+            }
         }
         let exec_req = world_api::ExecRequest {
             cmd: req.cmd,
@@ -336,22 +346,32 @@ impl WorldAgentService {
                         write_allowlist_prefixes.join("\n"),
                     );
                 }
-                if isolation_full && !landlock_read_paths.is_empty() {
-                    env_map.insert(
-                        WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string(),
-                        landlock_read_paths.join("\n"),
-                    );
-                }
-                if isolation_full && !landlock_write_paths.is_empty() {
-                    env_map.insert(
-                        WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV.to_string(),
-                        landlock_write_paths.join("\n"),
-                    );
-                }
-                if let Ok(exe) = std::env::current_exe() {
-                    env_map
-                        .entry(LANDLOCK_HELPER_SRC_ENV.to_string())
-                        .or_insert_with(|| exe.display().to_string());
+                #[cfg(target_os = "linux")]
+                let landlock_supported = world::landlock::detect_support().supported;
+                #[cfg(not(target_os = "linux"))]
+                let landlock_supported = false;
+
+                let landlock_env_needed = isolation_full
+                    && landlock_supported
+                    && (!landlock_read_paths.is_empty() || !landlock_write_paths.is_empty());
+                if landlock_env_needed {
+                    if !landlock_read_paths.is_empty() {
+                        env_map.insert(
+                            WORLD_FS_LANDLOCK_READ_ALLOWLIST_ENV.to_string(),
+                            landlock_read_paths.join("\n"),
+                        );
+                    }
+                    if !landlock_write_paths.is_empty() {
+                        env_map.insert(
+                            WORLD_FS_LANDLOCK_WRITE_ALLOWLIST_ENV.to_string(),
+                            landlock_write_paths.join("\n"),
+                        );
+                    }
+                    if let Ok(exe) = std::env::current_exe() {
+                        env_map
+                            .entry(LANDLOCK_HELPER_SRC_ENV.to_string())
+                            .or_insert_with(|| exe.display().to_string());
+                    }
                 }
                 env_map
             },

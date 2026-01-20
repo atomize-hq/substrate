@@ -7,6 +7,8 @@ const INNER_CMD_ENV: &str = "SUBSTRATE_INNER_CMD";
 const INNER_LOGIN_SHELL_ENV: &str = "SUBSTRATE_INNER_LOGIN_SHELL";
 const MOUNT_CWD_ENV: &str = "SUBSTRATE_MOUNT_CWD";
 #[cfg(target_os = "linux")]
+const MOUNT_FS_MODE_ENV: &str = "SUBSTRATE_MOUNT_FS_MODE";
+#[cfg(target_os = "linux")]
 const MOUNT_PROJECT_DIR_ENV: &str = "SUBSTRATE_MOUNT_PROJECT_DIR";
 #[cfg(target_os = "linux")]
 const WORLD_FS_ISOLATION_ENV: &str = "SUBSTRATE_WORLD_FS_ISOLATION";
@@ -20,22 +22,15 @@ pub fn run_landlock_exec() -> Result<()> {
 
     #[cfg(target_os = "linux")]
     {
-        fn extend_with_overlayfs_backing_dirs(
+        fn extend_with_overlayfs_backing_dirs_strict(
             policy: &mut world::landlock::LandlockFilesystemPolicy,
             mount_point: &str,
         ) -> Result<()> {
-            let Some(backing) =
-                world::mountinfo::overlay_backing_dirs_for_mount_point(mount_point)?
-            else {
-                return Ok(());
-            };
+            let backing =
+                world::mountinfo::overlay_backing_dirs_for_mount_point_strict(mount_point)?;
 
-            if let Some(upper) = backing.upperdir {
-                policy.write_paths.push(upper);
-            }
-            if let Some(work) = backing.workdir {
-                policy.write_paths.push(work);
-            }
+            policy.write_paths.push(backing.upperdir);
+            policy.write_paths.push(backing.workdir);
             for lower in backing.lowerdirs {
                 policy.read_paths.push(lower);
             }
@@ -48,11 +43,14 @@ pub fn run_landlock_exec() -> Result<()> {
             .is_some_and(|raw| raw.trim().eq_ignore_ascii_case("full"));
 
         if isolation_full {
-            let mut read_paths = read_paths;
-            let mut write_paths = write_paths;
-            if read_paths.is_empty() && write_paths.is_empty() {
-                // Nothing to enforce.
-            } else {
+            let landlock_intended = !(read_paths.is_empty() && write_paths.is_empty());
+            let landlock_support = world::landlock::detect_support();
+            let landlock_supported = landlock_support.supported;
+
+            if landlock_intended && landlock_supported {
+                let mut read_paths = read_paths;
+                let mut write_paths = write_paths;
+
                 let mut policy = world::landlock::LandlockFilesystemPolicy {
                     exec_paths: vec!["/".to_string(), "/project".to_string()],
                     read_paths: vec![
@@ -79,12 +77,49 @@ pub fn run_landlock_exec() -> Result<()> {
                 policy.read_paths.append(&mut read_paths);
                 policy.write_paths.append(&mut write_paths);
 
-                if let Ok(project_dir) = std::env::var(MOUNT_PROJECT_DIR_ENV) {
-                    let project_dir = project_dir.trim();
-                    if !project_dir.is_empty() {
-                        extend_with_overlayfs_backing_dirs(&mut policy, project_dir).with_context(
-                            || format!("failed to derive overlayfs backing dirs for {project_dir}"),
-                        )?;
+                let mount_fs_mode =
+                    std::env::var(MOUNT_FS_MODE_ENV).unwrap_or_else(|_| "writable".to_string());
+                let fs_mode_writable = !mount_fs_mode.trim().eq_ignore_ascii_case("read_only");
+
+                let derivation_required = fs_mode_writable;
+
+                if derivation_required {
+                    let project_dir = std::env::var(MOUNT_PROJECT_DIR_ENV)
+                        .ok()
+                        .map(|raw| raw.trim().to_string())
+                        .filter(|t| !t.is_empty());
+                    let mount_point = project_dir
+                        .clone()
+                        .unwrap_or_else(|| "<missing>".to_string());
+
+                    let Some(project_dir) = project_dir else {
+                        eprintln!(
+                            "substrate: error: full isolation landlock prerequisites missing: {}",
+                            serde_json::to_string(&json!({
+                                "feature": "full-isolation-landlock-overlayfs-compat",
+                                "mount_point": mount_point,
+                                "reason": "missing or empty SUBSTRATE_MOUNT_PROJECT_DIR",
+                                "remediation": "this full-isolation exec requires deriving overlayfs backing dirs from /proc/self/mountinfo",
+                            }))
+                            .unwrap_or_else(|_| "<unserializable>".to_string())
+                        );
+                        std::process::exit(4);
+                    };
+
+                    if let Err(err) =
+                        extend_with_overlayfs_backing_dirs_strict(&mut policy, &project_dir)
+                    {
+                        eprintln!(
+                            "substrate: error: full isolation landlock prerequisites missing: {}",
+                            serde_json::to_string(&json!({
+                                "feature": "full-isolation-landlock-overlayfs-compat",
+                                "mount_point": project_dir,
+                                "reason": err.to_string(),
+                                "remediation": "this full-isolation exec requires deriving overlayfs backing dirs from /proc/self/mountinfo",
+                            }))
+                            .unwrap_or_else(|_| "<unserializable>".to_string())
+                        );
+                        std::process::exit(4);
                     }
                 }
 
@@ -104,18 +139,6 @@ pub fn run_landlock_exec() -> Result<()> {
                             "applied": report.applied,
                             "rules_added": report.rules_added,
                             "reason": report.reason,
-                        }))
-                        .unwrap_or_else(|_| "<unserializable>".to_string())
-                    );
-                    std::process::exit(4);
-                }
-                if !report.support.supported {
-                    eprintln!(
-                        "substrate: error: landlock not supported but full isolation requested: {}",
-                        serde_json::to_string(&json!({
-                            "supported": report.support.supported,
-                            "abi": report.support.abi,
-                            "reason": report.support.reason,
                         }))
                         .unwrap_or_else(|_| "<unserializable>".to_string())
                     );
