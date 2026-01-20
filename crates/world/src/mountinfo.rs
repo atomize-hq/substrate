@@ -29,13 +29,19 @@ fn overlay_backing_dirs_for_mount_point_from_str(
     mountinfo: &str,
     mount_point: &str,
 ) -> Option<OverlayBackingDirs> {
+    let mut best_match: Option<(u64, &str)> = None;
+
     for line in mountinfo.lines() {
         let Some((pre, post)) = line.split_once(" - ") else {
             continue;
         };
 
         let mut pre_fields = pre.split_whitespace();
-        let _mount_id = pre_fields.next()?;
+        let mount_id_raw = pre_fields.next()?;
+        let mount_id = match mount_id_raw.parse::<u64>() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
         let _parent_id = pre_fields.next()?;
         let _dev = pre_fields.next()?;
         let _root = pre_fields.next()?;
@@ -46,52 +52,57 @@ fn overlay_backing_dirs_for_mount_point_from_str(
             continue;
         }
 
-        let mut post_fields = post.split_whitespace();
-        let fstype = post_fields.next().unwrap_or("");
-        let _mount_source = post_fields.next().unwrap_or("");
-        let super_opts = post_fields.next().unwrap_or("");
-
-        if fstype != "overlay" {
-            return None;
+        match best_match {
+            Some((best_mount_id, _)) if mount_id <= best_mount_id => {}
+            _ => best_match = Some((mount_id, post)),
         }
-
-        let mut lowerdirs = Vec::new();
-        let mut upperdir = None;
-        let mut workdir = None;
-
-        for opt in super_opts.split(',') {
-            if let Some(raw) = opt.strip_prefix("lowerdir=") {
-                for p in raw.split(':').filter(|p| !p.trim().is_empty()) {
-                    lowerdirs.push(p.to_string());
-                }
-                continue;
-            }
-
-            if let Some(raw) = opt.strip_prefix("upperdir=") {
-                let t = raw.trim();
-                if !t.is_empty() {
-                    upperdir = Some(t.to_string());
-                }
-                continue;
-            }
-
-            if let Some(raw) = opt.strip_prefix("workdir=") {
-                let t = raw.trim();
-                if !t.is_empty() {
-                    workdir = Some(t.to_string());
-                }
-                continue;
-            }
-        }
-
-        return Some(OverlayBackingDirs {
-            lowerdirs,
-            upperdir,
-            workdir,
-        });
     }
 
-    None
+    let (_mount_id, post) = best_match?;
+
+    let mut post_fields = post.split_whitespace();
+    let fstype = post_fields.next().unwrap_or("");
+    let _mount_source = post_fields.next().unwrap_or("");
+    let super_opts = post_fields.next().unwrap_or("");
+
+    if fstype != "overlay" {
+        return None;
+    }
+
+    let mut lowerdirs = Vec::new();
+    let mut upperdir = None;
+    let mut workdir = None;
+
+    for opt in super_opts.split(',') {
+        if let Some(raw) = opt.strip_prefix("lowerdir=") {
+            for p in raw.split(':').filter(|p| !p.trim().is_empty()) {
+                lowerdirs.push(p.to_string());
+            }
+            continue;
+        }
+
+        if let Some(raw) = opt.strip_prefix("upperdir=") {
+            let t = raw.trim();
+            if !t.is_empty() {
+                upperdir = Some(t.to_string());
+            }
+            continue;
+        }
+
+        if let Some(raw) = opt.strip_prefix("workdir=") {
+            let t = raw.trim();
+            if !t.is_empty() {
+                workdir = Some(t.to_string());
+            }
+            continue;
+        }
+    }
+
+    Some(OverlayBackingDirs {
+        lowerdirs,
+        upperdir,
+        workdir,
+    })
 }
 
 fn decode_mountinfo_path(input: &str) -> String {
@@ -186,5 +197,17 @@ mod tests {
 ";
         let dirs = overlay_backing_dirs_for_mount_point_from_str(mi, "/tmp/hello world").unwrap();
         assert_eq!(dirs.upperdir.as_deref(), Some("/u"));
+    }
+
+    #[test]
+    fn overlay_backing_dirs_selects_highest_mount_id_for_duplicate_mountpoint() {
+        let mi = "\
+43 33 0:44 / /mnt/project rw,relatime - overlay overlay rw,lowerdir=/l1,upperdir=/u43,workdir=/w43\n\
+99 33 0:44 / /mnt/project rw,relatime - overlay overlay rw,lowerdir=/l2,upperdir=/u99,workdir=/w99\n\
+";
+        let dirs = overlay_backing_dirs_for_mount_point_from_str(mi, "/mnt/project").unwrap();
+        assert_eq!(dirs.lowerdirs, vec!["/l2"]);
+        assert_eq!(dirs.upperdir.as_deref(), Some("/u99"));
+        assert_eq!(dirs.workdir.as_deref(), Some("/w99"));
     }
 }
