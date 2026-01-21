@@ -25,8 +25,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: a9247d51e0f3037dc34d9510f3a677b55a11eb050209a6ffbc2b8637f77b0a7e
-
+ADR_BODY_SHA256: da8a994c34a11a9ca9d1a7698dae8cf380b1184b52938ec1057a7b096ee80c04
 ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md` after drafting>
 
 ### Changes (operator-facing)
@@ -45,6 +44,13 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-wo
   - Links:
     - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md#cli`
 
+- Ensure `-c/--command` is world-consistent when world is enabled
+  - Existing: `-c/--command` uses the same “lightweight builtin” fast-path as the REPL, so `cd`/`pwd`/`export`/`unset` can be executed on the host even when the command is otherwise world-backed.
+  - New: When world is enabled, `-c/--command` MUST interpret `cd`/`pwd`/`export`/`unset` in-world (shell semantics) and MUST NOT execute them as host-only builtins; `:host` is never recognized in `-c/--command`.
+  - Why: Prevent “mixed-context” surprises and avoid accidental host-path evaluation when the operator expects world semantics.
+  - Links:
+    - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md#cli`
+
 ## Problem / Context
 - The current interactive REPL mixes execution contexts:
   - Many commands are executed “in world” (overlay view) via world-agent request/response paths.
@@ -60,13 +66,16 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-wo
   - `cd` changes the in-world working directory for subsequent commands.
   - `pwd` reports the in-world working directory.
   - `export`/`unset` affect subsequent in-world commands.
+- Non-interactive `-c/--command` is consistent with world-first semantics when world is enabled:
+  - `cd`/`pwd`/`export`/`unset` MUST NOT be implemented as host-only “lightweight builtins” when world is enabled.
+  - Any state changes from `cd`/`export`/`unset` exist only within the invoked command’s shell/process (standard shell semantics).
 - Preserve an explicit host escape hatch for interactive work: `:host <command>`.
 - Retain high-signal diagnostics when the world backend is unavailable and `world_fs.require_world=true`.
 - Maintain trace/event correctness:
   - Each REPL-entered command produces a trace command span with an accurate execution origin (`world` vs `host`) and exit status.
 
 ## Non-Goals
-- Changing non-interactive command routing semantics (`substrate -c ...`, `substrate --command ...`) beyond what is required for correctness.
+- Broad changes to non-interactive execution (`-c/--command`) beyond eliminating host-only “lightweight builtin” behavior when world is enabled.
 - Implementing `world_fs.read_allowlist` enforcement in `world_fs.isolation=workspace` (reads remain unrestricted in workspace isolation).
 - Replacing the “needs PTY?” heuristic for non-REPL executions (this ADR is REPL-focused).
 - Providing Windows parity for interactive world PTY streaming (Windows work, if any, requires a separate platform-specific design).
@@ -79,12 +88,19 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-wo
   - All unprefixed input lines are executed inside the world session.
   - `exit` / `quit`: exits the REPL; Substrate shuts down the world session as part of cleanup.
 
-- Host escape hatch:
-  - `:host <command>`: executes `<command>` on the host using the existing host execution routing and host cwd/env.
-  - `:host cd <path>` / `:host pwd` / `:host export ...` / `:host unset ...` are supported as host operations.
+- Non-interactive single-command mode (`substrate -c <CMD>` / `substrate --command <CMD>`):
+  - When world is enabled and available, `<CMD>` MUST execute inside the world (non-PTY by default) and must observe the in-world filesystem view.
+  - In this mode, `cd`/`pwd`/`export`/`unset` MUST NOT be executed as host-only builtins when world is enabled; they must be interpreted by the in-world shell/process.
+  - When world is disabled, `<CMD>` executes on the host using host shell semantics.
+  - `:host` MUST NOT be recognized in this mode.
 
-- World override (optional, but if implemented must be stable):
-  - `:world <command>` MAY be implemented as an explicit “force world” prefix, but this ADR does not require it. If implemented, it must be equivalent to the unprefixed default path.
+- Host escape hatch:
+  - `:host <command>` is the explicit host escape hatch in the Substrate REPL, but it MUST NOT be available by default.
+  - Enablement rules (fail-closed):
+    - `:host` MUST be recognized only in the interactive REPL (never in `--command` / `-c`, CI, or agent/automation flows).
+    - `:host` MUST require explicit opt-in at REPL startup (e.g., a dedicated CLI flag and/or a REPL-only config/env knob). If not enabled, `:host ...` MUST NOT execute on the host.
+  - `:host cd <path>` / `:host pwd` / `:host export ...` / `:host unset ...` are supported as host operations when `:host` is enabled.
+  - Rationale: `:host` is a bypass of world isolation; it must be gated to prevent accidental or programmatic host execution.
 
 - Exit codes:
   - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -95,9 +111,10 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-wo
 - Existing world configuration continues to apply:
   - `world.enabled`, `world.anchor_mode`, `world.anchor_path`, `world.caged`
   - `world_fs.isolation`, `world_fs.mode`, `world_fs.require_world`
-- A new setting MAY be introduced to control the interactive default mode, but this ADR does not require it. If introduced, it must:
-  - default to the world-first mode described above,
-  - preserve a host-only mode for debugging/regression bisects.
+- A new setting MAY be introduced to control REPL-only behavior, but this ADR does not require it. If introduced, it must:
+  - be REPL-only (not honored in non-interactive `--command`/`-c` and not available to CI/agent automation),
+  - include an explicit knob to enable/disable `:host` (default disabled),
+  - preserve a host-only mode for debugging/regression bisects (time-boxed).
 
 ### Platform guarantees
 - Linux:
@@ -140,6 +157,9 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-wo
 - Default behavior is world-first to avoid accidental host execution while the UI appears “world-like”.
 - Fail-closed behavior when world is required:
   - If `world_fs.require_world=true` and the world backend is unavailable at REPL startup, Substrate must exit with a clear error (no host fallback).
+- `:host` bypass controls:
+  - `:host` MUST NOT be recognized in `-c/--command` or any non-interactive flow (CI/automation).
+  - `:host` MUST require explicit opt-in at REPL startup and must fail closed when not enabled.
 - Observability:
   - Every input line must produce a trace command span with:
     - execution origin (`world` vs `host`),
@@ -153,6 +173,9 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-wo
   - Add tests covering the “world-only path exists” scenario:
     - Create a directory in the world overlay view.
     - Verify `cd <dir>` works in the REPL default mode and subsequent `pwd` reflects the new directory.
+  - Add tests covering `-c/--command` consistency:
+    - When world is enabled, `substrate -c "cd <dir>"` must not fail solely because `<dir>` exists only in the world overlay view.
+    - Assert `:host` is not recognized in `-c/--command` (must fail closed / treat as a normal command string, not a bypass).
 - Integration tests (Linux/macOS):
   - A REPL interaction harness must validate that a sequence of commands maintains in-world cwd state across multiple commands without requiring `:pty bash`.
 - Manual playbook:
@@ -161,12 +184,10 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-wo
     - `:host` can run host tooling without changing the in-world session state.
 
 ## Rollout / Backwards Compatibility
-- This change is intentionally user-visible and can be behavior-breaking for users who relied on implicit host builtins in the REPL.
-- During rollout, Substrate SHOULD:
-  - provide a compatibility switch (env var or config) that restores legacy REPL routing for debugging only,
-  - and emit a one-time warning when legacy mode is enabled.
+- Greenfield: legacy REPL behavior is removed.
+- No compatibility switch, warnings, or transitional UX is permitted by this ADR.
+- Any operator need for host execution must use the explicitly gated `:host` escape hatch described in this ADR.
 
 ## Decision Summary
 - Decision register: `docs/project_management/next/world-first-repl-persistent-pty/decision_register.md`
 - This ADR’s decisions are captured there and referenced during implementation reviews to prevent drift.
-

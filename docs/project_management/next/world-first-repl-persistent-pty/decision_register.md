@@ -58,5 +58,42 @@ This decision register supports:
   - Cons: higher rollout risk; fewer tools for diagnosis during early adoption.
 
 ### Decision
-- Selected: Option A (legacy mode allowed for debugging only; time-box removal in follow-up work).
+- Selected: Option B (no legacy mode).
 
+## DR-04 — Gating `:host` (prevent automation bypass)
+
+### Option A
+- `:host` is available only in the interactive REPL and requires an explicit REPL startup opt-in (flag/config/env); it is never honored in `--command` / `-c` or CI/automation modes.
+
+### Option B
+- `:host` is always available in the REPL (no extra opt-in), but is not honored in `--command` / `-c`.
+
+### Tradeoffs
+- A:
+  - Pros: prevents accidental host execution and prevents agents/CI scripts from using `:host` as a bypass surface; aligns with “world-first by default” posture.
+  - Cons: adds one more knob and documentation burden; requires operator intent to use host escape.
+- B:
+  - Pros: simpler UX for operators; fewer knobs.
+  - Cons: increases the risk of unintended host execution during interactive use (and increases the chance that automation discovers and uses the bypass in unexpected ways via pseudo-interactive wrappers).
+
+### Decision
+- Selected: Option A (explicit opt-in; REPL-only; never in non-interactive/CI).
+
+## DR-05 — Non-interactive `-c/--command` semantics when world is enabled
+
+### Option A
+- Keep current behavior: `-c/--command` uses the same “lightweight builtin” fast-path, so `cd`/`pwd`/`export`/`unset` may execute on the host even when the command is otherwise world-backed.
+
+### Option B
+- When world is enabled, `-c/--command` MUST NOT execute `cd`/`pwd`/`export`/`unset` as host-only builtins; they must be interpreted in-world (shell semantics), and `:host` is never recognized in `-c/--command`.
+
+### Tradeoffs
+- A:
+  - Pros: minimal implementation change; preserves current performance shortcuts.
+  - Cons: mixed-context surprises; host-path evaluation can fail for overlay-only paths; violates “world-first” mental model.
+- B:
+  - Pros: consistent world semantics; avoids accidental host-path evaluation; removes a class of confusing failures.
+  - Cons: requires routing changes and tests; `cd` in a one-shot command has only intra-command effect (standard shell semantics).
+
+### Decision
+- Selected: Option B.
