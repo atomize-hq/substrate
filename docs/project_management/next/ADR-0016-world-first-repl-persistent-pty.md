@@ -16,6 +16,8 @@
 ## Related Docs
 - Plan: `docs/project_management/next/world-first-repl-persistent-pty/plan.md`
 - Decision Register: `docs/project_management/next/world-first-repl-persistent-pty/decision_register.md`
+- Protocol (authoritative): `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`
+- State machine (authoritative): `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`
 - Context (previous REPL + world routing behavior):
   - `crates/shell/src/execution/invocation/runtime.rs`
   - `crates/shell/src/execution/routing/dispatch/exec.rs`
@@ -78,6 +80,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-wo
 - Broad changes to non-interactive execution (`-c/--command`) beyond eliminating host-only “lightweight builtin” behavior when world is enabled.
 - Implementing `world_fs.read_allowlist` enforcement in `world_fs.isolation=workspace` (reads remain unrestricted in workspace isolation).
 - Replacing the “needs PTY?” heuristic for non-REPL executions (this ADR is REPL-focused).
+- Capturing per-command `fs_diff` for commands executed inside the persistent world session (this requires additional agent/world support and is explicitly deferred).
 - Providing Windows parity for interactive world PTY streaming (Windows work, if any, requires a separate platform-specific design).
 
 ## User Contract (Authoritative)
@@ -86,7 +89,11 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-wo
 - Interactive REPL (`substrate` with no `--command`/`-c`):
   - Default: Substrate starts and maintains a persistent in-world PTY-backed shell session (“world session”) when world execution is enabled and available.
   - All unprefixed input lines are executed inside the world session.
+  - The REPL is line-oriented: multiline continuations and job control are not part of the default contract (see `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`).
   - `exit` / `quit`: exits the REPL; Substrate shuts down the world session as part of cleanup.
+  - Protocol and state machine are authoritative:
+    - `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`
+    - `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`
 
 - Non-interactive single-command mode (`substrate -c <CMD>` / `substrate --command <CMD>`):
   - When world is enabled and available, `<CMD>` MUST execute inside the world (non-PTY by default) and must observe the in-world filesystem view.
@@ -98,9 +105,16 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-wo
   - `:host <command>` is the explicit host escape hatch in the Substrate REPL, but it MUST NOT be available by default.
   - Enablement rules (fail-closed):
     - `:host` MUST be recognized only in the interactive REPL (never in `--command` / `-c`, CI, or agent/automation flows).
-    - `:host` MUST require explicit opt-in at REPL startup (e.g., a dedicated CLI flag and/or a REPL-only config/env knob). If not enabled, `:host ...` MUST NOT execute on the host.
+    - `:host` MUST require explicit opt-in at REPL startup via a dedicated CLI flag and/or a REPL-only env/config knob. If not enabled, `:host ...` MUST be rejected and MUST NOT execute on host or world.
+    - Canonical enablement knobs (REPL-only):
+      - CLI: `--repl-host-escape`
+      - Env: `SUBSTRATE_REPL_HOST_ESCAPE=1`
   - `:host cd <path>` / `:host pwd` / `:host export ...` / `:host unset ...` are supported as host operations when `:host` is enabled.
   - Rationale: `:host` is a bypass of world isolation; it must be gated to prevent accidental or programmatic host execution.
+
+- Interactive/TTY passthrough:
+  - `:pty <cmd>` remains available as an explicit “run this command in a one-shot in-world PTY stream” escape for full-screen TUIs and stdin-driven interactive programs.
+  - `:pty` does not share the persistent session’s shell state beyond starting in the current effective in-world cwd (see decision register DR-12).
 
 - Exit codes:
   - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
@@ -111,18 +125,17 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-wo
 - Existing world configuration continues to apply:
   - `world.enabled`, `world.anchor_mode`, `world.anchor_path`, `world.caged`
   - `world_fs.isolation`, `world_fs.mode`, `world_fs.require_world`
-- A new setting MAY be introduced to control REPL-only behavior, but this ADR does not require it. If introduced, it must:
-  - be REPL-only (not honored in non-interactive `--command`/`-c` and not available to CI/agent automation),
-  - include an explicit knob to enable/disable `:host` (default disabled),
-  - preserve a host-only mode for debugging/regression bisects (time-boxed).
+- A new REPL-only setting MUST exist to gate `:host` enablement (default disabled).
+  - It MUST NOT be honored in non-interactive `--command`/`-c` or any CI/agent automation flow.
+  - This ADR explicitly disallows any legacy/compatibility mode that restores the old REPL routing behavior (see decision register DR-06).
 
 ### Platform guarantees
 - Linux:
   - Interactive REPL uses the Linux world backend (world-agent over UDS) when enabled and available.
-  - When `world_fs.require_world=true`, the REPL must fail closed on startup if the world backend is not available.
+  - When world execution is enabled (e.g., `--world` or effective config enables world), the REPL must fail closed on startup if the world backend is not available (no implicit host fallback). `world_fs.require_world=true` strengthens this by ensuring world execution cannot be disabled by policy/config.
 - macOS:
   - Interactive REPL uses Lima-backed world-agent streaming when enabled and available.
-  - When `world_fs.require_world=true`, the REPL must fail closed on startup if the world backend is not available.
+  - When world execution is enabled (e.g., `--world` or effective config enables world), the REPL must fail closed on startup if the world backend is not available (no implicit host fallback). `world_fs.require_world=true` strengthens this by ensuring world execution cannot be disabled by policy/config.
 - Windows:
   - No changes required by this ADR; world PTY parity is explicitly out of scope.
 
@@ -155,8 +168,9 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-wo
 
 ## Security / Safety Posture
 - Default behavior is world-first to avoid accidental host execution while the UI appears “world-like”.
-- Fail-closed behavior when world is required:
-  - If `world_fs.require_world=true` and the world backend is unavailable at REPL startup, Substrate must exit with a clear error (no host fallback).
+- Fail-closed behavior when world execution is enabled:
+  - If world execution is enabled and the world backend is unavailable at REPL startup, Substrate must exit with a clear error (no implicit host fallback).
+  - If an operator explicitly disables world execution (e.g., `--no-world`), Substrate runs on-host (this is not a fallback; it is an explicit mode selection).
 - `:host` bypass controls:
   - `:host` MUST NOT be recognized in `-c/--command` or any non-interactive flow (CI/automation).
   - `:host` MUST require explicit opt-in at REPL startup and must fail closed when not enabled.
@@ -186,6 +200,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-wo
 ## Rollout / Backwards Compatibility
 - Greenfield: legacy REPL behavior is removed.
 - No compatibility switch, warnings, or transitional UX is permitted by this ADR.
+- No hidden switches (flags/env) are permitted to restore legacy REPL routing behavior (see decision register DR-06).
 - Any operator need for host execution must use the explicitly gated `:host` escape hatch described in this ADR.
 
 ## Decision Summary
