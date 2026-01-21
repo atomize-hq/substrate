@@ -56,7 +56,9 @@ Input handling:
 - Line begins with `:host`:
   - If `host_escape_enabled=false`: print a clear error (“host escape not enabled”) and stay in `Idle`.
   - If `host_escape_enabled=true`: transition to `ExecutingHost(line_without_prefix)`.
-- Line begins with `:pty `: transition to `ExecutingPty(cmd_string)`.
+- Line begins with `:pty `:
+  - If world execution is disabled: print a clear error (“:pty requires world execution”) and stay in `Idle`.
+  - If world execution is enabled: transition to `ExecutingPty(cmd_string)`.
 - Otherwise:
   - If world execution is enabled: transition to `ExecutingWorld(line)`.
   - If world execution is disabled: transition to `ExecutingHost(line)`.
@@ -69,10 +71,14 @@ Actions:
 2) If the snapshot hash differs from the current session’s snapshot hash:
    - Tear down the current world session.
    - Start a new world session and wait for readiness (`seq=0`).
+     - Substrate SHOULD request the new session start with `cwd` set to the previous session's `world_cwd` to preserve the
+       operator's location.
+     - If that `cwd` is rejected/invalid under the new session, Substrate MUST start in the new session's resolved
+       project/root directory and MUST report the cwd change.
    - Update `world_cwd` from readiness.
 3) Submit the user line to the session shell using the protocol in `PROTOCOL.md`:
-   - host assigns the next `seq`,
-   - sends `line\n` then `__substrate_cmd_end <seq>\n`,
+   - host assigns the next `seq` and a per-command token,
+   - executes the line with stdin redirected to `/dev/null` (to prevent stdin-consuming commands from consuming the marker line),
    - consumes `stdout` until the accepted marker for `seq` arrives.
 
 Outputs:
@@ -107,6 +113,8 @@ Runs a command in a one-shot in-world PTY stream (not the persistent session).
 Contract:
 - Intended for full-screen TUIs and programs that require continuous stdin/tty interaction.
 - Does not share the persistent session’s shell state (`world_cwd`/exports) beyond the current effective `world_cwd` used as the starting cwd for the PTY command.
+- Policy snapshot MUST be recomputed immediately before starting `:pty` using the current `world_cwd` (same rule as `ExecutingWorld`), so `:pty` never runs under a stale policy snapshot.
+- The PTY command SHOULD start with `cwd` set to the current `world_cwd`. If that `cwd` is invalid/rejected for the computed snapshot, Substrate MUST start in the resolved project/root directory and MUST report the cwd change.
 
 Completion:
 - On PTY exit, return to `Idle` without modifying `world_cwd` unless explicitly specified by the PTY implementation (default: unchanged).

@@ -115,6 +115,8 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-wo
 - Interactive/TTY passthrough:
   - `:pty <cmd>` remains available as an explicit “run this command in a one-shot in-world PTY stream” escape for full-screen TUIs and stdin-driven interactive programs.
   - `:pty` does not share the persistent session’s shell state beyond starting in the current effective in-world cwd (see decision register DR-12).
+  - `:pty` recomputes the effective policy snapshot for the current in-world cwd immediately before starting (see decision register DR-18).
+  - `:pty` is world-only; when world execution is disabled/unavailable, `:pty` MUST error (no host PTY fallback) (see decision register DR-18).
 
 - Exit codes:
   - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
