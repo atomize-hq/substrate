@@ -28,6 +28,19 @@ Substrate uses the existing world-agent `/v1/stream` WebSocket JSON protocol:
 
 `stdout` payloads are base64-encoded bytes; all parsing in this document occurs on the decoded byte stream.
 
+## Correlation (Per-REPL-Line vs In-World Subprocess Telemetry)
+This ADR’s v1 protocol provides per-line completion (exit code + cwd) by parsing client-side markers from the PTY output.
+It does not, by itself, provide “host-shim parity” for in-world subprocess tracing in a long-lived session shell.
+
+Authoritative v1 correlation guarantees:
+- The host creates a trace command span per REPL line (see `STATE_MACHINE.md`).
+- The world-agent sees only the session-level `/v1/stream` start request for the long-lived session shell.
+
+Non-goal for this ADR (explicit):
+- Correlating every in-world spawned subprocess to the specific REPL line that caused it is out of scope for this v1
+  persistent-session model. That work is tracked as **P0 – In-world process execution tracing parity** in
+  `docs/BACKLOG.md` and will likely require additional world-agent capture and/or protocol support beyond the marker scheme.
+
 ## Session Shell
 The persistent session shell MUST be:
 - `/bin/bash` (required dependency of the world image for this feature).
@@ -53,7 +66,7 @@ Substrate MUST generate a per-session random nonce `nonce_hex` and embed it into
 - Purpose: reduce accidental marker collisions; it is a robustness mechanism, not a security boundary.
 
 ### Per-Command Token
-Substrate MUST generate a per-command random token `token_hex` and include it in the marker request line and marker payload.
+Substrate MUST generate a per-command random token `token_hex` and include it in the marker invocation appended to the submitted command and in the marker payload.
 - Format: lowercase hex string, 32 chars (16 bytes).
 - Purpose: prevent a command from spoofing a valid completion marker for the currently awaited command.
 - Note: this is a protocol integrity mechanism for the host parser. It is not a general security boundary against a malicious
@@ -64,27 +77,64 @@ Substrate MUST wait for the readiness marker (`seq=0`) before accepting user com
 The readiness marker MUST include a token (the host chooses it and validates it like any other command).
 
 ## Command Submission (Per REPL Line)
-### Stdin Contract (Persistent Session Mode)
-In persistent-session mode, stdin is part of the REPL command channel. Therefore:
-- User commands MUST NOT be permitted to read from the session shell stdin.
-- Substrate MUST execute user lines with stdin redirected to `/dev/null` so stdin-consuming commands observe EOF and cannot consume the marker line.
+### I/O Modes (Line vs PTY Passthrough)
+The world-first REPL is line-editor driven, but it must retain support for interactive programs and TUIs.
+Therefore, Substrate MUST support two per-command I/O modes for the persistent world session:
 
-Implications:
-- Commands that require interactive stdin (e.g. `cat` with no args, `python` REPL, `read`, password prompts, etc.) are unsupported in the default REPL mode and MUST use `:pty <cmd>`.
+- **Line mode** (default for non-interactive commands):
+  - The user enters a single line in the host line editor.
+  - Substrate sends that line to the session shell and waits for the completion marker.
+  - Substrate does not forward additional user keystrokes to the PTY while the command runs.
+  - To prevent accidental hangs, stdin for the user command MUST be redirected to `/dev/null` in line mode.
+  - Note: stdin redirection does not prevent reads from `/dev/tty`. Commands that read directly from the TTY (e.g., password prompts)
+    must be classified into PTY passthrough mode (auto-PTY) or explicitly forced with `:pty`.
+
+- **PTY passthrough mode** (for interactive commands / TUIs):
+  - Substrate sends the command to the session shell and then temporarily switches the host terminal into raw mode.
+  - While the command runs, Substrate forwards user keystrokes (stdin bytes) and resize events to the PTY until the completion marker is observed.
+  - PTY passthrough mode MUST be selected:
+    - automatically when Substrate’s existing “needs PTY” heuristic classifies the line as interactive, and
+    - explicitly when the user prefixes the line with `:pty ` (force PTY).
+
+This preserves current Substrate behavior where commands like `vim`, `lazygit`, `python` (REPL), and `sudo` prompts work as normal REPL lines (auto-PTY), without forcing users to learn separate workflows.
 
 For each accepted REPL input line:
 - If the line is empty/whitespace-only: Substrate MUST NOT send anything to the session shell.
-- Otherwise, Substrate MUST send the following bytes to the session shell (in order):
-  1) A brace-group start line: `{\n`
-  2) The user line exactly as typed, followed by `\n`.
-  3) A brace-group end line with stdin redirected: `} </dev/null\n`
-  4) A marker request line: `__substrate_cmd_end <seq> <token_hex>\n`
+- Otherwise, Substrate MUST send a framed “compound command” such that:
+  - the session shell consumes (parses) the marker invocation bytes before starting the user command, and
+  - the marker invocation runs only after the user command returns control to the session shell.
+
+This is required to prevent interactive commands from consuming marker bytes as stdin.
+
+#### Line mode submission (stdin redirected; no keystroke forwarding)
+- Substrate MUST send a multi-line frame of the form:
+  1) `{\n`
+  2) `<user_line>\n`
+  3) `} </dev/null; __substrate_cmd_end <seq> <token_hex>\n`
+
+This preserves shell state semantics (the brace-group runs in the current shell), prevents stdin-consuming commands from hanging, and ensures the marker is executed after the user command completes.
+
+#### PTY passthrough submission (stdin forwarded)
+- Substrate MUST send a multi-line frame of the form:
+  1) `{\n`
+  2) `<user_line>\n`
+  3) `}; __substrate_cmd_end <seq> <token_hex>\n`
+  - and then enter PTY passthrough mode (forward stdin bytes + resize events) until the marker is observed.
 
 Where `<seq>`:
 - Is a strictly increasing unsigned integer starting at `1` for the first user command of the session.
 - MUST be chosen by the host and is the “command id” for boundary correlation.
 
 This design intentionally avoids wrapping the user command in an extra `bash -c` layer: quoting and parsing are the shell’s responsibility.
+
+### Edge Cases (Command Shape)
+Some shell constructs can undermine “one command == one completion boundary”:
+- `exit`/`logout` within the session shell will terminate the session before the marker runs.
+- `exec <cmd>` will replace the session shell process, likely terminating the protocol.
+- Backgrounding (`cmd &`) returns control to the shell immediately; the marker will run even though a background job may continue producing output and mutating the filesystem.
+- Multiline shell constructs that require additional input (e.g., heredocs, `if/for/while` blocks, unmatched quotes) require PTY passthrough mode so the operator can provide continuation input. If they are run in line mode, the session shell may block waiting for more input.
+
+These constructs are not supported in the default contract; Substrate may treat them as session-terminating or “best effort” with reduced audit fidelity.
 
 ## Command Boundary Marker (Framing + Payload)
 The marker is a byte sequence written by `__substrate_cmd_end` to stdout.

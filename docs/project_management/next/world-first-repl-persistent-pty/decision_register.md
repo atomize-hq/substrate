@@ -221,18 +221,20 @@ This decision register supports:
 ## DR-12 — `:pty` directive behavior under world-first REPL
 
 ### Option A
-- Keep `:pty <cmd>` as an explicit “interactive/TTY passthrough” escape for running a command in a one-shot in-world PTY stream (not the persistent session) when full terminal interaction is required.
+- Keep `:pty <cmd>` as an explicit “force PTY” directive that runs the command in PTY passthrough mode (raw terminal, stdin forwarded).
+  - When the persistent world session is active, `:pty` forces PTY passthrough within that session (so it shares `world_cwd` and world session state).
+  - When world execution is disabled, `:pty` runs the command on the host using the host PTY execution path (same as current host-only behavior).
 
 ### Option B
-- Reinterpret `:pty` as “attach to the persistent world session” and temporarily hand terminal control to the in-world shell.
+- Keep `:pty` as a one-shot separate PTY execution path (a separate `/v1/stream` invocation) and do not share persistent session state.
 
 ### Tradeoffs
 - A:
-  - Pros: minimal change; preserves known behavior; avoids mixing a line editor and raw TTY in the same session.
-  - Cons: `:pty` does not share the persistent session’s cwd/env state.
+  - Pros: preserves current Substrate UX where TUIs “just work” as normal commands; maintains world-first state continuity for interactive commands; allows explicit forcing when heuristics are wrong.
+  - Cons: requires careful terminal mode switching and command-boundary handling while stdin is forwarded.
 - B:
-  - Pros: best UX for interactive programs; shares session state.
-  - Cons: substantially more complex; requires a robust host↔PTY raw mode state machine and clear detachment semantics.
+  - Pros: simpler persistent session model; avoids raw passthrough state inside the same session.
+  - Cons: breaks state continuity (cwd/env) for interactive commands; diverges from current Substrate “auto-PTY” behavior.
 
 ### Decision
 - Selected: Option A.
@@ -240,7 +242,10 @@ This decision register supports:
 ## DR-13 — Multiline input and job control in the world-first REPL
 
 ### Option A
-- Define the persistent-session REPL contract as single-line commands only; multiline continuations and job control are out of scope and treated as unsupported.
+- Define the persistent-session REPL contract as:
+  - line-editor submissions are single-line (no PS2 continuations in line mode),
+  - PTY passthrough mode supports interactive multiline input for both invoked programs (e.g., Python REPL) and shell continuations/heredocs when explicitly forced or auto-classified as PTY,
+  - job control/backgrounding is out of scope and treated as unsupported.
 
 ### Option B
 - Support multiline and job control inside the persistent session.
@@ -259,18 +264,20 @@ This decision register supports:
 ## DR-14 — Stdin contract for the persistent world session
 
 ### Option A
-- Execute each user command line with stdin redirected to `/dev/null` (or otherwise closed) so stdin-consuming commands cannot consume the command boundary marker request.
+- Execute each user command line with an explicit per-command I/O mode:
+  - Line mode: stdin redirected to `/dev/null` to prevent hangs for stdin-consuming commands.
+  - PTY passthrough mode: stdin forwarded to support TUIs and interactive programs.
 
 ### Option B
-- Allow commands to read from stdin in the persistent session and accept that stdin-consuming commands can desynchronize the protocol.
+- Always redirect stdin to `/dev/null` in the persistent session (no interactive stdin support).
 
 ### Tradeoffs
 - A:
-  - Pros: prevents a known hard-hang/desync failure mode; aligns with a line-oriented REPL where user keystrokes are not forwarded to the PTY.
-  - Cons: commands that genuinely require stdin must use `:pty` (explicit mode switch).
+  - Pros: prevents hangs in line mode while retaining current Substrate “auto-PTY” behavior for interactive commands; keeps the protocol robust without losing TUI support.
+  - Cons: requires correct PTY classification and careful raw-mode handling during passthrough.
 - B:
-  - Pros: closer to a “real shell” stdin model.
-  - Cons: unsafe and fragile; allows commands like `cat`/`read` to consume marker input and hang the session.
+  - Pros: simplest implementation.
+  - Cons: breaks TUIs/interactive programs as normal REPL commands; diverges from existing Substrate behavior.
 
 ### Decision
 - Selected: Option A.
@@ -298,7 +305,7 @@ This decision register supports:
 ## DR-16 — Per-command token in the marker protocol (spoof resistance)
 
 ### Option A
-- Include a per-command random token in the marker request line and marker payload, and require the host to validate the awaited `(seq, token)` pair.
+- Include a per-command random token in the marker invocation (appended to the submitted command line) and marker payload, and require the host to validate the awaited `(seq, token)` pair.
 
 ### Option B
 - Do not include a per-command token; rely on nonce + seq only.
@@ -337,20 +344,82 @@ This decision register supports:
 ## DR-18 — `:pty` policy snapshot + availability semantics
 
 ### Option A
-- `:pty` recomputes the effective policy snapshot for the current `world_cwd` immediately before starting the one-shot PTY stream.
-- `:pty` is world-only; when world execution is disabled/unavailable, `:pty` MUST error (no host PTY fallback).
+- `:pty` recomputes policy snapshot when world execution is enabled (same pre-step as other world commands).
+- When world execution is disabled (explicit `--no-world`), `:pty` runs on the host using the host PTY execution path.
+- When world execution is enabled but unavailable, the REPL must fail closed (no implicit host fallback).
 
 ### Option B
-- `:pty` reuses the persistent session’s snapshot without recomputing.
-- When world execution is disabled, `:pty` runs a host PTY command.
+- `:pty` is world-only and errors when world execution is disabled.
 
 ### Tradeoffs
 - A:
-  - Pros: consistent security posture (`:pty` never runs under stale policy); avoids silently turning a “world” directive into host execution.
-  - Cons: requires explicit error UX when `--no-world` is used.
+  - Pros: matches existing Substrate behavior in host-only mode while keeping fail-closed posture when world execution is selected; avoids stale policy for world PTY.
+  - Cons: increases surface area of `:pty` semantics (world vs host depends on explicit world selection).
 - B:
-  - Pros: convenient in host-only mode; fewer policy computations.
-  - Cons: `:pty` can run under stale policy; undermines the “world-only directive” mental model and increases accidental host execution surface.
+  - Pros: simplest safety story (“:pty is always world”).
+  - Cons: diverges from current host-only behavior; less useful when world is explicitly disabled.
+
+### Decision
+- Selected: Option A.
+
+## DR-20 — Auto-PTY in the persistent world session
+
+### Option A
+- Retain Substrate’s existing “needs PTY” heuristic in the world-first REPL:
+  - interactive/TUI commands automatically run in PTY passthrough mode within the persistent session (stdin forwarded, raw terminal),
+  - non-interactive commands run in line mode (stdin redirected, no forwarding).
+
+### Option B
+- Disable auto-PTY and require explicit `:pty` for interactive/TUI commands.
+
+### Tradeoffs
+- A:
+  - Pros: preserves current Substrate UX; avoids surprising regressions where `vim`/`lazygit`/`python` stop working as normal commands.
+  - Cons: requires careful terminal mode switching; depends on heuristic correctness (mitigated by `:pty` forcing).
+- B:
+  - Pros: simpler execution model.
+  - Cons: regressions vs current behavior; higher cognitive load for operators.
+
+### Decision
+- Selected: Option A.
+
+## DR-21 — Command submission framing (prevent marker bytes becoming stdin)
+
+### Option A
+- Submit each REPL line as a brace-framed compound command that includes the marker invocation on the closing line (so bash parses the marker before starting the user command):
+  - `{\n <user_line>\n } ... ; __substrate_cmd_end <seq> <token>\n`
+  - Line mode adds `</dev/null` on the closing line; PTY passthrough omits it.
+
+### Option B
+- Append marker invocation as a separate subsequent stdin line (`<user_line>\n` then `__substrate_cmd_end ...\n`) and rely on stdin redirection to prevent consumption.
+
+### Tradeoffs
+- A:
+  - Pros: prevents marker bytes from being consumed as stdin by interactive programs while still allowing stdin forwarding in PTY passthrough mode.
+  - Cons: slightly more complex framing; introduces a small set of shell-syntax edge cases (e.g., user-provided unmatched braces).
+- B:
+  - Pros: simpler framing.
+  - Cons: incompatible with auto-PTY/stdin forwarding; risks hangs/desync when stdin is forwarded.
+
+### Decision
+- Selected: Option A.
+
+## DR-19 — Per-REPL-line correlation for in-world subprocess tracing
+
+### Option A
+- Treat per-process in-world tracing parity (and per-line correlation into those events) as out of scope for this ADR’s v1 persistent session.
+  Track and implement under `docs/BACKLOG.md` **P0 – In-world process execution tracing parity**.
+
+### Option B
+- Require v1 to deliver host-level parity: every in-world spawned process is captured and correlated to the originating REPL line span.
+
+### Tradeoffs
+- A:
+  - Pros: keeps the persistent-session v1 surface area bounded; avoids forcing immediate world-agent protocol/event work.
+  - Cons: reduced observability for complex in-world workflows until the P0 backlog item ships.
+- B:
+  - Pros: strongest audit/debug story for persistent sessions.
+  - Cons: large scope increase; likely requires new world-agent capture mechanisms and/or protocol support.
 
 ### Decision
 - Selected: Option A.

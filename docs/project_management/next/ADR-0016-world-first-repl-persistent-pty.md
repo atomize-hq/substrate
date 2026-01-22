@@ -81,6 +81,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-wo
 - Implementing `world_fs.read_allowlist` enforcement in `world_fs.isolation=workspace` (reads remain unrestricted in workspace isolation).
 - Replacing the “needs PTY?” heuristic for non-REPL executions (this ADR is REPL-focused).
 - Capturing per-command `fs_diff` for commands executed inside the persistent world session (this requires additional agent/world support and is explicitly deferred).
+- Achieving in-world per-process execution tracing parity with host-level shim events (tracked as **P0 – In-world process execution tracing parity** in `docs/BACKLOG.md`).
 - Providing Windows parity for interactive world PTY streaming (Windows work, if any, requires a separate platform-specific design).
 
 ## User Contract (Authoritative)
@@ -89,7 +90,8 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-wo
 - Interactive REPL (`substrate` with no `--command`/`-c`):
   - Default: Substrate starts and maintains a persistent in-world PTY-backed shell session (“world session”) when world execution is enabled and available.
   - All unprefixed input lines are executed inside the world session.
-  - The REPL is line-oriented: multiline continuations and job control are not part of the default contract (see `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`).
+  - Auto-PTY is preserved: interactive/TUI commands run in PTY passthrough mode automatically, using the existing “needs PTY” heuristic; `:pty` forces PTY passthrough for a line when heuristics are wrong (see `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`).
+  - Line-editor submissions remain single-line; job control/backgrounding remains out of scope (see `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`).
   - `exit` / `quit`: exits the REPL; Substrate shuts down the world session as part of cleanup.
   - Protocol and state machine are authoritative:
     - `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`
@@ -113,10 +115,10 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-wo
   - Rationale: `:host` is a bypass of world isolation; it must be gated to prevent accidental or programmatic host execution.
 
 - Interactive/TTY passthrough:
-  - `:pty <cmd>` remains available as an explicit “run this command in a one-shot in-world PTY stream” escape for full-screen TUIs and stdin-driven interactive programs.
-  - `:pty` does not share the persistent session’s shell state beyond starting in the current effective in-world cwd (see decision register DR-12).
-  - `:pty` recomputes the effective policy snapshot for the current in-world cwd immediately before starting (see decision register DR-18).
-  - `:pty` is world-only; when world execution is disabled/unavailable, `:pty` MUST error (no host PTY fallback) (see decision register DR-18).
+  - `:pty <cmd>` forces PTY passthrough mode for a command line (raw terminal + stdin forwarding).
+    - When world execution is enabled, `:pty` runs in-world within the persistent session (sharing `world_cwd` and session state).
+    - When world execution is disabled via explicit `--no-world`, `:pty` runs on-host using the host PTY execution path.
+  - World-enabled fail-closed posture remains: if world execution is enabled but unavailable, the REPL must not fall back to host execution (see decision register DR-18).
 
 - Exit codes:
   - Exit code taxonomy: `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`
