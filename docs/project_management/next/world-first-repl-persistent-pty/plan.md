@@ -41,7 +41,9 @@ This plan is anchored by:
   - Binary output containing arbitrary bytes must never interfere with command completion (no stdout marker parsing).
   - Output ordering: prompt/resume input must not occur before all foreground PTY stdout for that command has been forwarded (no “late stdout after command_complete” for non-backgrounded commands).
   - Out-of-band stdout: `stdout` bytes arriving while no `exec` is in-flight (idle/out-of-band output) must be forwarded/rendered without corrupting the prompt/input buffer, and should emit an explicit trace event (unattributed; no `cmd_id` guessing).
+  - Structured concurrent events during PTY passthrough: structured host/agent messages MUST NOT be injected into the PTY byte stream during `stdin_mode=passthrough`; they should be buffered and flushed after passthrough ends (e.g., verify `:demo-agent` output does not corrupt a running TUI).
   - Stdin boundary: world-agent must ignore/drop `stdin` frames unless the current command is `stdin_mode=passthrough`, and must drop “late keystrokes” after `command_complete` until the next passthrough command begins.
+  - Resize forwarding: terminal resize events must be forwarded to world-agent and must take effect for the in-world foreground program (e.g., a `passthrough` command that prints cols/rows on `SIGWINCH` observes updated values).
   - No pipelining: world-agent must reject concurrent `exec` requests as protocol error; host must not send a new `exec` until the prior completes.
   - Signal targeting: host-originated `SIGINT` must interrupt the currently executing foreground program without killing the session driver loop (Ctrl+C should not “brick” the REPL).
   - PTY passthrough Ctrl+C semantics: in `stdin_mode=passthrough`, typed `Ctrl+C` must be forwarded as byte `0x03` via `stdin` frames (not translated into a `signal` message).
@@ -51,8 +53,10 @@ This plan is anchored by:
   - Control-plane FD privacy (DR-22): user submissions attempting to access the reserved control-plane FDs (e.g., via `/proc/self/fd` scanning where available and redirections like `echo hi >&$FD` / `<&$FD`) must not be able to spoof completion, read tokens, or desync the protocol.
   - Version negotiation: if `ready.protocol_version != 1`, the host must treat the session as unsupported and fail closed with a high-signal error (no partial compatibility).
   - Auto-PTY commands (vim/python REPL): must receive stdin and function interactively in PTY passthrough mode.
+  - Directive parsing (multiline submissions): directives are recognized only when the submission contains no embedded newlines; a pasted multiline submission beginning with `:pty`/`:host` must be treated as program text (and must not trigger directive routing).
   - Multiline and incomplete shell syntax: incomplete constructs (e.g., `if true; then`) must produce a syntax error and return to idle (no session hang).
   - Session termination: REPL `exit` and `exit <code>` must cleanly shut down the world session (REPL process exit code remains `0` on normal user exit); shell-terminating submissions like `exec ...` must not produce silent hangs (session exit must be surfaced as fatal fail-closed error).
+  - Graceful vs unexpected exit: if the host initiates shutdown (`close`), the subsequent `exit` is treated as expected/graceful; if `exit` arrives unexpectedly (no shutdown in progress), the host must fail closed with a high-signal error.
   - `:host` disabled: must error and must not execute.
   - Snapshot drift restart: policy file/workspace root change triggers restart (cwd continuity preserved when possible).
   - Startup cwd resolution: if requested `start_session.cwd` is invalid, world-agent must start in the resolved session root/project dir and `ready.cwd` must reflect that; host must surface the change.
@@ -64,6 +68,8 @@ This plan is anchored by:
     - `program_b64` invalid base64: `error.code=bad_request`, fail closed.
   - Session initiation: if the first WS frame is not `start` or `start_session`, world-agent must fail the connection with `error.code=bad_request` (no “partial compat”).
   - Exit code semantics: when `SIGINT` terminates the foreground program, `command_complete.exit` should follow bash conventions (typically `130`).
+  - CWD semantics (physical): `command_complete.cwd` must be the physical working directory (equivalent to `pwd -P` / `getcwd()`); e.g., `cd` into a symlinked path and assert `command_complete.cwd` resolves symlinks.
+  - Token redaction: `token_hex` MUST NOT be printed in full to the operator terminal; protocol error messaging/traces should redact or hash tokens (e.g., ensure a token-mismatch failure message does not include the full 32-hex token).
   - Correlation env scoping: `SHIM_PARENT_CMD_ID` must not persist as an exported variable across submissions (e.g., after a command, `env | rg SHIM_PARENT_CMD_ID` should be empty).
   - Signal test coverage:
     - Line mode: run a long command (e.g., `sleep 10`) in `stdin_mode=eof`, deliver host-originated `SIGINT`, and assert the session recovers with a clean `command_complete` and stable prompt.
