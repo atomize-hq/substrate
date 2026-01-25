@@ -401,8 +401,8 @@ Scope:
 - Do not send program text over PTY stdin at all.
   Instead:
   - The host sends programs to world-agent via an explicit `exec` message.
-  - World-agent delivers program bytes to the session shell via a private command-control channel that is not the PTY stdin.
-  - World-agent receives completion events from the session shell via a private completion channel that is not inherited by user programs.
+  - World-agent delivers program bytes to the trusted driver component via a private command-control channel that is not the PTY stdin.
+  - World-agent receives completion events from the trusted driver component via a private completion channel that is not inherited by user programs.
   - World-agent emits `command_complete` to the host; the host never parses stdout for completion boundaries.
 
 ### Option B

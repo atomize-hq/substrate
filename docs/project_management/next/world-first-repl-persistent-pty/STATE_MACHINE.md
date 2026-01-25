@@ -103,9 +103,9 @@ Actions:
    - Update `world_cwd` from `ready.cwd`.
    - Note: this restart reinitializes the session shell. Only `world_cwd` continuity is best-effort; other in-session state (exported env mutations, history, shell-local state, etc.) may be lost (see ADR-0016 and decision register DR-09/DR-17).
 3) Submit the user line to the session shell using the protocol in `PROTOCOL.md`:
-   - host assigns the next `seq`, per-command token, and `cmd_id`,
+   - host assigns the next `seq`, per-command `token_hex`, and `cmd_id`,
    - sends an `exec` message with `stdin_mode=eof` (stdin is treated as EOF for the duration of the program),
-   - streams `stdout` to the user while waiting for the accepted `command_complete(seq, token)`.
+   - streams `stdout` to the user while waiting for the accepted `command_complete(seq, token_hex)`.
 4) The host MUST NOT pipeline: it MUST NOT send a second `exec` until the current `exec` completes (sequential in-flight semantics; see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`).
 
 Outputs:
@@ -137,10 +137,10 @@ The REPL executes one REPL submission inside the persistent world session in **P
 Actions:
 1) Perform the same pre-step as `ExecutingWorldLine` for drift (restart-on-change for policy snapshot hash OR workspace root, preserving `world_cwd` when possible).
 2) Submit the user line to the session shell using the protocol in `PROTOCOL.md`:
-   - host assigns the next `seq`, per-command token, and `cmd_id`,
+   - host assigns the next `seq`, per-command `token_hex`, and `cmd_id`,
    - sends an `exec` message with `stdin_mode=passthrough`,
    - switches the host terminal into raw mode and begins forwarding stdin bytes and resize events to the session PTY.
-3) Continue forwarding until the accepted `command_complete(seq, token)` arrives.
+3) Continue forwarding until the accepted `command_complete(seq, token_hex)` arrives.
 4) The host MUST NOT pipeline: it MUST NOT send a second `exec` until the current `exec` completes (sequential in-flight semantics; see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`).
 
 Completion:

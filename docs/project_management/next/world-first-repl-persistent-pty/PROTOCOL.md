@@ -236,7 +236,7 @@ World-agent MUST:
 - base64-decode `program_b64` to bytes,
 - validate the bytes are UTF-8 (the “program” string),
 - reject any program containing NUL (`0x00`) bytes (because the internal FD framing is NUL-delimited),
-- and then deliver the decoded program to the session shell via the private command-control channel (FD 9) for execution by the driver loop.
+- and then deliver the decoded program to the trusted driver component via the private command-control channel (FD 9), which then executes it in the session shell execution context.
 
 Non-interactive execution note:
 - The persistent-session REPL contract MUST NOT rely on interactive shell continuation prompts (PS2). Incomplete constructs must fail as a bounded submission (syntax error) and return to `Idle` (see DR-13 and `plan.md` validation).
