@@ -8,18 +8,21 @@ This plan is anchored by:
 
 1) REPL command routing
 - Add `:host` prefix routing and ensure unprefixed commands are world-first.
-- Enforce `:host` gating: when disabled, `:host ...` must error and must not execute on host or world.
+- Enforce `:host` gating (interactive REPL only): when disabled, `:host ...` must error and must not execute on host or world; in `-c/--command`, `:host` must never be recognized as a directive (treated as a normal command string, not a bypass).
+- Make `-c/--command` world-consistent when world is enabled (no host-only builtins for `cd`/`pwd`/`export`/`unset`), since agent/automation integrations are expected to primarily use `-c`.
 
 2) Persistent world session
 - Introduce a long-lived world-agent `/v1/stream` PTY session abstraction (initially Linux/macOS).
-- Define and implement a deterministic command-boundary protocol to extract per-command exit status without terminating the session.
-- Implement the marker framing + streaming parser (split-frame handling, prefix-gated candidate detection, seq+token validation).
+- Extend the `/v1/stream` WebSocket protocol for persistent REPL sessions with explicit per-command execution and completion messages (`exec` → `command_complete`), so the host never parses stdout to find completion boundaries.
 - Implement per-command I/O modes:
-  - Line mode: stdin redirected to `/dev/null` to avoid hangs for stdin-consuming commands.
+  - Line mode: stdin is treated as EOF (implemented in-world by the driver loop, e.g. `</dev/null`) to avoid hangs for stdin-consuming commands.
   - PTY passthrough mode: raw terminal + stdin forwarding for TUIs/interactive programs (auto-PTY).
-- Implement the per-line submission framing (brace-frame with marker invocation on the closing line) for both modes, so the shell parses the marker invocation before starting the user command.
-- Implement marker parsing prefix-gate to avoid false protocol errors on binary output.
-- Add per-command token validation to prevent early marker spoofing and desync.
+  - Reuse the existing host-side PTY attach primitives (raw-mode guard, stdin forward loop, resize forwarding) currently used by one-shot world-agent PTY execution.
+- Implement the in-world driver loop owned by world-agent:
+  - maintain a private command-control channel (separate from PTY stdin) so user programs cannot consume REPL control bytes,
+  - maintain a private completion channel (not inherited by user programs) so completion events are not spoofable by untrusted output,
+  - support multiline submissions by sending program bytes via the control channel.
+- Add per-command token validation (`seq` + `token_hex`) to bind `command_complete` to the awaited command.
 - Preserve in-world cwd across snapshot-driven session restarts when possible.
 - Implement restart-on-snapshot-hash-change (and workspace root changes), with explicit operator-visible messaging when a restart occurs and when cwd continuity cannot be preserved.
 - Define `:pty` semantics: force PTY passthrough mode (in-world when world enabled; host PTY when `--no-world`).
@@ -34,9 +37,34 @@ This plan is anchored by:
 - Integration harness for multi-command REPL sessions (cwd/env persistence).
 - Manual playbook per ADR.
 - Add targeted tests for protocol robustness and security invariants:
-  - Marker split across multiple `stdout` frames.
-  - Binary output containing marker-like bytes: must not false-fatal unless prefix+validation matches.
-  - Stdin-consuming commands in line mode (`cat`, `read`): must not hang the session (stdin redirected to `/dev/null`).
+  - `command_complete` correlation: mismatched `seq/token_hex` must be treated as a protocol error (fail closed).
+  - Binary output containing arbitrary bytes must never interfere with command completion (no stdout marker parsing).
+  - Output ordering: prompt/resume input must not occur before all foreground PTY stdout for that command has been forwarded (no “late stdout after command_complete” for non-backgrounded commands).
+  - Out-of-band stdout: `stdout` bytes arriving while no `exec` is in-flight (idle/out-of-band output) must be forwarded/rendered without corrupting the prompt/input buffer, and should emit an explicit trace event (unattributed; no `cmd_id` guessing).
+  - Stdin boundary: world-agent must ignore/drop `stdin` frames unless the current command is `stdin_mode=passthrough`, and must drop “late keystrokes” after `command_complete` until the next passthrough command begins.
+  - No pipelining: world-agent must reject concurrent `exec` requests as protocol error; host must not send a new `exec` until the prior completes.
+  - Signal targeting: host-originated `SIGINT` must interrupt the currently executing foreground program without killing the session driver loop (Ctrl+C should not “brick” the REPL).
+  - PTY passthrough Ctrl+C semantics: in `stdin_mode=passthrough`, typed `Ctrl+C` must be forwarded as byte `0x03` via `stdin` frames (not translated into a `signal` message).
+  - Stdin-consuming commands in line mode (`cat`, `read`): must not hang the session (stdin treated as EOF, e.g. via `/dev/null`).
+  - Session-state persistence: `export FOO=bar` then `echo "$FOO"` must print `bar`; `unset FOO` then `echo "$FOO"` must print empty (validates ADR persistence goals).
+  - `:pty` shares persistent state: `cd /tmp` then `:pty pwd` must report `/tmp` (enforces DR-12 “:pty runs within the persistent session”).
+  - Control-plane FD privacy (DR-22): user submissions attempting to access the reserved control-plane FDs (e.g., via `/proc/self/fd` scanning where available and redirections like `echo hi >&$FD` / `<&$FD`) must not be able to spoof completion, read tokens, or desync the protocol.
+  - Version negotiation: if `ready.protocol_version != 1`, the host must treat the session as unsupported and fail closed with a high-signal error (no partial compatibility).
   - Auto-PTY commands (vim/python REPL): must receive stdin and function interactively in PTY passthrough mode.
+  - Multiline and incomplete shell syntax: incomplete constructs (e.g., `if true; then`) must produce a syntax error and return to idle (no session hang).
+  - Session termination: REPL `exit` and `exit <code>` must cleanly shut down the world session (REPL process exit code remains `0` on normal user exit); shell-terminating submissions like `exec ...` must not produce silent hangs (session exit must be surfaced as fatal fail-closed error).
   - `:host` disabled: must error and must not execute.
   - Snapshot drift restart: policy file/workspace root change triggers restart (cwd continuity preserved when possible).
+  - Startup cwd resolution: if requested `start_session.cwd` is invalid, world-agent must start in the resolved session root/project dir and `ready.cwd` must reflect that; host must surface the change.
+  - Startup snapshot consistency: after `ready`, host recomputes effective snapshot/workspace root for `ready.cwd`; if it differs from what was used to start the session (e.g., because `start_session.cwd` could not be honored), the host must restart immediately before accepting input.
+  - Error framing: world-agent `error` frames must include a stable `code` and optional `seq`; host must surface and fail closed (enables assertable harness tests).
+  - Program rejection cases (explicit, testable):
+    - Program contains NUL: `error.code=program_contains_nul`, fail closed.
+    - Program bytes not valid UTF-8: `error.code=program_invalid_utf8`, fail closed.
+    - `program_b64` invalid base64: `error.code=bad_request`, fail closed.
+  - Session initiation: if the first WS frame is not `start` or `start_session`, world-agent must fail the connection with `error.code=bad_request` (no “partial compat”).
+  - Exit code semantics: when `SIGINT` terminates the foreground program, `command_complete.exit` should follow bash conventions (typically `130`).
+  - Correlation env scoping: `SHIM_PARENT_CMD_ID` must not persist as an exported variable across submissions (e.g., after a command, `env | rg SHIM_PARENT_CMD_ID` should be empty).
+  - Signal test coverage:
+    - Line mode: run a long command (e.g., `sleep 10`) in `stdin_mode=eof`, deliver host-originated `SIGINT`, and assert the session recovers with a clean `command_complete` and stable prompt.
+    - PTY passthrough: run a raw-input test program in `stdin_mode=passthrough` and assert typed `Ctrl+C` is observed as byte `0x03` (not termination via injected `SIGINT`).

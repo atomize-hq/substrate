@@ -1,5 +1,11 @@
 # ADR-0011 — World Deps Packages/Bundles Inventory + Enabled Contract
 
+> NOTICE (2026-01-24)
+>
+> The world-first persistent REPL work in `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md` changes the interactive shell contract: the REPL uses a persistent in-world bash session (no rcfiles) rather than the historical “`/bin/sh -c` for everything” model.
+>
+> This ADR currently states that *interactive* `substrate>` runs execute under `/bin/sh -c`. That statement will need to be revised to stay in parity with ADR-0016. See “Proposed draft edit (post-ADR-0016)” below.
+
 ## Status
 - Status: Approved
 - Date (UTC): 2026-01-13
@@ -130,6 +136,19 @@ Implication for `nvm`-style deps:
   - sources the installed `nvm.sh`,
   - then runs `nvm "$@"`,
   - and fails with an actionable error if `bash` is unavailable.
+
+### Notes (ADR-0016 impact)
+- ADR-0016 introduces a persistent in-world REPL session that uses `bash --noprofile --norc` (no rcfiles) for interactive `substrate>` sessions.
+- This ADR’s world-deps contract should remain compatible with non-interactive world execution (`/bin/sh -c`) and must not rely on shell init behavior for “runnable” packages.
+- For consistency, the world-first REPL session environment should include `/var/lib/substrate/world-deps/bin` in `PATH` so enabled deps are runnable without requiring manual PATH edits.
+
+### Proposed draft edit (post-ADR-0016)
+This is a proposed replacement for the “World Shell Contract” wording above, to keep this ADR consistent with ADR-0016 while preserving the world-deps “runnable package” contract.
+
+Proposed replacement text:
+- World commands executed via non-interactive pathways (e.g., `substrate -c`, automation, world-agent `/v1/execute`) execute under `/bin/sh -c` in the world, with no user shell rc sourcing.
+- Interactive REPL sessions (`substrate>` when world-first persistent REPL is enabled) execute in a persistent in-world `bash --noprofile --norc` session (still no user rc sourcing).
+- Therefore, runnable deps MUST expose real executable entrypoints (files) and MUST NOT rely on shell functions, aliases, or `~/.bashrc`-style initialization. If a tool requires shell init, it MUST be made runnable via a generated wrapper entrypoint (e.g., `bash_function` / `bash_source_exec` wrappers).
 
 ### Inventory Model
 

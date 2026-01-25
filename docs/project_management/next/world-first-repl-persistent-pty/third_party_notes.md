@@ -1,4 +1,26 @@
-# Implementation Plan: World-First Shell Execution Model
+# Third-Party Reviewer Notes (Historical): World-First Shell Execution Model
+
+> NOTE (2026-01-22): This file contains third-party reviewer notes captured against an earlier, marker-based persistent-session design.
+> The authoritative plan has since pivoted to a world-agent owned driver loop with explicit `exec` → `command_complete` messages,
+> i.e., a **wire protocol extension** and a strict separation between command-control bytes and PTY stdin.
+> Treat the contents below as historical context only (especially anything discussing client-side marker parsing or “no wire protocol changes”).
+> Some recommendations below also conflict with current decisions (e.g., “no fallbacks / no hidden legacy switches” in DR-06).
+>
+> Authoritative docs:
+> - `docs/project_management/next/world-first-repl-persistent-pty/plan.md`
+> - `docs/project_management/next/world-first-repl-persistent-pty/decision_register.md`
+> - `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`
+> - `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`
+
+## Disposition Summary (to avoid mixed messaging)
+- **Rejected / superseded:**
+  - Client-side stdout marker parsing, marker framing, or “append marker to user input” schemes (see decision register DR-08 and DR-21).
+  - Any suggestion of silently continuing in host mode when world execution is enabled but unavailable (no fallbacks; see DR-06).
+- **Adopted in the current plan/spec:**
+  - Restart-on-policy-snapshot drift with best-effort cwd continuity (see DR-09 and DR-17).
+  - Explicit per-command completion with `(seq, token)` validation (see DR-08 and DR-16).
+  - Auto-PTY passthrough for interactive programs (see DR-14 and DR-20).
+  - A v1 correlation hook via `cmd_id` propagated in-world as `SHIM_PARENT_CMD_ID` (see DR-19).
 
 ## Recommended Implementation Path – Persistent World PTY Session (Option A)
 

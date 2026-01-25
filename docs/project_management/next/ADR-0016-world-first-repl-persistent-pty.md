@@ -24,11 +24,11 @@
   - `crates/shell/src/execution/routing/builtin/utility.rs`
   - `crates/shell/src/execution/routing/builtin/world_deps.rs`
   - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
+  - Note: paths are accurate as of 2026-01-24; if the repo layout changes, search for identifiers like `execute_command`, `handle_builtin`, and `execute_world_pty_over_ws`.
 
 ## Executive Summary (Operator)
 
 ADR_BODY_SHA256: da8a994c34a11a9ca9d1a7698dae8cf380b1184b52938ec1057a7b096ee80c04
-ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md` after drafting>
 
 ### Changes (operator-facing)
 - Make interactive `substrate` behave like a normal in-world shell by default (persistent world PTY session)
@@ -89,10 +89,18 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-wo
 ### CLI
 - Interactive REPL (`substrate` with no `--command`/`-c`):
   - Default: Substrate starts and maintains a persistent in-world PTY-backed shell session (“world session”) when world execution is enabled and available.
-  - All unprefixed input lines are executed inside the world session.
+  - All unprefixed input submissions are executed inside the world session.
   - Auto-PTY is preserved: interactive/TUI commands run in PTY passthrough mode automatically, using the existing “needs PTY” heuristic; `:pty` forces PTY passthrough for a line when heuristics are wrong (see `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`).
-  - Line-editor submissions remain single-line; job control/backgrounding remains out of scope (see `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`).
+    - If a command is misclassified into line mode but reads from the controlling TTY (e.g., via `/dev/tty`), it may block; `Ctrl+C` is the supported escape, then rerun with `:pty <cmd>`.
+    - Operator recovery contract (no fallback): if a line-mode command appears “hung” due to needing a TTY, abort with `Ctrl+C` and rerun with `:pty <cmd>`. Implementations MAY print a non-fatal hint after a short delay (guidance only; not a completion fallback).
+  - The prompt is line-editor driven (no interactive PS2 continuation prompts), but a single submission MAY contain embedded newlines (e.g., pastes/multiline input). Submissions are sent to world-agent via explicit `exec` messages (not as raw PTY stdin bytes), and completion is reported via `command_complete`. Job control/backgrounding remains out of scope (see `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md` and decision register DR-13).
+  - Persistence guarantees (within a single world session):
+    - MUST persist: in-world working directory (`cd`/`pwd`) and exported environment mutations (`export`/`unset`) across subsequent submissions.
+    - MAY persist / not guaranteed: shell-local variables (non-exported), functions, aliases, traps, `set -o` / `shopt` options, and other session-internal shell state.
+  - Snapshot-driven restart note: Substrate may restart the world session when the effective policy snapshot hash (or workspace root) changes; it attempts best-effort cwd continuity, but other in-session state (exported env mutations, history, shell-local state) may be lost (see decision register DR-09 and DR-17).
+  - Hardened protocol invariant: user-submitted programs MUST NOT be able to read/write the driver loop’s private control-plane file descriptors (conceptually “FD 8/FD 9”; the implementation SHOULD use high-numbered reserved FDs to reduce collisions); closing on exec is not sufficient because shell-evaluated submissions can use redirections. See decision register DR-22 and `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`.
   - `exit` / `quit`: exits the REPL; Substrate shuts down the world session as part of cleanup.
+    - `exit` may include an optional numeric argument (e.g., `exit 2`), but this is treated as an operator request to end the REPL (it is not sent into the world session shell as a command). The REPL process exit code remains `0` on normal user exit (see `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`).
   - Protocol and state machine are authoritative:
     - `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`
     - `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`
@@ -111,6 +119,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-wo
     - Canonical enablement knobs (REPL-only):
       - CLI: `--repl-host-escape`
       - Env: `SUBSTRATE_REPL_HOST_ESCAPE=1`
+  - Directive parsing rule (multiline submissions): REPL directives (`exit`/`quit`, `:host ...`, `:pty ...`) are recognized only when the submission contains no embedded newlines; multiline submissions are treated as program text and are not parsed as directives.
   - `:host cd <path>` / `:host pwd` / `:host export ...` / `:host unset ...` are supported as host operations when `:host` is enabled.
   - Rationale: `:host` is a bypass of world isolation; it must be gated to prevent accidental or programmatic host execution.
 
@@ -151,14 +160,14 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/next/ADR-0016-wo
 
 - World session abstraction (new):
   - A long-lived PTY-backed shell process exists inside the world for the duration of the REPL session.
-  - Substrate sends each input line to that shell and receives stdout/stderr stream data.
-  - Substrate must derive an exit status per submitted command and update its in-world cwd tracking for prompt and downstream policy resolution.
+  - Substrate submits each REPL “submission” to world-agent as an explicit `exec` request (not as raw PTY stdin bytes) and receives streamed PTY output.
+  - Substrate derives per-submission exit status and updates its in-world cwd tracking from world-agent `command_complete` messages.
 
 - World backend requirements (Linux/macOS):
   - The world backend must support a long-lived interactive session (PTY stream) with:
     - a stable session identifier,
     - reliable stream framing,
-    - and a deterministic “command boundary” protocol so the host can obtain an exit code per submitted line without terminating the session.
+    - and explicit per-command completion messages (e.g., `command_complete`) so the host can obtain an exit code + cwd per submission without parsing stdout markers.
 
 - Compatibility and safety invariants:
   - Host execution remains available only via explicit `:host` routing (no silent host builtins when world is enabled).

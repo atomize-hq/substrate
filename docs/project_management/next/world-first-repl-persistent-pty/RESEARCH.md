@@ -18,6 +18,7 @@ This mismatch affects:
 - pipe mode (stdin-driven execution)
 
 ## Code Map — Builtins and Their Call Paths
+Note: paths are accurate as of 2026-01-24; if the repo layout changes, search for identifiers like `execute_command`, `handle_builtin`, and `execute_world_pty_over_ws`.
 
 ### Builtin interception (host-side)
 - Interception happens in shared routing:
@@ -82,6 +83,9 @@ Implication:
     - Client frames: `start`, `stdin`, `resize`, `signal`
     - Server frames: `stdout`, `exit`, `error`
 
+This feature adds *new* persistent-session frames (without breaking the existing one-shot `start` flow):
+- Persistent REPL sessions use `start_session` + per-submission `exec` and `command_complete` (see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`).
+
 Important limitation:
 - The current client usage is effectively “one interactive command per WS session”.
 - A world-first REPL requires a *persistent* session and a *command-boundary protocol* for per-line exit status + cwd without tearing down the session.
@@ -139,16 +143,17 @@ This choice is central to correctness and must be locked before implementation t
 
 These are implementation options for how Substrate “replaces the state” currently maintained by host builtins.
 
-### Option A (recommended under ADR constraints): Persistent in-world shell session + machine-readable boundary markers
+### Option A (recommended under ADR constraints): Persistent in-world shell session + explicit `command_complete` protocol
 
 Idea:
 - Start a persistent `bash` (or compatible shell) inside the world PTY and keep it alive for the REPL duration.
-- Configure it to emit a deterministic marker after each command completes, containing:
-  - last exit code
-  - current working directory (and potentially other fields later)
+- Extend `/v1/stream` so world-agent can accept per-submission `exec` messages and emit structured `command_complete` messages.
+- Use a small in-world “driver loop” owned by world-agent so:
+  - user programs cannot consume REPL control bytes (command text is not sent over PTY stdin),
+  - and completion events cannot be spoofed by user output.
 
 State replacement:
-- Substrate maintains `WorldSessionState` (at minimum: `cwd`, `last_exit`) by parsing markers.
+- Substrate maintains `WorldSessionState` (at minimum: `cwd`, `last_exit`) by waiting for `command_complete` from world-agent.
 - Substrate uses that internal `cwd` for:
   - policy/config resolution (workspace detection, snapshot derivation)
   - world-agent request `cwd` for subsequent commands
@@ -160,8 +165,8 @@ Pros:
 
 Cons / risks:
 - PTY echo/line discipline complexity for a line-editor prompt.
-- Requires robust, non-ambiguous command-boundary markers.
-- Requires a span correlation story for shim logs inside a long-lived shell (e.g., per-line injected `SHIM_PARENT_CMD_ID`).
+- Requires world-agent protocol changes and a hardened driver loop.
+- Requires a correlation story for shim logs inside a long-lived shell (the protocol can provide this cleanly via per-command `cmd_id` propagated as `SHIM_PARENT_CMD_ID`).
 
 ### Option B: Virtual state in Substrate + per-command non-PTY `/v1/execute`
 
@@ -206,18 +211,22 @@ Cons:
   - `crates/shell/src/repl/async_repl.rs`
 - `:host` must never be recognized in `-c/--command` or non-interactive modes.
 
-## Recommendation (for operator decision)
+## Recommendation (historical)
 
 If the priority is “Substrate feels like a normal shell inside the world” with correct semantics:
-- Prefer Option A (persistent in-world shell + boundary markers) and accept the PTY/session complexity.
+- Prefer Option A (persistent in-world shell + explicit `command_complete` protocol) and accept the PTY/session complexity.
 
 If the priority is fastest correctness with minimal PTY work:
 - Prefer Option B (virtual state + per-command exec) and accept that the REPL is not a full shell.
 
-## Next Decisions to Lock (before implementation triads)
+## Next Decisions to Lock (historical; resolved)
 
-- Do we keep a line-editor REPL prompt (`substrate>`) or shift to a terminal-like session UX for the default mode?
-- For Option A:
-  - What is the exact marker format and how do we guarantee it is non-ambiguous?
-  - How do we propagate per-line correlation metadata to shimmed child processes (e.g., per-command env injection)?
-  - How do we support full-screen TUIs (explicit “raw passthrough” within the same session vs separate mode)?
+The major design choices that were previously open here are now locked by the decision register:
+- Line-editor REPL + multiline submissions (no PS2 continuation): see DR-13.
+- Persistent PTY-backed session with explicit `exec` → `command_complete` (no stdout marker parsing): see DR-08 and `PROTOCOL.md`.
+- Driver-loop control plane separation (no program text over PTY stdin): see DR-21.
+- Control-plane FD privacy beyond `FD_CLOEXEC`: see DR-22.
+- Auto-PTY + `:pty` passthrough behavior: see DR-12 and DR-14.
+- `:host` scope and gating (REPL-only; never in `-c`): see DR-10.
+
+Open questions should be tracked as explicit DR entries or issues (not implied as “pending” here).
