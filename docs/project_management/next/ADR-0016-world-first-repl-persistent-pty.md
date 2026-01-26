@@ -32,7 +32,7 @@ ADR_BODY_SHA256: 6440d354ecf7fbc3d1b66f5b73a1f5b3e95347a694c7a52619370ddf433e4db
 ### Changes (operator-facing)
 - Make interactive `substrate` behave like a normal in-world shell by default (persistent world PTY session)
   - Existing: In the REPL, most commands run in the world overlay view, but stateful builtins (`cd`, `pwd`, `export`, `unset`) run on the host and operate on host paths/env; this can yield surprising “exists in world but cd fails” behavior.
-  - New: The default REPL command path executes inside a persistent world PTY-backed shell session, so `cd`/`pwd`/`export`/`unset` behave like a normal shell within the same in-world filesystem view the user sees.
+- New: The default REPL command path executes inside a persistent world Session PTY (driver-managed; per-submission evaluator shells), so `cd`/`pwd`/`export`/`unset` behave like a normal shell within the same in-world filesystem view the user sees.
   - Why: Align REPL ergonomics with the isolation model and user expectations: a “world REPL” should be internally consistent and not require users to know which tokens are host-only.
   - Links:
     - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md#user-contract-authoritative`
@@ -88,6 +88,7 @@ ADR_BODY_SHA256: 6440d354ecf7fbc3d1b66f5b73a1f5b3e95347a694c7a52619370ddf433e4db
 ### CLI
 - Interactive REPL (`substrate` with no `--command`/`-c`):
   - Default: Substrate starts and maintains a persistent in-world PTY-backed world session (“world session”) when world execution is enabled and available.
+    - Terms: see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` (World session vs Session PTY).
   - All unprefixed input submissions are executed inside the world session.
   - Auto-PTY is preserved: interactive/TUI commands run in PTY passthrough mode automatically, using the existing “needs PTY” heuristic; `:pty` forces PTY passthrough for a line when heuristics are wrong (see `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`).
     - If a command is misclassified into line mode but reads from the controlling TTY (e.g., via `/dev/tty`), it may block; `Ctrl+C` is the supported escape, then rerun with `:pty <cmd>`.
@@ -101,7 +102,7 @@ ADR_BODY_SHA256: 6440d354ecf7fbc3d1b66f5b73a1f5b3e95347a694c7a52619370ddf433e4db
     - MUST persist: in-world working directory (`cd`/`pwd`) and exported environment mutations (`export`/`unset`) across subsequent submissions.
     - MAY persist / not guaranteed: shell-local variables (non-exported), functions, aliases, traps, `set -o` / `shopt` options, and other session-internal shell state.
     - Implementation note: v1 does not require a single long-lived bash interpreter process; persistence may be implemented by a trusted driver component that applies `cwd` + exported env to per-submission evaluator shells.
-  - Snapshot-driven restart note: Substrate may restart the world session when the effective policy snapshot hash (or workspace root) changes; it attempts best-effort cwd continuity, but other in-session state (exported env mutations, history, shell-local state) may be lost (see decision register DR-09 and DR-17).
+  - Snapshot-driven restart note: Substrate MUST restart the world session when the effective policy snapshot hash (or workspace root) changes, before executing the next submission (see decision register DR-09 and `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` “Policy Snapshot Drift”). It attempts best-effort cwd continuity, but other in-session state (exported env mutations, history, shell-local state) may be lost (see decision register DR-17).
   - Hardened protocol invariant (DR-22): user-submitted programs MUST NOT be able to access session infrastructure or control-plane endpoints/handles (e.g., inherited `/v1/stream` WebSocket FDs or other session control endpoints). Close-on-exec alone is necessary but not sufficient; the evaluator execution context must not have access in the first place. See decision register DR-22 and `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`.
   - `exit` / `quit`: exits the REPL; Substrate shuts down the world session as part of cleanup.
     - `exit` may include an optional numeric argument (e.g., `exit 2`), but this is treated as an operator request to end the REPL (it is not sent into the world session as a command). The REPL process exit code remains `0` on normal user exit (see `docs/project_management/standards/EXIT_CODE_TAXONOMY.md`).

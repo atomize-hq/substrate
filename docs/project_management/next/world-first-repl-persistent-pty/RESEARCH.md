@@ -137,7 +137,7 @@ Therefore, any “persistent world session” design must explicitly choose one:
 - Keep per-command `/v1/execute` as the primary execution path and maintain state in the shell
   (virtual state approach), so each command naturally carries the correct snapshot.
 
-This choice is central to correctness and must be locked before implementation triads.
+This choice is central to correctness and is now locked by decision register DR-09 (restart-on-change) and `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` (“Policy Snapshot Drift”).
 
 ## Options for Replacing Host-State Builtins
 

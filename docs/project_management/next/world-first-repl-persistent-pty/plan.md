@@ -22,6 +22,7 @@ This plan is anchored by:
   - maintain a private command-control channel (separate from PTY stdin) so user programs cannot consume REPL control bytes,
   - maintain a private completion channel (not inherited by user programs) so completion events are not spoofable by untrusted output,
   - support multiline submissions by sending program bytes via the control channel.
+  - See `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` (“Internal Driver Loop (World-Agent Owned)”) for the v1 in-process/no-OS-FD-pipes constraint.
 - Add per-command token validation (`seq` + `token_hex`) to bind `command_complete` to the awaited command.
 - Preserve in-world cwd across snapshot-driven session restarts when possible.
 - Implement restart-on-snapshot-hash-change (and workspace root changes), with explicit operator-visible messaging when a restart occurs and when cwd continuity cannot be preserved.
@@ -39,7 +40,7 @@ This plan is anchored by:
 - Add targeted tests for protocol robustness and security invariants:
   - `command_complete` correlation: mismatched `seq/token_hex` must be treated as a protocol error (fail closed).
   - Binary output containing arbitrary bytes must never interfere with command completion (no stdout marker parsing).
-  - Output ordering: prompt/resume input must not occur before all foreground PTY stdout for that command has been forwarded (no “late stdout after command_complete” for non-backgrounded commands).
+  - Output ordering: prompt/resume input must not occur before all foreground PTY stdout for that command has been forwarded (no “late stdout after command_complete” for non-backgrounded commands). See DR-23 and `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` (“Output ordering / drain guarantee”, watermark barrier).
   - Out-of-band stdout: `stdout` bytes arriving while no `exec` is in-flight (idle/out-of-band output) must be forwarded/rendered without corrupting the prompt/input buffer, and should emit an explicit trace event (unattributed; no `cmd_id` guessing).
   - Structured concurrent events during PTY passthrough: structured host/agent messages MUST NOT be injected into the PTY byte stream during `stdin_mode=passthrough`; they should be buffered and flushed after passthrough ends (e.g., verify `:demo-agent` output does not corrupt a running TUI).
   - Stdin boundary: world-agent must ignore/drop `stdin` frames before `ready`, while `Idle`, and during `stdin_mode=eof` commands (i.e., unless the current command is `stdin_mode=passthrough`), and must drop “late keystrokes” after `command_complete` until the next passthrough command begins.

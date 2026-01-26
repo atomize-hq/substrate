@@ -143,7 +143,7 @@ This decision register supports:
 ## DR-08 — Per-command completion protocol (exit status + cwd)
 
 ### Option A
-- Implement a client-side stdout marker scheme: a shell interpreter emits a boundary marker (with nonce/seq/token/exit/cwd) and the host parses stdout to determine completion.
+- Historical (pre-lock): implement a client-side stdout marker scheme: a shell interpreter emits a boundary marker (with nonce/seq/token/exit/cwd) and the host parses stdout to determine completion.
   - Status: not selected (retained for historical comparison only).
 
 ### Option B
@@ -293,7 +293,7 @@ Scope:
 ### Decision
 - Selected: Option A.
 
-## DR-15 — Marker candidate detection (reduce false protocol fatals on binary output)
+## DR-15 — Deprecated: candidate detection (binary-output false fatals)
 
 ### Decision
 - Deprecated by DR-08 (Option B). With explicit `command_complete` frames from world-agent, the host does not parse stdout for completion boundaries.
@@ -301,7 +301,7 @@ Scope:
 ## DR-16 — Per-command token in the persistent-session protocol (spoof resistance)
 
 ### Option A
-- Include a per-command random token in the `exec` request and `command_complete` response, and require the host to validate the awaited `(seq, token)` pair.
+- Include a per-command random token in the `exec` request and `command_complete` response, and require the host to validate the awaited `(seq, token_hex)` pair (`token_hex` is a `hex32` in the wire protocol).
 
 ### Option B
 - Do not include a per-command token; rely on nonce + seq only.
@@ -309,7 +309,7 @@ Scope:
 ### Tradeoffs
 - A:
   - Pros: prevents premature completion spoofing; reduces protocol desync and policy/cwd mismatch risks.
-  - Cons: slightly more protocol complexity (host must track `(seq, token)` per in-flight command).
+  - Cons: slightly more protocol complexity (host must track `(seq, token_hex)` per in-flight command).
 - B:
   - Pros: simpler.
   - Cons: allows completion spoofing (DoS and potential policy/cwd mismatch within a session).
@@ -399,7 +399,7 @@ Scope:
 ### Decision
 - Selected: Option A.
 
-## DR-21 — Command submission framing (prevent marker bytes becoming stdin)
+## DR-21 — Command submission framing (prevent REPL control bytes becoming stdin)
 
 ### Option A
 - Do not send program text over PTY stdin at all.
@@ -458,3 +458,31 @@ Scope:
 
 ### Decision
 - Selected: Option B.
+
+## DR-23 — Output drain barrier (watermark-based; fail-closed)
+
+Scope:
+- Applies to the world-first persistent-session REPL only (`start_session` / `exec` / `stdout` / `command_complete`).
+- Defines the required ordering barrier between foreground Session PTY output forwarding and `command_complete` emission.
+
+### Option A
+- Use timing heuristics or “drain until would-block/quiescence” to decide when it is safe to emit `command_complete`.
+- Status: not selected.
+  - Retained for historical comparison only; violates the locked v1 ordering barrier selected in Option B.
+
+### Option B
+- Use a deterministic, watermark-based post-exit drain barrier:
+  - Snapshot “bytes readable at exit” on the PTY master (Linux: `ioctl(FIONREAD)`), then drain at least that many bytes before emitting `command_complete`.
+  - Fail closed if the required watermark query cannot be supported for `protocol_version=1` (no timing heuristics and no quiescence-based fallback).
+
+### Tradeoffs
+- A:
+  - Pros: easier to implement.
+  - Cons: can hang indefinitely under continuous out-of-band writers; can emit `command_complete` too early and corrupt prompt/input rendering; violates the MUST-level ordering guarantee.
+- B:
+  - Pros: deterministic and testable; does not rely on global quiescence; preserves the MUST-level “no `command_complete` before forwarded foreground Session PTY output” guarantee.
+  - Cons: requires platform support for a PTY watermark query; may reduce platform coverage in v1 due to fail-closed posture.
+
+### Decision
+- Selected: Option B.
+  - Authoritative spec: `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` (“Output ordering / drain guarantee”, watermark barrier).

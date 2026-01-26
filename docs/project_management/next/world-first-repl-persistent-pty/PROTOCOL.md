@@ -26,6 +26,7 @@ It specifies the host↔world-agent protocol for the world-first interactive REP
   - executes them under the stdin-mode semantics below,
   - and reports structured completion events to the host.
 - **Evaluator shell**: the untrusted shell interpreter used to evaluate a submission program (v1 requires `/bin/bash --noprofile --norc`).
+- **hex32**: 32 lowercase hex characters (16 bytes).
 - **Session nonce**: a world-agent-generated, per-session random identifier (`hex32`) returned as `ready.session_nonce`.
   - It is intended for observability and correlation (e.g., tying out-of-band `stdout` or errors to a specific persistent session instance, including across restart boundaries).
   - It is not an authentication secret and MUST NOT be used as a capability/credential.
@@ -62,6 +63,9 @@ Out-of-band PTY output (session-level stdout):
 - Such bytes are **unattributed** to a specific `cmd_id` by default. The v1 protocol does not provide job control or background attribution, and implementations MUST NOT guess attribution.
 - Forward-compat: `command_complete` is a foreground completion boundary, not a guarantee that no further `stdout` bytes will occur on the session PTY stream.
 
+Host rendering note:
+- Because `stdout` is a raw byte stream (may be non-UTF8) and may arrive while the host line editor is active, host rendering MUST follow `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md` (`Idle` → “Out-of-band world PTY output”).
+
 Important separation (host concurrent output vs PTY bytes):
 - This protocol’s `stdout` stream is the **session PTY byte stream** only.
 - Substrate-managed concurrent output on the host (e.g., `:demo-agent`, future AgentHub events) MUST NOT be injected into the PTY byte stream.
@@ -90,6 +94,7 @@ Evaluation model (v1):
 - To satisfy the control-plane handle privacy requirements in this protocol (DR-22), world-agent MUST evaluate each `exec` in an untrusted evaluator context that does not have access to session control-plane endpoints or other session infrastructure.
 - In v1, the trusted driver component MUST evaluate each `exec` by spawning a fresh evaluator shell process attached to the Session PTY.
   - The trusted driver component MUST persist and re-apply the ADR-0016 guaranteed state across submissions (at minimum: physical cwd + exported env).
+  - Persistence scope note (v1): no other shell-local state is guaranteed to persist across submissions (e.g., aliases, functions, traps, `set -o` / `shopt`, non-exported vars, history, or job control). See `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md` (“Persistence guarantees”) and `docs/project_management/next/world-first-repl-persistent-pty/decision_register.md` (DR-07).
 
 ## Key Design Invariant: Separate Command Channel vs User Stdin
 Persistent sessions must support auto-PTY (interactive stdin forwarding) without allowing interactive programs to consume REPL control bytes.
@@ -420,10 +425,10 @@ One viable shape:
    - update `world_cwd` to the post-exec physical directory (equivalent to `pwd -P` / `getcwd()` semantics),
    - and update the exported env mutations (export/unset) to reflect the completed exec.
    - Note: ADR-0016 explicitly does not require preserving all shell-local state (functions/aliases/traps/options), so the reference design persists only what is required.
-5) The driver component emits `command_complete(seq, token, exit, cwd)` to the host.
+5) The driver component emits `command_complete(seq, token_hex, exit, cwd)` to the host.
 
 Security/integrity notes:
-- In this reference design, the **completion event** and `(seq, token)` binding come from the trusted driver component, not from user-output parsing.
+- In this reference design, the **completion event** and `(seq, token_hex)` binding come from the trusted driver component, not from user-output parsing.
 - The untrusted evaluation context MUST NOT be able to read tokens/future submissions nor spoof completion (DR-22).
 
 ### Anti-patterns (do not implement; violate DR-22 and/or core invariants)

@@ -2,7 +2,7 @@
 
 This document is authoritative for:
 - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
-- `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`
+- host-side REPL behavior referenced by `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` (it does not override the wire protocol or agent-side requirements).
 
 It defines the observable behavior of the interactive REPL, including routing rules, lifecycle, and signal handling.
 
@@ -74,12 +74,12 @@ Input handling:
   - If `host_escape_enabled=false`: print a clear error (“host escape not enabled”) and stay in `Idle`.
   - If `host_escape_enabled=true`: transition to `ExecutingHost(line_without_prefix)`.
 - Line begins with `:pty `:
-  - If world execution is enabled: transition to `ExecutingWorldPty(line_without_prefix)`.
+  - If world execution is enabled: transition to `ExecutingWorldPty(submission_without_prefix)`.
   - If world execution is disabled: transition to `ExecutingHostPty(line_without_prefix)`.
 - Otherwise:
   - If world execution is enabled:
-    - If the command is classified as “needs PTY”: transition to `ExecutingWorldPty(line)`.
-    - Otherwise: transition to `ExecutingWorldLine(line)`.
+    - If the command is classified as “needs PTY”: transition to `ExecutingWorldPty(submission)`.
+    - Otherwise: transition to `ExecutingWorldLine(submission)`.
   - If world execution is disabled:
     - If the command is classified as “needs PTY”: transition to `ExecutingHostPty(line)`.
     - Otherwise: transition to `ExecutingHost(line)`.
@@ -90,7 +90,7 @@ Reserved / special shell constructs (operator guidance):
 - Job control and backgrounding remain unsupported. In particular, `cmd &` can cause `command_complete` to fire while work continues in the background, undermining per-line auditability and command boundaries.
 - If the world session exits unexpectedly while a command is in-flight, Substrate MUST treat it as a fatal error and fail closed (see `PROTOCOL.md` Failures).
 
-### State: `ExecutingWorldLine(line)`
+### State: `ExecutingWorldLine(submission)`
 The REPL executes one REPL submission inside the persistent world session in **line mode** (`stdin_mode=eof`, no keystroke forwarding).
 
 Actions:
@@ -105,17 +105,18 @@ Actions:
        project/root directory and MUST report the cwd change.
    - Update `world_cwd` from `ready.cwd`.
    - Note: this restart reinitializes the persistent session infrastructure. Only `world_cwd` continuity is best-effort; other in-session state (exported env mutations, history, shell-local state, etc.) may be lost (see ADR-0016 and decision register DR-09/DR-17).
-3) Submit the user line to the world session using the protocol in `PROTOCOL.md`:
+3) Submit the user submission to the world session using the protocol in `PROTOCOL.md`:
    - host assigns the next `seq`, per-command `token_hex`, and `cmd_id`,
    - sends an `exec` message with `stdin_mode=eof` (stdin is treated as EOF for the duration of the program),
-   - streams `stdout` to the user while waiting for the accepted `command_complete(seq, token_hex)`.
+   - streams `stdout` (raw PTY bytes; stdout+stderr combined) to the user while waiting for the accepted `command_complete(seq, token_hex)`.
 4) The host MUST NOT pipeline: it MUST NOT send a second `exec` until the current `exec` completes (sequential in-flight semantics; see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`).
 
 Outputs:
-- `stdout` is streamed to the user unchanged.
+- `stdout` (raw PTY bytes; stdout+stderr combined) is streamed to the user unchanged.
 
 Completion:
 - On accepted `command_complete`:
+  - Accepted means `(seq, token_hex)` matches the currently awaited command (see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` `command_complete` acceptance rules).
   - (Ordering assumption) By protocol, all PTY output from the just-finished foreground command has already been forwarded before `command_complete` is delivered, so it is safe to render the next prompt / resume Reedline after this point (see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`).
   - update `world_cwd` from `cwd`,
   - set `last_exit` to `exit`,
@@ -134,12 +135,12 @@ Edge case:
 - If a command is misclassified into line mode but attempts to read from the controlling TTY (e.g., via `/dev/tty`), it may block.
   The operator can abort with `Ctrl+C` and retry with `:pty <cmd>` to force PTY passthrough.
 
-### State: `ExecutingWorldPty(line)`
+### State: `ExecutingWorldPty(submission)`
 The REPL executes one REPL submission inside the persistent world session in **PTY passthrough mode** (raw terminal, stdin forwarded).
 
 Actions:
 1) Perform the same pre-step as `ExecutingWorldLine` for drift (restart-on-change for policy snapshot hash OR workspace root, preserving `world_cwd` when possible).
-2) Submit the user line to the world session using the protocol in `PROTOCOL.md`:
+2) Submit the user submission to the world session using the protocol in `PROTOCOL.md`:
    - host assigns the next `seq`, per-command `token_hex`, and `cmd_id`,
    - sends an `exec` message with `stdin_mode=passthrough`,
    - switches the host terminal into raw mode and begins forwarding stdin bytes and resize events to the session PTY.
@@ -148,6 +149,7 @@ Actions:
 
 Completion:
 - On accepted `command_complete`:
+  - Accepted means `(seq, token_hex)` matches the currently awaited command (see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` `command_complete` acceptance rules).
   - stop forwarding stdin bytes immediately,
   - restore the host terminal to non-raw mode,
   - note: world-agent will ignore any `stdin` frames outside `stdin_mode=passthrough` by protocol, so any “late keystrokes” are dropped rather than leaking into the next command (see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`),
@@ -162,7 +164,8 @@ Edge case:
 - Job control and backgrounding remain unsupported. In particular, `cmd &` can cause `command_complete` to fire while work continues in the background,
   undermining per-line auditability and command boundaries.
   - Out-of-band PTY output may continue after `command_complete` (see `PROTOCOL.md`). This is allowed but unattributed in v1.
-  - Structured host/agent messages MUST NOT be injected into the PTY byte stream during passthrough (it would corrupt TUIs). If the REPL has concurrent structured events, implementations SHOULD buffer and flush them after passthrough ends (guidance; not a fallback).
+- Structured host/agent messages MUST NOT be injected into the PTY byte stream during passthrough (it would corrupt TUIs). If the REPL has concurrent structured events, implementations SHOULD buffer and flush them after passthrough ends (guidance; not a fallback).
+  - See `docs/project_management/next/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`.
 
 ### State: `ExecutingHost(line)`
 The REPL executes one REPL submission on the host.

@@ -289,6 +289,7 @@
         that bash).
       - In practice, any design where the evaluator can access session infrastructure (including inherited file descriptors and
         /proc/self/fd discovery) is extremely hard to harden against redirections, DEBUG traps, `read -u`, etc.
+      - Reminder: v1 explicitly does not require a long-lived interpreter; the selected model is per-submission evaluators with driver-managed persistence (see `docs/project_management/next/world-first-repl-persistent-pty/decision_register.md` DR-07).
   2. Replace ptrace with a “self-stop barrier” wrapper
       - Have a trusted wrapper around evaluation that ensures the evaluator process stops (SIGSTOP) at a known completion boundary before
         exiting, so the driver can read /proc/<pid>/{cwd,environ}.

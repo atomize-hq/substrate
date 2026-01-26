@@ -117,7 +117,7 @@ Grounding (what exists today)
       C) evaluator process exit (only when Running)
 
   on Exec in Idle:
-    - validate no NUL, UTF-8 already validated by handler (or re-check in driver)
+    - validate no NUL, UTF-8/no-NUL MUST be validated by the handler per `PROTOCOL.md`; driver MAY defensively re-check
     - spawn evaluator (per-exec) attached to PTY slave:
         - cwd = session_cwd
         - envp = session_env (+ required session overrides) + SHIM_PARENT_CMD_ID=cmd_id
@@ -292,8 +292,7 @@ Grounding (what exists today)
       - Cons: can hang if other writers keep writing; you’d need a fail-closed timeout (acceptable only if timeout triggers a fatal error, not
         a degraded continuation). Watermark-based drain avoids this class of hang.
   3. Instrumented PTY proxy with an internal “barrier marker” that never reaches the user
-      - Generally not recommended given the constraints: anything injected into the PTY output risks corrupting TUIs, and server-side marker
-        parsing becomes its own correctness/safety hazard.
+      - Disallowed for v1: v1 explicitly avoids stdout marker parsing and forbids injecting non-PTY bytes into the Session PTY stream; the watermark barrier is the selected ordering mechanism (DR-23 / `PROTOCOL.md`).
   4. Separate PTY per exec (not a shared persistent PTY)
       - Avoids out-of-band entirely, but breaks the persistent-session UX and conflicts with the protocol’s session model.
 
@@ -320,8 +319,8 @@ Grounding (what exists today)
 
   1. Protocol-level ordering integration test (WS harness)
       - Start persistent session (start_session → ready).
-      - Exec a command that writes a large deterministic stream ending with a sentinel (e.g., ...; printf '__SENTINEL__\\n'), ensuring enough
-        output to stress buffering.
+      - Exec a command that writes a large deterministic stream ending with a **test-only output sentinel** (e.g., ...; printf '__SENTINEL__\\n').
+        This sentinel is not a completion marker and is not parsed by either side; it is only used by the test harness to assert ordering.
       - Assert:
           - the reconstructed stdout byte stream before command_complete contains the sentinel,
           - no additional bytes from that command arrive after its command_complete in the absence of backgrounding.
