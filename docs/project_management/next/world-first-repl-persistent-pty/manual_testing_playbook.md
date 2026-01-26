@@ -85,6 +85,34 @@ Expected:
 - Startup fails with a high-signal error.
 - Exit code: `3` (dependency unavailable) per taxonomy.
 
+### 5) Out-of-band Session PTY output while idle (unattributed; does not corrupt Reedline)
+Purpose:
+- Validate the v1 contract that PTY bytes may arrive while idle and MUST be rendered without breaking the line editor buffer.
+- This is not “supported job control”; it is a robustness test for the output/rendering path.
+
+In a world-enabled REPL session, run:
+- `bash -lc '(sleep 1; echo OOB_FROM_WORLD_PTY)&'`
+
+Expected:
+- After ~1s, `OOB_FROM_WORLD_PTY` appears on the terminal even though the REPL is idle.
+- The current input buffer is preserved (your partially typed input is not destroyed/corrupted).
+- No attempt is made to attribute this output to a specific `cmd_id` in v1.
+
+### 6) Structured host output buffering during PTY passthrough (no injection into PTY bytes)
+Purpose:
+- Validate the locked routing invariant that Substrate-managed structured output MUST NOT be injected into the Session PTY byte stream.
+- During PTY passthrough, structured output SHOULD be buffered and flushed after the foreground PTY command completes.
+
+In a world-enabled REPL session, run:
+1) Start a structured-output producer:
+   - `:demo-agent`
+2) Immediately start a PTY passthrough command that runs long enough to overlap:
+   - `:pty bash -lc 'sleep 3'`
+
+Expected:
+- While the `:pty` command is running, you do NOT see `:demo-agent` structured output interleaved into the PTY output.
+- After the `:pty` command completes, buffered `:demo-agent` output is rendered (and the REPL remains usable).
+
 ## macOS manual validation (local)
 
 Preconditions:
