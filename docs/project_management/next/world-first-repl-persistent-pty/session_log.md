@@ -227,3 +227,10 @@
   - `make planning-lint FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty"` → `0`
   - `make -n ci-compile-parity CI_WORKFLOW_REF="feat/world-first-repl-persistent-pty" CI_REMOTE=origin CI_CLEANUP=1` → `0`
   - `make -n feature-smoke FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty" PLATFORM=behavior SMOKE_SLICE_ID="C0" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/world-first-repl-persistent-pty" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=1` → `0`
+
+## START — 2026-01-26T23:35:41Z — code — C0-code
+- Worktree: `wt/world-first-repl-persistent-pty-c0-code`
+- Branch: `world-first-repl-persistent-pty-c0-code`
+- Orchestration branch: `feat/world-first-repl-persistent-pty`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" LAUNCH_CODEX=1`
