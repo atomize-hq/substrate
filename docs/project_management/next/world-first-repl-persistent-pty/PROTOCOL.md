@@ -89,6 +89,7 @@ The evaluator shell MUST be `/bin/bash` with deterministic invocation:
 
 World-agent SHOULD suppress in-world prompt output by setting:
 - `PS1=""`, `PS2=""`, and `PROMPT_COMMAND=""` in the evaluator shell environment (and any other in-world shell contexts used to execute submissions).
+  - The REPL prompt is host-side (Reedline). These variables exist only to prevent in-world prompt bytes from polluting the Session PTY stream.
 
 Evaluation model (v1):
 - To satisfy the control-plane handle privacy requirements in this protocol (DR-22), world-agent MUST evaluate each `exec` in an untrusted evaluator context that does not have access to session control-plane endpoints or other session infrastructure.
@@ -222,7 +223,7 @@ Therefore:
 ### `exec`
 For each REPL submission, the host MUST:
 1) Choose a new `seq` (strictly increasing `u64`, starting at `1`).
-2) Generate a per-command `token_hex` (lowercase hex, 32 chars).
+2) Generate a per-command `token_hex` (`hex32`).
 3) Generate a per-command `cmd_id` (UUIDv7 string).
 4) Decide `stdin_mode`:
    - `eof` for line mode (default)

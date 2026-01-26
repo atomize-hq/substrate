@@ -256,8 +256,8 @@ Grounding (what exists today)
 
   ## 4) Cross-platform considerations (Linux vs macOS PTY behaviors)
 
-  Even though macOS REPL usage likely goes through a Linux guest today, the protocol scope names Linux/macOS, and portable_pty behavior
-  differs across OSes. Likely friction points:
+  macOS REPL usage goes through a Linux guest (Lima) today, but the protocol scope names Linux/macOS, and portable_pty behavior differs across
+  OSes. Likely friction points:
 
   - Drain primitive implementation
       - Linux: use a watermark query (`ioctl(FIONREAD)` on the PTY master) to bound the post-exit drain, then drain at least that many bytes.
@@ -279,6 +279,9 @@ Grounding (what exists today)
   ———
 
   ## 5) Design alternatives / backup plans (if the above is hard)
+  
+  Note:
+  - These are engineering pivots if the primary design proves too complex. They are not runtime fallbacks and must not be silently enabled in production (see DR-06 “no fallbacks” posture).
 
   1. World-agent-local “pending completion” (no separate driver event stream)
       - Keep PTY reading and completion generation inside the WS handler, but still enforce:
@@ -320,8 +323,9 @@ Grounding (what exists today)
 
   1. Protocol-level ordering integration test (WS harness)
       - Start persistent session (start_session → ready).
-      - Exec a command that writes a large deterministic stream ending with a **test-only output sentinel** (e.g., ...; printf '__SENTINEL__\\n').
-        This sentinel is not a completion marker and is not parsed by either side; it is only used by the test harness to assert ordering.
+      - Exec a command that writes a large deterministic stream ending with a **test-only output suffix** (e.g., ...; printf '__SUFFIX__\\n').
+        This suffix is not a completion marker and is not parsed by either side; it is only used by the test harness to assert ordering.
+        It is not part of the protocol and MUST NOT be used by production code.
       - Assert:
           - the reconstructed stdout byte stream before command_complete contains the sentinel,
           - no additional bytes from that command arrive after its command_complete in the absence of backgrounding.

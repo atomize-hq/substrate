@@ -18,6 +18,9 @@
 - Decision Register: `docs/project_management/next/world-first-repl-persistent-pty/decision_register.md`
 - Protocol (authoritative): `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`
 - State machine (authoritative): `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`
+- Research (historical context): `docs/project_management/next/world-first-repl-persistent-pty/RESEARCH.md`
+- Driver design (implementation sketch): `docs/project_management/next/world-first-repl-persistent-pty/driver_loop_design.md`
+- Drain/ordering design: `docs/project_management/next/world-first-repl-persistent-pty/drain_design.md`
 - Context (previous REPL + world routing behavior):
   - `crates/shell/src/execution/invocation/runtime.rs`
   - `crates/shell/src/execution/routing/dispatch/exec.rs`
@@ -87,7 +90,7 @@ ADR_BODY_SHA256: 6440d354ecf7fbc3d1b66f5b73a1f5b3e95347a694c7a52619370ddf433e4db
 
 ### CLI
 - Interactive REPL (`substrate` with no `--command`/`-c`):
-  - Default: Substrate starts and maintains a persistent in-world PTY-backed world session (“world session”) when world execution is enabled and available.
+  - Default: Substrate starts and maintains a persistent in-world world session (WebSocket) + Session PTY (PTY stream) when world execution is enabled and available.
     - Terms: see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` (World session vs Session PTY).
   - All unprefixed input submissions are executed inside the world session.
   - Auto-PTY is preserved: interactive/TUI commands run in PTY passthrough mode automatically, using the existing “needs PTY” heuristic; `:pty` forces PTY passthrough for a line when heuristics are wrong (see `docs/project_management/next/world-first-repl-persistent-pty/STATE_MACHINE.md`).
@@ -99,7 +102,7 @@ ADR_BODY_SHA256: 6440d354ecf7fbc3d1b66f5b73a1f5b3e95347a694c7a52619370ddf433e4db
     - Concurrent output note (MUST): Session PTY `stdout` frames are raw PTY bytes only (stdout+stderr combined). Substrate-managed concurrent output (e.g., `:demo-agent`, future AgentHub events) MUST NOT be injected into PTY bytes; during PTY passthrough, such structured events SHOULD be buffered and rendered only after the foreground PTY command completes to avoid corrupting TUIs (see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`).
     - Rendering note (MUST): PTY output is a byte stream and may be non-UTF8. While waiting for input (Reedline active), Substrate MUST use a byte-capable output path to render PTY bytes without corrupting the input buffer; it MUST NOT route PTY bytes through string-only printers.
   - Persistence guarantees (within a single world session):
-    - MUST persist: in-world working directory (`cd`/`pwd`) and exported environment mutations (`export`/`unset`) across subsequent submissions.
+    - MUST persist: physical in-world working directory (`cd`/`pwd -P` / `getcwd()` semantics) and exported environment mutations (`export`/`unset`) across subsequent submissions (see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` cwd semantics).
     - MAY persist / not guaranteed: shell-local variables (non-exported), functions, aliases, traps, `set -o` / `shopt` options, and other session-internal shell state.
     - Implementation note: v1 does not require a single long-lived bash interpreter process; persistence may be implemented by a trusted driver component that applies `cwd` + exported env to per-submission evaluator shells.
   - Snapshot-driven restart note: Substrate MUST restart the world session when the effective policy snapshot hash (or workspace root) changes, before executing the next submission (see decision register DR-09 and `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` “Policy Snapshot Drift”). It attempts best-effort cwd continuity, but other in-session state (exported env mutations, history, shell-local state) may be lost (see decision register DR-17).
@@ -170,7 +173,7 @@ ADR_BODY_SHA256: 6440d354ecf7fbc3d1b66f5b73a1f5b3e95347a694c7a52619370ddf433e4db
 
 - World backend requirements (Linux/macOS):
   - The world backend must support a long-lived interactive session (PTY stream) with:
-    - a stable session identifier,
+    - a per-session identifier (`ready.session_nonce`, `hex32`) that is freshly generated per `start_session` and changes on restart (observability/correlation only; not a capability/credential; see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` `ready` semantics),
     - reliable stream framing,
     - and explicit per-command completion messages (e.g., `command_complete`) so the host can obtain an exit code + cwd per submission without parsing stdout markers.
 

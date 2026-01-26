@@ -26,6 +26,7 @@ Substrate maintains the following state for the lifetime of the REPL:
 - `last_exit`: last command exit code (world or host).
 - `host_escape_enabled`: boolean (default `false`).
 - `host_cwd`: host-only working directory for `:host` commands.
+- `host_env`: host-only exported environment state applied to `:host` commands, initialized from the Substrate process environment at REPL startup, and mutated only by `:host export ...` / `:host unset ...` (it MUST NOT affect world session environment persistence).
 
 `world_cwd` and `host_cwd` are independent by design.
 
@@ -37,7 +38,9 @@ On REPL startup:
 1) Resolve whether world execution is enabled (based on existing `--world/--no-world` and config).
 2) If world execution is enabled:
    - Start the persistent world session and wait for readiness (`ready`).
+     - Substrate MUST send initial terminal size (`cols`, `rows`) in `start_session`, and MUST keep the session PTY size updated by forwarding `resize` events while the REPL is running (see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`).
    - Validate `ready.protocol_version` matches `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` (fail closed if unsupported).
+     - While waiting for `ready`: receiving a world-agent `error` frame or any unknown server frame type MUST be treated as fatal (fail closed), per `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`.
    - Initialize `world_cwd` from `ready.cwd`.
    - Record the session nonce from `ready.session_nonce` into `world_session` metadata for trace correlation (see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`).
    - If the requested `start_session.cwd` could not be honored and `ready.cwd` differs, Substrate MUST report that the REPL started in a different working directory (see `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`).
@@ -75,9 +78,11 @@ Input handling:
   - `exit` MAY include an optional numeric argument (e.g., `exit 2`). The REPL treats this as an operator termination request, not as a world command. The REPL process exit code remains governed by `docs/project_management/standards/EXIT_CODE_TAXONOMY.md` (normal exit stays `0`).
 - Empty/whitespace-only line: stay in `Idle`.
 - Line begins with `:host`:
+  - Directive tokenization: `:host` is recognized only as `:host␠...` (colon-host followed by at least one ASCII space). A bare `:host` (no command) MUST be treated as an error (do not execute) and stays in `Idle`.
   - If `host_escape_enabled=false`: print a clear error (“host escape not enabled”) and stay in `Idle`.
   - If `host_escape_enabled=true`: transition to `ExecutingHost(line_without_prefix)`.
 - Line begins with `:pty `:
+  - Directive tokenization: `:pty` is recognized only as `:pty␠...` (colon-pty followed by at least one ASCII space). A bare `:pty` (no command) MUST be treated as an error (do not execute) and stays in `Idle`.
   - If world execution is enabled: transition to `ExecutingWorldPty(submission_without_prefix)`.
   - If world execution is disabled: transition to `ExecutingHostPty(line_without_prefix)`.
 - Otherwise:
@@ -130,7 +135,7 @@ Policy resolution note:
 - `world_cwd` is a world path. Substrate MUST NOT require `world_cwd` to exist on the host filesystem (e.g., by calling `fs::canonicalize`) when recomputing the effective snapshot/workspace-root; it must use the path namespace semantics defined in `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md`.
 
 Errors:
-- On protocol error, world session exit, or WebSocket close:
+- On protocol error (including world-agent `error` frames or unknown server frame types), world session exit, or WebSocket close:
   - print a clear error,
   - transition to `Error` (fatal) and then `ShuttingDown`.
   - Exception: if the REPL is already in `ShuttingDown` and the host has initiated session closure, receiving a world-agent `exit` is expected and treated as graceful shutdown (see `PROTOCOL.md` `close`/`exit` semantics).
@@ -177,6 +182,10 @@ The REPL executes one REPL submission on the host.
 Working directory:
 - The command MUST execute with `host_cwd` as its working directory.
 - `:host cd <path>` MUST update `host_cwd` on success (it MUST NOT affect `world_cwd`).
+
+Environment:
+- The command MUST execute with `host_env` as its environment.
+- `:host export ...` / `:host unset ...` MUST update `host_env` on success and MUST affect subsequent `:host` commands, but MUST NOT affect world session persistence guarantees (`world_cwd` + world exported env).
 
 Completion:
 - Capture the host command exit code into `last_exit`.
