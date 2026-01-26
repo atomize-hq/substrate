@@ -91,7 +91,8 @@ Purpose:
 - This is not “supported job control”; it is a robustness test for the output/rendering path.
 
 In a world-enabled REPL session, run:
-- `bash -lc '(sleep 1; echo OOB_FROM_WORLD_PTY)&'`
+- Start a detached writer that will print to the controlling TTY after the submission completes:
+  - `bash -lc 'nohup sh -c "sleep 1; echo OOB_FROM_WORLD_PTY" >/dev/tty 2>/dev/tty </dev/null &'`
 
 Expected:
 - After ~1s, `OOB_FROM_WORLD_PTY` appears on the terminal even though the REPL is idle.
