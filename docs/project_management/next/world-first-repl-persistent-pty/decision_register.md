@@ -3,8 +3,13 @@
 This decision register supports:
 - `docs/project_management/next/ADR-0016-world-first-repl-persistent-pty.md`
 
-Note on non-selected options:
-- Many DRs include “Option A/B/…” that were considered during design. Unless the DR explicitly says “Selected”, treat non-selected options as historical context only; do not implement them in v1.
+Note on options:
+- Each DR has exactly **Option A** and **Option B** (no “Option C”), per `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`.
+- Any additional ideas are documented as **Notes / future work** (not options) and MUST NOT be treated as implementable for v1 unless a new DR explicitly selects them.
+
+Decision follow-up tasks (auditability):
+- Implementation and validation ownership lives in `docs/project_management/next/world-first-repl-persistent-pty/requirements_traceability.md`.
+- This register also includes a compact selected-DR → task mapping at the end (“Decision follow-ups”) so triads can quickly find owning tasks.
 
 ## DR-01 — Host escape prefix syntax
 
@@ -172,9 +177,6 @@ Note on non-selected options:
 ### Option B
 - Keep the session running with the original snapshot and only apply new policy on the next REPL invocation.
 
-### Option C
-- Add an in-session “reconfigure snapshot” control protocol to update enforcement without restarting the shell.
-
 ### Tradeoffs
 - A:
   - Pros: fail-closed correctness; keeps host evaluation and in-world enforcement aligned.
@@ -182,12 +184,13 @@ Note on non-selected options:
 - B:
   - Pros: simplest implementation.
   - Cons: policy ambiguity and potential enforcement mismatch; reduces audit clarity for long sessions.
-- C:
-  - Pros: preserves session state while applying policy changes.
-  - Cons: complex, security-sensitive contract; must be proven fail-closed across backends.
 
 ### Decision
 - Selected: Option A.
+
+Notes / future work (not an option):
+- An in-session “reconfigure snapshot” control protocol could preserve more shell state while applying new policy, but it is a complex,
+  security-sensitive contract and must be proven fail-closed across backends. Track separately if/when needed.
 
 ## DR-10 — `:host` enablement mechanism and behavior when disabled
 
@@ -492,3 +495,19 @@ Scope:
 ### Decision
 - Selected: Option B.
   - Authoritative spec: `docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md` (“Output ordering / drain guarantee”, watermark barrier).
+
+## Decision follow-ups (selected DRs → tasks)
+
+This table is a convenience index. The source of truth for requirement-level ownership is
+`docs/project_management/next/world-first-repl-persistent-pty/requirements_traceability.md`.
+
+| DR | Selected decision (summary) | Implemented by | Validated by |
+|---|---|---|---|
+| DR-04 / DR-10 / DR-11 | `:host` exists, REPL-only, gated; host-only `host_cwd`/`host_env` | `C3-code`, `C5-code` | `C3-test`, `C5-test` |
+| DR-05 | `-c/--command` world-consistency (no host-only builtins when world enabled) | `C5-code` | `C5-test`; smoke `linux-smoke.sh` |
+| DR-08 | Explicit completion protocol (`start_session → ready → exec → command_complete`) | `C0-code`, `C1-code`, `C2-code`, `C3-code` | `C0-test`, `C1-test`, `C2-test`, `C3-test` |
+| DR-09 / DR-17 | Drift restart (snapshot/workspace-root) with best-effort cwd continuity | `C3-code` | `C3-test`; manual playbook |
+| DR-12 / DR-20 | Auto-PTY retained; `:pty` forces passthrough within session | `C3-code`, `C4-code` | `C3-test`, `C4-test`; manual playbook |
+| DR-21 | Command/control separation (program text not on PTY stdin) | `C1-code` | `C1-test` |
+| DR-22 | Control-plane handle privacy (evaluator cannot access session infra/handles) | `C0-code`, `C1-code` | `C0-test`, `C1-test` |
+| DR-23 | Watermark drain barrier ordering (no `command_complete` before forwarded foreground PTY output) | `C0-code`, `C1-code` | `C0-test`, `C1-test` |
