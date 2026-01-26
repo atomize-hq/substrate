@@ -137,3 +137,77 @@ PY
 ### If ACCEPT
 - Summary: Planning artifacts are complete, lint-clean, and cross-platform integration tasks are execution-ready under the triad workflow.
 - Next step: Execution triads may begin.
+
+---
+
+# Planning Quality Gate Report — world-first-repl-persistent-pty (Third-party re-review)
+
+## Metadata
+- Feature directory: `docs/project_management/next/world-first-repl-persistent-pty/`
+- Reviewed commit: `5e4a6d061f6baeb106ab8823f72da08aaaf101e1` (plus local modifications noted below)
+- Reviewer: `Codex CLI (third-party reviewer)`
+- Date (UTC): `2026-01-26`
+- Recommendation: `ACCEPT`
+
+## Evidence: Commands Run (verbatim)
+```bash
+FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty"
+
+git rev-parse HEAD                                  # exit 0 → 5e4a6d061f6baeb106ab8823f72da08aaaf101e1
+git status --porcelain=v1                           # shows: M docs/project_management/next/world-first-repl-persistent-pty/tasks.json
+
+jq -e . "$FEATURE_DIR/tasks.json" >/dev/null         # exit 0
+jq -e . docs/project_management/next/sequencing.json >/dev/null # exit 0
+
+make planning-lint FEATURE_DIR="$FEATURE_DIR"        # exit 0 → planning lint passed
+
+# Verify no Option C sections remain
+rg -n "^###\\s+Option\\s+C\\b" "$FEATURE_DIR/decision_register.md"  # exit 1 (no matches)
+
+# Verify every DR is referenced by at least one task (auditability via references)
+python - <<'PY'                                       # exit 0
+import json,re
+from pathlib import Path
+dec=Path("docs/project_management/next/world-first-repl-persistent-pty/decision_register.md").read_text("utf-8")
+drs=[m.group(1) for m in re.finditer(r"^##\\s+(DR-\\d+)\\b", dec, re.M)]
+data=json.loads(Path("docs/project_management/next/world-first-repl-persistent-pty/tasks.json").read_text("utf-8"))
+by_dr={dr:set() for dr in drs}
+for t in data["tasks"]:
+  for ref in t.get("references",[]):
+    if "decision_register.md" not in ref:
+      continue
+    for dr in re.findall(r"DR-\\d+", ref):
+      if dr in by_dr:
+        by_dr[dr].add(t["id"])
+unref=[dr for dr,ids in by_dr.items() if not ids]
+print("unreferenced_drs_count:", len(unref))
+if unref:
+  print("unreferenced_drs:", unref)
+  raise SystemExit(1)
+print("OK: every DR is referenced by at least one task")
+PY
+```
+
+## Findings
+
+### Finding 001 — Mechanical lint checks pass
+- Status: `VERIFIED`
+- Evidence: `make planning-lint FEATURE_DIR="docs/project_management/next/world-first-repl-persistent-pty"` → exit `0`
+- Impact: Pack is mechanically executable under the triad workflow.
+- Fix required (exact): `NONE`
+
+### Finding 002 — Decision register now conforms to the “no Option C” rule
+- Status: `VERIFIED`
+- Evidence: `rg -n "^###\\s+Option\\s+C\\b" docs/project_management/next/world-first-repl-persistent-pty/decision_register.md` → exit `1`
+- Impact: Restores “exactly two options” framing.
+- Fix required (exact): `NONE`
+
+### Finding 003 — Decision→task auditability is now complete
+- Status: `VERIFIED`
+- Evidence: script output in “Evidence: Commands Run” shows `unreferenced_drs_count: 0`
+- Impact: Decisions are traceable to concrete triad task IDs via `tasks.json` `references`, satisfying the auditability checklist.
+- Fix required (exact): `NONE` (but commit the updated `tasks.json`)
+
+## Decision: ACCEPT
+- Summary: Mechanical lint is green; decision register is 2-option compliant; decision→task traceability is complete.
+- Next step: Execution triads may begin (after committing the updated `docs/project_management/next/world-first-repl-persistent-pty/tasks.json`).
